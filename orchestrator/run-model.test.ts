@@ -21,7 +21,7 @@ import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { aggregateRun, listRuns, buildNodeMapping, computeFlowLineage } from './run-model.ts';
+import { aggregateRun, listRuns, buildNodeMapping, buildAgentSlugToNodeId, computeFlowLineage } from './run-model.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES_DIR = join(__dirname, 'run-model.fixtures');
@@ -430,6 +430,89 @@ test('aggregateRun: gate names the node actually reached, not a hardcoded "revie
     assert.equal(run.phases['human-check'], 'active');
     assert.equal(run.phases['review'], undefined, 'no review node ever ran in this flow');
     assert.equal(run.gate, 'human-check', 'gate must name the node actually awaiting the operator, not a hardcoded "review"');
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R2-01-F4: generic execAgent/runAgent node visibility in the flow monitor
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: a generic execAgent/runAgent node resolves via metadata.agent_slug — visible in the monitor, not stuck pending/$0.00 (R2-01-F4)', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-agent-proof';
+    const cycleId = '2026-01-01T03-00-00_INIT-2026-01-01-agent-proof';
+
+    // A flow whose one node dispatches the roster's orphaned project-scoped-review
+    // agent through the generic F1/F2 execAgent path — a SYNTHETIC test flow, not
+    // one of the seed flows (F4 scope: no seed-flow node-count change).
+    const flowDir = join(root, 'studio', 'flows', 'agent-proof-flow');
+    mkdirSync(flowDir, { recursive: true });
+    writeFileSync(join(flowDir, 'flow.yaml'), `id: agent-proof-flow
+name: Agent Proof Flow
+version: 1
+goal: Prove a generic agent node is visible in the flow monitor.
+project: null
+kb: null
+costCeilingUsd: 5
+origin: seed
+nodes:
+  - { id: audit, agent: project-scoped-review }
+edges: []
+triggers: []
+`);
+
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId, flow_id: 'agent-proof-flow' });
+
+    // runAgent (orchestrator/run-agent.ts)-shaped events: phase:'orchestrator'
+    // hardcoded (frozen F1 contract, run-agent.test.ts:121), skill:def.slug,
+    // metadata.agent_slug/agent_phase, cost_usd riding on the end event.
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' }),
+      ev('orchestrator', 'start', undefined, { agent_phase: 'audit', agent_slug: 'project-scoped-review' }, { skill: 'project-scoped-review' }),
+      ev('orchestrator', 'end', undefined, { agent_phase: 'audit', agent_slug: 'project-scoped-review' }, { skill: 'project-scoped-review', cost_usd: 0.42 }),
+    ]);
+
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs: Date.now() });
+
+    // The exact two fields monitor-layout.ts:170,174 read to produce
+    // data-status / data-phase-cost-usd — the "visible in the monitor" AC.
+    assert.equal(run.phases['audit'], 'complete', 'generic-agent node status resolves via metadata.agent_slug, not stuck pending');
+    assert.equal(run.phaseMeta['audit']?.costUsd, 0.42, 'generic-agent node cost resolves from its end event, not stuck at $0.00');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('buildAgentSlugToNodeId: resolves node.agent directly (no SKILL.md phase indirection) for a flow declaring project-scoped-review', () => {
+  const root = makeTmp();
+  try {
+    const flowDir = join(root, 'studio', 'flows', 'agent-proof-flow');
+    mkdirSync(flowDir, { recursive: true });
+    writeFileSync(join(flowDir, 'flow.yaml'), `id: agent-proof-flow
+name: Agent Proof Flow
+version: 1
+goal: Prove the agent-slug map resolves.
+project: null
+kb: null
+costCeilingUsd: 5
+origin: seed
+nodes:
+  - { id: audit, agent: project-scoped-review }
+edges: []
+triggers: []
+`);
+
+    const agentSlugMap = buildAgentSlugToNodeId(root);
+    assert.equal(agentSlugMap.get('project-scoped-review'), 'audit', 'agent slug resolves straight to the node id declaring it');
+
+    // Sibling of buildNodeMapping's own canonical assertion — that override
+    // belongs to the OTHER (phase-keyed) map and must stay untouched by the
+    // new agent-slug map.
+    const nodeMapping = buildNodeMapping(root);
+    assert.equal(nodeMapping.get('orchestrator'), null, "buildNodeMapping's orchestrator→null override is unaffected by the new map");
   } finally {
     cleanup(root);
   }

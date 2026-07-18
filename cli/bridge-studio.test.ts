@@ -198,6 +198,31 @@ function makeFlowYaml(flowId = 'forge-cycle'): string {
   ].join('\n');
 }
 
+/**
+ * R2-01-F4 fixture: a flow declaring one node whose agent has NO matching
+ * SKILL.md (so `buildNodeMapping` never routes an event-phase to it — only
+ * `buildAgentSlugToNodeId`, resolved via a `phase:'orchestrator'` +
+ * `metadata.agent_slug` event, can find it). Used by the drawer log-tail
+ * resolution test below.
+ */
+function makeGenericFlowYaml(): string {
+  return [
+    'id: generic-flow',
+    'name: generic-flow',
+    'version: 1',
+    'goal: Test flow for generic-agent node resolution.',
+    'project: null',
+    'kb: null',
+    'costCeilingUsd: 5',
+    'origin: architect',
+    'nodes:',
+    '  - id: generic',
+    '    agent: generic-worker',
+    'edges: []',
+    'triggers: []',
+  ].join('\n');
+}
+
 /** Minimal catalog.yaml */
 function makeCatalogYaml(): string {
   return [
@@ -266,6 +291,10 @@ before(async () => {
   // -- studio/flows/forge-cycle/flow.yaml --
   mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-cycle'), { recursive: true });
   writeFileSync(join(forgeRoot, 'studio', 'flows', 'forge-cycle', 'flow.yaml'), makeFlowYaml());
+
+  // -- studio/flows/generic-flow/flow.yaml (R2-01-F4 generic-agent node fixture) --
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'generic-flow'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'flows', 'generic-flow', 'flow.yaml'), makeGenericFlowYaml());
 
   // -- studio/catalog.yaml --
   writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), makeCatalogYaml());
@@ -747,4 +776,71 @@ test('classifyEvent: failure_classification + recoverable=true → retry (not st
   const stderrLine = body.lines.find((l) => !l.text.includes('transient'));
   assert.ok(stderrLine, 'non-recoverable failure_classification must produce a line');
   assert.equal(stderrLine!.kind, 'stderr', 'recoverable=false must classify as "stderr"');
+});
+
+// ---------------------------------------------------------------------------
+// R2-01 final-review fix (c): generic-agent node log-tail resolution
+//
+// A generic-agent node (run via orchestrator/run-agent.ts's execAgent) always
+// emits phase:'orchestrator' + metadata.agent_slug — nodeMapping.get('orchestrator')
+// is explicitly null, so a naive `nodeMapping.get(e.phase) === nodeId` filter
+// drops these events entirely. The drawer endpoint must resolve them via
+// eventToNodeId (nodeMapping + agentSlugToNodeId), same as the rest of the
+// run-model derivation.
+// ---------------------------------------------------------------------------
+
+test('GET /api/runs/<id>/phases/<node>/log resolves a generic-agent node\'s phase:orchestrator events', async () => {
+  const genericInitId = 'INIT-GENERIC-001';
+  const genericCycleId = `2026-05-30T22-45-07_${genericInitId}`;
+
+  mkdirSync(join(forgeRoot, '_queue', 'done'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, '_queue', 'done', `${genericInitId}.md`),
+    makeManifest({ initId: genericInitId }),
+  );
+  mkdirSync(join(forgeRoot, '_logs', genericCycleId), { recursive: true });
+  const genericAgentEvent = JSON.stringify({
+    cycle_id: genericCycleId,
+    initiative_id: genericInitId,
+    event_id: 'EV_GEN_001',
+    phase: 'orchestrator',
+    skill: 'generic-worker',
+    event_type: 'log',
+    started_at: '2026-05-30T22:45:20.000Z',
+    message: 'generic agent turn',
+    metadata: { agent_slug: 'generic-worker' },
+    input_refs: [],
+    output_refs: [],
+  });
+  // A control event on the SAME cycle that must NOT show up on the `generic`
+  // node's tail (a plain flow-runner orchestrator event with no agent_slug —
+  // still correctly ignored via the orchestrator→null override).
+  const flowRunnerEvent = JSON.stringify({
+    cycle_id: genericCycleId,
+    initiative_id: genericInitId,
+    event_id: 'EV_GEN_002',
+    phase: 'orchestrator',
+    skill: 'cycle',
+    event_type: 'start',
+    started_at: '2026-05-30T22:45:19.000Z',
+    message: 'cycle.start',
+    input_refs: [],
+    output_refs: [],
+  });
+  writeFileSync(
+    join(forgeRoot, '_logs', genericCycleId, 'events.jsonl'),
+    flowRunnerEvent + '\n' + genericAgentEvent + '\n',
+  );
+
+  const res = await fetch(
+    `${bridgeUrl}/api/runs/${encodeURIComponent(genericCycleId)}/phases/generic/log`,
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { lines: Array<{ kind: string; text: string }> };
+  assert.ok(Array.isArray(body.lines));
+  assert.equal(body.lines.length, 1, 'only the agent_slug-carrying event resolves to the generic node');
+  assert.ok(
+    body.lines[0].text.includes('generic agent turn'),
+    'the generic-agent node tail must include its own event',
+  );
 });

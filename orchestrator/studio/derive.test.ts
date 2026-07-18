@@ -12,7 +12,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { deriveAgentSpec } from './derive.ts';
+import { deriveAgentSpec, executionPathForSurface } from './derive.ts';
 
 // ---------------------------------------------------------------------------
 // Explicit expected-literal assertions (frontmatter-regression lock, M2-3)
@@ -185,4 +185,32 @@ test('deriveAgentSpec default root is the forge install root, not process.cwd()'
     process.chdir(prev);
     rmSync(dir, { recursive: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// executionPathForSurface (R2-01-F5) — pure mapping, no I/O
+// ---------------------------------------------------------------------------
+
+test("executionPathForSurface('interactive') → 'interactive'", () => {
+  assert.equal(executionPathForSurface('interactive'), 'interactive');
+});
+
+test("executionPathForSurface('unattended') → 'unattended'", () => {
+  assert.equal(executionPathForSurface('unattended'), 'unattended');
+});
+
+test("executionPathForSurface('operator-triggered') → 'unattended' (describes the launch, not mid-run interactivity)", () => {
+  assert.equal(executionPathForSurface('operator-triggered'), 'unattended');
+});
+
+test("executionPathForSurface('both') → 'unattended' (safe default; unattended-with-optional-pause)", () => {
+  assert.equal(executionPathForSurface('both'), 'unattended');
+});
+
+test('executionPathForSurface(undefined) → \'unattended\' (absent surface, e.g. architect)', () => {
+  assert.equal(executionPathForSurface(undefined), 'unattended');
+});
+
+test("executionPathForSurface('some-unknown-value') → 'unattended' (unknown default)", () => {
+  assert.equal(executionPathForSurface('some-unknown-value'), 'unattended');
 });

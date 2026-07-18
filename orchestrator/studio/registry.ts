@@ -102,6 +102,26 @@ class RegistryError extends Error {}
 const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;
 const MODEL_STRATEGIES = ['fixed', 'range'] as const;
 const KB_SCOPES = ['project', 'flow', 'agent-integration'] as const;
+// R2-01-F5: the ONLY four `surface` values seen across the real roster
+// (verified 2026-07-18). Checked at LINT time (validateAgent), not load time —
+// unlike BRAIN_ACCESS/MODEL_STRATEGIES above, a bad value here should report
+// with full lint context (agent:<slug>) instead of crashing the loader,
+// mirroring the kb.backend / flow.kickoff.kind precedent. Exported so
+// validate.ts (the enum check) and derive.ts (the execution-path mapping)
+// share this one source instead of duplicating the literal list.
+export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered', 'both'] as const;
+
+// R2-01-F2: the declared phase-executor allowlist. These are the ONLY
+// `AgentDefinition.executor` values the flow engine recognises as a
+// phase-specific NodeKind — the DECLARED replacement for the old hardcoded
+// AGENT_KIND object literal. Set via `executor:` frontmatter on the four
+// phase SKILL.md files (project-manager, developer-ralph, developer-unifier,
+// reflector); an agent def with no `executor` resolves to the generic
+// 'agent' kind instead. Lives here (not flow-runner.ts) so validate.ts can
+// import it for the executor/enum lint check without creating a circular
+// import (flow-runner.ts already imports FROM validate.ts for
+// findFanOutViolations).
+export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
 
 function oneOf<T extends string>(value: string, allowed: readonly T[], file: string, key: string): T {
   if ((allowed as readonly string[]).includes(value)) return value as T;
@@ -169,6 +189,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   const description = reqString(d, 'description', skillMdPath);
   const phase = optString(d, 'phase');
   const surface = optString(d, 'surface');
+  const executor = optString(d, 'executor');
   const purpose = reqString(d, 'purpose', skillMdPath);
   const brainAccess = oneOf(reqString(d, 'brainAccess', skillMdPath), BRAIN_ACCESS, skillMdPath, 'brainAccess');
   const interactivity = reqString(d, 'interactivity', skillMdPath);
@@ -217,6 +238,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     description,
     phase,
     surface,
+    executor,
     purpose,
     composition,
     runtime,
@@ -232,13 +254,15 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeAgentDefinition(def: AgentDefinition): string {
-  // Fixed key order: name, description, phase?, surface?, purpose, composition,
-  // runtime, brainAccess, interactivity, allowed-tools, disallowed-tools, budgets
+  // Fixed key order: name, description, phase?, surface?, executor?, purpose,
+  // composition, runtime, brainAccess, interactivity, allowed-tools,
+  // disallowed-tools, budgets
   const data: Record<string, unknown> = {};
   data['name'] = def.name;
   data['description'] = def.description;
   if (def.phase !== undefined) data['phase'] = def.phase;
   if (def.surface !== undefined) data['surface'] = def.surface;
+  if (def.executor !== undefined) data['executor'] = def.executor;
   data['purpose'] = def.purpose;
   data['composition'] = def.composition;
 

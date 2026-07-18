@@ -28,7 +28,8 @@ import { join, resolve, sep } from 'node:path';
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
 import { hasPendingStudioChanges, STUDIO_BRANCH } from '../orchestrator/project-repo-tx.ts';
-import { listRuns, buildNodeMapping } from '../orchestrator/run-model.ts';
+import { listRuns, buildNodeMapping, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { eventToNodeId } from '../orchestrator/run-model-derive.ts';
 import { listPlannedInitiatives } from '../orchestrator/planned-initiatives.ts';
 import { checkInitiativeDeps } from '../orchestrator/scheduler.ts';
 import type { Run } from '../orchestrator/run-model.ts';
@@ -471,8 +472,12 @@ export async function handleStudioRoutes(
         return true;
       }
 
-      // Build node mapping to resolve phase → nodeId
+      // Build node mapping to resolve phase → nodeId. R2-01-F4: also build the
+      // agent-slug map so a generic-agent node's events (phase:'orchestrator'
+      // + metadata.agent_slug — nodeMapping.get('orchestrator') is null) are
+      // resolved via eventToNodeId instead of being silently dropped.
       const nodeMapping = buildNodeMapping(ctx.forgeRoot);
+      const agentSlugToNodeId = buildAgentSlugToNodeId(ctx.forgeRoot);
 
       // Read events, filter to this node, classify, cap last 200
       const raw = readFileSync(eventsPath, 'utf8');
@@ -482,7 +487,7 @@ export async function handleStudioRoutes(
         try { events.push(JSON.parse(line) as EventLogEntry); } catch { /* skip malformed */ }
       }
 
-      let nodeEvents = events.filter((e) => nodeMapping.get(e.phase) === nodeId);
+      let nodeEvents = events.filter((e) => eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata) === nodeId);
       // Per-WI scoping (#11): when a WI hex is clicked, show ONLY that WI's own
       // events — each fanOut dev agent has an independent stream, not the pooled
       // dev-loop log. Events already carry metadata.work_item_id.

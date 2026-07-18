@@ -9,6 +9,8 @@
 import { DEMO_STEP_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
+import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { executionPathForSurface } from './derive.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -121,6 +123,32 @@ export function validateAgent(
     findings.push(err(obj, 'readiness/interactivity', 'Agent interactivity description is missing or blank'));
   }
 
+  // surface/enum — error (R2-01-F5). `surface` is optional — absent is legal
+  // (e.g. architect has no surface field at all). Parsed leniently at load
+  // (registry.ts), so a bad value is a lint error here, not a load crash
+  // (kb.backend / flow.kickoff.kind precedent).
+  if (def.surface !== undefined && def.surface.trim() !== '' && !(SURFACE_KINDS as readonly string[]).includes(def.surface)) {
+    findings.push(
+      err(obj, 'surface/enum', `unknown surface "${def.surface}" — must be one of ${SURFACE_KINDS.join('|')}`),
+    );
+  }
+
+  // executor/enum — error (R2-01-F2 review finding). `executor` is optional —
+  // absent is legal (most roster agents have none; they run via the generic
+  // F1 execAgent path). Parsed leniently at load (registry.ts), so a bad
+  // value is a lint error here, not a load crash — otherwise a typo'd
+  // executor silently resolves to NodeKind 'unknown' at runtime (the node
+  // is never executed, only an error-severity log) with no lint signal.
+  if (
+    def.executor !== undefined &&
+    def.executor.trim() !== '' &&
+    !(PHASE_EXECUTOR_KINDS as readonly string[]).includes(def.executor)
+  ) {
+    findings.push(
+      err(obj, 'executor/enum', `unknown executor "${def.executor}" — must be one of ${PHASE_EXECUTOR_KINDS.join('|')}`),
+    );
+  }
+
   // readiness/runtime — error
   const rt = def.runtime;
   const runtimeOk =
@@ -221,6 +249,27 @@ export function validateFlow(
     if (node.agent && !agents.has(node.agent)) {
       findings.push(
         err(obj, 'agent-ref', `Node "${node.id}" references unknown agent "${node.agent}"`),
+      );
+    }
+  }
+
+  // node-executor (R2-01-F2, AC #2): a node whose agent resolves to a real
+  // def but that def is INTERACTIVE (executionPathForSurface(def.surface) ===
+  // 'interactive') and carries no declared `executor` (i.e. not one of the
+  // four legacy phase executors) can never be executed by the flow engine —
+  // interactive agents run through the interactive-session runner, not a
+  // flow node. The `!def` case is already covered by agent-ref above.
+  for (const node of flow.nodes) {
+    if (!node.agent) continue;
+    const def = agents.get(node.agent);
+    if (!def) continue;
+    if (executionPathForSurface(def.surface) === 'interactive' && def.executor === undefined) {
+      findings.push(
+        err(
+          obj,
+          'node-executor',
+          `Node "${node.id}" references interactive agent "${node.agent}" — interactive agents run through the interactive-session runner, not a flow node`,
+        ),
       );
     }
   }

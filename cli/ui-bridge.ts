@@ -98,6 +98,7 @@ import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
+import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import {
   readSessionStatus,
   writeSessionStatus,
@@ -216,7 +217,7 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // user-feedback.md out-dates its last reflector.end. Fire-and-continue — never
   // blocks the server coming up. Skipped in no-spawn mode (seeded e2e/journey
   // runs set FORGE_ARCHITECT_NO_SPAWN=1; the reconcile spawns reflectors, so it
-  // honours the same guard as spawnArchitectTurn — no surprise agent runs there).
+  // honours the same guard as spawnAgentTurn — no surprise agent runs there).
   // R5-01-F1: dry-bridge suppresses this startup spawn path independently too —
   // there is no HTTP response at boot, so the JSONL event IS the typed refusal.
   if (isDryBridge()) {
@@ -1100,24 +1101,56 @@ async function handleHttp(
 
 // ---- Architect routes (ADR 020) -------------------------------------------
 
-/** Spawn one architect-runner turn as a detached child (the scheduler-daemon
+/** The 4 detached-runner turn families the bridge spawns — each `verb` maps
+ *  1:1 to `orchestrator/cli.ts <verb> run <sid> --project <project>`, and
+ *  `logPrefix` names the `_logs/_<logPrefix>-<sid>/` capture dir. `demo-builder`
+ *  is the one case where the two diverge (verb `demo-builder`, log prefix
+ *  `demo`) — preserved exactly from the pre-collapse per-agent functions. */
+type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain';
+
+const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { verb: string; logPrefix: string }> = {
+  architect: { verb: 'architect', logPrefix: 'architect' },
+  instructions: { verb: 'instructions', logPrefix: 'instructions' },
+  'demo-builder': { verb: 'demo-builder', logPrefix: 'demo' },
+  'project-brain': { verb: 'project-brain', logPrefix: 'project-brain' },
+};
+
+/** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
  *  spawn pattern). Best-effort + fire-and-forget — the runner checkpoints to
- *  the session dir and the fsWatch/`architect-list-changed` signal drives the
- *  UI re-fetch. `FORGE_ARCHITECT_NO_SPAWN=1` disables the spawn for harness /
+ *  the session dir and the relevant `broadcast*Changed` signal drives the UI
+ *  re-fetch. `FORGE_ARCHITECT_NO_SPAWN=1` disables the spawn for harness /
  *  curl runs that pre-seed session state (mirrors `FORGE_BRIDGE_DEBUG`).
  *
  *  The runner's stderr (uncaught exceptions, SDK errors) is captured to
- *  `_logs/_architect-<sid>/stderr.log` so stalls are diagnosable via the
- *  existing GET /api/architect/file/<project>/<sid>/stderr.log endpoint. */
-function spawnArchitectTurn(forgeRoot: string, project: string, sessionId: string): void {
+ *  `_logs/_<logPrefix>-<sid>/stderr.log` so stalls are diagnosable via the
+ *  existing GET /api/<family>/file/<project>/<sid>/stderr.log endpoints.
+ *
+ *  R2-01-F3b: collapses the 4 near-byte-identical `spawn<X>Turn` helpers
+ *  (architect/instructions/demo-builder/project-brain) that differed only in
+ *  the CLI verb and the log-dir prefix — same guard, same detached-spawn
+ *  shape, same argv per agent as before the collapse.
+ *
+ *  R2-01 final-review fix (e): guard `sessionId` against path traversal
+ *  before it's used to build the `_logs/_<logPrefix>-<sessionId>/` dir name
+ *  below — defense-in-depth on a pre-existing, F3b-renamed function (route
+ *  handlers already 404 an unknown sessionId before spawning, plus the
+ *  bridge's same-origin + `x-forge-csrf` guard, so this isn't closing an
+ *  exploitable hole today). Reuses `isSafeRunId` — `orchestrator/run-agent.ts`'s
+ *  `SAFE_RUN_ID_RE` + `..` check — as the SSOT rather than re-deriving it. */
+function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: string, sessionId: string): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(sessionId)) {
+    console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
+    return;
+  }
+  const { verb, logPrefix } = SPAWN_AGENT_SPECS[agentId];
   try {
-    const logDir = join(forgeRoot, '_logs', `_architect-${sessionId}`);
+    const logDir = join(forgeRoot, '_logs', `_${logPrefix}-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
     const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'architect', 'run', sessionId, '--project', project],
+      ['--experimental-strip-types', 'orchestrator/cli.ts', verb, 'run', sessionId, '--project', project],
       { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
     closeSync(stderrFd);
@@ -1251,7 +1284,7 @@ async function handleArchitect(
         updated_at: new Date().toISOString(),
       };
       writeStatus(dir, status);
-      spawnArchitectTurn(ctx.forgeRoot, body.project, sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, sessionId, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/start', sessionId) }, origin);
     } catch (err) {
@@ -1284,7 +1317,7 @@ async function handleArchitect(
       const round = prior.length + 1;
       writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
       writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
-      spawnArchitectTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);
     } catch (err) {
@@ -1305,7 +1338,7 @@ async function handleArchitect(
         mergePr: ctx.mergePr,
         finalizeAfterMerge: ctx.finalizeAfterMerge,
         broadcastArchitectChanged: ctx.broadcastArchitectChanged,
-        spawnArchitectTurnFn: spawnArchitectTurn,
+        spawnArchitectTurnFn: (forgeRoot, project, sessionId) => spawnAgentTurn(forgeRoot, 'architect', project, sessionId),
       };
       await applyPlanVerdict(req, res, planCtx, {
         project: typeof body['project'] === 'string' ? body['project'] : '',
@@ -1327,27 +1360,8 @@ async function handleArchitect(
 //
 // Mirrors the architect routes: an operator-driven, file-checkpointed runner
 // that authors a managed project's AGENTS.md (interview → draft → verdict →
-// finalize). The bridge spawns one CLI turn per operator action.
-
-/** Spawn one instructions-runner turn as a detached child. Mirrors
- *  `spawnArchitectTurn` exactly; honours the same `FORGE_ARCHITECT_NO_SPAWN`
- *  env guard the harness sets. Stderr is captured to
- *  `_logs/_instructions-<sid>/stderr.log` for diagnosability. */
-function spawnInstructionsTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  try {
-    const logDir = join(forgeRoot, '_logs', `_instructions-${sessionId}`);
-    mkdirSync(logDir, { recursive: true });
-    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
-    const proc = spawn(
-      process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'instructions', 'run', sessionId, '--project', project],
-      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
-    );
-    closeSync(stderrFd);
-    proc.unref();
-  } catch { /* best-effort */ }
-}
+// finalize). The bridge spawns one CLI turn per operator action via the
+// shared `spawnAgentTurn(forgeRoot, 'instructions', project, sessionId)`.
 
 /** Discover every instructions session under `projects/<name>/_instructions/<sid>/`
  *  — used by the bridge's `GET /api/instructions/sessions`. Best-effort; never
@@ -1524,7 +1538,7 @@ async function handleInstructions(
       const brief = body.brief ?? '';
       writeFileSync(join(dir, 'prompt.md'), brief);
       writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: 1, prompt: brief });
-      spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/brief', body.sessionId) }, origin);
     } catch (err) {
@@ -1557,7 +1571,7 @@ async function handleInstructions(
       const round = prior.length + 1;
       writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
       writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: round + 1 });
-      spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
       sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/answer', body.sessionId) }, origin);
     } catch (err) {
@@ -1594,7 +1608,7 @@ async function handleInstructions(
       } else {
         writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'rejected' });
       }
-      spawnInstructionsTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/verdict', body.sessionId) }, origin);
     } catch (err) {
@@ -1613,44 +1627,13 @@ async function handleInstructions(
 // instructions (whose output lives in the session dir), the demo-builder agent
 // writes DEMO.html into the PROJECT REPO under .forge/demo/ — so the file route
 // serves from `project_repo_path`, not the session dir. The bridge spawns one
-// CLI turn per operator action.
+// CLI turn per operator action, via the shared
+// `spawnAgentTurn(forgeRoot, 'demo-builder', project, sessionId)` — note the
+// log-dir prefix stays `_demo-<sid>` (not `_demo-builder-<sid>`), matching
+// the pre-collapse `spawnDemoBuilderTurn` exactly.
 
-/** Spawn one demo-builder-runner turn as a detached child. Mirrors
- *  `spawnInstructionsTurn` exactly; honours the same `FORGE_ARCHITECT_NO_SPAWN`
- *  env guard the harness sets. Stderr is captured to
- *  `_logs/_demo-<sid>/stderr.log` for diagnosability. */
-function spawnDemoBuilderTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  try {
-    const logDir = join(forgeRoot, '_logs', `_demo-${sessionId}`);
-    mkdirSync(logDir, { recursive: true });
-    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
-    const proc = spawn(
-      process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'demo-builder', 'run', sessionId, '--project', project],
-      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
-    );
-    closeSync(stderrFd);
-    proc.unref();
-  } catch { /* best-effort */ }
-}
-
-/** R1-3b — spawn ONE detached `forge project-brain run` turn (analyze or commit). */
-function spawnProjectBrainTurn(forgeRoot: string, project: string, sessionId: string): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  try {
-    const logDir = join(forgeRoot, '_logs', `_project-brain-${sessionId}`);
-    mkdirSync(logDir, { recursive: true });
-    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
-    const proc = spawn(
-      process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', 'project-brain', 'run', sessionId, '--project', project],
-      { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
-    );
-    closeSync(stderrFd);
-    proc.unref();
-  } catch { /* best-effort */ }
-}
+// R1-3b — the project-brain turn spawns via
+// `spawnAgentTurn(forgeRoot, 'project-brain', project, sessionId)`.
 
 /** R1-3b — list every project-brain session with its current state. */
 function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
@@ -1985,7 +1968,7 @@ async function handleDemoBuilder(
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       writeFileSync(join(dir, 'prompt.md'), body.brief ?? '');
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: 'analyzing', prompt: body.brief ?? '' });
-      spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
     } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
@@ -2000,7 +1983,7 @@ async function handleDemoBuilder(
       const status = readSessionStatus<ProjectBrainStatus>(dir);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: approve ? 'committing' : 'abandoned' });
-      if (approve) spawnProjectBrainTurn(ctx.forgeRoot, body.project, body.sessionId);
+      if (approve) spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       // Only approve spawns — abandon is exempt-local and carries no marker.
       sendJson(res, 200, { ok: true, ...(approve ? dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/approve', body.sessionId) : {}) }, origin);
@@ -2067,7 +2050,7 @@ async function handleDemoBuilder(
         ...status, phase: 'generating', iteration: 1, prompt: brief,
         ...(targetElement ? { targetElement } : {}),
       });
-      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/brief', body.sessionId) }, origin);
     } catch (err) {
@@ -2093,7 +2076,7 @@ async function handleDemoBuilder(
       }
       writeFileSync(join(dir, 'feedback.md'), body.feedback ?? '');
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: status.iteration + 1 });
-      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/feedback', body.sessionId) }, origin);
     } catch (err) {
@@ -2117,7 +2100,7 @@ async function handleDemoBuilder(
         return true;
       }
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'locking' });
-      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
     } catch (err) {
@@ -2141,7 +2124,7 @@ async function handleDemoBuilder(
         return true;
       }
       writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'abandoned' });
-      spawnDemoBuilderTurn(ctx.forgeRoot, body.project, body.sessionId);
+      spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/abandon', body.sessionId) }, origin);
     } catch (err) {

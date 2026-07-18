@@ -13,6 +13,7 @@ import type {
   KbDescriptor,
   ProjectDefinition,
 } from './types.ts';
+import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import {
   SLUG_RE,
   validateAgent,
@@ -204,6 +205,72 @@ describe('validateAgent — readiness/interactivity', () => {
   it('non-empty interactivity → no readiness/interactivity finding', () => {
     const findings = validateAgent(makeAgent());
     assert.ok(!findings.some((x) => x.check === 'readiness/interactivity'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateAgent — surface/enum (R2-01-F5)
+// ---------------------------------------------------------------------------
+
+describe('validateAgent — surface/enum', () => {
+  for (const value of SURFACE_KINDS) {
+    it(`valid surface "${value}" → no surface/enum finding`, () => {
+      const findings = validateAgent(makeAgent({ surface: value }));
+      assert.ok(!findings.some((x) => x.check === 'surface/enum'));
+    });
+  }
+
+  it('absent surface → no surface/enum finding', () => {
+    const findings = validateAgent(makeAgent({ surface: undefined }));
+    assert.ok(!findings.some((x) => x.check === 'surface/enum'));
+  });
+
+  it('unknown surface value → blocking surface/enum finding', () => {
+    const findings = validateAgent(makeAgent({ surface: 'bogus' }));
+    const f = findings.find((x) => x.check === 'surface/enum');
+    assert.ok(f, 'expected surface/enum finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.object.startsWith('agent:'));
+    assert.match(f.message, /unknown surface "bogus"/);
+    assert.match(f.message, new RegExp(SURFACE_KINDS.join('\\|')));
+  });
+
+  it('blank/whitespace-only surface → no surface/enum finding (treated as absent)', () => {
+    const findings = validateAgent(makeAgent({ surface: '   ' }));
+    assert.ok(!findings.some((x) => x.check === 'surface/enum'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateAgent — executor/enum (R2-01-F2 review finding)
+// ---------------------------------------------------------------------------
+
+describe('validateAgent — executor/enum', () => {
+  for (const value of PHASE_EXECUTOR_KINDS) {
+    it(`valid executor "${value}" → no executor/enum finding`, () => {
+      const findings = validateAgent(makeAgent({ executor: value }));
+      assert.ok(!findings.some((x) => x.check === 'executor/enum'));
+    });
+  }
+
+  it('absent executor → no executor/enum finding', () => {
+    const findings = validateAgent(makeAgent({ executor: undefined }));
+    assert.ok(!findings.some((x) => x.check === 'executor/enum'));
+  });
+
+  it('unknown executor value → blocking executor/enum finding', () => {
+    const findings = validateAgent(makeAgent({ executor: 'xyz' }));
+    const f = findings.find((x) => x.check === 'executor/enum');
+    assert.ok(f, 'expected executor/enum finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.object.startsWith('agent:'));
+    assert.match(f.message, /unknown executor "xyz"/);
+    assert.match(f.message, new RegExp(PHASE_EXECUTOR_KINDS.join('\\|')));
+  });
+
+  it('blank/whitespace-only executor → no executor/enum finding (treated as absent)', () => {
+    const findings = validateAgent(makeAgent({ executor: '   ' }));
+    assert.ok(!findings.some((x) => x.check === 'executor/enum'));
   });
 });
 
@@ -441,6 +508,39 @@ describe('validateFlow — agent-ref', () => {
   it('node.agent slug present in agents map → no agent-ref finding', () => {
     const findings = validateFlow(makeFlow(), makeAgentMap(makeAgent()));
     assert.ok(!findings.some((x) => x.check === 'agent-ref'));
+  });
+});
+
+describe('validateFlow — node-executor (R2-01-F2)', () => {
+  it('node references an interactive agent with no declared executor → error node-executor', () => {
+    const interactiveAgent = makeAgent({ slug: 'my-agent', surface: 'interactive' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(interactiveAgent));
+    const f = findings.find((x) => x.check === 'node-executor');
+    assert.ok(f, 'expected node-executor finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('my-agent'));
+    assert.ok(f.message.includes('interactive'));
+  });
+
+  it('node references an unattended agent with no declared executor → no node-executor finding', () => {
+    const unattendedAgent = makeAgent({ slug: 'my-agent', surface: 'unattended' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(unattendedAgent));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
+  });
+
+  it('node references an interactive agent that DOES declare an executor (a phase agent) → no node-executor finding', () => {
+    const phaseAgent = makeAgent({ slug: 'my-agent', surface: 'interactive', executor: 'pm' });
+    const findings = validateFlow(makeFlow(), makeAgentMap(phaseAgent));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
+  });
+
+  it('node references an unknown agent slug → no node-executor finding (agent-ref already covers it)', () => {
+    const flow = makeFlow({
+      nodes: [{ id: 'step-a', agent: 'ghost-agent' }, { id: 'gate', gate: 'verdict' }],
+      edges: [{ from: 'step-a', to: 'gate', artifact: 'result' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'node-executor'));
   });
 });
 
