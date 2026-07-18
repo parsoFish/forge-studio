@@ -1,12 +1,37 @@
 # ADR 037 — Compiled work-item contracts (wi-spec-compiler)
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-07-11
+**Accepted:** 2026-07-18
 **Amends:** [ADR 010](./010-brain-first.md)'s enforcement mechanism (not its
 allocation of who reads the brain). **References:** [ADR 036](./036-orchestrator-owned-gate-execution.md)
 (the sibling structural fix, opposite end of the pipeline), [ADR 024](./024-phases-as-subagents-invoking-skills.md)
 (the skill-composition seam this adds to). Codifies REFINEMENT-PLAN.md
 Phase 3, item 3.1.
+
+## 2026-07-18 amendment (R4-05-F3): accepted at the plan-agent seam
+
+ADR-037 is **Accepted**. It lives at the **plan-agent seam** ([R4-05](../roadmaps/R4-ootb-suite.md)
+evolves the `project-manager` skill into forge's plan agent): the deterministic
+compile stage runs inside the plan agent's `runOnePmPass` post-agent pipeline,
+after the agent returns and before `validateWorkItemSet`/`detectHiddenCoupling`.
+
+**As-built:** decision items 1+2 (structured constraint blocks + the
+deterministic injector, `creates:` mandatory-with-escape + sizing bound, and
+hidden-coupling reject→compile) and item 4 (`ralph-spec-lint`) are
+implemented and running — `orchestrator/phases/wi-spec-compile.ts`,
+`orchestrator/constraint-blocks.ts`, `orchestrator/phases/ralph-spec-lint.ts`.
+
+**Item 3 (bounded sonnet assist, `skills/wi-spec-compiler/SKILL.md`) is
+DEFERRED.** Rationale: the deterministic injector already closes the proven
+failure mode (brain checklist dropped across WIs — the three-cycle
+terraform-provider-betterado evidence). Item 3 targets the *narrower,
+unproven* judgment case (ambiguous `applies_to`, novel port-fidelity
+checklist synthesis); building a speculative LLM spawn against an unproven
+need contradicts forge's "simplest thing that could work / shave guardrails"
+north star. **Re-entry condition:** a real cycle demonstrably needs a
+constraint the deterministic selector cannot express. (Mirrors the wave-1
+R2-01-F3 deferral pattern.)
 
 ## Context
 
@@ -77,7 +102,10 @@ the existing post-PM pipeline (`appendStandingAcs` is the direct precedent).
    *(As-built note, 2026-07-11: selector fields match any parsed WI/manifest
    frontmatter field generically; until the PM populates a dedicated domain
    field, clauses target `manifest.<field>` globs — e.g. `initiative_id` —
-   or `all`.)*
+   or `all`.)* *(Update, R4-05-F7, 2026-07-18: the PM now populates
+   `wi.domain` — a coarse subsystem/feature-area tag set per WI — so
+   `applies_to: wi.domain=<glob>` selectors are live, in addition to
+   `manifest.<field>` globs and `all`.)*
 
 2. **Deterministic injector (code, not LLM)**, sequenced alongside
    `appendStandingAcs` before `validateWorkItemSet`:
