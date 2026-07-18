@@ -10,7 +10,7 @@
  *   GET /api/runs?flow=<id>                 → { runs: Run[] } (filtered)
  *   GET /api/runs/<id>                      → { run: Run }
  *   GET /api/runs/<id>/phases/<node>/log    → { lines } (stderr=1 to filter)
- *   GET /api/studio/agents                  → { agents: AgentDefinition[] }
+ *   GET /api/studio/agents                  → { agents: (AgentDefinition & { capability: AgentCapabilityDescriptor })[] }
  *   GET /api/studio/flows                   → { flows: FlowDefinition[] }
  *   GET /api/studio/projects                → { projects }
  *   GET /api/studio/catalog                 → catalog content
@@ -43,6 +43,7 @@ import {
   loadCatalog,
   listDemoElements,
 } from '../orchestrator/studio/registry.ts';
+import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
@@ -538,7 +539,14 @@ export async function handleStudioRoutes(
     try {
       const skillsDir = join(resolve(ctx.forgeRoot), 'skills');
       const agents = listAgentDefinitions(skillsDir);
-      sendJson(res, 200, { agents }, origin);
+      // R2-02-F1: thread the server-computed capability descriptor onto each
+      // agent's wire payload — no capability fact may exist only in UI code.
+      sendJson(
+        res,
+        200,
+        { agents: agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) })) },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -547,11 +555,19 @@ export async function handleStudioRoutes(
 
   // ---- /api/studio/starters -----------------------------------------------
   // The curated OOTB starter agents (ADR-033) the New-Agent picker offers.
+  // Same capability-descriptor threading as /api/studio/agents (R2-02-F1) —
+  // starters carry a real AgentDefinition the builder reads via the same
+  // client parser, so the fact must be present here too.
   if (url === '/api/studio/starters') {
     try {
       const starters = listStarterAgents(ctx.forgeRoot);
       const flow = loadStarterFlow(ctx.forgeRoot);
-      sendJson(res, 200, { starters, flow }, origin);
+      sendJson(
+        res,
+        200,
+        { starters: starters.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) })), flow },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

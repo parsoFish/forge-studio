@@ -31,6 +31,7 @@ import {
   fetchStarters,
   saveAgent,
   type Agent,
+  type AgentCapabilityDescriptor,
   type AgentRuntime,
   type Catalog,
   type Flow,
@@ -58,6 +59,12 @@ type AgentState = {
   allowedTools: string[];
   disallowedTools: string[];
   phase: string;
+  // R2-02-F4: server-computed F1 capability descriptor, carried through
+  // as-is (never re-derived client-side) — undefined only for a genuinely
+  // blank agent, before the first load/save round-trip. A starter-picked
+  // agent DOES carry a capability (applyStarter → parseAgent(starter),
+  // fed by the /api/studio/starters threading).
+  capability?: AgentCapabilityDescriptor;
 };
 
 const DEFAULT_RUNTIME: AgentRuntime = {
@@ -124,6 +131,7 @@ function parseAgent(raw: Agent): AgentState {
     allowedTools:   ((raw as Record<string, unknown>).allowedTools  as string[] | undefined) ?? [],
     disallowedTools:((raw as Record<string, unknown>).disallowedTools as string[] | undefined) ?? [],
     phase:          raw.phase ?? '',
+    capability:     raw.capability,
   };
 }
 
@@ -148,11 +156,6 @@ function buildPutBody(state: AgentState): Record<string, unknown> {
       loopStrategy: state.runtime.loopStrategy,
     },
   };
-}
-
-function runtimeConfigured(rt: AgentRuntime): boolean {
-  if (!rt.sdk) return false;
-  return rt.strategy === 'fixed' ? !!rt.model : rt.range.length > 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -329,13 +332,17 @@ export default function AgentBuilderPage() {
   const usedIds = [...state.skills, ...state.tools, ...state.mcps, ...state.hooks];
 
   // ---- readiness check inputs ----
+  // R2-02-F4: `capability` (the runtime-SDK + interactive facts) is the
+  // server-computed F1 descriptor, threaded through verbatim — NOT
+  // re-derived from `state.runtime` here (that client re-derivation was the
+  // "hardcoded heuristic" the AC replaces). See forge-ui/lib/agent-readiness.ts.
   const readinessState = {
-    purpose:           state.purpose,
-    skills:            state.skills,
-    hooks:             state.hooks,
-    process:           state.process,
-    interactivity:     state.interactivity,
-    runtimeConfigured: runtimeConfigured(state.runtime),
+    purpose:       state.purpose,
+    skills:        state.skills,
+    hooks:         state.hooks,
+    process:       state.process,
+    interactivity: state.interactivity,
+    capability:    state.capability,
   };
 
   // ---- render ----

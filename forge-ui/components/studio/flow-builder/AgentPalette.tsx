@@ -16,6 +16,10 @@ import { fetchStudioAgents } from '@/lib/studio-client';
 import type { Agent } from '@/lib/studio-client';
 import { ARTIFACTS } from './ArtifactPicker';
 
+// Tooltip shown on a non-placeable (interactive) agent chip (R2-02-F3).
+const INTERACTIVE_NOT_PLACEABLE_TITLE =
+  'interactive agents run through the interactive-session runner, not a flow node';
+
 // Encode drag payload as JSON string in data-transfer
 export function encodeDragPayload(kind: 'agent' | 'project' | 'artifact', ref: string): string {
   return JSON.stringify({ kind, ref });
@@ -36,9 +40,13 @@ type DraggableChipProps = {
   ref_: string;
   label: string;
   sublabel?: string;
+  // R2-02-F3: false for an interactive agent — it cannot be placed as a flow
+  // node, so its chip is greyed out and cannot start a drag. Defaults true
+  // (project/artifact chips are never gated).
+  placeable?: boolean;
 };
 
-function DraggableChip({ kind, ref_, label, sublabel }: DraggableChipProps): JSX.Element {
+function DraggableChip({ kind, ref_, label, sublabel, placeable = true }: DraggableChipProps): JSX.Element {
   const dotColor =
     kind === 'agent'   ? 'var(--c-agent)' :
     kind === 'project' ? 'var(--c-project)' :
@@ -46,10 +54,12 @@ function DraggableChip({ kind, ref_, label, sublabel }: DraggableChipProps): JSX
 
   return (
     <div
-      draggable
+      draggable={placeable}
       data-palette-chip={kind}
       data-chip-ref={ref_}
+      data-chip-placeable={placeable ? 'true' : 'false'}
       onDragStart={(e) => {
+        if (!placeable) return;
         e.dataTransfer.effectAllowed = 'copy';
         e.dataTransfer.setData('text/plain', encodeDragPayload(kind, ref_));
         (e.currentTarget as HTMLElement).style.opacity = '0.4';
@@ -57,7 +67,7 @@ function DraggableChip({ kind, ref_, label, sublabel }: DraggableChipProps): JSX
       onDragEnd={(e) => {
         (e.currentTarget as HTMLElement).style.opacity = '1';
       }}
-      title={sublabel}
+      title={placeable ? sublabel : INTERACTIVE_NOT_PLACEABLE_TITLE}
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -67,20 +77,23 @@ function DraggableChip({ kind, ref_, label, sublabel }: DraggableChipProps): JSX
         border: '1px solid var(--line-2)',
         borderRadius: 'var(--radius-sm)',
         fontSize: 12.5,
-        color: 'var(--text)',
-        cursor: 'grab',
+        color: placeable ? 'var(--text)' : 'var(--faint)',
+        cursor: placeable ? 'grab' : 'not-allowed',
+        opacity: placeable ? 1 : 0.5,
         userSelect: 'none',
         transition: 'border-color 0.12s',
         width: '100%',
         boxSizing: 'border-box',
       }}
       onMouseEnter={(e) => {
+        if (!placeable) return;
         const el = e.currentTarget as HTMLElement;
         el.style.borderColor = 'var(--ember)';
         el.style.background = 'rgba(255,158,74,0.08)';
         el.style.boxShadow = '0 0 0 1px rgba(255,158,74,0.18)';
       }}
       onMouseLeave={(e) => {
+        if (!placeable) return;
         const el = e.currentTarget as HTMLElement;
         el.style.borderColor = 'var(--line-2)';
         el.style.background = 'var(--panel-2)';
@@ -186,6 +199,7 @@ export function AgentPalette(): JSX.Element {
               ref_={ag.id}
               label={ag.name}
               sublabel={ag.purpose}
+              placeable={!ag.capability?.interactive}
             />
           ))
         )}

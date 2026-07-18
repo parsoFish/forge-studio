@@ -567,6 +567,21 @@ export function FlowBuilderCanvas({
     e.dataTransfer.dropEffect = 'copy';
   }, []);
 
+  // R2-02-F3: belt-and-suspenders drop rejection banner (the palette chip
+  // itself is the primary gate — a non-placeable chip can't start a drag —
+  // this only fires if a drag somehow slips through). Auto-clears.
+  const [dropReject, setDropReject] = useState<string | null>(null);
+  const dropRejectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rejectDrop = useCallback((message: string) => {
+    console.warn(`[flow-builder] ${message}`);
+    setDropReject(message);
+    if (dropRejectTimeoutRef.current) clearTimeout(dropRejectTimeoutRef.current);
+    dropRejectTimeoutRef.current = setTimeout(() => setDropReject(null), 4000);
+  }, []);
+  useEffect(() => () => {
+    if (dropRejectTimeoutRef.current) clearTimeout(dropRejectTimeoutRef.current);
+  }, []);
+
   const onDrop = useCallback(
     (e: React.DragEvent) => {
       e.preventDefault();
@@ -576,6 +591,14 @@ export function FlowBuilderCanvas({
 
       const agentRef = payload.ref;
       const agent = agents.find((a) => a.id === agentRef);
+
+      // R2-02-F3: an interactive agent (per the F1 capability descriptor)
+      // cannot be placed as a plain flow node — it runs through the
+      // interactive-session runner, not a flow node. Do NOT create the node.
+      if (agent?.capability?.interactive) {
+        rejectDrop(`"${agent.name}" is an interactive agent — interactive agents run through the interactive-session runner, not a flow node.`);
+        return;
+      }
 
       // Convert screen coords to ReactFlow coords
       const wrapper = reactFlowWrapper.current;
@@ -601,7 +624,7 @@ export function FlowBuilderCanvas({
       };
       setRfNodes((nds) => [...nds, newNode]);
     },
-    [agents, rfInstance],
+    [agents, rfInstance, rejectDrop],
   );
 
   // ---------------------------------------------------------------------------
@@ -693,6 +716,33 @@ export function FlowBuilderCanvas({
           ⊞ Layout
         </button>
       </div>
+
+      {/* R2-02-F3: drop-rejected banner (belt-and-suspenders — the palette
+          chip is the primary gate) */}
+      {dropReject && (
+        <div
+          data-component="canvas-drop-reject"
+          data-drop-reject-message={dropReject}
+          role="alert"
+          style={{
+            position: 'absolute',
+            top: 12,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 30,
+            background: 'rgba(239,68,68,0.14)',
+            border: '1px solid rgba(239,68,68,0.4)',
+            color: '#fca5a5',
+            fontSize: 12,
+            padding: '6px 12px',
+            borderRadius: 'var(--radius-sm)',
+            maxWidth: '70%',
+            textAlign: 'center',
+          }}
+        >
+          {dropReject}
+        </div>
+      )}
 
       {/* Empty state hint */}
       {rfNodes.length === 0 && (

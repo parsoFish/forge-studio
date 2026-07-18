@@ -17,6 +17,17 @@ import yaml from 'js-yaml';
 // to compare against.
 const SCRATCH_CHAIN = ['developer-ralph', 'developer-unifier', 'project-scoped-review'];
 
+// R2-02-F3: no shipped library agent is currently `capability.interactive:
+// true` — the roster's few `surface: interactive` skills (demo-builder,
+// instructions-creator, cruft-sweep) are deliberately excluded from the
+// composable roster (registry.ts's isStudioAgent — `library: false` or no
+// `runtime` block). To prove the BUILD tab's placement gate genuinely reads
+// the F1 `agent.capability.interactive` descriptor (not a stub), the
+// scratch-build beat flips ONE real, unrelated roster agent's capability via
+// a one-shot network fixture — never a SCRATCH_CHAIN agent — narrated
+// honestly as a fixture, not a "real" interactive agent.
+const CAPABILITY_FIXTURE_AGENT = 'project-manager';
+
 // Drop-coordinate spacing for the three scratch-flow nodes, shared by the main
 // beat AND the clip so both drop hexes the same way. Canvas-fraction based (not
 // pixel-based) so it scales with whatever viewport is recording. Widened from
@@ -297,12 +308,35 @@ export const journey = defineJourney({
       {
         id: 'flows-author-scratch-build',
         title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'The operator genuinely rebuilds forge-develop in the live builder — clear the seeded starter, drag three agents onto a blank canvas by HTML5 drag-and-drop, wire two edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and triggers/kickoff/cost-ceiling have no UI surface at all.',
+        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag three agents onto a blank canvas by HTML5 drag-and-drop, wire two edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and triggers/kickoff/cost-ceiling have no UI surface at all.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH, LIVE IN THE UI ─────────
               console.log('\n[A2] Build the forge-develop flow from scratch (flow-as-data)');
               cleanScratchFlow(); // defensive — a prior run's leftover, if any
+
+              // R2-02-F3: register the capability fixture BEFORE the navigation
+              // below so /flows/new's GET /api/studio/agents traffic is
+              // intercepted — flips CAPABILITY_FIXTURE_AGENT's
+              // capability.interactive to true (see CAPABILITY_FIXTURE_AGENT
+              // comment up top). /flows/new fires TWO independent fetches to
+              // this endpoint on mount (loadBuildData's agents prop and
+              // AgentPalette's own load), so the handler mutates EVERY
+              // intercepted response for the beat's duration — idempotently,
+              // it only ever rewrites the one agent's field — rather than
+              // unrouting after the first hit, which left the fetch that lost
+              // the race unmutated. Cleanup is the existing end-of-beat
+              // page.unroute below, once both fetches are safely done with.
+              await page.route('**/api/studio/agents', async (route) => {
+                const response = await route.fetch();
+                const body = await response.json();
+                const agents = Array.isArray(body.agents)
+                  ? body.agents.map((a) => (a && a.slug === CAPABILITY_FIXTURE_AGENT
+                      ? { ...a, capability: { interactive: true, runtimeSdks: a.capability?.runtimeSdks ?? [] } }
+                      : a))
+                  : body.agents;
+                await route.fulfill({ response, json: { ...body, agents } });
+              });
 
               await page.goto(watch.uiUrl + '/flows/new', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
@@ -310,6 +344,43 @@ export const journey = defineJourney({
                 null, { timeout: 15000 },
               ).catch(() => {});
               await caption(page, 'Building the forge-develop flow from scratch, live: three agents dropped from the palette, two edges wired by hand, one verdict gate — the same shape as the production seed.');
+
+              // R2-02-F3: BUILD-tab capability gate, checked against the fixture
+              // above before anything else — a non-placeable palette chip, and a
+              // rejected raw drop (bypassing the disabled chip's own dragstart
+              // guard, belt-and-suspenders per FlowBuilderCanvas.onDrop).
+              const fixtureChip = page.locator(`[data-palette-chip="agent"][data-chip-ref="${CAPABILITY_FIXTURE_AGENT}"]`);
+              await fixtureChip.waitFor({ timeout: 8000 }).catch(() => {});
+              const fixturePlaceable = await fixtureChip.getAttribute('data-chip-placeable').catch(() => null);
+              check(fixturePlaceable === 'false',
+                `author-from-scratch: an interactive agent's palette chip is non-placeable (data-chip-placeable="${fixturePlaceable}")`);
+
+              const realChip = page.locator(`[data-palette-chip="agent"][data-chip-ref="${SCRATCH_CHAIN[0]}"]`);
+              const realPlaceable = await realChip.getAttribute('data-chip-placeable').catch(() => null);
+              check(realPlaceable === 'true',
+                `author-from-scratch: a normal (unattended) agent's palette chip stays placeable (data-chip-placeable="${realPlaceable}")`);
+
+              const nodeCountBeforeReject = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10));
+              const canvasEl = page.locator('[data-component="flow-builder-canvas"]');
+              const rejectDataTransfer = await page.evaluateHandle((ref) => {
+                const dt = new DataTransfer();
+                dt.setData('text/plain', JSON.stringify({ kind: 'agent', ref }));
+                return dt;
+              }, CAPABILITY_FIXTURE_AGENT);
+              await canvasEl.dispatchEvent('dragover', { dataTransfer: rejectDataTransfer });
+              await canvasEl.dispatchEvent('drop', { dataTransfer: rejectDataTransfer });
+              await page.waitForSelector('[data-component="canvas-drop-reject"]', { timeout: 3000 }).catch(() => {});
+              const rejectMessage = await page.evaluate(() =>
+                document.querySelector('[data-component="canvas-drop-reject"]')?.getAttribute('data-drop-reject-message') ?? null);
+              check(rejectMessage !== null && rejectMessage.toLowerCase().includes('interactive'),
+                `author-from-scratch: FlowBuilderCanvas.onDrop rejects an interactive-agent drop even via a raw payload (message: "${rejectMessage}")`);
+              const nodeCountAfterReject = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10));
+              check(nodeCountAfterReject === nodeCountBeforeReject,
+                `author-from-scratch: the rejected interactive-agent drop created no new node (count stayed ${nodeCountBeforeReject})`);
+              await page.unroute('**/api/studio/agents').catch(() => {});
+              await frame(page, 'a2-0b-capability-gate', 'A2 — the BUILD tab gates interactive-agent placement (R2-02-F3): a non-placeable palette chip, and a rejected drop, both driven by the F1 capability descriptor');
 
               // /flows/new always seeds the basic starter — there is no blank path.
               // WAIT for the starter fetch to land first: loadBuildData is async, and

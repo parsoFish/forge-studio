@@ -935,6 +935,23 @@ html { scroll-behavior: smooth; }
 .ready-badge.visible { display: flex; }
 .ready-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px rgba(74,222,128,.6); }
 
+/* capability chip — R2-02-F4: informational reflection of the F1 descriptor's
+   `interactive` fact (deliberately NOT green/gray ok-vs-not-ok, since neither
+   value is a readiness failure — see forge-ui/lib/agent-readiness.ts) */
+.capability-chip {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 12.5px;
+  color: var(--dim);
+  padding: 5px 6px;
+  margin-top: 2px;
+  border-radius: var(--radius-sm);
+}
+.capability-chip .ri-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--line-2); flex-shrink: 0; }
+.capability-chip.interactive { color: var(--text); }
+.capability-chip.interactive .ri-dot { background: var(--violet); box-shadow: 0 0 6px rgba(167,139,250,.4); }
+
 /* used-in-flows */
 .flows-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .flow-chip-link {
