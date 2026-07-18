@@ -341,6 +341,37 @@ is authoritative for how/when.
   the harness runbook and consider narrowing the PR check to only PRs the harness could have
   acted on if the false-positive proves annoying in practice. *(R6/R7)*
 
+### 8. R2-01 agent-as-runnable — as-built follow-ups (2026-07-18)
+
+R2-01 (agent-as-runnable primitive, roadmap R2-B8) shipped clean — zero merge-blockers across six
+per-task reviews + a 4-lens adversarial whole-branch review (+ re-run integration/security lenses).
+The whole-branch review surfaced three **latent, forward-looking** items — none reachable in
+shipping content today (no seed flow declares a generic-agent node; every seed flow uses
+gated/canonical-executor nodes), each owned by a downstream initiative:
+
+- **`execAgent` stamps `PROMPT.md` into the initiative git-worktree root.**
+  `orchestrator/flow-runner.ts`'s `execAgent` passes `workdir: input.worktreePath`;
+  `orchestrator/run-agent.ts` writes `join(workdir, 'PROMPT.md')`. The normal Ralph loop writes
+  there too but goes through the dev-loop's scratch-strip / `wi-merge-back` exclusion; the generic
+  `execAgent` path does not. If a real generic-agent node runs in a develop-style flow whose
+  worktree becomes a PR, `PROMPT.md` could leak into the PR. *Owner **R4-01/R4-02*** (they wire
+  generic agents onto real flows): give `execAgent` a scratch prompt path (e.g. a `.forge/`-ignored
+  dir) while keeping the agent's cwd on the worktree.
+- **The F2 `node-executor` lint is surface-derived and doesn't catch a bespoke interactive runner
+  placed as a bare (no-`gate`) agent node** (`orchestrator/studio/validate.ts`). It correctly flags
+  `surface: interactive` roster agents, but `architect` (no `surface` → `executionPathForSurface`
+  yields `unattended`) as a bare `{agent: architect}` node with no `gate:'plan'` would resolve to
+  `'agent'` → `execAgent` and mis-dispatch a multi-turn runner one-shot. Unreachable today (architect
+  always ships with `gate:'plan'` → resolves via `GATE_KIND`). *Owner **R4*** (when real flows are
+  authored): key the guard off the bespoke-interactive-runner set, not `surface` alone. (`library:false`
+  bespoke runners like `project-brain-builder` are NOT in the roster map → already resolve to `'unknown'`.)
+- **`buildAgentPrompt` will carry untrusted input once R2-04 external triggers land.**
+  `orchestrator/flow-runner.ts` concatenates `def.body` + `basename(projectRepoPath)` + `initiativeId`
+  + inbound-artifact labels into the agent prompt — all forge/operator-authored today (no injection
+  vector). When R2-04 lets external systems set binding fields, validate/escape them at the trigger
+  boundary before they reach the prompt. *Owner **R2-04*** (already carries the content-trust posture:
+  HMAC, source allowlists, typed-payload isolation, injection fixture).
+
 ---
 
 ## Strengths worth preserving (don't regress these)
