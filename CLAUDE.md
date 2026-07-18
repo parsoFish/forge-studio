@@ -159,7 +159,14 @@ inventory rather than one shared page-level contract:
 
 - **Library `/`** — the landing/browse surface: `[data-page="library"][data-page-ready]`,
   one `data-section` per pillar (`orientation`, `projects`, `agents`,
-  `flows`, `kbs`).
+  `flows`, `kbs`). Right after the hero's Operator Pulse panel sits the
+  cross-project **attention strip** (R4-11-F4, present once ≥1 project is
+  registered) — `[data-section="attention-strip"]` wrapping one
+  `[data-attention-item][data-attention-project]` link per project (a real
+  `<a href="/projects/<id>">`, every item links through to its project's
+  roadmap) carrying `data-attention-planned`, `data-attention-in-flight`,
+  `data-attention-gated`, `data-attention-merged`, `data-attention-flagged`
+  counts.
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
