@@ -361,6 +361,52 @@ export async function startDevelopment(initiativeIds: string[]): Promise<StartDe
   };
 }
 
+// ---- Plan trigger (R4-05-F4 / R4-11-F2) ----------------------------------
+
+export type PlanInitiativeResult = {
+  status: 'enqueued' | 'not-found' | 'already-running' | 'error';
+  initiativeId: string;
+  cycleId?: string;
+  flowId?: string;
+  detail?: string;
+};
+
+/**
+ * Trigger the forge-architect (decompose) flow for a WI-less initiative (the
+ * roadmap's per-initiative "Plan" trigger, R4-11-F2). Repoints the manifest
+ * at forge-architect + threads its cycle_id, then the scheduler claims it.
+ *
+ * Unlike `startDevelopment`'s batch envelope, `POST /api/initiatives/:id/plan`
+ * maps its single outcome onto a real HTTP status (200 enqueued / 404
+ * not-found / 409 already-running / 500 error) with every field (status,
+ * detail, cycleId, flowId) meaningful on every outcome — `bridgePost`'s
+ * generic non-2xx handling only preserves a bare `error` string, so this
+ * reads the JSON body directly instead of going through that envelope.
+ */
+export async function planInitiative(initiativeId: string): Promise<PlanInitiativeResult> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { status: 'error', initiativeId, detail: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/initiatives/${encodeURIComponent(initiativeId)}/plan`, {
+      method: 'POST',
+      headers: { 'x-forge-csrf': '1' },
+    });
+    const body = (await res.json()) as Partial<PlanInitiativeResult> & { error?: string };
+    if (body.status) {
+      return {
+        status: body.status,
+        initiativeId,
+        cycleId: body.cycleId,
+        flowId: body.flowId,
+        detail: body.detail,
+      };
+    }
+    return { status: 'error', initiativeId, detail: body.error ?? `HTTP ${res.status}` };
+  } catch (err) {
+    return { status: 'error', initiativeId, detail: String(err) };
+  }
+}
+
 // ---- Structured demo (ADR 021) ------------------------------------------
 
 export type DemoHarnessMetricRow = {

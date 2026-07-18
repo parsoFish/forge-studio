@@ -110,6 +110,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-gate-control'],
 
   ['roadmap', 'roadmap-tab'],
+  ['roadmap', 'roadmap-plan-trigger'],
   ['roadmap', 'roadmap-start-development'],
 
   ['recovery', 'recovery-surface'],

@@ -792,7 +792,13 @@ export type RoadmapInitiative = {
    */
   ready: boolean;
   blockedBy: string[];
-  /** Present when the initiative has been decomposed (non-pending). */
+  /**
+   * R4-11-F2: present once the initiative has been decomposed (a WI snapshot
+   * exists) — regardless of queue status. This is the "planned" fact the
+   * roadmap's per-initiative Plan trigger + blocked-until-planned lock read;
+   * a `pending` initiative with no WI snapshot yet is unplanned even though
+   * it is otherwise a normal, readable queue entry.
+   */
   workItems?: RoadmapWorkItem[];
 };
 
@@ -803,9 +809,12 @@ export type ProjectRoadmap = {
 
 /**
  * Build a read-only roadmap for a project by scanning all queue dirs for
- * manifests owned by this project. For each initiative:
- *   - pending-only: initiatives with no work items (PM hasn't run yet).
- *   - non-pending: reads WI-*.md from the work-items-snapshot in `_logs/`.
+ * manifests owned by this project. For each initiative, `workItems` reads
+ * WI-*.md from the work-items-snapshot in `_logs/` (or the live worktree)
+ * regardless of queue status — decomposition is a fact about the WI
+ * snapshot, not a function of which queue dir the manifest sits in
+ * (R4-11-F2: a pending initiative can already be planned; the roadmap's
+ * Plan-trigger lock reads `workItems === undefined` as "unplanned").
  *
  * Mirrors the queueStatusFor pattern from cli/ui-bridge.ts:195.
  */
@@ -852,9 +861,8 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
       const titleMatch = manifest.body.match(/^##?\s+(.+)$/m);
       const title = titleMatch ? titleMatch[1].trim() : initId;
 
-      const workItems = status === 'pending'
-        ? undefined
-        : readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
+      const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
+      const workItems = items.length > 0 ? items : undefined;
 
       const blockedBy = checkInitiativeDeps(file, queuePaths);
 
@@ -874,9 +882,11 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
 }
 
 /**
- * Read work items for a non-pending initiative. Tries the work-items-snapshot
- * in `_logs/<cycleId>/` first (reliable for done/in-flight); falls back to
- * the live worktree spec if the snapshot isn't present yet.
+ * Read work items for an initiative, independent of its queue status. Tries
+ * the work-items-snapshot in `_logs/<cycleId>/` first (reliable for
+ * done/in-flight); falls back to the live worktree spec if the snapshot
+ * isn't present yet. Always returns an array — `[]` (never `undefined`)
+ * when nothing is found, so callers decide what an empty result means.
  */
 function readWorkItemsForInitiative(
   initId: string,

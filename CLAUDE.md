@@ -219,8 +219,17 @@ inventory rather than one shared page-level contract:
   Roadmap renders `SerpentineTimeline.tsx`:
   `[data-roadmap-timeline][data-node-count]` with per-initiative
   `[data-roadmap-node][data-initiative-id][data-initiative-status]` and a
-  pop-off detail card `[data-roadmap-popover][data-popover-initiative-id]`. A
-  brand-new project renders `ProjectOnboardForm` instead:
+  pop-off detail card `[data-roadmap-popover][data-popover-initiative-id]`.
+  Each pending initiative card also carries `[data-plan-state="unplanned"
+  |"planning"|"planned"|"error"]` (`unplanned` = the R4-05
+  `enqueuePlanRun`-derived `workItems === undefined` proxy — no decomposition
+  has run yet): unplanned renders the `[data-action="plan-initiative"]`
+  button plus a blocked-until-planned lock badge
+  (`[data-section="initiative-blocked-until-planned"]`) that hides
+  `[data-action="start-development"]` until the card flips to `planned`;
+  dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
+  the `forge-architect` flow monitor. A brand-new project renders
+  `ProjectOnboardForm` instead:
   `[data-section="project-onboard"]`, collapsible
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —

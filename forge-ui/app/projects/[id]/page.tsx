@@ -8,7 +8,10 @@ import {
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
-import { fetchRoadmap, startDevelopment, type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem } from '@/lib/bridge-client';
+import {
+  fetchRoadmap, startDevelopment, planInitiative,
+  type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem, type PlanInitiativeResult,
+} from '@/lib/bridge-client';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { SerpentineTimeline, STATUS_COLOURS } from '@/components/studio/SerpentineTimeline';
@@ -505,6 +508,33 @@ function developStateFromResult(
     : { status: 'error', error: item?.detail ?? item?.status ?? requestError ?? 'failed to start development' };
 }
 
+// R4-11-F2: per-card Plan-trigger state, same shape/lift pattern as
+// DevelopCardState above. `planned` (whether `workItems` exists) is server
+// truth from the roadmap fetch, not tracked here — this only tracks the
+// transient client-side request lifecycle of clicking "Plan".
+type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null };
+const IDLE_PLAN: PlanCardState = { status: 'idle', error: null };
+
+/** Map a single plan-dispatch result onto the per-card plan state. */
+function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
+  return result.status === 'enqueued'
+    ? { status: 'started', error: null }
+    : { status: 'error', error: result.detail ?? result.status };
+}
+
+/**
+ * Combine server truth (`planned` — has `workItems`) with the transient
+ * client action state into the one rendered `data-plan-state`. Server truth
+ * always wins once it lands: a refetch that surfaces `workItems` flips the
+ * card to `planned` even if the client never itself observed the enqueue.
+ */
+function planStateAttr(planned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'unplanned' {
+  if (planned) return 'planned';
+  if (plan.status === 'error') return 'error';
+  if (plan.status === 'planning' || plan.status === 'started') return 'planning';
+  return 'unplanned';
+}
+
 function RoadmapView({
   projectId,
   roadmap,
@@ -517,6 +547,7 @@ function RoadmapView({
   // Node selected in the serpentine timeline → highlight + scroll to its card.
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [developByInitiative, setDevelopByInitiative] = useState<Record<string, DevelopCardState>>({});
+  const [planByInitiative, setPlanByInitiative] = useState<Record<string, PlanCardState>>({});
   const [batchStarting, setBatchStarting] = useState(false);
 
   const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
@@ -533,12 +564,14 @@ function RoadmapView({
   // be pending AND ready at once. "Start eligible" kicks all of them off in a
   // single batched POST rather than one click per card. Ids already starting/
   // started this session are excluded so the button can't re-fire them before
-  // the refetched roadmap catches up.
+  // the refetched roadmap catches up. R4-11-F2: the batch button honours the
+  // same blocked-until-planned lock as the single-card button — a WI-less
+  // initiative is never eligible, even if the dep gate says `ready`.
   const eligible = useMemo(
     () =>
       initiatives.filter((i) => {
         const dev = developByInitiative[i.initiativeId]?.status ?? 'idle';
-        return i.status === 'pending' && i.ready && dev !== 'starting' && dev !== 'started';
+        return i.status === 'pending' && i.ready && i.workItems !== undefined && dev !== 'starting' && dev !== 'started';
       }),
     [initiatives, developByInitiative],
   );
@@ -549,6 +582,17 @@ function RoadmapView({
     const item = r.results?.find((x) => x.initiativeId === initiativeId);
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
     // Refetch so status/ready/blockedBy reflect the queue's new reality.
+    await onRefresh();
+  }, [onRefresh]);
+
+  // R4-11-F2: the per-card "Plan" trigger — dispatches the standalone
+  // forge-architect (decompose) flow for a WI-less initiative. Refetches
+  // afterwards so `workItems` (and therefore the lock) picks up the new state
+  // once the scheduler actually decomposes it.
+  const planOne = useCallback(async (initiativeId: string): Promise<void> => {
+    setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'planning', error: null } }));
+    const result = await planInitiative(initiativeId);
+    setPlanByInitiative((prev) => ({ ...prev, [initiativeId]: planStateFromResult(result) }));
     await onRefresh();
   }, [onRefresh]);
 
@@ -652,6 +696,8 @@ function RoadmapView({
               selected
               develop={developByInitiative[init.initiativeId] ?? IDLE_DEVELOP}
               onStart={startOne}
+              plan={planByInitiative[init.initiativeId] ?? IDLE_PLAN}
+              onPlan={planOne}
             />
           )}
         />
@@ -666,22 +712,35 @@ function InitiativeCard({
   selected = false,
   develop,
   onStart,
+  plan,
+  onPlan,
 }: {
   initiative: RoadmapInitiative;
   selected?: boolean;
   develop: DevelopCardState;
   onStart: (initiativeId: string) => void | Promise<void>;
+  plan: PlanCardState;
+  onPlan: (initiativeId: string) => void | Promise<void>;
 }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
   const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
   const router = useRouter();
+
+  // R4-11-F2: "planned" is the same fact the roadmap-builder computes
+  // server-side (`workItems !== undefined` — a WI snapshot exists,
+  // independent of queue status). A pending, WI-less initiative is
+  // "unplanned" and shows the Plan trigger + the blocked-until-planned lock.
+  const planned = workItems !== undefined;
+  const unplanned = status === 'pending' && !planned;
 
   // S7 / DEC-3: "start development" runs the forge-develop flow on a decomposed,
   // not-yet-developing initiative (pending = architect hand-off). It repoints the
   // manifest at forge-develop + threads the cycle_id, then the scheduler claims it.
   // plan-everything-before-kickoff: gated on `ready` too — a pending initiative
   // can still be blocked by an unmet build-flow dependency (item 1's gate).
-  const canStartDevelopment = status === 'pending' && ready;
+  // R4-11-F2: also gated on `planned` — a WI-less initiative can't be
+  // developed until the standalone Plan trigger (or the architect) decomposes it.
+  const canStartDevelopment = status === 'pending' && ready && planned;
   const blocked = status === 'pending' && !ready;
 
   // WI topo levels (for sub-graph ordering).
@@ -694,6 +753,7 @@ function InitiativeCard({
       data-initiative-id={initiativeId}
       data-initiative-status={status}
       data-develop-state={develop.status}
+      data-plan-state={planStateAttr(planned, plan)}
       data-initiative-ready={String(ready)}
       data-blocked-by={blockedBy.join(',')}
       style={{
@@ -735,6 +795,15 @@ function InitiativeCard({
         </div>
       )}
 
+      {/* R4-11-F2: blocked-until-planned lock — a WI-less initiative can't
+          start development until it's decomposed (the standalone Plan
+          trigger below, or an architect run). */}
+      {unplanned && (
+        <div data-section="initiative-blocked-until-planned" style={{ fontSize: 11, color: 'var(--amber, #d29922)' }}>
+          Not yet planned — decompose it before starting development.
+        </div>
+      )}
+
       {wiLevels && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
           <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Work Items</div>
@@ -744,6 +813,42 @@ function InitiativeCard({
               <WorkItemBadge key={wi.id} wi={wi} />
             ));
           })}
+        </div>
+      )}
+
+      {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. Runs
+          the forge-architect (decompose) flow so a real PM pass produces
+          work items, which then flips this card to "planned". */}
+      {unplanned && plan.status !== 'started' && (
+        <button
+          data-action="plan-initiative"
+          data-initiative-id={initiativeId}
+          disabled={plan.status === 'planning'}
+          onClick={() => void onPlan(initiativeId)}
+          style={{
+            marginTop: 4, alignSelf: 'flex-start',
+            color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
+            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
+            fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
+            opacity: plan.status === 'planning' ? 0.6 : 1,
+          }}
+        >
+          {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
+        </button>
+      )}
+      {unplanned && plan.status === 'error' && plan.error && (
+        <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
+      )}
+      {unplanned && plan.status === 'started' && (
+        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Planning started — the initiative will be decomposed into work items.</span>
+          <button
+            data-action="open-plan-run"
+            onClick={() => router.push('/flows/forge-architect')}
+            style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
+          >
+            view run →
+          </button>
         </div>
       )}
 

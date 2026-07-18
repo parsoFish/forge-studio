@@ -1,6 +1,6 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption, THINK, WORK,
+  CYCLE_LOG, INIT, DATE, STAMP, QDIR, PROJECT, projectRoot, caption, THINK, WORK, FORGE_ROOT,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 import { mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
@@ -10,6 +10,7 @@ import { join } from 'node:path';
 let ROADMAP_SEEDED_WI, roadmapSeeded;       // roadmap-tab → roadmap-start-development
 let INIT_DEV, DEV_CYCLE_ID;                 // roadmap-tab → roadmap-start-development
 let INIT_MERGED;                            // roadmap-tab only (seeded + asserted + cleaned in one beat)
+let INIT_PLAN;                              // roadmap-tab → roadmap-plan-trigger (R4-11-F2)
 
 export const journey = defineJourney({
     id: 'roadmap',
@@ -117,8 +118,32 @@ export const journey = defineJourney({
                 '---', '', '# mdtoc — `--check` mode (CI drift guard)', '',
                 'Given a doc whose embedded TOC has drifted, when `mdtoc --check` runs, then it exits non-zero so CI can fail.',
               ].join('\n'));
+              // R4-11-F2: this initiative must already be PLANNED (a WI snapshot
+              // exists under its threaded cycle_id) — the roadmap-builder now reads
+              // decomposition off the WI snapshot regardless of queue status, so a
+              // WI-less pending manifest would otherwise render the Plan lock and
+              // withhold "start development" (the very trigger this beat needs).
+              const devWiSnapshotDir = join(FORGE_ROOT, '_logs', DEV_CYCLE_ID, 'work-items-snapshot');
+              mkdirSync(devWiSnapshotDir, { recursive: true });
+              writeFileSync(join(devWiSnapshotDir, 'WI-1.md'), [
+                '---', 'work_item_id: WI-1', `initiative_id: ${INIT_DEV}`, 'status: pending', 'depends_on: []',
+                '---', '', '## Add --check mode', '',
+                'Implement the CI drift guard.',
+              ].join('\n'));
 
-              // R4-11-F1: a THIRD seeded initiative sitting in `_queue/merged/` —
+              // R4-11-F2: a THIRD seeded initiative — pending, no cycle_id, no WI
+              // snapshot — the "unplanned" fixture for the Plan trigger + the
+              // blocked-until-planned lock (asserted in the roadmap-plan-trigger beat).
+              INIT_PLAN = `INIT-${DATE}-e2e-plan-trigger`;
+              writeFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), [
+                '---', `initiative_id: ${INIT_PLAN}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+                `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12', 'phase: pending',
+                'origin: architect',
+                '---', '', '# mdtoc — `--fix` mode (auto-repair drift)', '',
+                'Given a doc whose embedded TOC has drifted, when `mdtoc --fix` runs, then the TOC is rewritten in place.',
+              ].join('\n'));
+
+              // R4-11-F1: a FOURTH seeded initiative sitting in `_queue/merged/` —
               // the transient QueueState pass-through dir between a confirmed PR
               // merge and closure's own same-sweep promotion to `done/` (distinct
               // from the unrelated CycleOutcome 'merged' status value). `merged`
@@ -187,6 +212,55 @@ export const journey = defineJourney({
               // Clean up the seeded merged/ initiative — self-contained to this beat,
               // unlike INIT_DEV which the next beat still needs.
               try { rmSync(join(QDIR('merged'), `${INIT_MERGED}.md`), { force: true }); } catch { /* */ }
+
+        },
+      },
+      {
+        id: 'roadmap-plan-trigger',
+        title: 'Plan trigger + blocked-until-planned lock (R4-11-F2)',
+        narration: 'A WI-less pending initiative shows a "Plan" trigger instead of "Start development" — a blocked-until-planned lock withholds development until it\'s actually decomposed. Clicking Plan repoints the manifest at the forge-architect flow so a real PM pass can produce work items.',
+        drive: async (ctx) => {
+              const { page, check, frame } = ctx;
+              // ── R4-11-F2: Plan trigger + blocked-until-planned lock ──────────────────
+              console.log('\n[R4-11-F2] Plan trigger + blocked-until-planned lock');
+
+              // The card pops off the dot — click the WI-less initiative's node to reveal it.
+              await page.locator(`[data-roadmap-node][data-initiative-id="${INIT_PLAN}"]`).first().click().catch(() => {});
+              await sleep(500);
+              // The card div is uniquely identified by data-plan-state (the Plan button
+              // also carries data-initiative-id, so select the div explicitly).
+              const planCard = page.locator(`[data-initiative-id="${INIT_PLAN}"][data-plan-state]`);
+              const planBtn = planCard.locator('[data-action="plan-initiative"]');
+              if (await planBtn.count() > 0) {
+                const initialState = await planCard.getAttribute('data-plan-state');
+                check(initialState === 'unplanned', `roadmap: a WI-less pending initiative renders [data-plan-state="unplanned"] (got ${initialState})`);
+
+                const lockCount = await planCard.locator('[data-section="initiative-blocked-until-planned"]').count();
+                check(lockCount > 0, 'roadmap: the blocked-until-planned lock badge is present on a WI-less initiative');
+
+                const developCount = await planCard.locator('[data-action="start-development"]').count();
+                check(developCount === 0, 'roadmap: "start development" is withheld until the initiative is planned');
+
+                await planCard.scrollIntoViewIfNeeded().catch(() => {});
+                await caption(page, 'A WI-less initiative offers "Plan" instead of "Start development" — the blocked-until-planned lock withholds development until it is decomposed.');
+                await frame(page, 'r4-11-2-plan-trigger', 'R4-11-F2 — the Plan trigger + blocked-until-planned lock on a WI-less initiative', { key: true });
+
+                await planBtn.click();
+                await page.waitForSelector(`[data-initiative-id="${INIT_PLAN}"][data-plan-state="planning"]`, { timeout: 12000 }).catch(() => {});
+                const afterState = await planCard.getAttribute('data-plan-state');
+                check(afterState === 'planning', `plan-initiative transitions to [data-plan-state="planning"] (got ${afterState})`);
+                await frame(page, 'r4-11-2b-planning-started', 'R4-11-F2 — planning started: the initiative will be decomposed into work items', { key: true });
+
+                // The manifest is now claimable on the forge-architect flow.
+                const planManifest = readFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), 'utf8');
+                check(/^flow_id:\s*forge-architect\s*$/m.test(planManifest), 'plan-initiative repoints the manifest at the forge-architect flow');
+              } else {
+                check(false, `roadmap: [data-action="plan-initiative"] present on the WI-less initiative ${INIT_PLAN}`);
+              }
+
+              // Self-contained to this beat — dismiss the popover and clean up the fixture.
+              await page.keyboard.press('Escape').catch(() => {});
+              try { rmSync(join(QDIR('pending'), `${INIT_PLAN}.md`), { force: true }); } catch { /* */ }
 
         },
       },
@@ -271,6 +345,7 @@ export const journey = defineJourney({
                 try { rmSync(ROADMAP_SEEDED_WI, { force: true }); } catch { /* */ }
               }
               try { rmSync(join(QDIR('pending'), `${INIT_DEV}.md`), { force: true }); } catch { /* */ }
+              try { rmSync(join(FORGE_ROOT, '_logs', DEV_CYCLE_ID), { recursive: true, force: true }); } catch { /* */ }
 
         },
       },
