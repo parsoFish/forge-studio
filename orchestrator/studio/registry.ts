@@ -111,6 +111,18 @@ const KB_SCOPES = ['project', 'flow', 'agent-integration'] as const;
 // share this one source instead of duplicating the literal list.
 export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered', 'both'] as const;
 
+// R2-01-F2: the declared phase-executor allowlist. These are the ONLY
+// `AgentDefinition.executor` values the flow engine recognises as a
+// phase-specific NodeKind — the DECLARED replacement for the old hardcoded
+// AGENT_KIND object literal. Set via `executor:` frontmatter on the four
+// phase SKILL.md files (project-manager, developer-ralph, developer-unifier,
+// reflector); an agent def with no `executor` resolves to the generic
+// 'agent' kind instead. Lives here (not flow-runner.ts) so validate.ts can
+// import it for the executor/enum lint check without creating a circular
+// import (flow-runner.ts already imports FROM validate.ts for
+// findFanOutViolations).
+export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
+
 function oneOf<T extends string>(value: string, allowed: readonly T[], file: string, key: string): T {
   if ((allowed as readonly string[]).includes(value)) return value as T;
   throw new RegistryError(`${file}: field "${key}" must be one of ${allowed.join('|')}, got "${value}"`);

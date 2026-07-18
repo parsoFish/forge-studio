@@ -13,7 +13,7 @@ import type {
   KbDescriptor,
   ProjectDefinition,
 } from './types.ts';
-import { SURFACE_KINDS } from './registry.ts';
+import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import {
   SLUG_RE,
   validateAgent,
@@ -238,6 +238,39 @@ describe('validateAgent — surface/enum', () => {
   it('blank/whitespace-only surface → no surface/enum finding (treated as absent)', () => {
     const findings = validateAgent(makeAgent({ surface: '   ' }));
     assert.ok(!findings.some((x) => x.check === 'surface/enum'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateAgent — executor/enum (R2-01-F2 review finding)
+// ---------------------------------------------------------------------------
+
+describe('validateAgent — executor/enum', () => {
+  for (const value of PHASE_EXECUTOR_KINDS) {
+    it(`valid executor "${value}" → no executor/enum finding`, () => {
+      const findings = validateAgent(makeAgent({ executor: value }));
+      assert.ok(!findings.some((x) => x.check === 'executor/enum'));
+    });
+  }
+
+  it('absent executor → no executor/enum finding', () => {
+    const findings = validateAgent(makeAgent({ executor: undefined }));
+    assert.ok(!findings.some((x) => x.check === 'executor/enum'));
+  });
+
+  it('unknown executor value → blocking executor/enum finding', () => {
+    const findings = validateAgent(makeAgent({ executor: 'xyz' }));
+    const f = findings.find((x) => x.check === 'executor/enum');
+    assert.ok(f, 'expected executor/enum finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.object.startsWith('agent:'));
+    assert.match(f.message, /unknown executor "xyz"/);
+    assert.match(f.message, new RegExp(PHASE_EXECUTOR_KINDS.join('\\|')));
+  });
+
+  it('blank/whitespace-only executor → no executor/enum finding (treated as absent)', () => {
+    const findings = validateAgent(makeAgent({ executor: '   ' }));
+    assert.ok(!findings.some((x) => x.check === 'executor/enum'));
   });
 });
 

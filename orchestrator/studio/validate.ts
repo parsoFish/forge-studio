@@ -9,7 +9,7 @@
 import { DEMO_STEP_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
-import { SURFACE_KINDS } from './registry.ts';
+import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { executionPathForSurface } from './derive.ts';
 import type {
   AgentDefinition,
@@ -130,6 +130,22 @@ export function validateAgent(
   if (def.surface !== undefined && def.surface.trim() !== '' && !(SURFACE_KINDS as readonly string[]).includes(def.surface)) {
     findings.push(
       err(obj, 'surface/enum', `unknown surface "${def.surface}" — must be one of ${SURFACE_KINDS.join('|')}`),
+    );
+  }
+
+  // executor/enum — error (R2-01-F2 review finding). `executor` is optional —
+  // absent is legal (most roster agents have none; they run via the generic
+  // F1 execAgent path). Parsed leniently at load (registry.ts), so a bad
+  // value is a lint error here, not a load crash — otherwise a typo'd
+  // executor silently resolves to NodeKind 'unknown' at runtime (the node
+  // is never executed, only an error-severity log) with no lint signal.
+  if (
+    def.executor !== undefined &&
+    def.executor.trim() !== '' &&
+    !(PHASE_EXECUTOR_KINDS as readonly string[]).includes(def.executor)
+  ) {
+    findings.push(
+      err(obj, 'executor/enum', `unknown executor "${def.executor}" — must be one of ${PHASE_EXECUTOR_KINDS.join('|')}`),
     );
   }
 

@@ -66,7 +66,7 @@ import {
   enforceFinalCiGate,
   preservingForgeScratch,
 } from './cycle-helpers.ts';
-import { listArtifactTemplates, listAgentDefinitions } from './studio/registry.ts';
+import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
@@ -225,16 +225,6 @@ const GATE_KIND: Readonly<Record<string, NodeKind>> = {
   verdict: 'review',
 };
 
-/**
- * The declared phase-executor allowlist (R2-01-F2). These are the ONLY
- * `AgentDefinition.executor` values the flow engine recognises as a
- * phase-specific `NodeKind` — the DECLARED replacement for the old hardcoded
- * `AGENT_KIND` object literal. Set via `executor:` frontmatter on the four
- * phase SKILL.md files (project-manager, developer-ralph, developer-unifier,
- * reflector); an agent def with no `executor` resolves to the generic
- * 'agent' kind instead.
- */
-export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
 type PhaseExecutorKind = (typeof PHASE_EXECUTOR_KINDS)[number];
 
 function isPhaseExecutorKind(value: string): value is PhaseExecutorKind {
