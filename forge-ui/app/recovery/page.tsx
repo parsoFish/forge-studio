@@ -18,10 +18,13 @@ import {
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
 
 // R4-11-F1: `merged` is deliberately EXCLUDED here. It's a transient
-// pass-through — closure promotes it on to `done/` in the SAME sweep that
-// lands it in `merged/`, never a parking state an operator needs to act on —
-// so it doesn't belong in the "needs attention" recovery list the way a
-// genuinely stuck in-flight/ready-for-review/failed cycle does. (The bridge's
+// pass-through — closure promotes it on to `done/` in the SAME finalize
+// sweep that lands it in `merged/`, but that sweep spans the post-merge CI
+// watch plus the reflector run, so a manifest legitimately sits in
+// `merged/` for minutes, not instantaneously. It's still never a parking
+// state an operator needs to act on — so it doesn't belong in the "needs
+// attention" recovery list the way a genuinely stuck
+// in-flight/ready-for-review/failed cycle does. (The bridge's
 // `bridge-recovery.ts` locate() + `forge-requeue.ts` candidates DO still
 // search `merged/` defensively, for the rare crash-between-the-two-moves
 // case — but that's a manual escape hatch, not something this list surfaces

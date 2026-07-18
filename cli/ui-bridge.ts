@@ -347,8 +347,10 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
     for (const { cycle } of candidates) {
       // R4-11-F1: `merged` deliberately classifies as RECENT, not live — it's
       // the tail end of a finished cycle finalizing (merged → done, same
-      // sweep), not an actively-running one. In practice the window is so
-      // brief the UI is unlikely to ever observe it mid-transition.
+      // finalize sweep), not an actively-running one. That sweep spans the
+      // post-merge CI watch plus the reflector run, so a manifest legitimately
+      // sits in `merged/` for minutes on every normal finalize, not
+      // instantaneously.
       if (cycle.status === 'in-flight' || cycle.status === 'ready-for-review') {
         live.push(cycle);
       } else if (recent.length < RECENT_CYCLES_MAX) {

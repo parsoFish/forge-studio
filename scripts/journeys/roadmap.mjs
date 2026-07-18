@@ -121,12 +121,15 @@ export const journey = defineJourney({
               // R4-11-F1: a THIRD seeded initiative sitting in `_queue/merged/` —
               // the transient QueueState pass-through dir between a confirmed PR
               // merge and closure's own same-sweep promotion to `done/` (distinct
-              // from the unrelated CycleOutcome 'merged' status value). In real
-              // production this window is same-sweep and effectively instantaneous,
-              // but the roadmap must still be able to render the state faithfully
-              // (e.g. the rare crash-between-moves case) — seed it directly so the
-              // dot renders `[data-initiative-status="merged"]` without needing a
-              // real merge+closure round-trip (that's covered by the orchestrator
+              // from the unrelated CycleOutcome 'merged' status value). `merged`
+              // is a same-sweep pass-through, but that sweep spans the post-merge
+              // CI watch plus the reflector run, so a manifest legitimately sits
+              // here for minutes on every normal finalize, not instantaneously —
+              // the roadmap must be able to render the state faithfully for that
+              // whole window (not just the rare crash-between-moves case) — seed
+              // it directly so the dot renders
+              // `[data-initiative-status="merged"]` without needing a real
+              // merge+closure round-trip (that's covered by the orchestrator
               // suite: queue.test.ts, closure.test.ts, finalize-merged.test.ts).
               INIT_MERGED = `INIT-${DATE}-e2e-merged-state`;
               mkdirSync(QDIR('merged'), { recursive: true });
