@@ -416,3 +416,9 @@ pass across all five roadmaps plus four operator decisions:
   R2-02-F2 (composition-single-source) splits out to **R2-07** with an
   ADR-027 amendment as its first step; wave-1 R2-02 is F1+F3+F4. R2-07 is
   post-wave-1 (unwaved), sequenced after R2-02 lands.
+- 2026-07-18 — **R2-02 implemented** (branch `feat/r2-02-def-driven-builder`;
+  R2 gains baseline R2-B9): the agent-def-driven builder shipped — F1
+  server-computed `{interactive, runtimeSdks}` capability descriptor on the
+  agents/starters wire, F3 BUILD-tab interactive-placement gating, F4
+  descriptor-sourced readiness. F2 remains split to R2-07. **Wave 1 (R5-04 +
+  R2-01 + R2-02) complete.**
