@@ -50,13 +50,14 @@ export function deriveNodeStatuses(
   events: readonly EventLogEntry[],
   runStatus: RunStatus,
   nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
 ): Record<string, RunPhaseStatus> {
   const cycleFailed = runStatus === 'failed';
 
   const seen = new Map<string, NodeAccum>();
 
   for (const e of events) {
-    const nodeId = eventToNodeId(e.phase, nodeMapping);
+    const nodeId = eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata);
     if (nodeId === null) continue;
 
     const acc = seen.get(nodeId) ?? {
@@ -118,11 +119,12 @@ export function deriveNodeMeta(
   iterationBudget: number,
   nowMs: number,
   nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
 ): Record<string, RunPhaseMeta> {
   // Bucket events by nodeId
   const buckets = new Map<string, EventLogEntry[]>();
   for (const e of events) {
-    const nodeId = eventToNodeId(e.phase, nodeMapping);
+    const nodeId = eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata);
     if (nodeId === null) continue;
     if (!buckets.has(nodeId)) buckets.set(nodeId, []);
     buckets.get(nodeId)!.push(e);
@@ -406,6 +408,7 @@ export function findGateChecks(
 export function deriveWorkItems(
   events: readonly EventLogEntry[],
   nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
 ): { id: string; status: RunPhaseStatus; costUsd: number; task?: string; dependsOn?: string[]; delivered?: { files: number; insertions: number; commits: number } }[] {
   // Collect WI ids in order of first appearance
   const wiOrder: string[] = [];
@@ -440,7 +443,7 @@ export function deriveWorkItems(
   }
 
   // Only dev-phase events are relevant for per-WI status
-  const devEvents = events.filter((e) => eventToNodeId(e.phase, nodeMapping) === 'dev');
+  const devEvents = events.filter((e) => eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata) === 'dev');
 
   const LIFECYCLE_TYPES = new Set(['start', 'iteration', 'tool_use', 'end', 'error']);
 
@@ -605,10 +608,11 @@ export function deriveArtifacts(
 export function findGateNodeId(
   events: readonly EventLogEntry[],
   nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
 ): string | undefined {
   let lastNodeId: string | undefined;
   for (const e of events) {
-    const nodeId = eventToNodeId(e.phase, nodeMapping);
+    const nodeId = eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata);
     if (nodeId !== null) lastNodeId = nodeId;
   }
   return lastNodeId;
@@ -637,6 +641,7 @@ export function findGateNote(logDir: string): string {
 export function findFailure(
   events: readonly EventLogEntry[],
   nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
 ): {
   failedAt?: string;
   failNote?: string;
@@ -648,7 +653,7 @@ export function findFailure(
       const m = e.metadata;
       const reason = typeof m.reason === 'string' ? m.reason : undefined;
       // Find the node of the last error event before this classifier
-      const failedNode = findLastErrorNode(events, i, nodeMapping);
+      const failedNode = findLastErrorNode(events, i, nodeMapping, agentSlugToNodeId);
       return {
         failedAt: failedNode ?? 'unifier',
         failNote: reason,
@@ -660,7 +665,7 @@ export function findFailure(
   for (let i = events.length - 1; i >= 0; i--) {
     const e = events[i];
     if (e.event_type === 'error' && e.metadata?.expected_fail !== true) {
-      const nodeId = eventToNodeId(e.phase, nodeMapping);
+      const nodeId = eventToNodeId(e.phase, nodeMapping, agentSlugToNodeId, e.metadata);
       return { failedAt: nodeId ?? 'unifier' };
     }
   }
@@ -672,10 +677,11 @@ export function findLastErrorNode(
   events: readonly EventLogEntry[],
   beforeIdx: number,
   nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
 ): string | null {
   for (let i = beforeIdx - 1; i >= 0; i--) {
     if (events[i].event_type === 'error' && events[i].metadata?.expected_fail !== true) {
-      return eventToNodeId(events[i].phase, nodeMapping);
+      return eventToNodeId(events[i].phase, nodeMapping, agentSlugToNodeId, events[i].metadata);
     }
   }
   return null;
@@ -744,7 +750,27 @@ export function findReflectionLoss(
 // Shared low-level helper
 // ---------------------------------------------------------------------------
 
-export function eventToNodeId(phase: string, nodeMapping: Map<string, string | null>): string | null {
+export function eventToNodeId(
+  phase: string,
+  nodeMapping: Map<string, string | null>,
+  agentSlugToNodeId: Map<string, string>,
+  metadata?: EventLogEntry['metadata'],
+): string | null {
+  // R2-01-F4: execAgent/runAgent (orchestrator/run-agent.ts) always emits its
+  // events with phase:'orchestrator' + metadata.agent_slug (the frozen F1
+  // contract, run-agent.test.ts:121) — resolve THAT to the flow node
+  // declaring the agent slug before the orchestrator→null canonical override
+  // below ever applies, so a generic-agent node's status/cost populate.
+  // Flow-runner's own orchestrator-phase bookkeeping (skill:'flow-runner' /
+  // 'flow-budgets' / 'cycle') carries no agent_slug, so it falls through to
+  // the override untouched — this branch is purely additive.
+  if (phase === 'orchestrator') {
+    const agentSlug = metadata?.agent_slug;
+    if (typeof agentSlug === 'string') {
+      const nodeId = agentSlugToNodeId.get(agentSlug);
+      if (nodeId !== undefined) return nodeId;
+    }
+  }
   // An explicit mapping entry wins — including an explicit `null` (orchestrator
   // and brain are deliberately ignored for phase status).
   if (nodeMapping.has(phase)) return nodeMapping.get(phase) ?? null;

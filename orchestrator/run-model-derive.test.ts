@@ -10,7 +10,7 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildNodeMeta, deriveWorkItems, findDelivered } from './run-model-derive.ts';
+import { buildNodeMeta, deriveWorkItems, findDelivered, eventToNodeId, deriveNodeStatuses } from './run-model-derive.ts';
 import type { EventLogEntry, Phase } from './logging.ts';
 
 // ---------------------------------------------------------------------------
@@ -120,6 +120,11 @@ const DEV_MAPPING = new Map<string, string | null>([
   ['orchestrator', null],
 ]);
 
+// None of these deriveWorkItems fixtures exercise a generic execAgent/runAgent
+// node (R2-01-F4) — an empty slug map keeps their pre-existing assertions
+// byte-for-byte unchanged (eventToNodeId's new branch never fires).
+const EMPTY_AGENT_SLUG_MAP = new Map<string, string>();
+
 test('deriveWorkItems: per-WI costUsd from WI-scoped iteration events (restating ends excluded)', () => {
   const events = [
     ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
@@ -131,7 +136,7 @@ test('deriveWorkItems: per-WI costUsd from WI-scoped iteration events (restating
     ev('developer-loop', 'end', { cost_usd: 0.25, message: 'ralph.end', work_item_id: 'WI-2', status: 'complete' }),
     ev('developer-loop', 'end', { cost_usd: 1.25 }), // phase rollup (no WI id)
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   assert.equal(wis.length, 2);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   const wi2 = wis.find((w) => w.id === 'WI-2');
@@ -153,7 +158,7 @@ test('deriveWorkItems: per-WI costs stay consistent with the phase rule when the
     ev('developer-loop', 'start', { work_item_id: 'WI-2' }),
     ev('developer-loop', 'end', { cost_usd: 0.2, message: 'ralph.end', work_item_id: 'WI-2', status: 'failed' }),
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   const wi2 = wis.find((w) => w.id === 'WI-2');
   assert.ok(wi1 && Math.abs(wi1.costUsd - 0.5) < 0.000001, `WI-1 cost ~0.5, got ${wi1?.costUsd}`);
@@ -165,7 +170,7 @@ test('deriveWorkItems: a non-looping dev stream keeps per-WI end cost (nothing t
     ev('developer-loop', 'start', { work_item_id: 'WI-1' }),
     ev('developer-loop', 'end', { cost_usd: 0.3, message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   assert.ok(wi1 && Math.abs(wi1.costUsd - 0.3) < 0.000001,
     `WI-1 cost should be ~0.3 (end cost, no iterations in phase), got ${wi1?.costUsd}`);
@@ -189,7 +194,7 @@ test('deriveWorkItems: a failed WI with a dev-loop.discarded event carrying comm
       metadata: { work_item_id: 'WI-1', files_changed: 3, insertions: 40, deletions: 1, commits: 2, outcome: 'failed' },
     }),
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   assert.equal(wi1?.status, 'retrying', 'a WI that committed real work before crashing must not read as a hard failure');
   assert.equal(wi1?.delivered, undefined, 'delivered stays honest/undefined — the WI did not ship, it is retrying');
@@ -204,7 +209,7 @@ test('deriveWorkItems: a failed WI with a zero-commit dev-loop.discarded event s
       metadata: { work_item_id: 'WI-1', files_changed: 0, insertions: 0, deletions: 0, commits: 0, outcome: 'failed' },
     }),
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   assert.equal(wi1?.status, 'failed', 'nothing recoverable was committed — must stay a hard failure');
 });
@@ -222,7 +227,7 @@ test('deriveWorkItems: a failed WI whose only earlier delivered attempt was supe
       metadata: { work_item_id: 'WI-1', files_changed: 5, insertions: 12, deletions: 3, commits: 1, outcome: 'failed' },
     }),
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   assert.equal(wi1?.status, 'retrying', 'the later discarded attempt still carries commits, so the crash-retry override applies');
   assert.equal(wi1?.delivered, undefined, 'the stale earlier delivered event must not resurface once superseded');
@@ -248,7 +253,7 @@ test('deriveWorkItems: a shipped WI followed by a harmless duplicate-dev-loop-af
     }),
     ev('developer-loop', 'end', { message: 'ralph.end', work_item_id: 'WI-1', status: 'complete' }),
   ];
-  const wis = deriveWorkItems(events, DEV_MAPPING);
+  const wis = deriveWorkItems(events, DEV_MAPPING, EMPTY_AGENT_SLUG_MAP);
   const wi1 = wis.find((w) => w.id === 'WI-1');
   assert.equal(wi1?.status, 'complete');
   assert.deepEqual(
@@ -368,4 +373,71 @@ test('findDelivered: a trivial all-zero delivered event with no earlier meaningf
     }),
   ];
   assert.equal(findDelivered(events, 'WI-1'), undefined, 'a genuinely empty delivery has nothing meaningful to surface');
+});
+
+// ---------------------------------------------------------------------------
+// R2-01-F4: eventToNodeId / deriveNodeStatuses / buildNodeMeta resolve a
+// generic execAgent/runAgent event (phase:'orchestrator' + metadata.agent_slug
+// — the frozen F1 emission shape, run-agent.test.ts:121) onto its flow node
+// via the agent-slug map, ADDITIVELY ahead of the orchestrator→null canonical
+// override (CANONICAL_PHASE_OVERRIDES, run-model.ts) — never displacing it
+// for events that carry no agent_slug (flow-runner's own bookkeeping).
+// ---------------------------------------------------------------------------
+
+const NODE_MAPPING_WITH_ORCH_NULL = new Map<string, string | null>([
+  ['orchestrator', null],
+  ['brain', null],
+]);
+
+const AGENT_SLUG_MAP = new Map<string, string>([
+  ['project-scoped-review', 'audit'],
+]);
+
+test('eventToNodeId: a generic agent event (phase:orchestrator + metadata.agent_slug) resolves via the slug map, not the orchestrator→null override', () => {
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, { agent_slug: 'project-scoped-review', agent_phase: 'audit' }),
+    'audit',
+  );
+});
+
+test("eventToNodeId: flow-runner's own orchestrator bookkeeping (no agent_slug) still resolves to null — additive, not a regression", () => {
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, { origin: 'human-directed' }),
+    null,
+    'an orchestrator event with no agent_slug keeps the pre-F4 behaviour',
+  );
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, undefined),
+    null,
+    'an orchestrator event with no metadata at all keeps the pre-F4 behaviour',
+  );
+});
+
+test('eventToNodeId: an agent_slug that resolves in no flow node still falls through to the orchestrator→null override', () => {
+  assert.equal(
+    eventToNodeId('orchestrator', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP, { agent_slug: 'unregistered-agent' }),
+    null,
+  );
+});
+
+test('deriveNodeStatuses: a generic execAgent/runAgent node (start+end, phase:orchestrator) resolves to complete on its own flow node id', () => {
+  const events = [
+    ev('orchestrator', 'start', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' } }),
+    ev('orchestrator', 'end', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' }, cost_usd: 0.42 }),
+  ];
+  const statuses = deriveNodeStatuses(events, 'complete', NODE_MAPPING_WITH_ORCH_NULL, AGENT_SLUG_MAP);
+  assert.equal(statuses['audit'], 'complete', 'generic-agent node status resolves onto its flow node id, not dropped');
+  assert.equal(statuses['orchestrator'], undefined, 'the orchestrator pseudo-node itself never materialises as a hex');
+});
+
+test('buildNodeMeta: a generic execAgent/runAgent node carries its real cost once bucketed onto its flow node id', () => {
+  const events = [
+    ev('orchestrator', 'start', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' } }),
+    ev('orchestrator', 'end', { metadata: { agent_phase: 'audit', agent_slug: 'project-scoped-review' }, cost_usd: 0.42 }),
+  ];
+  const meta = buildNodeMeta('audit', events, 8, Date.now());
+  assert.ok(
+    Math.abs(meta.costUsd - 0.42) < 0.000001,
+    `audit node cost should be ~0.42 (from its end event), got ${meta.costUsd}`,
+  );
 });

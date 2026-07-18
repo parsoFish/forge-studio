@@ -232,6 +232,55 @@ export function buildNodeMapping(root: string): Map<string, string | null> {
 }
 
 /**
+ * R2-01-F4: agent slug → flow-node-id, built directly from every seed flow's
+ * `node.agent` field (union over studio/flows/*, same pattern as
+ * buildNodeMapping; first-write-wins per slug — every seed flow shares
+ * canonical node ids for a shared agent, so the union is unambiguous).
+ *
+ * Deliberately a DIFFERENT derivation from buildNodeMapping: that map routes
+ * through the agent's SKILL.md `phase:` frontmatter (event.phase → node.id),
+ * because phase-named events (architect/project-manager/…) carry that phase
+ * string directly. A generic execAgent/runAgent event (orchestrator/
+ * run-agent.ts) never carries a resolvable phase — it always carries the
+ * literal `phase:'orchestrator'` plus `metadata.agent_slug` — so it needs the
+ * agent's own slug resolved straight to the node id declaring it, no
+ * frontmatter indirection. Consumed by eventToNodeId (run-model-derive.ts)
+ * as an additive resolution path ahead of the orchestrator→null override.
+ *
+ * Missing/unreadable studio/flows/ degrades to an empty map (no generic-agent
+ * node resolves) — the same fail-safe shape as buildFlowNodeSets, and never
+ * throws so aggregateRun/listRuns stay crash-safe.
+ *
+ * Exported for testing; not part of the public run-aggregation API.
+ */
+export function buildAgentSlugToNodeId(root: string): Map<string, string> {
+  const mapping = new Map<string, string>();
+  try {
+    const flowsDir = join(resolve(root), 'studio', 'flows');
+    const flowDirs = existsSync(flowsDir) ? readdirSync(flowsDir) : [];
+    for (const entry of flowDirs) {
+      const flowPath = join(flowsDir, entry, 'flow.yaml');
+      if (!existsSync(flowPath)) continue;
+      let flow;
+      try {
+        flow = loadFlowDefinition(flowPath);
+      } catch {
+        continue; // a single malformed flow must not sink the whole mapping
+      }
+      for (const node of flow.nodes) {
+        if (!node.agent) continue; // gate-only nodes have no agent
+        if (!mapping.has(node.agent)) mapping.set(node.agent, node.id);
+      }
+    }
+  } catch {
+    // Registry unavailable — degrade to an empty map, same effect as a flow
+    // set that declares no generic-agent nodes; existing eventToNodeId
+    // resolution is entirely untouched either way (additive fix).
+  }
+  return mapping;
+}
+
+/**
  * S9: map each seed flow id → its set of node ids, so a run's flow LINEAGE can be
  * derived (the flows whose nodes the run actually executed). Built once per list
  * pass, alongside buildNodeMapping. Empty map when studio/flows is unavailable.
@@ -307,7 +356,8 @@ export function aggregateRun(args: {
   // Build mapping once per call from flow.yaml + registry (falls back if unavailable)
   const nodeMapping = buildNodeMapping(args.root);
   const flowNodeSets = buildFlowNodeSets(args.root);
-  return aggregateRunWithMapping({ ...args, nodeMapping, flowNodeSets });
+  const agentSlugToNodeId = buildAgentSlugToNodeId(args.root);
+  return aggregateRunWithMapping({ ...args, nodeMapping, flowNodeSets, agentSlugToNodeId });
 }
 
 export function listRuns(root: string, nowMs: number): Run[] {
@@ -316,6 +366,7 @@ export function listRuns(root: string, nowMs: number): Run[] {
   // Build mapping + flow-node-sets once for the entire list pass
   const nodeMapping = buildNodeMapping(root);
   const flowNodeSets = buildFlowNodeSets(root);
+  const agentSlugToNodeId = buildAgentSlugToNodeId(root);
 
   for (const state of allStates) {
     const queueDir = join(resolve(root), '_queue', state);
@@ -331,7 +382,7 @@ export function listRuns(root: string, nowMs: number): Run[] {
     for (const file of files) {
       const manifestPath = join(queueDir, file);
       try {
-        runs.push(aggregateRunWithMapping({ root, queueState: state, manifestPath, nowMs, nodeMapping, flowNodeSets }));
+        runs.push(aggregateRunWithMapping({ root, queueState: state, manifestPath, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId }));
       } catch (err) {
         // Corrupt manifest: produce a degraded Run entry rather than crashing the list
         const initId = file.replace(/\.md$/, '');
@@ -362,8 +413,9 @@ function aggregateRunWithMapping(args: {
   nowMs: number;
   nodeMapping: Map<string, string | null>;
   flowNodeSets: Map<string, Set<string>>;
+  agentSlugToNodeId: Map<string, string>;
 }): Run {
-  const { root, queueState, manifestPath, nowMs, nodeMapping, flowNodeSets } = args;
+  const { root, queueState, manifestPath, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId } = args;
 
   // Parse manifest (throws on unreadable — caller wraps for listRuns)
   const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
@@ -386,7 +438,7 @@ function aggregateRunWithMapping(args: {
   const eventsPath = join(logDir, 'events.jsonl');
   const events = existsSync(eventsPath) ? readEventsJsonl(eventsPath) : [];
 
-  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets });
+  return buildRun({ manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId });
 }
 
 // ---------------------------------------------------------------------------
@@ -403,17 +455,18 @@ function buildRun(args: {
   nowMs: number;
   nodeMapping: Map<string, string | null>;
   flowNodeSets: Map<string, Set<string>>;
+  agentSlugToNodeId: Map<string, string>;
 }): Run {
-  const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets } = args;
+  const { manifest, cycleId, events, logDir, root, runStatus, nowMs, nodeMapping, flowNodeSets, agentSlugToNodeId } = args;
 
   // --- Phase status derivation (ported from forge-ui/lib/phases.ts) ---
-  const phases = deriveNodeStatuses(events, runStatus, nodeMapping);
+  const phases = deriveNodeStatuses(events, runStatus, nodeMapping, agentSlugToNodeId);
 
   // --- Per-node metadata ---
-  const phaseMeta = deriveNodeMeta(events, manifest.iteration_budget, nowMs, nodeMapping);
+  const phaseMeta = deriveNodeMeta(events, manifest.iteration_budget, nowMs, nodeMapping, agentSlugToNodeId);
 
   // --- Work items (dev node fanOut) ---
-  const workItems = deriveWorkItems(events, nodeMapping);
+  const workItems = deriveWorkItems(events, nodeMapping, agentSlugToNodeId);
 
   // --- Reflection present flag (from events, not just files) ---
   const hasReflectionEvents = events.some((e) => e.phase === 'reflection');
@@ -436,11 +489,11 @@ function buildRun(args: {
   // trail — not hardcoded to the seed flow's 'review' node id (a
   // user-authored flow can name its gate node anything; some flows have no
   // review node at all).
-  const gate = runStatus === 'gated' ? findGateNodeId(events, nodeMapping) : undefined;
+  const gate = runStatus === 'gated' ? findGateNodeId(events, nodeMapping, agentSlugToNodeId) : undefined;
   const gateNote = gate ? findGateNote(logDir) : undefined;
 
   // --- Failure ---
-  const { failedAt, failNote } = findFailure(events, nodeMapping);
+  const { failedAt, failNote } = findFailure(events, nodeMapping, agentSlugToNodeId);
 
   // --- Initiative title from manifest body first heading ---
   const initiative = extractTitle(manifest.body, manifest.initiative_id);
