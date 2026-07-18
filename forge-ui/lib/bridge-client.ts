@@ -608,6 +608,16 @@ export async function postArchitectAnswers(input: {
   return bridgePost('/api/architect/answer', input);
 }
 
+/** R4-11-T5 — StuckWarning's one-click re-run: re-spawns the existing
+ *  session's turn as-is (no answers/round mutation). Mirrors
+ *  `postArchitectAnswers`'s bridgePost shape. */
+export async function rerunArchitectSession(
+  project: string,
+  sessionId: string,
+): Promise<{ ok: boolean; error?: string }> {
+  return bridgePost('/api/architect/rerun', { project, sessionId });
+}
+
 export type PlanVerdict = {
   project: string;
   sessionId: string;

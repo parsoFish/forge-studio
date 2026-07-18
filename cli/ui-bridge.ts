@@ -1368,6 +1368,34 @@ async function handleArchitect(
     return true;
   }
 
+  // POST /api/architect/rerun {project, sessionId} — StuckWarning's one-click
+  // re-run affordance (R4-11-T5). Re-invokes the EXISTING session's turn
+  // as-is: unlike /api/architect/answer, no round is appended and no
+  // answers.json write happens — the runner re-reads status.json fresh at
+  // turn start and resumes wherever it left off, so there's nothing to
+  // rewrite here beyond confirming the session exists before spawning.
+  if (method === 'POST' && url === '/api/architect/rerun') {
+    try {
+      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      if (!body.project || !body.sessionId) {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      const status = readStatus(dir);
+      if (!status) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
+      ctx.broadcastArchitectChanged();
+      sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/rerun', body.sessionId) }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: String(err) }, origin);
+    }
+    return true;
+  }
+
   // POST /api/plan-verdict — delegates to applyPlanVerdict in bridge-studio.ts.
   if (method === 'POST' && url === '/api/plan-verdict') {
     try {

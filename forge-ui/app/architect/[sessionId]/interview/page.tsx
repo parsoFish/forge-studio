@@ -5,6 +5,7 @@ import Link from 'next/link';
 
 import {
   fetchArchitectSessions,
+  rerunArchitectSession,
   type ArchitectSessionSummary,
 } from '@/lib/bridge-client';
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
@@ -217,13 +218,30 @@ function Status({ label }: { label: string }): JSX.Element {
 }
 
 /** P1 — stale-session warning. Mirrors the retired screen's StuckWarning,
- *  driven by the shared {@link isSessionStale} predicate. */
+ *  driven by the shared {@link isSessionStale} predicate. F5 (R4-11-T5) adds
+ *  a one-click re-run affordance that re-spawns the existing session's turn
+ *  without mutating its answers/round — the existing 3s poll picks the
+ *  resumed session back up once the runner reports progress. */
 function StuckWarning({ session }: { session: ArchitectSessionSummary }): JSX.Element {
   const staleMinutes = Math.round((session.staleMs ?? 0) / 60_000);
+  const [rerunState, setRerunState] = useState<'idle' | 'rerunning' | 'error'>('idle');
+
+  async function onRerun(): Promise<void> {
+    if (rerunState === 'rerunning') return;
+    setRerunState('rerunning');
+    try {
+      const res = await rerunArchitectSession(session.project, session.sessionId);
+      setRerunState(res.ok ? 'idle' : 'error');
+    } catch {
+      setRerunState('error');
+    }
+  }
+
   return (
     <div
       data-architect-stale="true"
       data-architect-stale-ms={session.staleMs}
+      data-rerun-state={rerunState}
       style={{
         marginBottom: 12,
         border: '1px solid #9e6a0388',
@@ -234,11 +252,35 @@ function StuckWarning({ session }: { session: ArchitectSessionSummary }): JSX.El
         color: '#d29922',
       }}
     >
-      ⚠ No architect activity for {staleMinutes}m — it may have stalled. Check{' '}
-      <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-        _logs/_architect-{session.sessionId}/stderr.log
-      </code>{' '}
-      or re-run.
+      <div>
+        ⚠ No architect activity for {staleMinutes}m — it may have stalled. Check{' '}
+        <code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+          _logs/_architect-{session.sessionId}/stderr.log
+        </code>{' '}
+        or re-run below.
+      </div>
+      <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+        <button
+          onClick={() => void onRerun()}
+          disabled={rerunState === 'rerunning'}
+          data-action="architect-rerun"
+          style={{
+            background: rerunState === 'rerunning' ? '#21262d' : '#9e6a03',
+            color: '#fff',
+            border: '1px solid #9e6a0388',
+            borderRadius: 6,
+            padding: '5px 12px',
+            fontSize: 12,
+            fontWeight: 600,
+            cursor: rerunState === 'rerunning' ? 'not-allowed' : 'pointer',
+          }}
+        >
+          {rerunState === 'rerunning' ? 'Re-running…' : 'Re-run'}
+        </button>
+        {rerunState === 'error' && (
+          <span style={{ color: '#f85149', fontSize: 12 }}>Failed to re-run — try again.</span>
+        )}
+      </div>
     </div>
   );
 }
