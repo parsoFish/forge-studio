@@ -17,6 +17,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runStudioLint } from './studio-lint.ts';
+import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
+import { validateKb } from '../orchestrator/studio/validate.ts';
+import type { KbBinding } from '../orchestrator/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -99,11 +102,12 @@ function seedValidProject(root: string, id = 'my-project'): void {
   writeFileSync(join(forgeDir, 'project.json'), JSON.stringify({ name: id }), 'utf8');
 }
 
-/** Minimal valid kb.yaml. */
-function validKbYaml(id: string): string {
+/** Minimal valid kb.yaml — defaults to a unique binding so callers don't need
+ * to seed a matching flow/project just to exercise unrelated checks. */
+function validKbYaml(id: string, bindingYaml = 'binding: { kind: unique }'): string {
   return `id: ${id}
 name: Test KB
-scope: flow
+${bindingYaml}
 desc: A test knowledge base.
 `;
 }
@@ -278,7 +282,7 @@ test('kb.yaml with bad slug → error', () => {
     join(kbDir, 'kb.yaml'),
     `id: Bad Slug!!
 name: Bad KB
-scope: flow
+binding: { kind: unique }
 desc: Has an invalid id.
 `,
   );
@@ -344,6 +348,159 @@ test('duplicate kb ids across brain/*/kb.yaml → error', () => {
   );
 
   cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 6b: dangling binding.ref (flow) → binding-ref error (R1-01)
+// ---------------------------------------------------------------------------
+
+test('kb.yaml binding.kind=flow with dangling ref → binding-ref error', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'flow-kb');
+  mkdirSync(kbDir, { recursive: true });
+  writeFileSync(
+    join(kbDir, 'kb.yaml'),
+    `id: flow-kb
+name: Flow KB
+binding: { kind: flow, ref: no-such-flow }
+desc: Bound to a flow that does not exist.
+`,
+  );
+
+  const result = runStudioLint(root);
+
+  const refFinding = result.findings.find(
+    (f) => f.level === 'error' && f.check === 'binding-ref' && f.object === 'kb:flow-kb',
+  );
+  assert.ok(
+    refFinding !== undefined,
+    `Expected a binding-ref error for kb:flow-kb, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
+  );
+  assert.ok(refFinding.message.includes('no-such-flow'));
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 6c: dangling binding.ref (project) → binding-ref error (R1-01)
+// ---------------------------------------------------------------------------
+
+test('kb.yaml binding.kind=project with dangling ref → binding-ref error', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'project-kb');
+  mkdirSync(kbDir, { recursive: true });
+  writeFileSync(
+    join(kbDir, 'kb.yaml'),
+    `id: project-kb
+name: Project KB
+binding: { kind: project, ref: no-such-project }
+desc: Bound to a project that does not exist.
+`,
+  );
+
+  const result = runStudioLint(root);
+
+  const refFinding = result.findings.find(
+    (f) => f.level === 'error' && f.check === 'binding-ref' && f.object === 'kb:project-kb',
+  );
+  assert.ok(
+    refFinding !== undefined,
+    `Expected a binding-ref error for kb:project-kb, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
+  );
+  assert.ok(refFinding.message.includes('no-such-project'));
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 6d: two KBs both binding: { kind: unique } → unique-binding error (R1-01)
+// ---------------------------------------------------------------------------
+
+test('two KBs both declaring binding.kind=unique → unique-binding error', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir1 = join(root, 'brain', 'brain-x');
+  const kbDir2 = join(root, 'brain', 'brain-y');
+  mkdirSync(kbDir1, { recursive: true });
+  mkdirSync(kbDir2, { recursive: true });
+  writeFileSync(join(kbDir1, 'kb.yaml'), validKbYaml('unique-x'));
+  writeFileSync(join(kbDir2, 'kb.yaml'), validKbYaml('unique-y'));
+
+  const result = runStudioLint(root);
+
+  const uniqueFindings = result.findings.filter(
+    (f) => f.level === 'error' && f.check === 'unique-binding',
+  );
+  assert.strictEqual(
+    uniqueFindings.length,
+    2,
+    `Expected one unique-binding error per offending KB (2), got: ${JSON.stringify(result.findings.map((f) => f.check))}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 6e: the 6 real, migrated brain/**/kb.yaml descriptors lint clean
+//
+// runStudioLint's own KB scan is one-level-deep (brain/<id>/kb.yaml) and
+// deliberately does NOT descend into brain/projects/*/kb.yaml (R1-01 scope
+// decision — extending it would pull in projects absent from a sandbox
+// checkout). This test bypasses that scan-depth gap and asserts each real
+// descriptor directly: it must load and carry exactly the migrated binding.
+//
+// trafficGame is a pre-existing (not R1-01-introduced) exception: its id is
+// mixed-case and so fails the `slug` check in validateKb — the brief is
+// explicit that this id must be kept verbatim, not renamed, as part of this
+// migration. So trafficGame is asserted to produce exactly that one known
+// `slug` finding; the other 5 descriptors must lint fully clean.
+// ---------------------------------------------------------------------------
+
+test('all 6 real brain kb.yaml descriptors load with the migrated binding contract and lint clean', () => {
+  const expectations: Array<{ path: string; binding: KbBinding; expectedFindings?: unknown[] }> = [
+    { path: join(process.cwd(), 'brain', 'forge-dev', 'kb.yaml'), binding: { kind: 'unique' } },
+    { path: join(process.cwd(), 'brain', 'cycles', 'kb.yaml'), binding: { kind: 'flow', ref: 'forge-develop' } },
+    {
+      // Pre-existing mixed-case id (violates SLUG_RE) — the brief mandates
+      // keeping `trafficGame` verbatim, so this one descriptor is expected
+      // to carry exactly its known `slug` lint error, not a clean result.
+      path: join(process.cwd(), 'brain', 'projects', 'trafficGame', 'kb.yaml'),
+      binding: { kind: 'project', ref: 'trafficGame' },
+      expectedFindings: [
+        {
+          check: 'slug',
+          level: 'error',
+          message: 'KB id "trafficGame" does not match /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/',
+          object: 'kb:trafficGame',
+        },
+      ],
+    },
+    {
+      path: join(process.cwd(), 'brain', 'projects', 'mdtoc', 'kb.yaml'),
+      binding: { kind: 'project', ref: 'mdtoc' },
+    },
+    {
+      path: join(process.cwd(), 'brain', 'projects', 'terraform-provider-betterado', 'kb.yaml'),
+      binding: { kind: 'project', ref: 'terraform-provider-betterado' },
+    },
+    {
+      path: join(process.cwd(), 'brain', 'projects', 'gitpulse', 'kb.yaml'),
+      binding: { kind: 'project', ref: 'gitpulse' },
+    },
+  ];
+
+  for (const { path, binding, expectedFindings } of expectations) {
+    const kb = loadKbDescriptor(path);
+    assert.deepEqual(
+      kb.binding,
+      binding,
+      `${path}: expected binding ${JSON.stringify(binding)}, got ${JSON.stringify(kb.binding)}`,
+    );
+    assert.deepEqual(
+      validateKb(kb),
+      expectedFindings ?? [],
+      `${path}: expected validateKb findings ${JSON.stringify(expectedFindings ?? [])}`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------

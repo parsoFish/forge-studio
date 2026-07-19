@@ -17,9 +17,12 @@ import {
   loadFlowDefinition,
   serializeFlowDefinition,
   loadKbDescriptor,
+  serializeKbDescriptor,
+  resolveKbProcesses,
   loadCatalog,
   discoverProjects,
 } from './registry.ts';
+import type { KbBinding, KbDescriptor } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -84,7 +87,7 @@ triggers: []
 
 const KB_FIXTURE = `id: cycles
 name: Cycle Patterns
-scope: flow
+binding: { kind: flow, ref: forge-develop }
 desc: Accumulated cross-cycle patterns and retros.
 `;
 
@@ -409,14 +412,314 @@ describe('serializeFlowDefinition', () => {
 // ---------------------------------------------------------------------------
 
 describe('loadKbDescriptor', () => {
-  it('parses id, name, scope, desc', () => {
+  it('parses id, name, binding, desc', () => {
     const p = writeFixture('kb.yaml', KB_FIXTURE);
     const kb = loadKbDescriptor(p);
     assert.equal(kb.id, 'cycles');
     assert.equal(kb.name, 'Cycle Patterns');
-    assert.equal(kb.scope, 'flow');
+    assert.deepEqual(kb.binding, { kind: 'flow', ref: 'forge-develop' });
     assert.equal(kb.desc, 'Accumulated cross-cycle patterns and retros.');
     assert.equal(kb.path, p);
+  });
+
+  it('binding.kind unique parses with no ref required', () => {
+    const p = writeFixture(
+      'kb-unique.yaml',
+      `id: forge-dev
+name: Forge Dev
+binding: { kind: unique }
+desc: Forge engineering knowledge.
+`,
+    );
+    const kb = loadKbDescriptor(p);
+    assert.deepEqual(kb.binding, { kind: 'unique' });
+  });
+
+  it('throws when binding is missing', () => {
+    const bad = KB_FIXTURE.replace('binding: { kind: flow, ref: forge-develop }\n', '');
+    const p = writeFixture('kb-no-binding.yaml', bad);
+    assert.throws(
+      () => loadKbDescriptor(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes('binding'), `Expected "binding" in error: ${err.message}`);
+        return true;
+      },
+    );
+  });
+
+  it('throws on invalid binding.kind', () => {
+    const bad = KB_FIXTURE.replace('kind: flow', 'kind: bogus');
+    const p = writeFixture('kb-bad-kind.yaml', bad);
+    assert.throws(
+      () => loadKbDescriptor(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(
+          err.message.includes('binding.kind') && err.message.includes('flow|project|unique'),
+          `Expected enum message: ${err.message}`,
+        );
+        return true;
+      },
+    );
+  });
+
+  it('throws when flow binding is missing ref', () => {
+    const bad = KB_FIXTURE.replace('binding: { kind: flow, ref: forge-develop }', 'binding: { kind: flow }');
+    const p = writeFixture('kb-no-ref.yaml', bad);
+    assert.throws(
+      () => loadKbDescriptor(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes('ref'), `Expected "ref" in error: ${err.message}`);
+        return true;
+      },
+    );
+  });
+
+  it('throws when project binding has empty-string ref', () => {
+    const bad = KB_FIXTURE.replace(
+      'binding: { kind: flow, ref: forge-develop }',
+      'binding: { kind: project, ref: "" }',
+    );
+    const p = writeFixture('kb-empty-ref.yaml', bad);
+    assert.throws(() => loadKbDescriptor(p));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// loadKbDescriptor — processes
+// ---------------------------------------------------------------------------
+
+describe('loadKbDescriptor — processes', () => {
+  it('lean descriptor (no processes) → processes is undefined', () => {
+    const p = writeFixture('kb-lean.yaml', KB_FIXTURE);
+    const kb = loadKbDescriptor(p);
+    assert.equal(kb.processes, undefined);
+  });
+
+  it('full processes block parses all four obligations', () => {
+    const full = `id: cycles
+name: Cycle Patterns
+binding: { kind: flow, ref: forge-develop }
+desc: Accumulated cross-cycle patterns and retros.
+processes:
+  lint: { builtin: forge-brain-lint }
+  ingest: { cmd: "./scripts/custom-ingest.sh" }
+  consolidate: { builtin: brain-fix }
+  usage: { readSurface: search, readers: [planner, reflector] }
+`;
+    const p = writeFixture('kb-full-processes.yaml', full);
+    const kb = loadKbDescriptor(p);
+    assert.deepEqual(kb.processes, {
+      lint: { builtin: 'forge-brain-lint' },
+      ingest: { cmd: './scripts/custom-ingest.sh' },
+      consolidate: { builtin: 'brain-fix' },
+      usage: { readSurface: 'search', readers: ['planner', 'reflector'] },
+    });
+  });
+
+  it('throws on unknown process key', () => {
+    const bad = `id: cycles
+name: Cycle Patterns
+binding: { kind: flow, ref: forge-develop }
+desc: Accumulated cross-cycle patterns and retros.
+processes:
+  lint: { builtin: forge-brain-lint }
+  ingest: { builtin: reflector-ingest }
+  consolidate: { builtin: brain-fix }
+  usage: { readSurface: navigation-index, readers: [planner] }
+  extra: { builtin: bogus }
+`;
+    const p = writeFixture('kb-unknown-process-key.yaml', bad);
+    assert.throws(
+      () => loadKbDescriptor(p),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes('extra'), `Expected "extra" in error: ${err.message}`);
+        return true;
+      },
+    );
+  });
+
+  it('throws when a process obligation is neither {builtin} nor {cmd}', () => {
+    const bad = `id: cycles
+name: Cycle Patterns
+binding: { kind: flow, ref: forge-develop }
+desc: Accumulated cross-cycle patterns and retros.
+processes:
+  lint: { builtin: forge-brain-lint, cmd: also-here }
+  ingest: { builtin: reflector-ingest }
+  consolidate: { builtin: brain-fix }
+  usage: { readSurface: navigation-index, readers: [planner] }
+`;
+    const p = writeFixture('kb-bad-process-shape.yaml', bad);
+    assert.throws(() => loadKbDescriptor(p));
+  });
+
+  it('throws when processes.usage.readSurface is invalid', () => {
+    const bad = `id: cycles
+name: Cycle Patterns
+binding: { kind: flow, ref: forge-develop }
+desc: Accumulated cross-cycle patterns and retros.
+processes:
+  lint: { builtin: forge-brain-lint }
+  ingest: { builtin: reflector-ingest }
+  consolidate: { builtin: brain-fix }
+  usage: { readSurface: bogus-surface, readers: [planner] }
+`;
+    const p = writeFixture('kb-bad-read-surface.yaml', bad);
+    assert.throws(() => loadKbDescriptor(p));
+  });
+
+  it('throws when processes.usage.readers contains an invalid role', () => {
+    const bad = `id: cycles
+name: Cycle Patterns
+binding: { kind: flow, ref: forge-develop }
+desc: Accumulated cross-cycle patterns and retros.
+processes:
+  lint: { builtin: forge-brain-lint }
+  ingest: { builtin: reflector-ingest }
+  consolidate: { builtin: brain-fix }
+  usage: { readSurface: navigation-index, readers: [planner, bogus-role] }
+`;
+    const p = writeFixture('kb-bad-reader-role.yaml', bad);
+    assert.throws(() => loadKbDescriptor(p));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// resolveKbProcesses
+// ---------------------------------------------------------------------------
+
+describe('resolveKbProcesses', () => {
+  it('lean flow-bound descriptor → fills all four defaults', () => {
+    const kb = loadKbDescriptor(writeFixture('kb-resolve-lean.yaml', KB_FIXTURE));
+    const resolved = resolveKbProcesses(kb);
+    assert.deepEqual(resolved, {
+      lint: { builtin: 'forge-brain-lint' },
+      ingest: { builtin: 'reflector-ingest' },
+      consolidate: { builtin: 'brain-fix' },
+      usage: { readSurface: 'navigation-index', readers: ['planner', 'reflector'] },
+    });
+  });
+
+  it('lean project-bound descriptor → usage defaults include dev-loop + reviewer', () => {
+    const kb = loadKbDescriptor(
+      writeFixture(
+        'kb-resolve-project.yaml',
+        `id: gitpulse
+name: Gitpulse Patterns
+binding: { kind: project, ref: gitpulse }
+desc: Project-scoped patterns.
+`,
+      ),
+    );
+    const resolved = resolveKbProcesses(kb);
+    assert.deepEqual(resolved.usage, {
+      readSurface: 'navigation-index',
+      readers: ['planner', 'reflector', 'dev-loop', 'reviewer'],
+    });
+  });
+
+  it('lean unique-bound descriptor → usage defaults are planner+reflector only', () => {
+    const kb = loadKbDescriptor(
+      writeFixture(
+        'kb-resolve-unique.yaml',
+        `id: forge-dev
+name: Forge Dev
+binding: { kind: unique }
+desc: Forge engineering knowledge.
+`,
+      ),
+    );
+    const resolved = resolveKbProcesses(kb);
+    assert.deepEqual(resolved.usage, { readSurface: 'navigation-index', readers: ['planner', 'reflector'] });
+  });
+
+  it('descriptor with explicit processes resolves to its own declared values, not defaults', () => {
+    const full = `id: cycles
+name: Cycle Patterns
+binding: { kind: flow, ref: forge-develop }
+desc: Accumulated cross-cycle patterns and retros.
+processes:
+  lint: { cmd: ./custom-lint.sh }
+  ingest: { builtin: reflector-ingest }
+  consolidate: { builtin: brain-fix }
+  usage: { readSurface: search, readers: [reflector] }
+`;
+    const kb = loadKbDescriptor(writeFixture('kb-resolve-full.yaml', full));
+    const resolved = resolveKbProcesses(kb);
+    assert.deepEqual(resolved.lint, { cmd: './custom-lint.sh' });
+    assert.deepEqual(resolved.usage, { readSurface: 'search', readers: ['reflector'] });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeKbDescriptor round-trip
+// ---------------------------------------------------------------------------
+
+describe('serializeKbDescriptor round-trip', () => {
+  const cases: Array<{ label: string; binding: KbBinding }> = [
+    { label: 'unique', binding: { kind: 'unique' } },
+    { label: 'flow', binding: { kind: 'flow', ref: 'forge-develop' } },
+    { label: 'project', binding: { kind: 'project', ref: 'gitpulse' } },
+  ];
+
+  for (const { label, binding } of cases) {
+    it(`lean (${label} binding, no processes) round-trips`, () => {
+      const kb: KbDescriptor = {
+        id: `test-${label}`,
+        name: `Test ${label}`,
+        binding,
+        desc: 'A test KB.',
+        path: '/unused',
+      };
+      const yamlStr = serializeKbDescriptor(kb);
+      const p = writeFixture(`kb-rt-lean-${label}.yaml`, yamlStr);
+      const reloaded = loadKbDescriptor(p);
+      assert.equal(reloaded.id, kb.id);
+      assert.equal(reloaded.name, kb.name);
+      assert.deepEqual(reloaded.binding, kb.binding);
+      assert.equal(reloaded.desc, kb.desc);
+      assert.equal(reloaded.processes, undefined);
+    });
+
+    it(`with explicit processes (${label} binding) round-trips all four obligations`, () => {
+      const kb: KbDescriptor = {
+        id: `test-full-${label}`,
+        name: `Test Full ${label}`,
+        binding,
+        desc: 'A test KB with explicit processes.',
+        processes: {
+          lint: { builtin: 'forge-brain-lint' },
+          ingest: { cmd: './custom-ingest.sh' },
+          consolidate: { builtin: 'brain-fix' },
+          usage: { readSurface: 'search', readers: ['planner', 'dev-loop'] },
+        },
+        path: '/unused',
+      };
+      const yamlStr = serializeKbDescriptor(kb);
+      const p = writeFixture(`kb-rt-full-${label}.yaml`, yamlStr);
+      const reloaded = loadKbDescriptor(p);
+      assert.deepEqual(reloaded.binding, kb.binding);
+      assert.deepEqual(reloaded.processes, kb.processes);
+    });
+  }
+
+  it('omits backend when undefined, includes it when present', () => {
+    const kb: KbDescriptor = {
+      id: 'test-backend',
+      name: 'Test Backend',
+      binding: { kind: 'unique' },
+      desc: 'A test KB.',
+      backend: 'filesystem',
+      path: '/unused',
+    };
+    const yamlStr = serializeKbDescriptor(kb);
+    assert.ok(yamlStr.includes('backend'));
+    const reloaded = loadKbDescriptor(writeFixture('kb-rt-backend.yaml', yamlStr));
+    assert.equal(reloaded.backend, 'filesystem');
   });
 });
 
@@ -628,22 +931,6 @@ describe('loadAgentDefinition enum guards', () => {
         assert.ok(
           err.message.includes('strategy') && err.message.includes('fixed|range'),
           `Expected enum message for strategy: ${err.message}`,
-        );
-        return true;
-      },
-    );
-  });
-
-  it('throws on invalid kb scope value with descriptive message', () => {
-    const bad = KB_FIXTURE.replace('scope: flow', 'scope: bad-scope');
-    const p = writeFixture('bad-scope-kb.yaml', bad);
-    assert.throws(
-      () => loadKbDescriptor(p),
-      (err: unknown) => {
-        assert.ok(err instanceof Error);
-        assert.ok(
-          err.message.includes('scope') && err.message.includes('project|flow|agent-integration'),
-          `Expected enum message for scope: ${err.message}`,
         );
         return true;
       },

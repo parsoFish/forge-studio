@@ -72,7 +72,7 @@ test('disk-discovered projects validate clean (no error-level findings)', () => 
 // KB descriptors
 // ---------------------------------------------------------------------------
 
-test('brain/forge-dev/kb.yaml loads, validates clean, scope is agent-integration', () => {
+test('brain/forge-dev/kb.yaml loads, validates clean, binding is unique', () => {
   const kbPath = join(ROOT, 'brain/forge-dev/kb.yaml');
   const kb = loadKbDescriptor(kbPath);
   const findings = validateKb(kb);
@@ -83,10 +83,10 @@ test('brain/forge-dev/kb.yaml loads, validates clean, scope is agent-integration
     [],
     `forge-dev kb has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
-  assert.equal(kb.scope, 'agent-integration', 'forge-dev kb.scope must be "agent-integration"');
+  assert.deepEqual(kb.binding, { kind: 'unique' }, 'forge-dev kb.binding must be {kind:"unique"}');
 });
 
-test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
+test('brain/cycles/kb.yaml loads, validates clean, binding is flow ref forge-develop', () => {
   const kbPath = join(ROOT, 'brain/cycles/kb.yaml');
   const kb = loadKbDescriptor(kbPath);
   const findings = validateKb(kb);
@@ -97,7 +97,11 @@ test('brain/cycles/kb.yaml loads, validates clean, scope is flow', () => {
     [],
     `cycles kb has error-level findings:\n${JSON.stringify(errors, null, 2)}`,
   );
-  assert.equal(kb.scope, 'flow', 'cycles kb.scope must be "flow"');
+  assert.deepEqual(
+    kb.binding,
+    { kind: 'flow', ref: 'forge-develop' },
+    'cycles kb.binding must be {kind:"flow", ref:"forge-develop"}',
+  );
 });
 
 // ---------------------------------------------------------------------------

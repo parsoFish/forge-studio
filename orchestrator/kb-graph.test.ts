@@ -186,7 +186,7 @@ function makeSyntheticKb(): { root: string; cleanup: () => void } {
   mkdirSync(join(brainDir, '_raw'), { recursive: true });
 
   // kb.yaml
-  writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nscope: flow\ndesc: Test.\n');
+  writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nbinding: { kind: unique }\ndesc: Test.\n');
 
   // category index
   writeFileSync(join(brainDir, 'patterns.md'), '# Patterns\n\n- [[theme-alpha]]\n');

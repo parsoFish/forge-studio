@@ -27,8 +27,8 @@ import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 // Fixture helpers
 // ---------------------------------------------------------------------------
 
-const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nscope: flow\ndesc: Cross-cycle patterns.\n`;
-const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nscope: agent-integration\ndesc: Forge engineering decisions.\n`;
+const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nbinding: { kind: flow, ref: forge-develop }\ndesc: Cross-cycle patterns.\n`;
+const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nbinding: { kind: unique }\ndesc: Forge engineering decisions.\n`;
 
 // Minimal theme file whose title becomes the theme node id.
 // kb-graph derives node ids from the filename slug (without .md extension).
@@ -253,7 +253,7 @@ test('loadKbDescriptors: includes central per-project brains under brain/project
     // Central per-project brain with two themes
     const proj = join(root, 'brain', 'projects', 'gitpulse');
     mkdirSync(join(proj, 'themes'), { recursive: true });
-    writeFileSync(join(proj, 'kb.yaml'), 'id: gitpulse\nname: gitpulse (project)\nscope: project\ndesc: Per-project brain.\nbackend: filesystem\n');
+    writeFileSync(join(proj, 'kb.yaml'), 'id: gitpulse\nname: gitpulse (project)\nbinding: { kind: project, ref: gitpulse }\ndesc: Per-project brain.\nbackend: filesystem\n');
     writeFileSync(join(proj, 'themes', 'a.md'), '# A\n');
     writeFileSync(join(proj, 'themes', 'b.md'), '# B\n');
 
@@ -262,7 +262,7 @@ test('loadKbDescriptors: includes central per-project brains under brain/project
     assert.ok(ids.includes('cycles'), `expected top-level cycles, got ${JSON.stringify(ids)}`);
     assert.ok(ids.includes('gitpulse'), `expected per-project gitpulse, got ${JSON.stringify(ids)}`);
     const gp = kbs.find((k) => k.id === 'gitpulse');
-    assert.equal(gp?.scope, 'project');
+    assert.deepEqual(gp?.binding, { kind: 'project', ref: 'gitpulse' });
     assert.equal(gp?.counts.themes, 2, 'gitpulse theme count should reflect its themes/ dir');
   } finally {
     rmSync(root, { recursive: true, force: true });

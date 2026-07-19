@@ -417,7 +417,7 @@ test('POST /api/studio/kbs/:id/guidance — writes _guidance file → 200 {ok, f
   // Set up a minimal brain with a kb.yaml so loadKbDescriptors can find it
   const brainDir = join(forgeRoot, 'brain', 'test-kb');
   mkdirSync(join(brainDir, 'themes'), { recursive: true });
-  writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nscope: flow\ndesc: Test.\n');
+  writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nbinding: { kind: unique }\ndesc: Test.\n');
 
   const { status, json } = await post(bridgeUrl, '/api/studio/kbs/test-kb/guidance', {
     text: 'The worktree traps theme should be split.',
@@ -441,7 +441,7 @@ test('POST /api/studio/kbs/:id/guidance with targetNode — written to frontmatt
   const brainDir = join(forgeRoot, 'brain', 'test-kb');
   if (!existsSync(brainDir)) {
     mkdirSync(join(brainDir, 'themes'), { recursive: true });
-    writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nscope: flow\ndesc: Test.\n');
+    writeFileSync(join(brainDir, 'kb.yaml'), 'id: test-kb\nname: Test KB\nbinding: { kind: unique }\ndesc: Test.\n');
   }
 
   const { status, json } = await post(bridgeUrl, '/api/studio/kbs/test-kb/guidance', {

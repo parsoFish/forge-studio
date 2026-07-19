@@ -252,11 +252,11 @@ function makeProjectJson(): string {
 }
 
 /** Minimal kb.yaml */
-function makeKbYaml(id: string, name: string): string {
+function makeKbYaml(id: string, name: string, bindingYaml = 'binding: { kind: unique }'): string {
   return [
     `id: ${id}`,
     `name: ${name}`,
-    'scope: agent-integration',
+    bindingYaml,
     `desc: Test KB ${name}.`,
   ].join('\n');
 }
@@ -334,7 +334,10 @@ before(async () => {
 
   // -- brain/cycles/kb.yaml --
   mkdirSync(join(forgeRoot, 'brain', 'cycles', 'themes'), { recursive: true });
-  writeFileSync(join(forgeRoot, 'brain', 'cycles', 'kb.yaml'), makeKbYaml('cycles', 'Cycle Patterns'));
+  writeFileSync(
+    join(forgeRoot, 'brain', 'cycles', 'kb.yaml'),
+    makeKbYaml('cycles', 'Cycle Patterns', 'binding: { kind: flow, ref: forge-cycle }'),
+  );
 
   // Start bridge
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
