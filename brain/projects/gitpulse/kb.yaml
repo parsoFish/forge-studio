@@ -1,5 +1,7 @@
 id: gitpulse
 name: gitpulse (project)
-scope: project
+binding:
+  kind: project
+  ref: gitpulse
 desc: Per-project brain for gitpulse — themes the reflector distils from each gitpulse cycle (ADR 035, central forge-owned).
 backend: filesystem

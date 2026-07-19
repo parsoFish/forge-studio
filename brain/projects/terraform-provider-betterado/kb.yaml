@@ -1,5 +1,7 @@
 id: terraform-provider-betterado
 name: terraform-provider-betterado (project)
-scope: project
+binding:
+  kind: project
+  ref: terraform-provider-betterado
 desc: Per-project brain for the betterado Terraform provider — themes the reflector distils from each cycle (ADR 035, central forge-owned).
 backend: filesystem
