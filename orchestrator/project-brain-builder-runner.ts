@@ -27,6 +27,7 @@ import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
+import { serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec('skills/project-brain-builder/SKILL.md');
@@ -235,12 +236,20 @@ function runCommitStep(args: {
     }
   }
 
-  // Ensure a kb.yaml descriptor exists so the brain is discoverable.
+  // Ensure a kb.yaml descriptor exists so the brain is discoverable. R1-01:
+  // binding.kind=project ref=<project> — the owning-project identity,
+  // replacing the old loose `scope: project` enum.
   const kbYaml = join(centralBrain, 'kb.yaml');
   if (!existsSync(kbYaml)) {
     writeFileSync(
       kbYaml,
-      `id: ${status.project}\nname: ${status.project} Brain\nscope: project\ndesc: Per-project brain for ${status.project}.\n`,
+      serializeKbDescriptor({
+        id: status.project,
+        name: `${status.project} Brain`,
+        binding: { kind: 'project', ref: status.project },
+        desc: `Per-project brain for ${status.project}.`,
+        path: '',
+      }),
     );
     wrote.push(kbYaml);
   }

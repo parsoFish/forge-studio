@@ -21,12 +21,13 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
-import yaml from 'js-yaml';
 
-import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
+import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects } from '../orchestrator/studio/registry.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
+import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { KB_BINDING_KINDS, type KbBinding } from '../orchestrator/studio/types.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -47,7 +48,7 @@ import {
 type KbWithCounts = {
   id: string;
   name: string;
-  scope: string;
+  binding: KbBinding;
   desc: string;
   path: string;
   counts: { index: number; themes: number; raw: number };
@@ -241,13 +242,6 @@ function buildKbHealth(
 
   return { layerBalance, orphans, linkDensity, staleness: { staleRawCount, staleThemeCount }, lintFlags, lintErrors };
 }
-
-// ---------------------------------------------------------------------------
-// KB scope allowed values
-// ---------------------------------------------------------------------------
-
-const KB_SCOPES_ALLOWED = ['project', 'flow', 'agent-integration'] as const;
-type KbScopeAllowed = typeof KB_SCOPES_ALLOWED[number];
 
 // ---------------------------------------------------------------------------
 // Guidance size cap
@@ -475,11 +469,42 @@ export async function handleStudioKbRoutes(
         return true;
       }
 
-      // 4. Validate scope enum
-      const scope = typeof b['scope'] === 'string' ? b['scope'] : '';
-      if (!KB_SCOPES_ALLOWED.includes(scope as KbScopeAllowed)) {
-        sendJson(res, 400, { error: `scope must be one of: ${KB_SCOPES_ALLOWED.join(', ')}` }, origin);
+      // 4. Validate binding (R1-01 KB contract — replaces the old scope enum)
+      const bindingRaw = b['binding'];
+      if (bindingRaw === null || typeof bindingRaw !== 'object' || Array.isArray(bindingRaw)) {
+        sendJson(res, 400, { error: 'binding is required and must be an object' }, origin);
         return true;
+      }
+      const bindingObj = bindingRaw as Record<string, unknown>;
+      const kind = typeof bindingObj['kind'] === 'string' ? bindingObj['kind'] : '';
+      if (!(KB_BINDING_KINDS as readonly string[]).includes(kind)) {
+        sendJson(res, 400, { error: `binding.kind must be one of: ${KB_BINDING_KINDS.join(', ')}` }, origin);
+        return true;
+      }
+      let binding: KbBinding;
+      if (kind === 'unique') {
+        binding = { kind: 'unique' };
+      } else {
+        const ref = typeof bindingObj['ref'] === 'string' ? bindingObj['ref'].trim() : '';
+        if (!ref) {
+          sendJson(res, 400, { error: `binding.ref is required for binding.kind "${kind}"` }, origin);
+          return true;
+        }
+        if (kind === 'flow') {
+          const flowIds = listFlowIds(ctx.forgeRoot);
+          if (!flowIds.includes(ref)) {
+            sendJson(res, 400, { error: `binding.ref "${ref}" is not a registered flow id` }, origin);
+            return true;
+          }
+        } else {
+          const projectsDir = resolveProjectsDir(ctx.forgeRoot, loadConfig());
+          const projectIds = discoverProjects(projectsDir, ctx.forgeRoot).map((p) => p.id);
+          if (!projectIds.includes(ref)) {
+            sendJson(res, 400, { error: `binding.ref "${ref}" is not a discovered project id` }, origin);
+            return true;
+          }
+        }
+        binding = { kind: kind as 'flow' | 'project', ref };
       }
 
       // 5. Path-guard: resolved kb dir must stay under brain/
@@ -500,10 +525,11 @@ export async function handleStudioKbRoutes(
       mkdirSync(join(kbDir, 'themes'), { recursive: true });
       mkdirSync(join(kbDir, '_raw'), { recursive: true });
 
-      // 8. Write brain/<id>/kb.yaml safely via js-yaml (prevents YAML injection)
+      // 8. Write brain/<id>/kb.yaml via the canonical serializer (leaves
+      // `processes` absent — the KB resolves every obligation to its default
+      // via resolveKbProcesses until an operator opts into an override).
       const kbYamlPath = join(kbDir, 'kb.yaml');
-      const kbYamlContent = yaml.dump({ id, name, scope, desc }, { lineWidth: 120, quotingType: '"', forceQuotes: false });
-      writeFileSync(kbYamlPath, kbYamlContent, 'utf8');
+      writeFileSync(kbYamlPath, serializeKbDescriptor({ id, name, binding, desc, path: kbYamlPath }), 'utf8');
 
       // 9. Verify loadKbDescriptor can round-trip it
       loadKbDescriptor(kbYamlPath);
