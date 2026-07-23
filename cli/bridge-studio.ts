@@ -44,6 +44,7 @@ import {
   loadCatalog,
   listDemoElements,
 } from '../orchestrator/studio/registry.ts';
+import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
@@ -538,7 +539,7 @@ export async function handleStudioRoutes(
   // ---- /api/studio/agents -------------------------------------------------
   if (url === '/api/studio/agents') {
     try {
-      const skillsDir = join(resolve(ctx.forgeRoot), 'skills');
+      const skillsDir = toSkillsDir(resolve(ctx.forgeRoot));
       const agents = listAgentDefinitions(skillsDir);
       // R2-02-F1: thread the server-computed capability descriptor onto each
       // agent's wire payload — no capability fact may exist only in UI code.

@@ -9,6 +9,7 @@ import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
+import { listSkillMdDirs } from '../skill-path.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentBudgets,
@@ -230,18 +231,9 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
 }
 
 export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(skillsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch (err) {
-    throw new Error(`${skillsDir}: cannot read skills directory — ${(err as Error).message}`);
-  }
-
   const defs: AgentDefinition[] = [];
-  for (const entry of entries) {
-    const skillMdPath = join(skillsDir, entry, 'SKILL.md');
+  for (const dir of listSkillMdDirs(skillsDir)) {
+    const skillMdPath = join(dir, 'SKILL.md');
     if (!isStudioAgent(skillMdPath)) continue;
     defs.push(loadAgentDefinition(skillMdPath));
   }

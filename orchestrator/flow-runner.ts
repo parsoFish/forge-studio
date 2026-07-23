@@ -67,6 +67,7 @@ import {
   preservingForgeScratch,
 } from './cycle-helpers.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
+import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
@@ -917,7 +918,7 @@ export async function runFlow({
   // of skill dirs). Node-kind resolution reads `AgentDefinition.executor` off
   // this map instead of a hardcoded slug table.
   const agents = new Map<string, AgentDefinition>(
-    listAgentDefinitions(resolve(FLOW_RUNNER_ROOT, 'skills')).map((a) => [a.slug, a]),
+    listAgentDefinitions(skillsDir(FLOW_RUNNER_ROOT)).map((a) => [a.slug, a]),
   );
 
   for (const nodeId of order) {

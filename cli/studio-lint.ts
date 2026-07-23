@@ -22,8 +22,8 @@
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
 
-import { existsSync, readdirSync, type Dirent } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { basename, join } from 'node:path';
 
 import {
   isStudioAgent,
@@ -46,6 +46,7 @@ import {
   type Finding,
 } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -133,7 +134,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // 1. Agent definitions (skills/)
   // ------------------------------------------------------------------
 
-  const skillsDir = join(root, 'skills');
+  const skillsDir = toSkillsDir(root);
   const agentMap = new Map<string, AgentDefinition>();
 
   if (!existsSync(skillsDir)) {
@@ -144,28 +145,16 @@ export function runStudioLint(root: string): StudioLintResult {
       message: `Required directory "${skillsDir}" is missing — skills/ must exist in a forge repo`,
     });
   } else {
-    let skillEntries: Dirent[];
-    try {
-      skillEntries = readdirSync(skillsDir, { withFileTypes: true }).filter((e) => e.isDirectory());
-    } catch (err) {
-      skillEntries = [];
-      findings.push({
-        level: 'error',
-        object: 'studio:agents',
-        check: 'load',
-        message: `Cannot read skills directory "${skillsDir}" — ${(err as Error).message}`,
-      });
-    }
-
-    for (const entry of skillEntries) {
-      const skillMdPath = join(skillsDir, entry.name, 'SKILL.md');
+    for (const dir of listSkillMdDirs(skillsDir)) {
+      const entryName = basename(dir);
+      const skillMdPath = join(dir, 'SKILL.md');
       let isStudio: boolean;
       try {
         isStudio = isStudioAgent(skillMdPath);
       } catch (err) {
         findings.push({
           level: 'error',
-          object: `agent:${entry.name}`,
+          object: `agent:${entryName}`,
           check: 'load',
           message: `Cannot check studio agent "${skillMdPath}" — ${(err as Error).message}`,
         });
@@ -180,7 +169,7 @@ export function runStudioLint(root: string): StudioLintResult {
       } catch (err) {
         findings.push({
           level: 'error',
-          object: `agent:${entry.name}`,
+          object: `agent:${entryName}`,
           check: 'load',
           message: (err as Error).message,
         });

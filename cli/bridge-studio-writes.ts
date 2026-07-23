@@ -34,6 +34,7 @@ import {
   serializeAgentDefinition,
   serializeFlowDefinition,
 } from '../orchestrator/studio/registry.ts';
+import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar } from '../orchestrator/project-config.ts';
@@ -754,7 +755,7 @@ export async function handleStudioWriteRoutes(
       };
 
       // 6. Build agents map for validateFlow
-      const skillsDir = resolve(ctx.forgeRoot, 'skills');
+      const skillsDir = toSkillsDir(ctx.forgeRoot);
       let agentsList: AgentDefinition[] = [];
       try {
         agentsList = listAgentDefinitions(skillsDir);

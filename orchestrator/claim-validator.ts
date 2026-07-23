@@ -24,11 +24,12 @@
  */
 
 import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 
 import { runPreflight } from '../cli/preflight.ts';
 import { loadFlowDefinition, listAgentDefinitions } from './studio/registry.ts';
 import { validateFlow } from './studio/validate.ts';
+import { skillsDir as toSkillsDir } from './skill-path.ts';
 import type { AgentDefinition } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -83,7 +84,7 @@ export function clearAllPendingRefusalLogs(): void {
  * will flag unresolved agent refs as errors, which is the correct signal.
  */
 function loadAgentMap(forgeRoot: string): ReadonlyMap<string, AgentDefinition> {
-  const skillsDir = join(forgeRoot, 'skills');
+  const skillsDir = toSkillsDir(forgeRoot);
   if (!existsSync(skillsDir)) return new Map();
   try {
     const defs = listAgentDefinitions(skillsDir);
