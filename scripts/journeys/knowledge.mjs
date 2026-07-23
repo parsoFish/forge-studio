@@ -17,7 +17,8 @@ let GUIDANCE_TEXT, kbPageReady;             // knowledge-graph → knowledge-pin
 const SCRATCH_KB_ID = 'journey-scratch-kb';
 const SCRATCH_KB_NAME = 'Journey scratch KB';
 const SCRATCH_KB_DESC = 'Ephemeral KB created by the e2e journey itself, to demo create -> guidance -> ingest -> delete without ever touching a real brain.';
-const SCRATCH_KB_SCOPE = 'project';
+const SCRATCH_KB_BIND_KIND = 'flow';
+const SCRATCH_KB_BIND_REF = 'forge-develop'; // an always-registered flow → the POST dangling-ref check passes
 const SCRATCH_KB_DIR = join(FORGE_ROOT, 'brain', SCRATCH_KB_ID);
 const SCRATCH_GUIDANCE_TEXT = '[e2e-journey] scratch-kb guidance: a KB created purely for this demo should still round-trip through the exact same pin -> ingest -> delete loop as a real brain.';
 
@@ -226,7 +227,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-create-kb',
         title: 'Author a KB from scratch — /knowledge/new',
-        narration: 'From a blank form the operator names a brand-new knowledge base, picks a scope, and describes it; creating it writes a fresh kb.yaml + themes/ + _raw/ under brain/ — a scratch KB this journey both creates and deletes itself, so the real cycles/forge-dev brains are never touched.',
+        narration: 'From a blank form the operator names a brand-new knowledge base, binds it to a flow, and describes it; creating it writes a fresh kb.yaml + themes/ + _raw/ under brain/ — a scratch KB this journey both creates and deletes itself, so the real cycles/forge-dev brains are never touched.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── S3.0b: author a brand-new KB from scratch (/knowledge/new) ────────────
@@ -241,7 +242,10 @@ export const journey = defineJourney({
                 await nameEl.click().catch(() => {});
                 await nameEl.fill('').catch(() => {});
                 await nameEl.pressSequentially(SCRATCH_KB_NAME, { delay: 16 }).catch(() => {});
-                await page.locator('[data-field="kb-scope"]').selectOption(SCRATCH_KB_SCOPE).catch(() => {});
+                await page.locator('[data-field="kb-binding-kind"]').selectOption(SCRATCH_KB_BIND_KIND).catch(() => {});
+                // fetchStudioFlows is async — wait for the ref option to render before selecting it
+                await page.locator(`[data-field="kb-binding-ref"] option[value="${SCRATCH_KB_BIND_REF}"]`).waitFor({ timeout: 5000 }).catch(() => {});
+                await page.locator('[data-field="kb-binding-ref"]').selectOption(SCRATCH_KB_BIND_REF).catch(() => {});
                 await page.locator('[data-field="kb-desc"]').fill(SCRATCH_KB_DESC).catch(() => {});
               };
               const createEnabled = (ms) => page.waitForFunction(() => {
@@ -251,8 +255,8 @@ export const journey = defineJourney({
               await fillKb();
               let kbEnabled = await createEnabled(6000);
               if (!kbEnabled) { await fillKb(); kbEnabled = await createEnabled(6000); }
-              check(kbEnabled, 'kb-create: create-kb enables once a name is filled');
-              await frame(page, 'kb-2-create-form', 'Knowledge — authoring a brand-new KB from scratch (name/scope/description)');
+              check(kbEnabled, 'kb-create: create-kb enables once a name + binding are filled');
+              await frame(page, 'kb-2-create-form', 'Knowledge — authoring a brand-new KB from scratch (name/binding/description)');
               await page.locator('[data-action="create-kb"]').click().catch(() => {});
               const created = await waitForFile(join(SCRATCH_KB_DIR, 'kb.yaml'), 12000);
               check(created, `kb-create: creating writes brain/${SCRATCH_KB_ID}/kb.yaml`);

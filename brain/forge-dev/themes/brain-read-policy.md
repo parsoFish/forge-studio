@@ -78,6 +78,8 @@ sees stale indexes until restart — invalidate per cycle or document.
 Net: **one source of intent per phase.** Planner ← brain. Executor ←
 work item. Reviewer ← manifest + work-item set. Reflector ↔ brain.
 
+> **R1-01 (2026-07-19):** the KB `binding` contract changed KB *scoping*, not this asymmetric who-reads-what policy (ADR-010, Q5-B) — guarded by `orchestrator/kb-read-policy-guard.test.ts`.
+
 ## Sources
 
 - [`2026-05-16_trafficgame-arc-reflection.md`](../../cycles/_raw/2026-05-16_trafficgame-arc-reflection.md) — cycle archive: F-34/F-41 strip-backs + operator confirmation.

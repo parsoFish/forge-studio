@@ -2,7 +2,6 @@
 
 export type BrainAccess = 'mandatory' | 'advisory' | 'none';
 export type ModelStrategy = 'fixed' | 'range';
-export type KbScope = 'project' | 'flow' | 'agent-integration';
 
 export type AgentComposition = {
   skills: string[];
@@ -138,11 +137,47 @@ export type ArtifactTemplate = {
 export const KB_BACKENDS = ['filesystem'] as const;
 export type KbBackendId = (typeof KB_BACKENDS)[number];
 
+/**
+ * KB binding (R1-01 amendment) — replaces the old loose `scope` enum. A KB
+ * binds to exactly one owning identity: a specific flow, a specific project,
+ * or the single forge-dev "unique" KB (Brain 1). `flow`/`project` bindings
+ * carry a `ref` naming the bound flow id / project id; `unique` carries none.
+ */
+export type KbBindingKind = 'flow' | 'project' | 'unique';
+export const KB_BINDING_KINDS: readonly KbBindingKind[] = ['flow', 'project', 'unique'];
+export type KbBinding =
+  | { kind: 'flow'; ref: string }
+  | { kind: 'project'; ref: string }
+  | { kind: 'unique' };
+
+/** A KB process obligation is either a named forge builtin or a shell command. */
+export type KbProcessImpl = { builtin: string } | { cmd: string };
+
+export const KB_READ_SURFACES = ['navigation-index', 'search'] as const;
+export type KbReadSurface = (typeof KB_READ_SURFACES)[number];
+export const KB_READER_ROLES = ['planner', 'reflector', 'dev-loop', 'reviewer'] as const;
+export type KbReaderRole = (typeof KB_READER_ROLES)[number];
+export type KbUsagePolicy = { readSurface: KbReadSurface; readers: KbReaderRole[] };
+
+/**
+ * The four-obligation KB process contract (R1-01): how the KB is linted,
+ * ingested, consolidated, and who is allowed to read it and how. Optional on
+ * `KbDescriptor` as a whole — a lean descriptor resolves every obligation to
+ * a repo-wide default via `resolveKbProcesses`.
+ */
+export type KbProcesses = {
+  lint: KbProcessImpl;
+  ingest: KbProcessImpl;
+  consolidate: KbProcessImpl;
+  usage: KbUsagePolicy;
+};
+
 export type KbDescriptor = {
   id: string;
   name: string;
-  scope: KbScope;
+  binding: KbBinding;
   desc: string;
+  processes?: KbProcesses;
   /** Storage backend; absent ⇒ filesystem (the historical default). */
   backend?: string;
   path: string;

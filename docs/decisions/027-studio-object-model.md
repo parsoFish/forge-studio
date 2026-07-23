@@ -149,3 +149,47 @@ and how a run starts — are ADR 028's. Seed flows: `forge-architect` = `idea`
 picker → develop), `forge-reflect` = `trigger-only` (no manual launch; fired by a
 declared trigger). Absent ⇒ the generic launcher (back-compat for any flow without
 the field).
+
+## Amendment (R1-01, 2026-07-19): kb.yaml serializer + binding
+
+§4 made the KB a `kb.yaml` *descriptor* with a loose `scope: project | flow |
+agent-integration` enum and no serializer ("kb.yaml is hand-edited; no
+serializer by design" — the §5 reference in the original registry.ts comment
+was itself a mislabel: kb.yaml is §4, not §5, which is the Catalog). R1-01
+promotes it from descriptor to **contract**:
+
+- **`scope` is dead — no back-compat.** Replaced by a mandatory `binding`:
+  `{ kind: 'flow', ref: <flow-id> } | { kind: 'project', ref: <project-id> } |
+  { kind: 'unique' }`. `binding` names the OWNING flow/project (the
+  accrual/bootstrap identity); `unique` is the single sanctioned unbound KB
+  (forge-dev), lint-enforced to exactly one across the roster. `cli/
+  studio-lint.ts` additionally cross-checks a `flow`/`project` `ref` against
+  the registered flow ids / discovered project ids (`check: 'binding-ref'`) —
+  a dangling ref is now a lint error, not a silent typo.
+- **A four-obligation `processes` block, optional in the file.** `lint /
+  ingest / consolidate` each resolve to `{builtin: <name>} | {cmd: <string>}`;
+  `usage` is a typed policy (`readSurface`, `readers[]`), NOT builtin-or-cmd.
+  Absent ⇒ `resolveKbProcesses()` supplies binding-derived defaults
+  (`deriveKbUsageDefaults` follows the ADR-010 asymmetric brain-read policy:
+  planners + reflector always; `project`-bound KBs additionally advisory-
+  readable by dev-loop/reviewer). This amendment *declares* the contract; it
+  does not execute `cmd`-form processes — the built-in defaults are the
+  shipped path.
+- **`serializeKbDescriptor` now exists**, mirroring `serializeFlowDefinition`
+  (explicit key order, `yaml.dump(..., { lineWidth: 120, quotingType: '"',
+  forceQuotes: false })`) — superseding the "no serializer by design" rule for
+  kb.yaml specifically (§5's Catalog is unaffected; it still has none). The
+  KB-create route (`POST /api/studio/kbs`) and the project-brain
+  seed/commit paths (`orchestrator/project-brain-seed.ts`,
+  `project-brain-builder-runner.ts`) now write through this one canonical
+  serializer instead of hand-rolled `yaml.dump`/template-string YAML.
+- **Migration (one-shot, no legacy path):** the 6 existing descriptors
+  (`brain/forge-dev`, `brain/cycles`, `brain/projects/{trafficGame,mdtoc,
+  terraform-provider-betterado,gitpulse}`) were rewritten in place —
+  `forge-dev`'s `agent-integration` → `{kind: unique}` (and the
+  `agent-integration` enum member dies with it); `cycles`'s `flow` → `{kind:
+  flow, ref: forge-develop}`; the four project brains' `project` → `{kind:
+  project, ref: <own-id>}`. The three seed flows' `kb: cycles` read grants
+  (`studio/flows/{forge-architect,forge-develop,forge-reflect}/flow.yaml`)
+  were left untouched — they are a separate read-grant mechanism, not the
+  binding.

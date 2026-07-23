@@ -3,7 +3,7 @@
  * Pure semantic checks — no I/O, no mutation of inputs.
  * Consumed by: bridge PUT routes (M2) and `forge studio lint` (Task 5).
  *
- * validateKb intentionally checks only the slug; the scope enum is enforced at load time in registry.ts.
+ * validateKb intentionally checks only the slug and backend; the binding shape is enforced at load time in registry.ts.
  */
 
 import { DEMO_STEP_KINDS } from './types.ts';
@@ -436,8 +436,11 @@ export function validateKb(kb: KbDescriptor): Finding[] {
     );
   }
 
-  // Note: scope enum is already load-guarded in registry (oneOf check);
-  // we do not duplicate it here.
+  // Note: the `binding` shape (kind enum + ref presence) is already
+  // load-guarded in registry (parseKbBinding); we do not duplicate it here.
+  // Binding *cross-reference* checks (dangling ref, exactly-one-unique) live
+  // in cli/studio-lint.ts, which has the full KB roster + discovered
+  // flows/projects needed to check them.
 
   return findings;
 }

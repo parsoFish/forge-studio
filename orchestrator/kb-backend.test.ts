@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path';
 
 import { getKbBackend, FilesystemKbBackend, type KbBackend } from './kb-backend.ts';
 import { buildKbGraph } from './kb-graph.ts';
+import { loadKbDescriptor, resolveKbProcesses } from './studio/registry.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FORGE_ROOT = resolve(__dirname, '..');
@@ -84,3 +85,56 @@ test('search() returns ranked title hits and is empty for a blank query', () => 
     assert.equal(typeof h.score, 'number');
   }
 });
+
+// ---------------------------------------------------------------------------
+// KB-contract conformance (R1-01-F5): any backend + any binding kind must
+// satisfy the four-process obligation set AND the KbBackend interface.
+// Parameterized over the three real migrated descriptors — one per binding kind.
+// ---------------------------------------------------------------------------
+
+const CONFORMANCE_CASES = [
+  { kind: 'unique', id: 'forge-dev', kbYaml: resolve(FORGE_ROOT, 'brain', 'forge-dev', 'kb.yaml') },
+  { kind: 'flow', id: 'cycles', kbYaml: resolve(FORGE_ROOT, 'brain', 'cycles', 'kb.yaml') },
+  { kind: 'project', id: 'mdtoc', kbYaml: resolve(FORGE_ROOT, 'brain', 'projects', 'mdtoc', 'kb.yaml') },
+] as const;
+
+for (const c of CONFORMANCE_CASES) {
+  test(`KB-contract conformance: ${c.id} (binding.kind=${c.kind}) resolves the four-process obligation set`, () => {
+    const kb = loadKbDescriptor(c.kbYaml);
+    assert.equal(kb.binding.kind, c.kind, `${c.id} declares binding.kind=${c.kind}`);
+
+    const procs = resolveKbProcesses(kb);
+    for (const key of ['lint', 'ingest', 'consolidate'] as const) {
+      const impl = procs[key];
+      const hasBuiltin = 'builtin' in impl && typeof impl.builtin === 'string' && impl.builtin.length > 0;
+      const hasCmd = 'cmd' in impl && typeof impl.cmd === 'string' && impl.cmd.length > 0;
+      assert.ok(hasBuiltin !== hasCmd, `${c.id}.processes.${key} resolves to exactly one of {builtin}|{cmd}`);
+    }
+    assert.ok(['navigation-index', 'search'].includes(procs.usage.readSurface), 'usage.readSurface is a valid surface');
+    assert.ok(procs.usage.readers.length > 0, 'usage.readers is non-empty');
+
+    // deriveKbUsageDefaults: a project (Brain-3) KB additionally grants advisory
+    // dev-loop/reviewer reads; flow/unique KBs grant planner+reflector only.
+    if (c.kind === 'project') {
+      assert.ok(
+        procs.usage.readers.includes('dev-loop') && procs.usage.readers.includes('reviewer'),
+        'project KB grants advisory dev-loop/reviewer reads',
+      );
+    } else {
+      assert.ok(
+        !procs.usage.readers.includes('dev-loop') && !procs.usage.readers.includes('reviewer'),
+        `${c.kind} KB grants planner/reflector reads only`,
+      );
+    }
+  });
+
+  test(`KB-contract conformance: FilesystemKbBackend satisfies the interface for ${c.id}`, () => {
+    const backend = getKbBackend(FORGE_ROOT, c.id);
+    assert.equal(backend.kbId, c.id);
+    assert.ok(backend instanceof FilesystemKbBackend);
+    const graph = backend.buildGraph();
+    assert.ok(Array.isArray(graph.nodes) && Array.isArray(graph.edges), 'buildGraph returns a graph');
+    assert.ok(Array.isArray(backend.listPendingGuidance()), 'listPendingGuidance returns an array');
+    assert.ok(Array.isArray(backend.search('index', 3)), 'search returns an array');
+  });
+}

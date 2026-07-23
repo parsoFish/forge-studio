@@ -8,7 +8,11 @@
  *   2. Flow definitions   — every studio/flows/<id>/flow.yaml
  *   3. Catalog            — studio/catalog.yaml
  *   4. Projects           — auto-discovered from `<projectsDir>/*` (B1; no registry file)
- *   5. KB descriptors     — brain/<name>/kb.yaml (tolerate zero; duplicates are errors)
+ *   5. KB descriptors     — brain/<name>/kb.yaml (tolerate zero; duplicates are
+ *                           errors; R1-01 also cross-checks binding.ref against
+ *                           registered flows/discovered projects, and enforces
+ *                           exactly one binding: { kind: unique } KB once ≥1 is
+ *                           loaded)
  *
  * Missing seed files (studio/ dir, catalog.yaml) are errors. Zero discovered
  * projects is NOT an error (a fresh box has none); a project dir missing its
@@ -42,7 +46,7 @@ import {
   type Finding,
 } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import type { AgentDefinition } from '../orchestrator/studio/types.ts';
+import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -189,6 +193,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
 
   const flowsDir = join(root, 'studio', 'flows');
+  const flowIds = new Set<string>();
 
   if (!existsSync(flowsDir)) {
     findings.push({
@@ -221,6 +226,8 @@ export function runStudioLint(root: string): StudioLintResult {
         message: `No flow definitions found in "${flowsDir}" — at least one flow is required`,
       });
     }
+
+    flowDirs.forEach((d) => flowIds.add(d));
 
     for (const dir of flowDirs) {
       const flowPath = join(flowsDir, dir, 'flow.yaml');
@@ -283,7 +290,9 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
 
   const projectsDir = resolveProjectsDir(root, loadConfig());
-  findings.push(...validateDiscoveredProjects(discoverProjects(projectsDir, root)));
+  const discoveredProjects = discoverProjects(projectsDir, root);
+  findings.push(...validateDiscoveredProjects(discoveredProjects));
+  const projectIds = new Set(discoveredProjects.map((p) => p.id));
 
   // ------------------------------------------------------------------
   // 5. KB descriptors (brain/*/kb.yaml — absent = NOT an error)
@@ -310,10 +319,12 @@ export function runStudioLint(root: string): StudioLintResult {
   }
 
   const seenKbIds = new Map<string, string>(); // id → first file path
+  const loadedKbs: KbDescriptor[] = [];
 
   for (const kbPath of kbPaths) {
     try {
       const kb = loadKbDescriptor(kbPath);
+      loadedKbs.push(kb);
       findings.push(...validateKb(kb));
 
       if (seenKbIds.has(kb.id)) {
@@ -326,6 +337,25 @@ export function runStudioLint(root: string): StudioLintResult {
       } else {
         seenKbIds.set(kb.id, kbPath);
       }
+
+      // Dangling binding.ref (R1-01) — flow/project refs must resolve to a
+      // registered flow id / discovered project id.
+      if (kb.binding.kind === 'flow' && !flowIds.has(kb.binding.ref)) {
+        findings.push({
+          level: 'error',
+          object: `kb:${kb.id}`,
+          check: 'binding-ref',
+          message: `KB "${kb.id}" binding.ref "${kb.binding.ref}" is not a registered flow id (studio/flows/${kb.binding.ref}/flow.yaml not found)`,
+        });
+      }
+      if (kb.binding.kind === 'project' && !projectIds.has(kb.binding.ref)) {
+        findings.push({
+          level: 'error',
+          object: `kb:${kb.id}`,
+          check: 'binding-ref',
+          message: `KB "${kb.id}" binding.ref "${kb.binding.ref}" is not a discovered project id`,
+        });
+      }
     } catch (err) {
       findings.push({
         level: 'error',
@@ -333,6 +363,29 @@ export function runStudioLint(root: string): StudioLintResult {
         check: 'load',
         message: `Cannot load KB descriptor "${kbPath}" — ${(err as Error).message}`,
       });
+    }
+  }
+
+  // Exactly one KB must declare binding: { kind: unique } (the forge-dev KB) —
+  // skipped when zero KBs loaded (absent kb.yaml is not an error, see header).
+  if (loadedKbs.length > 0) {
+    const uniqueKbs = loadedKbs.filter((kb) => kb.binding.kind === 'unique');
+    if (uniqueKbs.length === 0) {
+      findings.push({
+        level: 'error',
+        object: 'kb:none',
+        check: 'unique-binding',
+        message: 'Exactly one KB must declare binding: { kind: unique } (the forge-dev KB) — found 0',
+      });
+    } else if (uniqueKbs.length > 1) {
+      for (const kb of uniqueKbs) {
+        findings.push({
+          level: 'error',
+          object: `kb:${kb.id}`,
+          check: 'unique-binding',
+          message: `Exactly one KB must declare binding: { kind: unique } — found ${uniqueKbs.length} (including "${kb.id}")`,
+        });
+      }
     }
   }
 

@@ -393,6 +393,32 @@ gated/canonical-executor nodes), each owned by a downstream initiative:
 
 ---
 
+### 10. R1-01 KB contract — as-built follow-ups (2026-07-19)
+
+All minor; R1-01 landed clean (opus whole-branch + security review both clean). Recorded so a later pass
+can pick them up:
+
+- **`listProjectIds` not factored.** The project-id enumeration (`discoverProjects(...).map(p => p.id)`)
+  is duplicated inline at the `POST /api/studio/kbs` binding check and in `cli/studio-lint.ts` (its flow
+  sibling `listFlowIds` was factored to `registry.ts`). Factor a parallel `listProjectIds` if a third
+  consumer appears. *Re-entry:* next touch of either site.
+- **`forge studio lint`'s KB scan is one-level** (`brain/<id>/kb.yaml`) — it does not descend into
+  `brain/projects/*/kb.yaml`, so the four project KBs' `binding.ref`/`unique` cross-checks only run via the
+  direct `studio-lint.test.ts` case + the `POST` route + the F5 conformance suite, not the standing lint
+  command. Extending the scan would surface `trafficGame`'s pre-existing mixed-case id (a `SLUG_RE`
+  violation) — so extend-scan and the id fix must land together. *Re-entry:* R1-02 (KB seam completion) or
+  a project-brain rename.
+- **No inline "second `unique`" guard on the POST route.** Unique-count enforcement lives at lint (per
+  spec); a direct (CSRF-protected, localhost-operator-only) API call could scaffold a second `unique` KB on
+  disk that then wedges `forge studio lint`. The UI never offers `unique`. A one-line inline count check
+  would close it defence-in-depth. *Re-entry:* if the bridge ever serves a non-localhost surface.
+- **`brain/forge-dev/themes/brain-read-policy.md` is 62 body lines** (>60 soft cap) — the R1-01-F4
+  AC-required note landed on an already-at-cap theme (soft flag, non-blocking). *Re-entry:* next edit of
+  that theme (trim then).
+- **`kb-read-policy-guard.test.ts` covers PM + reflector**, not architect (also a planner); its
+  `doesNotMatch` side is a name-specific (weaker) guard. Adequate for the "rebind doesn't change readers"
+  invariant. *Re-entry:* if a new planner phase is added.
+
 ## Strengths worth preserving (don't regress these)
 
 - The **dual-boundary gate works as designed** — the unifier catches a red

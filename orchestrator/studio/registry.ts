@@ -28,80 +28,40 @@ import type {
   FlowKickoffKind,
   FlowNode,
   FlowTrigger,
-  KbDescriptor,
   ProjectRef,
 } from './types.ts';
 
-// ---------------------------------------------------------------------------
-// Typed field-extraction helpers (modelled on orchestrator/manifest.ts)
-// ---------------------------------------------------------------------------
+import {
+  reqString,
+  optString,
+  reqNumber,
+  optNumber,
+  optBool,
+  stringArray,
+  reqObject,
+  oneOf,
+  loadYaml,
+} from './yaml-fields.ts';
 
-function reqString(data: Record<string, unknown>, key: string, file: string): string {
-  const v = data[key];
-  if (typeof v !== 'string' || v.length === 0) {
-    throw new Error(`${file}: required string field "${key}" is missing or empty`);
-  }
-  return v;
-}
-
-function optString(data: Record<string, unknown>, key: string): string | undefined {
-  const v = data[key];
-  return typeof v === 'string' && v.length > 0 ? v : undefined;
-}
-
-function reqNumber(data: Record<string, unknown>, key: string, file: string): number {
-  const v = data[key];
-  if (typeof v !== 'number') {
-    throw new Error(`${file}: required number field "${key}" is missing or not a number`);
-  }
-  return v;
-}
-
-function optNumber(data: Record<string, unknown>, key: string): number | undefined {
-  const v = data[key];
-  return typeof v === 'number' ? v : undefined;
-}
-
-function optBool(data: Record<string, unknown>, key: string): boolean | undefined {
-  const v = data[key];
-  return typeof v === 'boolean' ? v : undefined;
-}
-
-function stringArray(data: Record<string, unknown>, key: string, file: string): string[] {
-  const v = data[key];
-  if (v === undefined || v === null) return [];
-  if (!Array.isArray(v)) {
-    throw new Error(`${file}: field "${key}" must be an array of strings`);
-  }
-  return (v as unknown[]).map((item, i) => {
-    if (typeof item !== 'string') {
-      throw new Error(`${file}: field "${key}[${i}]" must be a string`);
-    }
-    return item;
-  });
-}
-
-function reqObject(data: Record<string, unknown>, key: string, file: string): Record<string, unknown> {
-  const v = data[key];
-  if (v === null || typeof v !== 'object' || Array.isArray(v)) {
-    throw new Error(`${file}: required object field "${key}" is missing or not an object`);
-  }
-  return v as Record<string, unknown>;
-}
+// The KB descriptor's load / serialize / process-resolution live in
+// ./kb-descriptor.ts (extracted to keep this file under the 800-line cap).
+// Re-exported here so existing importers keep resolving them from './registry.ts'.
+export {
+  loadKbDescriptor,
+  serializeKbDescriptor,
+  resolveKbProcesses,
+  deriveKbUsageDefaults,
+  DEFAULT_KB_LINT,
+  DEFAULT_KB_INGEST,
+  DEFAULT_KB_CONSOLIDATE,
+} from './kb-descriptor.ts';
 
 // ---------------------------------------------------------------------------
-// Sentinel error class — used inside loadYaml to avoid double-wrapping
-// ---------------------------------------------------------------------------
-
-class RegistryError extends Error {}
-
-// ---------------------------------------------------------------------------
-// Union-field guard helper
+// Union-field guard helpers live in ./yaml-fields.ts (oneOf, loadYaml)
 // ---------------------------------------------------------------------------
 
 const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;
 const MODEL_STRATEGIES = ['fixed', 'range'] as const;
-const KB_SCOPES = ['project', 'flow', 'agent-integration'] as const;
 // R2-01-F5: the ONLY four `surface` values seen across the real roster
 // (verified 2026-07-18). Checked at LINT time (validateAgent), not load time —
 // unlike BRAIN_ACCESS/MODEL_STRATEGIES above, a bad value here should report
@@ -122,30 +82,6 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // import (flow-runner.ts already imports FROM validate.ts for
 // findFanOutViolations).
 export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
-
-function oneOf<T extends string>(value: string, allowed: readonly T[], file: string, key: string): T {
-  if ((allowed as readonly string[]).includes(value)) return value as T;
-  throw new RegistryError(`${file}: field "${key}" must be one of ${allowed.join('|')}, got "${value}"`);
-}
-
-function loadYaml(file: string): Record<string, unknown> {
-  let raw: string;
-  try {
-    raw = readFileSync(file, 'utf8');
-  } catch (err) {
-    throw new Error(`${file}: cannot read file — ${(err as Error).message}`);
-  }
-  try {
-    const parsed = yaml.load(raw);
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new RegistryError(`${file}: YAML root must be a mapping`);
-    }
-    return parsed as Record<string, unknown>;
-  } catch (err) {
-    if (err instanceof RegistryError) throw err;
-    throw new Error(`${file}: YAML parse error — ${(err as Error).message}`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md
@@ -480,11 +416,24 @@ export function serializeFlowDefinition(def: FlowDefinition): string {
   return yaml.dump(out, { lineWidth: 100, quotingType: '"', forceQuotes: false });
 }
 
-// ---------------------------------------------------------------------------
-// KB descriptor
-// ---------------------------------------------------------------------------
+/**
+ * List the ids of every registered flow (`studio/flows/<id>/flow.yaml`) —
+ * directory presence only, no flow.yaml load/validate. Used by the R1-01 KB
+ * binding cross-reference checks (the KB create route; studio-lint.ts reuses
+ * its own already-computed flow-directory listing inline) so both share one
+ * definition of "a registered flow id".
+ */
+export function listFlowIds(forgeRoot: string): string[] {
+  const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
+  try {
+    return readdirSync(flowsDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
 
-// kb.yaml is hand-edited (git changes); no serializer by design (ADR-027 §5).
 // Artifact templates — studio/artifact-templates/<id>.md (gray-matter, ADR-027 amendment).
 export function loadArtifactTemplate(mdPath: string): ArtifactTemplate {
   let raw: string;
@@ -561,18 +510,6 @@ export function listDemoElements(studioRoot: string): DemoElementDefinition[] {
     return [];
   }
   return files.map((f) => loadDemoElement(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
-}
-
-export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {
-  const d = loadYaml(kbYamlPath);
-  return {
-    id: reqString(d, 'id', kbYamlPath),
-    name: reqString(d, 'name', kbYamlPath),
-    scope: oneOf(reqString(d, 'scope', kbYamlPath), KB_SCOPES, kbYamlPath, 'scope'),
-    desc: reqString(d, 'desc', kbYamlPath),
-    backend: optString(d, 'backend'),
-    path: kbYamlPath,
-  };
 }
 
 // ---------------------------------------------------------------------------

@@ -33,10 +33,9 @@
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
-import yaml from 'js-yaml';
 
 import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
-import { loadKbDescriptor } from './studio/registry.ts';
+import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 
 export type ProjectBrainSeedFile = {
   /** forge-root-relative path, forward-slash separated. */
@@ -55,16 +54,16 @@ function toRelPath(forgeRoot: string, absPath: string): string {
 }
 
 function buildKbYaml(projectId: string): string {
-  return yaml.dump(
-    {
-      id: projectId,
-      name: `${projectId} (project)`,
-      scope: 'project',
-      desc: `Per-project brain for ${projectId} — themes the reflector distils from each ${projectId} cycle (ADR 035, central forge-owned).`,
-      backend: 'filesystem',
-    },
-    { lineWidth: 120, quotingType: '"', forceQuotes: false },
-  );
+  // R1-01: binding.kind=project ref=<projectId> — the KB contract's
+  // owning-project identity, replacing the old loose `scope: project` enum.
+  return serializeKbDescriptor({
+    id: projectId,
+    name: `${projectId} (project)`,
+    binding: { kind: 'project', ref: projectId },
+    desc: `Per-project brain for ${projectId} — themes the reflector distils from each ${projectId} cycle (ADR 035, central forge-owned).`,
+    backend: 'filesystem',
+    path: '',
+  });
 }
 
 function buildProfileMd(projectId: string, name: string): string {

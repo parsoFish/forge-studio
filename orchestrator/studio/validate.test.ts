@@ -730,7 +730,7 @@ describe('validateKb — slug', () => {
     const kb: KbDescriptor = {
       id: 'Cycles_KB',
       name: 'Cycles',
-      scope: 'flow',
+      binding: { kind: 'flow', ref: 'forge-develop' },
       desc: 'Patterns.',
       path: '/brain/cycles/kb.yaml',
     };
@@ -745,7 +745,7 @@ describe('validateKb — slug', () => {
     const kb: KbDescriptor = {
       id: 'cycles',
       name: 'Cycles',
-      scope: 'flow',
+      binding: { kind: 'flow', ref: 'forge-develop' },
       desc: 'Patterns.',
       path: '/brain/cycles/kb.yaml',
     };

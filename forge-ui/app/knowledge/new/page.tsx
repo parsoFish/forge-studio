@@ -1,38 +1,44 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
-import { createKb } from '@/lib/studio-client';
+import { createKb, fetchStudioFlows, fetchStudioProjects } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
-// New knowledge base — minimal create form (ADR-033 / J6).
-// Required: name + scope. Description optional. Mirrors the project-onboard
-// pattern (only required fields up front).
+// New knowledge base — create form (ADR-033 / J6; R1-01 binding contract).
+// Required: name + a binding to the flow OR project the KB belongs to. `unique`
+// is reserved for the shipped forge-dev KB (exactly one is lint-enforced), so
+// it is not offered here. Description optional.
 // ---------------------------------------------------------------------------
 
-const SCOPES = [
-  { id: 'project', label: 'Project — knowledge for one project' },
-  { id: 'flow', label: 'Flow — cross-cycle patterns for a flow' },
-  { id: 'agent-integration', label: 'Agent integration — shared agent knowledge' },
-];
+type BindingKind = 'flow' | 'project';
 
 export default function NewKbPage() {
   const router = useRouter();
   const [name, setName] = useState('');
-  const [scope, setScope] = useState('project');
+  const [kind, setKind] = useState<BindingKind>('flow');
+  const [ref, setRef] = useState('');
   const [desc, setDesc] = useState('');
+  const [flows, setFlows] = useState<{ id: string; name: string }[]>([]);
+  const [projects, setProjects] = useState<{ id: string; name: string }[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  useEffect(() => {
+    void fetchStudioFlows().then((fs) => setFlows(fs.map((f) => ({ id: f.id, name: f.name }))));
+    void fetchStudioProjects().then((ps) => setProjects(ps.map((p) => ({ id: p.id, name: p.name }))));
+  }, []);
+
+  const refOptions = kind === 'flow' ? flows : projects;
   const slug = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-  const canSubmit = name.trim().length > 0;
+  const canSubmit = name.trim().length > 0 && ref.length > 0;
 
   async function onSubmit() {
     if (!canSubmit || saving) return;
     setSaving(true);
     setError(null);
-    const result = await createKb({ id: slug, name: name.trim(), scope, desc: desc.trim() });
+    const result = await createKb({ id: slug, name: name.trim(), binding: { kind, ref }, desc: desc.trim() });
     if (result.ok) {
       router.push('/knowledge');
     } else {
@@ -52,8 +58,8 @@ export default function NewKbPage() {
           New knowledge base
         </h1>
         <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 24px' }}>
-          A knowledge base is where a flow&apos;s learning compounds across cycles. Give it a name and a
-          scope to begin.
+          A knowledge base is where a flow&apos;s learning compounds across cycles. Give it a name and
+          bind it to the flow or project it belongs to.
         </p>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
@@ -63,9 +69,19 @@ export default function NewKbPage() {
             {slug && <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>id: {slug}</div>}
           </div>
           <div>
-            <label style={labelStyle} htmlFor="kb-scope">Scope</label>
-            <select id="kb-scope" data-field="kb-scope" style={inputStyle} value={scope} onChange={(e) => setScope(e.target.value)}>
-              {SCOPES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            <label style={labelStyle} htmlFor="kb-binding-kind">Binding</label>
+            <select id="kb-binding-kind" data-field="kb-binding-kind" style={inputStyle} value={kind}
+              onChange={(e) => { setKind(e.target.value as BindingKind); setRef(''); }}>
+              <option value="flow">Flow — cross-cycle knowledge for a flow</option>
+              <option value="project">Project — knowledge for one project</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle} htmlFor="kb-binding-ref">{kind === 'flow' ? 'Flow' : 'Project'}</label>
+            <select id="kb-binding-ref" data-field="kb-binding-ref" style={inputStyle} value={ref}
+              onChange={(e) => setRef(e.target.value)}>
+              <option value="">— select a {kind} —</option>
+              {refOptions.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           </div>
           <div>
@@ -79,7 +95,7 @@ export default function NewKbPage() {
               disabled={!canSubmit || saving} style={{ opacity: canSubmit && !saving ? 1 : 0.5 }}>
               {saving ? 'Creating…' : 'Create knowledge base →'}
             </button>
-            {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>A name is required.</span>}
+            {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>A name and a binding are required.</span>}
           </div>
         </div>
       </div>

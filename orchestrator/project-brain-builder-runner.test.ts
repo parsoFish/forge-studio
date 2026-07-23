@@ -10,6 +10,7 @@ import {
   type ProjectBrainStatus,
 } from './project-brain-builder-runner.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
+import { loadKbDescriptor } from './studio/registry.ts';
 
 function setup(phase: ProjectBrainStatus['phase']): { forgeRoot: string; projectRoot: string; sessionDir: string; sessionId: string } {
   const forgeRoot = mkdtempSync(join(tmpdir(), 'pbrain-'));
@@ -88,6 +89,8 @@ test('committing copies staged themes into the central project brain + kb.yaml',
     assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', 'demoproj', 'themes', 'structure.md')), 'theme committed to central brain');
     assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', 'demoproj', 'profile.md')), 'profile committed');
     assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', 'demoproj', 'kb.yaml')), 'kb.yaml scaffolded');
+    const committedKb = loadKbDescriptor(join(forgeRoot, 'brain', 'projects', 'demoproj', 'kb.yaml'));
+    assert.deepEqual(committedKb.binding, { kind: 'project', ref: 'demoproj' }, 'kb.yaml carries the project binding');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

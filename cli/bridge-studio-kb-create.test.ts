@@ -8,7 +8,10 @@
  *   POST /api/studio/kbs           — creates brain/<id>/ + kb.yaml + themes/ + _raw/
  *   POST /api/studio/kbs           — loadKbDescriptor can round-trip the written kb.yaml
  *   POST /api/studio/kbs           — duplicate id → 409
- *   POST /api/studio/kbs           — bad scope → 400
+ *   POST /api/studio/kbs           — missing binding → 400
+ *   POST /api/studio/kbs           — bad binding.kind → 400
+ *   POST /api/studio/kbs           — flow/project binding missing ref → 400
+ *   POST /api/studio/kbs           — dangling binding.ref (flow/project) → 400
  *   POST /api/studio/kbs           — traversal id → 400
  *   POST /api/studio/kbs           — empty name → 400
  *   POST /api/studio/kbs           — empty desc → 400
@@ -35,8 +38,8 @@ import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 // Fixture helpers
 // ---------------------------------------------------------------------------
 
-const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nscope: flow\ndesc: Cross-cycle patterns.\n`;
-const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nscope: agent-integration\ndesc: Forge engineering decisions.\n`;
+const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nbinding: { kind: flow, ref: forge-develop }\ndesc: Cross-cycle patterns.\n`;
+const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nbinding: { kind: unique }\ndesc: Forge engineering decisions.\n`;
 
 // ---------------------------------------------------------------------------
 // Bridge lifecycle
@@ -63,6 +66,11 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'brain', 'forge-dev', 'themes'), { recursive: true });
   mkdirSync(join(forgeRoot, 'brain', 'forge-dev', '_raw'), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'kb.yaml'), FORGE_DEV_KB_YAML);
+
+  // A registered flow + a discovered project, so binding.ref existence checks
+  // (R1-01) have something real to resolve against.
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-develop'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'projects', 'demo-project'), { recursive: true });
 
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -101,7 +109,7 @@ test('POST /api/studio/kbs: creates brain/<id>/ + kb.yaml + themes/ + _raw/', as
   const { status, json } = await post('/api/studio/kbs', {
     id: 'my-project-brain',
     name: 'My Project Brain',
-    scope: 'project',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: 'Brain for my project.',
   });
   assert.equal(status, 200, JSON.stringify(json));
@@ -120,7 +128,7 @@ test('POST /api/studio/kbs: loadKbDescriptor can round-trip the written kb.yaml'
   await post('/api/studio/kbs', {
     id: 'roundtrip-brain',
     name: 'Round Trip Brain',
-    scope: 'flow',
+    binding: { kind: 'flow', ref: 'forge-develop' },
     desc: 'Testing round-trip.',
   });
 
@@ -130,7 +138,7 @@ test('POST /api/studio/kbs: loadKbDescriptor can round-trip the written kb.yaml'
   const descriptor = loadKbDescriptor(kbYamlPath);
   assert.equal(descriptor.id, 'roundtrip-brain');
   assert.equal(descriptor.name, 'Round Trip Brain');
-  assert.equal(descriptor.scope, 'flow');
+  assert.deepEqual(descriptor.binding, { kind: 'flow', ref: 'forge-develop' });
   assert.equal(descriptor.desc, 'Testing round-trip.');
 });
 
@@ -139,7 +147,7 @@ test('POST /api/studio/kbs: duplicate id → 409', async () => {
   await post('/api/studio/kbs', {
     id: 'duplicate-brain',
     name: 'Duplicate Brain',
-    scope: 'project',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: 'First.',
   });
 
@@ -147,7 +155,7 @@ test('POST /api/studio/kbs: duplicate id → 409', async () => {
   const { status, json } = await post('/api/studio/kbs', {
     id: 'duplicate-brain',
     name: 'Duplicate Brain 2',
-    scope: 'project',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: 'Second.',
   });
   assert.equal(status, 409, JSON.stringify(json));
@@ -155,23 +163,84 @@ test('POST /api/studio/kbs: duplicate id → 409', async () => {
   assert.ok((json['error'] as string).includes('already exists'));
 });
 
-test('POST /api/studio/kbs: bad scope → 400', async () => {
+test('POST /api/studio/kbs: missing binding → 400', async () => {
   const { status, json } = await post('/api/studio/kbs', {
-    id: 'bad-scope-brain',
-    name: 'Bad Scope Brain',
-    scope: 'invalid-scope',
-    desc: 'Testing bad scope.',
+    id: 'no-binding-brain',
+    name: 'No Binding Brain',
+    desc: 'Testing missing binding.',
   });
   assert.equal(status, 400, JSON.stringify(json));
   assert.ok(typeof json['error'] === 'string');
-  assert.ok((json['error'] as string).toLowerCase().includes('scope'));
+  assert.ok((json['error'] as string).toLowerCase().includes('binding'));
+});
+
+test('POST /api/studio/kbs: bad binding.kind → 400', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'bad-binding-brain',
+    name: 'Bad Binding Brain',
+    binding: { kind: 'invalid-kind' },
+    desc: 'Testing bad binding kind.',
+  });
+  assert.equal(status, 400, JSON.stringify(json));
+  assert.ok(typeof json['error'] === 'string');
+  assert.ok((json['error'] as string).toLowerCase().includes('binding.kind'));
+});
+
+test('POST /api/studio/kbs: flow binding missing ref → 400', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'flow-no-ref-brain',
+    name: 'Flow No Ref Brain',
+    binding: { kind: 'flow' },
+    desc: 'Testing flow binding without a ref.',
+  });
+  assert.equal(status, 400, JSON.stringify(json));
+  assert.ok(typeof json['error'] === 'string');
+  assert.ok((json['error'] as string).toLowerCase().includes('ref'));
+});
+
+test('POST /api/studio/kbs: dangling flow binding.ref → 400', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'dangling-flow-brain',
+    name: 'Dangling Flow Brain',
+    binding: { kind: 'flow', ref: 'no-such-flow' },
+    desc: 'Testing a dangling flow ref.',
+  });
+  assert.equal(status, 400, JSON.stringify(json));
+  assert.ok(typeof json['error'] === 'string');
+  assert.ok((json['error'] as string).includes('no-such-flow'));
+});
+
+test('POST /api/studio/kbs: dangling project binding.ref → 400', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'dangling-project-brain',
+    name: 'Dangling Project Brain',
+    binding: { kind: 'project', ref: 'no-such-project' },
+    desc: 'Testing a dangling project ref.',
+  });
+  assert.equal(status, 400, JSON.stringify(json));
+  assert.ok(typeof json['error'] === 'string');
+  assert.ok((json['error'] as string).includes('no-such-project'));
+});
+
+test('POST /api/studio/kbs: binding.kind=unique needs no ref', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'unique-kind-brain',
+    name: 'Unique Kind Brain',
+    binding: { kind: 'unique' },
+    desc: 'Testing a unique binding.',
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+
+  const kbYamlPath = join(forgeRoot, 'brain', 'unique-kind-brain', 'kb.yaml');
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  assert.deepEqual(descriptor.binding, { kind: 'unique' });
 });
 
 test('POST /api/studio/kbs: path traversal id → 400', async () => {
   const { status, json } = await post('/api/studio/kbs', {
     id: '../evil',
     name: 'Evil Brain',
-    scope: 'project',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: 'Traversal attempt.',
   });
   assert.equal(status, 400, JSON.stringify(json));
@@ -181,7 +250,7 @@ test('POST /api/studio/kbs: empty name → 400', async () => {
   const { status, json } = await post('/api/studio/kbs', {
     id: 'empty-name-brain',
     name: '',
-    scope: 'project',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: 'Testing empty name.',
   });
   assert.equal(status, 400, JSON.stringify(json));
@@ -192,7 +261,7 @@ test('POST /api/studio/kbs: empty desc → 400', async () => {
   const { status, json } = await post('/api/studio/kbs', {
     id: 'empty-desc-brain',
     name: 'Empty Desc Brain',
-    scope: 'project',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: '',
   });
   assert.equal(status, 400, JSON.stringify(json));
@@ -202,7 +271,12 @@ test('POST /api/studio/kbs: empty desc → 400', async () => {
 test('POST /api/studio/kbs: missing CSRF → 403', async () => {
   const { status } = await post(
     '/api/studio/kbs',
-    { id: 'no-csrf-brain', name: 'No CSRF Brain', scope: 'project', desc: 'No CSRF.' },
+    {
+      id: 'no-csrf-brain',
+      name: 'No CSRF Brain',
+      binding: { kind: 'project', ref: 'demo-project' },
+      desc: 'No CSRF.',
+    },
     true, // nocsrf=true
   );
   assert.equal(status, 403);
@@ -212,7 +286,7 @@ test('POST /api/studio/kbs: kb.yaml content has correct fields', async () => {
   await post('/api/studio/kbs', {
     id: 'content-check-brain',
     name: 'Content Check Brain',
-    scope: 'agent-integration',
+    binding: { kind: 'unique' },
     desc: 'Checking yaml content.',
   });
 
@@ -220,7 +294,7 @@ test('POST /api/studio/kbs: kb.yaml content has correct fields', async () => {
   const content = readFileSync(kbYamlPath, 'utf8');
   assert.ok(content.includes('id: content-check-brain'));
   assert.ok(content.includes('name: Content Check Brain'));
-  assert.ok(content.includes('scope: agent-integration'));
+  assert.ok(content.includes('kind: unique'));
   assert.ok(content.includes('desc: Checking yaml content.'));
 });
 
@@ -231,17 +305,17 @@ test('POST /api/studio/kbs: kb.yaml content has correct fields', async () => {
 test('POST /api/studio/kbs: newline in name does not inject extra YAML keys', async () => {
   const { status, json } = await post('/api/studio/kbs', {
     id: 'injection-brain',
-    name: 'foo\nscope: evil',
-    scope: 'project',
+    name: 'foo\nbinding: evil',
+    binding: { kind: 'project', ref: 'demo-project' },
     desc: 'Normal desc.',
   });
   assert.equal(status, 200, JSON.stringify(json));
 
   const kbYamlPath = join(forgeRoot, 'brain', 'injection-brain', 'kb.yaml');
-  // Round-trip via loadKbDescriptor — must parse to the literal name, no injected scope
+  // Round-trip via loadKbDescriptor — must parse to the literal name, no injected binding
   const descriptor = loadKbDescriptor(kbYamlPath);
-  assert.equal(descriptor.name, 'foo\nscope: evil', 'name round-trips to literal value');
-  assert.equal(descriptor.scope, 'project', 'scope is not overwritten by injection');
+  assert.equal(descriptor.name, 'foo\nbinding: evil', 'name round-trips to literal value');
+  assert.deepEqual(descriptor.binding, { kind: 'project', ref: 'demo-project' }, 'binding is not overwritten by injection');
   assert.equal(descriptor.id, 'injection-brain');
   assert.equal(descriptor.desc, 'Normal desc.');
 });
@@ -251,7 +325,7 @@ test('POST /api/studio/kbs: YAML-special desc value round-trips correctly', asyn
   const { status, json } = await post('/api/studio/kbs', {
     id: 'special-desc-brain',
     name: 'Special Desc Brain',
-    scope: 'flow',
+    binding: { kind: 'flow', ref: 'forge-develop' },
     desc: specialDesc,
   });
   assert.equal(status, 200, JSON.stringify(json));
@@ -273,7 +347,12 @@ async function del(path: string, nocsrf = false): Promise<{ status: number; json
 }
 
 test('DELETE /api/studio/kbs/:id removes the brain dir', async () => {
-  await post('/api/studio/kbs', { id: 'doomed-brain', name: 'Doomed', scope: 'project', desc: 'to be deleted' });
+  await post('/api/studio/kbs', {
+    id: 'doomed-brain',
+    name: 'Doomed',
+    binding: { kind: 'project', ref: 'demo-project' },
+    desc: 'to be deleted',
+  });
   assert.equal(existsSync(join(forgeRoot, 'brain', 'doomed-brain')), true);
   const { status, json } = await del('/api/studio/kbs/doomed-brain');
   assert.equal(status, 200, JSON.stringify(json));
@@ -298,7 +377,12 @@ test('CORS preflight (OPTIONS) advertises DELETE — else the browser blocks the
 });
 
 test('DELETE without CSRF header → 403', async () => {
-  await post('/api/studio/kbs', { id: 'csrf-brain', name: 'CSRF', scope: 'project', desc: 'x' });
+  await post('/api/studio/kbs', {
+    id: 'csrf-brain',
+    name: 'CSRF',
+    binding: { kind: 'project', ref: 'demo-project' },
+    desc: 'x',
+  });
   const { status } = await del('/api/studio/kbs/csrf-brain', true);
   assert.equal(status, 403);
   assert.equal(existsSync(join(forgeRoot, 'brain', 'csrf-brain')), true, 'not deleted without CSRF');

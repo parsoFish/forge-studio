@@ -31,11 +31,11 @@ test('seedProjectBrain: fresh project — creates kb.yaml + profile.md + themes/
     assert.ok(existsSync(profilePath));
     assert.ok(existsSync(themesReadmePath));
 
-    // kb.yaml matches the existing per-project shape (id/name/scope/desc/backend).
+    // kb.yaml matches the R1-01 contract shape (id/name/binding/desc/backend).
     const kb = yaml.load(readFileSync(kbYamlPath, 'utf8')) as Record<string, unknown>;
     assert.equal(kb.id, 'acme-cli');
     assert.equal(kb.name, 'acme-cli (project)');
-    assert.equal(kb.scope, 'project');
+    assert.deepEqual(kb.binding, { kind: 'project', ref: 'acme-cli' });
     assert.equal(kb.backend, 'filesystem');
     assert.equal(typeof kb.desc, 'string');
     assert.ok((kb.desc as string).includes('acme-cli'));

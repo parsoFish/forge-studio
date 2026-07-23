@@ -297,7 +297,8 @@ inventory rather than one shared page-level contract:
   `[data-section="demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`.
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
   (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
-  (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`).
+  (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`; the create form's
+  binding picker carries `data-field="kb-binding-kind"` + `data-field="kb-binding-ref"` — R1-01).
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The

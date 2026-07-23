@@ -61,7 +61,7 @@ export function KbBind({
         }}
       >
         <option value="">— bind a knowledge base —</option>
-        {kbs.map((k) => <option key={k.id} value={k.id}>{k.name} [{k.scope}]</option>)}
+        {kbs.map((k) => <option key={k.id} value={k.id}>{k.name} [{k.binding.kind}]</option>)}
       </select>
       {/* A project carries a SINGLE brain — once one is bound, the build button is
           hidden (swap via the dropdown above, or unbind with the × chip). */}

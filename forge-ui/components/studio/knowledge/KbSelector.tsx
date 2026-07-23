@@ -8,18 +8,18 @@ interface Props {
   currentId: string;
 }
 
-const SCOPE_GROUPS: { scope: string; label: string }[] = [
-  { scope: 'project',          label: 'Project Brains' },
-  { scope: 'flow',             label: 'Flow Knowledge' },
-  { scope: 'agent-integration', label: 'Agent Integration' },
+const BINDING_GROUPS: { kind: string; label: string }[] = [
+  { kind: 'flow',    label: 'Flow Knowledge' },
+  { kind: 'project', label: 'Project Brains' },
+  { kind: 'unique',  label: 'Core' },
 ];
 
 export function KbSelector({ kbs, currentId }: Props) {
   const router = useRouter();
 
-  const groups: Record<string, Kb[]> = { project: [], flow: [], 'agent-integration': [] };
+  const groups: Record<string, Kb[]> = { flow: [], project: [], unique: [] };
   for (const kb of kbs) {
-    const bucket = groups[kb.scope] ?? (groups[kb.scope] = []);
+    const bucket = groups[kb.binding.kind] ?? (groups[kb.binding.kind] = []);
     bucket.push(kb);
   }
 
@@ -42,11 +42,11 @@ export function KbSelector({ kbs, currentId }: Props) {
           padding: '6px 10px', outline: 'none', cursor: 'pointer',
         }}
       >
-        {SCOPE_GROUPS.map(({ scope, label }) => {
-          const items = groups[scope];
+        {BINDING_GROUPS.map(({ kind, label }) => {
+          const items = groups[kind];
           if (!items?.length) return null;
           return (
-            <optgroup key={scope} label={label}>
+            <optgroup key={kind} label={label}>
               {items.map((kb) => (
                 <option key={kb.id} value={kb.id}>{kb.name}</option>
               ))}
