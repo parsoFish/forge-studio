@@ -39,6 +39,8 @@ export type AgentDefinition = {
   slug: string; // skill directory name
   name: string;
   description: string;
+  /** Studio-roster / palette visibility (R3-01-F2); explicit on every shipped skill. */
+  library?: boolean;
   phase?: string;
   surface?: string;
   /**

@@ -201,6 +201,7 @@ test('PUT /api/studio/agents/write-agent edits composition + purpose, preserves 
   assert.ok(skillMd.includes('phase: developer'), 'phase preserved');
   assert.ok(skillMd.includes('- Read'), 'allowedTools preserved');
   assert.ok(skillMd.includes('iterationCap: 3'), 'budget preserved');
+  assert.ok(/^library:/m.test(skillMd), 'authored agent carries an explicit library flag (R3-01-F2)');
 });
 
 test('PUT /api/studio/agents/write-agent preserves allowedTools even when not in body', async () => {

@@ -409,6 +409,7 @@ export async function handleStudioWriteRoutes(
         allowedTools: existing?.allowedTools ?? [],
         disallowedTools: existing?.disallowedTools ?? [],
         body: body_text,
+        library: existing?.library ?? true,
         path: skillMdPath,
       };
 

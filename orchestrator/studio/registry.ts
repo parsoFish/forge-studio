@@ -166,6 +166,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 
   const allowedTools = stringArray(d, 'allowed-tools', skillMdPath);
   const disallowedTools = stringArray(d, 'disallowed-tools', skillMdPath);
+  const library = optBool(d, 'library');
 
   const slug = basename(dirname(skillMdPath));
 
@@ -173,6 +174,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     slug,
     name,
     description,
+    library,
     phase,
     surface,
     executor,
@@ -191,12 +193,13 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeAgentDefinition(def: AgentDefinition): string {
-  // Fixed key order: name, description, phase?, surface?, executor?, purpose,
-  // composition, runtime, brainAccess, interactivity, allowed-tools,
+  // Fixed key order: name, description, library?, phase?, surface?, executor?,
+  // purpose, composition, runtime, brainAccess, interactivity, allowed-tools,
   // disallowed-tools, budgets
   const data: Record<string, unknown> = {};
   data['name'] = def.name;
   data['description'] = def.description;
+  if (def.library !== undefined) data['library'] = def.library;
   if (def.phase !== undefined) data['phase'] = def.phase;
   if (def.surface !== undefined) data['surface'] = def.surface;
   if (def.executor !== undefined) data['executor'] = def.executor;
