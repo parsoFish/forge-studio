@@ -437,3 +437,10 @@ pass across all five roadmaps plus four operator decisions:
   re-run. Deferred to known-gaps §9: a server-side `planned` gate on `/api/develop/start` (UI-only lock; ADR-031
   makes the UI the sole surface) + the orphan-in-merged SIGKILL edge (R4-09). **Waves 0+1+2 all complete;** next per
   the wave plan (§4) = wave 3 (R1-01 + R3-01 interleaved) or the operator's pick.
+- 2026-07-19 — **Wave 3 opened: R1-01 implemented** (PR-A; R1 gains baseline **R1-B9**). KB descriptor →
+  contract type: `binding` replaces the `scope` enum (killed, no back-compat), an optional four-obligation
+  `processes` block, `serializeKbDescriptor` as the one `kb.yaml` writer, a `kb-descriptor.ts`/`yaml-fields.ts`
+  extraction (registry under the 800-cap), the 6-descriptor migration, an ADR-027 §4 amendment, studio-lint
+  binding/dangling-ref/`unique` checks, the F4 read-policy guard + F5 conformance suite, and the forge-ui
+  `scope`→`binding` sweep + `/knowledge/new` binding picker + `knowledge` journey. Opus whole-branch + security
+  reviews both clean; minors → known-gaps §10. **R3-01 (F1+F2) is wave-3's other half.**
