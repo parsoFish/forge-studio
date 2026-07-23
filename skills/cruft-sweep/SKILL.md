@@ -1,6 +1,7 @@
 ---
 name: cruft-sweep
 description: Rule-based, directory-by-directory cleanup of generated/abandoned/scratch cruft from the forge tree. Every removal is justified by an EXPLICIT rule, never a hardcoded path, so the rule set stays auditable and adjustable. Reports a plan before deleting; deletes nothing matched by a SAFETY exclusion.
+library: true
 phase: maintenance
 surface: interactive
 model: claude-sonnet-4-6

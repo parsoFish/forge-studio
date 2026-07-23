@@ -1,6 +1,7 @@
 ---
 name: doc-updater
 description: Detect the documentation surface a change touched and refresh it using the project's own declared doc tool, then stage the result. Maps the diff to the docs that describe it (generated reference docs via the project's generator command, hand-written guides/READMEs for behaviour changes), runs the project's `docs` release step command when one is declared, and stages the regenerated/edited files. Composed by the release-finalizer during pre-merge finalisation; language- and tool-agnostic (it runs whatever command the project declares).
+library: true
 phase: release-finalize
 surface: unattended
 model: claude-sonnet-4-6

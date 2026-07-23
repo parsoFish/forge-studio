@@ -1,6 +1,7 @@
 ---
 name: demo-design
 description: Forge-owned generator skill that reads a project's demoProcess + its actual code and generates per-project demo machinery (a repo skill and/or CI step and/or test) committed into the project repo. Run when an operator saves a project's demoProcess in Studio. The generator PRODUCES; the project's own toolchain EXECUTES the generated artifact. Operators customize by editing the generated files (committed repo files) and by editing this generator skill.
+library: true
 phase: onboarding
 surface: operator-triggered
 model: claude-sonnet-4-6

@@ -22,8 +22,9 @@
  * Mirrors brain-lint.ts shape: pure function, typed result, no unhandled throws.
  */
 
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
+import matter from 'gray-matter';
 
 import {
   isStudioAgent,
@@ -43,6 +44,7 @@ import {
   validateFlow,
   validateKb,
   validateDiscoveredProjects,
+  validateLibraryFlag,
   type Finding,
 } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
@@ -148,6 +150,23 @@ export function runStudioLint(root: string): StudioLintResult {
     for (const dir of listSkillMdDirs(skillsDir)) {
       const entryName = basename(dir);
       const skillMdPath = join(dir, 'SKILL.md');
+
+      // R3-01-F2: `library` must be an explicit boolean on EVERY skill dir
+      // this scan reaches — not only the isStudioAgent-included ones below —
+      // so a `library: false` skill is still checked to prove it's explicit.
+      try {
+        const raw = readFileSync(skillMdPath, 'utf8');
+        const { data } = matter(raw);
+        findings.push(...validateLibraryFlag(entryName, data));
+      } catch (readErr) {
+        findings.push({
+          level: 'error',
+          object: `agent:${entryName}`,
+          check: 'library',
+          message: `Cannot read "${skillMdPath}" to check "library" — ${(readErr as Error).message}`,
+        });
+      }
+
       let isStudio: boolean;
       try {
         isStudio = isStudioAgent(skillMdPath);

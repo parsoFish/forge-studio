@@ -205,6 +205,37 @@ export function validateAgent(
 }
 
 // ---------------------------------------------------------------------------
+// validateLibraryFlag (R3-01-F2)
+// `library` must be an explicit boolean in every skill's SKILL.md
+// frontmatter — never left unset. Deliberately takes raw frontmatter data
+// rather than a loaded AgentDefinition: unlike validateAgent, this must run
+// against every skill dir the scan reaches, including ones that never pass
+// isStudioAgent/loadAgentDefinition at all (no `runtime` block, or an
+// explicit `library: false`) — a `library: false` skill must still be
+// reachable to prove it's explicit.
+// ---------------------------------------------------------------------------
+
+export function validateLibraryFlag(entryName: string, data: unknown): Finding[] {
+  const value =
+    data != null && typeof data === 'object' && !Array.isArray(data)
+      ? (data as Record<string, unknown>)['library']
+      : undefined;
+
+  if (typeof value !== 'boolean') {
+    return [
+      err(
+        `agent:${entryName}`,
+        'library',
+        `"library" must be an explicit boolean (true/false) in SKILL.md frontmatter — found ${
+          value === undefined ? 'unset' : JSON.stringify(value)
+        }`,
+      ),
+    ];
+  }
+  return [];
+}
+
+// ---------------------------------------------------------------------------
 // validateFlow
 // ---------------------------------------------------------------------------
 

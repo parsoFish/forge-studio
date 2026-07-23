@@ -1,6 +1,7 @@
 ---
 name: brain-ingest
 description: Append raw sources to the brain and create or update theme pages. Never modifies raw in place; never deletes.
+library: true
 phase: brain
 surface: unattended
 purpose: Ingest operator-provided raw sources into the brain — append to brain/_raw/, create or update theme pages, update category indexes, and log to brain/forge-dev/log.md.

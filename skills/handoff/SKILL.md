@@ -1,6 +1,7 @@
 ---
 name: handoff
 description: Compress the current session into a markdown transfer document — open threads, decisions made, and context consumed — so another agent or a human can resume without re-deriving state.
+library: true
 ---
 
 # Handoff

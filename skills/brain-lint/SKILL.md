@@ -1,6 +1,7 @@
 ---
 name: brain-lint
 description: Structural integrity checks on the brain — frontmatter, index sync, source links, staleness, orphans, length cap, contamination, contradictions. Thin invoker of `forge brain lint`.
+library: true
 phase: brain
 surface: unattended
 model: claude-haiku-4-5

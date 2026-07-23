@@ -1,6 +1,7 @@
 ---
 name: demo
 description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The phase agent (the developer-unifier, ADR 024) composes this skill to author the structured demo.json and derive DEMO.md. The unifier reads the project's generated demo skill (from skills/demo-design) to know what evidence to produce; this skill defines the contract that evidence must satisfy. Scale demo effort to the size of the change.
+library: true
 phase: developer-loop
 surface: unattended
 model: claude-sonnet-4-6

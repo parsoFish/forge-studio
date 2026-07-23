@@ -38,6 +38,7 @@ function validSkillMd(slug: string): string {
   return `---
 name: ${slug}
 description: A test agent.
+library: true
 purpose: Does things.
 brainAccess: none
 interactivity: none
@@ -554,6 +555,7 @@ test('corrupt studio SKILL.md produces per-skill error; valid sibling still lint
     `---
 name: ${badSlug}
 description: A corrupt agent.
+library: true
 purpose: Does bad things.
 brainAccess: bogus
 interactivity: none
@@ -693,6 +695,76 @@ test('flow dir "my-cycle" with id "other-name" → dir-name error', () => {
   assert.ok(
     dirNameError.message.includes('other-name') && dirNameError.message.includes('my-cycle'),
     `Expected message to mention both ids, got: "${dirNameError.message}"`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 10: `library` frontmatter flag (R3-01-F2) — unset errors; an explicit
+// boolean lints clean even on a skill that's outside the isStudioAgent
+// roster (no `runtime` block), proving the check reaches every skill dir.
+// ---------------------------------------------------------------------------
+
+test('SKILL.md with unset "library" → library error', () => {
+  const root = buildValidRoot({ agentSlug: 'has-library' });
+
+  const badSlug = 'no-library';
+  const badDir = join(root, 'skills', badSlug);
+  mkdirSync(badDir, { recursive: true });
+  writeFileSync(
+    join(badDir, 'SKILL.md'),
+    `---
+name: ${badSlug}
+description: A skill with no library flag.
+---
+## Process
+
+Nothing special.
+`,
+  );
+
+  const result = runStudioLint(root);
+
+  const libraryError = result.findings.find(
+    (f) => f.level === 'error' && f.object === `agent:${badSlug}` && f.check === 'library',
+  );
+  assert.ok(
+    libraryError !== undefined,
+    `Expected a library error for agent:${badSlug}, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
+  );
+
+  cleanup(root);
+});
+
+test('SKILL.md with explicit "library: false" and no runtime block (not isStudioAgent) still lints clean', () => {
+  const root = buildValidRoot({ agentSlug: 'has-library' });
+
+  const internalSlug = 'internal-skill';
+  const internalDir = join(root, 'skills', internalSlug);
+  mkdirSync(internalDir, { recursive: true });
+  writeFileSync(
+    join(internalDir, 'SKILL.md'),
+    `---
+name: ${internalSlug}
+description: An internal/system skill with no runtime block, dispatched directly.
+library: false
+---
+## Process
+
+Internal only.
+`,
+  );
+
+  const result = runStudioLint(root);
+
+  const libraryFinding = result.findings.find(
+    (f) => f.object === `agent:${internalSlug}` && f.check === 'library',
+  );
+  assert.strictEqual(
+    libraryFinding,
+    undefined,
+    `Expected no library finding for agent:${internalSlug}, got: ${JSON.stringify(libraryFinding)}`,
   );
 
   cleanup(root);

@@ -1,6 +1,7 @@
 ---
 name: architect
 description: Interactive ideation session that turns ideas into a PLAN.md the operator reviews before any manifest is queued.
+library: true
 phase: architect
 purpose: Turn an operator idea into a PLAN.md and queued manifest through an interactive interview and the human PLAN gate.
 composition:

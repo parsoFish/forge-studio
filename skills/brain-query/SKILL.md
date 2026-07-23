@@ -1,6 +1,7 @@
 ---
 name: brain-query
-description: Efficient lookup against the brain via markdown keyword scan. Logs gaps so the next ingest pass can fill them. Accepts a scope parameter to target the right brain: forge-dev, cycles, project, or all.
+description: "Efficient lookup against the brain via markdown keyword scan. Logs gaps so the next ingest pass can fill them. Accepts a scope parameter to target the right brain: forge-dev, cycles, project, or all."
+library: true
 phase: brain
 surface: unattended
 model: claude-haiku-4-5
