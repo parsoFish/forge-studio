@@ -86,11 +86,34 @@ upstream `source` URL, `provenance` attribution, `stars`, `category`, `tier`,
 (object-type refinement item #10, closed 2026-06-16) guards that these surface
 in the builder.
 
+### R3-B7 Skills first-class — shared resolver + unified palette library (R3-01 F1+F2)
+
+Landed 2026-07-19 (branch `feat/r3-01-skills-library`, PR-B). **F1:** the
+`orchestrator/skill-path.ts` leaf module (`skillPath` absolute / `skillPathRelative`
+root-relative / `skillDir` / `skillsDir` / `listSkillMdDirs` / `listSkillDirs`) is
+the single source for every skill lookup + enumeration — the ~40 hardcoded
+`skills/<name>/SKILL.md` sites across `orchestrator/` + `cli/` route through it
+(grep-clean of literal `skills/` path construction). `deriveAgentSpec` sites use the
+root-relative form (`PhaseAgentSpec.skill` / event-log `agent_skill` attribution
+fidelity); content-reads use the absolute form. This satisfies the [known-gaps §6](../known-gaps.md)
+precondition — the physical `skills/` role-subfolder move is now a one-place change
+(still a separate, untaken decision). **F2:** `listPlainSkills` (runtime-less,
+non-`library:false` `SKILL.md`) unions with `studio/catalog.yaml` community-skills in
+the `/api/studio/catalog` GET (`cli/bridge-studio.ts`), so a `/skills/new`-authored
+skill (`POST /api/studio/skills`, stamped `library: true`) is palette-visible with no
+bridge restart — closing [known-gaps §4.11](../known-gaps.md). The `library`
+frontmatter is explicit on all 24 skills (6 `false` / 18 `true`), lint-enforced by
+`validateLibraryFlag` (`orchestrator/studio/validate.ts` + `cli/studio-lint.ts`,
+errors on unset, reaching every skill dir); `isStudioAgent`'s agent-roster semantics
+are unchanged. The `skills`/`agents` journeys demo the real create→compose throughline
+(no `handoff` substitution). **F3** (`/skills` library view) + **F4** (marketplace
+install) are deferred pending the operator's §4b.1 skill-management-view design session.
+
 ## Planned initiatives
 
 ### R3-01 Skills first-class management
 
-- **Status:** planned  ·  **Wave:** 3 (interleaved at dependency points — Q6-A)
+- **Status:** implemented (F1+F2, 2026-07-19, PR-B — see baseline R3-B7; **F3+F4 deferred** to the operator's §4b.1 session)  ·  **Wave:** 3
 - **Depends on:** — . **Depended on by:** R3-02 (landing-place), R3-03 (soft —
   hooks reuse the unified-registry + library-view pattern), R3-04 (soft — same
   surface pattern), R5-05 (skills-palette residue cross-references here, not
@@ -445,3 +468,13 @@ rather than deferred within it:
   (E5, operator decision 3 — third-party prompt-code never gets a weaker gate
   than forge's own generated drafts); R3-02 gained the soft R5-04 edge
   (edit-lock verification precedes a second live flow — E7).
+- 2026-07-19 — **R3-01 F1+F2 implemented** (PR-B, branch `feat/r3-01-skills-library`; baseline **R3-B7**).
+  F1 shared `skill-path.ts` resolver + the ~40-site sweep (grep-clean; `deriveAgentSpec` root-relative vs
+  content-read absolute — the attribution split; §6 physical-move precondition now met, move untaken).
+  F2 unified palette library: `listPlainSkills` ∪ catalog community-skills in the catalog GET (UI-created
+  skills palette-visible, no restart — §4.11 closed), `library` explicit on all 24 + `validateLibraryFlag`
+  lint, journey de-substitution. Opus whole-branch + security reviews clean (one Important — the
+  POST-writes-`library` / discovery-honors-`library` coherence — fixed in-PR). **F3 (`/skills` view) + F4
+  (marketplace) deferred** to the operator's §4b.1 design session. Mid-wave chore (PR #37) also slimmed the
+  always-injected `CLAUDE.md` ~56% (DOM/harness reference → `docs/forge-ui-dom-and-harness.md`) to restore
+  subagent fanout.
