@@ -69,8 +69,8 @@ against; if the text no longer describes the surface, update BOTH.
 
 1. `node scripts/e2e-journey.mjs --list` — find the affected journey/beats.
 2. Update the beat's drive/checks for the new surface (`data-*` first — see
-   CLAUDE.md's DOM-as-metrics convention; add/update attributes with the UI
-   change itself).
+   the forge-ui DOM contract in `docs/forge-ui-dom-and-harness.md`; add/update
+   attributes with the UI change itself).
 3. Update the narration + captions so the text still describes what's shown;
    re-record the clip if the visible arc changed (entry → progression → payoff).
 4. Mark 1-2 `key: true` frames per beat for the gallery.
