@@ -27,7 +27,7 @@ import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
-import { serializeKbDescriptor } from './studio/registry.ts';
+import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec('skills/project-brain-builder/SKILL.md');
@@ -251,6 +251,9 @@ function runCommitStep(args: {
         path: '',
       }),
     );
+    // Loud self-check (parity with project-brain-seed): a malformed kb.yaml
+    // fails the commit rather than shipping an undiscoverable brain.
+    loadKbDescriptor(kbYaml);
     wrote.push(kbYaml);
   }
 

@@ -440,6 +440,33 @@ test('two KBs both declaring binding.kind=unique → unique-binding error', () =
 });
 
 // ---------------------------------------------------------------------------
+// Test 6d-zero: KBs present but NONE unique → 'kb:none' unique-binding error
+// ---------------------------------------------------------------------------
+
+test('KBs present but none declaring binding.kind=unique → kb:none unique-binding error', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'brain-z');
+  mkdirSync(kbDir, { recursive: true });
+  // One non-unique KB: the roster is non-empty so the exactly-one-unique
+  // invariant fires with 0 found. The dangling project ref is irrelevant to
+  // this assertion — we target only the 'kb:none' unique-binding finding.
+  writeFileSync(join(kbDir, 'kb.yaml'), validKbYaml('proj-z', 'binding: { kind: project, ref: nonexistent }'));
+
+  const result = runStudioLint(root);
+
+  const zeroUnique = result.findings.filter(
+    (f) => f.level === 'error' && f.check === 'unique-binding' && f.object === 'kb:none',
+  );
+  assert.strictEqual(
+    zeroUnique.length,
+    1,
+    `Expected exactly one kb:none unique-binding error, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
 // Test 6e: the 6 real, migrated brain/**/kb.yaml descriptors lint clean
 //
 // runStudioLint's own KB scan is one-level-deep (brain/<id>/kb.yaml) and
