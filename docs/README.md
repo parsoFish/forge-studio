@@ -36,6 +36,7 @@ Perishable strategy docs (dated; not onboarding material):
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — build/test gates and how to extend forge (repo root).
 - [Architecture overview](./architecture/overview.md) — internal index into phases, decisions, and the contract.
 - [CLI reference](./reference/cli.md) — *Reference.* The committed `forge --help` plus the daemon / scaffolding / phase verbs.
+- [Forge-UI DOM contract & harness](./forge-ui-dom-and-harness.md) — *Reference.* The per-route `data-*` contract, status vocabularies, and the journeys-as-data + real-capability harnesses (moved out of CLAUDE.md so the always-injected instructions stay lean).
 
 **Direction**
 - [Roadmap set](./roadmaps/README.md) — *Explanation · Reference.* The living forge-dev roadmaps (R1–R8): the planning SSOT for everything forge builds next, with the coverage map routing every architecture pillar to its owning roadmap. Start any forge-dev work here.
