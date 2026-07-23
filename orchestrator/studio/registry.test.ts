@@ -14,6 +14,7 @@ import {
   loadAgentDefinition,
   serializeAgentDefinition,
   listAgentDefinitions,
+  listPlainSkills,
   loadFlowDefinition,
   serializeFlowDefinition,
   loadKbDescriptor,
@@ -994,5 +995,38 @@ describe('listAgentDefinitions', () => {
     assert.equal(defs.length, 2);
     assert.equal(defs[0].slug, 'alpha');
     assert.equal(defs[1].slug, 'zulu');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listPlainSkills (R3-01-F2)
+// ---------------------------------------------------------------------------
+
+describe('listPlainSkills', () => {
+  it('returns only the plain (no-runtime) skill, skipping the runtime-bearing one', () => {
+    const forgeRootFixture = join(tmpDir, 'plain-skills-root');
+    const skillsSubdir = join(forgeRootFixture, 'skills');
+    mkdirSync(skillsSubdir, { recursive: true });
+
+    // Plain skill: SKILL.md with no `runtime` block.
+    const plainDir = join(skillsSubdir, 'plain-skill');
+    mkdirSync(plainDir, { recursive: true });
+    writeFileSync(join(plainDir, 'SKILL.md'), LEGACY_AGENT_FIXTURE, 'utf8');
+
+    // Runtime-bearing skill: a studio agent — must be excluded.
+    const studioDir = join(skillsSubdir, 'studio-agent');
+    mkdirSync(studioDir, { recursive: true });
+    writeFileSync(join(studioDir, 'SKILL.md'), AGENT_FIXTURE, 'utf8');
+
+    const plain = listPlainSkills(forgeRootFixture);
+    assert.equal(plain.length, 1);
+    assert.equal(plain[0].id, 'plain-skill');
+    assert.equal(plain[0].name, 'legacy-agent');
+    assert.equal(plain[0].desc, 'A legacy skill without studio fields.');
+  });
+
+  it('returns [] for a forgeRoot with no skills/ directory', () => {
+    const emptyRoot = join(tmpDir, 'plain-skills-root-empty');
+    assert.deepEqual(listPlainSkills(emptyRoot), []);
   });
 });

@@ -43,6 +43,7 @@ import {
   discoverProjects,
   loadCatalog,
   listDemoElements,
+  listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
@@ -664,7 +665,14 @@ export async function handleStudioRoutes(
       }));
       // A1: surface the curated community skills as the agent-builder Skills
       // library (the palette reads catalog.skills) so skills are draggable too.
-      const skills = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
+      // R3-01-F2: union in filesystem plain skills (SKILL.md, no runtime block)
+      // — e.g. one authored via `/skills/new` — so it appears in the palette on
+      // the next fetch with no bridge restart (known-gaps §4.11). Community
+      // entries win on an id collision (they carry provenance/stars metadata).
+      const community = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
+      const seen = new Set(community.map((s) => s.id));
+      const local = listPlainSkills(ctx.forgeRoot).filter((s) => !seen.has(s.id));
+      const skills = [...community, ...local];
       sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

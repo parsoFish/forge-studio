@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  cleanStarterAgents, STARTER_AGENT_SLUGS, FORGE_ROOT, waitForFile, caption, ACT, THINK, READ, OOTB_SKILL_IDS,
+  cleanStarterAgents, STARTER_AGENT_SLUGS, FORGE_ROOT, waitForFile, caption, ACT, THINK, READ, SK_NEW_SLUG,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -15,18 +15,18 @@ function cleanScratchAgent() {
   try { rmSync(join(FORGE_ROOT, 'skills', SCRATCH_AGENT_SLUG), { recursive: true, force: true }); } catch { /* */ }
 }
 
-// The skill dragged into the from-scratch agent's skill zone. NOT
-// `api-contract-review` (the skill skills-create authors earlier in this
-// walkthrough) — CatalogPalette's chips are sourced EXCLUSIVELY from
-// studio/catalog.yaml's static `community-skills` list, never a live scan of
-// skills/. `POST /api/studio/skills` (the /skills/new path skills-create
-// drives) writes only skills/<slug>/SKILL.md to disk — it never registers
-// the new skill into catalog.yaml (ADR-027 §5: no serializer, by design). So
-// a freshly-authored skill can NEVER appear as a draggable catalog chip; an
-// honest UI limit, not something to fake around. `handoff` is the strongest
-// substitute: a REAL catalog.yaml community-skills entry (genuinely
-// draggable) that ALSO has a real skills/handoff/SKILL.md on disk.
-const DND_SKILL_ID = OOTB_SKILL_IDS[0]; // 'handoff'
+// The skill dragged into the from-scratch agent's skill zone: `api-contract-review`
+// (SK_NEW_SLUG), the plain SKILL.md (no `runtime` block) that this walkthrough's
+// earlier skills-create beat (SK-3) authored via `/skills/new`. Before R3-01-F2,
+// CatalogPalette's chips were sourced EXCLUSIVELY from studio/catalog.yaml's
+// static `communitySkills` list, so a freshly-authored skill could never appear
+// as a draggable chip and this beat substituted a curated OOTB skill (`handoff`)
+// instead, narrating the limitation. `GET /api/studio/catalog` now unions in a
+// live filesystem scan of plain skills (orchestrator/studio/registry.ts
+// listPlainSkills), so the real skill authored by skills-create is itself a
+// palette chip with no bridge restart — demoing the full "create a skill →
+// compose it into an agent" throughline for real, not a substitute.
+const DND_SKILL_ID = SK_NEW_SLUG; // 'api-contract-review'
 
 // ── module-local stash/restore for the REAL project-manager skill ──────────
 // agents-builder's edit now SAVES (proving an OOTB agent stays genuinely
@@ -168,13 +168,14 @@ export const journey = defineJourney({
                 null, { timeout: 5000 },
               ).catch(() => {});
               const chipPresent = await page.evaluate((id) =>
-                document.querySelector(`.catalog-chip[data-id="${id}"][data-kind="skill"]`) !== null, DND_SKILL_ID);
-              check(chipPresent, `A-scratch: "${DND_SKILL_ID}" is a real, draggable catalog chip (studio/catalog.yaml community-skills)`);
+                document.querySelector(`[data-component="catalog-palette"] .catalog-chip[data-id="${id}"][data-kind="skill"]`) !== null,
+                DND_SKILL_ID);
+              check(chipPresent, `A-scratch: "${DND_SKILL_ID}" (skills-create's own skill) is a real, draggable catalog chip — live filesystem discovery (R3-01-F2)`);
               await dragSkillChipIntoZone(page, DND_SKILL_ID);
               const zoneCount = await page.evaluate(() =>
                 document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') ?? '0');
               check(zoneCount === '1', `A-scratch: dragging "${DND_SKILL_ID}" into the skill drop zone lands it (data-count="${zoneCount}")`);
-              await frame(page, 'a-scratch-1-skill-dropped', `A-scratch — "${DND_SKILL_ID}" dragged from the catalog into the skill zone (HTML5 DnD)`);
+              await frame(page, 'a-scratch-1-skill-dropped', `A-scratch — "${DND_SKILL_ID}" (the skill created earlier in this walkthrough) dragged from the catalog into the skill zone (HTML5 DnD)`);
 
               // ── Runtime-adapter seam (ported from the retired standalone runtime-adapter journey) ──
               const claudeCardAvailable = await page.evaluate(() => {

@@ -172,16 +172,21 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     (extend the `FORGE_ARCHITECT_NO_SPAWN` contract to ALL real-agent/real-git
     paths, or a first-class `FORGE_DRY_BRIDGE=1`) is the proper fix.
 11. **UI-created skills are invisible to the agent builder's palette (2026-07-17,
-    found by the S5b demo rebuild):** `CatalogPalette` sources skill chips
-    exclusively from `studio/catalog.yaml`'s static `community-skills` list, and
-    `POST /api/studio/skills` (the `/skills/new` builder) never registers the new
-    skill into `catalog.yaml` — so a skill an operator just authored cannot be
-    dragged into an agent's skill drop-zone. This broke the demo's intended
-    artifact throughline (create a skill → compose it into an agent); the journey
-    substitutes the catalog-listed `handoff` skill and narrates the limitation
-    honestly. **Fix candidates:** the skills builder registers into
-    `catalog.yaml` on create, or the palette unions catalog entries with live
-    `skills/*/SKILL.md` discovery.
+    found by the S5b demo rebuild) — *resolved 2026-07-24 (R3-01-F2):*** `CatalogPalette`
+    sourced skill chips exclusively from `studio/catalog.yaml`'s static
+    `community-skills` list, and `POST /api/studio/skills` (the `/skills/new`
+    builder) never registered the new skill into `catalog.yaml` — so a skill an
+    operator just authored could not be dragged into an agent's skill drop-zone.
+    Fixed via the "palette unions" candidate: `orchestrator/studio/registry.ts`
+    now exposes `listPlainSkills(forgeRoot)` (a live filesystem scan of
+    `skills/*/SKILL.md` entries with no `runtime` block — the inverse of
+    `isStudioAgent`), and `GET /api/studio/catalog`
+    (`cli/bridge-studio.ts`) unions it into `catalog.skills` — community entries
+    win on an id collision — so a `/skills/new`-authored skill appears in the
+    palette on the very next fetch, no bridge restart. The `agents` journey's
+    `agents-scratch-build` beat now drags the real skill `skills-create` authored
+    earlier in the walkthrough (`api-contract-review`) instead of substituting
+    `handoff`.
 
 ### 4b. Demo/UI-journey refinement backlog — operator review of PR #24 (2026-07-17)
 
@@ -195,8 +200,9 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
 1. **Skills need first-class management.** The skill-create surface exposed that
    there is no clear way to view the skill library, no consistent entry point for
    creating skills, and skills should break out into their own library item.
-   (Operator will detail their view in a future session; pairs with item 11 above —
-   UI-created skills invisible to the catalog palette.)
+   (Operator will detail their view in a future session; item 11 above — UI-created
+   skills invisible to the catalog palette — is resolved as of R3-01-F2; the
+   standalone library VIEW + marketplace remain open, tracked as R3-01-F3/F4.)
 2. **Create-KB must mandate a scope at creation** — without one the KB can't know
    what information to seed on or how it should generate new information over time.
 3. **KB scoping model rework.** The "cycles" (forge-cycle) brain is likely a scope

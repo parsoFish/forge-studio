@@ -9,7 +9,7 @@ import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { listSkillMdDirs } from '../skill-path.ts';
+import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentBudgets,
@@ -239,6 +239,26 @@ export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
   }
 
   return defs.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/** Plain composable skills (skills/<slug>/SKILL.md with NO runtime block) —
+ *  the filesystem half of the unified skill library (R3-01-F2). Studio agents
+ *  (runtime-bearing) are the agent roster, not palette skill chips. */
+export function listPlainSkills(forgeRoot: string): { id: string; name: string; desc?: string }[] {
+  const out: { id: string; name: string; desc?: string }[] = [];
+  for (const dir of listSkillDirs(forgeRoot)) {
+    const skillMdPath = join(dir, 'SKILL.md');
+    try {
+      const { data } = matter(readFileSync(skillMdPath, 'utf8'));
+      const d = (data ?? {}) as Record<string, unknown>;
+      if ('runtime' in d) continue;                     // runtime block ⇒ a studio agent, not a plain skill
+      const id = basename(dir);
+      const name = typeof d['name'] === 'string' && d['name'] ? d['name'] as string : id;
+      const desc = typeof d['description'] === 'string' ? d['description'] as string : undefined;
+      out.push({ id, name, desc });
+    } catch { /* unreadable/malformed ⇒ skip */ }
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /**

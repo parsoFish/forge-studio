@@ -670,6 +670,59 @@ test('GET /api/studio/catalog reconciles sdk availability with the adapter regis
 });
 
 // ---------------------------------------------------------------------------
+// /api/studio/catalog — unions live filesystem plain skills (R3-01-F2)
+// ---------------------------------------------------------------------------
+
+test('GET /api/studio/catalog unions a filesystem plain skill (no runtime block) into skills, live', async () => {
+  const skillsRoot = mkdtempSync(join(tmpdir(), 'bridge-catalog-skills-'));
+  try {
+    mkdirSync(join(skillsRoot, 'studio'), { recursive: true });
+    writeFileSync(join(skillsRoot, 'studio', 'catalog.yaml'), [
+      'sdks: []',
+      'models: []',
+      'tools: []',
+      'mcps: []',
+      'hooks: []',
+      'communitySkills: []',
+    ].join('\n'));
+
+    const bridgeResult = await startBridge({ forgeRoot: skillsRoot, port: 0 });
+    try {
+      // Catalog fetched BEFORE the plain skill exists on disk — must not appear yet.
+      const before = (await (await fetch(`${bridgeResult.url}/api/studio/catalog`)).json()) as {
+        catalog: { skills: Array<{ id: string; name: string; desc?: string }> };
+      };
+      assert.ok(
+        !before.catalog.skills.some((s) => s.id === 'scratch-plain-skill'),
+        'plain skill must not appear before it is written to disk',
+      );
+
+      // Author a plain skill (SKILL.md, no runtime block) as `/skills/new` would.
+      mkdirSync(join(skillsRoot, 'skills', 'scratch-plain-skill'), { recursive: true });
+      writeFileSync(
+        join(skillsRoot, 'skills', 'scratch-plain-skill', 'SKILL.md'),
+        ['---', 'name: Scratch Plain Skill', 'description: a plain composable skill', '---', '', 'Body.', ''].join(
+          '\n',
+        ),
+      );
+
+      // Fetched again — no bridge restart — the live filesystem discovery picks it up.
+      const after = (await (await fetch(`${bridgeResult.url}/api/studio/catalog`)).json()) as {
+        catalog: { skills: Array<{ id: string; name: string; desc?: string }> };
+      };
+      const found = after.catalog.skills.find((s) => s.id === 'scratch-plain-skill');
+      assert.ok(found, 'plain skill must appear in catalog.skills after being written, with no restart');
+      assert.equal(found!.name, 'Scratch Plain Skill');
+      assert.equal(found!.desc, 'a plain composable skill');
+    } finally {
+      await bridgeResult.close();
+    }
+  } finally {
+    rmSync(skillsRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Non-studio URL → returns false (handler passes through)
 // ---------------------------------------------------------------------------
 
