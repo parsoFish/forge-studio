@@ -1025,6 +1025,22 @@ describe('listPlainSkills', () => {
     assert.equal(plain[0].desc, 'A legacy skill without studio fields.');
   });
 
+  it('excludes a plain skill that opts out with library:false', () => {
+    const forgeRootFixture = join(tmpDir, 'plain-skills-optout-root');
+    const skillsSubdir = join(forgeRootFixture, 'skills');
+    mkdirSync(skillsSubdir, { recursive: true });
+    const optOutDir = join(skillsSubdir, 'opted-out');
+    mkdirSync(optOutDir, { recursive: true });
+    writeFileSync(join(optOutDir, 'SKILL.md'), '---\nname: opted-out\ndescription: hidden\nlibrary: false\n---\nbody\n', 'utf8');
+    const shownDir = join(skillsSubdir, 'shown');
+    mkdirSync(shownDir, { recursive: true });
+    writeFileSync(join(shownDir, 'SKILL.md'), '---\nname: shown\ndescription: visible\nlibrary: true\n---\nbody\n', 'utf8');
+
+    const plain = listPlainSkills(forgeRootFixture);
+    assert.equal(plain.length, 1, 'library:false plain skill is hidden from the palette');
+    assert.equal(plain[0].id, 'shown');
+  });
+
   it('returns [] for a forgeRoot with no skills/ directory', () => {
     const emptyRoot = join(tmpDir, 'plain-skills-root-empty');
     assert.deepEqual(listPlainSkills(emptyRoot), []);

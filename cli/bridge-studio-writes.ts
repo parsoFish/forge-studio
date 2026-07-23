@@ -804,7 +804,8 @@ export async function handleStudioWriteRoutes(
   // ---- POST /api/studio/skills (P2) — author a plain composable skill ---------
   // A "skill" here is a plain SKILL.md (name + description + body, no runtime
   // block) — composable into agents. Distinct from a studio agent (which has a
-  // runtime block); `forge studio lint` skips non-studio skills, so this is safe.
+  // runtime block). Stamped `library: true` so it is palette-visible (R3-01-F2
+  // union) and passes the `library`-must-be-explicit lint on the very next run.
   if (url === '/api/studio/skills' && method === 'POST') {
     try {
       let body: unknown;
@@ -827,7 +828,7 @@ export async function handleStudioWriteRoutes(
 
       const md = matter.stringify(
         '\n' + (skillBody.trim() || `# ${name}\n\n${description}\n`) + '\n',
-        { name, description },
+        { name, description, library: true },
       );
       if (!existsSync(skillDirPath)) mkdirSync(skillDirPath, { recursive: true });
       writeFileSync(skillMdPath, md, 'utf8');
