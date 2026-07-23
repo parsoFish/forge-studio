@@ -9,7 +9,7 @@ import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { ARTIFACT_KINDS, DEMO_STEP_KINDS, KB_BINDING_KINDS, KB_READ_SURFACES, KB_READER_ROLES } from './types.ts';
+import { ARTIFACT_KINDS, DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentBudgets,
   AgentComposition,
@@ -28,79 +28,36 @@ import type {
   FlowKickoffKind,
   FlowNode,
   FlowTrigger,
-  KbBinding,
-  KbDescriptor,
-  KbProcessImpl,
-  KbProcesses,
-  KbUsagePolicy,
   ProjectRef,
 } from './types.ts';
 
-// ---------------------------------------------------------------------------
-// Typed field-extraction helpers (modelled on orchestrator/manifest.ts)
-// ---------------------------------------------------------------------------
+import {
+  reqString,
+  optString,
+  reqNumber,
+  optNumber,
+  optBool,
+  stringArray,
+  reqObject,
+  oneOf,
+  loadYaml,
+} from './yaml-fields.ts';
 
-function reqString(data: Record<string, unknown>, key: string, file: string): string {
-  const v = data[key];
-  if (typeof v !== 'string' || v.length === 0) {
-    throw new Error(`${file}: required string field "${key}" is missing or empty`);
-  }
-  return v;
-}
-
-function optString(data: Record<string, unknown>, key: string): string | undefined {
-  const v = data[key];
-  return typeof v === 'string' && v.length > 0 ? v : undefined;
-}
-
-function reqNumber(data: Record<string, unknown>, key: string, file: string): number {
-  const v = data[key];
-  if (typeof v !== 'number') {
-    throw new Error(`${file}: required number field "${key}" is missing or not a number`);
-  }
-  return v;
-}
-
-function optNumber(data: Record<string, unknown>, key: string): number | undefined {
-  const v = data[key];
-  return typeof v === 'number' ? v : undefined;
-}
-
-function optBool(data: Record<string, unknown>, key: string): boolean | undefined {
-  const v = data[key];
-  return typeof v === 'boolean' ? v : undefined;
-}
-
-function stringArray(data: Record<string, unknown>, key: string, file: string): string[] {
-  const v = data[key];
-  if (v === undefined || v === null) return [];
-  if (!Array.isArray(v)) {
-    throw new Error(`${file}: field "${key}" must be an array of strings`);
-  }
-  return (v as unknown[]).map((item, i) => {
-    if (typeof item !== 'string') {
-      throw new Error(`${file}: field "${key}[${i}]" must be a string`);
-    }
-    return item;
-  });
-}
-
-function reqObject(data: Record<string, unknown>, key: string, file: string): Record<string, unknown> {
-  const v = data[key];
-  if (v === null || typeof v !== 'object' || Array.isArray(v)) {
-    throw new Error(`${file}: required object field "${key}" is missing or not an object`);
-  }
-  return v as Record<string, unknown>;
-}
+// The KB descriptor's load / serialize / process-resolution live in
+// ./kb-descriptor.ts (extracted to keep this file under the 800-line cap).
+// Re-exported here so existing importers keep resolving them from './registry.ts'.
+export {
+  loadKbDescriptor,
+  serializeKbDescriptor,
+  resolveKbProcesses,
+  deriveKbUsageDefaults,
+  DEFAULT_KB_LINT,
+  DEFAULT_KB_INGEST,
+  DEFAULT_KB_CONSOLIDATE,
+} from './kb-descriptor.ts';
 
 // ---------------------------------------------------------------------------
-// Sentinel error class — used inside loadYaml to avoid double-wrapping
-// ---------------------------------------------------------------------------
-
-class RegistryError extends Error {}
-
-// ---------------------------------------------------------------------------
-// Union-field guard helper
+// Union-field guard helpers live in ./yaml-fields.ts (oneOf, loadYaml)
 // ---------------------------------------------------------------------------
 
 const BRAIN_ACCESS = ['mandatory', 'advisory', 'none'] as const;
@@ -125,30 +82,6 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // import (flow-runner.ts already imports FROM validate.ts for
 // findFanOutViolations).
 export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
-
-function oneOf<T extends string>(value: string, allowed: readonly T[], file: string, key: string): T {
-  if ((allowed as readonly string[]).includes(value)) return value as T;
-  throw new RegistryError(`${file}: field "${key}" must be one of ${allowed.join('|')}, got "${value}"`);
-}
-
-function loadYaml(file: string): Record<string, unknown> {
-  let raw: string;
-  try {
-    raw = readFileSync(file, 'utf8');
-  } catch (err) {
-    throw new Error(`${file}: cannot read file — ${(err as Error).message}`);
-  }
-  try {
-    const parsed = yaml.load(raw);
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new RegistryError(`${file}: YAML root must be a mapping`);
-    }
-    return parsed as Record<string, unknown>;
-  } catch (err) {
-    if (err instanceof RegistryError) throw err;
-    throw new Error(`${file}: YAML parse error — ${(err as Error).message}`);
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md
@@ -501,118 +434,6 @@ export function listFlowIds(forgeRoot: string): string[] {
   }
 }
 
-// ---------------------------------------------------------------------------
-// KB descriptor
-// ---------------------------------------------------------------------------
-
-/**
- * Strict `binding` parse (R1-01) — mirrors the strict-at-load-time treatment
- * the old `scope` enum received. `kind` must be one of KB_BINDING_KINDS;
- * `flow`/`project` bindings require a non-empty string `ref`; `unique`
- * carries no `ref`.
- */
-function parseKbBinding(raw: Record<string, unknown>, file: string): KbBinding {
-  const kindRaw = reqString(raw, 'kind', file);
-  const kind = oneOf(kindRaw, KB_BINDING_KINDS, file, 'binding.kind');
-  if (kind === 'unique') return { kind: 'unique' };
-  const ref = reqString(raw, 'ref', file);
-  return { kind, ref };
-}
-
-const KB_PROCESS_KEYS = ['lint', 'ingest', 'consolidate', 'usage'] as const;
-
-/** Strict `{builtin: string} | {cmd: string}` parse for one process obligation. */
-function parseKbProcessImpl(raw: unknown, file: string, key: string): KbProcessImpl {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: processes.${key} must be a mapping of {builtin} or {cmd}`);
-  }
-  const obj = raw as Record<string, unknown>;
-  const hasBuiltin = typeof obj['builtin'] === 'string' && obj['builtin'].length > 0;
-  const hasCmd = typeof obj['cmd'] === 'string' && obj['cmd'].length > 0;
-  if (hasBuiltin === hasCmd) {
-    throw new Error(`${file}: processes.${key} must be exactly one of {builtin} or {cmd}`);
-  }
-  return hasBuiltin ? { builtin: obj['builtin'] as string } : { cmd: obj['cmd'] as string };
-}
-
-function parseKbUsagePolicy(raw: unknown, file: string): KbUsagePolicy {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: processes.usage must be a mapping`);
-  }
-  const obj = raw as Record<string, unknown>;
-  const readSurface = oneOf(reqString(obj, 'readSurface', file), KB_READ_SURFACES, file, 'processes.usage.readSurface');
-  const readersRaw = obj['readers'];
-  if (!Array.isArray(readersRaw) || readersRaw.length === 0) {
-    throw new Error(`${file}: processes.usage.readers must be a non-empty array`);
-  }
-  const readers = readersRaw.map((r, i) => {
-    if (typeof r !== 'string') {
-      throw new Error(`${file}: processes.usage.readers[${i}] must be a string`);
-    }
-    return oneOf(r, KB_READER_ROLES, file, `processes.usage.readers[${i}]`);
-  });
-  return { readSurface, readers };
-}
-
-/** Strict `processes` parse — present only if declared; when present, all four
- * obligations are required and no unknown key is tolerated. */
-function parseKbProcesses(raw: unknown, file: string): KbProcesses {
-  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    throw new Error(`${file}: "processes" must be a mapping`);
-  }
-  const obj = raw as Record<string, unknown>;
-  const unknownKeys = Object.keys(obj).filter((k) => !(KB_PROCESS_KEYS as readonly string[]).includes(k));
-  if (unknownKeys.length > 0) {
-    throw new Error(`${file}: processes has unknown key(s) ${unknownKeys.join(', ')} — expected only ${KB_PROCESS_KEYS.join('|')}`);
-  }
-  return {
-    lint: parseKbProcessImpl(obj['lint'], file, 'lint'),
-    ingest: parseKbProcessImpl(obj['ingest'], file, 'ingest'),
-    consolidate: parseKbProcessImpl(obj['consolidate'], file, 'consolidate'),
-    usage: parseKbUsagePolicy(obj['usage'], file),
-  };
-}
-
-export const DEFAULT_KB_LINT: KbProcessImpl = { builtin: 'forge-brain-lint' };
-export const DEFAULT_KB_INGEST: KbProcessImpl = { builtin: 'reflector-ingest' };
-export const DEFAULT_KB_CONSOLIDATE: KbProcessImpl = { builtin: 'brain-fix' };
-
-export function deriveKbUsageDefaults(binding: KbBinding): KbUsagePolicy {
-  if (binding.kind === 'project') {
-    return { readSurface: 'navigation-index', readers: ['planner', 'reflector', 'dev-loop', 'reviewer'] };
-  }
-  return { readSurface: 'navigation-index', readers: ['planner', 'reflector'] };
-}
-
-export function resolveKbProcesses(kb: KbDescriptor): Required<KbProcesses> {
-  const p = kb.processes;
-  return {
-    lint: p?.lint ?? DEFAULT_KB_LINT,
-    ingest: p?.ingest ?? DEFAULT_KB_INGEST,
-    consolidate: p?.consolidate ?? DEFAULT_KB_CONSOLIDATE,
-    usage: p?.usage ?? deriveKbUsageDefaults(kb.binding),
-  };
-}
-
-/**
- * Serialize a KB descriptor back to kb.yaml text (R1-01 amendment — kb.yaml
- * now has a canonical serializer, mirroring serializeFlowDefinition; the
- * historical "hand-edited, no serializer by design" note referenced ADR-027
- * §4 (the KB descriptor), not §5 (the Catalog, which still has no serializer).
- */
-export function serializeKbDescriptor(kb: KbDescriptor): string {
-  const out: Record<string, unknown> = {};
-  out['id'] = kb.id;
-  out['name'] = kb.name;
-  out['binding'] = kb.binding.kind === 'unique'
-    ? { kind: 'unique' }
-    : { kind: kb.binding.kind, ref: kb.binding.ref };
-  out['desc'] = kb.desc;
-  if (kb.processes !== undefined) out['processes'] = kb.processes;
-  if (kb.backend !== undefined) out['backend'] = kb.backend;
-  return yaml.dump(out, { lineWidth: 120, quotingType: '"', forceQuotes: false });
-}
-
 // Artifact templates — studio/artifact-templates/<id>.md (gray-matter, ADR-027 amendment).
 export function loadArtifactTemplate(mdPath: string): ArtifactTemplate {
   let raw: string;
@@ -689,25 +510,6 @@ export function listDemoElements(studioRoot: string): DemoElementDefinition[] {
     return [];
   }
   return files.map((f) => loadDemoElement(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
-}
-
-export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {
-  const d = loadYaml(kbYamlPath);
-  const binding = parseKbBinding(reqObject(d, 'binding', kbYamlPath), kbYamlPath);
-  const processesRaw = d['processes'];
-  const processes =
-    processesRaw === undefined || processesRaw === null
-      ? undefined
-      : parseKbProcesses(processesRaw, kbYamlPath);
-  return {
-    id: reqString(d, 'id', kbYamlPath),
-    name: reqString(d, 'name', kbYamlPath),
-    binding,
-    desc: reqString(d, 'desc', kbYamlPath),
-    processes,
-    backend: optString(d, 'backend'),
-    path: kbYamlPath,
-  };
 }
 
 // ---------------------------------------------------------------------------
