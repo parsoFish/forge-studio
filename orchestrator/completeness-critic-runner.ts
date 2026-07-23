@@ -30,12 +30,12 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 import { runStructuredTurn, type QueryFn } from './interactive-session.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
 
 export type { QueryFn };
@@ -45,7 +45,7 @@ export type { QueryFn };
 // ---------------------------------------------------------------------------
 
 export const completenessCriticAgentSpec = deriveAgentSpec(
-  'skills/architect-completeness-critic/SKILL.md',
+  skillPathRelative('architect-completeness-critic'),
 );
 export const COMPLETENESS_CRITIC_MODEL = modelForSpec(completenessCriticAgentSpec);
 
@@ -224,7 +224,7 @@ function loadSkillPrompt(skillPromptPath?: string): string {
     }
   }
   if (cachedSkill !== null) return cachedSkill;
-  const def = resolve('skills/architect-completeness-critic/SKILL.md');
+  const def = skillPath('architect-completeness-critic');
   cachedSkill = existsSync(def)
     ? readFileSync(def, 'utf8')
     : 'You are the forge architect completeness critic.';

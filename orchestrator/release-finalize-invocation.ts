@@ -18,14 +18,13 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import type { ReleaseStep } from './studio/types.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
-const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'release-finalizer', 'SKILL.md');
+const SKILL_PATH = skillPath('release-finalizer');
 
 export type ReleaseFinalizeAllowedTool = 'Read' | 'Edit' | 'Bash' | 'Grep' | 'Glob';
 export type ReleaseFinalizeDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -35,7 +34,7 @@ export type ReleaseFinalizeDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSe
  * source). The orchestrator resolves the model from the tier declared in the
  * frontmatter.
  */
-export const releaseFinalizeAgentSpec = deriveAgentSpec('skills/release-finalizer/SKILL.md');
+export const releaseFinalizeAgentSpec = deriveAgentSpec(skillPathRelative('release-finalizer'));
 
 /** Tool lists derived from the spec — exported for downstream consumers. */
 export const RELEASE_FINALIZE_ALLOWED_TOOLS =

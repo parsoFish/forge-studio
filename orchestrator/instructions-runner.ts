@@ -45,6 +45,7 @@ import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { readAgentInstructionsFile } from './project-config.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
 export { type InterviewQuestion } from './interactive-session.ts';
 
@@ -52,7 +53,7 @@ export { type InterviewQuestion } from './interactive-session.ts';
 // ADR-024: spec derived from skills/instructions-creator/SKILL.md (single source)
 // ---------------------------------------------------------------------------
 
-export const instructionsAgentSpec = deriveAgentSpec('skills/instructions-creator/SKILL.md');
+export const instructionsAgentSpec = deriveAgentSpec(skillPathRelative('instructions-creator'));
 export const INSTRUCTIONS_MODEL = modelForSpec(instructionsAgentSpec);
 
 // ---------------------------------------------------------------------------
@@ -472,7 +473,7 @@ function loadSkillPrompt(skillPromptPath?: string): string {
     }
   }
   if (cachedSkill !== null) return cachedSkill;
-  const def = resolve('skills/instructions-creator/SKILL.md');
+  const def = skillPath('instructions-creator');
   cachedSkill = existsSync(def) ? readFileSync(def, 'utf8') : 'You are the forge instructions-creator agent.';
   return cachedSkill;
 }

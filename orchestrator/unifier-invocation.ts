@@ -23,15 +23,15 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 
 import { readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { projectDemoRelDir, worktreeDemoRelDir } from './demo-paths.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
-const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-unifier', 'SKILL.md');
+const SKILL_PATH = skillPath('developer-unifier');
 
 export type UnifierAllowedTool =
   | 'Read'
@@ -47,7 +47,7 @@ export type UnifierDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
  * ADR 024 / M2-3: the unifier spec derived from SKILL.md (single source).
  * The orchestrator resolves the model from the tier declared in the frontmatter.
  */
-export const unifierAgentSpec = deriveAgentSpec('skills/developer-unifier/SKILL.md');
+export const unifierAgentSpec = deriveAgentSpec(skillPathRelative('developer-unifier'));
 
 /** Tool lists derived from the spec — exported for downstream consumers. */
 export const UNIFIER_ALLOWED_TOOLS = unifierAgentSpec.allowedTools as UnifierAllowedTool[];

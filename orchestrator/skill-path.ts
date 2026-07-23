@@ -6,11 +6,12 @@
  * one-place change (the known-gaps §6 precondition — the move itself is a
  * separate decision, NOT taken here).
  *
- * `skillPath` returns an ABSOLUTE path: it feeds both the `resolve(root,'skills',
- * name,'SKILL.md')` sites and the `deriveAgentSpec('skills/<name>/SKILL.md')`
- * sites — `deriveAgentSpec` does `resolve(root, arg)`, and Node's `resolve`
- * ignores `root` when `arg` is absolute, so an absolute skillPath is correct for
- * both.
+ * `skillPath` returns an ABSOLUTE path — use it for direct file reads
+ * (`readFileSync`, `existsSync`, ...). `deriveAgentSpec('skills/<name>/SKILL.md')`
+ * sites must instead use `skillPathRelative(name)`: its argument is echoed
+ * verbatim into `PhaseAgentSpec.skill`, which is root-relative BY CONTRACT
+ * (see `orchestrator/phase-agent.ts`) — an absolute path there would leak a
+ * worktree-specific filesystem path into the portable, greppable event log.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -32,6 +33,20 @@ export function skillDir(name: string, root: string = FORGE_ROOT): string {
 /** Absolute path to a named skill's `SKILL.md`: `<root>/skills/<name>/SKILL.md`. */
 export function skillPath(name: string, root: string = FORGE_ROOT): string {
   return join(skillsDir(root), name, 'SKILL.md');
+}
+
+/**
+ * Root-relative path to a named skill's `SKILL.md`: `skills/<name>/SKILL.md`
+ * — always relative, regardless of root. This is the string form
+ * `deriveAgentSpec` requires: its `skill` argument is echoed verbatim into
+ * `PhaseAgentSpec.skill`, which is root-relative BY CONTRACT (see
+ * `orchestrator/phase-agent.ts` — it flows into event-log `agent_skill`
+ * attribution, so it must stay a portable, greppable relative path, never an
+ * absolute filesystem path). Use `skillPath()` (absolute) for direct file
+ * reads instead.
+ */
+export function skillPathRelative(name: string): string {
+  return join('skills', name, 'SKILL.md');
 }
 
 /**

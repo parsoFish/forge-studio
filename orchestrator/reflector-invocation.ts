@@ -17,14 +17,13 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { loadBrainIndex } from '../cli/brain-index.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
-const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'reflector', 'SKILL.md');
+const SKILL_PATH = skillPath('reflector');
 
 export type ReflectorAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit' | 'Bash';
 export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -33,7 +32,7 @@ export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
  * ADR 024 / M2-3: the reflector spec derived from SKILL.md (single source).
  * The orchestrator resolves the model from the tier declared in the frontmatter.
  */
-export const reflectorAgentSpec = deriveAgentSpec('skills/reflector/SKILL.md');
+export const reflectorAgentSpec = deriveAgentSpec(skillPathRelative('reflector'));
 
 /** Tool lists derived from the spec — exported for downstream consumers. */
 export const REFLECTOR_ALLOWED_TOOLS = reflectorAgentSpec.allowedTools as ReflectorAllowedTool[];

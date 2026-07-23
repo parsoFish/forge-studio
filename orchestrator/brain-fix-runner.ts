@@ -22,12 +22,13 @@ import { withIdleDeadline } from './stream-deadline.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { runBrainLint } from '../cli/brain-lint.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/brain-fix/SKILL.md
 // ---------------------------------------------------------------------------
 
-export const brainFixAgentSpec = deriveAgentSpec('skills/brain-fix/SKILL.md');
+export const brainFixAgentSpec = deriveAgentSpec(skillPathRelative('brain-fix'));
 export const BRAIN_FIX_MODEL = modelForSpec(brainFixAgentSpec);
 
 // ---------------------------------------------------------------------------
@@ -109,10 +110,10 @@ export async function runBrainFixTurn(
   });
 
   // Load skill prompt (ADR 003 — prompt is skill content, not re-baked TS).
-  const skillPath = resolve(input.forgeRoot, 'skills/brain-fix/SKILL.md');
+  const skillFile = skillPath('brain-fix', input.forgeRoot);
   let skillPrompt = 'You are the forge brain-fix agent.';
   try {
-    skillPrompt = readFileSync(skillPath, 'utf8');
+    skillPrompt = readFileSync(skillFile, 'utf8');
   } catch {
     /* fall through to default */
   }

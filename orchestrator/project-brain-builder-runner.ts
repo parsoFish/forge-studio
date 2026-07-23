@@ -29,8 +29,9 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-export const projectBrainAgentSpec = deriveAgentSpec('skills/project-brain-builder/SKILL.md');
+export const projectBrainAgentSpec = deriveAgentSpec(skillPathRelative('project-brain-builder'));
 export const PROJECT_BRAIN_MODEL = modelForSpec(projectBrainAgentSpec);
 
 export type ProjectBrainPhase =
@@ -81,7 +82,7 @@ function stagingThemesDir(sessionDir: string): string {
 }
 
 function loadSkillPrompt(skillPromptPath: string | undefined, forgeRoot: string): string {
-  const path = skillPromptPath ?? resolve(forgeRoot, 'skills/project-brain-builder/SKILL.md');
+  const path = skillPromptPath ?? skillPath('project-brain-builder', forgeRoot);
   try {
     return readFileSync(path, 'utf8');
   } catch {

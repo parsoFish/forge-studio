@@ -24,8 +24,9 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { runPreflight, type ClauseId } from '../cli/preflight.ts';
 import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-export const preflightFixAgentSpec = deriveAgentSpec('skills/preflight-fix/SKILL.md');
+export const preflightFixAgentSpec = deriveAgentSpec(skillPathRelative('preflight-fix'));
 export const PREFLIGHT_FIX_MODEL = modelForSpec(preflightFixAgentSpec);
 
 /** Loose async iterable — same shape brain-fix / architect runners use. */
@@ -90,10 +91,10 @@ export async function runPreflightFixTurn(
     skill: 'preflight-fix',
   });
 
-  const skillPath = resolve(input.forgeRoot, 'skills/preflight-fix/SKILL.md');
+  const skillFile = skillPath('preflight-fix', input.forgeRoot);
   let skillPrompt = 'You are the forge preflight-fix agent.';
   try {
-    skillPrompt = readFileSync(skillPath, 'utf8');
+    skillPrompt = readFileSync(skillFile, 'utf8');
   } catch {
     /* fall through to default */
   }

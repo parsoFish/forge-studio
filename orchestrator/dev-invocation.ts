@@ -24,14 +24,14 @@
  */
 
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
-import { resolve, join } from 'node:path';
+import { join } from 'node:path';
 
 import { parseWorkItem, type WorkItem } from './work-item.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
-const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
+const SKILL_PATH = skillPath('developer-ralph');
 
 export type DevAllowedTool = 'Read' | 'Write' | 'Edit' | 'MultiEdit' | 'Bash' | 'Grep' | 'Glob';
 export type DevDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -41,7 +41,7 @@ export type DevDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
  * source). The orchestrator resolves the model from the tier declared in the
  * frontmatter.
  */
-export const devAgentSpec = deriveAgentSpec('skills/developer-ralph/SKILL.md');
+export const devAgentSpec = deriveAgentSpec(skillPathRelative('developer-ralph'));
 
 /** Tool lists derived from the spec — exported for downstream consumers. */
 export const DEV_ALLOWED_TOOLS = devAgentSpec.allowedTools as DevAllowedTool[];

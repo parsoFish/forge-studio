@@ -40,12 +40,13 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { listDemoElements } from './studio/registry.ts';
 import type { DemoStep, DemoElementDefinition } from './studio/types.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)
 // ---------------------------------------------------------------------------
 
-export const demoBuilderAgentSpec = deriveAgentSpec('skills/demo-builder/SKILL.md');
+export const demoBuilderAgentSpec = deriveAgentSpec(skillPathRelative('demo-builder'));
 export const DEMO_BUILDER_MODEL = modelForSpec(demoBuilderAgentSpec);
 
 // ---------------------------------------------------------------------------
@@ -481,7 +482,7 @@ function loadSkillPrompt(skillPromptPath: string | undefined, forgeRoot: string)
     }
   }
   if (cachedSkill !== null) return cachedSkill;
-  const def = join(forgeRoot, 'skills/demo-builder/SKILL.md');
+  const def = skillPath('demo-builder', forgeRoot);
   cachedSkill = existsSync(def) ? readFileSync(def, 'utf8') : 'You are the forge demo-builder agent.';
   return cachedSkill;
 }
