@@ -22,6 +22,7 @@ import {
   validateCatalog,
   validateFlow,
   validateKb,
+  validateLibraryFlag,
   validateProject,
   validateDiscoveredProjects,
 } from './validate.ts';
@@ -386,6 +387,39 @@ describe('validateAgent — fully-ready agent', () => {
     );
     assert.ok(findings.every((f) => f.level === 'flag'));
     assert.equal(findings.length, 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateLibraryFlag (R3-01-F2)
+// ---------------------------------------------------------------------------
+
+describe('validateLibraryFlag', () => {
+  it('unset (key absent) → error', () => {
+    const findings = validateLibraryFlag('my-agent', { name: 'my-agent' });
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].level, 'error');
+    assert.equal(findings[0].object, 'agent:my-agent');
+    assert.equal(findings[0].check, 'library');
+  });
+
+  it('non-boolean value → error', () => {
+    const findings = validateLibraryFlag('my-agent', { library: 'true' });
+    assert.equal(findings.length, 1);
+    assert.equal(findings[0].level, 'error');
+  });
+
+  it('explicit true → clean', () => {
+    assert.deepEqual(validateLibraryFlag('my-agent', { library: true }), []);
+  });
+
+  it('explicit false → clean', () => {
+    assert.deepEqual(validateLibraryFlag('my-agent', { library: false }), []);
+  });
+
+  it('null/non-object frontmatter → error, no throw', () => {
+    assert.equal(validateLibraryFlag('my-agent', null).length, 1);
+    assert.equal(validateLibraryFlag('my-agent', undefined).length, 1);
   });
 });
 

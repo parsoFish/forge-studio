@@ -43,7 +43,9 @@ import {
   discoverProjects,
   loadCatalog,
   listDemoElements,
+  listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
+import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
@@ -538,7 +540,7 @@ export async function handleStudioRoutes(
   // ---- /api/studio/agents -------------------------------------------------
   if (url === '/api/studio/agents') {
     try {
-      const skillsDir = join(resolve(ctx.forgeRoot), 'skills');
+      const skillsDir = toSkillsDir(resolve(ctx.forgeRoot));
       const agents = listAgentDefinitions(skillsDir);
       // R2-02-F1: thread the server-computed capability descriptor onto each
       // agent's wire payload — no capability fact may exist only in UI code.
@@ -663,7 +665,14 @@ export async function handleStudioRoutes(
       }));
       // A1: surface the curated community skills as the agent-builder Skills
       // library (the palette reads catalog.skills) so skills are draggable too.
-      const skills = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
+      // R3-01-F2: union in filesystem plain skills (SKILL.md, no runtime block)
+      // — e.g. one authored via `/skills/new` — so it appears in the palette on
+      // the next fetch with no bridge restart (known-gaps §4.11). Community
+      // entries win on an id collision (they carry provenance/stars metadata).
+      const community = (catalog.communitySkills ?? []).map((s) => ({ id: s.id, name: s.name, desc: s.desc }));
+      const seen = new Set(community.map((s) => s.id));
+      const local = listPlainSkills(ctx.forgeRoot).filter((s) => !seen.has(s.id));
+      const skills = [...community, ...local];
       sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

@@ -34,6 +34,7 @@ import {
   serializeAgentDefinition,
   serializeFlowDefinition,
 } from '../orchestrator/studio/registry.ts';
+import { skillsDir as toSkillsDir, skillDir, skillPath } from '../orchestrator/skill-path.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar } from '../orchestrator/project-config.ts';
@@ -321,9 +322,8 @@ export async function handleStudioWriteRoutes(
       }
 
       // 2. Resolve and prefix-guard the SKILL.md path
-      const skillsBase = resolve(ctx.forgeRoot, 'skills');
-      const skillMdPath = resolve(skillsBase, slug, 'SKILL.md');
-      if (!skillMdPath.startsWith(skillsBase + sep)) {
+      const skillMdPath = skillPath(slug, ctx.forgeRoot);
+      if (!skillMdPath.startsWith(toSkillsDir(ctx.forgeRoot) + sep)) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
@@ -409,6 +409,7 @@ export async function handleStudioWriteRoutes(
         allowedTools: existing?.allowedTools ?? [],
         disallowedTools: existing?.disallowedTools ?? [],
         body: body_text,
+        library: existing?.library ?? true,
         path: skillMdPath,
       };
 
@@ -422,9 +423,9 @@ export async function handleStudioWriteRoutes(
 
       // 7. Serialize and write
       const serialized = serializeAgentDefinition(merged);
-      const skillDir = resolve(skillsBase, slug);
-      if (!existsSync(skillDir)) {
-        mkdirSync(skillDir, { recursive: true });
+      const skillDirPath = skillDir(slug, ctx.forgeRoot);
+      if (!existsSync(skillDirPath)) {
+        mkdirSync(skillDirPath, { recursive: true });
       }
       writeFileSync(skillMdPath, serialized, 'utf8');
 
@@ -754,7 +755,7 @@ export async function handleStudioWriteRoutes(
       };
 
       // 6. Build agents map for validateFlow
-      const skillsDir = resolve(ctx.forgeRoot, 'skills');
+      const skillsDir = toSkillsDir(ctx.forgeRoot);
       let agentsList: AgentDefinition[] = [];
       try {
         agentsList = listAgentDefinitions(skillsDir);
@@ -804,7 +805,8 @@ export async function handleStudioWriteRoutes(
   // ---- POST /api/studio/skills (P2) — author a plain composable skill ---------
   // A "skill" here is a plain SKILL.md (name + description + body, no runtime
   // block) — composable into agents. Distinct from a studio agent (which has a
-  // runtime block); `forge studio lint` skips non-studio skills, so this is safe.
+  // runtime block). Stamped `library: true` so it is palette-visible (R3-01-F2
+  // union) and passes the `library`-must-be-explicit lint on the very next run.
   if (url === '/api/studio/skills' && method === 'POST') {
     try {
       let body: unknown;
@@ -820,17 +822,16 @@ export async function handleStudioWriteRoutes(
         .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       if (!SLUG_RE.test(slug)) { sendJson(res, 400, { error: 'could not derive a valid slug from the name' }, origin); return true; }
 
-      const skillsBase = resolve(ctx.forgeRoot, 'skills');
-      const skillDir = resolve(skillsBase, slug);
-      if (!skillDir.startsWith(skillsBase + sep)) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
-      const skillMdPath = resolve(skillDir, 'SKILL.md');
+      const skillDirPath = skillDir(slug, ctx.forgeRoot);
+      if (!skillDirPath.startsWith(toSkillsDir(ctx.forgeRoot) + sep)) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
+      const skillMdPath = skillPath(slug, ctx.forgeRoot);
       if (existsSync(skillMdPath)) { sendJson(res, 409, { error: `skill "${slug}" already exists` }, origin); return true; }
 
       const md = matter.stringify(
         '\n' + (skillBody.trim() || `# ${name}\n\n${description}\n`) + '\n',
-        { name, description },
+        { name, description, library: true },
       );
-      if (!existsSync(skillDir)) mkdirSync(skillDir, { recursive: true });
+      if (!existsSync(skillDirPath)) mkdirSync(skillDirPath, { recursive: true });
       writeFileSync(skillMdPath, md, 'utf8');
       sendJson(res, 200, { ok: true, id: slug }, origin);
     } catch (err) {

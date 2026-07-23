@@ -1,6 +1,7 @@
 ---
 name: developer-ralph
 description: Launch the Ralph loop runner for a single work item; iterate until quality gates pass, iteration budget is exhausted, or the loop is detected as wedged.
+library: true
 phase: developer-loop
 surface: unattended
 executor: dev

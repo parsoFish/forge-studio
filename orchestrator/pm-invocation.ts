@@ -12,15 +12,14 @@
  */
 
 import { readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
 
 import { loadBrainIndex } from '../cli/brain-index.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { loadAgentDefinition } from './studio/registry.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
-const FORGE_ROOT = resolve(import.meta.dirname, '..');
-const SKILL_PATH = resolve(FORGE_ROOT, 'skills', 'project-manager', 'SKILL.md');
+const SKILL_PATH = skillPath('project-manager');
 
 export type PmAllowedTool = 'Read' | 'Grep' | 'Glob' | 'Write' | 'Edit';
 export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch';
@@ -30,7 +29,7 @@ export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch
  * source). The orchestrator resolves the model from the tier declared in the
  * frontmatter.
  */
-export const pmAgentSpec = deriveAgentSpec('skills/project-manager/SKILL.md');
+export const pmAgentSpec = deriveAgentSpec(skillPathRelative('project-manager'));
 
 /** Tool lists derived from the spec — exported for downstream consumers. */
 export const PM_ALLOWED_TOOLS = pmAgentSpec.allowedTools as PmAllowedTool[];

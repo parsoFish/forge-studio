@@ -76,6 +76,7 @@ import {
   CRITIC_MAX_MANIFEST_BODY_CHARS,
   type CompletenessCriticFinding,
 } from './completeness-critic-runner.ts';
+import { skillPath, skillPathRelative } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)
@@ -85,7 +86,7 @@ import {
  * The architect's PhaseAgentSpec — derived from SKILL.md frontmatter so the
  * model tier and tool allow-list have one source of truth (ADR-024).
  */
-export const architectAgentSpec = deriveAgentSpec('skills/architect/SKILL.md');
+export const architectAgentSpec = deriveAgentSpec(skillPathRelative('architect'));
 
 /** Concrete model id resolved from the spec's tier. */
 export const ARCHITECT_MODEL = modelForSpec(architectAgentSpec);
@@ -1088,7 +1089,7 @@ function loadSkillPrompt(skillPromptPath?: string): string {
     }
   }
   if (cachedSkill !== null) return cachedSkill;
-  const def = resolve('skills/architect/SKILL.md');
+  const def = skillPath('architect');
   cachedSkill = existsSync(def) ? readFileSync(def, 'utf8') : 'You are the forge architect.';
   return cachedSkill;
 }

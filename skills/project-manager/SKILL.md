@@ -1,6 +1,7 @@
 ---
 name: project-manager
 description: forge's plan agent — decomposes the architect's finalised initiative into atomic, dependency-ordered spec-work-items (ADR-015's versioned artifact contract) for the develop agent's ralph loop to consume.
+library: true
 phase: project-manager
 surface: unattended
 executor: pm

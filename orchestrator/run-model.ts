@@ -30,6 +30,7 @@ import { parseManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import type { QueueState } from './queue.ts';
 import { loadFlowDefinition, listAgentDefinitions } from './studio/registry.ts';
+import { skillsDir as toSkillsDir } from './skill-path.ts';
 import {
   deriveNodeStatuses,
   deriveNodeMeta,
@@ -186,7 +187,7 @@ const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
 export function buildNodeMapping(root: string): Map<string, string | null> {
   try {
     const flowsDir = join(resolve(root), 'studio', 'flows');
-    const skillsDir = join(resolve(root), 'skills');
+    const skillsDir = toSkillsDir(resolve(root));
 
     const agents = listAgentDefinitions(skillsDir);
     // Index agents by slug for O(1) lookup

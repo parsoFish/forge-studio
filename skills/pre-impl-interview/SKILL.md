@@ -1,6 +1,7 @@
 ---
 name: pre-impl-interview
 description: Interview the developer on a work-item spec BEFORE writing any code — surface gaps, false assumptions, and scope creep while they are still cheap to fix.
+library: true
 ---
 
 # Pre-implementation Interview

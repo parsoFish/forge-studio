@@ -9,6 +9,7 @@ import { join, dirname, basename, resolve, relative, sep } from 'node:path';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
+import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS } from './types.ts';
 import type {
   AgentBudgets,
@@ -165,6 +166,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 
   const allowedTools = stringArray(d, 'allowed-tools', skillMdPath);
   const disallowedTools = stringArray(d, 'disallowed-tools', skillMdPath);
+  const library = optBool(d, 'library');
 
   const slug = basename(dirname(skillMdPath));
 
@@ -172,6 +174,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     slug,
     name,
     description,
+    library,
     phase,
     surface,
     executor,
@@ -190,12 +193,13 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 
 // consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeAgentDefinition(def: AgentDefinition): string {
-  // Fixed key order: name, description, phase?, surface?, executor?, purpose,
-  // composition, runtime, brainAccess, interactivity, allowed-tools,
+  // Fixed key order: name, description, library?, phase?, surface?, executor?,
+  // purpose, composition, runtime, brainAccess, interactivity, allowed-tools,
   // disallowed-tools, budgets
   const data: Record<string, unknown> = {};
   data['name'] = def.name;
   data['description'] = def.description;
+  if (def.library !== undefined) data['library'] = def.library;
   if (def.phase !== undefined) data['phase'] = def.phase;
   if (def.surface !== undefined) data['surface'] = def.surface;
   if (def.executor !== undefined) data['executor'] = def.executor;
@@ -230,23 +234,36 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
 }
 
 export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
-  let entries: string[];
-  try {
-    entries = readdirSync(skillsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
-      .map((e) => e.name);
-  } catch (err) {
-    throw new Error(`${skillsDir}: cannot read skills directory — ${(err as Error).message}`);
-  }
-
   const defs: AgentDefinition[] = [];
-  for (const entry of entries) {
-    const skillMdPath = join(skillsDir, entry, 'SKILL.md');
+  for (const dir of listSkillMdDirs(skillsDir)) {
+    const skillMdPath = join(dir, 'SKILL.md');
     if (!isStudioAgent(skillMdPath)) continue;
     defs.push(loadAgentDefinition(skillMdPath));
   }
 
   return defs.sort((a, b) => a.slug.localeCompare(b.slug));
+}
+
+/** Plain composable skills (skills/<slug>/SKILL.md with NO runtime block AND not
+ *  library:false) — the filesystem half of the unified skill library (R3-01-F2).
+ *  Studio agents (runtime-bearing) are the agent roster, not palette skill chips;
+ *  a plain skill opting out with library:false is hidden from the palette too. */
+export function listPlainSkills(forgeRoot: string): { id: string; name: string; desc?: string }[] {
+  const out: { id: string; name: string; desc?: string }[] = [];
+  for (const dir of listSkillDirs(forgeRoot)) {
+    const skillMdPath = join(dir, 'SKILL.md');
+    try {
+      const { data } = matter(readFileSync(skillMdPath, 'utf8'));
+      const d = (data ?? {}) as Record<string, unknown>;
+      if ('runtime' in d) continue;                     // runtime block ⇒ a studio agent, not a plain skill
+      if (d['library'] === false) continue;             // library:false ⇒ plain skill opted out of the palette (R3-01-F2)
+      const id = basename(dir);
+      const name = typeof d['name'] === 'string' && d['name'] ? d['name'] as string : id;
+      const desc = typeof d['description'] === 'string' ? d['description'] as string : undefined;
+      out.push({ id, name, desc });
+    } catch { /* unreadable/malformed ⇒ skip */ }
+  }
+  return out.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 /**

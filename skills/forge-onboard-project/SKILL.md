@@ -1,6 +1,7 @@
 ---
 name: forge-onboard-project
 description: Bring any code project up to the forge↔Studio project contract so forge can develop it unattended at roadmap scale. Use before pointing forge at a new or not-yet-primed managed project. Works for any form — UI app, HTTP API, library, CLI, monorepo, infra provider — by authoring the project as a Studio object, mapping each operational contract invariant onto that project's shape, then validating (forge preflight + UI readiness) and handing off a roadmap-scale initiative. The contract spec is docs/forge-project-contract.md (ADR-034).
+library: true
 ---
 
 # Onboard a project to the forge↔Studio contract

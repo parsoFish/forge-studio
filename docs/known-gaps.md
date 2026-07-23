@@ -172,16 +172,21 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     (extend the `FORGE_ARCHITECT_NO_SPAWN` contract to ALL real-agent/real-git
     paths, or a first-class `FORGE_DRY_BRIDGE=1`) is the proper fix.
 11. **UI-created skills are invisible to the agent builder's palette (2026-07-17,
-    found by the S5b demo rebuild):** `CatalogPalette` sources skill chips
-    exclusively from `studio/catalog.yaml`'s static `community-skills` list, and
-    `POST /api/studio/skills` (the `/skills/new` builder) never registers the new
-    skill into `catalog.yaml` — so a skill an operator just authored cannot be
-    dragged into an agent's skill drop-zone. This broke the demo's intended
-    artifact throughline (create a skill → compose it into an agent); the journey
-    substitutes the catalog-listed `handoff` skill and narrates the limitation
-    honestly. **Fix candidates:** the skills builder registers into
-    `catalog.yaml` on create, or the palette unions catalog entries with live
-    `skills/*/SKILL.md` discovery.
+    found by the S5b demo rebuild) — *resolved 2026-07-24 (R3-01-F2):*** `CatalogPalette`
+    sourced skill chips exclusively from `studio/catalog.yaml`'s static
+    `community-skills` list, and `POST /api/studio/skills` (the `/skills/new`
+    builder) never registered the new skill into `catalog.yaml` — so a skill an
+    operator just authored could not be dragged into an agent's skill drop-zone.
+    Fixed via the "palette unions" candidate: `orchestrator/studio/registry.ts`
+    now exposes `listPlainSkills(forgeRoot)` (a live filesystem scan of
+    `skills/*/SKILL.md` entries with no `runtime` block — the inverse of
+    `isStudioAgent`), and `GET /api/studio/catalog`
+    (`cli/bridge-studio.ts`) unions it into `catalog.skills` — community entries
+    win on an id collision — so a `/skills/new`-authored skill appears in the
+    palette on the very next fetch, no bridge restart. The `agents` journey's
+    `agents-scratch-build` beat now drags the real skill `skills-create` authored
+    earlier in the walkthrough (`api-contract-review`) instead of substituting
+    `handoff`.
 
 ### 4b. Demo/UI-journey refinement backlog — operator review of PR #24 (2026-07-17)
 
@@ -195,8 +200,9 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
 1. **Skills need first-class management.** The skill-create surface exposed that
    there is no clear way to view the skill library, no consistent entry point for
    creating skills, and skills should break out into their own library item.
-   (Operator will detail their view in a future session; pairs with item 11 above —
-   UI-created skills invisible to the catalog palette.)
+   (Operator will detail their view in a future session; item 11 above — UI-created
+   skills invisible to the catalog palette — is resolved as of R3-01-F2; the
+   standalone library VIEW + marketplace remain open, tracked as R3-01-F3/F4.)
 2. **Create-KB must mandate a scope at creation** — without one the KB can't know
    what information to seed on or how it should generate new information over time.
 3. **KB scoping model rework.** The "cycles" (forge-cycle) brain is likely a scope
@@ -418,6 +424,29 @@ can pick them up:
 - **`kb-read-policy-guard.test.ts` covers PM + reflector**, not architect (also a planner); its
   `doesNotMatch` side is a name-specific (weaker) guard. Adequate for the "rebind doesn't change readers"
   invariant. *Re-entry:* if a new planner phase is added.
+
+### 11. R3-01 skills first-class — as-built follow-ups (2026-07-19)
+
+R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred / to-watch:
+
+- **F3 (`/skills` library view) + F4 (marketplace install) are deferred** — gated on the operator's §4b.1
+  skill-management-view design session. F3's `/skills` route + edit surface and F4's draft→scan→approve
+  marketplace pipeline are unbuilt; their DOM/surface shape must be confirmed against that session before
+  implementation. *Re-entry:* the operator's design session.
+- **The physical `skills/` role-subfolder move (§6) precondition is now met** — the shared
+  `orchestrator/skill-path.ts` resolver + `listSkillDirs`/`listSkillMdDirs` centralise lookup AND
+  enumeration, so the move is a one-place change. The move itself stays an untaken §6 decision.
+- **Palette taxonomy — operator eye.** The F2 union surfaces 8 forge-internal composable skills
+  (`brain-query`, `brain-lint`, `changelog-semver`, `cruft-sweep`, `demo-design`, `demo`, `doc-updater`,
+  `forge-onboard-project`) as draggable palette chips — genuinely composable, but a couple (`brain-lint`,
+  `cruft-sweep`) are maintenance skills whose value as arbitrary building blocks is debatable. `library:
+  false` on a plain skill now hides it from the palette (the mechanism exists), so reclassification is a
+  one-flag change — fold into the §4b.1 view design. *Re-entry:* the operator's design session.
+- **`skill-path.ts` primitives are unsafe-by-construction** — `skillPath`/`skillDir`/`skillsDir` use `join`
+  (not traversal-safe in isolation) and rely on callers to validate `name` against `SLUG_RE` first. Today
+  every caller is a hardcoded literal or the `SLUG_RE`-guarded `POST`/`PUT` routes (security review: no
+  exploit). A guard inside the primitives would harden future callers. *Re-entry:* if a new request-input
+  caller of these primitives is added.
 
 ## Strengths worth preserving (don't regress these)
 

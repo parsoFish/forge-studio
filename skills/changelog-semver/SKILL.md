@@ -1,6 +1,7 @@
 ---
 name: changelog-semver
 description: Compute the next semantic version and a finalised changelog entry from a cycle's acceptance-criteria categories. Reads the draft Unreleased changelog section (or the cycle's AC list), maps categories to a semver bump (breaking-change marker → major; new capability / Added → minor; Changed / Fixed / docs → patch), determines the current version (from a declared version file or the latest changelog heading), and produces the next version + the dated changelog heading. Composed by the release-finalizer; never tags or publishes (that is CI's job).
+library: true
 phase: release-finalize
 surface: unattended
 model: claude-sonnet-4-6

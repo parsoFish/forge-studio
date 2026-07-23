@@ -1,6 +1,7 @@
 ---
 name: release-finalizer
 description: After the operator approves a merged-ready cycle, finalise the release on the PR branch — compute the semver bump, promote the draft changelog entry to a versioned section, run the project's declared pre-merge release steps, optionally bump the version file, then commit and push to the PR branch BEFORE forge merges. Tag/publish stay with CI.
+library: true
 phase: release-finalize
 surface: both
 purpose: Turn the in-cycle draft release artifacts into the finalised, versioned release commit on the PR branch, immediately before merge.
