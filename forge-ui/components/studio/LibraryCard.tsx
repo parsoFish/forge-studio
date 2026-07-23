@@ -171,11 +171,11 @@ export function KbCard({ kb, index }: { kb: Kb; index: number }) {
   const layerStat = layerParts.join(' · ') || '0 nodes';
 
   const scopeBadgeClass =
-    kb.scope === 'project' ? 'badge-project' :
-    kb.scope === 'flow' ? 'badge-flow' :
+    kb.binding.kind === 'project' ? 'badge-project' :
+    kb.binding.kind === 'flow' ? 'badge-flow' :
     'badge-agent';
 
-  const scopeLabel = kb.scope === 'agent-integration' ? 'agent-integration' : kb.scope;
+  const scopeLabel = kb.binding.kind;
 
   return (
     <Link

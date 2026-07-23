@@ -177,11 +177,16 @@ export type Project = {
   hasLockedDemo?: boolean;
 };
 
+export type KbBinding =
+  | { kind: 'flow'; ref: string }
+  | { kind: 'project'; ref: string }
+  | { kind: 'unique' };
+
 export type Kb = {
   id: string;
   name: string;
   desc?: string;
-  scope: string;
+  binding: KbBinding;
   counts: { index: number; themes: number; raw: number };
 };
 
@@ -829,7 +834,7 @@ export async function resolveKbNode(nodeId: string): Promise<{ kbId: string } | 
 export async function createKb(body: {
   id: string;
   name: string;
-  scope: string;
+  binding: KbBinding;
   desc: string;
 }): Promise<{ ok: boolean; id?: string; error?: string }> {
   const r = await studioPost('/api/studio/kbs', body);

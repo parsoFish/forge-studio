@@ -15,9 +15,9 @@ import { KbSelector } from '@/components/studio/knowledge/KbSelector';
 // ── Scope badge class ─────────────────────────────────────────────────────────
 
 const SCOPE_BADGE: Record<string, string> = {
-  project:           'badge-project',
-  flow:              'badge-flow',
-  'agent-integration': 'badge-agent',
+  project: 'badge-project',
+  flow:    'badge-flow',
+  unique:  'badge-agent',
 };
 
 // ── Default export wraps inner in Suspense (required for useSearchParams) ─────
@@ -205,8 +205,8 @@ function KnowledgePageInner() {
               <span id="kb-title" style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text)', lineHeight: 1.2 }}>
                 {currentKb.name}
               </span>
-              <span id="kb-scope-badge" className={`badge ${SCOPE_BADGE[currentKb.scope] ?? 'badge-dim'}`}>
-                {currentKb.scope}
+              <span id="kb-scope-badge" className={`badge ${SCOPE_BADGE[currentKb.binding.kind] ?? 'badge-dim'}`}>
+                {currentKb.binding.kind}
               </span>
             </div>
             <div id="kb-desc" style={{ fontSize: 12.5, color: 'var(--dim)' }}>
