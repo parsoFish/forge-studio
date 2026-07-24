@@ -4,7 +4,7 @@
  * Uses the queryFn stub pattern from `loops/ralph/claude-agent.test.ts` (the
  * canonical stub for this exact spawn path: a fake `query`-shaped function
  * that records calls and yields a fixed SDK message stream), retyped to
- * `SdkQueryFn` — the locked `RunContext.queryFn` shape — rather than
+ * `StreamQueryFn` — the locked `RunContext.queryFn` shape — rather than
  * inventing a new SDK stub shape.
  */
 
@@ -16,7 +16,7 @@ import { join } from 'node:path';
 
 import { runAgent } from './run-agent.ts';
 import { listAgentDefinitions } from './studio/registry.ts';
-import type { SdkQueryFn } from './pinned-sdk-query.ts';
+import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from './studio/types.ts';
 import type { EventLogger, EventLogEntry } from './logging.ts';
 
@@ -24,8 +24,8 @@ const ROOT = process.cwd();
 
 /** Build a fake SDK query() that yields a single `result` message reporting
  * the given cost — mirrors `fakeQuery` in loops/ralph/claude-agent.test.ts,
- * retyped as `SdkQueryFn` to match RunContext.queryFn's locked shape. */
-function fakeQueryFn(costUsd: number): SdkQueryFn {
+ * retyped as `StreamQueryFn` to match RunContext.queryFn's locked shape. */
+function fakeQueryFn(costUsd: number): StreamQueryFn {
   return ((_params: { prompt: unknown; options?: unknown }) => {
     async function* gen() {
       yield {
@@ -36,14 +36,14 @@ function fakeQueryFn(costUsd: number): SdkQueryFn {
       };
     }
     return gen();
-  }) as unknown as SdkQueryFn;
+  }) as unknown as StreamQueryFn;
 }
 
 /** A queryFn that fails the test if the SDK is ever actually invoked — for
  * proving the dry-bridge / no-spawn seam never reaches the real spawn. */
-const throwingQueryFn: SdkQueryFn = ((() => {
+const throwingQueryFn: StreamQueryFn = ((() => {
   throw new Error('runAgent must not invoke queryFn under dry-bridge / no-spawn suppression');
-}) as unknown) as SdkQueryFn;
+}) as unknown) as StreamQueryFn;
 
 /** Look up a named library fixture from the roster, failing with a clear
  * message (rather than a bare TypeError on a `!`-asserted `undefined`) if
@@ -450,7 +450,7 @@ function oneShotClone(
 function capturingQueryFn(
   calls: Array<{ prompt: string; options: Record<string, unknown> }>,
   messages?: unknown[],
-): SdkQueryFn {
+): StreamQueryFn {
   return ((params: { prompt: string; options: Record<string, unknown> }) => {
     calls.push(params);
     async function* gen() {
@@ -468,7 +468,7 @@ function capturingQueryFn(
       }
     }
     return gen();
-  }) as unknown as SdkQueryFn;
+  }) as unknown as StreamQueryFn;
 }
 
 /** An EventLogger that fails the test on any emission — for proving the
@@ -715,6 +715,32 @@ test('runAgent legacy invocation path: prompt lands in the .forge/agent-run scra
     );
   } finally {
     restoreEnv();
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent one-shot + lifecycle caller: env suppression vars do NOT short-circuit (caller owns harness-safety — parity with the phase pipelines)', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-caller-env-'));
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'));
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const result = await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'p',
+      lifecycle: 'caller',
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.equal(calls.length, 1, 'the injected stub runs — caller mode never consults the env seam');
+    assert.equal(result.suppressed, false);
+  } finally {
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });

@@ -1,5 +1,5 @@
 /**
- * Unit tests for orchestrator/pm-invocation.ts — ADR 024 seam.
+ * Unit tests for orchestrator/phases/pm-binding.ts — ADR 024 seam.
  *
  * Verifies:
  *   1. `pmAgentSpec` shape (phase / skill / tier / tools).
@@ -22,8 +22,8 @@ import {
   buildPmSystemPrompt,
   renderPmUserPrompt,
   renderProjectContextBlock,
-} from './pm-invocation.ts';
-import { modelForSpec } from './phase-agent.ts';
+} from './pm-binding.ts';
+import { modelForSpec } from '../phase-agent.ts';
 
 // ---------------------------------------------------------------------------
 // 1. pmAgentSpec shape

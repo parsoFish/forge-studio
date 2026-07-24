@@ -223,7 +223,6 @@ function topoSort(flow: FlowDefinition): string[] {
 
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
-  | 'pm'          // agent def declares executor:'pm' (project-manager)
   | 'dev'         // agent def declares executor:'dev' (developer-ralph, fanOut:'work-items')
   | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
@@ -826,7 +825,6 @@ const execAgent: NodeExecutor = async (ctx) => {
  */
 const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   architect: execArchitect,
-  pm: execPm,
   dev: execDev,
   unifier: execUnifier,
   review: execReview,

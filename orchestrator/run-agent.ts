@@ -45,7 +45,7 @@ import { dirname, join, relative } from 'node:path';
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
 import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, type EventLogger } from './logging.ts';
-import { pinnedSdkQuery, type SdkQueryFn } from './pinned-sdk-query.ts';
+import { pinnedStreamQuery, type StreamQueryFn } from './pinned-sdk-query.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
@@ -167,11 +167,12 @@ export type RunContext = {
   lifecycle?: 'self' | 'caller';
   /**
    * Test-injection only. Production callers must omit this — the default
-   * is `pinnedSdkQuery`; a real alternate SDK `queryFn` can't exist outside
-   * that wrapper because `pinned-sdk-query.enforce.test.ts` forbids
-   * importing the raw SDK `query` anywhere under orchestrator/, loops/, cli/.
+   * is `pinnedStreamQuery` (the env-pinned SDK query in its loosened
+   * stream shape); a real alternate SDK `queryFn` can't exist outside that
+   * wrapper because `pinned-sdk-query.enforce.test.ts` forbids importing
+   * the raw SDK `query` anywhere under orchestrator/, loops/, cli/.
    */
-  queryFn?: SdkQueryFn;
+  queryFn?: StreamQueryFn;
 };
 
 export type RunAgentResult = {
@@ -190,6 +191,9 @@ export type RunAgentResult = {
  * Effective one-shot budget cap: `max(flat, share × initiative budget)` —
  * a declared floor and a proportional share compose (the PM policy as data).
  * Undefined when the def declares neither (no cap passed to the SDK).
+ * Note: an explicit `maxBudgetUsd: 0` does NOT mean "no spend" — any
+ * positive share contribution wins the max. A true no-spend agent belongs
+ * behind the dry-bridge seam, not a zero budget.
  */
 export function resolveOneShotBudgetUsd(
   budgets: AgentBudgets,
@@ -340,11 +344,7 @@ async function runOneShotSpawn(
     options['abortController'] = abortController;
   }
 
-  type StreamQueryFn = (input: {
-    prompt: string;
-    options: Record<string, unknown>;
-  }) => AsyncIterable<unknown>;
-  const queryFn = (ctx.queryFn ?? pinnedSdkQuery) as unknown as StreamQueryFn;
+  const queryFn = ctx.queryFn ?? pinnedStreamQuery;
 
   let stream: AsyncIterable<unknown> = queryFn({ prompt: ctx.prompt, options });
   if (ctx.streamGuard && abortController) {
@@ -424,7 +424,9 @@ async function runInvocationSpawn(
     model: modelForSpec(spec),
     allowedTools: [...spec.allowedTools],
     disallowedTools: [...spec.disallowedTools],
-    queryFn: (ctx.queryFn ?? pinnedSdkQuery) as unknown as QueryFn,
+    // StreamQueryFn requires an options bag; the adapter's QueryFn keeps it
+    // optional — the closure always supplies one, so the cast is sound.
+    queryFn: (ctx.queryFn ?? pinnedStreamQuery) as QueryFn,
   });
 
   // Stamp the prompt + drive ONE iteration.

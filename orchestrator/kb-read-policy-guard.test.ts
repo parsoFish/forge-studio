@@ -18,7 +18,7 @@ const src = (f: string): string => readFileSync(resolve(__dirname, f), 'utf8');
 const READS_BRAIN_NAV = /loadBrainIndex|loadBrainNavigation/;
 
 test('R1-01-F4: planners (PM, reflector) still read the brain navigation surface post-rebind', () => {
-  assert.match(src('pm-invocation.ts'), READS_BRAIN_NAV, 'PM must still load the brain navigation');
+  assert.match(src('phases/pm-binding.ts'), READS_BRAIN_NAV, 'PM must still load the brain navigation');
   assert.match(src('phases/reflector-binding.ts'), READS_BRAIN_NAV, 'reflector must still load the brain navigation');
 });
 

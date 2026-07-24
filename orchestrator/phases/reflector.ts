@@ -30,7 +30,7 @@ import { parseRetroMd } from '../../cli/reflection-doc.ts';
 import type { EventLogger, EventLogEntry } from '../logging.ts';
 import { parseManifest } from '../manifest.ts';
 import { runAgent } from '../run-agent.ts';
-import type { SdkQueryFn } from '../pinned-sdk-query.ts';
+import type { StreamQueryFn } from '../pinned-sdk-query.ts';
 import { loadAgentDefinition } from '../studio/registry.ts';
 import { skillPath } from '../skill-path.ts';
 import {
@@ -131,8 +131,8 @@ export function emitReflectionLost(
  * the loss is visible in events.jsonl + Studio when it happens — ten July
  * cycles closed as done with reflection silently missing.
  *
- * Live invocation contract is shared with the bench via
- * orchestrator/reflector-invocation.ts (single source of truth).
+ * Live invocation contract (prompt builders + tool tally) lives in
+ * orchestrator/phases/reflector-binding.ts (single source of truth).
  */
 export async function runReflector(
   input: CycleInput,
@@ -288,7 +288,7 @@ export async function runReflector(
         };
         if (m.type === 'assistant') tallyReflectorToolUse(m.message, toolUseSummary);
       },
-      queryFn: deps.sdkQuery as unknown as SdkQueryFn | undefined,
+      queryFn: deps.sdkQuery as StreamQueryFn | undefined,
     });
     costUsd = spawn.costUsd;
     durationMs = spawn.durationMs ?? 0;

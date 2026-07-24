@@ -12,9 +12,6 @@ import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 import type { EventLogger } from '../logging.ts';
 import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '../manifest.ts';
 import {
-  PM_ALLOWED_TOOLS,
-  PM_DISALLOWED_TOOLS,
-  PM_MODEL,
   PM_BRAIN_ACCESS,
   PM_ALWAYS_RELEVANT_THEMES,
   DECOMPOSITION_STATE_FILENAME,
@@ -23,7 +20,7 @@ import {
   renderPmUserPrompt,
   tallyToolUse,
   type PmToolUseSummary,
-} from '../pm-invocation.ts';
+} from './pm-binding.ts';
 import {
   readWorkItemsFromDir,
   serializeWorkItem,
@@ -36,7 +33,9 @@ import { releaseDraftAcs } from '../release-process.ts';
 import { recordBrainGateResult, type CycleInput } from '../cycle-context.ts';
 import { makeToolEventSink, extractLiveToolDetails } from '../tool-event-emit.ts';
 import { deriveGateRecipe, renderGateRecipeBlock } from '../gate-recipes.ts';
-import { withIdleDeadline } from '../stream-deadline.ts';
+import { runAgent } from '../run-agent.ts';
+import { loadAgentDefinition } from '../studio/registry.ts';
+import { skillPath } from '../skill-path.ts';
 import { compileWorkItemSpecs } from './wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 
@@ -67,39 +66,17 @@ export type RunProjectManagerOptions = {
   constraintSourcesRoot?: string;
 };
 
-/**
- * Defaults for the live PM invocation. Higher budget + turn cap than the bench
- * (real worktrees are richer than fixtures); the bench enforces 0.5 USD / 30
- * turns to keep iteration cheap.
- */
-const PM_LIVE_MAX_TURNS = 70;
-// F-42: PM budget floor bumped from $1.00 → $2.50. The 22:17
-// simplification-source cycle hit $1.01 and emitted 0 WIs
-// (pm-budget-exhausted). At trafficGame's scale (251 files) $1.00 wasn't
-// enough headroom; $2.50 is generous there (PM peaks ~$1.50).
+// The live turn/budget caps are DECLARED DATA now (R4-01-F2, ADR-039):
+// `budgets.maxTurns: 70` + `maxBudgetUsd: 2.5` + `maxBudgetUsdShare: 0.2` in
+// skills/project-manager/SKILL.md, resolved by `runAgent`'s one-shot path as
+// `max(2.50 floor, 0.2 × manifest.cost_budget_usd)`. History of the values
+// (F-42 floor bump after a $1.01 pm-budget-exhausted 0-WI cycle; F-43
+// proportional share after terraform-provider-betterado blew the flat floor
+// and stalled 18 dependents) lives with the fields in the SKILL.md + ADR-039.
 //
-// F-43: $2.50 was a FLAT constant, so the classifier's pm-budget-exhausted
-// recommendation ("increase cost_budget_usd in the manifest") was inert —
-// the cap ignored the manifest entirely. terraform-provider-betterado (286
-// *_test.go + a huge vendored tree) proved larger than any project tuned
-// for: its PM blew $2.50 on the brain-first mandate + worktree exploration
-// before emitting any WIs, failing INIT 01/03 and stalling 18 dependents.
-// Fix: derive the cap from the initiative's own declared budget so big
-// initiatives (which already declare big budgets) get proportional PM
-// planning headroom, while $2.50 stays the floor (small projects + the PM
-// bench, which pins its own 2.5, are unchanged — no regression). This also
-// makes the classifier's existing recommendation actually true.
-const PM_LIVE_MAX_BUDGET_USD_FLOOR = 2.5;
-const PM_BUDGET_FRACTION_OF_INITIATIVE = 0.2;
 // Plan 2.11 part 3: emit `pm.turn-budget-warning` once when the streamed
-// assistant-turn count crosses this fraction of the live turn cap.
+// assistant-turn count crosses this fraction of the declared turn cap.
 const PM_TURN_WARNING_FRACTION = 0.8;
-function pmMaxBudgetUsd(initiativeCostBudgetUsd: number): number {
-  return Math.max(
-    PM_LIVE_MAX_BUDGET_USD_FLOOR,
-    initiativeCostBudgetUsd * PM_BUDGET_FRACTION_OF_INITIATIVE,
-  );
-}
 
 export async function runProjectManager(
   input: CycleInput,
@@ -223,52 +200,40 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
     },
   });
 
-  const opts: Record<string, unknown> = {
-    // F-37: PM runs with cwd = the worktree, NOT forgeRoot. Previously
-    // the PM agent's `Glob({pattern: 'src/**'})` resolved against forge's
-    // own root (which has no src/ directory) — getting zero results, then
-    // fabricating plausible paths from training-data priors (e.g.,
-    // src/engine/physics.test.ts on a project that has no src/engine/).
-    // With cwd at the worktree, every relative-path tool call sees the
-    // actual project. The system prompt's brain content is captured at
-    // build time so it's unaffected by the cwd switch.
-    cwd: input.worktreePath,
-    systemPrompt,
-    model: PM_MODEL,
-    permissionMode: 'acceptEdits',
-    allowedTools: PM_ALLOWED_TOOLS,
-    disallowedTools: PM_DISALLOWED_TOOLS,
-    maxTurns: PM_LIVE_MAX_TURNS,
-    maxBudgetUsd: pmMaxBudgetUsd(manifest.cost_budget_usd),
-  };
-  // Idle-deadline safety net: a stalled stream (usage limit / network) aborts +
-  // throws into cycle.ts → classifier (transient) instead of hanging the queue.
-  // betterado roadmap run stalled exactly here mid-PM (known-gaps 2026-06-01).
-  const abortController = new AbortController();
-  // Chain the optional wedge-kill signal so a raceWithWedge abort propagates
-  // into the SDK stream loop (best-effort — race has already rejected by then).
-  if (signal) {
-    signal.addEventListener('abort', () => abortController.abort(signal.reason), { once: true });
+  // R4-01-F2 (ADR-039): the spawn goes through the generic one-shot primitive
+  // with `lifecycle: 'caller'` — this pipeline owns the event lifecycle and
+  // every judgment (brain gate, WI validation, checkpoint classification);
+  // only the literal SDK call moved. Options are pinned byte-identical to the
+  // previous inline build by the golden spawn-capture suite:
+  //   - F-37 cwd = the worktree (Glob resolves against the actual project).
+  //   - model/tools from the derived spec (same SKILL.md source as before).
+  //   - caps from the declared budgets: max(2.50, 0.2 × manifest budget).
+  //   - streamGuard = the idle-deadline safety net + wedge-signal chaining
+  //     (a stalled stream aborts + classifies transient instead of hanging
+  //     the queue — betterado roadmap run stalled exactly here mid-PM).
+  const def = loadAgentDefinition(skillPath('project-manager'));
+  const pmMaxTurns = def.budgets.maxTurns;
+  if (pmMaxTurns === undefined) {
+    throw new Error(
+      'project-manager SKILL.md must declare budgets.maxTurns (R4-01-F2 — the live turn cap is frontmatter data)',
+    );
   }
-  opts.abortController = abortController;
 
   const toolUseSummary: PmToolUseSummary = { brainReads: 0, writes: 0 };
-  let costUsd = 0;
-  let durationMs = 0;
-  let resultSubtype: string | undefined;
   // Plan 2.11 part 3: the SDK exposes turn counts only on the terminal result
-  // message (`num_turns`) — no mid-run remaining-turns surface. But this loop
-  // IS the mid-run surface: each streamed assistant message is one turn, so
-  // the orchestrator counts them itself and emits a single near-exhaustion
-  // warning at the threshold (observability for the operator + the event log;
-  // the skill-side `_decomposition-state.md` checkpoint is the recovery half).
+  // message (`num_turns`) — no mid-run remaining-turns surface. But the
+  // onMessage observer IS the mid-run surface: each streamed assistant
+  // message is one turn, so the orchestrator counts them itself and emits a
+  // single near-exhaustion warning at the threshold (observability for the
+  // operator + the event log; the skill-side `_decomposition-state.md`
+  // checkpoint is the recovery half).
   let observedTurns = 0;
   let turnWarningEmitted = false;
-  const turnWarningThreshold = Math.ceil(PM_LIVE_MAX_TURNS * PM_TURN_WARNING_FRACTION);
+  const turnWarningThreshold = Math.ceil(pmMaxTurns * PM_TURN_WARNING_FRACTION);
 
   // Phase A — per-tool live telemetry for the PM (no work-item yet).
-  // The PM drives its own stream loop, so it feeds the sink manually via
-  // `extractLiveToolDetails` rather than `createClaudeAgent`'s `onToolUse`.
+  // The PM feeds the sink manually via `extractLiveToolDetails` from the
+  // onMessage observer rather than `createClaudeAgent`'s `onToolUse`.
   const pmToolSink = makeToolEventSink(logger, {
     initiativeId: input.initiativeId,
     parentEventId,
@@ -277,13 +242,28 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   });
   let pmToolSeq = 0;
 
-  for await (const msg of withIdleDeadline(queryFn({ prompt, options: opts }) as AsyncIterable<unknown>, {
-    label: 'project-manager',
-    abortController,
-  })) {
-    if (typeof msg !== 'object' || msg === null) continue;
-    const m = msg as { type?: string; message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> }; subtype?: string; total_cost_usd?: number; duration_ms?: number };
-    if (m.type === 'assistant') {
+  const spawn = await runAgent(def, {
+    runId: input.initiativeId,
+    workdir: input.worktreePath,
+    cwd: input.worktreePath,
+    prompt,
+    systemPrompt,
+    lifecycle: 'caller',
+    streamGuard: { label: 'project-manager', signal },
+    bindings: {
+      initiative: {
+        id: input.initiativeId,
+        manifestPath: input.manifestPath,
+        costBudgetUsd: manifest.cost_budget_usd,
+      },
+    },
+    onMessage: (msg) => {
+      if (typeof msg !== 'object' || msg === null) return;
+      const m = msg as {
+        type?: string;
+        message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+      };
+      if (m.type !== 'assistant') return;
       observedTurns += 1;
       if (!turnWarningEmitted && observedTurns >= turnWarningThreshold) {
         turnWarningEmitted = true;
@@ -296,7 +276,7 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
           input_refs: [],
           output_refs: [],
           message: 'pm.turn-budget-warning',
-          metadata: { observed_turns: observedTurns, max_turns: PM_LIVE_MAX_TURNS },
+          metadata: { observed_turns: observedTurns, max_turns: pmMaxTurns },
         });
       }
       tallyToolUse(m.message, toolUseSummary);
@@ -304,14 +284,12 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
         pmToolSink.onToolUse(detail);
         pmToolSeq = detail.seq;
       }
-      continue;
-    }
-    if (m.type !== 'result') continue;
-    if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
-    if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
-    resultSubtype = m.subtype ?? 'success';
-    break;
-  }
+    },
+    queryFn,
+  });
+  const costUsd = spawn.costUsd;
+  const durationMs = spawn.durationMs ?? 0;
+  const resultSubtype = spawn.resultSubtype;
   // PM is single-pass (not iterative); flush the coalesced remainder once.
   pmToolSink.flushIteration(0);
 

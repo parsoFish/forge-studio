@@ -84,9 +84,9 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 //
 // R4-01-F2 (ADR-039) is retiring this enum row by row as each phase moves to
 // declared dispatch (loopStrategy + band hooks): 'reflect' retired with the
-// reflector migration. The end state is ['unifier'] alone, held until
-// R4-01-F4 retirement.
-export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier'] as const;
+// reflector migration, 'pm' with the plan-agent migration. The end state is
+// ['unifier'] alone, held until R4-01-F4 retirement.
+export const PHASE_EXECUTOR_KINDS = ['dev', 'unifier'] as const;
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md

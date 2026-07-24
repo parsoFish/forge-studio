@@ -43,7 +43,7 @@ import {
   MANIFEST_SECTION_HEADER,
   BRAIN_CONTEXT_SECTION_HEADER,
   DECOMPOSITION_STATE_FILENAME,
-} from './pm-invocation.ts';
+} from './phases/pm-binding.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 

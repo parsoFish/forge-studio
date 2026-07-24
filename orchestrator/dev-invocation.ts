@@ -7,7 +7,7 @@
  * Single source of truth for what the developer agent sees, so the bench
  * reflects production.
  *
- * Contrast vs PM (orchestrator/pm-invocation.ts):
+ * Contrast vs PM (orchestrator/phases/pm-binding.ts):
  *   - PM is a one-shot decomposition. The agent reads, plans, writes WIs once.
  *   - Developer is a Ralph loop. Each iteration is one SDK query() call; the
  *     loop carries state across iterations via PROMPT.md / AGENT.md / fix_plan.md

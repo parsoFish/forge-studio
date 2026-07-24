@@ -220,7 +220,7 @@ export async function runArchitectTurn(
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
 
   // ARCH-1: load brain navigation index at turn start and inject into prompts.
-  // Mirrors the PM/reflector pattern (pm-invocation.ts, reflector-invocation.ts).
+  // Mirrors the PM/reflector pattern (phases/pm-binding.ts, phases/reflector-binding.ts).
   // The index is cheap to read (a few small markdown files); we don't cache it
   // across turns because each turn is a fresh process invocation.
   const brainCwd = input.brainCwd ?? resolve('.');

@@ -4,22 +4,22 @@ description: forge's plan agent — decomposes the architect's finalised initiat
 library: true
 phase: project-manager
 surface: unattended
-executor: pm
 purpose: Decompose an approved initiative into atomic, dependency-ordered work items with verifiable acceptance criteria.
 composition:
   skills: [brain-query]
   tools: []
   mcps: []
-  hooks: [event-log]
+  hooks: [event-log, wi-contract]
 runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
+  loopStrategy: one-shot
 brainAccess: mandatory
 interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Grep, Glob, Write, Edit]
 disallowed-tools: [Bash, NotebookEdit, WebFetch, WebSearch]
-budgets: {}
+budgets: {maxTurns: 70, maxBudgetUsd: 2.5, maxBudgetUsdShare: 0.2}
 ---
 
 # Project Manager
