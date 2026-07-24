@@ -64,7 +64,7 @@ facets preflight does not enforce**:
   yet). If it passes, it's hollow and is rejected at iter-0.
 - C2 *hermeticity*: build, then `git status` — anything but intended source is a gap.
 - C1b *CI alignment*: the per-WI gate must be the CI command or a strict subset it
-  subsumes (`ci_gate`) — never narrower than the project's merge bar.
+  subsumes (`testProcess.ci.cmd`) — never narrower than the project's merge bar.
 - DEMO *fidelity*: run the demo on baseline vs HEAD and eyeball that it captures the
   delta, not just that a shape exists.
 - C9 *fixtures*: non-default values for every field under test, create/update
@@ -75,8 +75,10 @@ Record every gap; the rest closes them.
 A gate that is fast, deterministic, green at HEAD, and **scoped to the unit of
 change** (empty ⇒ fail / real-work ⇒ pass). Map to the form (UI render test • API
 contract test • library/CLI unit test • monorepo package-scoped gate — never a
-repo-wide wildcard). Declare as ONE command in `.forge/quality_gate_cmd` +
-`.forge/project.json`. Verify fail-then-pass by hand. If one command cannot
+repo-wide wildcard). Declare as ONE command in the `.forge/quality_gate_cmd`
+sidecar and/or `testProcess.local.cmd` in `.forge/project.json` — the sidecar
+single-sources `testProcess.local.cmd` when the JSON omits it; when both are
+present, the JSON wins. Verify fail-then-pass by hand. If one command cannot
 express the gate, commit a gate script authored from
 [`docs/gate-script-template.md`](../../docs/gate-script-template.md) — never
 bare `! cmd` asserts (errexit-exempt: their failures silently don't fail the
@@ -147,13 +149,13 @@ If behaviour can only be verified live: a creds-free in-loop gate (mocks/in-proc
 plus a confirmation layer (create→confirm→destroy, prefixed/randomized names,
 orphan sweep, creds out-of-band → env). Make the per-WI testing contract structural
 via three `.forge/project.json` seams:
-- **`acceptance_gate: { match, required, requires_env }`** — `match` identifies the
-  live-acc suite in a WI gate; `required: true` hard-fails the cycle if no live-acc
-  WI; `requires_env` errors fast (not false-pass) when creds are absent.
+- **`testProcess.acceptance: { match, required, requiresEnv }`** — `match` identifies
+  the live-acc suite in a WI gate; `required: true` hard-fails the cycle if no live-acc
+  WI; `requiresEnv` errors fast (not false-pass) when creds are absent.
 - **`standing_work_item_acs: [...]`** — the live-proof AC (apply → API-read assert →
   idempotency re-plan → clean destroy) + the CI-equivalent push AC, appended to every WI.
-- **`ci_gate_unset_env: [...]`** — env to strip so `ci_gate` mirrors GitHub CI even
-  though the serve env sets the live-test trigger.
+- **`testProcess.ci.unsetEnv: [...]`** — env to strip so `testProcess.ci.cmd` mirrors
+  GitHub CI even though the serve env sets the live-test trigger.
 Compose the project linter into the live-acc per-WI gate (its gate is the acceptance
 test, which omits lint). Enforce C9 on the live tier: UUID-prefixed resources,
 teardown on success AND failure, a `PreCheck` that `t.Fatal`s on absent creds, a

@@ -149,8 +149,8 @@ The full spec — the preserved regression criterion ("no path to merge exists
 with a red full-suite baseline"), the `testProcess.local`/`testProcess.ci`
 keying (R1-03-F1, same PR), and the unattended-remediation mechanism (bounded
 by a shared cap; cap exhaustion parks the initiative `needs-operator`) — is
-recorded in
-[`docs/forge-project-contract.md`](../forge-project-contract.md#the-merge-boundary-full-suite-gate-relocation-spec--operator-review-required-not-yet-enforced),
+recorded in [`docs/forge-project-contract.md`](../forge-project-contract.md),
+in its "The merge-boundary full-suite gate (relocation spec)" section,
 not restated here. This amendment exists solely to record the operator's
 verdict on that spec, per the locked Q3-B decision that flagged this
 relocation for operator review

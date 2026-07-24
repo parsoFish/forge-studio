@@ -257,21 +257,35 @@ function wiOutcomes(cycleId) {
 }
 
 /** Run the project's own test suite post-merge. Prefer the project's declared
- *  quality gate (.forge/project.json quality_gate_cmd) so the gate mirrors what
- *  forge's own dev-loop runs (Go, etc.); fall back to `npm test`. */
+ *  quality gate — `.forge/project.json` `testProcess.local.cmd` (R1-03-F1;
+ *  the flat `quality_gate_cmd` key no longer exists), falling back to the
+ *  `.forge/quality_gate_cmd` sidecar (mirroring loadProjectConfig's
+ *  single-source rule) — so the gate mirrors what forge's own dev-loop runs
+ *  (Go, etc.); last resort `npm test`. A config present but carrying neither
+ *  logs LOUDLY rather than silently downgrading the assertion. */
 function runProjectTests(repoPath) {
   const cfgPath = join(repoPath, '.forge', 'project.json');
   if (existsSync(cfgPath)) {
     try {
       const cfg = JSON.parse(readFileSync(cfgPath, 'utf8'));
-      const cmd = cfg.quality_gate_cmd;
+      let cmd = cfg.testProcess?.local?.cmd;
+      if (!Array.isArray(cmd) || cmd.length === 0) {
+        const sidecarPath = join(repoPath, '.forge', 'quality_gate_cmd');
+        if (existsSync(sidecarPath)) {
+          const raw = readFileSync(sidecarPath, 'utf8').trim();
+          if (raw) cmd = raw.split(/\s+/);
+        }
+      }
+      if (!Array.isArray(cmd) || cmd.length === 0) {
+        log('WARNING: .forge/project.json present but no testProcess.local.cmd (and no sidecar) — the post-merge project-tests gate is falling back to npm test; this weakens the assertion for non-npm projects');
+      }
       if (Array.isArray(cmd) && cmd.length > 0) {
         const label = cmd.join(' ').length > 60 ? `${cmd.slice(0, 4).join(' ')}…` : cmd.join(' ');
         log(`running project quality gate in ${repoPath} (${label})…`);
         const r = spawnSync(cmd[0], cmd.slice(1), { cwd: repoPath, encoding: 'utf8', timeout: 15 * 60_000 });
         return { ran: true, ok: r.status === 0, label };
       }
-    } catch (e) { log(`.forge/project.json quality_gate_cmd unreadable: ${e.message}`); }
+    } catch (e) { log(`.forge/project.json testProcess unreadable: ${e.message}`); }
   }
   if (existsSync(join(repoPath, 'package.json'))) {
     log(`running project tests in ${repoPath} (npm test)…`);

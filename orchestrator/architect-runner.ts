@@ -41,6 +41,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -343,18 +344,33 @@ export async function runArchitectTurn(
   if (phase === 'exploring') {
     // R4-04-F4: enumerate edge cases + brain constraints before drafting.
     // Always a fresh run (a revise round changes the inputs; re-exploring is
-    // one cheap structured turn). Fail-open: an empty/failed exploration is
-    // logged and the session proceeds to drafting without an explore block.
-    const findings = await runExploreStep({
-      status,
-      sessionDir: paths.sessionDir,
-      queryFn,
-      skillPromptPath: input.skillPromptPath,
-      brainIndex,
-      onToolUse,
-      onHeartbeat,
-      onText,
-    });
+    // one cheap structured turn) — the previous round's findings are unlinked
+    // FIRST so a failed re-exploration can never silently feed stale edge
+    // cases into the new draft (review finding: the fail-open message must
+    // stay honest — no findings file means no explore block, ever).
+    // Fail-open covers BOTH the empty-output case and a thrown stream/SDK
+    // error: the stage is advisory enrichment and never bricks the session.
+    try {
+      rmSync(edgeCasesPath(paths.sessionDir), { force: true });
+    } catch {
+      /* best-effort — a stale file that survives is overwritten on success */
+    }
+    let findings: ExploreFindings | null = null;
+    let exploreCrash: string | null = null;
+    try {
+      findings = await runExploreStep({
+        status,
+        sessionDir: paths.sessionDir,
+        queryFn,
+        skillPromptPath: input.skillPromptPath,
+        brainIndex,
+        onToolUse,
+        onHeartbeat,
+        onText,
+      });
+    } catch (err) {
+      exploreCrash = err instanceof Error ? err.message : String(err);
+    }
     logger.emit({
       initiative_id: `architect-session-${input.sessionId}`,
       phase: 'architect',
@@ -364,11 +380,14 @@ export async function runArchitectTurn(
       output_refs: findings ? [edgeCasesPath(paths.sessionDir)] : [],
       message: findings
         ? `exploration stage — ${findings.edgeCases.length} edge case(s), ${findings.brainConstraints.length} brain constraint(s)`
-        : 'exploration stage returned nothing — proceeding to draft without an explore block (fail-open)',
+        : exploreCrash
+          ? `exploration stage crashed — proceeding to draft without an explore block (fail-open): ${exploreCrash}`
+          : 'exploration stage returned nothing — proceeding to draft without an explore block (fail-open)',
       metadata: {
         session_id: input.sessionId,
         edge_cases: findings?.edgeCases.length ?? 0,
         brain_constraints: findings?.brainConstraints.length ?? 0,
+        ...(exploreCrash ? { crashed: true } : {}),
       },
     });
     phase = 'drafting';
@@ -653,9 +672,27 @@ async function runExploreStep(args: {
   if (!output || !Array.isArray(output.edgeCases) || !Array.isArray(output.brainConstraints)) {
     return null;
   }
+  // Item-shape validation (review finding): the downstream renderers consume
+  // these fields verbatim after the EXPENSIVE draft call — drop malformed
+  // items here rather than TypeError-ing the whole turn later.
+  const DISPOSITIONS = new Set(['covered', 'needs-initiative', 'deferred']);
+  const edgeCases = output.edgeCases.filter(
+    (ec): ec is ExploreEdgeCase =>
+      ec !== null &&
+      typeof ec === 'object' &&
+      typeof ec.title === 'string' &&
+      typeof ec.detail === 'string' &&
+      typeof ec.disposition === 'string' &&
+      DISPOSITIONS.has(ec.disposition),
+  );
+  const brainConstraints = output.brainConstraints.filter(
+    (bc): bc is { constraint: string; source: string } =>
+      bc !== null && typeof bc === 'object' && typeof bc.constraint === 'string' && typeof bc.source === 'string',
+  );
+  if (edgeCases.length === 0 && brainConstraints.length === 0) return null;
   const findings: ExploreFindings = {
-    edgeCases: output.edgeCases,
-    brainConstraints: output.brainConstraints,
+    edgeCases,
+    brainConstraints,
     exploreSummary: typeof output.exploreSummary === 'string' ? output.exploreSummary : '',
   };
   writeFileSync(edgeCasesPath(sessionDir), JSON.stringify(findings, null, 2));

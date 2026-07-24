@@ -11,7 +11,7 @@ import { useState } from 'react';
  * brief and (on the bridge side) transitions briefing → working.
  *
  * Matches the Studio CSS-var design system (the `/instructions/<sid>` and
- * `/demo/<sid>` pages render this inside StudioArchitectShell).
+ * `the inline DemoBuilderPanel on /projects/[id]` pages render this inside StudioArchitectShell).
  */
 export function SessionBriefing({
   heading,

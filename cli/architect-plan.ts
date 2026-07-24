@@ -163,7 +163,7 @@ export function renderPlanDoc(session: ArchitectSession): string {
       parts.push('| # | Edge case | Disposition | Detail |');
       parts.push('|---|-----------|-------------|--------|');
       session.explore.edgeCases.forEach((ec, i) => {
-        const t = ec.title.replace(/\|/g, '\\|');
+        const t = ec.title.replace(/\|/g, '\\|').replace(/\n/g, ' ');
         const d = ec.detail.replace(/\|/g, '\\|').replace(/\n/g, ' ');
         parts.push(`| ${i + 1} | ${t} | ${ec.disposition} | ${d} |`);
       });

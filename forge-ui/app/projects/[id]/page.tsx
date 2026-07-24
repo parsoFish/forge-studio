@@ -353,7 +353,8 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               onSessionStarted={handleDemoSessionStarted}
             />
             {activeDemoSid && (
-              <DemoBuilderPanel projectId={id} sessionId={activeDemoSid} onClose={closeDemoPanel} />
+              <DemoBuilderPanel projectId={id} sessionId={activeDemoSid} onClose={closeDemoPanel}
+              onSessionStarted={handleDemoSessionStarted} />
             )}
             <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
           </div>
