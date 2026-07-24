@@ -522,3 +522,63 @@ test('preflight: ok stays false if ANY hard clause fails even when advisory ones
     p.cleanup();
   }
 });
+
+// ── DEMO-ALIGN (R1-03-F3): demo-builds-off-testing alignment, always advisory ──
+
+test('DEMO-ALIGN: capture referencing a test-process token (or test-evidence element) is aligned', () => {
+  const { dir, forgeRoot, cleanup } = happyProject();
+  try {
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: false } },
+      demoProcess: [
+        { kind: 'capture', text: 'Capture the acceptance run output.' },
+        { kind: 'capture', text: 'Anything at all', element: 'test-evidence' },
+        { kind: 'verify', text: 'Assert the output.' },
+      ],
+    }));
+    const r = runPreflight(dir, { forgeRoot });
+    const al = r.clauses.find((c) => c.clause === 'DEMO-ALIGN');
+    assert.ok(al && !al.hard, 'DEMO-ALIGN present and advisory');
+    assert.equal(al.pass, true, al.detail);
+  } finally {
+    cleanup();
+  }
+});
+
+test('DEMO-ALIGN: a divergent capture flags advisory — ok stays true (live evidence is legitimate)', () => {
+  const { dir, forgeRoot, cleanup } = happyProject();
+  try {
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+      testProcess: { local: { cmd: ['npm', 'test'] } },
+      demoProcess: [
+        { kind: 'capture', text: 'Screenshot of the live resource in the portal.', element: 'screenshot' },
+        { kind: 'verify', text: 'Assert the screenshot shows the resource.' },
+      ],
+    }));
+    const r = runPreflight(dir, { forgeRoot });
+    const al = r.clauses.find((c) => c.clause === 'DEMO-ALIGN');
+    assert.ok(al);
+    assert.equal(al.pass, false);
+    assert.match(al.detail, /divergence may be intentional/);
+    assert.equal(r.clauses.filter((c) => c.hard).every((c) => c.pass), r.ok);
+    assert.equal(r.ok, true, 'advisory divergence never fails the preflight');
+  } finally {
+    cleanup();
+  }
+});
+
+test('DEMO-ALIGN: no capture steps (or no config) → not applicable, pass', () => {
+  const { dir, forgeRoot, cleanup } = happyProject();
+  try {
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+      testProcess: { local: { cmd: ['npm', 'test'] } },
+    }));
+    const r = runPreflight(dir, { forgeRoot });
+    const al = r.clauses.find((c) => c.clause === 'DEMO-ALIGN');
+    assert.ok(al);
+    assert.equal(al.pass, true);
+    assert.match(al.detail, /not applicable/);
+  } finally {
+    cleanup();
+  }
+});

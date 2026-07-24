@@ -28,7 +28,7 @@
   "demoProcess": [
     {
       "kind": "capture",
-      "text": "Run `npm run demo` to execute the built mdtoc CLI against test/fixtures/release-notes.md and capture the real generated table of contents."
+      "text": "Run `npm run demo` to execute the built mdtoc CLI against test/fixtures/release-notes.md and capture the real generated table of contents (the same path the acceptance suite proves)."
     },
     {
       "kind": "verify",

@@ -41,6 +41,8 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   // (there is no deterministic generator), so it routes to demo-builder too.
   'DEMO-SKILL': { resolution: 'agent', route: 'demo-builder', fixHint: 'Generate the demo-design skill with the demo agent.' },
   BRAIN: { resolution: 'agent', route: 'brain-fix', fixHint: 'Repair the stale brain citation with the brain-fix agent.' },
+  // R1-03-F3: alignment divergence is a demo-content judgment — the demo agent owns it.
+  'DEMO-ALIGN': { resolution: 'agent', route: 'demo-builder', fixHint: 'Align capture steps with the declared test process (or keep the divergence deliberately — advisory).' },
 
   // USER — needs an operator decision; no safe auto/agent fix.
   C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (testProcess.local.cmd, the .forge/quality_gate_cmd sidecar, or package.json "test").' },

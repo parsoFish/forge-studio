@@ -33,7 +33,7 @@ import {
 } from '../orchestrator/project-config.ts';
 import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
-export type ClauseId = 'C1' | 'C1b' | 'C2' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'ARTIFACTS';
+export type ClauseId = 'C1' | 'C1b' | 'C2' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'DEMO-ALIGN' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -137,6 +137,7 @@ export function runPreflight(
     checkC8(dir),
     checkDemo(dir),
     checkDemoSkill(dir),
+    checkDemoAlignment(cfg),
     checkBuildArtifacts(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
@@ -467,6 +468,71 @@ function checkDemoSkill(dir: string): ClauseResult {
     };
   }
   return { ...base, pass: true, detail: `${DEMO_SKILL_REL} present (generated demo machinery)` };
+}
+
+// --- DEMO-ALIGN: demo-builds-off-testing alignment (ADVISORY, R1-03-F3) ---
+
+/**
+ * The operator diagram's "alignment recommended — demo should largely build
+ * off testing": each demoProcess CAPTURE step SHOULD reference the declared
+ * test process. Heuristic (cheap + honest): a capture step is aligned when
+ * its element kind IS test output (`test-evidence`), or its text mentions a
+ * test-process reference token — a full joined local/ci command string, a
+ * distinctive argv token, or the acceptance `match` substring. ALWAYS
+ * advisory: divergence may be intentional (live REST evidence per the
+ * betterado tier) — flagged, never blocked, and never part of hard readiness.
+ */
+const DEMO_ALIGN_TOKEN_STOPLIST = new Set(['bash', 'npm', 'node', 'make', 'test', 'run', 'npx', 'go']);
+
+export function demoAlignmentTokens(cfg: ProjectConfig): string[] {
+  const tokens = new Set<string>();
+  const cmds = [cfg.testProcess.local.cmd, cfg.testProcess.ci?.cmd ?? []];
+  for (const cmd of cmds) {
+    if (cmd.length === 0) continue;
+    tokens.add(cmd.join(' ').toLowerCase());
+    for (const t of cmd) {
+      const lowered = t.toLowerCase();
+      if (lowered.length >= 4 && !DEMO_ALIGN_TOKEN_STOPLIST.has(lowered) && !lowered.startsWith('-')) {
+        tokens.add(lowered);
+      }
+    }
+  }
+  if (cfg.testProcess.acceptance) tokens.add(cfg.testProcess.acceptance.match.toLowerCase());
+  return [...tokens];
+}
+
+function checkDemoAlignment(cfg: ProjectConfig | null): ClauseResult {
+  const base = {
+    clause: 'DEMO-ALIGN' as const,
+    title: 'Demo builds off the test process (alignment recommended)',
+    hard: false,
+  };
+  const steps = cfg?.demoProcess ?? [];
+  const captures = steps.filter((s) => s.kind === 'capture');
+  if (!cfg || captures.length === 0) {
+    return { ...base, pass: true, detail: 'no capture steps declared — alignment not applicable' };
+  }
+  const tokens = demoAlignmentTokens(cfg);
+  const divergent = captures.filter((s) => {
+    if (s.element === 'test-evidence') return false;
+    const text = s.text.toLowerCase();
+    return !tokens.some((t) => text.includes(t));
+  });
+  if (divergent.length === 0) {
+    return {
+      ...base,
+      pass: true,
+      detail: `all ${captures.length} capture step(s) reference the declared test process`,
+    };
+  }
+  const detail = divergent
+    .map((s) => `capture "${s.text.slice(0, 60)}" does not reference the declared test process`)
+    .join('; ');
+  return {
+    ...base,
+    pass: false,
+    detail: `${detail} — advisory: divergence may be intentional (live evidence); demo should largely build off testing`,
+  };
 }
 
 // --- ARTIFACTS: build-output ignore coverage (ADVISORY, betterado #4a) ---
