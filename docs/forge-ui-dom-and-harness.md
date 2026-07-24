@@ -152,11 +152,18 @@ inventory rather than one shared page-level contract:
   stepping through
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`).
-- **`/demo/[sid]`** — the per-project demo-page builder (brief → generate →
-  lock, element-by-element): shares the Studio-chrome shell —
-  `[data-page="demo-builder"][data-page-ready][data-session-id][data-demo-phase]`
-  — with
-  `[data-section="demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`.
+- **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
+  per-project demo-page builder (brief → generate → lock, element-by-element)
+  is an inline panel on the project page, opened by
+  `[data-action="launch-demo-builder"]` / a `?demo=<sid>` deep link:
+  `[data-section="demo-builder-panel"][data-demo-session][data-demo-phase]`
+  containing the preserved inner contract —
+  `[data-section="session-briefing"|"demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`,
+  `[data-component="demo-review"]`, `[data-demo-iframe]`,
+  `[data-action="submit-brief"|"lock-demo"|"abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`
+  plus a compact `[data-section="demo-status-strip"]`. The old detached
+  `/demo/[sid]` route is a redirect stub
+  (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`).
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
   (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
   (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`; the create form's
