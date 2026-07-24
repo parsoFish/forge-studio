@@ -18,10 +18,10 @@
 
 import { readFileSync } from 'node:fs';
 
-import { loadBrainIndex } from '../cli/brain-index.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { loadBrainIndex } from '../../cli/brain-index.ts';
+import { modelForSpec } from '../phase-agent.ts';
+import { deriveAgentSpec } from '../studio/derive.ts';
+import { skillPath, skillPathRelative } from '../skill-path.ts';
 
 const SKILL_PATH = skillPath('reflector');
 

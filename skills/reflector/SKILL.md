@@ -4,22 +4,22 @@ description: Run a deep structured retrospective at the end of a merged initiati
 library: true
 phase: reflector
 surface: both
-executor: reflect
 purpose: Run the end-of-cycle retrospective and write durable findings into the brain.
 composition:
   skills: [brain-query, brain-ingest]
   tools: []
   mcps: []
-  hooks: [event-log]
+  hooks: [event-log, reflection-close]
 runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
+  loopStrategy: one-shot
 brainAccess: mandatory
 interactivity: Autonomous self-reflection with an optional operator feedback round.
 allowed-tools: [Read, Grep, Glob, Write, Edit, Bash]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
-budgets: {}
+budgets: {maxTurns: 60, maxBudgetUsd: 1.5}
 ---
 
 # Reflector

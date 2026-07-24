@@ -75,14 +75,18 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // R2-01-F2: the declared phase-executor allowlist. These are the ONLY
 // `AgentDefinition.executor` values the flow engine recognises as a
 // phase-specific NodeKind — the DECLARED replacement for the old hardcoded
-// AGENT_KIND object literal. Set via `executor:` frontmatter on the four
-// phase SKILL.md files (project-manager, developer-ralph, developer-unifier,
-// reflector); an agent def with no `executor` resolves to the generic
+// AGENT_KIND object literal. Set via `executor:` frontmatter on the phase
+// SKILL.md files; an agent def with no `executor` resolves to the generic
 // 'agent' kind instead. Lives here (not flow-runner.ts) so validate.ts can
 // import it for the executor/enum lint check without creating a circular
 // import (flow-runner.ts already imports FROM validate.ts for
 // findFanOutViolations).
-export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
+//
+// R4-01-F2 (ADR-039) is retiring this enum row by row as each phase moves to
+// declared dispatch (loopStrategy + band hooks): 'reflect' retired with the
+// reflector migration. The end state is ['unifier'] alone, held until
+// R4-01-F4 retirement.
+export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier'] as const;
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md

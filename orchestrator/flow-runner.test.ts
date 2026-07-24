@@ -916,7 +916,21 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
       ['project-manager', makeAgentDef({ slug: 'project-manager', name: 'PM', executor: 'pm' })],
       ['developer-ralph', makeAgentDef({ slug: 'developer-ralph', name: 'Dev', executor: 'dev' })],
       ['developer-unifier', makeAgentDef({ slug: 'developer-unifier', name: 'Unifier', executor: 'unifier' })],
-      ['reflector', makeAgentDef({ slug: 'reflector', name: 'Reflector', executor: 'reflect' })],
+      // R4-01-F2: the reflector no longer declares an executor — its dispatch
+      // key is the reflection-close band hook (ADR-039), so it resolves to
+      // the generic 'agent' kind and execAgent routes it to the band.
+      [
+        'reflector',
+        makeAgentDef({
+          slug: 'reflector',
+          name: 'Reflector',
+          composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] },
+        }),
+      ],
+      [
+        'legacy-reflect-executor',
+        makeAgentDef({ slug: 'legacy-reflect-executor', name: 'Legacy Reflect', executor: 'reflect' }),
+      ],
       ['generic-lib-agent', makeAgentDef({ slug: 'generic-lib-agent', name: 'Generic Lib Agent' })],
       [
         'bad-executor-agent',
@@ -929,7 +943,16 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     assert.equal(resolveNodeKind({ id: 'pm', agent: 'project-manager' }, agents), 'pm');
     assert.equal(resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }, agents), 'dev');
     assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }, agents), 'unifier');
-    assert.equal(resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents), 'reflect');
+    assert.equal(
+      resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents),
+      'agent',
+      'reflector (band-hook dispatch, no executor) ⇒ the generic agent kind',
+    );
+    assert.equal(
+      resolveNodeKind({ id: 'lrf', agent: 'legacy-reflect-executor' }, agents),
+      'unknown',
+      "the retired executor:'reflect' row is no longer a valid declared executor",
+    );
     assert.equal(
       resolveNodeKind({ id: 'x', agent: 'totally-fake-nonexistent-agent' }, agents),
       'unknown',

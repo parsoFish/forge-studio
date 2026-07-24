@@ -26,6 +26,8 @@ hooks:
   - { id: stall-watchdog, name: Stall watchdog, desc: Heartbeat liveness monitoring. }
   - { id: merge-gate, name: Merge gate, desc: Dependent WIs wait on prerequisite merge. }
   - { id: scratch-strip, name: Scratch strip, desc: Base-guard strips scratch files pre-PR. }
+  - { id: wi-contract, name: WI contract band, desc: "Plan-agent band: work-item validation, spec compile, decompose checkpoint (ADR-039)." }
+  - { id: reflection-close, name: Reflection close band, desc: "Reflect-agent band: merged-guard, retention/lint/recap, merged→done promote (ADR-039)." }
 # Curated showcase of proven community skills forge ships in its OOTB library
 # (reference metadata only — `source` is upstream; `composedBy` names forge agents).
 community-skills:

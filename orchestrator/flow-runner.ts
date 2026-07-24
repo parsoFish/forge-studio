@@ -67,6 +67,7 @@ import {
   preservingForgeScratch,
 } from './cycle-helpers.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
+import { resolveBandHook, type BandHookId } from './agent-bands.ts';
 import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
@@ -226,8 +227,7 @@ export type NodeKind =
   | 'dev'         // agent def declares executor:'dev' (developer-ralph, fanOut:'work-items')
   | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
-  | 'reflect'     // agent def declares executor:'reflect' (reflector)
-  | 'agent'       // agent def exists, no executor declared — generic F1 runAgent path (R2-01-F2)
+  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); a declared band hook (ADR-039, e.g. reflector's reflection-close) routes to its band executor inside execAgent
   | 'unknown';    // defensive fallback — no def, or an invalid declared executor
 
 /**
@@ -693,7 +693,14 @@ const execReview: NodeExecutor = async (ctx) => {
   state.cycleOutcome = state.closure.outcome as CycleOutcome;
 };
 
-/** reflect: only when the closure confirmed a merge (G10). */
+/**
+ * The `reflection-close` band (R4-01-F2, ADR-039) — formerly the dedicated
+ * `reflect` NodeKind's executor, now selected by the reflector def's declared
+ * `composition.hooks` entry instead of a privileged executor enum. Semantics
+ * unchanged: runs only when the closure confirmed a merge (G10), records a
+ * reflection loss on a caller-side crash, and ALWAYS promotes `merged → done`
+ * in the finally (R4-11-F1 — reflection-lost still reaches done).
+ */
 const execReflect: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
   if (!state.closure?.merged) return;
@@ -791,6 +798,11 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
+  // ADR-039: a declared band hook routes this node to its orchestrator band
+  // (the phase pipeline machinery) instead of the bare generic spawn.
+  const bandHook = resolveBandHook(def);
+  if (bandHook) return AGENT_BAND_EXECUTORS[bandHook](ctx);
+
   const prompt = buildAgentPrompt(def, ctx);
 
   await runAgent(def, {
@@ -818,9 +830,20 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   dev: execDev,
   unifier: execUnifier,
   review: execReview,
-  reflect: execReflect,
   agent: execAgent,
   unknown: execUnknown,
+};
+
+/**
+ * Band-hook id → executor (ADR-039). The KEY is declared data (a
+ * `composition.hooks` entry on the agent's SKILL.md); the executors are the
+ * same orchestrator-band implementations the retired phase-executor rows
+ * carried. `wi-contract` is registered ahead of the PM's own migration in
+ * this same change-set so the table is total over BAND_HOOK_IDS.
+ */
+const AGENT_BAND_EXECUTORS: Readonly<Record<BandHookId, NodeExecutor>> = {
+  'wi-contract': execPm,
+  'reflection-close': execReflect,
 };
 
 // ---------------------------------------------------------------------------
@@ -963,11 +986,17 @@ export async function runFlow({
     };
 
     // ADR-027: assert the node's inbound artifacts exist before it runs. The
-    // reflect node is exempt — its inbound `verdict` is produced by the human
-    // review gate (async in unattended mode); verdict.json is persisted at the
-    // decision point, not by a producing node. A dry run produces no real
-    // artifacts, so enforcement is skipped there.
-    if (kind !== 'reflect' && !input.dryRun) {
+    // reflect node (the agent carrying the reflection-close band, ADR-039) is
+    // exempt — its inbound `verdict` is produced by the human review gate
+    // (async in unattended mode); verdict.json is persisted at the decision
+    // point, not by a producing node. A dry run produces no real artifacts,
+    // so enforcement is skipped there.
+    const nodeDefForExemption = node.agent ? agents.get(node.agent) : undefined;
+    const isReflectionCloseNode =
+      kind === 'agent' &&
+      nodeDefForExemption !== undefined &&
+      resolveBandHook(nodeDefForExemption) === 'reflection-close';
+    if (!isReflectionCloseNode && !input.dryRun) {
       assertInboundArtifacts({
         flow,
         nodeId,

@@ -23,8 +23,8 @@ import {
   REFLECTOR_DISALLOWED_TOOLS,
   buildReflectorSystemPrompt,
   renderReflectorUserPrompt,
-} from './reflector-invocation.ts';
-import { modelForSpec } from './phase-agent.ts';
+} from './reflector-binding.ts';
+import { modelForSpec } from '../phase-agent.ts';
 
 // ---------------------------------------------------------------------------
 // reflectorAgentSpec shape
