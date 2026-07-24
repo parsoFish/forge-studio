@@ -79,3 +79,13 @@ All phase infrastructure is live:
 - [x] Roadmap is a derived view (architect does not write roadmap.md) — ARCH-2.
 - [x] Feature list removed from manifests — ARCH-3 resolved: architect emits initiatives with GWT ACs in the body; PM decomposes ACs directly into WIs (2026-06-04).
 - [x] `forge studio` is the canonical launcher (`forge watch` alias was removed in M8-E — ADR 031).
+
+## Exploration stage (R4-04-F4, 2026-07-24)
+
+An explicit `exploring` phase runs between interview-done and drafting: one
+structured turn enumerating edge cases (dispositions: `covered` /
+`needs-initiative` / `deferred` — nothing enumerated may silently vanish) and
+brain-sourced constraints (each citing its theme). Findings persist to the
+session's `edge-cases.json`, feed the draft prompt (constraint→AC
+propagation), and render in PLAN.md/PLAN.html as "Edge cases & constraints".
+Fail-open: an empty/failed exploration is logged and the session proceeds.

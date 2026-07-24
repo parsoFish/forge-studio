@@ -532,6 +532,7 @@ export async function fetchDemoModel(cycleId: string): Promise<DemoModel | null>
 export type ArchitectPhase =
   | 'interviewing'
   | 'awaiting-answers'
+  | 'exploring'
   | 'drafting'
   | 'awaiting-verdict'
   | 'finalizing'

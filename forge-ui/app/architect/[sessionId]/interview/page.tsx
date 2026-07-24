@@ -125,11 +125,13 @@ export default function ArchitectInterviewPage({
               />
             ) : null}
 
-            {(session.phase === 'interviewing' || session.phase === 'drafting' || session.phase === 'finalizing') && (
+            {(session.phase === 'interviewing' || session.phase === 'exploring' || session.phase === 'drafting' || session.phase === 'finalizing') && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 <Status
                   label={
-                    session.phase === 'drafting'
+                    session.phase === 'exploring'
+                      ? 'The architect is exploring edge cases…'
+                      : session.phase === 'drafting'
                       ? 'The architect is drafting the plan…'
                       : session.phase === 'finalizing'
                       ? 'The architect is finalizing the plan…'

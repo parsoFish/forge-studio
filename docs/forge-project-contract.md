@@ -9,6 +9,11 @@
 > surface* is
 > [`forge-ui/components/studio/project-builder/ContractReadiness.tsx`](../forge-ui/components/studio/project-builder/ContractReadiness.tsx).
 > Last aligned to [ADR-035](./decisions/035-forge-owned-central-artifacts.md) (accepted 2026-06-20, amended 2026-06-23): Brain 3 and durable cycle history now live centrally in the forge repo.
+>
+> **2026-07-24 (R1-03-F1):** the flat gate keys (`quality_gate_cmd`, `ci_gate`,
+> `ci_fix_cmd`, `ci_gate_unset_env`, `acceptance_gate`) became the typed
+> `testProcess` object (`testProcess.local` / `testProcess.ci` /
+> `testProcess.acceptance`); flat keys are rejected with a migration message.
 
 ---
 
@@ -107,9 +112,11 @@ only to explicitly leave unbound when Brain 3 doesn't exist yet).
 ## Face B — Operational clauses
 
 These clauses are checked by `forge preflight <project>`. Hard clauses
-(C1/C2/C4) fail the preflight (non-zero exit); advisory clauses
-(C5/C6/C8/DEMO/DEMO-SKILL/ARTIFACTS/BRAIN) surface as warnings that never flip
-the verdict.
+(C1/C2/C4) fail the preflight (non-zero exit); C1b and C7 are conditionally
+hard — C1b once `testProcess.ci` is declared, C7 once
+`testProcess.acceptance.required` is `true`; advisory clauses
+(C5/C6/C8/DEMO/DEMO-SKILL/DEMO-ALIGN/ARTIFACTS/BRAIN) surface as warnings that
+never flip the verdict.
 
 **Guided resolution (Stage D).** Each failing clause is classified into a
 resolution tier (`cli/preflight-resolve.ts` `classifyClause`, mirroring the
@@ -117,10 +124,10 @@ brain-lint pattern) and surfaced in the project-builder `ContractResolutionPanel
 - **auto** — `C2`/`ARTIFACTS` (append to `.gitignore`), `C4` (scaffold `roadmap.md`
   + central brain `profile.md` stubs). One click applies every fixer
   (`cli/preflight-fix-auto.ts`), then re-runs preflight to confirm each cleared.
-- **agent** — `C8` routes to the Stage-A instructions creator, `DEMO`/`DEMO-SKILL`
-  to the Stage-B demo builder, `BRAIN` to brain-fix. The operator authors it in
-  the matching builder (no auto-generation of an agent-instruction file — C8 stays
-  human-confirmed).
+- **agent** — `C8` routes to the Stage-A instructions creator, `DEMO`/`DEMO-SKILL`/
+  `DEMO-ALIGN` to the Stage-B demo builder, `BRAIN` to brain-fix. The operator
+  authors it in the matching builder (no auto-generation of an agent-instruction
+  file — C8 stays human-confirmed).
 - **user** — `C1`/`C5`/`C6` need an operator decision; that decision drives
   the `preflight-fix` agent (`orchestrator/preflight-fix-runner.ts`), which applies
   it minimally and re-runs preflight as the verification gate.
@@ -141,8 +148,10 @@ files and do not flow through this transaction.
 
 **One command, deterministic, green at HEAD, fast (≤ 10 s), and genuinely
 discriminating** — it must fail before the work exists and pass only when the
-acceptance criteria are met. Declared as `quality_gate_cmd` in
-`.forge/project.json`.
+acceptance criteria are met. Declared as `testProcess.local.cmd` in
+`.forge/project.json` (omittable there when the `.forge/quality_gate_cmd`
+sidecar declares it — the loader single-sources from the sidecar when the JSON
+omits `testProcess.local`).
 
 Three silent failure modes observed in production:
 
@@ -162,16 +171,18 @@ author it from [`docs/gate-script-template.md`](./gate-script-template.md)
 (`set -euo pipefail` + explicit per-step `fail()` asserts; bare `! cmd` asserts
 are errexit-exempt and forbidden — their failures silently don't fail the gate).
 
-#### C1b — CI alignment *(HARD when `ci_gate` is populated)*
+#### C1b — CI alignment *(HARD when `testProcess.ci` is populated)*
 
-The per-WI `quality_gate_cmd` must be the CI command or a strict subset subsumed
-by it. Structural seams in `.forge/project.json`:
+The per-WI `quality_gate_cmd` (HARD structural) must be the CI command or a
+strict subset subsumed by it; `testProcess.ci` presence itself is advisory, but
+its shape is HARD once declared (C1b). Structural seams in
+`.forge/project.json`, all nested under `testProcess`:
 
-- `ci_gate` — the full CI command (used verbatim for CI-mirror WIs and as the
+- `ci.cmd` — the full CI command (used verbatim for CI-mirror WIs and as the
   final delivery gate before opening a PR).
-- `ci_fix_cmd` — auto-formatters run before `ci_gate`.
-- `ci_gate_unset_env` — strips live-test triggers from the env when running
-  `ci_gate`, so it mirrors GitHub CI's clean environment.
+- `ci.fixCmd` — auto-formatters run before `ci.cmd`.
+- `ci.unsetEnv` — strips live-test triggers from the env when running
+  `ci.cmd`, so it mirrors GitHub CI's clean environment.
 
 ---
 
@@ -232,34 +243,35 @@ remote exists.
 
 ---
 
-### C7 — External-resource model *(HARD when `acceptance_gate.required = true`)*
+### C7 — External-resource model *(HARD when `testProcess.acceptance.required = true`)*
 
 For projects whose behaviour can only be verified against a live external system,
 the done-signal must split into two tiers, both declared in `.forge/project.json`.
 
 **Tier 1 — per-WI (every dev-loop iteration):** fast, creds-free, deterministic,
-≤ 10 s. The `quality_gate_cmd` — never requires live external systems.
+≤ 10 s. `testProcess.local` — never requires live external systems.
 
-**Tier 2 — pre-PR (once per cycle):** the `ci_gate` with live-test triggers
-stripped via `ci_gate_unset_env`, plus a mandatory live-acceptance WI whose
+**Tier 2 — pre-PR (once per cycle):** `testProcess.ci` with live-test triggers
+stripped via `testProcess.ci.unsetEnv`, plus a mandatory live-acceptance WI whose
 per-WI gate runs with live creds.
 
-Three structural seams in `.forge/project.json` make the two-tier model
-impossible to bypass:
+Three structural seams in `.forge/project.json`, all nested under the typed
+`testProcess` object (R1-03-F1), make the two-tier model impossible to bypass:
 
-**`acceptance_gate: { match, required, requires_env }`** — when `required: true`,
-the PM phase hard-fails unless ≥ 1 emitted WI has a `quality_gate_cmd` token
-matching `match`. `requires_env` closes the false-pass hole: a matching gate
-whose listed env vars are unset is **errored**, not silently skipped.
-`requires_env` must list every var the test's `PreCheck` demands.
+**`testProcess.acceptance: { match, required, requiresEnv }`** — when
+`required: true`, the PM phase hard-fails unless ≥ 1 emitted WI has a
+`quality_gate_cmd` token matching `match`. `requiresEnv` closes the
+false-pass hole: a matching gate whose listed env vars are unset is
+**errored**, not silently skipped. `requiresEnv` must list every var the
+test's `PreCheck` demands.
 
 **`standing_work_item_acs: string[]`** — verbatim testing invariants appended
 to every WI body as a `## Standing acceptance criteria (project contract)`
 section. Encodes project-wide invariants as structural injection rather than
 per-WI PM judgment.
 
-**`ci_gate_unset_env: string[]`** — strips live-test triggers from the env
-before the final CI delivery gate runs.
+**`testProcess.ci.unsetEnv: string[]`** — strips live-test triggers from the
+env before the final CI delivery gate runs.
 
 Live-tier discipline: each live test creates uniquely named resources
 (UUID-prefixed); teardown runs on success AND failure; creds via a gitignored
@@ -491,10 +503,9 @@ nothing ships red as a result. This section relocates *where* that guarantee
 executes; it does not redesign the guarantee itself.
 
 **What relocates.** `composedUnifierGate`'s `initiative_gate` sub-check
-(`orchestrator/phases/developer-loop.ts`, function at `:2855`; the five-sub-check
-contract documented at `:2818`-`:2831`; wired into the unifier's Ralph loop at the
-call site `:2507`-`:2532`) — today's project `quality_gate_cmd` run against the
-post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
+(part of its five-sub-check contract in `orchestrator/phases/developer-loop.ts`,
+wired into the unifier's Ralph loop) — today's project `quality_gate_cmd` run
+against the post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
 orchestrator-executed band at the develop flow's merge boundary (not an agent
 node), per [ADR-036](./decisions/036-orchestrator-owned-gate-execution.md)'s rule
 that agents judge and the orchestrator executes. It is keyed off the **new
@@ -507,8 +518,8 @@ introduced in this same PR; `.forge/project.json`, loader in
 - `testProcess.ci` — the delivery net, run hermetic via the project's declared
   env-strip (today's `ci_gate`/`ci_fix_cmd` + `ci_gate_unset_env`, C1b) — the
   same env-stripping `composedUnifierGate` already applies at its call site and
-  the same boundary the final CI delivery gate (`decideFinalCiGate`,
-  `orchestrator/cycle.ts:582`) enforces today.
+  the same boundary the final CI delivery gate (`decideFinalCiGate`, in
+  `orchestrator/cycle.ts`) enforces today.
 
 The relocation re-homes *where* these two runs execute (unifier band → flow-engine
 merge-boundary band); `testProcess.local`/`testProcess.ci` are the typed names
@@ -516,9 +527,9 @@ for the fields the gate already reads.
 
 **Results flow TO agents, never from them.** The merge-boundary gate's verdict
 reaches the demo/review agents through the same seam the unifier and dev-loop
-already use: `.forge/last-gate-failure.md` (`lastGateFailurePath`,
-`orchestrator/phases/developer-loop.ts:1654`-`:1656`; write/clear behaviour in
-`writeGateFeedback` at `:1712` and `writeUnifierGateFeedback` at `:3326`). The
+already use: `.forge/last-gate-failure.md` (`lastGateFailurePath`, in
+`orchestrator/phases/developer-loop.ts`; write/clear behaviour in
+`writeGateFeedback` and `writeUnifierGateFeedback`, same file). The
 file is deleted on every passing gate run and at session start, so its
 **present ⇒ fresh** rule holds unchanged: if an agent reads it, the failure is
 live, not a fossil.
@@ -564,16 +575,17 @@ part of this spec.
 | demoProcess | UI readiness | ≥ 1 capture + ≥ 1 verify step |
 | skills | UI readiness | ≥ 1 slug |
 | kb | UI readiness | Non-null string |
-| C1 / C1b | `forge preflight` — **HARD** | Structural: single command, not a slow umbrella; `ci_gate` presence |
+| C1 / C1b | `forge preflight` — **HARD** | C1 `testProcess.local` (HARD structural); C1b `testProcess.ci` — presence advisory, shape HARD when declared |
 | C2 | `forge preflight` — **HARD** | git-truth: `git ls-files` + `git check-ignore` |
 | C4 | `forge preflight` — **HARD** | `roadmap.md` (project repo) + `brain/projects/<name>/profile.md` (central forge repo) existence |
 | C5 | `forge preflight` — advisory | Constraints doc presence |
 | C6 | `forge preflight` — advisory | GitHub remote existence |
-| C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requires_env` guard) | `acceptance_gate` enforcement; `ci_gate_unset_env` on final delivery gate |
+| C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requiresEnv` guard) | `testProcess.acceptance` enforcement; `testProcess.ci.unsetEnv` on final delivery gate |
 | C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
 | C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
 | DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
+| DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
 | MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/R4-ootb-suite.md` R4-10-F2) |
@@ -595,12 +607,12 @@ flow-ready — the flow engine will not accept it.
 | demoProcess | `capture`: `terraform apply` run; `verify`: ADO API GET assert + idempotency re-plan; `present`: portal screenshot |
 | skills | `forge-onboard-project`, `demo` |
 | kb | `betterado` (Brain 3 at `brain/projects/betterado/` in the central forge repo) |
-| **C1 / C1b** | `quality_gate_cmd`: `go test -tags all -count=1 ./...` scoped to changed packages. `ci_gate`: `make test && golangci-lint run ./... && make terrafmt-check`. `ci_fix_cmd`: `make fmt && make terrafmt` |
+| **C1 / C1b** | `testProcess.local.cmd` (via the `.forge/quality_gate_cmd` sidecar): `go test -tags all -count=1 ./...` scoped to changed packages. `testProcess.ci.cmd`: `make test && golangci-lint run ./... && make terrafmt-check`. `testProcess.ci.fixCmd`: `make fmt && make terrafmt` |
 | **C2** | `.gitignore` covers `.forge/work-items/`, compiled provider binary, `*.tfstate`, `.terraform/`. `.forge/project.json` force-tracked |
 | **C4** | `roadmap.md` at project root. Brain seeded with `profile.md`, release substrate context, failure-mode themes |
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
-| C7 | `acceptance_gate: { match: "acceptancetests", required: true, requires_env: ["TF_ACC"] }`. `ci_gate_unset_env: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
+| C7 | `testProcess.acceptance: { match: "acceptancetests", required: true, requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
 | C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
 | DEMO | `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; requires real ADO REST round-trip evidence (API GET response) when creds are present |

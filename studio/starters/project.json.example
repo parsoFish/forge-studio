@@ -37,14 +37,56 @@
   // kb (optional): the knowledge-base id this project's brain binds to, or null.
   "kb": null,
 
-  // ── Quality gate (C1, HARD) ───────────────────────────────────────────────
+  // ── Test process (C1 local HARD; C1b ci HARD once declared; C7 acceptance
+  //     HARD only when required=true) ─────────────────────────────────────
 
-  // quality_gate_cmd (required): ONE deterministic command, green at HEAD, that
-  // proves a change is good. Argv array (no shell pipes/&&/;). Must be fast and
-  // not require live external systems. Examples by project type:
+  // testProcess.local (required): the fast per-WI gate — ONE deterministic
+  // command, green at HEAD, that proves a change is good. Argv array (no
+  // shell pipes/&&/;). Must be fast and not require live external systems.
+  // Examples by project type:
   //   library/api:   ["npm","test"]      ["go","test","./..."]    ["pytest","-q"]
-  //   infra/provider:["go","test","./..."]  (unit tier; live tier via acceptance_gate)
-  "quality_gate_cmd": ["<test-runner>", "<args>"],
+  //   infra/provider:["go","test","./..."]  (unit tier; live tier via testProcess.acceptance)
+  // `cmd` may be OMITTED here if the `.forge/quality_gate_cmd` sidecar (a
+  // single whitespace-separated command line) declares it instead — the
+  // loader single-sources from the sidecar when the JSON omits
+  // testProcess.local.cmd; when both are present, the JSON wins (explicit
+  // override).
+  "testProcess": {
+    "local": {
+      "cmd": ["<test-runner>", "<args>"]
+      // , "timeoutMs": 1800000   // overrides the 30-min default; FORGE_GATE_TIMEOUT_MS still wins
+    }
+
+    // ci (optional, C1b — HARD shape once declared): the full CI command,
+    // when testProcess.local is a strict subset of it. Run DIRECTLY
+    // (operator-trusted) as the final delivery gate before a PR opens.
+    // , "ci": {
+    //   "cmd": ["<full-ci-command>", "<args>"],
+    //   "fixCmd": ["<auto-formatter-command>", "<args>"],
+    //   "unsetEnv": ["<LIVE_TEST_TRIGGER_VAR>"],
+    //   "timeoutMs": 1200000
+    // }
+
+    // acceptance (optional, C7 — HARD only when required=true): declare this
+    // ONLY if the project has a live/external acceptance tier (e.g. a
+    // Terraform provider hitting a real API). Omit it entirely otherwise.
+    //   match       — substring identifying a live-acceptance gate in a WI's
+    //                 quality_gate_cmd (e.g. "TF_ACC=1").
+    //   required    — when true, the PM phase hard-fails a cycle unless >= 1
+    //                 WI carries a matching live gate.
+    //   requiresEnv — every env var a matching live gate needs to actually
+    //                 run against the live system (e.g.
+    //                 ["TF_ACC","AZDO_ORG_SERVICE_URL"]). These are looked up
+    //                 in the project's gitignored secrets.env (see
+    //                 docs/getting-started.md). If a matching gate runs with
+    //                 one of these unset, the dev-loop ERRORS the gate (no
+    //                 false pass).
+    // , "acceptance": {
+    //   "match": "<live-gate token, e.g. TF_ACC=1>",
+    //   "required": true,
+    //   "requiresEnv": ["<ENV_VAR_1>", "<ENV_VAR_2>"]
+    // }
+  },
 
   // ── Demo shape (DEMO, advisory) ───────────────────────────────────────────
 
@@ -62,32 +104,7 @@
   // artifactRoot (optional, default "."): where the project's committed forge
   // artifacts live — its Brain 3 (<artifactRoot>/brain/profile.md) + history.
   // "." keeps brain/ at the project root.
-  "artifactRoot": ".",
-
-  // ── Live-acceptance gate (C7, HARD only when required=true) ───────────────
-  //
-  // Declare this block ONLY if the project has a live/external acceptance tier
-  // (e.g. a Terraform provider hitting a real API). Omit it entirely otherwise.
-  //
-  //   match        — substring identifying a live-acceptance gate in a WI's
-  //                  quality_gate_cmd (e.g. "TF_ACC=1").
-  //   required     — when true, the PM phase hard-fails a cycle unless >= 1 WI
-  //                  carries a matching live gate.
-  //   requires_env — every env var a matching live gate needs to actually run
-  //                  against the live system (e.g. ["TF_ACC","AZDO_ORG_SERVICE_URL"]).
-  //                  These are looked up in the project's gitignored secrets.env
-  //                  (see docs/getting-started.md). If a matching gate runs with
-  //                  one of these unset, the dev-loop ERRORS the gate (no false pass).
-  //
-  // "acceptance_gate": {
-  //   "match": "<live-gate token, e.g. TF_ACC=1>",
-  //   "required": true,
-  //   "requires_env": ["<ENV_VAR_1>", "<ENV_VAR_2>"]
-  // },
-
-  // ci_gate (optional): the full CI command, when quality_gate_cmd is a strict
-  // subset of it. Used as the post-merge whole-project gate.
-  "ci_gate": ["<full-ci-command>", "<args>"]
+  "artifactRoot": "."
 
   // releaseProcess (optional, C10): opt into the release flow. Declaring it
   // turns on (1) an in-cycle DRAFT changelog (every WI's standing ACs), (2) a

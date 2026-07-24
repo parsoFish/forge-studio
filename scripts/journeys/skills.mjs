@@ -25,8 +25,12 @@ async function waitForEditMarker(ms = 8000) {
   return false;
 }
 
-/** Parse the demo-builder session id out of a /demo/<sid> URL (null if not there). */
+/** Parse the demo-builder session id out of a project-page ?demo=<sid> URL
+ * (R1-03-F2 — the builder is an inline panel; the old /demo/<sid> path form
+ * is also still parsed for the redirect-stub hop). */
 function demoSidFromUrl(url) {
+  const q = /[?&]demo=([^&#]+)/.exec(url);
+  if (q) return decodeURIComponent(q[1]);
   const m = /\/demo\/([^/?#]+)/.exec(url);
   return m ? decodeURIComponent(m[1]) : null;
 }
@@ -244,9 +248,11 @@ export const journey = defineJourney({
 
               // The REAL click: fix-agent dispatch → demo-builder session → navigation.
               await page.locator(resolveBtn).click().catch(() => {});
-              await page.waitForURL('**/demo/**', { timeout: 15000 }).catch(() => {});
+              // R1-03-F2: the resolution opens the INLINE panel on the project page
+              // (?demo=<sid>), not a detached route.
+              await page.waitForURL('**demo=**', { timeout: 15000 }).catch(() => {});
               const sid = demoSidFromUrl(page.url());
-              check(!!sid, `SK-4: the agent route lands on a demo-builder session (${page.url()})`);
+              check(!!sid, `SK-4: the agent route opens an inline demo-builder session on the project page (${page.url()})`);
               ctx.seeded.demoSid = sid; // crash-safe sweep via the runner's finally
 
               // Brief the agent for real (the bridge flips briefing → generating; the
@@ -255,8 +261,8 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-section="session-briefing"]', { timeout: 15000 }).catch(() => {});
               await page.locator('[data-field="briefing-notes"]').fill(AGENTIC_BRIEF).catch(() => {});
               await page.locator('[data-action="submit-brief"]').click().catch(() => {});
-              await page.waitForFunction(() => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'generating', null, { timeout: 15000 }).catch(() => {});
-              check(await page.evaluate(() => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'generating'), 'SK-4: the briefed session enters generating (the pending state the real agent runs in)');
+              await page.waitForFunction(() => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'generating', null, { timeout: 15000 }).catch(() => {});
+              check(await page.evaluate(() => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'generating'), 'SK-4: the briefed session enters generating (the pending state the real agent runs in)');
               if (sid) demoEvent(sid, 'start', 'demo-builder turn (staged) — authoring .forge/skills/demo-design/SKILL.md');
               await caption(page, 'The demo-builder agent authors the skill — staged for this walkthrough; a real run writes the same file.');
               await frame(page, 'sk-5-generating', 'Part 2 (skills) — the agent turn pending (generation staged for the demo)');
@@ -286,7 +292,7 @@ export const journey = defineJourney({
                 await p.waitForFunction(() => document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') === 'ok', null, { timeout: 15000 }).catch(() => {});
                 await sleep(1600); // dwell on the failing clause + its agent-tier offer
                 await p.locator(resolveBtn).click().catch(() => {});
-                await p.waitForURL('**/demo/**', { timeout: 15000 }).catch(() => {});
+                await p.waitForURL('**demo=**', { timeout: 15000 }).catch(() => {});
                 clipSid = demoSidFromUrl(p.url());
                 await p.waitForSelector('[data-section="session-briefing"]', { timeout: 10000 }).catch(() => {});
                 await p.locator('[data-field="briefing-notes"]').fill(AGENTIC_BRIEF).catch(() => {});

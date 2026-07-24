@@ -15,6 +15,7 @@ export type HexMeta = { glow: string; frac: number; label: string };
 export const ARCHITECT_HEX_META: Record<ArchitectPhase, HexMeta> = {
   interviewing: { glow: STATUS_COLOR.active, frac: 0.15, label: 'thinking' },
   'awaiting-answers': { glow: STATUS_COLOR.attention, frac: 0.3, label: 'needs your answers' },
+  exploring: { glow: STATUS_COLOR.active, frac: 0.45, label: 'exploring edge cases' },
   drafting: { glow: STATUS_COLOR.active, frac: 0.55, label: 'drafting the plan' },
   'awaiting-verdict': { glow: STATUS_COLOR.attention, frac: 0.8, label: 'plan ready — your call' },
   finalizing: { glow: STATUS_COLOR.active, frac: 0.92, label: 'finalizing manifests' },
@@ -24,6 +25,7 @@ export const ARCHITECT_HEX_META: Record<ArchitectPhase, HexMeta> = {
 
 /** Phases where the architect runner is actively working (hex reads "active"). */
 export const ARCHITECT_WORKING_PHASES = new Set<ArchitectPhase>([
+  'exploring',
   'interviewing',
   'drafting',
   'finalizing',

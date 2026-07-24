@@ -1349,16 +1349,39 @@ async function handleArchitect(
         return true;
       }
       const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      const status = readStatus(dir);
-      if (!status) {
-        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+      // R4-04 review finding: guard + serialize like applyPlanVerdict — the
+      // interview→exploring→drafting turn is longer now, and an answer
+      // landing mid-turn would yank a live session back to 'interviewing'
+      // (a stray double-submit could previously do the same). The lock
+      // serializes against the runner's own status writes; the phase guard
+      // 409s anything that isn't actually waiting for answers.
+      const statusPath = join(dir, 'status.json');
+      let round = 0;
+      let release: (() => Promise<void>) | null = null;
+      try {
+        release = await lockfile.lock(statusPath, { retries: { retries: 5, minTimeout: 50 } });
+      } catch {
+        sendJson(res, 409, { error: 'session is busy — try again' }, origin);
         return true;
       }
-      const answersPath = join(dir, 'answers.json');
-      const prior = readJsonFile<{ round: number; answers: unknown[] }[]>(answersPath) ?? [];
-      const round = prior.length + 1;
-      writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
-      writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
+      try {
+        const status = readStatus(dir);
+        if (!status) {
+          sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+          return true;
+        }
+        if (status.phase !== 'awaiting-answers') {
+          sendJson(res, 409, { error: `session is not awaiting answers (phase: ${status.phase})` }, origin);
+          return true;
+        }
+        const answersPath = join(dir, 'answers.json');
+        const prior = readJsonFile<{ round: number; answers: unknown[] }[]>(answersPath) ?? [];
+        round = prior.length + 1;
+        writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
+        writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
+      } finally {
+        if (release) await release().catch(() => {});
+      }
       spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, body.sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/answer', body.sessionId) }, origin);

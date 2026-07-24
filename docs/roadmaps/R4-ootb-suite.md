@@ -345,7 +345,26 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-04 Architect agent refinement
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **implemented** (2026-07-24, wave-4 session 2, branch `feat/r4-04-architect-refinement`) — largely an
+  **as-built reconciliation**: the understand pass found F1/F2/F3 substantially pre-existing (the 2026-07-17 baseline
+  text R4-B3 was stale); the genuinely new build is **F4**, the explicit exploration stage.  ·  **Wave:** 4
+- **Implemented-notes (2026-07-24):**
+  - **F1 — as-built (no change):** the interview is already multi-round (bounded, cap 4; LLM decides `done` per
+    round), options + free-text answers round-trip, and the revise loop (`awaiting-verdict → interviewing`)
+    iterates the draft. The rich non-text PLAN surface (mockups) stays deferred on R2-05 (soft dep, unbuilt).
+  - **F2 — as-built (no change):** the completeness critic already runs INSIDE `runFinalizeStep` (one-shot per
+    session, advisory, findings bounce to `awaiting-verdict`, re-approve = ack; `completeness-critic-runner.ts`).
+    Its mechanics (findings block promotion; one-shot) are test-pinned in `architect-runner.test.ts`.
+  - **F3 — as-built (no change):** architect FINALIZE promotes WI-less manifests; freshly-accepted initiatives
+    land `data-plan-state="unplanned"` behind R4-11-F2's blocked-until-planned lock; the scheduler's
+    forge-architect decompose (or the per-initiative Plan trigger) flips them planned.
+  - **F4 — BUILT:** the `exploring` phase between interview-done and drafting (`ArchitectPhase` + runner
+    dispatch): one structured turn (`EXPLORE_SCHEMA`) enumerating edge cases with dispositions
+    (`covered`/`needs-initiative`/`deferred` — the scope-ledger discipline) + brain-sourced constraints citing
+    theme paths; persisted to `edge-cases.json`; injected into the draft prompt with propagation instructions;
+    rendered in PLAN.md/PLAN.html ("Edge cases & constraints"); fail-open (an empty exploration logs + proceeds).
+    UI: hex meta + working-phase set + `data-architect-phase="exploring"`; flows-run journey beat asserts the
+    stage. `skills/architect/SKILL.md` gains the stage's process section; operator-journey gap #6 closed.
 - **Depends on:** — (soft: R4-05 fixes the hand-off shape it emits into)
 - **Context:** Operator diagram: refined current architect; roadmap-level
   planning for a contract-clean project; generates initiatives filling the
@@ -847,3 +866,11 @@ free R4 ID's features.
   F4). Parity: golden spawn-captures pin PM/reflector {prompt, options} byte-identical. **Status in-progress: the
   PR is held open for the operator-gated frozen-SHA `verify:cycle` routine run (the F2 AC's real-run half); F4
   retirement stays planned for end of wave 4.**
+- 2026-07-24 — **Wave-4 session 2: R4-04 implemented** (branch `feat/r4-04-architect-refinement`). Reconciliation:
+  F1 (multi-round interview + revise loop), F2 (completeness critic in FINALIZE), F3 (WI-less registration +
+  blocked-until-planned) were already as-built — the stale R4-B3 framing corrected in the implemented-notes. New
+  build: **F4 exploring stage** (edge-case enumeration with dispositions + brain-constraint→AC propagation,
+  `edge-cases.json`, PLAN section, fail-open; operator-journey gap #6 closed). R1-03 rides the same session
+  (branch `feat/r1-03-contract-processes`): F1 typed `testProcess` (+ real preflight C1b/C7 + DEMO-ALIGN F3),
+  F2 demo-builder folded into the project page, F4 merge-boundary-gate relocation spec ⚑ awaiting the operator
+  verdict in the ADR-036 amendment.

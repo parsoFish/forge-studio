@@ -6,14 +6,16 @@
 
 ## When a gate is a script
 
-`quality_gate_cmd` is a single argv array and the orchestrator **hard-rejects
+The local gate (`testProcess.local.cmd` in `.forge/project.json`; the same
+argv shape applies to a work item's own `quality_gate_cmd`) is a single argv
+array and the orchestrator **hard-rejects
 shell pipelines/chains** (`bash -c "… | …"`, `&&`, `;` — see
 [`forge-project-contract.md`](./forge-project-contract.md) C1 and the
 project-manager skill). When a gate genuinely needs several checks, the
 escape hatch is a **committed script** invoked as one argv:
 
 ```json
-quality_gate_cmd: ["bash", "scripts/gates/<name>.sh"]
+"testProcess": { "local": { "cmd": ["bash", "scripts/gates/<name>.sh"] } }
 ```
 
 That script is then the gate — and how it is written decides whether its
@@ -89,7 +91,7 @@ echo "GATE PASS: release_definition is framework-native and green"
    on a clean tree before the work exists, and pass only once it lands.
 6. **A gate observes, it never fixes** — no repo mutation inside a gate script.
    (Live acceptance gates that talk to a real service remain sanctioned via the
-   project's `acceptance_gate` — the discipline here is about exit codes, not
+   project's `testProcess.acceptance` — the discipline here is about exit codes, not
    about what the checks touch.)
 
 ## Where this applies

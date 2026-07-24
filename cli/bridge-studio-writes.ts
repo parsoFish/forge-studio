@@ -37,7 +37,7 @@ import {
 import { skillsDir as toSkillsDir, skillDir, skillPath } from '../orchestrator/skill-path.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
-import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar } from '../orchestrator/project-config.ts';
+import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
@@ -629,22 +629,13 @@ export async function handleStudioWriteRoutes(
       // the sidecar legitimately omits it from project.json, so validate a copy
       // with the sidecar injected, but write `merged` unchanged (no mirror).
       const forValidation: Record<string, unknown> = { ...merged };
-      const tpForValidation = forValidation['testProcess'];
-      const localCmdMissing =
-        tpForValidation === undefined ||
-        tpForValidation === null ||
-        typeof tpForValidation !== 'object' ||
-        Array.isArray(tpForValidation) ||
-        (tpForValidation as Record<string, unknown>)['local'] === undefined;
-      if (localCmdMissing) {
+      {
+        // ONE shared rule with the loader (injectSidecarIntoTestProcess) —
+        // the predicates previously diverged (review finding: a
+        // sidecar-sourced config declaring only local.timeoutMs loaded fine
+        // but 400'd every Studio save).
         const sidecar = readQualityGateSidecar(projectRoot);
-        if (sidecar) {
-          const tpBase =
-            tpForValidation !== null && typeof tpForValidation === 'object' && !Array.isArray(tpForValidation)
-              ? { ...(tpForValidation as Record<string, unknown>) }
-              : {};
-          forValidation['testProcess'] = { ...tpBase, local: { cmd: sidecar } };
-        }
+        if (sidecar) injectSidecarIntoTestProcess(forValidation, sidecar);
       }
       try {
         validateProjectConfig(forValidation);

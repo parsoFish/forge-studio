@@ -139,6 +139,28 @@ Do not emit `done: true` until each of these is explicitly addressed (resolved, 
 Every resolved design decision — from operator answer or default — must be recorded in the PLAN. All five fields required; if you cannot fill all five, the decision is not resolved:
 > "In the context of **X** [situation], facing **Y** [concern], we chose **Z** [decision] to achieve **G** [goal], accepting tradeoff **T**."
 
+## Exploration stage — edge cases before drafting (R4-04-F4)
+
+Once the interview is done (or the operator drafted directly), an explicit
+**exploring** stage runs before any drafting — operator-journey stage 6, and
+the scope-ledger discipline from the coverage-scope-fidelity theme:
+
+1. **Enumerate honestly** what could break or be forgotten: edge cases,
+   failure modes, boundary conditions, cross-cutting invariants. An empty
+   list on a non-trivial idea is the smell this stage exists to catch.
+2. **Give every edge case a disposition** — `covered` (a drafted initiative's
+   ACs will own it), `needs-initiative` (it demands its own initiative), or
+   `deferred` (explicitly out of this plan, reason recorded). Nothing
+   enumerated may silently vanish: `covered` cases must appear in matching
+   ACs, `needs-initiative` cases must map to an initiative, `deferred` cases
+   are named in an out-of-scope note.
+3. **Surface brain-sourced constraints** — constraints from the theme files
+   you read, each citing its theme path. These shape the acceptance criteria
+   you draft next; cite the source theme in the AC line where applicable.
+
+The findings land in `edge-cases.json`, feed the draft prompt, and render as
+the PLAN's "Edge cases & constraints" section for the operator's review.
+
 ## Event-log entries to emit
 
 - `architect.start` — ideation begun.

@@ -71,14 +71,16 @@ renders live in the Studio project builder (the `ContractReadiness` panel).
 ### Secrets for a live-acceptance tier
 
 If your project has a live/external acceptance tier (e.g. a Terraform provider
-hitting a real API), declare an `acceptance_gate` block in `.forge/project.json`
-with `requires_env` listing every variable a live gate needs:
+hitting a real API), declare a `testProcess.acceptance` block in `.forge/project.json`
+with `requiresEnv` listing every variable a live gate needs:
 
 ```jsonc
-"acceptance_gate": {
-  "match": "TF_ACC=1",
-  "required": true,
-  "requires_env": ["TF_ACC", "AZDO_ORG_SERVICE_URL", "AZDO_PERSONAL_ACCESS_TOKEN"]
+"testProcess": {
+  "acceptance": {
+    "match": "TF_ACC=1",
+    "required": true,
+    "requiresEnv": ["TF_ACC", "AZDO_ORG_SERVICE_URL", "AZDO_PERSONAL_ACCESS_TOKEN"]
+  }
 }
 ```
 
@@ -94,8 +96,8 @@ AZDO_PERSONAL_ACCESS_TOKEN=...
 `secrets.env` is gitignored by convention — both at the forge root
 (`.gitignore` ignores `secrets.env` and `*.env`, keeping `*.env.example`) and in
 the project's own `.gitignore`. The dev-loop sources it when a work item's gate
-matches `acceptance_gate.match`; if a matching gate runs with one of
-`requires_env` unset, the dev-loop **errors the gate** rather than recording a
+matches `testProcess.acceptance.match`; if a matching gate runs with one of
+`requiresEnv` unset, the dev-loop **errors the gate** rather than recording a
 false pass. Verify the file is ignored before you write any secret into it:
 
 ```bash

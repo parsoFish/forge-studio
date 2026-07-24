@@ -54,7 +54,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-project',
         title: 'Create a project from nothing — /projects/new',
-        narration: 'The operator stands up a brand-new project from absolutely nothing — no repo, no contract, no brain — filling in a name, a north star, and a quality-gate command; the very same form that onboards an existing repo also creates one from scratch. Submitting immediately shows the real contract-readiness checklist (a fresh project always trips the hard clauses first, honestly), then opens straight into the new project\'s own page.',
+        narration: 'The operator stands up a brand-new project from absolutely nothing — no repo, no contract, no brain — filling in a name, a north star, and a quality-gate command; the very same form that onboards an existing repo also creates one from scratch. Since the typed testProcess contract (R1-03), the scaffold declares the gate and preflight reads it — so a from-scratch project is born contract-GREEN on the hard clauses and opens straight into its own page, where the honest remaining gaps (no CI net yet, no instructions file, no demo) show as advisory rows.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── A0: CREATE A PROJECT FROM NOTHING (in the UI) ──────────────────────────
@@ -82,24 +82,31 @@ export const journey = defineJourney({
 
               let createCfg = {};
               try { createCfg = JSON.parse(readFileSync(createJsonPath, 'utf8')); } catch { /* */ }
-              check(Array.isArray(createCfg.quality_gate_cmd) && createCfg.quality_gate_cmd.length > 0,
-                'A0: project.json carries the quality-gate contract field');
+              check(Array.isArray(createCfg.testProcess?.local?.cmd) && createCfg.testProcess.local.cmd.length > 0,
+                'A0: project.json carries the typed testProcess.local.cmd contract field (R1-03-F1)');
               check(typeof createCfg.northStar === 'string' && createCfg.northStar.length > 0,
                 'A0: project.json carries the north star — real contract items land, not just a bare registry entry');
 
-              // A from-scratch project always trips the hard contract clauses first (no
-              // package.json / quality-gate sidecar, no git history yet exists) — the form
-              // correctly stays on /projects/new and shows the real failing checklist,
-              // exactly as a first-time operator creating something from nothing would see.
-              const onFailingChecklist = await page.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).then(() => true).catch(() => false);
-              check(onFailingChecklist, 'A0: a from-scratch project trips real contract clauses — the failing checklist renders (nothing pre-seeded)');
-              if (onFailingChecklist) {
-                const failingCount = await page.evaluate(() =>
-                  parseInt(document.querySelector('[data-section="onboard-preflight"]')?.getAttribute('data-failing-count') ?? '0', 10));
-                check(failingCount >= 1, `A0: failing-clauses checklist reports ≥1 real gap (got ${failingCount})`);
-                const clauseCount = await page.locator('[data-section="failing-clauses"] [data-clause-id]').count();
-                check(clauseCount === failingCount, `A0: rendered clause rows match data-failing-count (${clauseCount} rows vs ${failingCount})`);
-                await frame(page, 'a0-1-failing-checklist', 'A0 — a project created from nothing immediately shows the real contract gaps');
+              // R1-03-F1 changed the from-scratch birth story: the scaffold declares
+              // the typed testProcess and preflight now READS it, so C1 is green at
+              // birth and the auto-fixes cover C2/C4 — ZERO hard clauses fail and the
+              // form navigates straight to the new project's page (the old failing
+              // checklist only renders when a hard clause still fails). The REAL
+              // remaining gaps are advisory (C1b no CI net, C8 instructions, DEMO)
+              // and render on the project page's ContractReadiness instead.
+              const landedOnProject = await page.waitForFunction(
+                (slug) => document.querySelector('[data-page="projects"]')?.getAttribute('data-project-id') === slug
+                  || window.location.pathname.endsWith(`/projects/${slug}`),
+                CREATE_SLUG, { timeout: 12000 },
+              ).then(() => true).catch(() => false);
+              check(landedOnProject, 'A0: a from-scratch project is born contract-green on the hard clauses — the form navigates straight to the project page (R1-03-F1: the declared testProcess closes C1 at birth)');
+              if (landedOnProject) {
+                const preflightStatus = await page.waitForFunction(
+                  () => document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') === 'ok',
+                  null, { timeout: 15000 },
+                ).then(() => true).catch(() => false);
+                check(preflightStatus, 'A0: the real preflight reports ok (no hard failures) on the newborn project');
+                await frame(page, 'a0-1-contract-green-birth', 'A0 — a project created from nothing is contract-green at birth; only advisory gaps remain');
               }
 
               // Clip: a second from-scratch project, created live in its own isolated
@@ -116,18 +123,17 @@ export const journey = defineJourney({
                 await p.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
                 await p.locator('[data-field="north-star"]').fill(CREATE_CLIP_NORTH_STAR).catch(() => {});
                 await p.locator('[data-action="onboard-project"]').click().catch(() => {});
-                await p.waitForSelector('[data-section="onboard-preflight"]', { timeout: 12000 }).catch(() => {});
+                // Contract-green birth (R1-03-F1): the form navigates to the new
+                // project's page rather than parking on a failing checklist.
+                await p.waitForFunction(
+                  () => document.querySelector('[data-page="projects"]') !== null,
+                  null, { timeout: 12000 },
+                ).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: 'main[data-page="library"]', caption: 'From the library\'s "+ New Project" CTA — creating a second project from nothing, live, through to the failing checklist' });
+              }, { readySel: 'main[data-page="library"]', caption: 'From the library\'s "+ New Project" CTA — a second project created from nothing, live, born contract-green' });
 
-              // Open the real project page — the "open onboarded project" link on the
-              // failing checklist, falling back to a direct navigate — contract readiness
-              // renders on the project's own page regardless of the form's redirect, same
-              // as stand-up-onboard's su-onboard-project.
-              const openLink = page.locator('[data-action="open-onboarded-project"]');
-              if (onFailingChecklist && (await openLink.count()) > 0) {
-                await openLink.click().catch(() => {});
-              }
+              // Already on the real project page (contract-green birth navigated
+              // there); a direct navigate below is the crash-safe fallback.
               await page.waitForURL(new RegExp(`/projects/${CREATE_SLUG}`), { timeout: 10000 }).catch(() => {});
               if (!new RegExp(`/projects/${CREATE_SLUG}`).test(page.url())) {
                 await page.goto(watch.uiUrl + `/projects/${CREATE_SLUG}`, { waitUntil: 'domcontentloaded' });

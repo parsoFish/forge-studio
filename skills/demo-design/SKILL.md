@@ -76,7 +76,7 @@ what the code actually exposes. Use this decision tree:
    Look for: provider SDK imports (`hashicorp/go-plugin`, `azure-sdk-for-go`,
    `aws-sdk-go`, `google.golang.org/api`), resource-lifecycle patterns (create →
    read → update → delete), acceptance test files (`*_test.go` with `TF_ACC`,
-   `*.acceptance.ts`), the `acceptance_gate` field in `.forge/project.json`.
+   `*.acceptance.ts`), the `testProcess.acceptance` field in `.forge/project.json`.
    → If YES (and no UI surface): evidence form is **live external API round-trip**
      (provision → GET → idempotency-replan → destroy, with portal screenshot
      opportunistically when a portal URL can be derived).

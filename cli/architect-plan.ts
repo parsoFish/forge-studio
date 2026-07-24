@@ -95,6 +95,16 @@ export type ArchitectSession = {
   brain_context: BrainContextEntry[];
   /** Raw council output (flags / escalations / per-critic + total cost). */
   council: CouncilTranscript;
+  /**
+   * The exploration stage's findings (R4-04-F4): enumerated edge cases with
+   * dispositions + brain-sourced constraints. Optional — a fail-open
+   * exploration leaves it absent and the PLAN renders without the section.
+   */
+  explore?: {
+    edgeCases: { title: string; detail: string; disposition: string }[];
+    brainConstraints: { constraint: string; source: string }[];
+    exploreSummary: string;
+  };
   /** One or more drafted initiatives — NOT yet written to `_queue/pending/`. */
   initiatives: ProposedInitiative[];
 };
@@ -140,6 +150,33 @@ export function renderPlanDoc(session: ArchitectSession): string {
     });
   }
   parts.push('');
+
+  // --- Edge cases + constraints (R4-04-F4 exploration stage) ---
+  if (session.explore && (session.explore.edgeCases.length > 0 || session.explore.brainConstraints.length > 0)) {
+    parts.push('## Edge cases & constraints (exploration stage)');
+    parts.push('');
+    if (session.explore.exploreSummary) {
+      parts.push(session.explore.exploreSummary);
+      parts.push('');
+    }
+    if (session.explore.edgeCases.length > 0) {
+      parts.push('| # | Edge case | Disposition | Detail |');
+      parts.push('|---|-----------|-------------|--------|');
+      session.explore.edgeCases.forEach((ec, i) => {
+        const t = ec.title.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        const d = ec.detail.replace(/\|/g, '\\|').replace(/\n/g, ' ');
+        parts.push(`| ${i + 1} | ${t} | ${ec.disposition} | ${d} |`);
+      });
+      parts.push('');
+    }
+    if (session.explore.brainConstraints.length > 0) {
+      parts.push('Brain-sourced constraints shaping the ACs:');
+      for (const bc of session.explore.brainConstraints) {
+        parts.push(`- ${bc.constraint} _(source: ${bc.source})_`);
+      }
+      parts.push('');
+    }
+  }
 
   // --- Brain context ---
   parts.push('## Brain context');
@@ -519,6 +556,16 @@ export function renderPlanHtml(session: ArchitectSession): string {
   <div class="init-cards">
 ${session.initiatives.map((init, idx) => renderInitiativeCard(init, idx)).join('\n')}
   </div>
+
+  <!-- ── EDGE CASES & CONSTRAINTS (R4-04-F4) ── -->
+  ${session.explore && (session.explore.edgeCases.length > 0 || session.explore.brainConstraints.length > 0)
+    ? `<h2>Edge cases &amp; constraints</h2>
+  ${session.explore.exploreSummary ? `<p>${esc(session.explore.exploreSummary)}</p>` : ''}
+  <ul class="brain-list">
+${session.explore.edgeCases.map((ec) => `    <li><strong>[${esc(ec.disposition)}]</strong> ${esc(ec.title)} — ${esc(ec.detail)}</li>`).join('\n')}
+${session.explore.brainConstraints.map((bc) => `    <li><em>constraint:</em> ${esc(bc.constraint)} <code>${esc(bc.source)}</code></li>`).join('\n')}
+  </ul>`
+    : ''}
 
   <!-- ── 3. BRAIN CONTEXT ── -->
   <h2>Brain context</h2>

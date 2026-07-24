@@ -263,33 +263,12 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig | null {
   // Single-source the local gate from the `.forge/quality_gate_cmd` sidecar
   // when project.json omits it (the JSON wins when both are present). Same
   // single-source rule as ever (R1-03-F1), re-rooted onto the typed object:
-  // the sidecar fills `testProcess.local.cmd`.
+  // the sidecar fills `testProcess.local.cmd`. Shared with the bridge's PUT
+  // validation copy via `injectSidecarIntoTestProcess` so the two can never
+  // diverge (review finding).
   if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
-    const obj = parsed as Record<string, unknown>;
-    const tp =
-      obj.testProcess !== null && typeof obj.testProcess === 'object' && !Array.isArray(obj.testProcess)
-        ? (obj.testProcess as Record<string, unknown>)
-        : undefined;
-    const localMissing =
-      tp === undefined ||
-      tp.local === undefined ||
-      tp.local === null ||
-      (typeof tp.local === 'object' &&
-        !Array.isArray(tp.local) &&
-        (tp.local as Record<string, unknown>).cmd === undefined);
-    if (localMissing) {
-      const sidecar = readQualityGateSidecar(projectRoot);
-      if (sidecar) {
-        const target = tp ?? {};
-        const local =
-          target.local !== null && typeof target.local === 'object' && !Array.isArray(target.local)
-            ? (target.local as Record<string, unknown>)
-            : {};
-        local.cmd = sidecar;
-        target.local = local;
-        obj.testProcess = target;
-      }
-    }
+    const sidecar = readQualityGateSidecar(projectRoot);
+    if (sidecar) injectSidecarIntoTestProcess(parsed as Record<string, unknown>, sidecar);
   }
   const config = validateProjectConfig(parsed);
   // AGENTS.md single-source binding (Stage A): a managed project's instructions
@@ -434,6 +413,38 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
     ...(releaseProcess !== undefined ? { releaseProcess } : {}),
   };
+}
+
+/**
+ * The ONE sidecar-injection rule (R1-03-F1), shared by the loader and the
+ * bridge's PUT-validation copy: when the raw config's `testProcess.local.cmd`
+ * is missing (testProcess absent, local absent/null, or a local object with
+ * no `cmd`), fill `cmd` from the sidecar — MERGING into any existing local
+ * object (a sidecar-sourced project may still declare `local.timeoutMs`).
+ * A present-but-malformed `testProcess` (string/array) is deliberately left
+ * untouched so `parseTestProcess` fail-closes on it instead of the injection
+ * masking the breakage (review finding).
+ */
+export function injectSidecarIntoTestProcess(
+  obj: Record<string, unknown>,
+  sidecarCmd: string[],
+): void {
+  const rawTp = obj.testProcess;
+  if (rawTp !== undefined && (rawTp === null || typeof rawTp !== 'object' || Array.isArray(rawTp))) {
+    return; // malformed — let the validator throw on the declared shape
+  }
+  const tp = (rawTp as Record<string, unknown> | undefined) ?? {};
+  const rawLocal = tp.local;
+  const localIsObject = rawLocal !== null && typeof rawLocal === 'object' && !Array.isArray(rawLocal);
+  const cmdMissing =
+    rawLocal === undefined ||
+    rawLocal === null ||
+    (localIsObject && (rawLocal as Record<string, unknown>).cmd === undefined);
+  if (!cmdMissing) return;
+  const local = localIsObject ? { ...(rawLocal as Record<string, unknown>) } : {};
+  local.cmd = sidecarCmd;
+  tp.local = local;
+  obj.testProcess = tp;
 }
 
 /** Optional positive-integer millisecond timeout (R1-03-F1). */

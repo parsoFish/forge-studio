@@ -23,8 +23,10 @@
  * State machine (`status.json.phase`):
  *
  *   interviewing ──(needs input)──▶ awaiting-answers ──(bridge: answer)──▶ interviewing
- *        │ (ready to draft)
+ *        │ (ready)
  *        ▼
+ *     exploring ──(R4-04-F4: edge cases + brain constraints, fail-open)──▶ drafting
+ *                                                                             │
  *     drafting ──▶ awaiting-verdict ──(bridge: approve)──▶ finalizing ──▶ committed
  *                        │ (bridge: revise) ──▶ interviewing
  *                        └ (bridge: reject)  ──▶ rejected
@@ -39,6 +41,7 @@ import {
   mkdirSync,
   readFileSync,
   readdirSync,
+  rmSync,
   writeFileSync,
 } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -98,6 +101,7 @@ export const ARCHITECT_MODEL = modelForSpec(architectAgentSpec);
 export type ArchitectPhase =
   | 'interviewing'
   | 'awaiting-answers'
+  | 'exploring'
   | 'drafting'
   | 'awaiting-verdict'
   | 'finalizing'
@@ -332,7 +336,60 @@ export async function runArchitectTurn(
       sink.flushIteration(1);
       return result;
     }
-    // Ready to draft (operator answered enough, or the round cap forced it).
+    // Ready — the explicit exploration stage runs before drafting (R4-04-F4).
+    phase = 'exploring';
+    writeStatus(paths.sessionDir, { ...status, phase: 'exploring' });
+  }
+
+  if (phase === 'exploring') {
+    // R4-04-F4: enumerate edge cases + brain constraints before drafting.
+    // Always a fresh run (a revise round changes the inputs; re-exploring is
+    // one cheap structured turn) — the previous round's findings are unlinked
+    // FIRST so a failed re-exploration can never silently feed stale edge
+    // cases into the new draft (review finding: the fail-open message must
+    // stay honest — no findings file means no explore block, ever).
+    // Fail-open covers BOTH the empty-output case and a thrown stream/SDK
+    // error: the stage is advisory enrichment and never bricks the session.
+    try {
+      rmSync(edgeCasesPath(paths.sessionDir), { force: true });
+    } catch {
+      /* best-effort — a stale file that survives is overwritten on success */
+    }
+    let findings: ExploreFindings | null = null;
+    let exploreCrash: string | null = null;
+    try {
+      findings = await runExploreStep({
+        status,
+        sessionDir: paths.sessionDir,
+        queryFn,
+        skillPromptPath: input.skillPromptPath,
+        brainIndex,
+        onToolUse,
+        onHeartbeat,
+        onText,
+      });
+    } catch (err) {
+      exploreCrash = err instanceof Error ? err.message : String(err);
+    }
+    logger.emit({
+      initiative_id: `architect-session-${input.sessionId}`,
+      phase: 'architect',
+      skill: 'architect-runner',
+      event_type: 'log',
+      input_refs: [],
+      output_refs: findings ? [edgeCasesPath(paths.sessionDir)] : [],
+      message: findings
+        ? `exploration stage — ${findings.edgeCases.length} edge case(s), ${findings.brainConstraints.length} brain constraint(s)`
+        : exploreCrash
+          ? `exploration stage crashed — proceeding to draft without an explore block (fail-open): ${exploreCrash}`
+          : 'exploration stage returned nothing — proceeding to draft without an explore block (fail-open)',
+      metadata: {
+        session_id: input.sessionId,
+        edge_cases: findings?.edgeCases.length ?? 0,
+        brain_constraints: findings?.brainConstraints.length ?? 0,
+        ...(exploreCrash ? { crashed: true } : {}),
+      },
+    });
     phase = 'drafting';
     writeStatus(paths.sessionDir, { ...status, phase: 'drafting' });
   }
@@ -479,6 +536,170 @@ async function runInterviewStep(args: {
 }
 
 // ---------------------------------------------------------------------------
+// Exploration step (R4-04-F4 — operator-journey gap #6)
+// ---------------------------------------------------------------------------
+
+/**
+ * One edge case the architect enumerated before drafting, with an explicit
+ * disposition so nothing enumerated can silently vanish (the scope-ledger
+ * discipline from brain theme 2026-07-01-architect-coverage-scope-fidelity).
+ */
+export type ExploreEdgeCase = {
+  title: string;
+  detail: string;
+  /** covered = an initiative's ACs will own it; needs-initiative = it demands its own; deferred = explicitly out of this plan. */
+  disposition: 'covered' | 'needs-initiative' | 'deferred';
+};
+
+export type ExploreFindings = {
+  edgeCases: ExploreEdgeCase[];
+  /** Brain-sourced constraints that must shape ACs, each citing its theme. */
+  brainConstraints: { constraint: string; source: string }[];
+  exploreSummary: string;
+};
+
+const EXPLORE_SCHEMA = {
+  type: 'object',
+  properties: {
+    edgeCases: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          title: { type: 'string' },
+          detail: { type: 'string' },
+          disposition: { type: 'string', enum: ['covered', 'needs-initiative', 'deferred'] },
+        },
+        required: ['title', 'detail', 'disposition'],
+      },
+    },
+    brainConstraints: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { constraint: { type: 'string' }, source: { type: 'string' } },
+        required: ['constraint', 'source'],
+      },
+    },
+    exploreSummary: { type: 'string' },
+  },
+  required: ['edgeCases', 'brainConstraints', 'exploreSummary'],
+};
+
+export function edgeCasesPath(sessionDir: string): string {
+  return join(sessionDir, 'edge-cases.json');
+}
+
+export function readExploreFindings(sessionDir: string): ExploreFindings | null {
+  const p = edgeCasesPath(sessionDir);
+  if (!existsSync(p)) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as ExploreFindings;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The explicit "exploring / edge cases" stage between the interview and the
+ * draft (R4-04-F4). One structured turn prompting enumeration: edge cases
+ * with dispositions, plus brain-sourced constraints to propagate into ACs.
+ * FAIL-OPEN: this stage enriches the draft — an empty/failed exploration is
+ * recorded honestly and the session proceeds (never bricks on an advisory
+ * enrichment step); the draft prompt then simply carries no explore block.
+ */
+async function runExploreStep(args: {
+  status: ArchitectStatus;
+  sessionDir: string;
+  queryFn: QueryFn;
+  skillPromptPath?: string;
+  brainIndex?: string;
+  onToolUse?: (d: ToolUseLiveDetail) => void;
+  onHeartbeat?: () => void;
+  onText?: (text: string) => void;
+}): Promise<ExploreFindings | null> {
+  const { status, sessionDir, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
+  const skill = loadSkillPrompt(skillPromptPath);
+  const interview = readInterview(sessionDir);
+  const priorQa = interview.length
+    ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
+    : '_(operator drafted directly)_';
+  const prompt = [
+    ...(brainIndex
+      ? [
+          '# Brain navigation index',
+          '',
+          'Read the relevant brain theme files below FIRST — a brain-sourced constraint you surface here must cite its theme path as `source`.',
+          '',
+          brainIndex,
+          '',
+          '---',
+          '',
+        ]
+      : []),
+    skill,
+    '',
+    '## Your task this turn: the exploration step',
+    '',
+    `Project: ${status.project}`,
+    '',
+    'Operator idea / brief:',
+    status.idea,
+    '',
+    'Interview answers:',
+    priorQa,
+    '',
+    'Before drafting, ENUMERATE what could break or be forgotten: edge cases, ' +
+      'failure modes, boundary conditions, and cross-cutting invariants. For ' +
+      'each edge case give a disposition — `covered` (a drafted initiative\'s ' +
+      'ACs will own it), `needs-initiative` (it demands its own initiative), or ' +
+      '`deferred` (explicitly out of this plan, with the reason in `detail`). ' +
+      'Separately list `brainConstraints`: constraints sourced from the brain ' +
+      'themes you read, each citing its theme path — these must shape the ' +
+      'acceptance criteria you draft next. Finish with a 2-3 sentence ' +
+      '`exploreSummary`. Enumerate honestly — an empty list on a non-trivial ' +
+      'idea is the smell this stage exists to catch.',
+  ].join('\n');
+
+  const { output } = await runStructured<ExploreFindings>({
+    queryFn,
+    prompt,
+    schema: EXPLORE_SCHEMA,
+    onToolUse,
+    onHeartbeat,
+    onText,
+  });
+  if (!output || !Array.isArray(output.edgeCases) || !Array.isArray(output.brainConstraints)) {
+    return null;
+  }
+  // Item-shape validation (review finding): the downstream renderers consume
+  // these fields verbatim after the EXPENSIVE draft call — drop malformed
+  // items here rather than TypeError-ing the whole turn later.
+  const DISPOSITIONS = new Set(['covered', 'needs-initiative', 'deferred']);
+  const edgeCases = output.edgeCases.filter(
+    (ec): ec is ExploreEdgeCase =>
+      ec !== null &&
+      typeof ec === 'object' &&
+      typeof ec.title === 'string' &&
+      typeof ec.detail === 'string' &&
+      typeof ec.disposition === 'string' &&
+      DISPOSITIONS.has(ec.disposition),
+  );
+  const brainConstraints = output.brainConstraints.filter(
+    (bc): bc is { constraint: string; source: string } =>
+      bc !== null && typeof bc === 'object' && typeof bc.constraint === 'string' && typeof bc.source === 'string',
+  );
+  if (edgeCases.length === 0 && brainConstraints.length === 0) return null;
+  const findings: ExploreFindings = {
+    edgeCases,
+    brainConstraints,
+    exploreSummary: typeof output.exploreSummary === 'string' ? output.exploreSummary : '',
+  };
+  writeFileSync(edgeCasesPath(sessionDir), JSON.stringify(findings, null, 2));
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // Draft step (+ council + PLAN)
 // ---------------------------------------------------------------------------
 
@@ -519,6 +740,40 @@ const DRAFT_SCHEMA = {
   },
   required: ['vision', 'initiatives'],
 };
+
+/**
+ * Render the explore stage's findings into the draft prompt (R4-04-F4).
+ * Empty array when no findings exist (fail-open exploration) — the draft
+ * prompt is then byte-identical to the pre-explore shape.
+ */
+function renderExploreBlock(findings: ExploreFindings | null): string[] {
+  if (!findings || (findings.edgeCases.length === 0 && findings.brainConstraints.length === 0)) {
+    return [];
+  }
+  const lines: string[] = ['', '### Edge cases + brain constraints (exploration stage)', ''];
+  if (findings.edgeCases.length > 0) {
+    lines.push(
+      'Edge cases you enumerated — every one MUST land per its disposition: ' +
+        '`covered` cases appear in a matching initiative\'s ACs; `needs-initiative` ' +
+        'cases get their own initiative; `deferred` cases are named in the ' +
+        'initiative body\'s out-of-scope note (nothing enumerated may silently vanish):',
+    );
+    for (const ec of findings.edgeCases) {
+      lines.push(`- [${ec.disposition}] **${ec.title}** — ${ec.detail}`);
+    }
+  }
+  if (findings.brainConstraints.length > 0) {
+    lines.push(
+      '',
+      'Brain-sourced constraints — shape the matching acceptance criteria and ' +
+        'cite the source theme in the AC line where applicable:',
+    );
+    for (const bc of findings.brainConstraints) {
+      lines.push(`- ${bc.constraint} _(source: ${bc.source})_`);
+    }
+  }
+  return lines;
+}
 
 async function runDraftStep(args: {
   input: RunArchitectTurnInput;
@@ -567,6 +822,7 @@ async function runDraftStep(args: {
     ...(resolvedDecisions
       ? ['', 'Resolved design decisions (bake these into the manifests):', resolvedDecisions]
       : []),
+    ...renderExploreBlock(readExploreFindings(paths.sessionDir)),
     '',
     'Produce one or more coherent, releasable initiatives. For each: a kebab ' +
       '`slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), ' +
@@ -690,6 +946,7 @@ async function runDraftStep(args: {
     })
     .map((p) => ({ path: p, summary: 'consulted during architect draft' }));
 
+  const exploreFindings = readExploreFindings(paths.sessionDir);
   const session: ArchitectSession = {
     session_id: status.session_id,
     project: status.project,
@@ -698,6 +955,7 @@ async function runDraftStep(args: {
     interview,
     brain_context,
     council: councilTranscript,
+    ...(exploreFindings ? { explore: exploreFindings } : {}),
     initiatives: proposed,
   };
 

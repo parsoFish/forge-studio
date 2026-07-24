@@ -71,6 +71,7 @@ export function DemoBuilderPanel({
   projectId,
   sessionId,
   onClose,
+  onSessionStarted,
 }: {
   projectId: string;
   sessionId: string;
@@ -78,6 +79,11 @@ export function DemoBuilderPanel({
    *  post-lock "Close" button) — the page owns clearing the active session id
    *  + query param and refetching project/preflight so ContractReadiness reacts. */
   onClose: () => void;
+  /** Called when an in-panel action (per-element iterate) starts a NEW
+   *  session — the page switches the panel onto it (same wiring as
+   *  DemoTimeline's launches), so the new session's review/lock surface is
+   *  always reachable (review finding: it was silently backgrounded). */
+  onSessionStarted?: (sessionId: string) => void;
 }): JSX.Element {
   const cycleId = `_demo-${sessionId}`;
 
@@ -163,14 +169,11 @@ export function DemoBuilderPanel({
 
   const meta = session ? demoHexMeta(session.phase) : null;
 
-  // Iterate ONE component: open a demo session focused on that element, brief it
-  // with the component's own prompt (so it runs immediately on just that part).
-  // Unlike the old standalone page, this does NOT navigate — the per-element
-  // session runs in the background and this panel keeps showing the session it
-  // was opened for; the operator returns to the timeline to pick it up once
-  // `demo-list-changed` surfaces it (mirrors how the WHOLE-demo relaunch from
-  // the timeline is handled by the page, not this panel — see DemoTimeline's
-  // `onSessionStarted`).
+  // Iterate ONE component: open a demo session focused on that element, brief
+  // it with the component's own prompt (so it runs immediately on just that
+  // part), then hand the NEW session id up to the page — the panel switches
+  // onto it (same wiring as DemoTimeline's launches), so its review/lock
+  // surface is immediately reachable.
   async function iteratePart(element: string, prompt: string): Promise<void> {
     if (iterating || !session) return;
     setIterateError(null);
@@ -186,6 +189,7 @@ export function DemoBuilderPanel({
         return;
       }
       await demoBuilderBrief({ project: session.project, sessionId: start.sessionId, brief: prompt, targetElement: element });
+      onSessionStarted?.(start.sessionId);
     } catch (err) {
       setIterateError(err instanceof Error ? err.message : String(err));
     } finally {

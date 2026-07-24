@@ -12,6 +12,7 @@ import type { ArchitectPhase } from './bridge-client';
 const ALL_PHASES: ArchitectPhase[] = [
   'interviewing',
   'awaiting-answers',
+  'exploring',
   'drafting',
   'awaiting-verdict',
   'finalizing',
@@ -46,6 +47,7 @@ describe('isArchitectWorking', () => {
   it('is true only for interviewing/drafting/finalizing', () => {
     expect(isArchitectWorking('interviewing')).toBe(true);
     expect(isArchitectWorking('drafting')).toBe(true);
+    expect(isArchitectWorking('exploring')).toBe(true);
     expect(isArchitectWorking('finalizing')).toBe(true);
   });
 
