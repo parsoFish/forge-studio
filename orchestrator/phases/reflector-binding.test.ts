@@ -1,5 +1,5 @@
 /**
- * Unit tests for orchestrator/reflector-invocation.ts — ADR 024 seam.
+ * Unit tests for orchestrator/phases/reflector-binding.ts — ADR 024 seam.
  *
  * Verifies:
  *   1. `reflectorAgentSpec` is well-formed (phase / skill / tier / tools).

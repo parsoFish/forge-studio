@@ -223,10 +223,9 @@ function topoSort(flow: FlowDefinition): string[] {
 
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
-  | 'dev'         // agent def declares executor:'dev' (developer-ralph, fanOut:'work-items')
-  | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates
+  | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates; the LAST declared executor row, held until R4-01-F4
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
-  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); a declared band hook (ADR-039, e.g. reflector's reflection-close) routes to its band executor inside execAgent
+  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); ADR-039 declared dispatch: a band hook (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
   | 'unknown';    // defensive fallback — no def, or an invalid declared executor
 
 /**
@@ -802,6 +801,12 @@ const execAgent: NodeExecutor = async (ctx) => {
   const bandHook = resolveBandHook(def);
   if (bandHook) return AGENT_BAND_EXECUTORS[bandHook](ctx);
 
+  // ADR-039: a declared ralph loop routes to the dev-loop pipeline — the one
+  // shipped multi-iteration executor (per-WI worktrees, merge queue, gates).
+  // `runAgent` itself REJECTS ralph defs; the loop machinery is
+  // orchestrator-band, selected here by the def's declared strategy.
+  if (def.runtime.loopStrategy === 'ralph') return execDev(ctx);
+
   const prompt = buildAgentPrompt(def, ctx);
 
   await runAgent(def, {
@@ -825,7 +830,6 @@ const execAgent: NodeExecutor = async (ctx) => {
  */
 const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   architect: execArchitect,
-  dev: execDev,
   unifier: execUnifier,
   review: execReview,
   agent: execAgent,

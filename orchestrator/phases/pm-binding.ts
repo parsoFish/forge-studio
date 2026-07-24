@@ -59,7 +59,7 @@ function loadSkillText(): string {
 // restarts. This is accepted, not a bug: the planner only needs a
 // stable index within a cycle, and restarts are cheap. If per-cycle
 // freshness is ever required, key the cache by cwd+mtime (as
-// reflector-invocation.ts already keys by cwd) rather than adding an
+// phases/reflector-binding.ts already keys by cwd) rather than adding an
 // invalidation path. Do not "fix" this silently.
 let cachedBrainIndex: string | null = null;
 function loadBrainNavigation(cwd: string): string {

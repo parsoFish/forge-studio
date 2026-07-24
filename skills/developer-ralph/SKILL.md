@@ -4,7 +4,6 @@ description: Launch the Ralph loop runner for a single work item; iterate until 
 library: true
 phase: developer-loop
 surface: unattended
-executor: dev
 purpose: Implement one work item to green gates inside its worktree, iterating until the budget is exhausted or the loop wedges.
 composition:
   skills: []
@@ -15,6 +14,7 @@ runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
+  loopStrategy: ralph
 brainAccess: advisory
 interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Write, Edit, MultiEdit, Bash, Grep, Glob]

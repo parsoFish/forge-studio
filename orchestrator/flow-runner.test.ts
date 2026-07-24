@@ -923,7 +923,16 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
           composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
         }),
       ],
-      ['developer-ralph', makeAgentDef({ slug: 'developer-ralph', name: 'Dev', executor: 'dev' })],
+      // R4-01-F2: the dev agent's dispatch key is its declared ralph loop
+      // (execAgent routes loopStrategy:'ralph' → the dev-loop pipeline).
+      [
+        'developer-ralph',
+        makeAgentDef({
+          slug: 'developer-ralph',
+          name: 'Dev',
+          runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'ralph' },
+        }),
+      ],
       ['developer-unifier', makeAgentDef({ slug: 'developer-unifier', name: 'Unifier', executor: 'unifier' })],
       // R4-01-F2: the reflector no longer declares an executor — its dispatch
       // key is the reflection-close band hook (ADR-039), so it resolves to
@@ -954,7 +963,11 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
       'agent',
       'PM (wi-contract band hook, no executor) ⇒ the generic agent kind',
     );
-    assert.equal(resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }, agents), 'dev');
+    assert.equal(
+      resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }, agents),
+      'agent',
+      "dev (declared loopStrategy:'ralph', no executor) ⇒ the generic agent kind; execAgent routes the loop",
+    );
     assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }, agents), 'unifier');
     assert.equal(
       resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents),

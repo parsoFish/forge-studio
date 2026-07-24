@@ -320,7 +320,7 @@ export async function run(input: LoopInput, agent: AgentInvocation = stubAgent):
     // the agent left WIP uncommitted, commit it under a clearly-tagged
     // `forge-autocommit:` message before the next gate check so the
     // required-paths-against-main diff sees the work. The agent's
-    // intent IS still "commit your own work" (per dev-invocation
+    // intent IS still "commit your own work" (per phases/dev-binding
     // system prompt) — this just guarantees the gate doesn't dead-end
     // on iteration-budget when the work is otherwise complete.
     // G1 rescope (plan item 2.6): the net staying silent was hiding the

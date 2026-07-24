@@ -82,11 +82,12 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // import (flow-runner.ts already imports FROM validate.ts for
 // findFanOutViolations).
 //
-// R4-01-F2 (ADR-039) is retiring this enum row by row as each phase moves to
-// declared dispatch (loopStrategy + band hooks): 'reflect' retired with the
-// reflector migration, 'pm' with the plan-agent migration. The end state is
-// ['unifier'] alone, held until R4-01-F4 retirement.
-export const PHASE_EXECUTOR_KINDS = ['dev', 'unifier'] as const;
+// R4-01-F2 (ADR-039) retired the enum row by row as each phase moved to
+// declared dispatch (loopStrategy + band hooks): 'reflect' with the reflector
+// migration, 'pm' with the plan agent, 'dev' with the ralph loopStrategy
+// routing. 'unifier' is the LAST row, held until R4-01-F4 retirement
+// (post R4-10-F2).
+export const PHASE_EXECUTOR_KINDS = ['unifier'] as const;
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md

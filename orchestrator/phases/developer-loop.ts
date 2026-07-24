@@ -23,7 +23,7 @@ import {
   prepareDevWorkspace,
   tallyToolUse as tallyDevToolUse,
   type DevToolUseSummary,
-} from '../dev-invocation.ts';
+} from './dev-binding.ts';
 import {
   gateRequiredPaths,
   readWorkItemsFromDir,

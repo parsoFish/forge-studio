@@ -136,7 +136,20 @@ test('runAgent: every library roster agent (listAgentDefinitions) runs without t
   const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-roster-'));
   try {
-    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const allDefs = listAgentDefinitions(join(ROOT, 'skills'));
+    // R4-01-F2 (ADR-039): ralph-declaring defs (developer-ralph) are dispatched
+    // by the flow engine's dev-loop pipeline — runAgent REJECTS them by design.
+    // Assert the rejection explicitly, then sweep the rest.
+    const ralphDefs = allDefs.filter((d) => d.runtime.loopStrategy === 'ralph');
+    for (const def of ralphDefs) {
+      const workdir = mkdtempSync(join(scratchRoot, `${def.slug}-ralph-`));
+      await assert.rejects(
+        () => runAgent(def, { runId: `_agent-${def.slug}`, workdir, prompt: 'test', queryFn: throwingQueryFn }),
+        /loopStrategy 'ralph'/,
+        `${def.slug}: a declared ralph loop must be rejected by the one-shot primitive`,
+      );
+    }
+    const defs = allDefs.filter((d) => d.runtime.loopStrategy !== 'ralph');
     assert.ok(defs.length > 0, 'expected at least one roster agent to drive through runAgent');
 
     for (const def of defs) {

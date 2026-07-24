@@ -1,5 +1,5 @@
 /**
- * Unit tests for orchestrator/dev-invocation.ts.
+ * Unit tests for orchestrator/phases/dev-binding.ts.
  *
  * Verifies the ADR 024 PhaseAgentSpec shape, the model derivation, and the
  * system + user prompt contracts. No SDK invocation, no shells.
@@ -15,8 +15,8 @@ import {
   DEV_DISALLOWED_TOOLS,
   buildDevSystemPrompt,
   renderDevUserPrompt,
-} from './dev-invocation.ts';
-import { modelForSpec } from './phase-agent.ts';
+} from './dev-binding.ts';
+import { modelForSpec } from '../phase-agent.ts';
 
 // ---------------------------------------------------------------------------
 // devAgentSpec shape

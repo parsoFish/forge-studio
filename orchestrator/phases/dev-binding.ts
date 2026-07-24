@@ -26,10 +26,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseWorkItem, type WorkItem } from './work-item.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { parseWorkItem, type WorkItem } from '../work-item.ts';
+import { modelForSpec } from '../phase-agent.ts';
+import { deriveAgentSpec } from '../studio/derive.ts';
+import { skillPath, skillPathRelative } from '../skill-path.ts';
 
 const SKILL_PATH = skillPath('developer-ralph');
 
