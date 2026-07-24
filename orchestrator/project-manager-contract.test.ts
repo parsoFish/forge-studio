@@ -18,7 +18,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
 import { runProjectManager, type PmQueryFn } from './phases/project-manager.ts';
-import { PM_BRAIN_ACCESS } from './pm-invocation.ts';
+import { PM_BRAIN_ACCESS } from './phases/pm-binding.ts';
 import { createLogger, type EventLogEntry } from './logging.ts';
 import type { CycleInput } from './cycle-context.ts';
 import { parseManifest } from './manifest.ts';

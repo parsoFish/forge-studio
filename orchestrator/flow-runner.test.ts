@@ -913,10 +913,42 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     // generic (no-executor) library agent and an invalid-executor agent.
     const agents = new Map<string, AgentDefinition>([
       ['architect', makeAgentDef({ slug: 'architect', name: 'Architect' })],
-      ['project-manager', makeAgentDef({ slug: 'project-manager', name: 'PM', executor: 'pm' })],
-      ['developer-ralph', makeAgentDef({ slug: 'developer-ralph', name: 'Dev', executor: 'dev' })],
+      // R4-01-F2: the PM no longer declares an executor either — its dispatch
+      // key is the wi-contract band hook (ADR-039).
+      [
+        'project-manager',
+        makeAgentDef({
+          slug: 'project-manager',
+          name: 'PM',
+          composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
+        }),
+      ],
+      // R4-01-F2: the dev agent's dispatch key is its declared ralph loop
+      // (execAgent routes loopStrategy:'ralph' → the dev-loop pipeline).
+      [
+        'developer-ralph',
+        makeAgentDef({
+          slug: 'developer-ralph',
+          name: 'Dev',
+          runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'ralph' },
+        }),
+      ],
       ['developer-unifier', makeAgentDef({ slug: 'developer-unifier', name: 'Unifier', executor: 'unifier' })],
-      ['reflector', makeAgentDef({ slug: 'reflector', name: 'Reflector', executor: 'reflect' })],
+      // R4-01-F2: the reflector no longer declares an executor — its dispatch
+      // key is the reflection-close band hook (ADR-039), so it resolves to
+      // the generic 'agent' kind and execAgent routes it to the band.
+      [
+        'reflector',
+        makeAgentDef({
+          slug: 'reflector',
+          name: 'Reflector',
+          composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] },
+        }),
+      ],
+      [
+        'legacy-reflect-executor',
+        makeAgentDef({ slug: 'legacy-reflect-executor', name: 'Legacy Reflect', executor: 'reflect' }),
+      ],
       ['generic-lib-agent', makeAgentDef({ slug: 'generic-lib-agent', name: 'Generic Lib Agent' })],
       [
         'bad-executor-agent',
@@ -926,10 +958,27 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
 
     assert.equal(resolveNodeKind({ id: 'a', agent: 'architect', gate: 'plan' }, agents), 'architect');
     assert.equal(resolveNodeKind({ id: 'r', gate: 'verdict' }, agents), 'review');
-    assert.equal(resolveNodeKind({ id: 'pm', agent: 'project-manager' }, agents), 'pm');
-    assert.equal(resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }, agents), 'dev');
+    assert.equal(
+      resolveNodeKind({ id: 'pm', agent: 'project-manager' }, agents),
+      'agent',
+      'PM (wi-contract band hook, no executor) ⇒ the generic agent kind',
+    );
+    assert.equal(
+      resolveNodeKind({ id: 'dev', agent: 'developer-ralph' }, agents),
+      'agent',
+      "dev (declared loopStrategy:'ralph', no executor) ⇒ the generic agent kind; execAgent routes the loop",
+    );
     assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }, agents), 'unifier');
-    assert.equal(resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents), 'reflect');
+    assert.equal(
+      resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents),
+      'agent',
+      'reflector (band-hook dispatch, no executor) ⇒ the generic agent kind',
+    );
+    assert.equal(
+      resolveNodeKind({ id: 'lrf', agent: 'legacy-reflect-executor' }, agents),
+      'unknown',
+      "the retired executor:'reflect' row is no longer a valid declared executor",
+    );
     assert.equal(
       resolveNodeKind({ id: 'x', agent: 'totally-fake-nonexistent-agent' }, agents),
       'unknown',
@@ -954,19 +1003,22 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
-    // Override the pm executor with a custom spy — the default deps.runProjectManager
-    // must NOT be called; the injected executor runs instead. This proves a flow can
-    // register custom node behaviour without touching flow-runner's dispatch loop.
+    // Override the unifier executor with a custom spy — the default
+    // deps.runUnifier must NOT be called; the injected executor runs instead.
+    // This proves a flow can register custom node behaviour without touching
+    // flow-runner's dispatch loop. (Was the pm kind pre-R4-01-F2; pm/reflect
+    // now dispatch as 'agent' band hooks, so the unifier — the last declared
+    // phase-executor kind until R4-01-F4 — carries the seam proof.)
     const customCalls: string[] = [];
-    const customPm: NodeExecutor = async () => { customCalls.push('custom-pm'); };
+    const customUnifier: NodeExecutor = async () => { customCalls.push('custom-unifier'); };
 
-    const result = await runFlow({ flow, input, logger, deps, nodeExecutors: { pm: customPm } });
+    const result = await runFlow({ flow, input, logger, deps, nodeExecutors: { unifier: customUnifier } });
 
-    assert.deepEqual(customCalls, ['custom-pm'], 'injected pm executor must run');
-    assert.ok(!tracker.calls.includes('runProjectManager'), 'default pm executor must be bypassed by the override');
+    assert.deepEqual(customCalls, ['custom-unifier'], 'injected unifier executor must run');
+    assert.ok(!tracker.calls.includes('runUnifier'), 'default unifier executor must be bypassed by the override');
     // The rest of the pipeline still runs through the defaults.
+    assert.ok(tracker.calls.includes('runProjectManager'), 'pm band still runs through its default (wi-contract hook)');
     assert.ok(tracker.calls.includes('runDeveloperLoop'));
-    assert.ok(tracker.calls.includes('runUnifier'), 'default unifier executor must run (real node, not a marker)');
     assert.ok(tracker.calls.includes('runReflector'));
     assert.ok(tracker.calls.includes('promoteMergedToDone'));
     assert.strictEqual(result.cycleOutcome, 'merged');

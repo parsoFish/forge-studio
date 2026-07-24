@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 import type { EventLogger } from './logging.ts';
+import { parseManifest } from './manifest.ts';
 import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import { classifyCrash } from './failure-classifier.ts';
 import type { ClosureResult } from './phases/closure.ts';
@@ -67,6 +68,7 @@ import {
   preservingForgeScratch,
 } from './cycle-helpers.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
+import { resolveBandHook, type BandHookId } from './agent-bands.ts';
 import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
@@ -222,12 +224,9 @@ function topoSort(flow: FlowDefinition): string[] {
 
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
-  | 'pm'          // agent def declares executor:'pm' (project-manager)
-  | 'dev'         // agent def declares executor:'dev' (developer-ralph, fanOut:'work-items')
-  | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates
+  | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates; the LAST declared executor row, held until R4-01-F4
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
-  | 'reflect'     // agent def declares executor:'reflect' (reflector)
-  | 'agent'       // agent def exists, no executor declared — generic F1 runAgent path (R2-01-F2)
+  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); ADR-039 declared dispatch: a band hook (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
   | 'unknown';    // defensive fallback — no def, or an invalid declared executor
 
 /**
@@ -693,7 +692,14 @@ const execReview: NodeExecutor = async (ctx) => {
   state.cycleOutcome = state.closure.outcome as CycleOutcome;
 };
 
-/** reflect: only when the closure confirmed a merge (G10). */
+/**
+ * The `reflection-close` band (R4-01-F2, ADR-039) — formerly the dedicated
+ * `reflect` NodeKind's executor, now selected by the reflector def's declared
+ * `composition.hooks` entry instead of a privileged executor enum. Semantics
+ * unchanged: runs only when the closure confirmed a merge (G10), records a
+ * reflection loss on a caller-side crash, and ALWAYS promotes `merged → done`
+ * in the finally (R4-11-F1 — reflection-lost still reaches done).
+ */
 const execReflect: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
   if (!state.closure?.merged) return;
@@ -778,7 +784,8 @@ function buildAgentPrompt(def: AgentDefinition, ctx: NodeExecContext): string {
 /**
  * agent: the generic F1 runAgent path (R2-01-F2, AC #1). Resolves ONLY when
  * `resolveNodeKind` picked 'agent' — a real roster def with no declared
- * `executor` (i.e. not one of the four legacy phase executors). No gate, no
+ * `executor` (i.e. not the sole remaining legacy phase executor, 'unifier' —
+ * R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect' onto declared dispatch). No gate, no
  * runWithWedge (runAgent takes no AbortSignal — abort-chaining is R2-03-F4's
  * job; wedge budgets are inert in production regardless, ADR-036 forbids the
  * primitive running its own gate).
@@ -791,7 +798,54 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
+  // ADR-039: a declared band hook routes this node to its orchestrator band
+  // (the phase pipeline machinery) instead of the bare generic spawn.
+  // Runtime backstop mirroring the ralph guard below (and the
+  // composition/band-hook lint): the band pipelines load the CANONICAL
+  // agent's SKILL.md themselves, so a non-canonical def declaring the hook
+  // would silently run the wrong identity — fail loud instead.
+  const bandHook = resolveBandHook(def);
+  if (bandHook) {
+    const canonicalSlug = bandHook === 'wi-contract' ? 'project-manager' : 'reflector';
+    if (def.slug !== canonicalSlug) {
+      throw new Error(
+        `execAgent: agent "${def.slug}" declares band hook "${bandHook}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
+      );
+    }
+    return AGENT_BAND_EXECUTORS[bandHook](ctx);
+  }
+
+  // ADR-039: a declared ralph loop routes to the dev-loop pipeline — the one
+  // shipped multi-iteration executor (per-WI worktrees, merge queue, gates).
+  // `runAgent` itself REJECTS ralph defs; the loop machinery is
+  // orchestrator-band, selected here by the def's declared strategy.
+  // Runtime backstop for the lint restriction (validate.ts
+  // runtime/loop-strategy): the dev-loop pipeline ignores the declaring
+  // def's own prompt/tools, so a non-canonical ralph def would silently
+  // mis-run under the wrong identity — fail loud instead.
+  if (def.runtime.loopStrategy === 'ralph') {
+    if (def.slug !== 'developer-ralph') {
+      throw new Error(
+        `execAgent: agent "${def.slug}" declares loopStrategy 'ralph', which routes to the dev-loop pipeline — restricted to developer-ralph until declared fanout generalises the loop (R2-03/R4-06); \`forge studio lint\` flags this at authoring time`,
+      );
+    }
+    return execDev(ctx);
+  }
+
   const prompt = buildAgentPrompt(def, ctx);
+
+  // R4-01 review: thread the initiative's declared cost budget into the
+  // binding so a def's `budgets.maxBudgetUsdShare` cap can resolve — without
+  // it the share term is silently inert and a share-only def would spawn
+  // UNCAPPED. Best-effort read (a dry-run/fixture flow may carry no real
+  // manifest); a share-declaring def with no resolvable budget still gets
+  // its flat floor via resolveOneShotBudgetUsd.
+  let costBudgetUsd: number | undefined;
+  try {
+    costBudgetUsd = parseManifest(readFileSync(input.manifestPath, 'utf8')).cost_budget_usd;
+  } catch {
+    costBudgetUsd = undefined;
+  }
 
   await runAgent(def, {
     runId: input.cycleId ?? input.initiativeId,
@@ -800,7 +854,7 @@ const execAgent: NodeExecutor = async (ctx) => {
     prompt,
     bindings: {
       project: { name: basename(input.projectRepoPath), repoPath: input.projectRepoPath },
-      initiative: { id: input.initiativeId, manifestPath: input.manifestPath },
+      initiative: { id: input.initiativeId, manifestPath: input.manifestPath, costBudgetUsd },
     },
     artifactRefs: ctx.inboundArtifacts,
   });
@@ -814,13 +868,22 @@ const execAgent: NodeExecutor = async (ctx) => {
  */
 const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   architect: execArchitect,
-  pm: execPm,
-  dev: execDev,
   unifier: execUnifier,
   review: execReview,
-  reflect: execReflect,
   agent: execAgent,
   unknown: execUnknown,
+};
+
+/**
+ * Band-hook id → executor (ADR-039). The KEY is declared data (a
+ * `composition.hooks` entry on the agent's SKILL.md); the executors are the
+ * same orchestrator-band implementations the retired phase-executor rows
+ * carried. `wi-contract` is registered ahead of the PM's own migration in
+ * this same change-set so the table is total over BAND_HOOK_IDS.
+ */
+const AGENT_BAND_EXECUTORS: Readonly<Record<BandHookId, NodeExecutor>> = {
+  'wi-contract': execPm,
+  'reflection-close': execReflect,
 };
 
 // ---------------------------------------------------------------------------
@@ -963,11 +1026,17 @@ export async function runFlow({
     };
 
     // ADR-027: assert the node's inbound artifacts exist before it runs. The
-    // reflect node is exempt — its inbound `verdict` is produced by the human
-    // review gate (async in unattended mode); verdict.json is persisted at the
-    // decision point, not by a producing node. A dry run produces no real
-    // artifacts, so enforcement is skipped there.
-    if (kind !== 'reflect' && !input.dryRun) {
+    // reflect node (the agent carrying the reflection-close band, ADR-039) is
+    // exempt — its inbound `verdict` is produced by the human review gate
+    // (async in unattended mode); verdict.json is persisted at the decision
+    // point, not by a producing node. A dry run produces no real artifacts,
+    // so enforcement is skipped there.
+    const nodeDefForExemption = node.agent ? agents.get(node.agent) : undefined;
+    const isReflectionCloseNode =
+      kind === 'agent' &&
+      nodeDefForExemption !== undefined &&
+      resolveBandHook(nodeDefForExemption) === 'reflection-close';
+    if (!isReflectionCloseNode && !input.dryRun) {
       assertInboundArtifacts({
         flow,
         nodeId,

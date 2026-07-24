@@ -353,18 +353,17 @@ is authoritative for how/when.
 
 R2-01 (agent-as-runnable primitive, roadmap R2-B8) shipped clean — zero merge-blockers across six
 per-task reviews + a 4-lens adversarial whole-branch review (+ re-run integration/security lenses).
-The whole-branch review surfaced three **latent, forward-looking** items — none reachable in
-shipping content today (no seed flow declares a generic-agent node; every seed flow uses
-gated/canonical-executor nodes), each owned by a downstream initiative:
+The whole-branch review surfaced three **latent, forward-looking** items, each owned by a
+downstream initiative. **Reachability update (2026-07-24, R4-01-F2):** the original "none reachable
+— no seed flow declares a generic-agent node" premise no longer holds: the pm/dev/reflect seed-flow
+nodes now resolve through the generic `agent` kind (band hooks / ralph routing, ADR-039), so the
+remaining items below are live-path concerns, not latent ones:
 
-- **`execAgent` stamps `PROMPT.md` into the initiative git-worktree root.**
-  `orchestrator/flow-runner.ts`'s `execAgent` passes `workdir: input.worktreePath`;
-  `orchestrator/run-agent.ts` writes `join(workdir, 'PROMPT.md')`. The normal Ralph loop writes
-  there too but goes through the dev-loop's scratch-strip / `wi-merge-back` exclusion; the generic
-  `execAgent` path does not. If a real generic-agent node runs in a develop-style flow whose
-  worktree becomes a PR, `PROMPT.md` could leak into the PR. *Owner **R4-01/R4-02*** (they wire
-  generic agents onto real flows): give `execAgent` a scratch prompt path (e.g. a `.forge/`-ignored
-  dir) while keeping the agent's cwd on the worktree.
+- ~~**`execAgent` stamps `PROMPT.md` into the initiative git-worktree root.**~~ **RESOLVED
+  2026-07-24 (R4-01-F2):** `runAgent`'s legacy invocation path now stamps the prompt at
+  `<workdir>/.forge/agent-run/PROMPT.md` (gitignored scratch; cwd stays on the worktree), and the
+  one-shot path passes the prompt inline with no file at all. Pinned by
+  `orchestrator/run-agent.test.ts` (scratch-path test).
 - **The F2 `node-executor` lint is surface-derived and doesn't catch a bespoke interactive runner
   placed as a bare (no-`gate`) agent node** (`orchestrator/studio/validate.ts`). It correctly flags
   `surface: interactive` roster agents, but `architect` (no `surface` → `executionPathForSurface`
@@ -373,12 +372,17 @@ gated/canonical-executor nodes), each owned by a downstream initiative:
   always ships with `gate:'plan'` → resolves via `GATE_KIND`). *Owner **R4*** (when real flows are
   authored): key the guard off the bespoke-interactive-runner set, not `surface` alone. (`library:false`
   bespoke runners like `project-brain-builder` are NOT in the roster map → already resolve to `'unknown'`.)
+  *2026-07-24 note (R4-01-F2): more relevant now that the roster has more executor-less defs; the new
+  `runtime/loop-strategy` lint covers the ralph-misdeclaration case, but the bare-architect-node case
+  above is still open.*
 - **`buildAgentPrompt` will carry untrusted input once R2-04 external triggers land.**
   `orchestrator/flow-runner.ts` concatenates `def.body` + `basename(projectRepoPath)` + `initiativeId`
   + inbound-artifact labels into the agent prompt — all forge/operator-authored today (no injection
   vector). When R2-04 lets external systems set binding fields, validate/escape them at the trigger
   boundary before they reach the prompt. *Owner **R2-04*** (already carries the content-trust posture:
-  HMAC, source allowlists, typed-payload isolation, injection fixture).
+  HMAC, source allowlists, typed-payload isolation, injection fixture). *2026-07-24 note (R4-01-F2):
+  band-routed agents (PM/reflector) bypass `buildAgentPrompt` entirely — their pipelines build their
+  own prompts — so this item concerns only bare generic-agent nodes, unchanged.*
 
 ### 9. R4-11 roadmap & attention — as-built follow-ups (2026-07-19)
 

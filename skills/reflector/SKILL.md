@@ -4,22 +4,22 @@ description: Run a deep structured retrospective at the end of a merged initiati
 library: true
 phase: reflector
 surface: both
-executor: reflect
 purpose: Run the end-of-cycle retrospective and write durable findings into the brain.
 composition:
   skills: [brain-query, brain-ingest]
   tools: []
   mcps: []
-  hooks: [event-log]
+  hooks: [event-log, reflection-close]
 runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
+  loopStrategy: one-shot
 brainAccess: mandatory
 interactivity: Autonomous self-reflection with an optional operator feedback round.
 allowed-tools: [Read, Grep, Glob, Write, Edit, Bash]
 disallowed-tools: [NotebookEdit, WebFetch, WebSearch]
-budgets: {}
+budgets: {maxTurns: 60, maxBudgetUsd: 1.5}
 ---
 
 # Reflector
@@ -34,7 +34,7 @@ The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders th
 
 **Reads:** `_logs/<id>/user-questions.json` (≤4 entries; `[]` if none written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
 
-**Writes:** `_logs/<id>/user-feedback.md` — answer each numbered question, then add free-form feedback. Stage 3 distils this into `retro.md` Section 2 (answers) + Section 3 (free-form). Contract: `orchestrator/reflector-invocation.ts`, `orchestrator/phases/reflector.ts`. If the file is absent when the reflector runs, record `_(no feedback supplied this cycle)_` and continue.
+**Writes:** `_logs/<id>/user-feedback.md` — answer each numbered question, then add free-form feedback. Stage 3 distils this into `retro.md` Section 2 (answers) + Section 3 (free-form). Contract: `orchestrator/phases/reflector-binding.ts`, `orchestrator/phases/reflector.ts`. If the file is absent when the reflector runs, record `_(no feedback supplied this cycle)_` and continue.
 
 ## Required first action
 

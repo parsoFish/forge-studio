@@ -38,6 +38,20 @@ import { buildChildEnv } from './spawn-env.ts';
 export type SdkQueryFn = (params: { prompt: string | AsyncIterable<SDKUserMessage>; options?: Options }) => Query;
 
 /**
+ * The loosened stream-call shape every direct-stream consumer (the phase
+ * pipelines' DI seams, `runAgent`'s one-shot path, the Ralph adapter's
+ * QueryFn) actually invokes: a plain-record options bag and an opaque
+ * async-iterable of SDK messages. One shared type so those seams stop
+ * re-deriving structurally-identical local aliases and double-casting
+ * through `SdkQueryFn` (R4-01 review finding).
+ */
+export type StreamQueryFn = (params: {
+  prompt: string;
+  options: Record<string, unknown>;
+}) => AsyncIterable<unknown>;
+
+
+/**
  * Build a `query`-compatible function that pins `options.env` via
  * `buildChildEnv` on every call before delegating to `queryImpl`. Exported
  * as a factory (rather than only the bound `pinnedSdkQuery` below) so tests
@@ -63,3 +77,11 @@ export function createPinnedSdkQuery(queryImpl: SdkQueryFn): SdkQueryFn {
  * directly.
  */
 export const pinnedSdkQuery: SdkQueryFn = createPinnedSdkQuery(rawSdkQuery);
+
+/**
+ * `pinnedSdkQuery` viewed through the loosened stream shape — the ONE place
+ * the structural cast lives. Sound at runtime: the SDK's `query` accepts a
+ * plain options record (Options is a plain object type) and its `Query`
+ * return IS an AsyncIterable.
+ */
+export const pinnedStreamQuery: StreamQueryFn = pinnedSdkQuery as unknown as StreamQueryFn;

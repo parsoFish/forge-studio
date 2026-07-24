@@ -193,3 +193,24 @@ promotes it from descriptor to **contract**:
   (`studio/flows/{forge-architect,forge-develop,forge-reflect}/flow.yaml`)
   were left untouched — they are a separate read-grant mechanism, not the
   binding.
+
+## Amendment (R4-01-F1, 2026-07-24): budget-cap fields + hook band keys
+
+[ADR 039](./039-ships-as-artifact.md) (ships-as-artifact) extends two of this
+ADR's §1 agent-definition fields as part of its R4-01-F2 dispatch-seam design:
+
+- **`AgentBudgets` gains `maxTurns`, `maxBudgetUsd`, `maxBudgetUsdShare`** —
+  cost-bounded caps alongside the existing `iterationFloor`/`iterationCap`/
+  `maxTurnsPerIteration`/`wedgeKillMs` fields, resolved generically as
+  `max(maxBudgetUsd, maxBudgetUsdShare × initiative cost budget)` so a
+  migrated phase agent's cost ceiling is declared data, not a per-phase
+  constant hand-coded in `orchestrator/`.
+- **`AgentComposition.hooks` gains band keys** (`wi-contract`, `reflection-close`)
+  alongside the existing toggle-style hook names (event-log, cost-guard,
+  stall-watchdog, merge-gate, scratch-strip). A band key selects an
+  orchestrator-implemented pre/post pipeline — the PM work-item contract
+  pipeline, the reflector close pipeline — rather than toggling one behaviour.
+  See ADR 039 for the honest caveat that the pipelines themselves stay
+  platform code; only the selection mechanism becomes declared data.
+
+Format only; ADR 039 owns the semantics and sequencing (R4-01-F2).

@@ -32,6 +32,18 @@ export type AgentBudgets = {
   iterationCap?: number;
   maxTurnsPerIteration?: number;
   wedgeKillMs?: number;
+  /**
+   * One-shot spawn caps (R4-01-F2, ADR-039). Consumed by `runAgent`'s
+   * `loopStrategy: 'one-shot'` path only — the Ralph loop keeps its
+   * per-iteration caps above. `maxBudgetUsdShare` is a fraction of the bound
+   * initiative's declared cost budget; the effective cap is
+   * `max(maxBudgetUsd, maxBudgetUsdShare × initiative.costBudgetUsd)` so a
+   * flat floor and a proportional share compose (the PM's budget policy,
+   * now declared data).
+   */
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+  maxBudgetUsdShare?: number;
 };
 
 /** An agent IS a skill directory; this is the parsed view of its SKILL.md. */
@@ -44,11 +56,13 @@ export type AgentDefinition = {
   phase?: string;
   surface?: string;
   /**
-   * Declared flow-engine executor kind (R2-01-F2). One of the four legacy
-   * phase-executor slugs ('pm' | 'dev' | 'unifier' | 'reflect') — the
-   * DECLARED replacement for flow-runner's old hardcoded AGENT_KIND table.
-   * Absent ⇒ a generic library agent, resolved through the F1 execAgent
-   * path instead of a phase-specific executor.
+   * Declared flow-engine executor kind (R2-01-F2) — the DECLARED replacement
+   * for flow-runner's old hardcoded AGENT_KIND table. R4-01-F2 (ADR-039)
+   * retired the 'pm' | 'dev' | 'reflect' rows onto declared dispatch
+   * (composition.hooks band hooks / loopStrategy:'ralph'); 'unifier' is the
+   * LAST remaining legacy phase-executor slug, held until R4-01-F4. Absent ⇒
+   * a generic library agent, resolved through the F1 execAgent path instead
+   * of a phase-specific executor.
    */
   executor?: string;
   purpose: string;

@@ -2,7 +2,7 @@
  * Unit tests for orchestrator/unifier-invocation.ts.
  *
  * The unifier-invocation contract is the developer-unifier sub-phase's
- * equivalent of `dev-invocation.ts` for per-WI Ralphs: system prompt builder,
+ * equivalent of `phases/dev-binding.ts` for per-WI Ralphs: system prompt builder,
  * per-iteration prompt builder, workspace prep. Tests are file-system tests
  * (tmp dir, write/read assertions) — no SDK invocation, no shells.
  */

@@ -149,6 +149,114 @@ export function validateAgent(
     );
   }
 
+  // runtime/loop-strategy — error (R4-01-F2 review finding). Mirrors the
+  // executor enum check: parsed leniently at load, so a bad value must be a
+  // lint error here (runAgent also rejects unknown values at spawn, but that
+  // is a runtime crash, not an authoring-time signal). And 'ralph' is
+  // restricted to the canonical developer-ralph slug: execAgent routes a
+  // declared ralph loop to the dev-loop pipeline, which is per-WI machinery
+  // that ignores the declaring def's own prompt/tools — any other agent
+  // declaring it would mis-run. Lifts when declared fanout generalises the
+  // loop machinery (R2-03 / R4-06-F2).
+  const loopStrategy = def.runtime.loopStrategy;
+  if (loopStrategy !== undefined && loopStrategy !== 'ralph' && loopStrategy !== 'one-shot') {
+    findings.push(
+      err(obj, 'runtime/loop-strategy', `unknown loopStrategy "${loopStrategy}" — must be ralph|one-shot`),
+    );
+  }
+  if (loopStrategy === 'ralph' && def.slug !== 'developer-ralph') {
+    findings.push(
+      err(
+        obj,
+        'runtime/loop-strategy',
+        `loopStrategy "ralph" is restricted to developer-ralph — the ralph loop is the dev-loop pipeline, which ignores this agent's own def (lifts with R2-03/R4-06 declared fanout)`,
+      ),
+    );
+  }
+
+  // composition/band-hook — error (R4-01 whole-branch review). Band hooks are
+  // declared DISPATCH (execAgent routes them to the canonical PM/reflector
+  // pipelines, which load their own SKILL.md and ignore the declaring def) —
+  // the exact wrong-identity hazard the ralph restriction above closes, so
+  // they get the same treatment: each hook is restricted to its canonical
+  // slug until the bands generalise (R4-06+); at most one band hook per def;
+  // a band-hook def must declare the one-shot loop the band spawns with.
+  // The INVERSE also lints: the canonical phase agents must CARRY their band
+  // hook — deleting it would silently degrade the phase node to the bare
+  // generic spawn (no WI validation, no brain gate) with lint green.
+  const CANONICAL_BAND_SLUGS: Record<string, string> = {
+    'wi-contract': 'project-manager',
+    'reflection-close': 'reflector',
+  };
+  const declaredBands = def.composition.hooks.filter((h) => h in CANONICAL_BAND_SLUGS);
+  for (const band of declaredBands) {
+    if (CANONICAL_BAND_SLUGS[band] !== def.slug) {
+      findings.push(
+        err(
+          obj,
+          'composition/band-hook',
+          `band hook "${band}" is restricted to ${CANONICAL_BAND_SLUGS[band]} — it routes this node to that agent's canonical pipeline, ignoring this def (lifts when the bands generalise)`,
+        ),
+      );
+    }
+  }
+  if (declaredBands.length > 1) {
+    findings.push(
+      err(obj, 'composition/band-hook', `at most one band hook per agent (got: ${declaredBands.join(', ')})`),
+    );
+  }
+  if (declaredBands.length === 1 && loopStrategy !== 'one-shot') {
+    findings.push(
+      err(
+        obj,
+        'composition/band-hook',
+        `a band-hook agent must declare runtime.loopStrategy: one-shot (the band spawns through the one-shot primitive)`,
+      ),
+    );
+  }
+  if (declaredBands.length === 1 && def.budgets.maxTurns === undefined) {
+    findings.push(
+      err(
+        obj,
+        'composition/band-hook',
+        `a band-hook agent must declare budgets.maxTurns — the caps are frontmatter data now; an uncapped unattended phase agent re-opens the F-42/F-43 silent-spend vector`,
+      ),
+    );
+  }
+  if (
+    declaredBands.length === 1 &&
+    def.budgets.maxBudgetUsd === undefined &&
+    def.budgets.maxBudgetUsdShare === undefined
+  ) {
+    findings.push(
+      err(obj, 'composition/band-hook', `a band-hook agent must declare a budget cap (maxBudgetUsd and/or maxBudgetUsdShare)`),
+    );
+  }
+
+  // budgets/range — error: nonsense cap values would silently weaken or
+  // invert the spend guards (a negative cap, a share > 1 spending more than
+  // the whole initiative budget).
+  const rangeChecks: Array<[string, number | undefined, (v: number) => boolean, string]> = [
+    ['maxTurns', def.budgets.maxTurns, (v) => Number.isInteger(v) && v > 0, 'a positive integer'],
+    ['maxBudgetUsd', def.budgets.maxBudgetUsd, (v) => v >= 0, '≥ 0'],
+    ['maxBudgetUsdShare', def.budgets.maxBudgetUsdShare, (v) => v > 0 && v <= 1, 'in (0, 1]'],
+  ];
+  for (const [field, value, ok, want] of rangeChecks) {
+    if (value !== undefined && !ok(value)) {
+      findings.push(err(obj, 'budgets/range', `budgets.${field} must be ${want} (got ${value})`));
+    }
+  }
+  const owedBand = Object.entries(CANONICAL_BAND_SLUGS).find(([, slug]) => slug === def.slug)?.[0];
+  if (owedBand !== undefined && !def.composition.hooks.includes(owedBand)) {
+    findings.push(
+      err(
+        obj,
+        'composition/band-hook',
+        `${def.slug} must declare its "${owedBand}" band hook — without it the phase node silently degrades to the bare generic spawn`,
+      ),
+    );
+  }
+
   // readiness/runtime — error
   const rt = def.runtime;
   const runtimeOk =
@@ -287,8 +395,9 @@ export function validateFlow(
   // node-executor (R2-01-F2, AC #2; sourced from the R2-02-F1 capability
   // descriptor as of R2-02-F3): a node whose agent resolves to a real def
   // but that def is INTERACTIVE (agentCapabilityDescriptor(def).interactive)
-  // and carries no declared `executor` (i.e. not one of the four legacy
-  // phase executors) can never be executed by the flow engine — interactive
+  // and carries no declared `executor` (i.e. not the sole remaining legacy
+  // phase executor, 'unifier' — R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect'
+  // onto declared dispatch) can never be executed by the flow engine — interactive
   // agents run through the interactive-session runner, not a flow node.
   // Sourced from the same descriptor the BUILD-tab palette/drop gate reads
   // client-side, so lint and the UI never disagree. The `!def` case is

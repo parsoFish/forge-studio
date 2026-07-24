@@ -18,11 +18,11 @@ const src = (f: string): string => readFileSync(resolve(__dirname, f), 'utf8');
 const READS_BRAIN_NAV = /loadBrainIndex|loadBrainNavigation/;
 
 test('R1-01-F4: planners (PM, reflector) still read the brain navigation surface post-rebind', () => {
-  assert.match(src('pm-invocation.ts'), READS_BRAIN_NAV, 'PM must still load the brain navigation');
-  assert.match(src('reflector-invocation.ts'), READS_BRAIN_NAV, 'reflector must still load the brain navigation');
+  assert.match(src('phases/pm-binding.ts'), READS_BRAIN_NAV, 'PM must still load the brain navigation');
+  assert.match(src('phases/reflector-binding.ts'), READS_BRAIN_NAV, 'reflector must still load the brain navigation');
 });
 
 test('R1-01-F4: dev-loop and reviewer/unifier do NOT read the forge brain (policy unchanged by the rebind)', () => {
-  assert.doesNotMatch(src('dev-invocation.ts'), READS_BRAIN_NAV, 'dev-loop must not read the forge brain');
+  assert.doesNotMatch(src('phases/dev-binding.ts'), READS_BRAIN_NAV, 'dev-loop must not read the forge brain');
   assert.doesNotMatch(src('unifier-invocation.ts'), READS_BRAIN_NAV, 'reviewer/unifier must not read the forge brain');
 });

@@ -151,3 +151,20 @@ Per-flow **kickoff** (`FlowDefinition.kickoff`, format in ADR 027): the UI rende
 the launch surface matching `kickoff.kind` — `idea` (architect NewIdeaBox),
 `initiative-select` (`GET /api/runs/planned` picker → `POST /api/runs`),
 `trigger-only` (no manual launch; reflect, fired by the merge trigger above).
+
+## Amendment (R4-01-F2 design, 2026-07-24): executor enum shrinks to `['unifier']`
+
+[ADR 039](./039-ships-as-artifact.md) (ships-as-artifact) designs the dispatch-seam
+replacement for this ADR's node-kind resolution: project-manager, developer-ralph,
+and reflector stop declaring a privileged `executor:` slug and instead resolve
+through the generic `'agent'` kind (`execAgent` → `runAgent`, R2-01-F1/F2), driven
+by `runtime.loopStrategy` — `'ralph'` dispatches to the orchestrator's existing
+loop machinery (`loops/ralph/`, ADR 002); `'one-shot'` drives the `runAgent`
+primitive's single query. Only `developer-unifier` keeps a declared
+`executor: 'unifier'` row — its dual-boundary close-contract gate (ADR 026,
+ADR 036) stays orchestrator-owned until R4-01-F4 retires it, after R4-10-F2
+relocates the gate. `PHASE_EXECUTOR_KINDS` narrows from four slugs to one;
+the `'agent'` fallback becomes the default path for every roster agent except
+that one, not the exception. Design only — the migration itself is R4-01-F2's
+implementation, gated on the standing harness suite per this ADR's Consequences
+(no parallel old/new dispatch survives cutover).

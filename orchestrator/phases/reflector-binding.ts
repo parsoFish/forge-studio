@@ -18,10 +18,10 @@
 
 import { readFileSync } from 'node:fs';
 
-import { loadBrainIndex } from '../cli/brain-index.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { loadBrainIndex } from '../../cli/brain-index.ts';
+import { modelForSpec } from '../phase-agent.ts';
+import { deriveAgentSpec } from '../studio/derive.ts';
+import { skillPath, skillPathRelative } from '../skill-path.ts';
 
 const SKILL_PATH = skillPath('reflector');
 
@@ -34,7 +34,9 @@ export type ReflectorDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';
  */
 export const reflectorAgentSpec = deriveAgentSpec(skillPathRelative('reflector'));
 
-/** Tool lists derived from the spec — exported for downstream consumers. */
+/** Tool lists derived from the spec. Production spawning now derives these
+ * inside `runAgent` (R4-01-F2); these exports remain the TEST-facing contract
+ * surface (reflector-binding.test.ts pins them against the SKILL.md source). */
 export const REFLECTOR_ALLOWED_TOOLS = reflectorAgentSpec.allowedTools as ReflectorAllowedTool[];
 export const REFLECTOR_DISALLOWED_TOOLS = reflectorAgentSpec.disallowedTools as ReflectorDisallowedTool[];
 

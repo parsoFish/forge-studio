@@ -400,6 +400,10 @@ export async function handleStudioWriteRoutes(
         description: existing?.description ?? name,
         phase: existing?.phase,
         surface: existing?.surface,
+        // R4-01 review: preserve the declared executor row — dropping it on a
+        // builder save would silently strip developer-unifier's dispatch (the
+        // one remaining executor, held until R4-01-F4 retirement).
+        executor: existing?.executor,
         purpose,
         composition,
         runtime,

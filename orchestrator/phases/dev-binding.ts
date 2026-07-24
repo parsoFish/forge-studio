@@ -1,13 +1,10 @@
 /**
- * Shared developer-loop invocation contract — system prompt + user prompt
- * builders + tool config.
+ * Developer-loop binding — system prompt + user prompt builders + tool
+ * config. Called by orchestrator/phases/developer-loop.ts (runDeveloperLoop);
+ * the single source of truth for what the developer agent sees. (The bench
+ * harnesses this header once named were removed 2026-05-25.)
  *
- * Both the bench harness (benchmarks/developer-loop/sdk.ts) and the live
- * orchestrator (orchestrator/cycle.ts:runDeveloperLoop) call into this module.
- * Single source of truth for what the developer agent sees, so the bench
- * reflects production.
- *
- * Contrast vs PM (orchestrator/pm-invocation.ts):
+ * Contrast vs PM (orchestrator/phases/pm-binding.ts):
  *   - PM is a one-shot decomposition. The agent reads, plans, writes WIs once.
  *   - Developer is a Ralph loop. Each iteration is one SDK query() call; the
  *     loop carries state across iterations via PROMPT.md / AGENT.md / fix_plan.md
@@ -26,10 +23,10 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { parseWorkItem, type WorkItem } from './work-item.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { parseWorkItem, type WorkItem } from '../work-item.ts';
+import { modelForSpec } from '../phase-agent.ts';
+import { deriveAgentSpec } from '../studio/derive.ts';
+import { skillPath, skillPathRelative } from '../skill-path.ts';
 
 const SKILL_PATH = skillPath('developer-ralph');
 

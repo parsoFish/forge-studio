@@ -11,7 +11,7 @@
  * release commit on the PR branch (semver bump + declared pre-merge steps +
  * optional version-file bump), then commits + pushes. Tag/publish stay with CI.
  *
- * Mirrors `reflector-invocation.ts`: derive the spec from SKILL.md (single
+ * Mirrors `phases/reflector-binding.ts`: derive the spec from SKILL.md (single
  * source of intent), resolve the model from the spec tier, keep the system
  * prompt stable (the SKILL.md contract) so per-cycle data goes in the user
  * prompt only.

@@ -75,14 +75,19 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // R2-01-F2: the declared phase-executor allowlist. These are the ONLY
 // `AgentDefinition.executor` values the flow engine recognises as a
 // phase-specific NodeKind — the DECLARED replacement for the old hardcoded
-// AGENT_KIND object literal. Set via `executor:` frontmatter on the four
-// phase SKILL.md files (project-manager, developer-ralph, developer-unifier,
-// reflector); an agent def with no `executor` resolves to the generic
+// AGENT_KIND object literal. Set via `executor:` frontmatter on the phase
+// SKILL.md files; an agent def with no `executor` resolves to the generic
 // 'agent' kind instead. Lives here (not flow-runner.ts) so validate.ts can
 // import it for the executor/enum lint check without creating a circular
 // import (flow-runner.ts already imports FROM validate.ts for
 // findFanOutViolations).
-export const PHASE_EXECUTOR_KINDS = ['pm', 'dev', 'unifier', 'reflect'] as const;
+//
+// R4-01-F2 (ADR-039) retired the enum row by row as each phase moved to
+// declared dispatch (loopStrategy + band hooks): 'reflect' with the reflector
+// migration, 'pm' with the plan agent, 'dev' with the ralph loopStrategy
+// routing. 'unifier' is the LAST row, held until R4-01-F4 retirement
+// (post R4-10-F2).
+export const PHASE_EXECUTOR_KINDS = ['unifier'] as const;
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md
@@ -162,6 +167,9 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     iterationCap: optNumber(budgetsRaw, 'iterationCap'),
     maxTurnsPerIteration: optNumber(budgetsRaw, 'maxTurnsPerIteration'),
     wedgeKillMs: optNumber(budgetsRaw, 'wedgeKillMs'),
+    maxTurns: optNumber(budgetsRaw, 'maxTurns'),
+    maxBudgetUsd: optNumber(budgetsRaw, 'maxBudgetUsd'),
+    maxBudgetUsdShare: optNumber(budgetsRaw, 'maxBudgetUsdShare'),
   };
 
   const allowedTools = stringArray(d, 'allowed-tools', skillMdPath);
@@ -227,6 +235,10 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
   if (def.budgets.maxTurnsPerIteration !== undefined)
     budgets['maxTurnsPerIteration'] = def.budgets.maxTurnsPerIteration;
   if (def.budgets.wedgeKillMs !== undefined) budgets['wedgeKillMs'] = def.budgets.wedgeKillMs;
+  if (def.budgets.maxTurns !== undefined) budgets['maxTurns'] = def.budgets.maxTurns;
+  if (def.budgets.maxBudgetUsd !== undefined) budgets['maxBudgetUsd'] = def.budgets.maxBudgetUsd;
+  if (def.budgets.maxBudgetUsdShare !== undefined)
+    budgets['maxBudgetUsdShare'] = def.budgets.maxBudgetUsdShare;
   data['budgets'] = budgets;
 
   const safeBody = def.body.replace(/^-{3,}/gm, (m) => m.replace(/-/g, '–'));

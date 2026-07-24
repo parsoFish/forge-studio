@@ -193,6 +193,12 @@ const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 // Turn entry point
 // ---------------------------------------------------------------------------
 
+// ADR-039: this is the architect's bespoke turn spawn — it deliberately stays
+// outside flow-runner's node-executor registry (never resolveNodeKind /
+// PHASE_EXECUTOR_KINDS / execAgent). The architect is intentionally
+// out-of-cycle (ARCHITECTURE.md §2) — an interactive, file-checkpointed
+// runner invoked directly by the Studio bridge, not a flow DAG node — so it
+// is not, and should not become, an executor-enum consumer.
 export async function runArchitectTurn(
   input: RunArchitectTurnInput,
 ): Promise<RunArchitectTurnResult> {
@@ -220,7 +226,7 @@ export async function runArchitectTurn(
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
 
   // ARCH-1: load brain navigation index at turn start and inject into prompts.
-  // Mirrors the PM/reflector pattern (pm-invocation.ts, reflector-invocation.ts).
+  // Mirrors the PM/reflector pattern (phases/pm-binding.ts, phases/reflector-binding.ts).
   // The index is cheap to read (a few small markdown files); we don't cache it
   // across turns because each turn is a fresh process invocation.
   const brainCwd = input.brainCwd ?? resolve('.');

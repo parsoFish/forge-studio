@@ -2,7 +2,7 @@
  * Conflict-context injection (2026-07-12) — unit coverage for
  * `writeMergeConflictFeedback` and its PRECEDENCE against `writeGateFeedback`,
  * both of which target the SAME `.forge/last-gate-failure.md` seam the dev
- * system prompt already mandates reading first (`dev-invocation.ts`).
+ * system prompt already mandates reading first (`phases/dev-binding.ts`).
  *
  * Precedence contract (see `writeGateFeedback`'s doc comment in
  * `developer-loop.ts` for the full rationale — re-review CRITICAL,

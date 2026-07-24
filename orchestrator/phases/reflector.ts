@@ -26,19 +26,19 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { parseRetroMd } from '../../cli/reflection-doc.ts';
-import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger, EventLogEntry } from '../logging.ts';
 import { parseManifest } from '../manifest.ts';
+import { runAgent } from '../run-agent.ts';
+import type { StreamQueryFn } from '../pinned-sdk-query.ts';
+import { loadAgentDefinition } from '../studio/registry.ts';
+import { skillPath } from '../skill-path.ts';
 import {
-  REFLECTOR_ALLOWED_TOOLS,
-  REFLECTOR_DISALLOWED_TOOLS,
-  REFLECTOR_MODEL,
   buildReflectorSystemPrompt,
   renderReflectorUserPrompt,
   tallyToolUse as tallyReflectorToolUse,
   type ReflectorToolUseSummary,
-} from '../reflector-invocation.ts';
+} from './reflector-binding.ts';
 import {
   recordBrainGateResult,
   REFLECTION_LOST_EVENT,
@@ -60,14 +60,10 @@ import { writeCycleRecap } from '../../cli/cycle-recap.ts';
 import { cyclesThemesDir, projectThemesDir } from '../brain-paths.ts';
 import { regenerateBrainIndex } from '../../cli/brain-index.ts';
 
-/**
- * Defaults for the live reflector invocation. The reflector is a one-shot SDK
- * call (not a Ralph loop) that consumes the cycle's event log + manifest +
- * merged tree and emits brain theme writes. The bench's 5-fixture median is
- * ~$0.74/run; the live cap gives 2x headroom for richer real cycles.
- */
-const REFLECTOR_LIVE_MAX_TURNS = 60;
-const REFLECTOR_LIVE_MAX_BUDGET_USD = 1.5;
+// The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was
+// ~$0.74, the cap gives 2x headroom) are DECLARED DATA now: `budgets.maxTurns`
+// / `budgets.maxBudgetUsd` in skills/reflector/SKILL.md, resolved by
+// `runAgent`'s one-shot path (R4-01-F2, ADR-039).
 
 /**
  * Optional injectables for testing. The brain-lint runner is the only one
@@ -77,15 +73,11 @@ const REFLECTOR_LIVE_MAX_BUDGET_USD = 1.5;
  * orchestrator via the bench's existing SDK harness (benchmarks/reflection/sdk.ts).
  */
 /**
- * SDK-query shape we depend on. Loosened from the SDK's full `Query` type
- * (which the SDK exports as a complex class with `interrupt`, `setModel`,
- * etc.) so test stubs can supply a simple async generator. The real
- * production path passes `sdkQuery` directly via `as unknown` cast.
+ * SDK-query shape we depend on — an alias of the one shared stream-call
+ * shape (R4-01 review — no structural twin types); test stubs supply a
+ * simple async generator.
  */
-export type ReflectorSdkQuery = (input: {
-  prompt: string;
-  options: Record<string, unknown>;
-}) => AsyncIterable<unknown>;
+export type ReflectorSdkQuery = StreamQueryFn;
 
 export type ReflectorDeps = {
   brainLint?: (opts: { cwd: string; cycleId: string }) => RunBrainLintResult;
@@ -135,8 +127,8 @@ export function emitReflectionLost(
  * the loss is visible in events.jsonl + Studio when it happens — ten July
  * cycles closed as done with reflection silently missing.
  *
- * Live invocation contract is shared with the bench via
- * orchestrator/reflector-invocation.ts (single source of truth).
+ * Live invocation contract (prompt builders + tool tally) lives in
+ * orchestrator/phases/reflector-binding.ts (single source of truth).
  */
 export async function runReflector(
   input: CycleInput,
@@ -257,17 +249,6 @@ export async function runReflector(
     forgeThemesDirRelPath: forgeThemesDir,
   });
 
-  const options: Record<string, unknown> = {
-    cwd: forgeRoot,
-    systemPrompt,
-    model: REFLECTOR_MODEL,
-    permissionMode: 'acceptEdits',
-    allowedTools: [...REFLECTOR_ALLOWED_TOOLS],
-    disallowedTools: [...REFLECTOR_DISALLOWED_TOOLS],
-    maxTurns: REFLECTOR_LIVE_MAX_TURNS,
-    maxBudgetUsd: REFLECTOR_LIVE_MAX_BUDGET_USD,
-  };
-
   const toolUseSummary: ReflectorToolUseSummary = {
     brainReads: 0,
     themeWrites: 0,
@@ -278,28 +259,45 @@ export async function runReflector(
   let durationMs = 0;
   let resultSubtype: string | undefined;
 
-  const queryImpl: ReflectorSdkQuery =
-    deps.sdkQuery ?? (sdkQuery as unknown as ReflectorSdkQuery);
   try {
-    for await (const msg of queryImpl({ prompt, options })) {
-      if (typeof msg !== 'object' || msg === null) continue;
-      const m = msg as {
-        type?: string;
-        message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
-        subtype?: string;
-        total_cost_usd?: number;
-        duration_ms?: number;
-      };
-      if (m.type === 'assistant') {
-        tallyReflectorToolUse(m.message, toolUseSummary);
-        continue;
-      }
-      if (m.type !== 'result') continue;
-      if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
-      if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
-      resultSubtype = m.subtype ?? 'success';
-      break;
+    // R4-01-F2: the spawn goes through the generic one-shot primitive.
+    // `lifecycle: 'caller'` — this pipeline owns the event lifecycle (the
+    // reflector.start/end pair around this call); runAgent emits nothing and
+    // returns the totals. Options (model/tools from the derived spec, caps
+    // from the SKILL.md `budgets`) are pinned byte-identical to the previous
+    // inline build by the golden spawn-capture suite. Per-message telemetry
+    // stays here via the onMessage observer (ADR-036: judgments never move
+    // into the primitive).
+    const def = loadAgentDefinition(skillPath('reflector'));
+    // R4-01 review: the caps moved from undeletable code constants to
+    // frontmatter data — fail loud if an edit removes them (mirrors the PM
+    // pipeline's maxTurns guard; an uncapped unattended reflector re-opens
+    // the silent-spend vector the old constants closed).
+    if (def.budgets.maxTurns === undefined || def.budgets.maxBudgetUsd === undefined) {
+      throw new Error(
+        'reflector SKILL.md must declare budgets.maxTurns and budgets.maxBudgetUsd (R4-01-F2 — the live caps are frontmatter data)',
+      );
     }
+    const spawn = await runAgent(def, {
+      runId: cycleId,
+      workdir: forgeRoot,
+      cwd: forgeRoot,
+      prompt,
+      systemPrompt,
+      lifecycle: 'caller',
+      onMessage: (msg) => {
+        if (typeof msg !== 'object' || msg === null) return;
+        const m = msg as {
+          type?: string;
+          message?: { content?: Array<{ type?: string; name?: string; input?: unknown }> };
+        };
+        if (m.type === 'assistant') tallyReflectorToolUse(m.message, toolUseSummary);
+      },
+      queryFn: deps.sdkQuery,
+    });
+    costUsd = spawn.costUsd;
+    durationMs = spawn.durationMs ?? 0;
+    resultSubtype = spawn.resultSubtype;
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
     logger.emit({

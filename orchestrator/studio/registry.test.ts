@@ -958,6 +958,9 @@ describe('serializeAgentDefinition empty budgets round-trip', () => {
       iterationCap: undefined,
       maxTurnsPerIteration: undefined,
       wedgeKillMs: undefined,
+      maxTurns: undefined,
+      maxBudgetUsd: undefined,
+      maxBudgetUsdShare: undefined,
     });
 
     const serialized = serializeAgentDefinition(original);

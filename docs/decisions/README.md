@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **039**).
+number (next free: **040**).
 
 ## Active
 
@@ -43,6 +43,7 @@ number (next free: **039**).
 | [036](./036-orchestrator-owned-gate-execution.md) | Orchestrator-owned gate execution (gates + demo capture run by forge, timeout = environment failure) | The anti-fabrication execution model |
 | [037](./037-compiled-wi-contracts.md) | Compiled work-item contracts (wi-spec-compiler) | Proposed — deterministic-first compiler stage at the PM seam, closing ADR 010's brain-encoding gap |
 | [038](./038-north-star-platform-and-ootb.md) | North-star reframe: platform (Scope 1) vs. shipped ideas machine (Scope 2 OOTB) | The mission statement every orientation doc points at |
+| [039](./039-ships-as-artifact.md) | Ships-as-artifact: every OOTB agent/flow is Scope-2 data on the runnable primitive | The R4-01 dispatch-seam design (executor enum → generic `runAgent`) |
 
 ## Retired / folded (numbers stay reserved)
 

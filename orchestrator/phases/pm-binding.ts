@@ -13,11 +13,11 @@
 
 import { readFileSync } from 'node:fs';
 
-import { loadBrainIndex } from '../cli/brain-index.ts';
-import { modelForSpec } from './phase-agent.ts';
-import { deriveAgentSpec } from './studio/derive.ts';
-import { loadAgentDefinition } from './studio/registry.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { loadBrainIndex } from '../../cli/brain-index.ts';
+import { modelForSpec } from '../phase-agent.ts';
+import { deriveAgentSpec } from '../studio/derive.ts';
+import { loadAgentDefinition } from '../studio/registry.ts';
+import { skillPath, skillPathRelative } from '../skill-path.ts';
 
 const SKILL_PATH = skillPath('project-manager');
 
@@ -31,7 +31,9 @@ export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch
  */
 export const pmAgentSpec = deriveAgentSpec(skillPathRelative('project-manager'));
 
-/** Tool lists derived from the spec — exported for downstream consumers. */
+/** Tool lists derived from the spec. Production spawning now derives these
+ * inside `runAgent` (R4-01-F2); these exports remain the TEST-facing contract
+ * surface (pm-binding.test.ts pins them against the SKILL.md source). */
 export const PM_ALLOWED_TOOLS = pmAgentSpec.allowedTools as PmAllowedTool[];
 export const PM_DISALLOWED_TOOLS = pmAgentSpec.disallowedTools as PmDisallowedTool[];
 
@@ -59,7 +61,7 @@ function loadSkillText(): string {
 // restarts. This is accepted, not a bug: the planner only needs a
 // stable index within a cycle, and restarts are cheap. If per-cycle
 // freshness is ever required, key the cache by cwd+mtime (as
-// reflector-invocation.ts already keys by cwd) rather than adding an
+// phases/reflector-binding.ts already keys by cwd) rather than adding an
 // invalidation path. Do not "fix" this silently.
 let cachedBrainIndex: string | null = null;
 function loadBrainNavigation(cwd: string): string {

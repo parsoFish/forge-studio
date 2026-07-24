@@ -160,12 +160,72 @@ R4-11 landed 2026-07-19 (wave 2, branch `feat/r4-11-roadmap-attention`). The ope
   `spawnAgentTurn`, `isSafeRunId`-guarded, dry-bridge `stub-actions`) + a `data-action="architect-rerun"` button on
   `StuckWarning`.
 
+### R4-B12 Declared dispatch — the phase agents as artifacts (F1–F3 as-built)
+
+R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-migration`):
+
+- **ADR-039** (`docs/decisions/039-ships-as-artifact.md`) — the ships-as-artifact principle +
+  the declared-dispatch seam; amendments on ADR-024/027/028.
+- **`orchestrator/run-agent.ts`** — the one-shot runtime: `loopStrategy: 'one-shot'` direct
+  pinned-stream spawn (options from the derived spec + declared `budgets` caps;
+  `resolveOneShotBudgetUsd` = `max(flat, share × initiative budget)`), `lifecycle: 'caller'`
+  (caller owns events/cost — no double emission), `streamGuard` (idle-deadline + abort chain),
+  `onMessage` observer (telemetry stays caller-side, ADR-036), scratch
+  `.forge/agent-run/PROMPT.md` on the legacy path. Shared `StreamQueryFn` seam in
+  `orchestrator/pinned-sdk-query.ts` (`pinnedStreamQuery`, the one structural cast).
+- **`orchestrator/agent-bands.ts`** — band-hook registry (`wi-contract`, `reflection-close`);
+  flow-runner's `AGENT_BAND_EXECUTORS` maps them onto the unchanged `execPm`/`execReflect`
+  bands; `execAgent` routes band hooks first, then `loopStrategy: 'ralph'` → the dev-loop
+  pipeline (lint + runtime-guard restricted to `developer-ralph`).
+- **Pipelines** (`orchestrator/phases/project-manager.ts` / `reflector.ts`) spawn via
+  `runAgent(lifecycle:'caller')`; every judgment band (brain-gate, WI validation/compile,
+  checkpoints, retention/lint/recap, `promoteMergedToDone`) unchanged. Prompt builders +
+  tallies live in `orchestrator/phases/{pm,dev,reflector}-binding.ts`.
+- **Parity evidence** — golden spawn-capture suite (`orchestrator/pm-spawn-capture.test.ts`,
+  `orchestrator/phases/reflector-spawn-capture.test.ts`, fixtures under
+  `orchestrator/test-fixtures/spawn-capture/`): {prompt, options} byte-identical pre/post;
+  systemPrompt deltas = the SKILL.md frontmatter edits only. `runtime/loop-strategy` lint
+  (`orchestrator/studio/validate.ts`); journey evidence in the `agents` journey
+  (builder-save preserves declared dispatch).
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
 
-- **Status:** planned  ·  **Wave:** 4 — first item of wave 4, before the agent
+- **Status:** **in-progress** — F1–F3 built 2026-07-24 (wave-4 session 1, branch
+  `feat/r4-01-artifact-migration`, as-built baseline **R4-B12**); PR held open
+  pending the operator-gated frozen-SHA `verify:cycle` routine run (the F2
+  no-behavioural-delta AC's real-run half — free gates all green). **F4 stays
+  planned** (end of wave 4, after R4-10-F2).  ·  **Wave:** 4 — first item of wave 4, before the agent
   initiatives; **F4 alone runs last**, after R4-10-F2 (not contiguous with F1–F3)
+- **Implemented-notes (2026-07-24, F1–F3):** the seam landed as **declared
+  dispatch** (ADR-039): `runtime.loopStrategy` (`one-shot` = a direct pinned
+  SDK stream inside `runAgent`; `ralph` = execAgent routes to the dev-loop
+  pipeline, lint-restricted to `developer-ralph` until R2-03/R4-06),
+  `budgets.maxTurns/maxBudgetUsd/maxBudgetUsdShare` (the PM's
+  floor-plus-share cap as frontmatter data), and `composition.hooks` band
+  keys (`wi-contract` → PM pipeline, `reflection-close` → reflector pipeline;
+  `orchestrator/agent-bands.ts`). Pipelines keep 100% of their judgment bands
+  (ADR-036); only the SDK call moved, behind `runAgent`'s
+  `lifecycle:'caller'` (no event/cost double-emission). Parity proof: golden
+  spawn-capture fixtures (`orchestrator/test-fixtures/spawn-capture/`) pin
+  {prompt, options} byte-identical for PM + reflector; systemPrompt deltas =
+  the frontmatter edits only. `*-invocation.ts` dissolved into
+  `orchestrator/phases/{pm,dev,reflector}-binding.ts` (~950 lines off the
+  orchestrator root). `PHASE_EXECUTOR_KINDS` = `['unifier']`. The F2 AC's
+  "declared kind-mapping deletion" is done for pm/dev/reflect; the frozen-SHA
+  verify:cycle run is the remaining AC evidence (operator-gated). F3
+  round-trip: agents-builder journey beat proves the builder save preserves
+  the declared dispatch data on the migrated PM. known-gaps §8's PROMPT.md
+  rider resolved here (scratch `.forge/agent-run/` path). **F2 scope note:**
+  the architect spawn path was audited, not migrated — it already sources
+  tools/model/prompts from SKILL.md and stays a deliberate bespoke
+  interactive runner (ADR-039 §5); its residual TS prompt prose is R4-04
+  material. The whole-branch review hardened the seam post-build: band
+  hooks + ralph got matching lint/runtime canonical-slug guards, budget
+  caps fail loud (pipelines + `budgets/range`/`composition/band-hook`
+  lints), `execAgent` threads the initiative cost budget so declared
+  share caps resolve, and the builder renders `loopStrategy` honestly.
 - **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder
   round-trip); **F4 only:** R4-07, R4-08, R4-10-F2 (retirement cannot start
   before the successor agents and the relocated gate are live)
@@ -778,3 +838,12 @@ free R4 ID's features.
   (`POST /api/architect/rerun`, guarded spawn). Deferred (known-gaps): a server-side `planned` gate on
   `/api/develop/start` (UI lock only — ADR-031 makes the UI the sole surface); the orphan-in-merged SIGKILL edge
   (R4-09). **Wave 2 (R4-05 + R4-11) COMPLETE.**
+- 2026-07-24 — **Wave 4 opened: R4-01 F1–F3 built** (branch `feat/r4-01-artifact-migration`; R4 gains baseline
+  **R4-B12**). ADR-039 ships-as-artifact + the declared-dispatch seam: `executor:` rows `pm`/`dev`/`reflect`
+  retired onto band hooks (`wi-contract`/`reflection-close`, `orchestrator/agent-bands.ts`) + `loopStrategy:
+  'ralph'` routing; `runAgent` gains the one-shot runtime (`lifecycle:'caller'`, declared budget caps, streamGuard,
+  scratch PROMPT.md — closes the known-gaps §8 rider); pipelines keep their judgment bands, only the SDK call
+  moved; `*-invocation.ts` dissolved into `phases/*-binding.ts`. `PHASE_EXECUTOR_KINDS` = `['unifier']` (held for
+  F4). Parity: golden spawn-captures pin PM/reflector {prompt, options} byte-identical. **Status in-progress: the
+  PR is held open for the operator-gated frozen-SHA `verify:cycle` routine run (the F2 AC's real-run half); F4
+  retirement stays planned for end of wave 4.**
