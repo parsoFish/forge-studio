@@ -13,7 +13,7 @@ In cycle `2026-06-19T06-29-05_INIT-2026-06-19-framework-mux-entrypoint`, unifier
 - `/home/parso/forge/fix_plan.md` (not the worktree)
 - `/home/parso/forge/work-items/WI-*.md` (not under `_worktrees/.../.forge/work-items/`)
 
-It then spent ~30 sequential `Bash` tool calls trying to invoke `forge demo render` — probing `cli/index.js`, `bin/forge.mjs`, `orchestrator/cli.ts`, `orchestrator/pm-invocation.ts`, `orchestrator/flow-runner.ts`, `skills/project-manager/` etc. None of the search paths resolved correctly from the wrong working directory.
+It then spent ~30 sequential `Bash` tool calls trying to invoke `forge demo render` — probing `cli/index.js`, `bin/forge.mjs`, `orchestrator/cli.ts`, `orchestrator/phases/pm-binding.ts`, `orchestrator/flow-runner.ts`, `skills/project-manager/` etc. None of the search paths resolved correctly from the wrong working directory.
 
 Cost: unifier UWI-3 cost $1.74 USD, significant portion in the exploration waste.
 
