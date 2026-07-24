@@ -21,7 +21,7 @@ export const journey = defineJourney({
       {
         id: 'roadmap-tab',
         title: 'Per-project Roadmap tab',
-        narration: 'The Roadmap tab renders every initiative as a dot on a serpentine timeline; clicking a completed one pops a detail card listing its actual work items — the roadmap is read straight off real cycle history, not a hand-maintained list.',
+        narration: 'The Roadmap tab renders every initiative as a dot on a serpentine timeline; clicking a completed one pops a detail card listing its actual work items — the roadmap is read straight off real cycle history, not a hand-maintained list. The card also links straight to the project\'s demo surface (R4-07-F3), so demo upkeep is one click from initiative state.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── R6: Per-project Roadmap tab (S6 DEC-3) ───────────────────────────────
@@ -203,6 +203,24 @@ export const journey = defineJourney({
                     document.querySelectorAll('[data-roadmap-popover] [data-work-item-id]').length);
                   check(wiCount >= 1, `roadmap: clicking a dot pops its card with ≥1 [data-work-item-id] (got ${wiCount})`);
                   await frame(page, 'r6-0b-popover', 'R6 — clicking an initiative dot pops its detail card up off the timeline');
+                  // R4-07-F3: the card links straight to the project's demo surface —
+                  // click it and land on the editor tab's Demo Timeline.
+                  const demoLink = page.locator('[data-roadmap-popover] [data-link="demo-builder"]');
+                  const demoLinkPresent = (await demoLink.count()) >= 1;
+                  check(demoLinkPresent, 'roadmap: initiative card carries [data-link="demo-builder"] (R4-07-F3 demo tie-in)');
+                  if (demoLinkPresent) {
+                    await demoLink.first().click().catch(() => {});
+                    await sleep(500);
+                    const demoSurface = await page.evaluate(() =>
+                      document.querySelector('[data-tab="editor"][data-tab-active="true"]') !== null &&
+                      document.querySelector('[data-section="demo-source"]') !== null);
+                    check(demoSurface, 'roadmap: demo-builder link lands on the editor tab\'s Demo Timeline ([data-section="demo-source"])');
+                    await frame(page, 'r6-0c-demo-link', 'R4-07-F3 — the roadmap card links straight to the demo surface');
+                    // Return to the roadmap tab so the following assertions/beats
+                    // keep driving the timeline.
+                    await page.locator('[data-tab="roadmap"]').click().catch(() => {});
+                    await sleep(500);
+                  }
                   await page.keyboard.press('Escape'); // dismiss before selecting the next node
                   await sleep(300);
                 }
