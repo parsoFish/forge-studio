@@ -332,7 +332,7 @@ export const journey = defineJourney({
       {
         id: 'agents-builder',
         title: 'Agent builder — /agents/project-manager',
-        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
+        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract hook, a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────
@@ -426,6 +426,21 @@ export const journey = defineJourney({
                       if (!savedOnDisk) await sleep(250);
                     }
                     check(savedOnDisk, 'agent-builder: the edited purpose lands in the real skills/project-manager/SKILL.md on disk');
+                    // R4-01-F3 round-trip proof: project-manager is a MIGRATED agent
+                    // (ADR-039 declared dispatch — no executor row). The builder save
+                    // must preserve the declared dispatch data verbatim, else a UI
+                    // edit would silently break flow dispatch.
+                    if (savedOnDisk) {
+                      const savedPm = readFileSync(PM_SKILL_PATH, 'utf8');
+                      check(savedPm.includes('wi-contract'),
+                        'agent-builder (R4-01-F3): the save preserves the declared wi-contract dispatch hook');
+                      check(savedPm.includes('loopStrategy: one-shot'),
+                        'agent-builder (R4-01-F3): the save preserves runtime.loopStrategy: one-shot');
+                      check(savedPm.includes('maxTurns: 70') && savedPm.includes('maxBudgetUsdShare: 0.2'),
+                        'agent-builder (R4-01-F3): the save preserves the declared budget caps (maxTurns/maxBudgetUsdShare)');
+                      check(!savedPm.includes('executor:'),
+                        'agent-builder (R4-01-F3): no retired executor row reappears on save');
+                    }
                     await frame(page, 'a3-1-agent-saved', 'A3 — data-dirty flips on edit; SAVE persists it to the real SKILL.md (restored after)');
                   } else {
                     check(false, 'agent-builder: #purpose-input present to test the edit→save round-trip');

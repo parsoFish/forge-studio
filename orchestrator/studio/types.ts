@@ -56,11 +56,13 @@ export type AgentDefinition = {
   phase?: string;
   surface?: string;
   /**
-   * Declared flow-engine executor kind (R2-01-F2). One of the four legacy
-   * phase-executor slugs ('pm' | 'dev' | 'unifier' | 'reflect') — the
-   * DECLARED replacement for flow-runner's old hardcoded AGENT_KIND table.
-   * Absent ⇒ a generic library agent, resolved through the F1 execAgent
-   * path instead of a phase-specific executor.
+   * Declared flow-engine executor kind (R2-01-F2) — the DECLARED replacement
+   * for flow-runner's old hardcoded AGENT_KIND table. R4-01-F2 (ADR-039)
+   * retired the 'pm' | 'dev' | 'reflect' rows onto declared dispatch
+   * (composition.hooks band hooks / loopStrategy:'ralph'); 'unifier' is the
+   * LAST remaining legacy phase-executor slug, held until R4-01-F4. Absent ⇒
+   * a generic library agent, resolved through the F1 execAgent path instead
+   * of a phase-specific executor.
    */
   executor?: string;
   purpose: string;

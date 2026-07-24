@@ -287,8 +287,9 @@ export function validateFlow(
   // node-executor (R2-01-F2, AC #2; sourced from the R2-02-F1 capability
   // descriptor as of R2-02-F3): a node whose agent resolves to a real def
   // but that def is INTERACTIVE (agentCapabilityDescriptor(def).interactive)
-  // and carries no declared `executor` (i.e. not one of the four legacy
-  // phase executors) can never be executed by the flow engine — interactive
+  // and carries no declared `executor` (i.e. not the sole remaining legacy
+  // phase executor, 'unifier' — R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect'
+  // onto declared dispatch) can never be executed by the flow engine — interactive
   // agents run through the interactive-session runner, not a flow node.
   // Sourced from the same descriptor the BUILD-tab palette/drop gate reads
   // client-side, so lint and the UI never disagree. The `!def` case is

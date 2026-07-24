@@ -193,6 +193,12 @@ const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 // Turn entry point
 // ---------------------------------------------------------------------------
 
+// ADR-039: this is the architect's bespoke turn spawn — it deliberately stays
+// outside flow-runner's node-executor registry (never resolveNodeKind /
+// PHASE_EXECUTOR_KINDS / execAgent). The architect is intentionally
+// out-of-cycle (ARCHITECTURE.md §2) — an interactive, file-checkpointed
+// runner invoked directly by the Studio bridge, not a flow DAG node — so it
+// is not, and should not become, an executor-enum consumer.
 export async function runArchitectTurn(
   input: RunArchitectTurnInput,
 ): Promise<RunArchitectTurnResult> {

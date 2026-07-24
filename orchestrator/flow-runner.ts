@@ -783,7 +783,8 @@ function buildAgentPrompt(def: AgentDefinition, ctx: NodeExecContext): string {
 /**
  * agent: the generic F1 runAgent path (R2-01-F2, AC #1). Resolves ONLY when
  * `resolveNodeKind` picked 'agent' — a real roster def with no declared
- * `executor` (i.e. not one of the four legacy phase executors). No gate, no
+ * `executor` (i.e. not the sole remaining legacy phase executor, 'unifier' —
+ * R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect' onto declared dispatch). No gate, no
  * runWithWedge (runAgent takes no AbortSignal — abort-chaining is R2-03-F4's
  * job; wedge budgets are inert in production regardless, ADR-036 forbids the
  * primitive running its own gate).

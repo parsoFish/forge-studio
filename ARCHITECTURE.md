@@ -62,10 +62,10 @@ flowchart TB
 
     subgraph ENGINE["Flow engine (ADR 028) — node-executor registry, no switch"]
         direction LR
-        PM["2 · project-manager<br/>node kind: pm"]
-        DV["3 · developer-loop<br/>node kind: dev · Ralph × N worktrees<br/>runtime adapter: getAdapter(sdkId)"]
-        UN["4 · unifier<br/>node kind: unifier · real executor<br/>runUnifierPhase in developer-loop.ts"]
-        RFL["reflector<br/>node kind: reflect"]
+        PM["2 · project-manager<br/>node kind: agent · wi-contract band hook (ADR 039)"]
+        DV["3 · developer-loop<br/>node kind: agent · loopStrategy:'ralph' · Ralph × N worktrees<br/>runtime adapter: getAdapter(sdkId)"]
+        UN["4 · unifier<br/>node kind: unifier · real executor · LAST declared phase-executor slug (R4-01-F4 retires it)<br/>runUnifierPhase in developer-loop.ts"]
+        RFL["reflector<br/>node kind: agent · reflection-close band hook (ADR 039)"]
     end
 
     subgraph SEAMS["Swappable seams · ADR 032"]
@@ -205,7 +205,7 @@ The PM uses the brain first; researches more broadly only when the brain is insu
 
 ### 4. Developer Loop *(unattended)*
 
-The developer loop is **the Ralph loop pattern** ([ghuntley/how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum)) run as a flow DAG node (`kind: dev`, `fanOut: work-items`).
+The developer loop is **the Ralph loop pattern** ([ghuntley/how-to-ralph-wiggum](https://github.com/ghuntley/how-to-ralph-wiggum)) run as a flow DAG node (node kind: `agent`, declared `runtime.loopStrategy: 'ralph'` — R4-01-F2/ADR-039 — `fanOut: work-items`).
 
 ```
 loop:
@@ -297,15 +297,16 @@ Every skill invocation emits a structured event to `_logs/<cycle-id>/events.json
 
 ### Flow engine + node-executor registry (ADR 028)
 
-`orchestrator/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — two read-only maps (`GATE_KIND`, `AGENT_KIND`) map gate ids and agent slugs to `NodeKind`; the dispatch loop resolves a kind and calls `executors[kind]`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
+`orchestrator/flow-runner.ts` interprets `FlowDefinition` DAGs in topological order. Node classification is table-driven — `resolveNodeKind` reads a read-only gate-id map (`GATE_KIND`) and, for agent nodes, the agent def's own declared `executor` field (`PHASE_EXECUTOR_KINDS`, `orchestrator/studio/registry.ts`) — there is no separate hardcoded agent-slug table. The dispatch loop resolves a kind and calls `executors[kind]`. **There is no `classifyNode` switch.** Adding a new kind is a one-line row in the table plus a new entry in `DEFAULT_NODE_EXECUTORS`; no dispatch edit.
 
-The six built-in executors:
+**Amended 2026-07-24 (R4-01-F2, [ADR 039](./docs/decisions/039-ships-as-artifact.md)):** the four-slug declared-executor model (`'pm' | 'dev' | 'unifier' | 'reflect'`) is retired down to one row — `PHASE_EXECUTOR_KINDS = ['unifier']`. PM, developer-loop, and reflector now resolve to the generic `agent` node kind and dispatch further inside `execAgent` via **declared data on the agent's own SKILL.md**: a `composition.hooks` band-hook id (`wi-contract` for PM, `reflection-close` for the reflector — `orchestrator/agent-bands.ts`) or `runtime.loopStrategy: 'ralph'` (developer-loop, routes to the existing `execDev`/Ralph machinery). `unifier` is the last declared phase-executor row, held until R4-01-F4.
+
+The five built-in node-kind executors:
 - `execArchitect` — silent DAG marker (the PLAN gate was satisfied before queue pickup).
-- `execPm` — runs `runProjectManager`; on unifier-resume, rebases the preserved branch + skips.
-- `execDev` — runs `runDeveloperLoop` (per-WI Ralph loop); on unifier-resume, self-no-ops the WI work (still emits start/end so the dev hex resolves complete).
 - `execUnifier` — runs `runUnifierPhase` then the close-contract gates (commit boundary, close invariant, delivery gate, non-empty guard, final CI). **This is a real executor, not a marker.**
 - `execReview` — `openPrInline` then `runClosure`.
-- `execReflect` — `runReflector` (only when closure confirmed a merge).
+- `execAgent` — the generic F1 `runAgent` path (R2-01-F2); resolves a declared band hook or `loopStrategy:'ralph'` first (PM/dev/reflector all land here — see the amendment above), else runs a bare one-shot `runAgent` spawn for a library agent.
+- `execUnknown` — defensive fallback (no agent def, or an invalid declared `executor`); loud error log, not a silent skip.
 
 Budget helpers (`orchestrator/flow-budgets.ts`): `CostTracker` (cost-ceiling check at every clean node boundary), `WedgeDetector` (per-node heartbeat/progress watch, race via `raceWithWedge`), `RateLimitGate` (gates spawn on rate-limit backoff).
 
