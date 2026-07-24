@@ -80,10 +80,10 @@ export const journey = defineJourney({
               // The hard contract fields are on disk.
               let projCfg = {};
               try { projCfg = JSON.parse(readFileSync(projectJsonPath, 'utf8')); } catch { /* */ }
-              check(Array.isArray(projCfg.quality_gate_cmd) && projCfg.quality_gate_cmd.length > 0,
-                'J4: project.json carries the C1 quality_gate_cmd');
-              check(projCfg.demo && typeof projCfg.demo.shape === 'string',
-                'J4: project.json carries the DEMO block (demo.shape)');
+              check(Array.isArray(projCfg.testProcess?.local?.cmd) && projCfg.testProcess.local.cmd.length > 0,
+                'J4: project.json carries the typed testProcess.local.cmd (R1-03-F1 — the C1 gate as declared contract data)');
+              check(projCfg.demo === undefined && projCfg.quality_gate_cmd === undefined,
+                'J4: no legacy flat gate keys or demo block scaffolded (the typed contract is the one JSON source)');
               check(typeof projCfg.northStar === 'string' && projCfg.northStar.length > 0,
                 'J4: project.json carries the north star');
               // The project is auto-discovered from disk: its dir carries the
