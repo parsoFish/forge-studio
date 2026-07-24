@@ -32,6 +32,18 @@ export type AgentBudgets = {
   iterationCap?: number;
   maxTurnsPerIteration?: number;
   wedgeKillMs?: number;
+  /**
+   * One-shot spawn caps (R4-01-F2, ADR-039). Consumed by `runAgent`'s
+   * `loopStrategy: 'one-shot'` path only — the Ralph loop keeps its
+   * per-iteration caps above. `maxBudgetUsdShare` is a fraction of the bound
+   * initiative's declared cost budget; the effective cap is
+   * `max(maxBudgetUsd, maxBudgetUsdShare × initiative.costBudgetUsd)` so a
+   * flat floor and a proportional share compose (the PM's budget policy,
+   * now declared data).
+   */
+  maxTurns?: number;
+  maxBudgetUsd?: number;
+  maxBudgetUsdShare?: number;
 };
 
 /** An agent IS a skill directory; this is the parsed view of its SKILL.md. */

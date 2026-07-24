@@ -425,3 +425,296 @@ test('runAgent: rejects an absolute-path runId', async () => {
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// R4-01-F2: the declared one-shot runtime (loopStrategy / caps / lifecycle)
+// ---------------------------------------------------------------------------
+
+/** Clone a roster def with a declared one-shot runtime + optional budget caps.
+ * The clone's `path` still points at the real SKILL.md (deriveAgentSpec reads
+ * tools/model from disk); `runtime.loopStrategy` + `budgets` are read from the
+ * in-memory def, which is exactly the seam under test. */
+function oneShotClone(
+  def: AgentDefinition,
+  budgets: AgentDefinition['budgets'] = {},
+): AgentDefinition {
+  return {
+    ...def,
+    runtime: { ...def.runtime, loopStrategy: 'one-shot' },
+    budgets,
+  };
+}
+
+/** A capturing queryFn: records {prompt, options} and yields the given
+ * message stream (default: one assistant message then a result). */
+function capturingQueryFn(
+  calls: Array<{ prompt: string; options: Record<string, unknown> }>,
+  messages?: unknown[],
+): SdkQueryFn {
+  return ((params: { prompt: string; options: Record<string, unknown> }) => {
+    calls.push(params);
+    async function* gen() {
+      for (const m of messages ?? [
+        { type: 'assistant', message: { content: [] } },
+        {
+          type: 'result',
+          subtype: 'success',
+          total_cost_usd: 0.33,
+          duration_ms: 1234,
+          usage: { input_tokens: 7, output_tokens: 9 },
+        },
+      ]) {
+        yield m;
+      }
+    }
+    return gen();
+  }) as unknown as SdkQueryFn;
+}
+
+/** An EventLogger that fails the test on any emission — for proving the
+ * caller lifecycle emits nothing from inside runAgent. */
+function forbiddenLogger(): EventLogger {
+  return {
+    cycleId: 'forbidden',
+    logFilePath: '/dev/null',
+    emit: () => {
+      throw new Error('lifecycle:caller must not emit events from runAgent');
+    },
+  } as unknown as EventLogger;
+}
+
+test('runAgent one-shot + lifecycle caller: direct query with spec/budget-shaped options, no events, no PROMPT.md', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-oneshot-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'), {
+      maxTurns: 60,
+      maxBudgetUsd: 1.5,
+    });
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const cwd = mkdtempSync(join(scratchRoot, 'cwd-'));
+
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const seen: unknown[] = [];
+    const result = await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'one-shot parity prompt',
+      systemPrompt: 'SYSTEM',
+      cwd,
+      lifecycle: 'caller',
+      logger: forbiddenLogger(),
+      onMessage: (m) => seen.push(m),
+      queryFn: capturingQueryFn(calls),
+    });
+
+    assert.equal(calls.length, 1);
+    assert.equal(calls[0].prompt, 'one-shot parity prompt');
+    const opts = calls[0].options;
+    assert.equal(opts.cwd, cwd);
+    assert.equal(opts.systemPrompt, 'SYSTEM');
+    assert.equal(opts.permissionMode, 'acceptEdits');
+    assert.equal(opts.maxTurns, 60);
+    assert.equal(opts.maxBudgetUsd, 1.5);
+    assert.ok(Array.isArray(opts.allowedTools), 'allowedTools from the derived spec');
+    assert.equal(opts.abortController, undefined, 'no streamGuard ⇒ no abortController (reflector shape)');
+
+    assert.equal(result.costUsd, 0.33);
+    assert.equal(result.durationMs, 1234);
+    assert.equal(result.resultSubtype, 'success');
+    assert.equal(result.tokensIn, 7);
+    assert.equal(result.tokensOut, 9);
+    assert.equal(result.suppressed, false);
+    assert.equal(seen.length, 2, 'onMessage sees every streamed message (assistant + result)');
+    assert.ok(!existsSync(join(workdir, 'PROMPT.md')), 'one-shot passes the prompt inline — no PROMPT.md stamp');
+    assert.ok(!existsSync(join(workdir, '.forge')), 'no scratch dir either on the one-shot path');
+  } finally {
+    restoreEnv();
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent one-shot: budget share composes with the flat floor (max of the two)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-share-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'), {
+      maxBudgetUsd: 2.5,
+      maxBudgetUsdShare: 0.2,
+    });
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+
+    // share × 20 = 4 > floor 2.5 ⇒ 4
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'p',
+      lifecycle: 'caller',
+      bindings: { initiative: { id: 'init-1', costBudgetUsd: 20 } },
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.equal(calls[0].options.maxBudgetUsd, 4);
+
+    // share × 5 = 1 < floor 2.5 ⇒ 2.5
+    await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'p',
+      lifecycle: 'caller',
+      bindings: { initiative: { id: 'init-1', costBudgetUsd: 5 } },
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.equal(calls[1].options.maxBudgetUsd, 2.5);
+
+    // no initiative binding ⇒ flat floor alone
+    await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'p',
+      lifecycle: 'caller',
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.equal(calls[2].options.maxBudgetUsd, 2.5);
+  } finally {
+    restoreEnv();
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent one-shot: streamGuard wires an abortController into the options (PM shape)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-guard-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'));
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    await runAgent(def, {
+      runId: '',
+      workdir,
+      prompt: 'p',
+      lifecycle: 'caller',
+      streamGuard: { label: 'guard-test' },
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.ok(
+      calls[0].options.abortController instanceof AbortController,
+      'streamGuard ⇒ abortController on the SDK options',
+    );
+  } finally {
+    restoreEnv();
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent: rejects a declared ralph loopStrategy (loops are orchestrator-band)', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-ralph-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const base = getFixtureDef(defs, 'project-scoped-review');
+    const def: AgentDefinition = { ...base, runtime: { ...base.runtime, loopStrategy: 'ralph' } };
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+
+    await assert.rejects(
+      () => runAgent(def, { runId: '_agent-test', workdir, prompt: 'p', queryFn: throwingQueryFn }),
+      /loopStrategy 'ralph'/,
+    );
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent: lifecycle caller requires a declared one-shot runtime', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-caller-guard-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = getFixtureDef(defs, 'project-scoped-review'); // no loopStrategy
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+
+    await assert.rejects(
+      () =>
+        runAgent(def, {
+          runId: '',
+          workdir,
+          prompt: 'p',
+          lifecycle: 'caller',
+          queryFn: throwingQueryFn,
+        }),
+      /lifecycle 'caller' requires loopStrategy 'one-shot'/,
+    );
+  } finally {
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent one-shot + self lifecycle: emits start+end with the streamed cost; suppression still guards it', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-oneshot-self-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'), { maxTurns: 10 });
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const logsRoot = join(scratchRoot, '_logs');
+
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    const result = await runAgent(def, {
+      runId: '_agent-oneshot-self',
+      workdir,
+      prompt: 'p',
+      logsRoot,
+      queryFn: capturingQueryFn(calls),
+    });
+    assert.equal(result.costUsd, 0.33);
+    const events = readEvents(join(logsRoot, '_agent-oneshot-self', 'events.jsonl'));
+    const types = events.map((e) => e.event_type);
+    assert.deepEqual(types, ['start', 'end']);
+    assert.equal(events[1].cost_usd, 0.33);
+    assert.equal(events[1].duration_ms, 1234, 'end event carries the SDK-reported duration');
+
+    // Suppression: self lifecycle still short-circuits under the env seam.
+    process.env.FORGE_DRY_BRIDGE = '1';
+    const suppressed = await runAgent(def, {
+      runId: '_agent-oneshot-suppressed',
+      workdir,
+      prompt: 'p',
+      logsRoot,
+      queryFn: throwingQueryFn,
+    });
+    assert.equal(suppressed.suppressed, true);
+  } finally {
+    restoreEnv();
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});
+
+test('runAgent legacy invocation path: prompt lands in the .forge/agent-run scratch dir, not the worktree root (known-gaps §8)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-scratch-'));
+  try {
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = getFixtureDef(defs, 'project-scoped-review'); // no loopStrategy ⇒ legacy path
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+    const logsRoot = join(scratchRoot, '_logs');
+
+    await runAgent(def, {
+      runId: '_agent-scratch',
+      workdir,
+      prompt: 'scratch-path prompt',
+      logsRoot,
+      queryFn: fakeQueryFn(0.01),
+    });
+
+    assert.ok(!existsSync(join(workdir, 'PROMPT.md')), 'no PROMPT.md at the worktree root');
+    assert.equal(
+      readFileSync(join(workdir, '.forge', 'agent-run', 'PROMPT.md'), 'utf8'),
+      'scratch-path prompt',
+    );
+  } finally {
+    restoreEnv();
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+});

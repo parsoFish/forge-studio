@@ -5,11 +5,27 @@
  * required project/initiative binding — the load-bearing seam the rest of
  * R2/R4 build on (a phase-agnostic way to run any roster agent).
  *
- * Single-shot execution: `AgentRuntime.loopStrategy: 'one-shot'` is
- * documented on the studio object model but intentionally UNWIRED here. This
- * is a real single-iteration spawn path, not a retrofit of
- * `loops/ralph/runner.ts`'s multi-iteration Ralph loop — `runAgent` drives
- * exactly one `AgentInvocation` call and returns.
+ * Two spawn shapes, selected by the def's declared `runtime.loopStrategy`
+ * (R4-01-F2, ADR-039):
+ *
+ *   - absent — the legacy single-iteration `AgentInvocation` path (adapter
+ *     `createAgent`, prompt stamped to a scratch PROMPT.md). One call, one
+ *     iteration; never a loop.
+ *   - `'one-shot'` — a direct `adapter.query` stream: the exact SDK call
+ *     shape the phase pipelines (PM / reflector) make, with options built
+ *     from the derived spec + declared `budgets` caps. Raw stream messages
+ *     flow OUT via `ctx.onMessage`; judgments/telemetry stay caller-side.
+ *   - `'ralph'` — REJECTED here. Multi-iteration loops are orchestrator-band
+ *     (the flow engine dispatches them to the dev-loop pipeline); the
+ *     primitive never drives one.
+ *
+ * Lifecycle: `ctx.lifecycle: 'caller'` (one-shot only) suppresses runAgent's
+ * own start/end/cost events and returns the totals instead — the caller (a
+ * phase pipeline) already owns its event lifecycle, and double emission
+ * would double-count cost into CostTracker. In caller mode the caller also
+ * owns harness-safety (parity: the phase pipelines are reachable only
+ * behind the dry-bridge's stub-actions routes); the env suppression check
+ * below guards the self-lifecycle paths exactly as before.
  *
  * ADR-036: `runAgent` runs NO gate/CI/demo-capture — it only spawns the
  * agent and reports back what happened; gate results flow TO agents, never
@@ -19,7 +35,7 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { dirname, join, relative } from 'node:path';
 
 // `FORGE_ROOT` (this install's root — `orchestrator/studio/` sits two levels
 // below it): single source is `studio/derive.ts`'s exported const. This
@@ -27,10 +43,11 @@ import { join, relative } from 'node:path';
 // duplicated derive.ts's `..`-depth by hand; import it instead so the two
 // can't drift out of sync.
 import { deriveAgentSpec, FORGE_ROOT } from './studio/derive.ts';
-import { modelForSpec } from './phase-agent.ts';
+import { modelForSpec, type PhaseAgentSpec } from './phase-agent.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { pinnedSdkQuery, type SdkQueryFn } from './pinned-sdk-query.ts';
-import type { AgentDefinition } from './studio/types.ts';
+import { withIdleDeadline } from './stream-deadline.ts';
+import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
 import type { QueryFn } from '../loops/_adapters/types.ts';
 
@@ -76,7 +93,27 @@ const FORGE_DRY_BRIDGE_ENV = 'FORGE_DRY_BRIDGE';
 const FORGE_ARCHITECT_NO_SPAWN_ENV = 'FORGE_ARCHITECT_NO_SPAWN';
 
 export type ProjectBinding = { name: string; repoPath: string };
-export type InitiativeBinding = { id: string; manifestPath?: string };
+export type InitiativeBinding = {
+  id: string;
+  manifestPath?: string;
+  /**
+   * The initiative's declared `cost_budget_usd` (R4-01-F2) — the input to
+   * the `budgets.maxBudgetUsdShare` proportional cap. Optional: absent ⇒
+   * only the flat `budgets.maxBudgetUsd` (if any) applies.
+   */
+  costBudgetUsd?: number;
+};
+
+/**
+ * Guard a one-shot stream with the idle-deadline safety net
+ * (`stream-deadline.ts`): presence creates an AbortController on the SDK
+ * options (chaining `signal` into it when given) and wraps the stream in
+ * `withIdleDeadline` so a stalled stream aborts instead of hanging the
+ * queue — exactly the PM pipeline's shape. Absent ⇒ a bare stream (the
+ * reflector's shape). Parity-preserving by construction: which phases carry
+ * the guard is the caller's declaration, not a primitive default.
+ */
+export type StreamGuard = { label: string; signal?: AbortSignal };
 
 /**
  * The context one `runAgent` call executes under. Deliberately open-ended:
@@ -104,6 +141,31 @@ export type RunContext = {
   bindings?: { project?: ProjectBinding; initiative?: InitiativeBinding };
   artifactRefs?: string[];
   /**
+   * One-shot spawn shaping (R4-01-F2). `systemPrompt` stays caller-assembled
+   * (brain-nav indexes are forge state, not def data); `cwd` overrides the
+   * spawn cwd (default `workdir` — the PM runs at the worktree, the
+   * reflector at forge root); `permissionMode` defaults to 'acceptEdits'
+   * (the unattended default every phase uses).
+   */
+  systemPrompt?: string;
+  cwd?: string;
+  permissionMode?: string;
+  streamGuard?: StreamGuard;
+  /**
+   * Observer for every raw streamed SDK message on the one-shot path,
+   * called before runAgent's own result-message handling. Telemetry
+   * (tool-use tallies, turn counting/warnings) stays caller-side — the
+   * ADR-036 boundary: observations flow out, judgments never move in.
+   */
+  onMessage?: (msg: unknown) => void;
+  /**
+   * 'self' (default): runAgent owns the event lifecycle — start/end (+cost)
+   * to its logger, env spawn-suppression enforced. 'caller' (one-shot
+   * only): NO events are emitted here; totals are returned for the caller's
+   * own end event. See the module doc for why (cost double-emission).
+   */
+  lifecycle?: 'self' | 'caller';
+  /**
    * Test-injection only. Production callers must omit this — the default
    * is `pinnedSdkQuery`; a real alternate SDK `queryFn` can't exist outside
    * that wrapper because `pinned-sdk-query.enforce.test.ts` forbids
@@ -118,27 +180,73 @@ export type RunAgentResult = {
   tokensIn: number;
   tokensOut: number;
   suppressed: boolean;
+  /** SDK-reported duration (one-shot path; the `result` message's `duration_ms`). */
+  durationMs?: number;
+  /** SDK result subtype (one-shot path) — 'success' | 'error_max_turns' | 'error_max_budget_usd' | …. */
+  resultSubtype?: string;
 };
 
 /**
+ * Effective one-shot budget cap: `max(flat, share × initiative budget)` —
+ * a declared floor and a proportional share compose (the PM policy as data).
+ * Undefined when the def declares neither (no cap passed to the SDK).
+ */
+export function resolveOneShotBudgetUsd(
+  budgets: AgentBudgets,
+  initiative?: InitiativeBinding,
+): number | undefined {
+  const flat = budgets.maxBudgetUsd;
+  const share =
+    budgets.maxBudgetUsdShare !== undefined && initiative?.costBudgetUsd !== undefined
+      ? budgets.maxBudgetUsdShare * initiative.costBudgetUsd
+      : undefined;
+  if (flat === undefined && share === undefined) return undefined;
+  return Math.max(flat ?? 0, share ?? 0);
+}
+
+/**
  * Run one studio agent (a resolved `AgentDefinition`) against `ctx`,
- * single-shot. No project/initiative binding is required. Emits a `start`
- * event before the spawn attempt, then either a `spawn-suppressed` `log`
- * event (harness safety) or an `end` event carrying cost/tokens — both to
- * `_logs/<runId>/events.jsonl` via `createLogger`.
+ * single-shot. No project/initiative binding is required. In the default
+ * 'self' lifecycle: emits a `start` event before the spawn attempt, then
+ * either a `spawn-suppressed` `log` event (harness safety) or an `end`
+ * event carrying cost/tokens — both to `_logs/<runId>/events.jsonl` via
+ * `createLogger`.
  */
 export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<RunAgentResult> {
-  if (!ctx.runId) throw new Error('runAgent: ctx.runId is required');
-  assertSafeRunId(ctx.runId);
+  const lifecycle = ctx.lifecycle ?? 'self';
   if (!ctx.workdir) throw new Error('runAgent: ctx.workdir is required');
   if (!ctx.prompt) throw new Error('runAgent: ctx.prompt is required');
+
+  const loopStrategy = def.runtime.loopStrategy;
+  if (loopStrategy === 'ralph') {
+    throw new Error(
+      `runAgent: agent "${def.slug}" declares loopStrategy 'ralph' — multi-iteration loops are orchestrator-band (the flow engine dispatches them to the dev-loop pipeline); the one-shot primitive never drives one`,
+    );
+  }
+  if (loopStrategy !== undefined && loopStrategy !== 'one-shot') {
+    throw new Error(
+      `runAgent: agent "${def.slug}" declares unknown loopStrategy ${JSON.stringify(loopStrategy)} (expected 'ralph' or 'one-shot')`,
+    );
+  }
+
+  // Step 1: derive the spec from the studio SKILL.md (ADR-027).
+  const spec = deriveAgentSpec(relative(FORGE_ROOT, def.path));
+
+  if (lifecycle === 'caller') {
+    if (loopStrategy !== 'one-shot') {
+      throw new Error(
+        `runAgent: lifecycle 'caller' requires loopStrategy 'one-shot' (agent "${def.slug}" declares ${JSON.stringify(loopStrategy)}) — the legacy invocation path has no caller-owned event shape`,
+      );
+    }
+    return runOneShotSpawn(def, ctx, spec);
+  }
+
+  if (!ctx.runId) throw new Error('runAgent: ctx.runId is required');
+  assertSafeRunId(ctx.runId);
 
   const logger = ctx.logger ?? createLogger(ctx.runId, ctx.logsRoot ?? '_logs');
   const initiativeId = ctx.bindings?.initiative?.id ?? ctx.runId;
   const inputRefs = ctx.artifactRefs ?? [];
-
-  // Step 1: derive the spec from the studio SKILL.md (ADR-027).
-  const spec = deriveAgentSpec(relative(FORGE_ROOT, def.path));
 
   logger.emit({
     initiative_id: initiativeId,
@@ -171,7 +279,134 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     return { costUsd: 0, outputRefs: [], tokensIn: 0, tokensOut: 0, suppressed: true };
   }
 
-  // Step 3: resolve the adapter + build the agent invocation.
+  const spawned =
+    loopStrategy === 'one-shot'
+      ? await runOneShotSpawn(def, ctx, spec)
+      : await runInvocationSpawn(def, ctx, spec, logger, initiativeId, inputRefs);
+
+  // Report + log the end event.
+  const durationMs = spawned.durationMs ?? Date.now() - startedAt;
+
+  logger.emit({
+    initiative_id: initiativeId,
+    phase: 'orchestrator',
+    skill: def.slug,
+    event_type: 'end',
+    input_refs: inputRefs,
+    output_refs: spawned.outputRefs,
+    cost_usd: spawned.costUsd,
+    tokens_in: spawned.tokensIn,
+    tokens_out: spawned.tokensOut,
+    duration_ms: durationMs,
+    metadata: { agent_phase: def.phase, agent_slug: def.slug },
+  });
+
+  return spawned;
+}
+
+/**
+ * The one-shot spawn: a direct `adapter.query` stream, options built from
+ * the derived spec + the def's declared `budgets` caps — the exact SDK call
+ * shape the phase pipelines make (byte-parity is pinned by the golden
+ * spawn-capture suite). No PROMPT.md is written: the prompt travels inline,
+ * as the phases have always passed it.
+ */
+async function runOneShotSpawn(
+  def: AgentDefinition,
+  ctx: RunContext,
+  spec: PhaseAgentSpec,
+): Promise<RunAgentResult> {
+  const options: Record<string, unknown> = {
+    cwd: ctx.cwd ?? ctx.workdir,
+    ...(ctx.systemPrompt !== undefined ? { systemPrompt: ctx.systemPrompt } : {}),
+    model: modelForSpec(spec),
+    permissionMode: ctx.permissionMode ?? 'acceptEdits',
+    allowedTools: [...spec.allowedTools],
+    disallowedTools: [...spec.disallowedTools],
+  };
+  if (def.budgets.maxTurns !== undefined) options['maxTurns'] = def.budgets.maxTurns;
+  const budgetUsd = resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
+  if (budgetUsd !== undefined) options['maxBudgetUsd'] = budgetUsd;
+
+  let abortController: AbortController | undefined;
+  if (ctx.streamGuard) {
+    abortController = new AbortController();
+    const upstream = ctx.streamGuard.signal;
+    if (upstream) {
+      upstream.addEventListener('abort', () => abortController!.abort(upstream.reason), {
+        once: true,
+      });
+    }
+    options['abortController'] = abortController;
+  }
+
+  type StreamQueryFn = (input: {
+    prompt: string;
+    options: Record<string, unknown>;
+  }) => AsyncIterable<unknown>;
+  const queryFn = (ctx.queryFn ?? pinnedSdkQuery) as unknown as StreamQueryFn;
+
+  let stream: AsyncIterable<unknown> = queryFn({ prompt: ctx.prompt, options });
+  if (ctx.streamGuard && abortController) {
+    stream = withIdleDeadline(stream, { label: ctx.streamGuard.label, abortController });
+  }
+
+  let costUsd = 0;
+  let durationMs = 0;
+  let tokensIn = 0;
+  let tokensOut = 0;
+  let resultSubtype: string | undefined;
+
+  for await (const msg of stream) {
+    ctx.onMessage?.(msg);
+    if (typeof msg !== 'object' || msg === null) continue;
+    const m = msg as {
+      type?: string;
+      subtype?: string;
+      total_cost_usd?: number;
+      duration_ms?: number;
+      usage?: { input_tokens?: number; output_tokens?: number };
+    };
+    if (m.type !== 'result') continue;
+    if (typeof m.duration_ms === 'number') durationMs = m.duration_ms;
+    if (typeof m.total_cost_usd === 'number') costUsd = m.total_cost_usd;
+    if (m.usage) {
+      tokensIn = m.usage.input_tokens ?? 0;
+      tokensOut = m.usage.output_tokens ?? 0;
+    }
+    resultSubtype = m.subtype ?? 'success';
+    break;
+  }
+
+  return {
+    costUsd,
+    outputRefs: [],
+    tokensIn,
+    tokensOut,
+    suppressed: false,
+    durationMs,
+    resultSubtype,
+  };
+}
+
+/**
+ * The legacy single-iteration invocation path (adapter `createAgent`) —
+ * unchanged behaviour for defs with no declared loopStrategy, except the
+ * prompt now lands in a `.forge/agent-run/` scratch dir instead of the
+ * worktree root (known-gaps §8: a root-level PROMPT.md could leak into a
+ * PR when a generic-agent node runs in a develop-style flow; `.forge/` is
+ * already excluded by the dev-loop's scratch-strip and gitignore
+ * conventions). The agent's cwd stays on the worktree.
+ */
+async function runInvocationSpawn(
+  def: AgentDefinition,
+  ctx: RunContext,
+  spec: PhaseAgentSpec,
+  logger: EventLogger,
+  initiativeId: string,
+  inputRefs: string[],
+): Promise<RunAgentResult> {
+  // Resolve the adapter + build the agent invocation.
   const sdkId = resolveSdkId(spec.sdk, (event) => {
     logger.emit({
       initiative_id: initiativeId,
@@ -192,9 +427,9 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     queryFn: (ctx.queryFn ?? pinnedSdkQuery) as unknown as QueryFn,
   });
 
-  // Step 4: stamp the prompt + drive ONE iteration.
-  if (!existsSync(ctx.workdir)) mkdirSync(ctx.workdir, { recursive: true });
-  const promptPath = join(ctx.workdir, 'PROMPT.md');
+  // Stamp the prompt + drive ONE iteration.
+  const promptPath = join(ctx.workdir, '.forge', 'agent-run', 'PROMPT.md');
+  if (!existsSync(dirname(promptPath))) mkdirSync(dirname(promptPath), { recursive: true });
   writeFileSync(promptPath, ctx.prompt);
 
   const info = await agent({
@@ -209,30 +444,11 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     iteration: 1,
   });
 
-  // Step 5: report + log the end event.
-  const durationMs = Date.now() - startedAt;
-  const tokensIn = info.tokensIn ?? 0;
-  const tokensOut = info.tokensOut ?? 0;
-
-  logger.emit({
-    initiative_id: initiativeId,
-    phase: 'orchestrator',
-    skill: def.slug,
-    event_type: 'end',
-    input_refs: inputRefs,
-    output_refs: info.filesChanged,
-    cost_usd: info.costUsd,
-    tokens_in: tokensIn,
-    tokens_out: tokensOut,
-    duration_ms: durationMs,
-    metadata: { agent_phase: def.phase, agent_slug: def.slug },
-  });
-
   return {
     costUsd: info.costUsd,
     outputRefs: info.filesChanged,
-    tokensIn,
-    tokensOut,
+    tokensIn: info.tokensIn ?? 0,
+    tokensOut: info.tokensOut ?? 0,
     suppressed: false,
   };
 }

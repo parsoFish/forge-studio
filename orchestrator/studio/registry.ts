@@ -162,6 +162,9 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     iterationCap: optNumber(budgetsRaw, 'iterationCap'),
     maxTurnsPerIteration: optNumber(budgetsRaw, 'maxTurnsPerIteration'),
     wedgeKillMs: optNumber(budgetsRaw, 'wedgeKillMs'),
+    maxTurns: optNumber(budgetsRaw, 'maxTurns'),
+    maxBudgetUsd: optNumber(budgetsRaw, 'maxBudgetUsd'),
+    maxBudgetUsdShare: optNumber(budgetsRaw, 'maxBudgetUsdShare'),
   };
 
   const allowedTools = stringArray(d, 'allowed-tools', skillMdPath);
@@ -227,6 +230,10 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
   if (def.budgets.maxTurnsPerIteration !== undefined)
     budgets['maxTurnsPerIteration'] = def.budgets.maxTurnsPerIteration;
   if (def.budgets.wedgeKillMs !== undefined) budgets['wedgeKillMs'] = def.budgets.wedgeKillMs;
+  if (def.budgets.maxTurns !== undefined) budgets['maxTurns'] = def.budgets.maxTurns;
+  if (def.budgets.maxBudgetUsd !== undefined) budgets['maxBudgetUsd'] = def.budgets.maxBudgetUsd;
+  if (def.budgets.maxBudgetUsdShare !== undefined)
+    budgets['maxBudgetUsdShare'] = def.budgets.maxBudgetUsdShare;
   data['budgets'] = budgets;
 
   const safeBody = def.body.replace(/^-{3,}/gm, (m) => m.replace(/-/g, '–'));
