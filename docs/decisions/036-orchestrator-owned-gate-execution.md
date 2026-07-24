@@ -161,4 +161,4 @@ recorded. `docs/roadmaps/R4-ootb-suite.md` R4-10-F2 is the sole
 build-and-prove owner of the runnable replacement and, by its own stated
 precondition, may not start before this line resolves.
 
-**Operator verdict:** *pending* — R4-10-F2 MUST NOT start before this line records approve/reject + date.
+**Operator verdict: APPROVED as specced — 2026-07-24** (recorded from the wave-4 S2 session decision). The relocation proceeds exactly per the contract-doc spec: orchestrator-owned merge-boundary gate keyed off testProcess.local + testProcess.ci, unattended remediation via develop-agent re-dispatch on scoped fix WIs from .forge/last-gate-failure.md under R4-10-F2's shared cap, cap exhaustion parks needs-operator, and the preserved invariant — no path to merge exists with a red full-suite baseline. R4-10-F2 (the build+prove owner, wave-4 tail) is now UNBLOCKED.
