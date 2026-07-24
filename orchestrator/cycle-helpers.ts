@@ -380,11 +380,13 @@ export function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void
   let ciGate: string[] | null = null;
   let ciFixCmd: string[] | null = null;
   let ciGateUnsetEnv: string[] = [];
+  let ciDeclaredTimeoutMs: number | undefined;
   try {
     const cfg = loadProjectConfig(input.projectRepoPath);
     ciGate = cfg?.ci_gate && cfg.ci_gate.length > 0 ? cfg.ci_gate : null;
     ciFixCmd = cfg?.ci_fix_cmd && cfg.ci_fix_cmd.length > 0 ? cfg.ci_fix_cmd : null;
     ciGateUnsetEnv = cfg?.ci_gate_unset_env && cfg.ci_gate_unset_env.length > 0 ? cfg.ci_gate_unset_env : [];
+    ciDeclaredTimeoutMs = cfg?.testProcess.ci?.timeoutMs;
   } catch (err) {
     // A malformed project.json is fail-closed elsewhere (dev-loop loads it);
     // here we log-and-skip rather than mask a real config error at PR-open.
@@ -407,7 +409,9 @@ export function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void
     ciGate,
     ciFixCmd,
     worktreePath: input.worktreePath,
-    run: execCommandVector,
+    // R1-03-F1: bind the declared testProcess.ci.timeoutMs into the runner
+    // (env override still wins inside resolveCiTimeoutMs).
+    run: (cmd, wt, kind, unsetEnv) => execCommandVector(cmd, wt, kind, unsetEnv, ciDeclaredTimeoutMs),
     unsetEnv: ciGateUnsetEnv,
   });
   // decision is non-null because ciGate is non-empty.

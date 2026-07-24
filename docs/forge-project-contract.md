@@ -472,6 +472,89 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 
 ---
 
+## The merge-boundary full-suite gate (relocation spec — ⚠ operator review required, not yet enforced)
+
+> **Nothing in this section is enforced today.** This is the R1-03-F4 relocation
+> spec for the unifier's dual-boundary full-suite gate. It is gated on an operator
+> verdict recorded in the [ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md)
+> — until that verdict lands, `composedUnifierGate` keeps running exactly as it
+> does today (`orchestrator/phases/developer-loop.ts`), and `R4-10-F2`
+> (`docs/roadmaps/R4-ootb-suite.md`) — the sole build-and-prove owner of the
+> runnable replacement — may not start.
+
+**Preserved invariant.** The regression criterion this relocation must hold,
+verbatim: **no path to merge exists with a red full-suite baseline.** This is
+the known-gaps "dual-boundary gate works as designed" strength
+(`docs/known-gaps.md`, "Strengths worth preserving") — the unifier today
+catches a red full-suite baseline the scoped per-WI gates can't see, and
+nothing ships red as a result. This section relocates *where* that guarantee
+executes; it does not redesign the guarantee itself.
+
+**What relocates.** `composedUnifierGate`'s `initiative_gate` sub-check
+(`orchestrator/phases/developer-loop.ts`, function at `:2855`; the five-sub-check
+contract documented at `:2818`-`:2831`; wired into the unifier's Ralph loop at the
+call site `:2507`-`:2532`) — today's project `quality_gate_cmd` run against the
+post-fan-in branch tip — becomes a **flow-engine merge-boundary gate**: an
+orchestrator-executed band at the develop flow's merge boundary (not an agent
+node), per [ADR-036](./decisions/036-orchestrator-owned-gate-execution.md)'s rule
+that agents judge and the orchestrator executes. It is keyed off the **new
+`testProcess` contract object** ([R1-03-F1](./roadmaps/R1-contract-componentry.md),
+introduced in this same PR; `.forge/project.json`, loader in
+`orchestrator/project-config.ts`) — mapping the old field names once:
+
+- `testProcess.local` — the full-suite gate at branch tip (today's
+  `quality_gate_cmd`, C1).
+- `testProcess.ci` — the delivery net, run hermetic via the project's declared
+  env-strip (today's `ci_gate`/`ci_fix_cmd` + `ci_gate_unset_env`, C1b) — the
+  same env-stripping `composedUnifierGate` already applies at its call site and
+  the same boundary the final CI delivery gate (`decideFinalCiGate`,
+  `orchestrator/cycle.ts:582`) enforces today.
+
+The relocation re-homes *where* these two runs execute (unifier band → flow-engine
+merge-boundary band); `testProcess.local`/`testProcess.ci` are the typed names
+for the fields the gate already reads.
+
+**Results flow TO agents, never from them.** The merge-boundary gate's verdict
+reaches the demo/review agents through the same seam the unifier and dev-loop
+already use: `.forge/last-gate-failure.md` (`lastGateFailurePath`,
+`orchestrator/phases/developer-loop.ts:1654`-`:1656`; write/clear behaviour in
+`writeGateFeedback` at `:1712` and `writeUnifierGateFeedback` at `:3326`). The
+file is deleted on every passing gate run and at session start, so its
+**present ⇒ fresh** rule holds unchanged: if an agent reads it, the failure is
+live, not a fossil.
+
+**Unattended remediation.** A red merge-boundary baseline re-dispatches the
+develop agent with scoped fix work items compiled from
+`.forge/last-gate-failure.md` — the same capability ADR-026's unifier UWI
+mechanism provided, successor-specified as `R4-10-F2`
+(`docs/roadmaps/R4-ootb-suite.md`). Remediation is bounded by the flow's shared
+remediation cap (R4-10-F1's shared round/total-fix cap, config home per
+R4-08-F2(b), which R4-10-F2 inherits); cap exhaustion parks the initiative
+`needs-operator` rather than looping forever. In every case — remediated or
+parked — **a red baseline never merges.**
+
+**Empirical grounding.**
+`brain/cycles/themes/2026-06-06-live-acc-gate-misses-lint-ci-gate-net.md`: a
+live-acceptance work item's per-WI gate is the acceptance test, which does not
+run the project linter, so the dev-loop can mark a WI complete while its code is
+lint-red. The cycle-level CI delivery gate (`make test && golangci-lint run
+./... && make terrafmt-check`, `TF_ACC` stripped) caught it and correctly
+refused to open the PR — the same "per-WI gate ≠ project CI" class the
+dual-boundary design exists to close. This is the concrete instance the
+relocated gate must keep working: the boundary that catches what the per-WI
+gates structurally cannot see.
+
+**Sequencing (hard).** This section is **spec-only**. `R4-10-F2`
+(`docs/roadmaps/R4-ootb-suite.md`) is the sole build-and-prove owner of the
+runnable replacement, and per its own stated precondition, **must not start**
+before the operator verdict is recorded in the
+[ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md).
+`R4-01-F4` (unifier retirement) depends in turn on `R4-10-F2` being live and
+green — retiring `composedUnifierGate`'s call site is downstream of both, not
+part of this spec.
+
+---
+
 ## Enforcement table
 
 | Clause | Check | Enforcement |
@@ -493,6 +576,7 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 | DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
+| MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/R4-ootb-suite.md` R4-10-F2) |
 
 **Readiness convergence:** `data-flow-ready="true"` on the project builder
 readiness panel requires all five UI checks AND `preflight.clauses.filter(hard &&

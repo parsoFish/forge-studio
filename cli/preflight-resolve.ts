@@ -43,7 +43,10 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   BRAIN: { resolution: 'agent', route: 'brain-fix', fixHint: 'Repair the stale brain citation with the brain-fix agent.' },
 
   // USER — needs an operator decision; no safe auto/agent fix.
-  C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (package.json "test" or .forge/quality_gate_cmd).' },
+  C1: { resolution: 'user', fixHint: 'Declare a single fast, deterministic test command (testProcess.local.cmd, the .forge/quality_gate_cmd sidecar, or package.json "test").' },
+  // R1-03-F1: the CI net + acceptance tier are operator-declared gate policy.
+  C1b: { resolution: 'user', fixHint: 'Declare testProcess.ci ({cmd, fixCmd?, unsetEnv?}) — the full CI mirror that keeps a red whole-module baseline from ever shipping.' },
+  C7: { resolution: 'user', fixHint: 'External-resource projects declare testProcess.acceptance ({match, required, requiresEnv}) so merges are backed by a live acceptance test.' },
   C5: { resolution: 'user', fixHint: 'Declare locked-core constraints (CLAUDE.md / AGENTS.md / CONSTRAINTS.md).' },
   C6: { resolution: 'user', fixHint: 'Add a GitHub remote so forge can open + merge PRs.' },
 };

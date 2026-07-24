@@ -108,35 +108,82 @@ export type AcceptanceGateConfig = {
   requires_env?: string[];
 };
 
+/**
+ * R1-03-F1 — the typed test process (contract object). Gathers the previously
+ * scattered flat gate fields into one declared object in `.forge/project.json`:
+ *
+ *   testProcess.local      — the fast per-WI gate (was `quality_gate_cmd`, C1)
+ *   testProcess.ci         — the full CI delivery net (was `ci_gate` +
+ *                            `ci_fix_cmd` + `ci_gate_unset_env`, C1b)
+ *   testProcess.acceptance — the live-acceptance tier (was `acceptance_gate`, C7)
+ *
+ * The JSON on disk declares ONLY `testProcess` (flat keys are rejected with a
+ * migration message — no permanent back-compat shim); the loaded
+ * `ProjectConfig`'s flat accessors below are DERIVED from it so the ~20
+ * consumers (gate runners, PM acceptance enforcement, preflight, bridge/UI)
+ * read on unchanged. Each process takes an optional `timeoutMs` inheriting
+ * ADR-036's semantics: the FORGE_*_TIMEOUT_MS env vars (per-run operator
+ * override) still win over a declared timeout, which wins over the default.
+ */
+export type TestProcessLocal = {
+  /**
+   * Fast per-WI gate argv. Omittable in the JSON when the
+   * `.forge/quality_gate_cmd` sidecar declares it (the loader single-sources
+   * from the sidecar; JSON wins when both are present — same rule as ever,
+   * re-rooted onto the typed object).
+   */
+  cmd: string[];
+  /** Overrides the 30-min default; `FORGE_GATE_TIMEOUT_MS` still wins. */
+  timeoutMs?: number;
+};
+export type TestProcessCi = {
+  /**
+   * The project's FULL CI verification — mirrors the project's CI workflow.
+   * Run DIRECTLY (operator-trusted) as the final delivery gate before a PR
+   * opens, so a cycle can't ship while whole-module CI is red. Unlike the
+   * pipe-banned per-WI gate, a `["bash","-c","…&&…"]` chain is permitted —
+   * the operator authored it.
+   */
+  cmd: string[];
+  /** Auto-formatters applied best-effort BEFORE `cmd` so the PR is fmt-clean. */
+  fixCmd?: string[];
+  /**
+   * Env-var names STRIPPED when running `cmd`/`fixCmd` (contract A3) so the
+   * delivery gate is hermetic — a live-test trigger in the cycle env (e.g.
+   * `TF_ACC=1`) must not leak into the CI mirror. `PATH`/`HOME`/`SHELL` are
+   * blocklisted.
+   */
+  unsetEnv?: string[];
+  /** Overrides the 20-min CI default; `FORGE_CI_GATE_TIMEOUT_MS` still wins. */
+  timeoutMs?: number;
+};
+export type TestProcessAcceptance = {
+  /** Substring identifying a live-acceptance gate in a WI quality_gate_cmd. */
+  match: string;
+  /** When true, every initiative must include ≥1 WI whose gate contains `match`. */
+  required: boolean;
+  /** Env vars that MUST be set for a matching gate to run live (else the gate ERRORS, never false-passes). */
+  requiresEnv?: string[];
+  /** Reserved: acceptance gates run as per-WI gates, so `FORGE_GATE_TIMEOUT_MS` semantics apply. */
+  timeoutMs?: number;
+};
+export type TestProcess = {
+  /** Required after load (JSON or sidecar — a config with neither fails closed). */
+  local: TestProcessLocal;
+  ci?: TestProcessCi;
+  acceptance?: TestProcessAcceptance;
+};
+
 export type ProjectConfig = {
+  /** The declared test process — the single JSON source of the gate fields below. */
+  testProcess: TestProcess;
+  /** @deprecated derived from `testProcess.local.cmd` at load — never written to JSON. */
   quality_gate_cmd: string[];
-  /**
-   * The project's FULL CI verification — the operator-configured gate that
-   * mirrors the project's CI workflow (e.g. `make test && golangci-lint run
-   * ./... && make terrafmt-check`). Run DIRECTLY (operator-trusted) as the
-   * final delivery gate before a PR is opened, so a cycle can't ship a PR
-   * while the project's whole-module CI is red. Distinct from the per-WI
-   * `quality_gate_cmd` (which is scoped + pipe-banned): `ci_gate` is allowed
-   * to be a `["bash","-c","…&&…"]` shell chain because the operator authored
-   * it. Optional — absent ⇒ no final CI gate.
-   */
+  /** @deprecated derived from `testProcess.ci.cmd` at load — never written to JSON. */
   ci_gate?: string[];
-  /**
-   * The project's auto-formatters (e.g. `make fmt && make terrafmt`), applied
-   * best-effort BEFORE `ci_gate` runs so a PR is fmt-clean. Optional — absent
-   * ⇒ the CI gate runs without an auto-format pass.
-   */
+  /** @deprecated derived from `testProcess.ci.fixCmd` at load — never written to JSON. */
   ci_fix_cmd?: string[];
-  /**
-   * Env-var names to STRIP from the environment when running `ci_gate` /
-   * `ci_fix_cmd` (2026-06-06, contract A3). The final CI delivery gate must
-   * mirror the project's GitHub CI, which runs in a clean env. A live-test
-   * trigger left in the cycle env (e.g. Terraform's `TF_ACC=1`, set so per-WI
-   * live-acceptance gates run) would otherwise leak into `make test` and run
-   * the whole live suite — env-dependent failures GitHub never sees. Listing
-   * the trigger here makes the CI gate hermetic regardless of cycle env.
-   * Optional — absent ⇒ the gate inherits `process.env` unchanged.
-   */
+  /** @deprecated derived from `testProcess.ci.unsetEnv` at load — never written to JSON. */
   ci_gate_unset_env?: string[];
   /**
    * Verbatim acceptance-criterion statements forge appends to EVERY work item
@@ -147,7 +194,7 @@ export type ProjectConfig = {
    * Optional — absent ⇒ no section appended.
    */
   standing_work_item_acs?: string[];
-  /** Live-acceptance-WI requirement (contract C7). Optional. */
+  /** @deprecated derived from `testProcess.acceptance` at load — never written to JSON. */
   acceptance_gate?: AcceptanceGateConfig;
   metrics?: MetricsConfig;
   sweep?: SweepConfig;
@@ -213,14 +260,35 @@ export function loadProjectConfig(projectRoot: string): ProjectConfig | null {
       `project-config: ${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  // Single-source the gate from the `.forge/quality_gate_cmd` sidecar when
-  // project.json omits it (the JSON wins when both are present). This lets a
-  // project declare the gate in ONE place instead of mirroring it by hand.
+  // Single-source the local gate from the `.forge/quality_gate_cmd` sidecar
+  // when project.json omits it (the JSON wins when both are present). Same
+  // single-source rule as ever (R1-03-F1), re-rooted onto the typed object:
+  // the sidecar fills `testProcess.local.cmd`.
   if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
     const obj = parsed as Record<string, unknown>;
-    if (obj.quality_gate_cmd === undefined || obj.quality_gate_cmd === null) {
+    const tp =
+      obj.testProcess !== null && typeof obj.testProcess === 'object' && !Array.isArray(obj.testProcess)
+        ? (obj.testProcess as Record<string, unknown>)
+        : undefined;
+    const localMissing =
+      tp === undefined ||
+      tp.local === undefined ||
+      tp.local === null ||
+      (typeof tp.local === 'object' &&
+        !Array.isArray(tp.local) &&
+        (tp.local as Record<string, unknown>).cmd === undefined);
+    if (localMissing) {
       const sidecar = readQualityGateSidecar(projectRoot);
-      if (sidecar) obj.quality_gate_cmd = sidecar;
+      if (sidecar) {
+        const target = tp ?? {};
+        const local =
+          target.local !== null && typeof target.local === 'object' && !Array.isArray(target.local)
+            ? (target.local as Record<string, unknown>)
+            : {};
+        local.cmd = sidecar;
+        target.local = local;
+        obj.testProcess = target;
+      }
     }
   }
   const config = validateProjectConfig(parsed);
@@ -290,23 +358,49 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   }
   const obj = raw as Record<string, unknown>;
 
-  const quality_gate_cmd = optionalArgv(obj.quality_gate_cmd, 'quality_gate_cmd');
-  if (!quality_gate_cmd) {
-    throw new Error('project-config: missing required `quality_gate_cmd` (argv)');
+  // R1-03-F1: the flat gate keys moved into `testProcess` — one declared
+  // object, one JSON source. Rejected fail-closed with the full mapping so an
+  // un-migrated config is a one-edit fix, never a silent dual-source. (The
+  // never-do rule forbids a permanent both-shapes fallback; only this error
+  // message may know the old names.)
+  const FLAT_GATE_KEY_MAPPING: Record<string, string> = {
+    quality_gate_cmd: 'testProcess.local.cmd',
+    ci_gate: 'testProcess.ci.cmd',
+    ci_fix_cmd: 'testProcess.ci.fixCmd',
+    ci_gate_unset_env: 'testProcess.ci.unsetEnv',
+    acceptance_gate: 'testProcess.acceptance ({match, required, requiresEnv})',
+  };
+  const flatPresent = Object.keys(FLAT_GATE_KEY_MAPPING).filter((k) => obj[k] !== undefined);
+  if (flatPresent.length > 0) {
+    const mapping = flatPresent.map((k) => `${k} → ${FLAT_GATE_KEY_MAPPING[k]}`).join('; ');
+    throw new Error(
+      obj.testProcess !== undefined
+        ? `project-config: conflicting flat gate key(s) alongside testProcess — remove: ${mapping}`
+        : `project-config: the flat gate keys moved to the typed testProcess object (R1-03) — migrate: ${mapping}. The .forge/quality_gate_cmd sidecar still single-sources testProcess.local.cmd when the JSON omits it.`,
+    );
   }
 
-  // Optional final-delivery CI gate + its auto-formatters. Both are
-  // operator-authored argv vectors; a `["bash","-c","…&&…"]` shell chain is
-  // permitted here (unlike the pipe-banned per-WI gate) because the orchestrator
-  // runs them DIRECTLY rather than through the per-WI gate runner.
-  const ci_gate = optionalArgv(obj.ci_gate, 'ci_gate');
-  const ci_fix_cmd = optionalArgv(obj.ci_fix_cmd, 'ci_fix_cmd');
-  const ci_gate_unset_env = parseCiGateUnsetEnv(obj.ci_gate_unset_env);
+  const testProcess = parseTestProcess(obj.testProcess);
+
+  // Derived flat accessors — consumers read on unchanged (see the type doc).
+  const quality_gate_cmd = testProcess.local.cmd;
+  const ci_gate = testProcess.ci?.cmd;
+  const ci_fix_cmd = testProcess.ci?.fixCmd;
+  const ci_gate_unset_env = testProcess.ci?.unsetEnv;
+  const acceptance_gate: AcceptanceGateConfig | undefined = testProcess.acceptance
+    ? {
+        match: testProcess.acceptance.match,
+        required: testProcess.acceptance.required,
+        ...(testProcess.acceptance.requiresEnv !== undefined
+          ? { requires_env: testProcess.acceptance.requiresEnv }
+          : {}),
+      }
+    : undefined;
+
   const standing_work_item_acs = optionalArgv(
     obj.standing_work_item_acs,
     'standing_work_item_acs',
   );
-  const acceptance_gate = parseAcceptanceGate(obj.acceptance_gate);
 
   const metrics = parseMetrics(obj.metrics);
   const sweep = parseSweep(obj.sweep);
@@ -322,6 +416,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const releaseProcess = parseReleaseProcess(obj.releaseProcess);
 
   return {
+    testProcess,
     quality_gate_cmd,
     ...(ci_gate ? { ci_gate } : {}),
     ...(ci_fix_cmd ? { ci_fix_cmd } : {}),
@@ -339,6 +434,108 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
     ...(releaseProcess !== undefined ? { releaseProcess } : {}),
   };
+}
+
+/** Optional positive-integer millisecond timeout (R1-03-F1). */
+function parseTimeoutMs(value: unknown, label: string): number | undefined {
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
+    throw new Error(`project-config: ${label} must be a positive integer of milliseconds`);
+  }
+  return value;
+}
+
+/**
+ * Parse + validate the `testProcess` contract object (R1-03-F1). Fail-closed:
+ * a missing/degenerate `local.cmd` throws (same guarantee the required flat
+ * `quality_gate_cmd` gave; the loader may have filled it from the sidecar
+ * before this runs).
+ */
+function parseTestProcess(value: unknown): TestProcess {
+  if (value === undefined || value === null) {
+    throw new Error(
+      'project-config: missing required `testProcess` — declare {local: {cmd: [...]}} (or provide the .forge/quality_gate_cmd sidecar)',
+    );
+  }
+  if (typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('project-config: `testProcess` must be an object');
+  }
+  const tp = value as Record<string, unknown>;
+
+  const rawLocal = tp.local;
+  if (rawLocal === undefined || rawLocal === null || typeof rawLocal !== 'object' || Array.isArray(rawLocal)) {
+    throw new Error(
+      'project-config: missing required `testProcess.local` (object with `cmd` argv; the .forge/quality_gate_cmd sidecar can supply cmd)',
+    );
+  }
+  const localObj = rawLocal as Record<string, unknown>;
+  const localCmd = optionalArgv(localObj.cmd, 'testProcess.local.cmd');
+  if (!localCmd) {
+    throw new Error('project-config: missing required `testProcess.local.cmd` (argv)');
+  }
+  const local: TestProcessLocal = {
+    cmd: localCmd,
+    ...(parseTimeoutMs(localObj.timeoutMs, 'testProcess.local.timeoutMs') !== undefined
+      ? { timeoutMs: parseTimeoutMs(localObj.timeoutMs, 'testProcess.local.timeoutMs') }
+      : {}),
+  };
+
+  let ci: TestProcessCi | undefined;
+  if (tp.ci !== undefined && tp.ci !== null) {
+    if (typeof tp.ci !== 'object' || Array.isArray(tp.ci)) {
+      throw new Error('project-config: `testProcess.ci` must be an object');
+    }
+    const ciObj = tp.ci as Record<string, unknown>;
+    const ciCmd = optionalArgv(ciObj.cmd, 'testProcess.ci.cmd');
+    if (!ciCmd) {
+      throw new Error('project-config: `testProcess.ci` requires a `cmd` argv');
+    }
+    const fixCmd = optionalArgv(ciObj.fixCmd, 'testProcess.ci.fixCmd');
+    const unsetEnv = parseCiGateUnsetEnv(ciObj.unsetEnv);
+    const ciTimeout = parseTimeoutMs(ciObj.timeoutMs, 'testProcess.ci.timeoutMs');
+    ci = {
+      cmd: ciCmd,
+      ...(fixCmd ? { fixCmd } : {}),
+      ...(unsetEnv ? { unsetEnv } : {}),
+      ...(ciTimeout !== undefined ? { timeoutMs: ciTimeout } : {}),
+    };
+  }
+
+  let acceptance: TestProcessAcceptance | undefined;
+  if (tp.acceptance !== undefined && tp.acceptance !== null) {
+    if (typeof tp.acceptance === 'object' && !Array.isArray(tp.acceptance)) {
+      const a = tp.acceptance as Record<string, unknown>;
+      if (typeof a.match !== 'string' || a.match.trim() === '') {
+        throw new Error('project-config: `testProcess.acceptance.match` must be a non-empty string');
+      }
+      if (typeof a.required !== 'boolean') {
+        throw new Error('project-config: `testProcess.acceptance.required` must be a boolean');
+      }
+      let requiresEnv: string[] | undefined;
+      if (a.requiresEnv !== undefined) {
+        if (
+          !Array.isArray(a.requiresEnv) ||
+          a.requiresEnv.some((e) => typeof e !== 'string' || e.trim() === '')
+        ) {
+          throw new Error(
+            'project-config: `testProcess.acceptance.requiresEnv` must be an array of non-empty strings',
+          );
+        }
+        requiresEnv = a.requiresEnv as string[];
+      }
+      const accTimeout = parseTimeoutMs(a.timeoutMs, 'testProcess.acceptance.timeoutMs');
+      acceptance = {
+        match: a.match,
+        required: a.required,
+        ...(requiresEnv !== undefined ? { requiresEnv } : {}),
+        ...(accTimeout !== undefined ? { timeoutMs: accTimeout } : {}),
+      };
+    } else {
+      throw new Error('project-config: `testProcess.acceptance` must be an object');
+    }
+  }
+
+  return { local, ...(ci ? { ci } : {}), ...(acceptance ? { acceptance } : {}) };
 }
 
 /**
@@ -447,31 +644,6 @@ function parseReleasePath(v: unknown, label: string): string | undefined {
   return s;
 }
 
-/**
- * Parse + validate the optional `acceptance_gate` block. Throws on a present
- * but malformed block (fail-closed, matching the other parsers). Returns
- * `undefined` when absent.
- */
-function parseAcceptanceGate(raw: unknown): AcceptanceGateConfig | undefined {
-  if (raw === undefined || raw === null) return undefined;
-  if (typeof raw !== 'object') {
-    throw new Error('project-config: acceptance_gate must be an object when present');
-  }
-  const a = raw as Record<string, unknown>;
-  const match = optionalString(a.match, 'acceptance_gate.match');
-  if (!match) {
-    throw new Error('project-config: acceptance_gate.match is required (non-empty string) when the block is present');
-  }
-  if (typeof a.required !== 'boolean') {
-    throw new Error('project-config: acceptance_gate.required must be a boolean when the block is present');
-  }
-  const requires_env = optionalArgv(a.requires_env, 'acceptance_gate.requires_env');
-  return {
-    match,
-    required: a.required,
-    ...(requires_env ? { requires_env } : {}),
-  };
-}
 
 function parseLogging(raw: unknown): LoggingConfig | undefined {
   if (raw === undefined || raw === null) return undefined;
@@ -642,13 +814,13 @@ const CI_GATE_UNSET_ENV_BLOCKLIST: readonly string[] = ['PATH', 'HOME', 'SHELL']
  * Validate `ci_gate_unset_env` as an argv string[] (via optionalArgv) and
  * reject any blocklisted process-fundamental name — fail fast at the boundary.
  */
-function parseCiGateUnsetEnv(v: unknown): string[] | undefined {
-  const names = optionalArgv(v, 'ci_gate_unset_env');
+function parseCiGateUnsetEnv(v: unknown, label = 'testProcess.ci.unsetEnv'): string[] | undefined {
+  const names = optionalArgv(v, label);
   if (names === undefined) return undefined;
   for (const name of names) {
     if (CI_GATE_UNSET_ENV_BLOCKLIST.includes(name)) {
       throw new Error(
-        `project-config: ci_gate_unset_env must not include ${name} — unsetting it would weaken the gate child (e.g. PATH loss → wrong-binary resolution), not act as a live-test trigger. Use it only for live-test trigger vars like TF_ACC.`,
+        `project-config: ${label} must not include ${name} — unsetting it would weaken the gate child (e.g. PATH loss → wrong-binary resolution), not act as a live-test trigger. Use it only for live-test trigger vars like TF_ACC.`,
       );
     }
   }

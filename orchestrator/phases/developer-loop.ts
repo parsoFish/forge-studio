@@ -363,10 +363,12 @@ export async function runDeveloperLoop(
   // silently run the live-acceptance suite on a docs-only cycle.
   let accGate: AcceptanceGateConfig | undefined;
   let ciGateUnsetEnv: string[] | undefined;
+  let localGateTimeoutMs: number | undefined;
   try {
     const projectCfg = loadProjectConfig(input.worktreePath);
     accGate = projectCfg?.acceptance_gate;
     ciGateUnsetEnv = projectCfg?.ci_gate_unset_env;
+    localGateTimeoutMs = projectCfg?.testProcess.local.timeoutMs;
   } catch {
     /* best-effort — a malformed config is fail-closed by the baseline gate */
   }
@@ -721,7 +723,8 @@ export async function runDeveloperLoop(
                 requiredPaths: gateRequiredPaths(wi),
                 ...(requiredEnv ? { requiredEnv } : {}),
                 ...(ciGateUnsetEnv && ciGateUnsetEnv.length > 0 ? { unsetEnv: ciGateUnsetEnv } : {}),
-                timeoutMs: resolveGateTimeoutMs(),
+                // R1-03-F1: env override > declared testProcess.local.timeoutMs > default.
+                timeoutMs: resolveGateTimeoutMs(localGateTimeoutMs),
               },
             );
           })(),
@@ -1895,7 +1898,8 @@ export function assertGreenBaseline(
     [...baselineCmd],
     (i) => { info = i; },
     {
-      timeoutMs: resolveGateTimeoutMs(),
+      // R1-03-F1: env override > declared testProcess.local.timeoutMs > default.
+      timeoutMs: resolveGateTimeoutMs(projectConfig?.testProcess.local.timeoutMs),
       // R5-02 F2: strip the project's declared ci_gate_unset_env (e.g.
       // TF_ACC) so the baseline gate can't silently run the live-acceptance
       // suite just because the orchestrator's own process env carries it.
@@ -2092,6 +2096,7 @@ export async function runUnifier(
         skills: projectConfig?.skills,
         changelogPath: projectConfig?.releaseProcess?.changelogPath,
         ciGateUnsetEnv: projectConfig?.ci_gate_unset_env,
+        localGateTimeoutMs: projectConfig?.testProcess.local.timeoutMs,
         unifierSdkId,
         devRoleSdkId,
       });
@@ -2246,6 +2251,8 @@ type UnifierItemArgs = {
    * sub-check). Absent/empty ⇒ no stripping.
    */
   ciGateUnsetEnv?: readonly string[];
+  /** R1-03-F1: the project's declared testProcess.local.timeoutMs (env override still wins). */
+  localGateTimeoutMs?: number;
 };
 type UnifierItemOutcome = {
   id: string;
@@ -2524,7 +2531,8 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
       demoDir: worktreeDemoRelDir(input.worktreePath, input.initiativeId),
       // N10: bound the initiative gate; a kill by this timeout classifies as
       // environment (unifier.gate.timeout), never work-failure.
-      gateTimeoutMs: resolveGateTimeoutMs(),
+      // R1-03-F1: env override > declared testProcess.local.timeoutMs > default.
+      gateTimeoutMs: resolveGateTimeoutMs(args.localGateTimeoutMs),
       // ADR 036 / N1: the ORCHESTRATOR runs `forge demo capture` — the agent
       // only authors checkpoint `command`s; real before/after evidence is
       // produced by a process the agent never touched and committed by forge.
@@ -2697,7 +2705,7 @@ async function runCodeFixUwi(args: UnifierItemArgs): Promise<UnifierItemOutcome>
     (gateInfo) => { lastGateErrored = (gateInfo.errored ?? false) || (gateInfo.timedOut ?? false); emitGateEvent(logger, input.initiativeId, startEventId, uwi.work_item_id, gateInfo, { phase: 'unifier', skill: 'developer-unifier' }); writeGateFeedback(input.worktreePath, gateInfo); },
     {
       requiredPaths: uwi.creates ?? [],
-      timeoutMs: resolveGateTimeoutMs(),
+      timeoutMs: resolveGateTimeoutMs(args.localGateTimeoutMs),
       // R5-02 F2: strip the project's declared ci_gate_unset_env.
       ...(args.ciGateUnsetEnv && args.ciGateUnsetEnv.length > 0 ? { unsetEnv: args.ciGateUnsetEnv } : {}),
     },

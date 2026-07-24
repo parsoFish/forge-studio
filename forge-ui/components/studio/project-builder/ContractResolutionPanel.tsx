@@ -37,10 +37,15 @@ export function ContractResolutionPanel({
   projectId,
   clauses,
   onChanged,
+  onDemoSessionStarted,
 }: {
   projectId: string;
   clauses: PreflightClause[];
   onChanged?: () => void;
+  /** R1-03-F2: a demo-builder resolution spawned a session — the project page
+   *  shows it inline via DemoBuilderPanel rather than navigating to the
+   *  (now-retired) standalone /demo/<sid> route. */
+  onDemoSessionStarted?: (sessionId: string) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -75,11 +80,11 @@ export function ContractResolutionPanel({
       if (s.ok && s.sessionId) router.push(`/instructions/${encodeURIComponent(s.sessionId)}`);
     } else if (r.route === 'demo-builder') {
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
-      if (s.ok && s.sessionId) router.push(`/demo/${encodeURIComponent(s.sessionId)}`);
+      if (s.ok && s.sessionId) onDemoSessionStarted?.(s.sessionId);
     } else if (r.route === 'brain-fix') {
       setMsg('Resolve the stale brain citation from the Knowledge tab → Resolve Lint.');
     }
-  }, [projectId, router]);
+  }, [projectId, router, onDemoSessionStarted]);
 
   const submitUser = useCallback(async (c: PreflightClause) => {
     const instruction = (notes[c.id] ?? '').trim();

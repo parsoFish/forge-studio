@@ -45,8 +45,7 @@ function uniqueCycleId(suffix: string): string {
 /** Write a minimal valid `.forge/project.json` into `repoRoot`. */
 function writeProjectConfig(repoRoot: string, withRelease: boolean, changelogPath = 'CHANGELOG.md'): void {
   const cfg: Record<string, unknown> = {
-    demo: { shape: 'none' },
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
   };
   if (withRelease) {
     cfg.releaseProcess = {

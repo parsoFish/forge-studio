@@ -78,7 +78,7 @@ function setup(overrides?: Partial<DemoBuilderStatus>): {
   mkdirSync(join(repoPath, '.forge'), { recursive: true });
   writeFileSync(
     join(repoPath, '.forge', 'project.json'),
-    JSON.stringify({ quality_gate_cmd: ['npm', 'test'], demoProcess: [{ kind: 'capture', text: 'Run the CLI on a sample.' }, { kind: 'verify', text: 'Output matches the golden file.' }] }),
+    JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, demoProcess: [{ kind: 'capture', text: 'Run the CLI on a sample.' }, { kind: 'verify', text: 'Output matches the golden file.' }] }),
   );
   const logsRoot = join(root, '_logs');
   const sessionId = '2026-06-24T11-00-00';
@@ -199,7 +199,7 @@ function writeComposedProcess(repoPath: string): void {
   writeFileSync(
     join(repoPath, '.forge', 'project.json'),
     JSON.stringify({
-      quality_gate_cmd: ['npm', 'test'],
+      testProcess: { local: { cmd: ['npm', 'test'] } },
       demoProcess: [
         { kind: 'present', text: 'Lead', element: 'narrative' },
         { kind: 'capture', text: 'node bin/x.js --write', element: 'cli-capture' },

@@ -515,12 +515,17 @@ const CI_GATE_TIMEOUT_MS = 20 * 60_000;
  * A non-numeric / non-positive value is ignored (falls back to the default).
  * Exported for unit testing.
  */
-export function resolveCiTimeoutMs(kind: 'fix' | 'gate'): number {
+export function resolveCiTimeoutMs(kind: 'fix' | 'gate', declaredMs?: number): number {
   const def = kind === 'fix' ? CI_FIX_TIMEOUT_MS : CI_GATE_TIMEOUT_MS;
   const raw = process.env[kind === 'fix' ? 'FORGE_CI_FIX_TIMEOUT_MS' : 'FORGE_CI_GATE_TIMEOUT_MS'];
   if (raw !== undefined && raw.trim() !== '') {
     const n = Number.parseInt(raw, 10);
     if (Number.isFinite(n) && n > 0) return n;
+  }
+  // R1-03-F1: the project's testProcess.ci.timeoutMs contract field sits
+  // between the env override and the default.
+  if (kind === 'gate' && declaredMs !== undefined && Number.isFinite(declaredMs) && declaredMs > 0) {
+    return declaredMs;
   }
   return def;
 }
@@ -539,9 +544,10 @@ export function execCommandVector(
   worktreePath: string,
   kind: 'fix' | 'gate',
   unsetEnv?: string[],
+  declaredTimeoutMs?: number,
 ): CiCommandResult {
   const [head, ...rest] = cmd;
-  const timeout = resolveCiTimeoutMs(kind);
+  const timeout = resolveCiTimeoutMs(kind, declaredTimeoutMs);
   // A3 (2026-06-06): strip the project's declared live-test triggers (e.g.
   // `TF_ACC`) so the CI delivery gate mirrors GitHub CI even when the serve
   // env set them for the per-WI live-acceptance gates. No list ⇒ inherit env.

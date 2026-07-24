@@ -584,3 +584,18 @@ test('autoCommitWorktreeIfDirty: clean tree → returns false, no commit created
   }
 });
 
+
+test('resolveGateTimeoutMs: precedence env > declared testProcess timeout > default (R1-03-F1)', () => {
+  const prior = process.env.FORGE_GATE_TIMEOUT_MS;
+  delete process.env.FORGE_GATE_TIMEOUT_MS;
+  try {
+    assert.equal(resolveGateTimeoutMs(), 30 * 60_000, 'default without env or declared');
+    assert.equal(resolveGateTimeoutMs(45_000), 45_000, 'declared wins over default');
+    process.env.FORGE_GATE_TIMEOUT_MS = '99000';
+    assert.equal(resolveGateTimeoutMs(45_000), 99_000, 'env override wins over declared');
+    assert.equal(resolveGateTimeoutMs(0), 99_000, 'non-positive declared ignored');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_GATE_TIMEOUT_MS;
+    else process.env.FORGE_GATE_TIMEOUT_MS = prior;
+  }
+});
