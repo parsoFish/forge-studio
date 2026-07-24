@@ -187,3 +187,14 @@ test('renderDevUserPrompt: does not repeat the static discipline rules (those li
     'user prompt must not re-state Ralph loop discipline (it lives in SKILL.md)',
   );
 });
+
+// ── R4-01-F2: the dev system prompt IS the raw SKILL.md file (frontmatter
+// included), so the executor→loopStrategy frontmatter migration changed its
+// bytes. Pin the reviewed delta: the declared dispatch data is present and
+// the retired executor row is gone. (The PM/reflector migrations pin their
+// deltas via golden spawn-captures; dev's spawn is per-iteration Ralph, so
+// this system-prompt pin is the equivalent evidence.)
+test('buildDevSystemPrompt: frontmatter carries the declared ralph dispatch, not the retired executor row (R4-01-F2)', () => {
+  assert.ok(SYS.includes('loopStrategy: ralph'), 'declared loopStrategy present in the embedded frontmatter');
+  assert.ok(!SYS.includes('executor:'), 'retired executor row absent from the embedded frontmatter');
+});

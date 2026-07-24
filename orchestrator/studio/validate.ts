@@ -149,6 +149,31 @@ export function validateAgent(
     );
   }
 
+  // runtime/loop-strategy — error (R4-01-F2 review finding). Mirrors the
+  // executor enum check: parsed leniently at load, so a bad value must be a
+  // lint error here (runAgent also rejects unknown values at spawn, but that
+  // is a runtime crash, not an authoring-time signal). And 'ralph' is
+  // restricted to the canonical developer-ralph slug: execAgent routes a
+  // declared ralph loop to the dev-loop pipeline, which is per-WI machinery
+  // that ignores the declaring def's own prompt/tools — any other agent
+  // declaring it would mis-run. Lifts when declared fanout generalises the
+  // loop machinery (R2-03 / R4-06-F2).
+  const loopStrategy = def.runtime.loopStrategy;
+  if (loopStrategy !== undefined && loopStrategy !== 'ralph' && loopStrategy !== 'one-shot') {
+    findings.push(
+      err(obj, 'runtime/loop-strategy', `unknown loopStrategy "${loopStrategy}" — must be ralph|one-shot`),
+    );
+  }
+  if (loopStrategy === 'ralph' && def.slug !== 'developer-ralph') {
+    findings.push(
+      err(
+        obj,
+        'runtime/loop-strategy',
+        `loopStrategy "ralph" is restricted to developer-ralph — the ralph loop is the dev-loop pipeline, which ignores this agent's own def (lifts with R2-03/R4-06 declared fanout)`,
+      ),
+    );
+  }
+
   // readiness/runtime — error
   const rt = def.runtime;
   const runtimeOk =

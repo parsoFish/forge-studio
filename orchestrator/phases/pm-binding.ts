@@ -31,7 +31,9 @@ export type PmDisallowedTool = 'Bash' | 'NotebookEdit' | 'WebFetch' | 'WebSearch
  */
 export const pmAgentSpec = deriveAgentSpec(skillPathRelative('project-manager'));
 
-/** Tool lists derived from the spec — exported for downstream consumers. */
+/** Tool lists derived from the spec. Production spawning now derives these
+ * inside `runAgent` (R4-01-F2); these exports remain the TEST-facing contract
+ * surface (pm-binding.test.ts pins them against the SKILL.md source). */
 export const PM_ALLOWED_TOOLS = pmAgentSpec.allowedTools as PmAllowedTool[];
 export const PM_DISALLOWED_TOOLS = pmAgentSpec.disallowedTools as PmDisallowedTool[];
 

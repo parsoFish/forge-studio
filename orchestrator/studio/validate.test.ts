@@ -1137,3 +1137,38 @@ describe('validateProject — fully valid project', () => {
     assert.deepEqual(findings, []);
   });
 });
+
+// ── runtime/loop-strategy (R4-01-F2 review finding) ────────────────────────
+describe('validateAgent runtime/loop-strategy', () => {
+  const inline = (slug: string, loopStrategy: string) => ({
+    slug,
+    name: slug,
+    description: 'd',
+    library: true,
+    purpose: 'p',
+    composition: { skills: [], tools: [], mcps: [], hooks: ['event-log'] },
+    runtime: { sdk: 'claude', strategy: 'fixed' as const, model: 'claude-sonnet-4-6', loopStrategy },
+    brainAccess: 'none' as const,
+    interactivity: 'autonomous',
+    budgets: {},
+    allowedTools: ['Read'],
+    disallowedTools: [],
+    body: 'b',
+    path: `/skills/${slug}/SKILL.md`,
+  });
+
+  it('unknown loopStrategy value → runtime/loop-strategy error', () => {
+    const findings = validateAgent(inline('some-agent', 'spiral'));
+    assert.ok(findings.some((f) => f.check === 'runtime/loop-strategy' && f.level === 'error'));
+  });
+
+  it('ralph on a non-canonical slug → runtime/loop-strategy error', () => {
+    const findings = validateAgent(inline('some-agent', 'ralph'));
+    assert.ok(findings.some((f) => f.check === 'runtime/loop-strategy' && f.level === 'error'));
+  });
+
+  it('ralph on developer-ralph is clean; one-shot valid anywhere', () => {
+    assert.ok(!validateAgent(inline('developer-ralph', 'ralph')).some((f) => f.check === 'runtime/loop-strategy'));
+    assert.ok(!validateAgent(inline('some-agent', 'one-shot')).some((f) => f.check === 'runtime/loop-strategy'));
+  });
+});

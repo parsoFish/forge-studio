@@ -806,7 +806,18 @@ const execAgent: NodeExecutor = async (ctx) => {
   // shipped multi-iteration executor (per-WI worktrees, merge queue, gates).
   // `runAgent` itself REJECTS ralph defs; the loop machinery is
   // orchestrator-band, selected here by the def's declared strategy.
-  if (def.runtime.loopStrategy === 'ralph') return execDev(ctx);
+  // Runtime backstop for the lint restriction (validate.ts
+  // runtime/loop-strategy): the dev-loop pipeline ignores the declaring
+  // def's own prompt/tools, so a non-canonical ralph def would silently
+  // mis-run under the wrong identity — fail loud instead.
+  if (def.runtime.loopStrategy === 'ralph') {
+    if (def.slug !== 'developer-ralph') {
+      throw new Error(
+        `execAgent: agent "${def.slug}" declares loopStrategy 'ralph', which routes to the dev-loop pipeline — restricted to developer-ralph until declared fanout generalises the loop (R2-03/R4-06); \`forge studio lint\` flags this at authoring time`,
+      );
+    }
+    return execDev(ctx);
+  }
 
   const prompt = buildAgentPrompt(def, ctx);
 

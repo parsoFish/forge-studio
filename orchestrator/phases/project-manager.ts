@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pinnedSdkQuery as sdkQuery } from '../pinned-sdk-query.ts';
+import { pinnedStreamQuery } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
 import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '../manifest.ts';
@@ -46,7 +46,7 @@ import { checkDecomposeCompleteness } from './decompose-completeness.ts';
  */
 export type PmQueryFn = (params: {
   prompt: string;
-  options?: Record<string, unknown>;
+  options: Record<string, unknown>;
 }) => AsyncIterable<unknown>;
 
 export type RunProjectManagerOptions = {
@@ -94,7 +94,7 @@ export async function runProjectManager(
 
   const manifestRaw = readFileSync(input.manifestPath, 'utf8');
   const manifest = parseManifest(manifestRaw);
-  const queryFn = options.queryFn ?? (sdkQuery as unknown as PmQueryFn);
+  const queryFn = options.queryFn ?? pinnedStreamQuery;
 
   const result = await runOnePmPass({
     input,
