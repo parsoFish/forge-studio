@@ -27,8 +27,10 @@ export type BandHookId = (typeof BAND_HOOK_IDS)[number];
 
 /**
  * First declared band hook on the def, or undefined for a bare generic
- * agent. Declaring more than one band is unsupported (first wins) — the
- * `node-executor`-adjacent lint keeps rosters honest before it matters.
+ * agent. Declaring more than one band is a `composition/band-hook` lint
+ * error (validate.ts) — first-wins here is only the defensive runtime
+ * order, and execAgent's slug backstop fails loud on any non-canonical
+ * declarer regardless.
  */
 export function resolveBandHook(def: AgentDefinition): BandHookId | undefined {
   for (const hook of def.composition.hooks) {

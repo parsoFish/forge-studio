@@ -1172,3 +1172,76 @@ describe('validateAgent runtime/loop-strategy', () => {
     assert.ok(!validateAgent(inline('some-agent', 'one-shot')).some((f) => f.check === 'runtime/loop-strategy'));
   });
 });
+
+// ── composition/band-hook + budgets/range (R4-01 whole-branch review) ──────
+describe('validateAgent composition/band-hook + budgets/range', () => {
+  const mk = (slug: string, over: Record<string, unknown> = {}) => ({
+    slug,
+    name: slug,
+    description: 'd',
+    library: true,
+    purpose: 'p',
+    composition: { skills: [], tools: [], mcps: [], hooks: ['event-log'] },
+    runtime: { sdk: 'claude', strategy: 'fixed' as const, model: 'claude-sonnet-4-6' },
+    brainAccess: 'none' as const,
+    interactivity: 'autonomous',
+    budgets: {},
+    allowedTools: ['Read'],
+    disallowedTools: [],
+    body: 'b',
+    path: `/skills/${slug}/SKILL.md`,
+    ...over,
+  });
+  const bandErrs = (f: Array<{ check: string; level: string }>) =>
+    f.filter((x) => x.check === 'composition/band-hook' && x.level === 'error');
+
+  it('a foreign def declaring wi-contract → error (canonical-slug restriction)', () => {
+    const findings = validateAgent(mk('some-agent', {
+      composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
+      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
+      budgets: { maxTurns: 10, maxBudgetUsd: 1 },
+    }));
+    assert.ok(bandErrs(findings).length >= 1);
+  });
+
+  it('two band hooks on one def → error; band hook without one-shot/caps → errors', () => {
+    const both = validateAgent(mk('project-manager', {
+      composition: { skills: [], tools: [], mcps: [], hooks: ['wi-contract', 'reflection-close'] },
+      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
+      budgets: { maxTurns: 10, maxBudgetUsd: 1 },
+    }));
+    assert.ok(both.some((x) => x.check === 'composition/band-hook' && x.message.includes('at most one')));
+
+    const bare = validateAgent(mk('project-manager', {
+      composition: { skills: [], tools: [], mcps: [], hooks: ['wi-contract'] },
+    }));
+    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('one-shot')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('maxTurns')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('budget cap')));
+  });
+
+  it('the canonical agents must CARRY their band hook (inverse guard)', () => {
+    const stripped = validateAgent(mk('reflector', {
+      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
+      budgets: { maxTurns: 60, maxBudgetUsd: 1.5 },
+    }));
+    assert.ok(stripped.some((x) => x.check === 'composition/band-hook' && x.message.includes('must declare its')));
+  });
+
+  it('the real shipped PM/reflector shapes are band-lint clean', () => {
+    const pm = validateAgent(mk('project-manager', {
+      composition: { skills: ['brain-query'], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
+      runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
+      budgets: { maxTurns: 70, maxBudgetUsd: 2.5, maxBudgetUsdShare: 0.2 },
+    }));
+    assert.equal(bandErrs(pm).length, 0);
+  });
+
+  it('budgets/range: negative/zero/out-of-range caps are errors', () => {
+    const findings = validateAgent(mk('some-agent', {
+      budgets: { maxTurns: 0, maxBudgetUsd: -1, maxBudgetUsdShare: 1.5 },
+    }));
+    const range = findings.filter((x) => x.check === 'budgets/range');
+    assert.equal(range.length, 3);
+  });
+});

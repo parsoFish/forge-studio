@@ -73,15 +73,11 @@ import { regenerateBrainIndex } from '../../cli/brain-index.ts';
  * orchestrator via the bench's existing SDK harness (benchmarks/reflection/sdk.ts).
  */
 /**
- * SDK-query shape we depend on. Loosened from the SDK's full `Query` type
- * (which the SDK exports as a complex class with `interrupt`, `setModel`,
- * etc.) so test stubs can supply a simple async generator. The real
- * production path passes `sdkQuery` directly via `as unknown` cast.
+ * SDK-query shape we depend on — an alias of the one shared stream-call
+ * shape (R4-01 review — no structural twin types); test stubs supply a
+ * simple async generator.
  */
-export type ReflectorSdkQuery = (input: {
-  prompt: string;
-  options: Record<string, unknown>;
-}) => AsyncIterable<unknown>;
+export type ReflectorSdkQuery = StreamQueryFn;
 
 export type ReflectorDeps = {
   brainLint?: (opts: { cwd: string; cycleId: string }) => RunBrainLintResult;
@@ -273,6 +269,15 @@ export async function runReflector(
     // stays here via the onMessage observer (ADR-036: judgments never move
     // into the primitive).
     const def = loadAgentDefinition(skillPath('reflector'));
+    // R4-01 review: the caps moved from undeletable code constants to
+    // frontmatter data — fail loud if an edit removes them (mirrors the PM
+    // pipeline's maxTurns guard; an uncapped unattended reflector re-opens
+    // the silent-spend vector the old constants closed).
+    if (def.budgets.maxTurns === undefined || def.budgets.maxBudgetUsd === undefined) {
+      throw new Error(
+        'reflector SKILL.md must declare budgets.maxTurns and budgets.maxBudgetUsd (R4-01-F2 — the live caps are frontmatter data)',
+      );
+    }
     const spawn = await runAgent(def, {
       runId: cycleId,
       workdir: forgeRoot,
@@ -288,7 +293,7 @@ export async function runReflector(
         };
         if (m.type === 'assistant') tallyReflectorToolUse(m.message, toolUseSummary);
       },
-      queryFn: deps.sdkQuery as StreamQueryFn | undefined,
+      queryFn: deps.sdkQuery,
     });
     costUsd = spawn.costUsd;
     durationMs = spawn.durationMs ?? 0;

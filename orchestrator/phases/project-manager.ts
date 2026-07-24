@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { pinnedStreamQuery } from '../pinned-sdk-query.ts';
+import { pinnedStreamQuery, type StreamQueryFn } from '../pinned-sdk-query.ts';
 
 import type { EventLogger } from '../logging.ts';
 import { parseManifest, persistManifestSpecs, type InitiativeManifest } from '../manifest.ts';
@@ -40,14 +40,12 @@ import { compileWorkItemSpecs } from './wi-spec-compile.ts';
 import { checkDecomposeCompleteness } from './decompose-completeness.ts';
 
 /**
- * Injection seam for tests. The live cycle uses `sdkQuery` from the
- * Claude Agent SDK; tests supply a stub that returns a canned PM session
- * per call so we can exercise the pass without hitting the network.
+ * Injection seam for tests. The live cycle uses the pinned stream query;
+ * tests supply a stub that returns a canned PM session per call so we can
+ * exercise the pass without hitting the network. Alias of the one shared
+ * stream-call shape (R4-01 review — no structural twin types).
  */
-export type PmQueryFn = (params: {
-  prompt: string;
-  options: Record<string, unknown>;
-}) => AsyncIterable<unknown>;
+export type PmQueryFn = StreamQueryFn;
 
 export type RunProjectManagerOptions = {
   queryFn?: PmQueryFn;
@@ -216,6 +214,11 @@ async function runOnePmPass(p: PmPassInput): Promise<PmPassOutcome> {
   if (pmMaxTurns === undefined) {
     throw new Error(
       'project-manager SKILL.md must declare budgets.maxTurns (R4-01-F2 — the live turn cap is frontmatter data)',
+    );
+  }
+  if (def.budgets.maxBudgetUsd === undefined && def.budgets.maxBudgetUsdShare === undefined) {
+    throw new Error(
+      'project-manager SKILL.md must declare a budget cap (budgets.maxBudgetUsd and/or maxBudgetUsdShare) — an uncapped unattended PM re-opens the F-42/F-43 silent-spend vector',
     );
   }
 

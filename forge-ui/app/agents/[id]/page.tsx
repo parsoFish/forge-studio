@@ -126,6 +126,10 @@ function parseAgent(raw: Agent): AgentState {
       strategy:      rt.strategy      ?? 'fixed',
       model:         rt.model         ?? null,
       range:         (rt.range        ?? []).slice(),
+      // R4-01-F2: loopStrategy is load-bearing declared dispatch (ADR-039) —
+      // dropping it here made the picker misrender migrated agents and the
+      // PUT round-trip depend on the server's existing-value fallback.
+      loopStrategy:  rt.loopStrategy,
     },
     brainAccess:    raw.brainAccess   ?? 'none',
     allowedTools:   ((raw as Record<string, unknown>).allowedTools  as string[] | undefined) ?? [],

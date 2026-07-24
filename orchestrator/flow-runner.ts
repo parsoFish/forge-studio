@@ -47,6 +47,7 @@ import { fileURLToPath } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 import type { EventLogger } from './logging.ts';
+import { parseManifest } from './manifest.ts';
 import { REFLECTION_LOST_EVENT, type CycleInput, type CycleOutcome, type ReviewerOutcome } from './cycle-context.ts';
 import { classifyCrash } from './failure-classifier.ts';
 import type { ClosureResult } from './phases/closure.ts';
@@ -799,8 +800,20 @@ const execAgent: NodeExecutor = async (ctx) => {
 
   // ADR-039: a declared band hook routes this node to its orchestrator band
   // (the phase pipeline machinery) instead of the bare generic spawn.
+  // Runtime backstop mirroring the ralph guard below (and the
+  // composition/band-hook lint): the band pipelines load the CANONICAL
+  // agent's SKILL.md themselves, so a non-canonical def declaring the hook
+  // would silently run the wrong identity — fail loud instead.
   const bandHook = resolveBandHook(def);
-  if (bandHook) return AGENT_BAND_EXECUTORS[bandHook](ctx);
+  if (bandHook) {
+    const canonicalSlug = bandHook === 'wi-contract' ? 'project-manager' : 'reflector';
+    if (def.slug !== canonicalSlug) {
+      throw new Error(
+        `execAgent: agent "${def.slug}" declares band hook "${bandHook}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
+      );
+    }
+    return AGENT_BAND_EXECUTORS[bandHook](ctx);
+  }
 
   // ADR-039: a declared ralph loop routes to the dev-loop pipeline — the one
   // shipped multi-iteration executor (per-WI worktrees, merge queue, gates).
@@ -821,6 +834,19 @@ const execAgent: NodeExecutor = async (ctx) => {
 
   const prompt = buildAgentPrompt(def, ctx);
 
+  // R4-01 review: thread the initiative's declared cost budget into the
+  // binding so a def's `budgets.maxBudgetUsdShare` cap can resolve — without
+  // it the share term is silently inert and a share-only def would spawn
+  // UNCAPPED. Best-effort read (a dry-run/fixture flow may carry no real
+  // manifest); a share-declaring def with no resolvable budget still gets
+  // its flat floor via resolveOneShotBudgetUsd.
+  let costBudgetUsd: number | undefined;
+  try {
+    costBudgetUsd = parseManifest(readFileSync(input.manifestPath, 'utf8')).cost_budget_usd;
+  } catch {
+    costBudgetUsd = undefined;
+  }
+
   await runAgent(def, {
     runId: input.cycleId ?? input.initiativeId,
     logger: nodeLogger,
@@ -828,7 +854,7 @@ const execAgent: NodeExecutor = async (ctx) => {
     prompt,
     bindings: {
       project: { name: basename(input.projectRepoPath), repoPath: input.projectRepoPath },
-      initiative: { id: input.initiativeId, manifestPath: input.manifestPath },
+      initiative: { id: input.initiativeId, manifestPath: input.manifestPath, costBudgetUsd },
     },
     artifactRefs: ctx.inboundArtifacts,
   });

@@ -1,11 +1,8 @@
 /**
- * Shared developer-loop invocation contract — system prompt + user prompt
- * builders + tool config.
- *
- * Both the bench harness (benchmarks/developer-loop/sdk.ts) and the live
- * orchestrator (orchestrator/cycle.ts:runDeveloperLoop) call into this module.
- * Single source of truth for what the developer agent sees, so the bench
- * reflects production.
+ * Developer-loop binding — system prompt + user prompt builders + tool
+ * config. Called by orchestrator/phases/developer-loop.ts (runDeveloperLoop);
+ * the single source of truth for what the developer agent sees. (The bench
+ * harnesses this header once named were removed 2026-05-25.)
  *
  * Contrast vs PM (orchestrator/phases/pm-binding.ts):
  *   - PM is a one-shot decomposition. The agent reads, plans, writes WIs once.

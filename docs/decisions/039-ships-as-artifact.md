@@ -64,7 +64,11 @@ every other roster agent already has carry the behaviour the phase needs:
 
 - **`runtime.loopStrategy`** (ADR 027 §1, already-shipped field) is the
   dispatch switch: `'one-shot'` is driven by the generic `runAgent` primitive
-  through the runtime adapter's single `query()` call; `'ralph'` is dispatched
+  as a single SDK stream call. *As-built note (2026-07-24): the one-shot path
+  calls the pinned Claude query (`pinnedStreamQuery`) directly — byte-parity
+  with what the phase pipelines always did — and does NOT yet route through
+  `resolveSdkId`/the adapter registry; honouring a non-claude `runtime.sdk`
+  on this path is R2-06 (runtime-adapter realization) work.* `'ralph'` is dispatched
   to the orchestrator's existing Ralph-loop machinery (`loops/ralph/`,
   ADR 002) and is **never** driven by the one-shot primitive — the two
   strategies stay two code paths, selected by declared data instead of by

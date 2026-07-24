@@ -46,7 +46,7 @@ Four optional fields tighten the dev-loop signal on larger initiatives. All four
 
 ## Sizing band (S3 refinement)
 
-Locked in `orchestrator/pm-invocation.ts` user prompt + `orchestrator/phases/project-manager.ts` derived range:
+Locked in the `orchestrator/phases/pm-binding.ts` user prompt + `orchestrator/phases/project-manager.ts` derived range:
 
 - **Per initiative:** 2–8 WIs is the target range. Under-decomposed = one giant WI; over-decomposed = >8 WIs (split the initiative instead).
 - **Per-file rule:** at most one WI **creates** a given file (listed in its `creates` array). Subsequent WIs extend it and `depends_on` the creator.

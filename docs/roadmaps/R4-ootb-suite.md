@@ -217,7 +217,15 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
   verify:cycle run is the remaining AC evidence (operator-gated). F3
   round-trip: agents-builder journey beat proves the builder save preserves
   the declared dispatch data on the migrated PM. known-gaps §8's PROMPT.md
-  rider resolved here (scratch `.forge/agent-run/` path).
+  rider resolved here (scratch `.forge/agent-run/` path). **F2 scope note:**
+  the architect spawn path was audited, not migrated — it already sources
+  tools/model/prompts from SKILL.md and stays a deliberate bespoke
+  interactive runner (ADR-039 §5); its residual TS prompt prose is R4-04
+  material. The whole-branch review hardened the seam post-build: band
+  hooks + ralph got matching lint/runtime canonical-slug guards, budget
+  caps fail loud (pipelines + `budgets/range`/`composition/band-hook`
+  lints), `execAgent` threads the initiative cost budget so declared
+  share caps resolve, and the builder renders `loopStrategy` honestly.
 - **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder
   round-trip); **F4 only:** R4-07, R4-08, R4-10-F2 (retirement cannot start
   before the successor agents and the relocated gate are live)

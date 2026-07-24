@@ -23,9 +23,12 @@
  * own start/end/cost events and returns the totals instead — the caller (a
  * phase pipeline) already owns its event lifecycle, and double emission
  * would double-count cost into CostTracker. In caller mode the caller also
- * owns harness-safety (parity: the phase pipelines are reachable only
- * behind the dry-bridge's stub-actions routes); the env suppression check
- * below guards the self-lifecycle paths exactly as before.
+ * owns harness-safety — parity: the phase pipelines never carried an env
+ * suppression check of their own; suppression is each entry point's
+ * responsibility (dry-bridge stub-actions on the bridge routes, the daemon
+ * guard + NO_SPAWN-aware harnesses on the scheduler path). The env
+ * suppression check below guards the self-lifecycle paths exactly as
+ * before.
  *
  * ADR-036: `runAgent` runs NO gate/CI/demo-capture — it only spawns the
  * agent and reports back what happened; gate results flow TO agents, never

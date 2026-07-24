@@ -175,7 +175,12 @@ export function RuntimePicker({
           <div className="field-label" style={{ margin: 0 }}>Loop strategy</div>
           <div className="seg-control" data-component="loop-strategy">
             {([['ralph', 'Ralph loop'], ['one-shot', 'One-shot']] as const).map(([id, label]) => {
-              const active = (runtime.loopStrategy ?? 'ralph') === id;
+              // R4-01-F2: loopStrategy is declared DISPATCH (ADR-039) — show
+              // only the actually-declared value; an unset field highlights
+              // neither segment (no false 'ralph' default: 'ralph' is
+              // lint-restricted to developer-ralph, and a misleading active
+              // chip invited saves the server would 400).
+              const active = runtime.loopStrategy === id;
               return (
                 <button
                   key={id}
