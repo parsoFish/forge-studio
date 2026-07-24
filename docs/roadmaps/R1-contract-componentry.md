@@ -90,7 +90,7 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
 
 ### R1-03 Project contract: demo + test processes
 
-- **Status:** in-progress — F1/F2/F3 implemented 2026-07-24 (wave-4 session 2,
+- **Status:** **implemented** — F1/F2/F3 implemented 2026-07-24, **MERGED PR #42** (main `05addf7`; reopen of the cascade-closed #40) (wave-4 session 2,
   branch `feat/r1-03-contract-processes`); F4 spec landed, awaiting the
   operator verdict recorded in the ADR-036 amendment (R4-10-F2 blocked until
   then)  ·  **Wave:** 3–4 (must land before R4-07 demo agent)
