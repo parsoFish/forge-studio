@@ -198,6 +198,16 @@ phase is migrated.
 > as **R4-01** (`docs/roadmaps/R4-ootb-suite.md`), not as an open item of this
 > ADR. `CLAUDE.md`'s north-star section now states this same definition.
 
+> **Amended 2026-07-24 (R4-01-F1 — [ADR 039](./039-ships-as-artifact.md)).**
+> R4-01 now has its ADR. As the roadmap's Context puts it: "PhaseAgentSpec
+> migration was step one; phases as OOTB artifacts on the generic primitive is
+> the rest" (`docs/roadmaps/R4-ootb-suite.md`, R4-01 Context). ADR 039 owns
+> the artifact-migration's design — the dispatch seam (`runtime.loopStrategy`,
+> extended `budgets`, `composition.hooks` band keys) that replaces the
+> privileged `executor:` slug table with declared data on the generic
+> `runAgent` primitive. This ADR's scope stays exactly what it always was: one
+> agent, one skill, one clean-context spawn per phase.
+
 ## Consequences
 
 - **Intent has one home; capabilities are shared.** A phase's intent is its agent
