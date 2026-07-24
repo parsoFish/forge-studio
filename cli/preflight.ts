@@ -29,10 +29,11 @@ import { join, resolve } from 'node:path';
 import { detectProjectLanguage, type ProjectLanguage } from '../orchestrator/gate-recipes.ts';
 import {
   loadProjectConfig,
+  type ProjectConfig,
 } from '../orchestrator/project-config.ts';
 import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
-export type ClauseId = 'C1' | 'C2' | 'C4' | 'C5' | 'C6' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'ARTIFACTS';
+export type ClauseId = 'C1' | 'C1b' | 'C2' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'DEMO-ALIGN' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -114,15 +115,29 @@ export function runPreflight(
   const projectName = dir.split(/[\\/]/).filter(Boolean).pop() ?? dir;
   const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..');
 
+  // R1-03-F1: load the typed config ONCE for the testProcess-sourced clauses
+  // (C1/C1b/C7). A load failure (e.g. an un-migrated flat-key config) is
+  // surfaced through C1's detail — preflight reports, it never crashes.
+  let cfg: ProjectConfig | null = null;
+  let cfgError: string | null = null;
+  try {
+    cfg = loadProjectConfig(dir);
+  } catch (err) {
+    cfgError = err instanceof Error ? err.message : String(err);
+  }
+
   const clauses: ClauseResult[] = [
-    checkC1(dir),
+    checkC1(dir, cfg, cfgError),
+    checkC1b(cfg, cfgError),
     checkC2(dir),
     checkC4(dir, projectName, forgeRoot),
     checkC5(dir),
     checkC6(dir),
+    checkC7(cfg),
     checkC8(dir),
     checkDemo(dir),
     checkDemoSkill(dir),
+    checkDemoAlignment(cfg),
     checkBuildArtifacts(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
@@ -133,16 +148,23 @@ export function runPreflight(
 
 // --- C1: fast, trustworthy quality gate (HARD) ---
 
-function checkC1(dir: string): ClauseResult {
+function checkC1(dir: string, cfg: ProjectConfig | null, cfgError: string | null): ClauseResult {
   const base = { clause: 'C1' as const, title: 'Fast, trustworthy quality gate', hard: true };
-  const declared = readQualityGateCmd(dir);
+  if (cfgError !== null) {
+    return {
+      ...base,
+      pass: false,
+      detail: `project config failed to load — ${cfgError}`,
+    };
+  }
+  const declared = readQualityGateCmd(dir, cfg);
   if (!declared) {
     return {
       ...base,
       pass: false,
       detail:
-        'no deterministic test command — need a package.json "test" script or a ' +
-        'quality_gate_cmd in the project (none found)',
+        'no deterministic test command — need testProcess.local.cmd in .forge/project.json, ' +
+        'the .forge/quality_gate_cmd sidecar, or a package.json "test" script (none found)',
     };
   }
   const { source, cmd } = declared;
@@ -448,6 +470,71 @@ function checkDemoSkill(dir: string): ClauseResult {
   return { ...base, pass: true, detail: `${DEMO_SKILL_REL} present (generated demo machinery)` };
 }
 
+// --- DEMO-ALIGN: demo-builds-off-testing alignment (ADVISORY, R1-03-F3) ---
+
+/**
+ * The operator diagram's "alignment recommended — demo should largely build
+ * off testing": each demoProcess CAPTURE step SHOULD reference the declared
+ * test process. Heuristic (cheap + honest): a capture step is aligned when
+ * its element kind IS test output (`test-evidence`), or its text mentions a
+ * test-process reference token — a full joined local/ci command string, a
+ * distinctive argv token, or the acceptance `match` substring. ALWAYS
+ * advisory: divergence may be intentional (live REST evidence per the
+ * betterado tier) — flagged, never blocked, and never part of hard readiness.
+ */
+const DEMO_ALIGN_TOKEN_STOPLIST = new Set(['bash', 'npm', 'node', 'make', 'test', 'run', 'npx', 'go']);
+
+export function demoAlignmentTokens(cfg: ProjectConfig): string[] {
+  const tokens = new Set<string>();
+  const cmds = [cfg.testProcess.local.cmd, cfg.testProcess.ci?.cmd ?? []];
+  for (const cmd of cmds) {
+    if (cmd.length === 0) continue;
+    tokens.add(cmd.join(' ').toLowerCase());
+    for (const t of cmd) {
+      const lowered = t.toLowerCase();
+      if (lowered.length >= 4 && !DEMO_ALIGN_TOKEN_STOPLIST.has(lowered) && !lowered.startsWith('-')) {
+        tokens.add(lowered);
+      }
+    }
+  }
+  if (cfg.testProcess.acceptance) tokens.add(cfg.testProcess.acceptance.match.toLowerCase());
+  return [...tokens];
+}
+
+function checkDemoAlignment(cfg: ProjectConfig | null): ClauseResult {
+  const base = {
+    clause: 'DEMO-ALIGN' as const,
+    title: 'Demo builds off the test process (alignment recommended)',
+    hard: false,
+  };
+  const steps = cfg?.demoProcess ?? [];
+  const captures = steps.filter((s) => s.kind === 'capture');
+  if (!cfg || captures.length === 0) {
+    return { ...base, pass: true, detail: 'no capture steps declared — alignment not applicable' };
+  }
+  const tokens = demoAlignmentTokens(cfg);
+  const divergent = captures.filter((s) => {
+    if (s.element === 'test-evidence') return false;
+    const text = s.text.toLowerCase();
+    return !tokens.some((t) => text.includes(t));
+  });
+  if (divergent.length === 0) {
+    return {
+      ...base,
+      pass: true,
+      detail: `all ${captures.length} capture step(s) reference the declared test process`,
+    };
+  }
+  const detail = divergent
+    .map((s) => `capture "${s.text.slice(0, 60)}" does not reference the declared test process`)
+    .join('; ');
+  return {
+    ...base,
+    pass: false,
+    detail: `${detail} — advisory: divergence may be intentional (live evidence); demo should largely build off testing`,
+  };
+}
+
 // --- ARTIFACTS: build-output ignore coverage (ADVISORY, betterado #4a) ---
 
 function checkBuildArtifacts(dir: string): ClauseResult {
@@ -483,7 +570,14 @@ function checkBuildArtifacts(dir: string): ClauseResult {
 
 // --- helpers ---
 
-function readQualityGateCmd(dir: string): { source: string; cmd: string } | null {
+function readQualityGateCmd(dir: string, cfg: ProjectConfig | null): { source: string; cmd: string } | null {
+  // R1-03-F1: the typed contract object is the primary source (the loader
+  // already single-sourced the sidecar into it, so a loaded config always
+  // carries local.cmd). The sidecar/package.json probes below remain for
+  // projects with NO project.json at all (pre-onboarding preflights).
+  if (cfg) {
+    return { source: 'testProcess.local.cmd', cmd: cfg.testProcess.local.cmd.join(' ') };
+  }
   const pkgPath = join(dir, 'package.json');
   if (existsSync(pkgPath)) {
     try {
@@ -496,14 +590,76 @@ function readQualityGateCmd(dir: string): { source: string; cmd: string } | null
       /* malformed package.json — fall through to other signals */
     }
   }
-  // A project may declare a quality_gate_cmd in a forge sidecar instead of
-  // (or in addition to) package.json — mirror the manifest's field name.
+  // A project may declare the gate in the forge sidecar without a project.json.
   const sidecar = join(dir, '.forge', 'quality_gate_cmd');
   if (existsSync(sidecar)) {
     const cmd = readFileSync(sidecar, 'utf8').trim();
     if (cmd) return { source: '.forge/quality_gate_cmd', cmd };
   }
   return null;
+}
+
+// --- C1b: CI merge-boundary net (advisory when absent; HARD shape when declared) ---
+
+/**
+ * R1-03-F1: surfaces the `testProcess.ci` delivery net. Absent ⇒ advisory
+ * gap (the merge decision rests on the per-WI gate alone — the brain's
+ * "per-WI gate ≠ project CI" antipattern class); declared ⇒ the shape was
+ * already validated fail-closed by the loader, so a loaded config passes
+ * HARD. A load failure reports advisory here (C1 carries the hard fail).
+ */
+function checkC1b(cfg: ProjectConfig | null, cfgError: string | null): ClauseResult {
+  const title = 'CI merge-boundary net (testProcess.ci)';
+  if (cfgError !== null) {
+    return { clause: 'C1b', title, hard: false, pass: false, detail: `project config failed to load — see C1` };
+  }
+  if (!cfg || !cfg.testProcess.ci) {
+    return {
+      clause: 'C1b',
+      title,
+      hard: false,
+      pass: false,
+      detail:
+        'no testProcess.ci declared — the merge decision rests on the per-WI gate alone; ' +
+        'declare the full CI mirror (cmd/fixCmd/unsetEnv) so a red whole-module baseline can never ship (advisory)',
+    };
+  }
+  const ci = cfg.testProcess.ci;
+  return {
+    clause: 'C1b',
+    title,
+    hard: true,
+    pass: true,
+    detail: `testProcess.ci declared ("${ci.cmd.join(' ')}"${ci.unsetEnv ? `; hermetic: unset ${ci.unsetEnv.join(',')}` : ''})`,
+  };
+}
+
+// --- C7: live-acceptance tier (advisory visibility; hard enforcement lives in PM + dev-loop) ---
+
+function checkC7(cfg: ProjectConfig | null): ClauseResult {
+  const title = 'Live-acceptance tier (testProcess.acceptance)';
+  const acc = cfg?.testProcess.acceptance;
+  if (!acc) {
+    return {
+      clause: 'C7',
+      title,
+      hard: false,
+      pass: true,
+      detail:
+        'no acceptance tier declared (n/a — external-resource projects declare testProcess.acceptance; ' +
+        'hard enforcement lives in the PM phase + dev-loop requires-env guard)',
+    };
+  }
+  const env = acc.requiresEnv ?? [];
+  return {
+    clause: 'C7',
+    title,
+    hard: false,
+    pass: true,
+    detail:
+      `acceptance tier declared (match "${acc.match}", required: ${acc.required}, ` +
+      `${env.length === 0 ? 'creds-free' : `requiresEnv: ${env.join(',')}`}) — enforced by the PM phase + dev-loop`,
+  };
 }
 
 /**

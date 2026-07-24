@@ -128,3 +128,37 @@ security-permissions UWI-6).
 - One more child-process spawn per packaging-gate evaluation when a demo
   declares capture checkpoints; bounded by its timeout and skipped for
   notes-only demos.
+
+## Amendment (2026-07-24) — merge-boundary relocation of the dual-boundary full-suite gate (R1-03-F4)
+
+Q3-B retires the unifier (`developer-unifier`/`execUnifier`) in favor of a demo
+agent + adversarial review agent (`docs/roadmaps/R4-ootb-suite.md` R4-07/R4-08).
+The unifier's `composedUnifierGate` full-suite `initiative_gate` sub-check — the
+"dual-boundary gate" `docs/known-gaps.md` names a strength worth preserving —
+does not retire with it: this ADR's Decision §1 (orchestrator executes; agents
+judge) still has to hold somewhere. That somewhere relocates to a new
+**flow-engine merge-boundary band**: an orchestrator-owned execution point at
+the develop flow's merge boundary (R4-10-F1's loop topology), not an agent
+node — the same posture Decision §1 already states, applied at the new
+boundary instead of inside the unifier's Ralph loop. The results-flow seam
+(Decision §2, `.forge/last-gate-failure.md`, present ⇒ fresh) and the
+forensic-escalation ban (Decision §4) are unchanged by this relocation — they
+were never unifier-specific.
+
+The full spec — the preserved regression criterion ("no path to merge exists
+with a red full-suite baseline"), the `testProcess.local`/`testProcess.ci`
+keying (R1-03-F1, same PR), and the unattended-remediation mechanism (bounded
+by a shared cap; cap exhaustion parks the initiative `needs-operator`) — is
+recorded in
+[`docs/forge-project-contract.md`](../forge-project-contract.md#the-merge-boundary-full-suite-gate-relocation-spec--operator-review-required-not-yet-enforced),
+not restated here. This amendment exists solely to record the operator's
+verdict on that spec, per the locked Q3-B decision that flagged this
+relocation for operator review
+(`docs/roadmaps/R1-contract-componentry.md` R1-03-F4).
+
+Nothing changes in this ADR's Decision or Consequences until that verdict is
+recorded. `docs/roadmaps/R4-ootb-suite.md` R4-10-F2 is the sole
+build-and-prove owner of the runnable replacement and, by its own stated
+precondition, may not start before this line resolves.
+
+**Operator verdict: APPROVED as specced — 2026-07-24** (recorded from the wave-4 S2 session decision). The relocation proceeds exactly per the contract-doc spec: orchestrator-owned merge-boundary gate keyed off testProcess.local + testProcess.ci, unattended remediation via develop-agent re-dispatch on scoped fix WIs from .forge/last-gate-failure.md under R4-10-F2's shared cap, cap exhaustion parks needs-operator, and the preserved invariant — no path to merge exists with a red full-suite baseline. R4-10-F2 (the build+prove owner, wave-4 tail) is now UNBLOCKED.

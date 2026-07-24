@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import type { DemoStep } from '@/lib/studio-client';
 import { startDemoBuilder, listDemoElements, type DemoElementSummary } from '@/lib/bridge-client';
 
@@ -23,8 +22,22 @@ function attachUids(steps: DemoStep[]): StepWithUid[] {
   return steps.map((s) => ({ ...s, uid: nextUid() }));
 }
 
-export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { project: string; steps: DemoStep[]; hasLockedDemo: boolean; onChange: (s: DemoStep[]) => void }) {
-  const router = useRouter();
+export function DemoTimeline({
+  project,
+  steps,
+  hasLockedDemo,
+  onChange,
+  onSessionStarted,
+}: {
+  project: string;
+  steps: DemoStep[];
+  hasLockedDemo: boolean;
+  onChange: (s: DemoStep[]) => void;
+  /** R1-03-F2: a demo session started (whole-demo launch or a per-element
+   *  iterate) — the page owns which session is active + shows it inline via
+   *  DemoBuilderPanel, rather than this component navigating to /demo/<sid>. */
+  onSessionStarted: (sessionId: string) => void;
+}) {
   const [internal, setInternal] = useState<StepWithUid[]>(() => attachUids(steps));
   const [dragIdx, setDragIdx] = useState<number | null>(null);
   const [launching, setLaunching] = useState(false);
@@ -59,7 +72,7 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
         setLaunchError(res.error ?? 'failed to start the demo agent');
         return;
       }
-      router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
+      onSessionStarted(res.sessionId);
     } finally {
       setLaunching(false);
     }
@@ -80,7 +93,7 @@ export function DemoTimeline({ project, steps, hasLockedDemo, onChange }: { proj
         setLaunchError(res.error ?? 'failed to start the demo agent');
         return;
       }
-      router.push(`/demo/${encodeURIComponent(res.sessionId)}`);
+      onSessionStarted(res.sessionId);
     } finally {
       setIterating(null);
     }

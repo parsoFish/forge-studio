@@ -1,57 +1,49 @@
 {
-  "name": "mdtoc",
-  "$comment": "forge↔project contract config for mdtoc, forge's creds-free OOTB reference project. Exercises every contract component: Studio fields (northStar/instructions/demoProcess/skills/kb), a fast deterministic quality gate, a creds-free acceptance gate against a fixture, a bound project skill, a Brain 3 under forge/, and a full releaseProcess (in-cycle docs+changelog drafts + a pre-merge version bump). The quality gate is the OFFLINE unit suite (npm test → node:test, <1s); the acceptance gate runs the BUILT CLI against test/fixtures/release-notes.md and reads back the exact TOC.",
-
-  "northStar": "A tiny, dependency-free CLI that turns a Markdown doc's headings into a correct, GitHub-compatible table of contents.",
-
-  "instructions": "Keep runtime dependencies at zero — node builtins only; tsx/typescript are the sole dev deps. Make the implementation satisfy the tests as written; never edit a test to make it pass. Keep source files small and feature-organised (immutable returns, validate argv at the boundary). Acceptance fixtures must use non-default sentinel values asserted via a read-back of the built CLI's output. Record each initiative's plan + demo under forge/history/<initiative-id>/ so the repo carries a browsable build record; project skills live under .forge/skills/.",
-
-  "quality_gate_cmd": ["npm", "test"],
-
-  "$acceptance_gate_comment": "Creds-free acceptance tier (contract C7). `match` identifies the live-vs-real gate by the `acceptance` token in a WI's quality_gate_cmd (`npm run acceptance`). required:true forces the PM to emit ≥1 WI whose gate runs the acceptance suite, so a change to TOC behaviour is always proven against the BUILT CLI, not just units. requires_env is empty: this project is creds-free, so the acceptance gate runs with no env preconditions.",
-  "acceptance_gate": {
-    "match": "acceptance",
-    "required": true,
-    "requires_env": []
-  },
-
+  "$comment": "forge\u2194project contract config for mdtoc, forge's creds-free OOTB reference project. Exercises every contract component: Studio fields (northStar/instructions/demoProcess/skills/kb), a fast deterministic quality gate, a creds-free acceptance gate against a fixture, a bound project skill, a Brain 3 under forge/, and a full releaseProcess (in-cycle docs+changelog drafts + a pre-merge version bump). The quality gate is the OFFLINE unit suite (npm test \u2192 node:test, <1s); the acceptance gate runs the BUILT CLI against test/fixtures/release-notes.md and reads back the exact TOC.",
+  "$acceptance_gate_comment": "Creds-free acceptance tier (contract C7). `match` identifies the live-vs-real gate by the `acceptance` token in a WI's quality_gate_cmd (`npm run acceptance`). required:true forces the PM to emit \u22651 WI whose gate runs the acceptance suite, so a change to TOC behaviour is always proven against the BUILT CLI, not just units. requires_env is empty: this project is creds-free, so the acceptance gate runs with no env preconditions.",
   "$standing_work_item_acs_comment": "Static testing invariants forge appends to EVERY work item (contract A2/C7/C9). Encodes the read-back + non-default-fixture discipline as standing ACs.",
+  "$releaseProcess_comment": "Release contract C10. In-cycle: keep docs (README/roadmap) current and draft a `## [Unreleased]` CHANGELOG entry. Pre-merge: the release-finalizer bumps the version in package.json + promotes the draft. Tag + GitHub release are CI's job (.github/workflows/release.yml, installed from studio/starters).",
+  "testProcess": {
+    "local": {
+      "cmd": [
+        "npm",
+        "test"
+      ]
+    },
+    "acceptance": {
+      "match": "acceptance",
+      "required": true,
+      "requiresEnv": []
+    }
+  },
+  "name": "mdtoc",
+  "northStar": "A tiny, dependency-free CLI that turns a Markdown doc's headings into a correct, GitHub-compatible table of contents.",
+  "instructions": "Keep runtime dependencies at zero \u2014 node builtins only; tsx/typescript are the sole dev deps. Make the implementation satisfy the tests as written; never edit a test to make it pass. Keep source files small and feature-organised (immutable returns, validate argv at the boundary). Acceptance fixtures must use non-default sentinel values asserted via a read-back of the built CLI's output. Record each initiative's plan + demo under forge/history/<initiative-id>/ so the repo carries a browsable build record; project skills live under .forge/skills/.",
   "standing_work_item_acs": [
     "Acceptance read-back: the change is exercised by `npm run acceptance`, which runs the BUILT CLI (`dist/cli.js`) against `test/fixtures/release-notes.md` and asserts the exact generated TOC. The WI that proves a TOC-behaviour change MUST set its quality_gate_cmd to the acceptance command and update the EXPECTED constant in test/acceptance/run.ts in lock-step.",
     "Non-default fixtures (C9): any heading under test in the fixture carries a distinctive, non-default value (e.g. a `sentinel-<hex>` section) and duplicate/edge cases (a repeated heading, a fenced code block) so a TOC that ignores the real heading text is caught by the read-back.",
     "Quality gate stays fast + green: `npm test` (node:test) is deterministic, creds-free, and sub-second; it must fail before the work exists and pass only when the behaviour is correct.",
     "Docs + changelog current: a TOC-behaviour change is not done until README/docs describe it and a `## [Unreleased]` CHANGELOG.md entry is drafted (the release-finalizer promotes it at pre-merge)."
   ],
-
-  "demo": {
-    "$shape_comment": "`cli-diff` — the change is shown by running the CLI and capturing its output. The demo command runs the creds-free acceptance driver with --demo, which writes captured evidence (the real generated TOC + read-back result) into forge/history/<initiative>/demo/.",
-    "shape": "cli-diff",
-    "command": ["npm", "run", "demo"],
-    "baseline": "main"
-  },
-
   "demoProcess": [
     {
       "kind": "capture",
-      "text": "Run `npm run demo` to execute the built mdtoc CLI against test/fixtures/release-notes.md and capture the real generated table of contents."
+      "text": "Run `npm run demo` to execute the built mdtoc CLI against test/fixtures/release-notes.md and capture the real generated table of contents (the same path the acceptance suite proves)."
     },
     {
       "kind": "verify",
-      "text": "Read back the captured TOC against the expected output — the sentinel section `Quickstart sentinel-7f3a9c`, the duplicate-anchor `#rotate-the-signing-key-1`, and the absence of the fenced `## Fake Heading` must all hold."
+      "text": "Read back the captured TOC against the expected output \u2014 the sentinel section `Quickstart sentinel-7f3a9c`, the duplicate-anchor `#rotate-the-signing-key-1`, and the absence of the fenced `## Fake Heading` must all hold."
     },
     {
       "kind": "present",
       "text": "Attach forge/history/<initiative-id>/demo/toc-capture.md (command + captured TOC + read-back result) to the PR as the demo evidence."
     }
   ],
-
-  "skills": ["toc-anchor-rules"],
-
+  "skills": [
+    "toc-anchor-rules"
+  ],
   "kb": "mdtoc",
-
   "artifactRoot": "forge",
-
-  "$releaseProcess_comment": "Release contract C10. In-cycle: keep docs (README/roadmap) current and draft a `## [Unreleased]` CHANGELOG entry. Pre-merge: the release-finalizer bumps the version in package.json + promotes the draft. Tag + GitHub release are CI's job (.github/workflows/release.yml, installed from studio/starters).",
   "releaseProcess": {
     "steps": [
       {
@@ -68,7 +60,13 @@
         "kind": "version",
         "phase": "pre-merge",
         "text": "Bump the semantic version in package.json to match the promoted changelog heading.",
-        "command": ["npm", "version", "--no-git-tag-version", "--allow-same-version", "patch"]
+        "command": [
+          "npm",
+          "version",
+          "--no-git-tag-version",
+          "--allow-same-version",
+          "patch"
+        ]
       }
     ],
     "versionFile": "package.json",

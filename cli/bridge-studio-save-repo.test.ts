@@ -44,7 +44,7 @@ before(async () => {
   }
   projectDir = join(forgeRoot, 'projects', PROJECT);
   mkdirSync(join(projectDir, '.forge'), { recursive: true });
-  writeFileSync(join(projectDir, '.forge', 'project.json'), JSON.stringify({ quality_gate_cmd: ['npm', 'test'], northStar: 'old' }));
+  writeFileSync(join(projectDir, '.forge', 'project.json'), JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, northStar: 'old' }));
   // Make it a git repo with a main branch + initial commit.
   execFileSync('git', ['-C', projectDir, 'init', '-b', 'main'], { stdio: 'ignore' });
   g(projectDir, ['config', 'user.email', 'test@forge.dev']);

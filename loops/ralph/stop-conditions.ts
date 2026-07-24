@@ -256,16 +256,19 @@ export type GateTighteningOptions = {
 const DEFAULT_GATE_TIMEOUT_MS = 30 * 60_000;
 
 /**
- * Resolve the gate-command timeout: `FORGE_GATE_TIMEOUT_MS` overrides (heavy
- * live-acceptance gates — e.g. a multi-resource terraform apply — can
- * legitimately exceed the default under a cold cache); otherwise 30 min.
+ * Resolve the gate-command timeout. Precedence (R1-03-F1):
+ * `FORGE_GATE_TIMEOUT_MS` (per-run operator override — heavy live-acceptance
+ * gates can legitimately exceed the default under a cold cache) >
+ * `declaredMs` (the project's `testProcess.local.timeoutMs` contract field) >
+ * the 30-min default.
  */
-export function resolveGateTimeoutMs(): number {
+export function resolveGateTimeoutMs(declaredMs?: number): number {
   const raw = process.env.FORGE_GATE_TIMEOUT_MS;
   if (raw) {
     const n = Number(raw);
     if (Number.isFinite(n) && n > 0) return n;
   }
+  if (declaredMs !== undefined && Number.isFinite(declaredMs) && declaredMs > 0) return declaredMs;
   return DEFAULT_GATE_TIMEOUT_MS;
 }
 

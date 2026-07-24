@@ -74,11 +74,11 @@ function makeAgentSkillMd(): string {
   ].join('\n');
 }
 
-/** Full valid project.json that includes the required quality_gate_cmd */
+/** Full valid project.json that includes the required testProcess.local.cmd */
 function makeProjectJson(extras: Record<string, unknown> = {}): string {
   return JSON.stringify(
     {
-      quality_gate_cmd: ['npm', 'test'],
+      testProcess: { local: { cmd: ['npm', 'test'] } },
       northStar: 'Ship a great product.',
       instructions: 'Always write tests first.',
       demoProcess: [
@@ -319,7 +319,7 @@ test('PUT /api/studio/agents/UPPERCASE → 400 (slug must be lowercase)', async 
 // PUT /api/studio/projects/:id — edits M2 fields, preserves required fields
 // ---------------------------------------------------------------------------
 
-test('PUT /api/studio/projects/write-project edits northStar + demoProcess, preserves quality_gate_cmd', async () => {
+test('PUT /api/studio/projects/write-project edits northStar + demoProcess, preserves testProcess', async () => {
   // Reset to known state
   writeFileSync(join(projectDir, '.forge', 'project.json'), makeProjectJson());
 
@@ -343,7 +343,7 @@ test('PUT /api/studio/projects/write-project edits northStar + demoProcess, pres
   ]);
 
   // Preserved fields
-  assert.deepEqual(written['quality_gate_cmd'], ['npm', 'test'], 'quality_gate_cmd preserved');
+  assert.deepEqual(written['testProcess'], { local: { cmd: ['npm', 'test'] } }, 'testProcess preserved');
   assert.equal(written['instructions'], 'Always write tests first.', 'instructions preserved');
   assert.deepEqual(written['skills'], ['tdd-workflow', 'coding-standards'], 'skills preserved');
 });
@@ -550,7 +550,8 @@ test('POST /api/studio/projects scaffolds project.json + C4 artifacts + git, rep
   const cfgPath = join(projDir, '.forge', 'project.json');
   assert.ok(existsSync(cfgPath), 'project.json must be scaffolded');
   const cfg = JSON.parse(readFileSync(cfgPath, 'utf8')) as Record<string, unknown>;
-  assert.ok(Array.isArray(cfg.quality_gate_cmd), 'C1 quality_gate_cmd present');
+  const testProcess = cfg.testProcess as { local?: { cmd?: unknown } } | undefined;
+  assert.ok(Array.isArray(testProcess?.local?.cmd), 'C1 testProcess.local.cmd present');
   assert.ok(Array.isArray(cfg.demoProcess), 'demoProcess present');
 
   // B3: the C4 artifacts + a git repo were scaffolded (idempotent stubs).

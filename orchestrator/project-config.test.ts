@@ -46,7 +46,7 @@ test('loadProjectConfig: happy path — minimal valid config', () => {
     writeConfig(
       root,
       JSON.stringify({
-        quality_gate_cmd: ['npm', 'test'],
+        testProcess: { local: { cmd: ['npm', 'test'] } },
       }),
     );
     const cfg = loadProjectConfig(root);
@@ -59,11 +59,11 @@ test('loadProjectConfig: happy path — minimal valid config', () => {
   }
 });
 
-test('loadProjectConfig: throws when quality_gate_cmd is missing', () => {
+test('loadProjectConfig: throws when testProcess is missing', () => {
   const root = newTempDir();
   try {
     writeConfig(root, JSON.stringify({}));
-    assert.throws(() => loadProjectConfig(root), /quality_gate_cmd/);
+    assert.throws(() => loadProjectConfig(root), /missing required `testProcess`/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -75,7 +75,7 @@ test('loadProjectConfig: optional metrics block round-trips', () => {
     writeConfig(
       root,
       JSON.stringify({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         metrics: {
           command: ['bash', '-lc', 'node bench.js'],
           baselines_dir: 'docs/baselines/',
@@ -99,7 +99,7 @@ test('loadProjectConfig: optional sweep block round-trips', () => {
     writeConfig(
       root,
       JSON.stringify({
-        quality_gate_cmd: ['go', 'test', './...'],
+        testProcess: { local: { cmd: ['go', 'test', './...'] } },
         sweep: {
           start_command: ['bash', '-lc', 'npm run preview'],
           draw_function: 'src/sweep/draw.ts',
@@ -145,10 +145,10 @@ test('loadProjectConfig: single-sources quality_gate_cmd from the .forge/quality
   }
 });
 
-test('loadProjectConfig: project.json quality_gate_cmd wins over the sidecar when both present', () => {
+test('loadProjectConfig: project.json testProcess.local.cmd wins over the sidecar when both present', () => {
   const root = newTempDir();
   try {
-    writeConfig(root, JSON.stringify({ quality_gate_cmd: ['npm', 'test'] }));
+    writeConfig(root, JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } } }));
     writeFileSync(join(root, '.forge', 'quality_gate_cmd'), 'go test ./...\n');
     const cfg = loadProjectConfig(root);
     assert.deepEqual(cfg!.quality_gate_cmd, ['npm', 'test']);
@@ -157,11 +157,11 @@ test('loadProjectConfig: project.json quality_gate_cmd wins over the sidecar whe
   }
 });
 
-test('loadProjectConfig: throws when neither quality_gate_cmd nor sidecar is present', () => {
+test('loadProjectConfig: throws when neither testProcess.local.cmd nor sidecar is present', () => {
   const root = newTempDir();
   try {
     writeConfig(root, JSON.stringify({}));
-    assert.throws(() => loadProjectConfig(root), /quality_gate_cmd/);
+    assert.throws(() => loadProjectConfig(root), /missing required `testProcess`/);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -177,9 +177,13 @@ test('loadProjectConfig: ci_gate + ci_fix_cmd round-trip from project.json', () 
     writeConfig(
       root,
       JSON.stringify({
-        quality_gate_cmd: ['go', 'test', './...'],
-        ci_gate: ['bash', '-c', 'make test && golangci-lint run ./... && make terrafmt-check'],
-        ci_fix_cmd: ['bash', '-c', 'make fmt && make terrafmt'],
+        testProcess: {
+          local: { cmd: ['go', 'test', './...'] },
+          ci: {
+            cmd: ['bash', '-c', 'make test && golangci-lint run ./... && make terrafmt-check'],
+            fixCmd: ['bash', '-c', 'make fmt && make terrafmt'],
+          },
+        },
       }),
     );
     const cfg = loadProjectConfig(root);
@@ -197,31 +201,35 @@ test('loadProjectConfig: ci_gate + ci_fix_cmd round-trip from project.json', () 
 
 test('loadProjectConfig: ci_gate + ci_fix_cmd are optional (absent ⇒ undefined)', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
   });
   assert.equal(cfg.ci_gate, undefined);
   assert.equal(cfg.ci_fix_cmd, undefined);
 });
 
-test('validateProjectConfig: ci_gate must be an argv string[] when present', () => {
+test('validateProjectConfig: testProcess.ci.cmd must be an argv string[] when present', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
-        ci_gate: 'make test && lint',
+        testProcess: {
+          local: { cmd: ['true'] },
+          ci: { cmd: 'make test && lint' },
+        },
       }),
-    /ci_gate/,
+    /testProcess\.ci\.cmd/,
   );
 });
 
 // ----- A2/A3 testing-contract seams (2026-06-06) -----
 
-test('validateProjectConfig: ci_gate_unset_env + standing_work_item_acs + acceptance_gate round-trip', () => {
+test('validateProjectConfig: testProcess.ci.unsetEnv + standing_work_item_acs + testProcess.acceptance round-trip', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
-    ci_gate_unset_env: ['TF_ACC'],
+    testProcess: {
+      local: { cmd: ['true'] },
+      ci: { cmd: ['true'], unsetEnv: ['TF_ACC'] },
+      acceptance: { match: 'acceptancetests', required: true, requiresEnv: ['TF_ACC'] },
+    },
     standing_work_item_acs: ['live acc test', 'CI must be green'],
-    acceptance_gate: { match: 'acceptancetests', required: true, requires_env: ['TF_ACC'] },
   });
   assert.deepEqual(cfg.ci_gate_unset_env, ['TF_ACC']);
   assert.deepEqual(cfg.standing_work_item_acs, ['live acc test', 'CI must be green']);
@@ -229,20 +237,22 @@ test('validateProjectConfig: ci_gate_unset_env + standing_work_item_acs + accept
 });
 
 test('validateProjectConfig: the three A2/A3 seams are optional (absent ⇒ undefined)', () => {
-  const cfg = validateProjectConfig({ quality_gate_cmd: ['true'] });
+  const cfg = validateProjectConfig({ testProcess: { local: { cmd: ['true'] } } });
   assert.equal(cfg.ci_gate_unset_env, undefined);
   assert.equal(cfg.standing_work_item_acs, undefined);
   assert.equal(cfg.acceptance_gate, undefined);
 });
 
-test('validateProjectConfig: ci_gate_unset_env must be an argv string[] when present', () => {
+test('validateProjectConfig: testProcess.ci.unsetEnv must be an argv string[] when present', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
-        ci_gate_unset_env: 'TF_ACC',
+        testProcess: {
+          local: { cmd: ['true'] },
+          ci: { cmd: ['true'], unsetEnv: 'TF_ACC' },
+        },
       }),
-    /ci_gate_unset_env/,
+    /testProcess\.ci\.unsetEnv/,
   );
 });
 
@@ -252,52 +262,60 @@ test('validateProjectConfig: ci_gate_unset_env must be an argv string[] when pre
 // reject those names with a clear error rather than silently self-sabotaging
 // the gate. Validate + fail fast.
 for (const forbidden of ['PATH', 'HOME', 'SHELL']) {
-  test(`validateProjectConfig: ci_gate_unset_env rejects ${forbidden} (would weaken the gate child, not trigger a live test)`, () => {
+  test(`validateProjectConfig: testProcess.ci.unsetEnv rejects ${forbidden} (would weaken the gate child, not trigger a live test)`, () => {
     assert.throws(
       () =>
         validateProjectConfig({
-          quality_gate_cmd: ['true'],
-          ci_gate_unset_env: ['TF_ACC', forbidden],
+          testProcess: {
+            local: { cmd: ['true'] },
+            ci: { cmd: ['true'], unsetEnv: ['TF_ACC', forbidden] },
+          },
         }),
-      new RegExp(`ci_gate_unset_env.*${forbidden}`),
+      new RegExp(`testProcess\\.ci\\.unsetEnv.*${forbidden}`),
     );
   });
 }
 
-test('validateProjectConfig: ci_gate_unset_env still accepts legitimate live-test trigger vars', () => {
+test('validateProjectConfig: testProcess.ci.unsetEnv still accepts legitimate live-test trigger vars', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
-    ci_gate_unset_env: ['TF_ACC', 'RUN_INTEGRATION', 'AZURE_ACC'],
+    testProcess: {
+      local: { cmd: ['true'] },
+      ci: { cmd: ['true'], unsetEnv: ['TF_ACC', 'RUN_INTEGRATION', 'AZURE_ACC'] },
+    },
   });
   assert.deepEqual(cfg.ci_gate_unset_env, ['TF_ACC', 'RUN_INTEGRATION', 'AZURE_ACC']);
 });
 
-test('validateProjectConfig: acceptance_gate requires a non-empty match', () => {
+test('validateProjectConfig: testProcess.acceptance requires a non-empty match', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
-        acceptance_gate: { required: true },
+        testProcess: {
+          local: { cmd: ['true'] },
+          acceptance: { required: true },
+        },
       }),
-    /acceptance_gate\.match/,
+    /testProcess\.acceptance\.match/,
   );
 });
 
-test('validateProjectConfig: acceptance_gate.required must be a boolean', () => {
+test('validateProjectConfig: testProcess.acceptance.required must be a boolean', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
-        acceptance_gate: { match: 'acceptancetests', required: 'yes' },
+        testProcess: {
+          local: { cmd: ['true'] },
+          acceptance: { match: 'acceptancetests', required: 'yes' },
+        },
       }),
-    /acceptance_gate\.required/,
+    /testProcess\.acceptance\.required/,
   );
 });
 
 // ----- M2 fields (northStar / instructions / demoProcess / skills / kb) -----
 
 test('validateProjectConfig: M2 fields all absent → valid (backward compat)', () => {
-  const cfg = validateProjectConfig({ quality_gate_cmd: ['true'] });
+  const cfg = validateProjectConfig({ testProcess: { local: { cmd: ['true'] } } });
   assert.equal(cfg.northStar, undefined);
   assert.equal(cfg.instructions, undefined);
   assert.equal(cfg.demoProcess, undefined);
@@ -307,7 +325,7 @@ test('validateProjectConfig: M2 fields all absent → valid (backward compat)', 
 
 test('validateProjectConfig: northStar ≤ 140 chars → accepted', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     northStar: 'Build a self-sustaining autonomous agent loop.',
   });
   assert.equal(cfg.northStar, 'Build a self-sustaining autonomous agent loop.');
@@ -317,7 +335,7 @@ test('validateProjectConfig: northStar > 140 chars → throws', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         northStar: 'x'.repeat(141),
       }),
     /northStar/,
@@ -328,7 +346,7 @@ test('validateProjectConfig: northStar must be a string when present', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         northStar: 42,
       }),
     /northStar/,
@@ -337,7 +355,7 @@ test('validateProjectConfig: northStar must be a string when present', () => {
 
 test('validateProjectConfig: instructions string round-trips', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     instructions: 'Always write tests first.',
   });
   assert.equal(cfg.instructions, 'Always write tests first.');
@@ -347,7 +365,7 @@ test('validateProjectConfig: instructions must be a string when present', () => 
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         instructions: 99,
       }),
     /instructions/,
@@ -356,7 +374,7 @@ test('validateProjectConfig: instructions must be a string when present', () => 
 
 test('validateProjectConfig: demoProcess array of valid steps round-trips', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     demoProcess: [
       { kind: 'capture', text: 'Screenshot home page.' },
       { kind: 'verify', text: 'Check API returns 200.' },
@@ -374,7 +392,7 @@ test('validateProjectConfig: demoProcess step with bad kind → throws', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         demoProcess: [{ kind: 'invalid', text: 'step' }],
       }),
     /demoProcess/,
@@ -385,7 +403,7 @@ test('validateProjectConfig: demoProcess must be an array when present', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         demoProcess: 'capture everything',
       }),
     /demoProcess/,
@@ -394,7 +412,7 @@ test('validateProjectConfig: demoProcess must be an array when present', () => {
 
 test('validateProjectConfig: skills string array round-trips', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     skills: ['demo', 'tdd-workflow'],
   });
   assert.deepEqual(cfg.skills, ['demo', 'tdd-workflow']);
@@ -404,7 +422,7 @@ test('validateProjectConfig: skills must be an array of strings when present', (
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         skills: [42, 'demo'],
       }),
     /skills/,
@@ -413,7 +431,7 @@ test('validateProjectConfig: skills must be an array of strings when present', (
 
 test('validateProjectConfig: kb string round-trips', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     kb: 'cycles',
   });
   assert.equal(cfg.kb, 'cycles');
@@ -421,7 +439,7 @@ test('validateProjectConfig: kb string round-trips', () => {
 
 test('validateProjectConfig: kb null is accepted', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     kb: null,
   });
   assert.equal(cfg.kb, null);
@@ -429,7 +447,7 @@ test('validateProjectConfig: kb null is accepted', () => {
 
 test('validateProjectConfig: all M2 fields valid together → round-trips', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     northStar: 'Build a great product.',
     instructions: 'Always write tests.',
     demoProcess: [{ kind: 'capture', text: 'Take a screenshot.' }],
@@ -446,14 +464,14 @@ test('validateProjectConfig: all M2 fields valid together → round-trips', () =
 // ----- artifactRoot validation -----
 
 test('validateProjectConfig: artifactRoot absent → undefined (no own key in result)', () => {
-  const cfg = validateProjectConfig({ quality_gate_cmd: ['true'] });
+  const cfg = validateProjectConfig({ testProcess: { local: { cmd: ['true'] } } });
   assert.equal(cfg.artifactRoot, undefined);
   assert.ok(!Object.prototype.hasOwnProperty.call(cfg, 'artifactRoot'));
 });
 
 test('validateProjectConfig: artifactRoot "." → normalised to undefined (legacy layout)', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     artifactRoot: '.',
   });
   assert.equal(cfg.artifactRoot, undefined);
@@ -461,7 +479,7 @@ test('validateProjectConfig: artifactRoot "." → normalised to undefined (legac
 
 test('validateProjectConfig: artifactRoot "" → normalised to undefined', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     artifactRoot: '',
   });
   assert.equal(cfg.artifactRoot, undefined);
@@ -469,7 +487,7 @@ test('validateProjectConfig: artifactRoot "" → normalised to undefined', () =>
 
 test('validateProjectConfig: artifactRoot "  " (whitespace only) → normalised to undefined', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     artifactRoot: '  ',
   });
   assert.equal(cfg.artifactRoot, undefined);
@@ -477,7 +495,7 @@ test('validateProjectConfig: artifactRoot "  " (whitespace only) → normalised 
 
 test('validateProjectConfig: artifactRoot "forge" → preserved as-is', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     artifactRoot: 'forge',
   });
   assert.equal(cfg.artifactRoot, 'forge');
@@ -485,7 +503,7 @@ test('validateProjectConfig: artifactRoot "forge" → preserved as-is', () => {
 
 test('validateProjectConfig: artifactRoot "forge/x" (nested clean relative) → preserved', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     artifactRoot: 'forge/x',
   });
   assert.equal(cfg.artifactRoot, 'forge/x');
@@ -495,7 +513,7 @@ test('validateProjectConfig: artifactRoot "/abs" (leading slash) → throws ment
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         artifactRoot: '/abs',
       }),
     /artifactRoot/,
@@ -506,7 +524,7 @@ test('validateProjectConfig: artifactRoot "../escape" (dotdot segment) → throw
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         artifactRoot: '../escape',
       }),
     /artifactRoot/,
@@ -517,7 +535,7 @@ test('validateProjectConfig: artifactRoot "a/../b" (embedded dotdot) → throws 
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         artifactRoot: 'a/../b',
       }),
     /artifactRoot/,
@@ -528,7 +546,7 @@ test('validateProjectConfig: artifactRoot with backslash → throws mentioning a
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         artifactRoot: 'a\\b',
       }),
     /artifactRoot/,
@@ -539,7 +557,7 @@ test('validateProjectConfig: artifactRoot as number → throws mentioning artifa
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         artifactRoot: 42,
       }),
     /artifactRoot/,
@@ -550,7 +568,7 @@ test('validateProjectConfig: artifactRoot as object → throws mentioning artifa
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         artifactRoot: { path: 'forge' },
       }),
     /artifactRoot/,
@@ -559,7 +577,7 @@ test('validateProjectConfig: artifactRoot as object → throws mentioning artifa
 
 test('validateProjectConfig: full valid config WITH artifactRoot round-trips alongside M2 fields', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     northStar: 'Ship great things.',
     instructions: 'Write tests first.',
     demoProcess: [{ kind: 'verify', text: 'Check API.' }],
@@ -579,7 +597,7 @@ test('validateProjectConfig: full valid config WITH artifactRoot round-trips alo
 
 test('validateProjectConfig: releaseProcess full round-trip (steps + paths + command)', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     releaseProcess: {
       steps: [
         { kind: 'docs', phase: 'in-cycle', text: 'Refresh the README usage section.' },
@@ -614,7 +632,7 @@ test('validateProjectConfig: releaseProcess full round-trip (steps + paths + com
 });
 
 test('validateProjectConfig: releaseProcess absent → undefined (no own key in result)', () => {
-  const cfg = validateProjectConfig({ quality_gate_cmd: ['true'] });
+  const cfg = validateProjectConfig({ testProcess: { local: { cmd: ['true'] } } });
   assert.equal(cfg.releaseProcess, undefined);
   assert.ok(!Object.prototype.hasOwnProperty.call(cfg, 'releaseProcess'));
 });
@@ -623,7 +641,7 @@ test('validateProjectConfig: releaseProcess step with bad kind → throws', () =
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: { steps: [{ kind: 'tag', phase: 'pre-merge', text: 'Tag the release.' }] },
       }),
     /releaseProcess\.steps\[0\]\.kind/,
@@ -634,7 +652,7 @@ test('validateProjectConfig: releaseProcess step with bad phase → throws', () 
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: { steps: [{ kind: 'docs', phase: 'post-merge', text: 'Refresh docs.' }] },
       }),
     /releaseProcess\.steps\[0\]\.phase/,
@@ -645,7 +663,7 @@ test('validateProjectConfig: releaseProcess.versionFile rejects "../escape"', ()
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: {
           steps: [{ kind: 'version', phase: 'pre-merge', text: 'Bump version.' }],
           versionFile: '../escape',
@@ -659,7 +677,7 @@ test('validateProjectConfig: releaseProcess.changelogPath rejects "../escape"', 
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: {
           steps: [{ kind: 'changelog', phase: 'pre-merge', text: 'Add entry.' }],
           changelogPath: '../escape',
@@ -673,7 +691,7 @@ test('validateProjectConfig: releaseProcess.docsDir rejects "../escape"', () => 
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: {
           steps: [{ kind: 'docs', phase: 'in-cycle', text: 'Refresh docs.' }],
           docsDir: '../escape',
@@ -685,7 +703,7 @@ test('validateProjectConfig: releaseProcess.docsDir rejects "../escape"', () => 
 
 test('validateProjectConfig: releaseProcess step command round-trips', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     releaseProcess: {
       steps: [
         {
@@ -705,7 +723,7 @@ test('validateProjectConfig: releaseProcess must be an object when present', () 
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: 'bump and ship',
       }),
     /releaseProcess/,
@@ -716,7 +734,7 @@ test('validateProjectConfig: releaseProcess requires a steps array', () => {
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: { versionFile: 'package.json' },
       }),
     /releaseProcess\.steps/,
@@ -727,7 +745,7 @@ test('validateProjectConfig: releaseProcess step command must be argv string[] w
   assert.throws(
     () =>
       validateProjectConfig({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: {
           steps: [{ kind: 'version', phase: 'pre-merge', text: 'Bump.', command: 'npm version' }],
         },
@@ -742,7 +760,7 @@ test('loadProjectConfig: releaseProcess round-trips from project.json', () => {
     writeConfig(
       root,
       JSON.stringify({
-        quality_gate_cmd: ['true'],
+        testProcess: { local: { cmd: ['true'] } },
         releaseProcess: {
           steps: [
             { kind: 'changelog', phase: 'pre-merge', text: 'Write a CHANGELOG entry.' },
@@ -764,7 +782,7 @@ test('loadProjectConfig: releaseProcess round-trips from project.json', () => {
 
 test('validateProjectConfig: full valid config WITH releaseProcess round-trips alongside all fields', () => {
   const cfg = validateProjectConfig({
-    quality_gate_cmd: ['true'],
+    testProcess: { local: { cmd: ['true'] } },
     northStar: 'Ship great things.',
     instructions: 'Write tests first.',
     demoProcess: [{ kind: 'verify', text: 'Check API.' }],
@@ -833,7 +851,7 @@ test('readAgentInstructionsFile returns null when neither file exists or content
 test('loadProjectConfig: AGENTS.md is the single source — its content overrides project.json instructions', () => {
   const root = newTempDir();
   try {
-    writeConfig(root, JSON.stringify({ quality_gate_cmd: ['npm', 'test'], instructions: 'stale json instructions' }));
+    writeConfig(root, JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, instructions: 'stale json instructions' }));
     writeFileSync(join(root, 'AGENTS.md'), '# Real instructions\n\nNever touch dist/.');
     const cfg = loadProjectConfig(root);
     assert.equal(cfg?.instructions, '# Real instructions\n\nNever touch dist/.');
@@ -845,10 +863,107 @@ test('loadProjectConfig: AGENTS.md is the single source — its content override
 test('loadProjectConfig: project.json instructions is the legacy fallback when no AGENTS.md/CLAUDE.md', () => {
   const root = newTempDir();
   try {
-    writeConfig(root, JSON.stringify({ quality_gate_cmd: ['npm', 'test'], instructions: 'json fallback' }));
+    writeConfig(root, JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, instructions: 'json fallback' }));
     const cfg = loadProjectConfig(root);
     assert.equal(cfg?.instructions, 'json fallback');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// R1-03-F1: flat-key rejection, conflict, sidecar re-rooting, timeouts,
+// derivation equality — the migration contract's own pins.
+// ---------------------------------------------------------------------------
+
+test('validateProjectConfig: a flat gate key alone → migration message naming the full mapping', () => {
+  assert.throws(
+    () => validateProjectConfig({ quality_gate_cmd: ['npm', 'test'] }),
+    /moved to the typed testProcess object \(R1-03\).*quality_gate_cmd → testProcess\.local\.cmd/,
+  );
+  assert.throws(
+    () => validateProjectConfig({ testProcess: { local: { cmd: ['npm', 'test'] } }, ci_gate: ['make', 'ci'] }),
+    /conflicting flat gate key\(s\) alongside testProcess.*ci_gate → testProcess\.ci\.cmd/,
+  );
+});
+
+test('validateProjectConfig: every flat key is named in the rejection', () => {
+  const err = (() => {
+    try {
+      validateProjectConfig({
+        quality_gate_cmd: ['a'],
+        ci_gate: ['b'],
+        ci_fix_cmd: ['c'],
+        ci_gate_unset_env: ['TF_ACC'],
+        acceptance_gate: { match: 'x', required: false },
+      });
+      return null;
+    } catch (e) {
+      return e instanceof Error ? e.message : String(e);
+    }
+  })();
+  assert.ok(err !== null);
+  for (const frag of [
+    'quality_gate_cmd → testProcess.local.cmd',
+    'ci_gate → testProcess.ci.cmd',
+    'ci_fix_cmd → testProcess.ci.fixCmd',
+    'ci_gate_unset_env → testProcess.ci.unsetEnv',
+    'acceptance_gate → testProcess.acceptance',
+  ]) {
+    assert.ok(err.includes(frag), `rejection names "${frag}" (got: ${err})`);
+  }
+});
+
+test('loadProjectConfig: the sidecar fills testProcess.local.cmd when the JSON omits local', () => {
+  const dir = newTempDir();
+  try {
+    mkdirSync(join(dir, '.forge'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'quality_gate_cmd'), 'go test ./...\n');
+    writeConfig(dir, JSON.stringify({ testProcess: { ci: { cmd: ['make', 'ci'] } } }));
+    const cfg = loadProjectConfig(dir);
+    assert.ok(cfg);
+    assert.deepEqual(cfg.testProcess.local.cmd, ['go', 'test', './...']);
+    assert.deepEqual(cfg.quality_gate_cmd, ['go', 'test', './...']);
+    assert.deepEqual(cfg.ci_gate, ['make', 'ci']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('validateProjectConfig: timeoutMs fields parse (positive int) and reject nonsense', () => {
+  const cfg = validateProjectConfig({
+    testProcess: {
+      local: { cmd: ['npm', 'test'], timeoutMs: 60000 },
+      ci: { cmd: ['make', 'ci'], timeoutMs: 1200000 },
+      acceptance: { match: 'acc', required: false, timeoutMs: 900000 },
+    },
+  });
+  assert.equal(cfg.testProcess.local.timeoutMs, 60000);
+  assert.equal(cfg.testProcess.ci?.timeoutMs, 1200000);
+  assert.equal(cfg.testProcess.acceptance?.timeoutMs, 900000);
+  for (const bad of [0, -5, 1.5, 'fast']) {
+    assert.throws(
+      () => validateProjectConfig({ testProcess: { local: { cmd: ['t'], timeoutMs: bad } } }),
+      /timeoutMs must be a positive integer/,
+    );
+  }
+});
+
+test('validateProjectConfig: derived flat accessors equal the declared testProcess (derivation equality)', () => {
+  const cfg = validateProjectConfig({
+    testProcess: {
+      local: { cmd: ['npm', 'test'] },
+      ci: { cmd: ['make', 'ci'], fixCmd: ['make', 'fmt'], unsetEnv: ['TF_ACC'] },
+      acceptance: { match: 'acceptance', required: true, requiresEnv: ['TF_ACC'] },
+    },
+  });
+  assert.deepEqual(cfg.quality_gate_cmd, cfg.testProcess.local.cmd);
+  assert.deepEqual(cfg.ci_gate, cfg.testProcess.ci?.cmd);
+  assert.deepEqual(cfg.ci_fix_cmd, cfg.testProcess.ci?.fixCmd);
+  assert.deepEqual(cfg.ci_gate_unset_env, cfg.testProcess.ci?.unsetEnv);
+  assert.deepEqual(cfg.acceptance_gate, {
+    match: 'acceptance',
+    required: true,
+    requires_env: ['TF_ACC'],
+  });
 });

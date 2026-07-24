@@ -551,3 +551,18 @@ test('snapshotCycleArtefacts: mirrors demo.json + DEMO.html + PLAN.html into _lo
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('resolveCiTimeoutMs: declared testProcess.ci.timeoutMs sits between env and default (R1-03-F1)', () => {
+  const prior = process.env.FORGE_CI_GATE_TIMEOUT_MS;
+  delete process.env.FORGE_CI_GATE_TIMEOUT_MS;
+  try {
+    assert.equal(resolveCiTimeoutMs('gate'), 20 * 60_000, 'default');
+    assert.equal(resolveCiTimeoutMs('gate', 33 * 60_000), 33 * 60_000, 'declared wins over default');
+    assert.equal(resolveCiTimeoutMs('fix', 33 * 60_000), 5 * 60_000, 'declared applies to the gate kind only');
+    process.env.FORGE_CI_GATE_TIMEOUT_MS = '77000';
+    assert.equal(resolveCiTimeoutMs('gate', 33 * 60_000), 77_000, 'env override wins over declared');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_CI_GATE_TIMEOUT_MS;
+    else process.env.FORGE_CI_GATE_TIMEOUT_MS = prior;
+  }
+});

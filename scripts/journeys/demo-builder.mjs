@@ -16,12 +16,12 @@ let demoBrief = '';
 export const journey = defineJourney({
   id: 'demo-builder',
   title: 'Regenerate the demo page',
-  story: 'As the operator, I regenerate a project\'s demo page element by element — brief the agent, watch it compose the capture/verify/present trio, review the result, and lock it in as the reproducible artifact.',
+  story: 'As the operator, I regenerate a project\'s demo page element by element WITHOUT leaving the project page (R1-03-F2: the demo builder is an inline panel, not a detached route) — brief the agent, watch it compose the capture/verify/present trio, review the result, and lock it in as the reproducible artifact.',
   beats: [
     {
       id: 'demo-builder-brief',
       title: 'Brief the demo agent',
-      narration: 'Before the agent touches anything, the operator types one line of steering ("give the CLI capture more contrast") into a real briefing field — the regenerate isn\'t a blind rerun, it takes direction first.',
+      narration: 'The demo builder now lives ON the project page (R1-03-F2) — the operator opens the session inline, right beneath the demo timeline, and types one line of steering ("give the CLI capture more contrast") into a real briefing field before the agent touches anything. The regenerate isn\'t a blind rerun, and it isn\'t a separate screen.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[DB-1] demo-builder — brief the agent');
@@ -30,13 +30,17 @@ export const journey = defineJourney({
         ctx.seeded.demoSid = demoSid;
         demoBrief = 'Give the CLI capture a touch more contrast; keep the narrative tight.';
         writeDemoStatus(demoSid, { phase: 'briefing', mode: 'create' });
-        await page.goto(watch.uiUrl + `/demo/${encodeURIComponent(demoSid)}`, { waitUntil: 'domcontentloaded' });
+        // R1-03-F2: entry is the PROJECT PAGE (?demo= deep link — the panel is
+        // inline; the old /demo/<sid> route is a redirect stub back here).
+        await page.goto(watch.uiUrl + `/projects/${PROJECT}?demo=${encodeURIComponent(demoSid)}`, { waitUntil: 'domcontentloaded' });
         const ready = await page.waitForFunction(
-          () => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-page-ready') === 'true',
+          () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
           null, { timeout: 20000 },
         ).then(() => true).catch(() => false);
-        check(ready, 'DB-1: demo-builder screen renders ([data-page="demo-builder"][data-page-ready="true"])');
-        await caption(page, 'Forge regenerates a project\'s demo page — element by element, then locks it in as a reproducible artifact.');
+        check(ready, 'DB-1: the project page renders ([data-page="projects"][data-page-ready="true"])');
+        const panelUp = await page.waitForSelector('[data-section="demo-builder-panel"]', { timeout: 15000 }).then(() => true).catch(() => false);
+        check(panelUp, 'DB-1: the inline demo-builder panel opens on the project page ([data-section="demo-builder-panel"])');
+        await caption(page, 'Forge regenerates a project\'s demo page — inline on the project page, element by element, then locks it in as a reproducible artifact.');
         await page.waitForSelector('[data-section="session-briefing"]', { timeout: 15000 }).catch(() => {});
         check(await page.locator('[data-section="session-briefing"]').count() > 0, 'DB-1: briefing surface offered before the agent runs');
         check(await page.locator('[data-action="submit-brief"]').count() > 0, 'DB-1: submit-brief action present');
@@ -61,11 +65,11 @@ export const journey = defineJourney({
         writeDemoStatus(demoSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief });
         demoEvent(demoSid, 'log', 'demo composed — awaiting review');
         await page.waitForFunction(
-          () => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'awaiting-review',
+          () => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'awaiting-review',
           null, { timeout: 15000 },
         ).catch(() => {});
-        const demoPhaseAttr = await page.evaluate(() => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') ?? null);
-        check(demoPhaseAttr === 'awaiting-review', 'DB-2: phase advances to awaiting-review');
+        const demoPhaseAttr = await page.evaluate(() => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') ?? null);
+        check(demoPhaseAttr === 'awaiting-review', 'DB-2: the panel phase advances to awaiting-review');
         await page.waitForSelector('[data-component="demo-review"]', { timeout: 15000 }).catch(() => {});
         check(await page.locator('[data-component="demo-review"]').count() > 0, 'DB-2: the demo-review surface renders');
         await page.waitForSelector('[data-demo-iframe]', { timeout: 15000 }).catch(() => {});
@@ -102,16 +106,16 @@ export const journey = defineJourney({
             () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
             null, { timeout: 15000 },
           ).catch(() => {});
-          await caption(p, 'From the project page — "Build the demo with the agent" is where a regenerate starts.');
+          await caption(p, 'From the project page — "Build the demo with the agent" opens the builder right here, inline.');
           const launchBtn = p.locator('[data-action="launch-demo-builder"]').first();
           await launchBtn.scrollIntoViewIfNeeded().catch(() => {});
           await launchBtn.hover().catch(() => {});
           await sleep(THINK);
           // No click on [data-action="launch-demo-builder"] — onLaunchDemoBuilder()
-          // is a real side-effecting API call. Transition straight to the
-          // clip-only session instead.
-          await p.goto(watch.uiUrl + `/demo/${encodeURIComponent(demoClipSid)}`, { waitUntil: 'domcontentloaded' });
-          await p.waitForSelector('main[data-page="demo-builder"]', { timeout: 12000 });
+          // is a real side-effecting API call. Deep-link the clip-only session
+          // instead (?demo= — same page, panel opens inline).
+          await p.goto(watch.uiUrl + `/projects/${PROJECT}?demo=${encodeURIComponent(demoClipSid)}`, { waitUntil: 'domcontentloaded' });
+          await p.waitForSelector('[data-section="demo-builder-panel"]', { timeout: 12000 });
           await p.waitForSelector('[data-section="session-briefing"]', { timeout: 8000 }).catch(() => {});
           await p.locator('[data-field="briefing-notes"]').fill(demoBrief).catch(() => {});
           await sleep(THINK);
@@ -121,7 +125,7 @@ export const journey = defineJourney({
           demoEvent(demoClipSid, 'start', 'demo-builder turn (phase=generating) — composing capture/verify/present');
           await demoBurst(demoClipSid, ['Read', 'Bash', 'Write']);
           await p.waitForFunction(
-            () => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'generating',
+            () => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'generating',
             null, { timeout: 10000 },
           ).catch(() => {});
           await sleep(WORK);
@@ -129,21 +133,21 @@ export const journey = defineJourney({
           writeDemoStatus(demoClipSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief });
           demoEvent(demoClipSid, 'log', 'demo composed — awaiting review');
           await p.waitForFunction(
-            () => document.querySelector('[data-page="demo-builder"]')?.getAttribute('data-demo-phase') === 'awaiting-review',
+            () => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'awaiting-review',
             null, { timeout: 10000 },
           ).catch(() => {});
           await p.waitForSelector('[data-demo-iframe]', { timeout: 10000 }).catch(() => {});
           await sleep(WORK);
         }, {
           readySel: '[data-page="projects"]',
-          caption: 'From the project page’s demo affordance into the builder: briefed, then composing the page element by element — capture, verify, present',
+          caption: 'The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present',
         });
       },
     },
     {
       id: 'demo-builder-lock',
       title: 'Lock the demo in',
-      narration: 'Locking writes demo.lock.json plus a history entry to disk and returns the operator to the project — the regenerated demo becomes the one reproducible artifact for this cycle, not a throwaway preview.',
+      narration: 'Locking writes demo.lock.json plus a history entry to disk and simply closes the panel — the operator never left the project page. The regenerated demo becomes the one reproducible artifact for this cycle, not a throwaway preview.',
       drive: async (ctx) => {
         const { page, frame, check } = ctx;
         console.log('\n[DB-3] demo-builder — lock');
@@ -152,9 +156,12 @@ export const journey = defineJourney({
         writeDemoLock(demoSid, demoBrief);
         demoEvent(demoSid, 'log', 'demo locked (.forge/demo/demo.lock.json + history/ written)');
         writeDemoStatus(demoSid, { phase: 'locked', mode: 'create', prompt: demoBrief });
-        await page.waitForSelector('[data-section="demo-status"] [data-action="back-to-project"]', { timeout: 15000 }).catch(() => {});
-        check(await page.locator('[data-section="demo-status"]').count() > 0, 'DB-3: the locked success surface renders');
-        check(await page.locator('[data-section="demo-status"] [data-action="back-to-project"]').count() > 0, 'DB-3: back-to-project offered once locked');
+        await page.waitForSelector('[data-section="demo-status"]', { timeout: 15000 }).catch(() => {});
+        check(await page.locator('[data-section="demo-status"]').count() > 0, 'DB-3: the locked success surface renders in the panel');
+        check(
+          await page.locator('[data-section="demo-builder-panel"] [data-action="close-demo-panel"]').count() > 0,
+          'DB-3: close-demo-panel offered once locked (the operator is already on the project page — R1-03-F2)',
+        );
         await frame(page, 'demo-3-locked', 'The demo agent — locked in as the reproducible demo artifact');
 
         // Self-contained cleanup (e2e-journey.mjs's finally block is out of this

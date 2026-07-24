@@ -47,7 +47,10 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
   writeFileSync(
     join(dir, '.forge', 'project.json'),
     JSON.stringify({
-      quality_gate_cmd: ['vitest', 'run'],
+      testProcess: {
+        local: { cmd: ['vitest', 'run'] },
+        ci: { cmd: ['vitest', 'run'] },
+      },
       demoProcess: [
         { kind: 'capture', text: 'Capture before state.' },
         { kind: 'verify', text: 'Run vitest to verify the change.' },
@@ -81,7 +84,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C2', 'C4', 'C5', 'C6', 'C8', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
+    for (const id of ['C1', 'C1b', 'C2', 'C4', 'C5', 'C6', 'C7', 'C8', 'BRAIN', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -93,8 +96,10 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
 test('C1 (HARD): no test command ⇒ fail + ok=false', () => {
   const p = happyProject();
   try {
-    // Remove the test script.
+    // Remove every gate source: package.json script AND project.json's
+    // testProcess.local.cmd (which now takes precedence over package.json).
     writeFileSync(join(p.dir, 'package.json'), JSON.stringify({ name: 'x' }));
+    rmSync(join(p.dir, '.forge', 'project.json'));
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'C1').pass, false);
     assert.equal(clause(r, 'C1').hard, true);
@@ -108,9 +113,11 @@ test('C1 (HARD): no test command ⇒ fail + ok=false', () => {
 test('C1 (HARD): chained test command is rejected (must be ONE command)', () => {
   const p = happyProject();
   try {
+    // testProcess.local.cmd (project.json) is the primary C1 source now — it
+    // takes precedence over package.json, so the chained command must live there.
     writeFileSync(
-      join(p.dir, 'package.json'),
-      JSON.stringify({ name: 'x', scripts: { test: 'lint && vitest run' } }),
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['bash', '-c', 'lint && vitest run'] } } }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'C1').pass, false);
@@ -124,8 +131,8 @@ test('C1 (HARD): a primarily-e2e gate is flagged as slow', () => {
   const p = happyProject();
   try {
     writeFileSync(
-      join(p.dir, 'package.json'),
-      JSON.stringify({ name: 'x', scripts: { test: 'playwright test' } }),
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['playwright', 'test'] } } }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'C1').pass, false);
@@ -139,6 +146,9 @@ test('C1: a .forge/quality_gate_cmd sidecar satisfies the gate without package.j
   const p = happyProject();
   try {
     rmSync(join(p.dir, 'package.json'));
+    // Remove project.json too — with it present, loadProjectConfig would
+    // succeed via its own testProcess.local.cmd and never consult the sidecar.
+    rmSync(join(p.dir, '.forge', 'project.json'));
     mkdirSync(join(p.dir, '.forge'), { recursive: true });
     writeFileSync(join(p.dir, '.forge', 'quality_gate_cmd'), 'pytest -q');
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
@@ -290,7 +300,7 @@ test('DEMO (ADVISORY): demoProcess with only verify step (no capture) warns', ()
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
       JSON.stringify({
-        quality_gate_cmd: ['vitest', 'run'],
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
         demoProcess: [{ kind: 'verify', text: 'Run vitest' }],
       }),
     );
@@ -310,7 +320,7 @@ test('DEMO (ADVISORY): demoProcess with only capture step (no verify) warns', ()
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
       JSON.stringify({
-        quality_gate_cmd: ['vitest', 'run'],
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
         demoProcess: [{ kind: 'capture', text: 'Screenshot' }],
       }),
     );
@@ -329,7 +339,7 @@ test('DEMO (ADVISORY): empty demoProcess warns', () => {
   try {
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
-      JSON.stringify({ quality_gate_cmd: ['vitest', 'run'] }),
+      JSON.stringify({ testProcess: { local: { cmd: ['vitest', 'run'] } } }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const c = clause(r, 'DEMO');
@@ -347,7 +357,7 @@ test('DEMO (ADVISORY): demoProcess with capture + verify passes', () => {
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
       JSON.stringify({
-        quality_gate_cmd: ['vitest', 'run'],
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
         demoProcess: [
           { kind: 'capture', text: 'Scrape harness metrics' },
           { kind: 'verify', text: 'Project tests green' },
@@ -395,7 +405,7 @@ test('DEMO-SKILL (N/A): no demoProcess → not applicable, passes (no double-war
     rmSync(join(p.dir, '.forge', 'skills', 'demo-design'), { recursive: true, force: true });
     writeFileSync(
       join(p.dir, '.forge', 'project.json'),
-      JSON.stringify({ quality_gate_cmd: ['vitest', 'run'] }),
+      JSON.stringify({ testProcess: { local: { cmd: ['vitest', 'run'] } } }),
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'DEMO-SKILL').pass, true);
@@ -510,5 +520,65 @@ test('preflight: ok stays false if ANY hard clause fails even when advisory ones
     assert.match(formatPreflightReport(r), /CONTRACT NOT MET/);
   } finally {
     p.cleanup();
+  }
+});
+
+// ── DEMO-ALIGN (R1-03-F3): demo-builds-off-testing alignment, always advisory ──
+
+test('DEMO-ALIGN: capture referencing a test-process token (or test-evidence element) is aligned', () => {
+  const { dir, forgeRoot, cleanup } = happyProject();
+  try {
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: false } },
+      demoProcess: [
+        { kind: 'capture', text: 'Capture the acceptance run output.' },
+        { kind: 'capture', text: 'Anything at all', element: 'test-evidence' },
+        { kind: 'verify', text: 'Assert the output.' },
+      ],
+    }));
+    const r = runPreflight(dir, { forgeRoot });
+    const al = r.clauses.find((c) => c.clause === 'DEMO-ALIGN');
+    assert.ok(al && !al.hard, 'DEMO-ALIGN present and advisory');
+    assert.equal(al.pass, true, al.detail);
+  } finally {
+    cleanup();
+  }
+});
+
+test('DEMO-ALIGN: a divergent capture flags advisory — ok stays true (live evidence is legitimate)', () => {
+  const { dir, forgeRoot, cleanup } = happyProject();
+  try {
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+      testProcess: { local: { cmd: ['npm', 'test'] } },
+      demoProcess: [
+        { kind: 'capture', text: 'Screenshot of the live resource in the portal.', element: 'screenshot' },
+        { kind: 'verify', text: 'Assert the screenshot shows the resource.' },
+      ],
+    }));
+    const r = runPreflight(dir, { forgeRoot });
+    const al = r.clauses.find((c) => c.clause === 'DEMO-ALIGN');
+    assert.ok(al);
+    assert.equal(al.pass, false);
+    assert.match(al.detail, /divergence may be intentional/);
+    assert.equal(r.clauses.filter((c) => c.hard).every((c) => c.pass), r.ok);
+    assert.equal(r.ok, true, 'advisory divergence never fails the preflight');
+  } finally {
+    cleanup();
+  }
+});
+
+test('DEMO-ALIGN: no capture steps (or no config) → not applicable, pass', () => {
+  const { dir, forgeRoot, cleanup } = happyProject();
+  try {
+    writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+      testProcess: { local: { cmd: ['npm', 'test'] } },
+    }));
+    const r = runPreflight(dir, { forgeRoot });
+    const al = r.clauses.find((c) => c.clause === 'DEMO-ALIGN');
+    assert.ok(al);
+    assert.equal(al.pass, true);
+    assert.match(al.detail, /not applicable/);
+  } finally {
+    cleanup();
   }
 });

@@ -136,8 +136,7 @@ function readEvents(logger: ReturnType<typeof createLogger>): EventLogEntry[] {
 }
 
 const BASE_CONFIG = {
-  demo: { shape: 'harness', command: ['go', 'test', './...'] },
-  quality_gate_cmd: ['go', 'test', './...'],
+  testProcess: { local: { cmd: ['go', 'test', './...'] } },
 };
 
 const ACC_GATE = [
@@ -148,7 +147,7 @@ const ACC_GATE = [
 test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    acceptance_gate: { match: 'acceptancetests', required: true },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [{ wiId: 'WI-1' }, { wiId: 'WI-2' }]);
@@ -176,7 +175,7 @@ test('A2a: acceptance_gate.required + no live-acc WI → PM pass fails', async (
 test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeeds', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    acceptance_gate: { match: 'acceptancetests', required: true },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [
@@ -195,7 +194,7 @@ test('A2a: acceptance_gate.required + a matching live-acc WI → PM pass succeed
 test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids) onto the manifest', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    acceptance_gate: { match: 'acceptancetests', required: true },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
   });
   try {
     const queryFn = makeStubQueryFn(h.input.initiativeId, [
@@ -213,7 +212,7 @@ test('R4-05-F2: a successful PM pass persists specs (the produced work_item_ids)
 test('R4-05-F2: a failed PM pass (accGateViolation) does NOT persist specs onto the manifest', async () => {
   const h = setupHarness({
     ...BASE_CONFIG,
-    acceptance_gate: { match: 'acceptancetests', required: true },
+    testProcess: { ...BASE_CONFIG.testProcess, acceptance: { match: 'acceptancetests', required: true } },
   });
   try {
     // Neither WI's gate matches "acceptancetests" — same fixture as the

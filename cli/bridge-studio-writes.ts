@@ -471,8 +471,6 @@ export async function handleStudioWriteRoutes(
       const qualityGate = toArgv(b['qualityGateCmd']);
       if (!qualityGate) { sendJson(res, 400, { error: 'qualityGateCmd is required (the project quality-gate command)' }, origin); return true; }
 
-      const demoShape = typeof b['demoShape'] === 'string' && b['demoShape'] ? b['demoShape'] : 'harness';
-      const demoCommand = toArgv(b['demoCommand']) ?? qualityGate;
 
       // Reject a duplicate id by disk scan (B1: projects are discovered, not
       // registered). Resolve + guard the repo path under the projects root.
@@ -497,8 +495,10 @@ export async function handleStudioWriteRoutes(
           { kind: 'capture', text: 'Capture the before state of the change.' },
           { kind: 'verify', text: 'Run the quality gate to verify the change.' },
         ],
-        quality_gate_cmd: qualityGate,
-        demo: demoShape === 'none' ? { shape: 'none' } : { shape: demoShape, command: demoCommand },
+        // R1-03-F1: the typed test process is the one JSON source of the gate
+        // fields (flat keys are rejected by the validator). The legacy `demo`
+        // block (shape/command) had no reader and is no longer scaffolded.
+        testProcess: { local: { cmd: qualityGate } },
       };
       try { validateProjectConfig(cfg); }
       catch (err) { sendJson(res, 400, { error: String(err) }, origin); return true; }
@@ -629,9 +629,22 @@ export async function handleStudioWriteRoutes(
       // the sidecar legitimately omits it from project.json, so validate a copy
       // with the sidecar injected, but write `merged` unchanged (no mirror).
       const forValidation: Record<string, unknown> = { ...merged };
-      if (forValidation['quality_gate_cmd'] === undefined || forValidation['quality_gate_cmd'] === null) {
+      const tpForValidation = forValidation['testProcess'];
+      const localCmdMissing =
+        tpForValidation === undefined ||
+        tpForValidation === null ||
+        typeof tpForValidation !== 'object' ||
+        Array.isArray(tpForValidation) ||
+        (tpForValidation as Record<string, unknown>)['local'] === undefined;
+      if (localCmdMissing) {
         const sidecar = readQualityGateSidecar(projectRoot);
-        if (sidecar) forValidation['quality_gate_cmd'] = sidecar;
+        if (sidecar) {
+          const tpBase =
+            tpForValidation !== null && typeof tpForValidation === 'object' && !Array.isArray(tpForValidation)
+              ? { ...(tpForValidation as Record<string, unknown>) }
+              : {};
+          forValidation['testProcess'] = { ...tpBase, local: { cmd: sidecar } };
+        }
       }
       try {
         validateProjectConfig(forValidation);
