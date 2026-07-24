@@ -192,11 +192,12 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-01 Platform→artifact migration
 
-- **Status:** **in-progress** — F1–F3 built 2026-07-24 (wave-4 session 1, branch
-  `feat/r4-01-artifact-migration`, as-built baseline **R4-B12**); PR held open
-  pending the operator-gated frozen-SHA `verify:cycle` routine run (the F2
-  no-behavioural-delta AC's real-run half — free gates all green). **F4 stays
-  planned** (end of wave 4, after R4-10-F2).  ·  **Wave:** 4 — first item of wave 4, before the agent
+- **Status:** **implemented (F1–F3)** — built 2026-07-24 (wave-4 session 1, as-built baseline **R4-B12**),
+  **MERGED PR #39** (main `0211972`, 2026-07-24). The F2 AC's real-run half (frozen-SHA `verify:cycle`)
+  rides the **single tail-of-wave verify run** (operator decision 2026-07-24, superseding the earlier
+  hold-PR disposition), which also serves R4-10-F5's harness-migration proof. **F4 stays planned**
+  (end of wave 4, after R4-10-F2 — the gate-relocation verdict is APPROVED + recorded in ADR-036,
+  so F2's precondition is met).  ·  **Wave:** 4 — first item of wave 4, before the agent
   initiatives; **F4 alone runs last**, after R4-10-F2 (not contiguous with F1–F3)
 - **Implemented-notes (2026-07-24, F1–F3):** the seam landed as **declared
   dispatch** (ADR-039): `runtime.loopStrategy` (`one-shot` = a direct pinned
@@ -866,6 +867,10 @@ free R4 ID's features.
   F4). Parity: golden spawn-captures pin PM/reflector {prompt, options} byte-identical. **Status in-progress: the
   PR is held open for the operator-gated frozen-SHA `verify:cycle` routine run (the F2 AC's real-run half); F4
   retirement stays planned for end of wave 4.**
+- 2026-07-24 — **Waves-4 S1+S2 MERGED**: R4-01 F1–F3 PR #39 (main `0211972`), R1-03 PR #42 (`05addf7` —
+  reopen of the cascade-closed #40), R4-04 PR #41 (`4f530ba`). Verify disposition superseded: ONE
+  tail-of-wave `verify:cycle` run covers the whole wave (operator decision). The R1-03-F4 merge-boundary
+  gate relocation verdict is **APPROVED as specced + recorded in the ADR-036 amendment** — R4-10-F2 unblocked.
 - 2026-07-24 — **Wave-4 session 2: R4-04 implemented** (branch `feat/r4-04-architect-refinement`). Reconciliation:
   F1 (multi-round interview + revise loop), F2 (completeness critic in FINALIZE), F3 (WI-less registration +
   blocked-until-planned) were already as-built — the stale R4-B3 framing corrected in the implemented-notes. New
