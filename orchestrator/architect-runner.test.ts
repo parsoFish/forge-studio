@@ -44,11 +44,13 @@ function* nothing(): Generator<never> {}
 /** A queryFn whose structured output is chosen by the prompt content. */
 function makeQueryFn(spec: {
   interview?: unknown;
+  explore?: unknown;
   draft?: unknown;
 }): QueryFn {
   return ({ prompt }) => {
     let structured: unknown = null;
     if (prompt.includes('the interview step')) structured = spec.interview;
+    else if (prompt.includes('the exploration step')) structured = spec.explore;
     else if (prompt.includes('draft the initiative')) structured = spec.draft;
     async function* gen(): AsyncGenerator<unknown> {
       yield { type: 'result', subtype: 'success', total_cost_usd: 0, structured_output: structured };
@@ -1140,4 +1142,111 @@ test('ADR-024: runStructured passes model + derived allowedTools to the queryFn 
       'allowedTools must be set from architectAgentSpec',
     );
   }
+});
+
+// ---------------------------------------------------------------------------
+// R4-04-F4: the exploration stage (edge cases + brain constraints)
+// ---------------------------------------------------------------------------
+
+test('exploring stage: findings land in edge-cases.json, feed the draft prompt, and render in the PLAN', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
+  );
+  const prompts: string[] = [];
+  const inner = makeQueryFn({
+    interview: { done: true },
+    explore: {
+      edgeCases: [
+        { title: 'Theme flash on load', detail: 'A FOUC before the persisted theme applies.', disposition: 'covered' },
+        { title: 'High-contrast mode', detail: 'OS high-contrast interacts with dark palettes.', disposition: 'deferred' },
+      ],
+      brainConstraints: [
+        { constraint: 'Persisted settings must survive a schema migration.', source: 'brain/projects/demo/themes/settings-migrations.md' },
+      ],
+      exploreSummary: 'Two edge cases; one brain constraint shapes the persistence AC.',
+    },
+    draft: {
+      vision: 'Dark-mode toggle following the OS.',
+      initiatives: [
+        {
+          slug: 'dark-mode-toggle',
+          title: 'Dark mode toggle',
+          iteration_budget: 4,
+          cost_budget_usd: 6,
+          body: '## Dark mode\n\nGiven settings exist, when toggled, then theme persists.',
+        },
+      ],
+    },
+  });
+  const queryFn: QueryFn = (args) => {
+    prompts.push(args.prompt);
+    return inner(args);
+  };
+
+  const result = await runArchitectTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queueRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'awaiting-verdict');
+  // Findings persisted.
+  const findings = JSON.parse(readFileSync(join(sessionDir, 'edge-cases.json'), 'utf8'));
+  assert.equal(findings.edgeCases.length, 2);
+  assert.equal(findings.brainConstraints.length, 1);
+  // The DRAFT prompt (the one containing the draft task marker) carries the explore block.
+  const draftPrompt = prompts.find((p) => p.includes('draft the initiative'));
+  assert.ok(draftPrompt, 'a draft prompt was issued');
+  assert.ok(draftPrompt.includes('[covered] **Theme flash on load**'), 'covered edge case in the draft prompt');
+  assert.ok(draftPrompt.includes('[deferred] **High-contrast mode**'), 'deferred edge case in the draft prompt');
+  assert.ok(
+    draftPrompt.includes('settings-migrations.md'),
+    'brain constraint cites its source theme in the draft prompt',
+  );
+  // The PLAN.md renders the section for the operator.
+  const plan = readFileSync(result.planPath!, 'utf8');
+  assert.ok(plan.includes('## Edge cases & constraints (exploration stage)'), 'PLAN.md section present');
+  assert.ok(plan.includes('Theme flash on load'));
+  assert.ok(plan.includes('settings-migrations.md'));
+  const planHtml = readFileSync(join(sessionDir, 'PLAN.html'), 'utf8');
+  assert.ok(planHtml.includes('Edge cases &amp; constraints'), 'PLAN.html section present');
+});
+
+test('exploring stage fails open: an empty exploration proceeds to draft with no explore block', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Q', answer: 'A' }] }]),
+  );
+  const prompts: string[] = [];
+  const inner = makeQueryFn({
+    interview: { done: true },
+    // NO explore stub → the exploration turn yields nothing (fail-open path).
+    draft: {
+      vision: 'v',
+      initiatives: [
+        { slug: 'x', title: 'X', iteration_budget: 2, cost_budget_usd: 3, body: 'Given a, when b, then c.' },
+      ],
+    },
+  });
+  const queryFn: QueryFn = (args) => {
+    prompts.push(args.prompt);
+    return inner(args);
+  };
+
+  const result = await runArchitectTurn({
+    sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'awaiting-verdict', 'session proceeds despite the empty exploration');
+  assert.ok(!existsSync(join(sessionDir, 'edge-cases.json')), 'no findings file written');
+  const draftPrompt = prompts.find((p) => p.includes('draft the initiative'));
+  assert.ok(draftPrompt && !draftPrompt.includes('exploration stage'), 'draft prompt carries no explore block');
+  const plan = readFileSync(result.planPath!, 'utf8');
+  assert.ok(!plan.includes('Edge cases & constraints'), 'PLAN.md has no empty section');
 });

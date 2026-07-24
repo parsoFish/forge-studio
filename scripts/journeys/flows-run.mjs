@@ -239,6 +239,19 @@ export const journey = defineJourney({
 
               await page.locator('[data-action="submit-answers"]').click();
               await sleep(ACT);
+              // R4-04-F4: the explicit exploring stage sits between the
+              // interview and the draft — edge cases + brain constraints are
+              // enumerated with dispositions before any initiative is drafted.
+              writeStatus(sid, { phase: 'exploring', round: 2, idea: IDEA });
+              archEvent(sid, 'start', 'architect turn (phase=exploring) — enumerating edge cases + brain constraints');
+              await page.waitForFunction(
+                () => document.querySelector('main[data-architect-phase]')?.getAttribute('data-architect-phase') === 'exploring',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              const explorePhase = await page.evaluate(
+                () => document.querySelector('main[data-architect-phase]')?.getAttribute('data-architect-phase') ?? null);
+              check(explorePhase === 'exploring', `R1: the exploring stage is visible in the interview UI (data-architect-phase, got "${explorePhase}")`);
+              await frame(page, 'r1-3a-exploring', 'R1 — planning: the architect explores edge cases before drafting (R4-04-F4)');
               writeStatus(sid, { phase: 'drafting', round: 2, idea: IDEA });
               archEvent(sid, 'start', 'architect turn (phase=drafting) — rolling in answers');
               await page.waitForSelector('[data-section="architect-interview"]', { state: 'detached', timeout: 8000 }).catch(() => {});
