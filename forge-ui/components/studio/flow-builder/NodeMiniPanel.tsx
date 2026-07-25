@@ -130,15 +130,32 @@ export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemo
             />
             Human gate (verdict)
           </label>
-          <label data-modifier="fanout" style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: 'var(--dim)', cursor: 'pointer' }}>
-            <input
-              type="checkbox"
-              data-action="toggle-fanout"
-              checked={Boolean(fanOut)}
-              onChange={(e) => onSetFanOut(nodeId, e.target.checked ? 'work-items' : undefined)}
-            />
-            Fan out (one run per work item)
-          </label>
+          {/* R2-03-F3: the fanout toggle is enabled ONLY on fanout-capable
+              agents (capability.fanoutCapable, the same wire fact validateFlow
+              lints), and binds the node fanOut to the agent's DECLARED driving
+              artifact — not a hardcoded 'work-items'. The server fanout-capability
+              lint is the backstop if a stale client bypasses this. */}
+          {(() => {
+            const fanoutCapable = Boolean(agent?.capability?.fanoutCapable);
+            const drivingArtifact = agent?.fanout?.drivingArtifact ?? 'work-items';
+            return (
+              <label
+                data-modifier="fanout"
+                data-fanout-capable={fanoutCapable ? 'true' : 'false'}
+                title={fanoutCapable ? undefined : 'This agent is not fanout-capable — its definition declares no `fanout:` block.'}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: fanoutCapable ? 'var(--dim)' : 'var(--faint)', cursor: fanoutCapable ? 'pointer' : 'not-allowed', opacity: fanoutCapable ? 1 : 0.55 }}
+              >
+                <input
+                  type="checkbox"
+                  data-action="toggle-fanout"
+                  disabled={!fanoutCapable}
+                  checked={Boolean(fanOut)}
+                  onChange={(e) => onSetFanOut(nodeId, e.target.checked ? drivingArtifact : undefined)}
+                />
+                Fan out (one run per {drivingArtifact === 'work-items' ? 'work item' : drivingArtifact})
+              </label>
+            );
+          })()}
         </div>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>

@@ -187,6 +187,20 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
     `agents-scratch-build` beat now drags the real skill `skills-create` authored
     earlier in the walkthrough (`api-contract-review`) instead of substituting
     `handoff`.
+12. **`externalSignal` (fanout wedge-kill) is claude-adapter-only (2026-07-25,
+    R2-03-F4).** The wedge-kill AbortSignal is now chained through
+    `runDeveloperLoop` into each per-WI Ralph iteration and, in the reference
+    `claude` adapter (`loops/ralph/claude-agent.ts`), into the SDK call's own
+    abort controller — so a wedge-kill on a fanout node actually cancels the
+    in-flight per-item CLI subprocess instead of leaving zombie work. The other
+    adapters (`gemini`, `aider`, `example`) accept `externalSignal` in
+    `AdapterAgentOptions` but do not yet wire it into their SDK's cancellation,
+    and the conformance suite (`loops/_adapters/conformance.ts`) does not assert
+    cancellation because those adapters are unprovisioned. **Consequence:** the
+    ADR-028 "no zombie work on wedge-kill" guarantee is scoped to the claude
+    adapter until a second adapter honors the signal (and the conformance suite
+    grows a cancellation assertion). No behaviour regression — claude is the
+    only wired adapter today.
 
 ### 4b. Demo/UI-journey refinement backlog — operator review of PR #24 (2026-07-17)
 

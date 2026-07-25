@@ -83,7 +83,45 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 
 ### R2-03 Fanout capability (research spike first)
 
-- **Status:** **F1 done (spike complete)** · F2/F3/F4 planned  ·  **Wave:** 3 (must land before R4-06 develop-agent refinement)
+- **Status:** **F1–F4 implemented** (F1 spike 2026-07-25; F2/F3/F4 2026-07-25 wave-4 S7, branch `feat/r2-03-fanout-capability`)  ·  **Wave:** 3 (unblocks R4-06 develop-agent refinement)
+- **Implemented-notes (F2/F3/F4, 2026-07-25):**
+  - **F2 — built.** `AgentDefinition.fanout` block `{drivingArtifact, isolation
+    (worktree|none|<provider>), concurrencyCap?, perItemGate?}` (parse/serialize
+    in registry.ts); `agentCapabilityDescriptor` folds a derived `fanoutCapable`
+    fact (wire-threaded, client optional-tolerant); `validateFlow`'s new
+    `fanout-capability` ERROR check rejects a node whose `fanOut` targets a
+    non-fanout-capable agent — same descriptor the BUILD tab reads. developer-ralph
+    declares its existing per-WI fan-out (cap 1 = byte-compat). ZERO runtime change.
+  - **F3 — built.** The NodeMiniPanel fanout toggle is capability-gated
+    (`data-fanout-capable`, disabled + greyed otherwise) and binds the node
+    `fanOut` to the agent's declared `drivingArtifact`, not a hardcoded string.
+    flows-author journey asserts both states (developer-ralph on / developer-unifier off).
+  - **F4 — built (scoped).** The extraction was **already done** (generic
+    `wi-dispatch-scheduler.ts` vs the SWE provider `wi-worktree.ts`+`wi-merge-back.ts`).
+    Closed the ADR-028 abort-chain TODO: `ClaudeAgentOptions.externalSignal`
+    chains the node wedge-kill into each per-WI Ralph iteration (kill test) — no
+    more zombie work. `resolveDevWiConcurrency` gains a definition-level source
+    (the agent's `fanout.concurrencyCap`; env still overrides; clamped to the
+    ceiling). A toy-provider (isolation:none, non-WorkItem) test proves the
+    generic dispatcher is reusable with no new dispatcher code. Byte-compatible
+    at concurrency 1 (existing behavior-lock tests green).
+  - **Review fixes (2026-07-25, whole-branch adversarial review).** Precedence
+    of `resolveDevWiConcurrency` corrected to **env > config > definitionCap >
+    default** (the agent's declared cap is a *default* below the ADR-009 operator
+    lever, not above it). Fixed an external-abort listener leak (`{once:true}`
+    never self-removes on normal completion → accumulated on the shared node
+    signal). Scoped the ADR-028 "no zombie work" guarantee to the reference
+    `claude` adapter (gemini/aider/example accept but don't honor `externalSignal`
+    yet — known-gaps §4.12). Added a SOFT `fanout/isolation` lint (open provider
+    ref; `FANOUT_ISOLATION_KINDS = worktree|none`). Wedge-kill firing MID-attempt
+    now reclassifies to `aborted` instead of routing through crash-retry.
+    - **Deferred within F4 (residual):** parameterizing `runDeveloperLoop` by the
+      NODE's agent def so a 2nd fanout-capable agent runs its OWN behaviour as a
+      real flow node (today `makeAgentWithTelemetry` hardcodes `developer-ralph`'s
+      identity + the flow-runner `loopStrategy:'ralph'` dispatch is slug-restricted).
+      That is a substantial hot-path refactor best folded into **R4-06** (which
+      refines the develop agent). The generic dispatcher seam IS provider-agnostic
+      (proven); the residual is the SWE dev-loop pipeline's hardcoded agent identity.
 - **F1 spike result (2026-07-25):** [`docs/investigations/R2-03-fanout-merge-resolution-spike.md`](../investigations/R2-03-fanout-merge-resolution-spike.md)
   — **NO-GO on R2-D1.** 76 external sources across 6 angles (merge queues,
   agent-swarm frameworks, worktree-fanout, decomposition-vs-resolution,

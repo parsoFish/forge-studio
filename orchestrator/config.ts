@@ -163,23 +163,29 @@ export const DEFAULT_DEV_WI_CONCURRENCY = 1;
 export const DEV_WI_CONCURRENCY_CEILING = 8;
 
 /**
- * Resolve the dev-loop's per-WI concurrency cap. Precedence (mirrors
- * `resolveUnifierGateFailureCap`):
+ * Resolve the dev-loop's per-WI concurrency cap. Precedence (preserves
+ * ADR-009's operator levers: an explicit env/config value still wins):
  *   1. `FORGE_DEV_WI_CONCURRENCY` env var (operator/CI override)
- *   2. `dev.maxConcurrentWorkItems` from `forge.config.json`
- *   3. `DEFAULT_DEV_WI_CONCURRENCY` (1 — serial, byte-identical to pre-step-6)
+ *   2. `dev.maxConcurrentWorkItems` from `forge.config.json` (operator lever)
+ *   3. `definitionCap` — the fanout AGENT's declared `fanout.concurrencyCap`
+ *      (R2-03-F4: the declared cap is the agent's DEFAULT — it replaces the
+ *      hardcoded `DEFAULT_DEV_WI_CONCURRENCY` as the source of the default, but
+ *      does NOT shadow an operator's explicit config/env override)
+ *   4. `DEFAULT_DEV_WI_CONCURRENCY` (1 — serial, byte-identical to pre-step-6;
+ *      the fallback when no agent declares a cap)
  *
  * Non-finite / zero / negative values are ignored (fall through — a cap
  * below 1 would dispatch nothing). The resolved value is always clamped to
- * `DEV_WI_CONCURRENCY_CEILING`.
+ * `DEV_WI_CONCURRENCY_CEILING` ("never unbounded"), even a definition-declared
+ * cap — the resource guard is deliberate, not an artifact of the old design.
  */
-export function resolveDevWiConcurrency(cfg: ForgeConfig = loadConfig()): number {
+export function resolveDevWiConcurrency(cfg: ForgeConfig = loadConfig(), definitionCap?: number): number {
+  const clamp = (n: number): number => Math.min(Math.floor(n), DEV_WI_CONCURRENCY_CEILING);
   const fromEnv = Number(process.env.FORGE_DEV_WI_CONCURRENCY);
-  if (Number.isFinite(fromEnv) && fromEnv >= 1) return Math.min(Math.floor(fromEnv), DEV_WI_CONCURRENCY_CEILING);
+  if (Number.isFinite(fromEnv) && fromEnv >= 1) return clamp(fromEnv);
   const fromCfg = cfg.dev?.maxConcurrentWorkItems;
-  if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg >= 1) {
-    return Math.min(Math.floor(fromCfg), DEV_WI_CONCURRENCY_CEILING);
-  }
+  if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg >= 1) return clamp(fromCfg);
+  if (typeof definitionCap === 'number' && Number.isFinite(definitionCap) && definitionCap >= 1) return clamp(definitionCap);
   return DEFAULT_DEV_WI_CONCURRENCY;
 }
 

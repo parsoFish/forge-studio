@@ -118,9 +118,16 @@ export type AgentCapabilityDescriptor = {
    * multi-adapter. A surfaced FACT, not a constraint.
    */
   runtimeSdks: string[];
-  // Extension points (documented; NOT computed in wave 1 — added where their
-  // authoring source lands):
-  //   fanoutCapable — R2-03-F2 ;  artifactOutputs — R2-05-F2.
+  /**
+   * R2-03-F2 — true iff the agent declares a `fanout:` block (dispatches one
+   * instance per driving-artifact item). A surfaced FACT: lint rejects a node
+   * whose `fanOut` targets a non-fanout-capable agent, and the builder gates
+   * the fanout toggle on it. The full fanout block (driving artifact, isolation,
+   * cap) rides on the AgentDefinition itself, already spread onto the wire.
+   */
+  fanoutCapable: boolean;
+  // Extension point (documented; added where its authoring source lands):
+  //   artifactOutputs — R2-05-F2.
 };
 
 /** Compute the wave-1 capability descriptor for an agent definition. Pure — no I/O. */
@@ -128,5 +135,6 @@ export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapability
   return {
     interactive: executionPathForSurface(def.surface) === 'interactive',
     runtimeSdks: def.runtime.sdk ? [def.runtime.sdk] : [],
+    fanoutCapable: def.fanout !== undefined,
   };
 }

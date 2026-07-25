@@ -8,6 +8,7 @@
 
 
 import { DEMO_STEP_KINDS } from './types.ts';
+import { FANOUT_ISOLATION_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
@@ -172,6 +173,24 @@ export function validateAgent(
         obj,
         'runtime/loop-strategy',
         `loopStrategy "ralph" is restricted to developer-ralph — the ralph loop is the dev-loop pipeline, which ignores this agent's own def (lifts with R2-03/R4-06 declared fanout)`,
+      ),
+    );
+  }
+
+  // fanout/isolation — flag (R2-03). Soft, not an error: `isolation` is an open
+  // provider ref (a future/custom provider is legal), so an unknown value only
+  // WARNS — enough to catch a typo (`worktre`) that would otherwise silently run
+  // items with no isolation, without rejecting a legitimately-new provider name.
+  if (
+    def.fanout !== undefined &&
+    def.fanout.isolation.trim() !== '' &&
+    !(FANOUT_ISOLATION_KINDS as readonly string[]).includes(def.fanout.isolation)
+  ) {
+    findings.push(
+      flag(
+        obj,
+        'fanout/isolation',
+        `fanout.isolation "${def.fanout.isolation}" is not a shipped provider (${FANOUT_ISOLATION_KINDS.join('|')}) — allowed as a future/custom provider ref, but check for a typo`,
       ),
     );
   }
@@ -500,6 +519,27 @@ export function validateFlow(
         `Node "${violation.nodeId}" declares fanOut:"${violation.fanOut}" but no inbound edge carries artifact "${violation.fanOut}"`,
       ),
     );
+  }
+
+  // fanout-capability (R2-03-F2): a node that declares `fanOut` must target a
+  // FANOUT-CAPABLE agent (one whose definition declares a `fanout:` block).
+  // Sourced from the SAME capability descriptor the BUILD-tab fanout toggle
+  // reads client-side (agentCapabilityDescriptor(def).fanoutCapable), so lint
+  // and the UI never disagree. The unknown-agent case is `agent-ref`; the
+  // no-inbound-edge topology case is `fan-out` above.
+  for (const node of flow.nodes) {
+    if (!node.fanOut || !node.agent) continue;
+    const def = agents.get(node.agent);
+    if (!def) continue;
+    if (!agentCapabilityDescriptor(def).fanoutCapable) {
+      findings.push(
+        err(
+          obj,
+          'fanout-capability',
+          `Node "${node.id}" declares fanOut but agent "${node.agent}" is not fanout-capable (its definition declares no \`fanout:\` block)`,
+        ),
+      );
+    }
   }
 
   // kickoff (Stage C, optional): kind must be in the enum. Loader parses it

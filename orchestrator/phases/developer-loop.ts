@@ -17,6 +17,7 @@ import { classifyCrash } from '../failure-classifier.ts';
 import {
   DEV_ALLOWED_TOOLS,
   DEV_DISALLOWED_TOOLS,
+  DEV_FANOUT_CONCURRENCY_CAP,
   DEV_MODEL,
   devAgentSpec,
   buildDevSystemPrompt,
@@ -284,10 +285,10 @@ function makeAgentWithTelemetry(
 export async function runDeveloperLoop(
   input: CycleInput,
   logger: EventLogger,
-  // best-effort wedge abort; not yet chained into per-WI Ralph instances
-  // (each Ralph creates its own abortController in claude-agent.ts — a clean
-  // chain requires ClaudeAgentOptions to accept an external signal, deferred).
-  _signal?: AbortSignal,
+  // R2-03-F4: the flow node's wedge-kill signal, now CHAINED into each per-WI
+  // Ralph iteration (claude-agent.ts `externalSignal`) so a wedge-kill cancels
+  // the in-flight per-item CLI subprocesses, not just the outer phase promise.
+  signal?: AbortSignal,
 ): Promise<void> {
   const workItemsDir = resolve(input.worktreePath, '.forge/work-items');
   const start = logger.emit({
@@ -626,6 +627,8 @@ export async function runDeveloperLoop(
         maxTurnsPerIteration: DEV_LIVE_MAX_TURNS_PER_ITERATION,
         // Per CONTRACTS.md C19: no $ cap on the per-WI Ralph.
         queryFn: tallyingQueryFn,
+        // R2-03-F4: chain the node wedge-kill into this WI's Ralph iterations.
+        ...(signal ? { externalSignal: signal } : {}),
       },
       // ADR 029: spawn on the resolved runtime sdk (default 'claude').
       DEV_SDK_ID,
@@ -662,6 +665,8 @@ export async function runDeveloperLoop(
     let priorCrashMessage: string | null = null;
     // F-44: bounded retry on transient agent-subprocess crash only.
     for (let attempt = 0; attempt <= DEV_AGENT_CRASH_MAX_RETRIES; attempt++) {
+      // R2-03-F4: a wedge-kill mid-flight must not spawn a fresh retry attempt.
+      if (signal?.aborted) { runnerError = { kind: 'aborted', message: 'wedge-kill: node aborted' }; break; }
       runnerError = undefined;
       try {
         // re-review #1: captured by the gate's onRun each run; read by the
@@ -793,6 +798,16 @@ export async function runDeveloperLoop(
           kind: 'agent_threw',
           message: err instanceof Error ? err.message : String(err),
         };
+      }
+
+      // R2-03-F4: a wedge-kill that fires MID-attempt surfaces here as a thrown
+      // abort — it must not be misclassified as a transient agent crash and
+      // retried (that would re-spawn the very work the kill was meant to stop).
+      // Reclassify to `aborted` and break, mirroring the between-attempt guard
+      // at the top of this loop.
+      if (runnerError && signal?.aborted) {
+        runnerError = { kind: 'aborted', message: 'wedge-kill: node aborted mid-attempt' };
+        break;
       }
 
       // F-44: success (or a real quality-gate `result`) → done, no retry.
@@ -1168,7 +1183,10 @@ export async function runDeveloperLoop(
     items: toRun,
     idOf: (wi) => wi.work_item_id,
     dependsOn: (wi) => wi.depends_on,
-    cap: resolveDevWiConcurrency(),
+    // R2-03-F4: the fanout agent's declared concurrencyCap is the definition-
+    // level source (env still overrides). developer-ralph declares 1 ⇒
+    // byte-identical to the pre-F4 default.
+    cap: resolveDevWiConcurrency(undefined, DEV_FANOUT_CONCURRENCY_CAP),
     dispatch: dispatchWi,
   });
 

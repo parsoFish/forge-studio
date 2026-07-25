@@ -466,6 +466,27 @@ export const journey = defineJourney({
               check(gateToggled, 'author-from-scratch: node-mini-panel opens on click; [data-action="toggle-gate"] sets the human verdict gate');
               await frame(page, 'a2-3-gate-toggled', 'A2 — the terminal node gated: a human verdict is required before this flow can complete');
 
+              // R2-03-F3: the fanout toggle is enabled ONLY on a fanout-capable
+              // agent (driven by the SAME capability descriptor the server lints).
+              // developer-ralph declares a fanout: block (capable → enabled);
+              // developer-unifier does not (not capable → disabled).
+              async function fanoutGateState(nodeId) {
+                await page.locator(`[data-testid="rf__node-${nodeId}"]`).click({ force: true }).catch(() => {});
+                await page.waitForSelector(`[data-component="node-mini-panel"][data-panel-node-id="${nodeId}"]`, { timeout: 6000 }).catch(() => {});
+                const cap = await page.locator('[data-modifier="fanout"]').getAttribute('data-fanout-capable').catch(() => null);
+                const disabled = await page.locator('[data-modifier="fanout"] input[data-action="toggle-fanout"]').isDisabled().catch(() => null);
+                await page.keyboard.press('Escape').catch(() => {});
+                await sleep(THINK);
+                return { cap, disabled };
+              }
+              const ralphGate = devId ? await fanoutGateState(devId) : { cap: null, disabled: null };
+              check(ralphGate.cap === 'true' && ralphGate.disabled === false,
+                `author-from-scratch: R2-03-F3 — developer-ralph (fanout-capable) has an ENABLED fanout toggle (data-fanout-capable="${ralphGate.cap}", disabled=${ralphGate.disabled})`);
+              const unifierGate = unifierId ? await fanoutGateState(unifierId) : { cap: null, disabled: null };
+              check(unifierGate.cap === 'false' && unifierGate.disabled === true,
+                `author-from-scratch: R2-03-F3 — developer-unifier (not fanout-capable) has a DISABLED fanout toggle (data-fanout-capable="${unifierGate.cap}", disabled=${unifierGate.disabled})`);
+              await frame(page, 'a2-3b-fanout-gate', 'A2 — the fanout toggle is enabled only on fanout-capable agents (R2-03-F3): developer-ralph on, developer-unifier off');
+
               // KB bind — Advanced → kb-select (this one WORKS; not a UI limit).
               await page.locator('summary[data-action="toggle-flow-advanced"]').click().catch(() => {});
               await page.waitForFunction(
