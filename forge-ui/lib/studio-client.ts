@@ -87,6 +87,8 @@ export type AgentRuntime = {
 export type AgentCapabilityDescriptor = {
   interactive: boolean;
   runtimeSdks: string[];
+  /** R2-03-F2 — true iff the agent declares a `fanout:` block. */
+  fanoutCapable: boolean;
 };
 
 export type Agent = {
@@ -519,7 +521,9 @@ export function parseRun(raw: unknown): Run {
 export function parseCapability(raw: unknown): AgentCapabilityDescriptor | undefined {
   const c = raw as Partial<AgentCapabilityDescriptor> | undefined;
   if (!c || typeof c.interactive !== 'boolean' || !Array.isArray(c.runtimeSdks)) return undefined;
-  return { interactive: c.interactive, runtimeSdks: c.runtimeSdks as string[] };
+  // fanoutCapable is optional-tolerant: an older bridge payload without it
+  // degrades to false (not the whole descriptor to undefined).
+  return { interactive: c.interactive, runtimeSdks: c.runtimeSdks as string[], fanoutCapable: c.fanoutCapable === true };
 }
 
 /**

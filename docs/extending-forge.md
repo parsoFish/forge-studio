@@ -251,7 +251,7 @@ triggers: []
 | `id` | yes | unique within the flow |
 | `agent` | if no `gate` | slug of an agent in `skills/` |
 | `gate` | if no `agent` | human gate id (`plan`, `verdict`) |
-| `fanOut` | no | artifact name — the flow engine spawns one node per item in the artifact |
+| `fanOut` | no | upstream artifact name whose items drive multiplicity — the agent runs once per item (in its declared isolation). The target `agent` MUST be **fanout-capable** (its SKILL.md declares a `fanout:` block, R2-03-F2); `forge studio lint` errors otherwise. |
 | `resumable` | no | node can be re-entered after partial failure (unifier pattern) |
 
 **Edge `artifact`** names the markdown artifact written by the `from` node and read by the `to` node. Every artifact must be greppable (ADR-007).

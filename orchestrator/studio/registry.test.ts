@@ -943,6 +943,30 @@ describe('loadAgentDefinition enum guards', () => {
 // serializeAgentDefinition — empty budgets round-trip
 // ---------------------------------------------------------------------------
 
+describe('R2-03-F2 fanout block round-trip', () => {
+  it('parses a fanout: block and survives load → serialize → load', () => {
+    const withFanout = AGENT_FIXTURE.replace(
+      /^brainAccess:/m,
+      'fanout:\n  drivingArtifact: work-items\n  isolation: worktree\n  concurrencyCap: 2\n  perItemGate: item-declared\nbrainAccess:',
+    );
+    const p = writeAgentFixture('fanout-agent', withFanout);
+    const original = loadAgentDefinition(p);
+    assert.deepEqual(original.fanout, { drivingArtifact: 'work-items', isolation: 'worktree', concurrencyCap: 2, perItemGate: 'item-declared' });
+
+    const rtDir = join(tmpDir, 'fanout-agent-rt');
+    mkdirSync(rtDir, { recursive: true });
+    const rtPath = join(rtDir, 'SKILL.md');
+    writeFileSync(rtPath, serializeAgentDefinition(original), 'utf8');
+    const reloaded = loadAgentDefinition(rtPath);
+    assert.deepEqual(reloaded.fanout, original.fanout, 'fanout survives the serialize round-trip');
+  });
+
+  it('an agent WITHOUT a fanout block loads fanout as undefined (not fanout-capable)', () => {
+    const p = writeAgentFixture('no-fanout-agent', AGENT_FIXTURE);
+    assert.equal(loadAgentDefinition(p).fanout, undefined);
+  });
+});
+
 describe('serializeAgentDefinition empty budgets round-trip', () => {
   it('agent without budget fields survives load→serialize→load with all budget fields undefined', () => {
     const noBudgets = AGENT_FIXTURE.replace(

@@ -15,10 +15,17 @@ import { test, expect } from 'vitest';
 import { parseCapability, buildTriggerDeclaration, isValidCronSchedule } from './studio-client';
 
 test('parseCapability: a well-formed descriptor is carried through verbatim', () => {
-  expect(parseCapability({ interactive: true, runtimeSdks: ['claude-code'] }))
-    .toEqual({ interactive: true, runtimeSdks: ['claude-code'] });
+  expect(parseCapability({ interactive: true, runtimeSdks: ['claude-code'], fanoutCapable: true }))
+    .toEqual({ interactive: true, runtimeSdks: ['claude-code'], fanoutCapable: true });
   expect(parseCapability({ interactive: false, runtimeSdks: [] }))
-    .toEqual({ interactive: false, runtimeSdks: [] });
+    .toEqual({ interactive: false, runtimeSdks: [], fanoutCapable: false });
+});
+
+test('parseCapability: R2-03-F2 — fanoutCapable degrades to false against an older payload', () => {
+  // A pre-F2 bridge payload lacks fanoutCapable → false, not whole-object undefined.
+  expect(parseCapability({ interactive: false, runtimeSdks: ['claude'] }))
+    .toEqual({ interactive: false, runtimeSdks: ['claude'], fanoutCapable: false });
+  expect(parseCapability({ interactive: false, runtimeSdks: ['claude'], fanoutCapable: true })?.fanoutCapable).toBe(true);
 });
 
 test('parseCapability: undefined/absent input returns undefined', () => {

@@ -672,7 +672,8 @@ describe('validateFlow — fan-out', () => {
     assert.ok(f.message.includes('work-items'));
   });
 
-  it('node with fanOut and matching inbound artifact → no fan-out finding', () => {
+  it('node with fanOut and matching inbound artifact on a fanout-capable agent → no fan-out/capability finding', () => {
+    const fanoutAgent = makeAgent({ fanout: { drivingArtifact: 'work-items', isolation: 'worktree', concurrencyCap: 1 } });
     const flow = makeFlow({
       nodes: [
         { id: 'pm', agent: 'my-agent' },
@@ -684,8 +685,29 @@ describe('validateFlow — fan-out', () => {
         { from: 'dev', to: 'gate', artifact: 'result' },
       ],
     });
+    const findings = validateFlow(flow, makeAgentMap(fanoutAgent));
+    assert.ok(!findings.some((x) => x.check === 'fan-out' || x.check === 'fanout-capability'));
+  });
+
+  // R2-03-F2 — the fanout-capability check
+  it('fanOut targeting a NON-fanout-capable agent → error fanout-capability', () => {
+    const flow = makeFlow({
+      nodes: [
+        { id: 'pm', agent: 'my-agent' },
+        { id: 'dev', agent: 'my-agent', fanOut: 'work-items' },
+        { id: 'gate', gate: 'verdict' },
+      ],
+      edges: [
+        { from: 'pm', to: 'dev', artifact: 'work-items' },
+        { from: 'dev', to: 'gate', artifact: 'result' },
+      ],
+    });
+    // makeAgent() has no fanout: block ⇒ not fanout-capable.
     const findings = validateFlow(flow, makeAgentMap(makeAgent()));
-    assert.ok(!findings.some((x) => x.check === 'fan-out'));
+    const f = findings.find((x) => x.check === 'fanout-capability');
+    assert.ok(f, 'expected fanout-capability finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /not fanout-capable/);
   });
 });
 

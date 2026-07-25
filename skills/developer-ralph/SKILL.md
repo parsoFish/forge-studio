@@ -15,6 +15,16 @@ runtime:
   strategy: fixed
   model: claude-sonnet-4-6
   loopStrategy: ralph
+# R2-03-F2 — declares the existing per-work-item fan-out as a first-class
+# capability (was an implicit slug-restricted behaviour). Each item of the
+# `work-items` driving artifact runs in its own git worktree, each carrying its
+# own quality gate; concurrencyCap 1 = the current default (byte-compatible —
+# raised after soak, known-gaps §4.2). Consumed at runtime by R2-03-F4.
+fanout:
+  drivingArtifact: work-items
+  isolation: worktree
+  concurrencyCap: 1
+  perItemGate: item-declared
 brainAccess: advisory
 interactivity: Fully autonomous; never blocks on the operator.
 allowed-tools: [Read, Write, Edit, MultiEdit, Bash, Grep, Glob]

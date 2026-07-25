@@ -15,6 +15,7 @@ import type {
   AgentBudgets,
   AgentComposition,
   AgentDefinition,
+  AgentFanout,
   AgentRuntime,
   ArtifactTemplate,
   Catalog,
@@ -172,6 +173,18 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     maxBudgetUsdShare: optNumber(budgetsRaw, 'maxBudgetUsdShare'),
   };
 
+  // R2-03-F2 — optional fanout capability block. Absent ⇒ not fanout-capable.
+  const rawFanout = d['fanout'];
+  const fanout: AgentFanout | undefined =
+    rawFanout != null && typeof rawFanout === 'object' && !Array.isArray(rawFanout)
+      ? {
+          drivingArtifact: reqString(rawFanout as Record<string, unknown>, 'drivingArtifact', skillMdPath),
+          isolation: reqString(rawFanout as Record<string, unknown>, 'isolation', skillMdPath),
+          concurrencyCap: optNumber(rawFanout as Record<string, unknown>, 'concurrencyCap'),
+          perItemGate: optString(rawFanout as Record<string, unknown>, 'perItemGate'),
+        }
+      : undefined;
+
   const allowedTools = stringArray(d, 'allowed-tools', skillMdPath);
   const disallowedTools = stringArray(d, 'disallowed-tools', skillMdPath);
   const library = optBool(d, 'library');
@@ -189,6 +202,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     purpose,
     composition,
     runtime,
+    ...(fanout ? { fanout } : {}),
     brainAccess,
     interactivity,
     budgets,
@@ -202,8 +216,8 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 // consumed by the M2 bridge PUT routes (no production call site until then)
 export function serializeAgentDefinition(def: AgentDefinition): string {
   // Fixed key order: name, description, library?, phase?, surface?, executor?,
-  // purpose, composition, runtime, brainAccess, interactivity, allowed-tools,
-  // disallowed-tools, budgets
+  // purpose, composition, runtime, fanout?, brainAccess, interactivity,
+  // allowed-tools, disallowed-tools, budgets
   const data: Record<string, unknown> = {};
   data['name'] = def.name;
   data['description'] = def.description;
@@ -222,6 +236,17 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
   if (def.runtime.range !== undefined) runtime['range'] = def.runtime.range;
   if (def.runtime.loopStrategy !== undefined) runtime['loopStrategy'] = def.runtime.loopStrategy;
   data['runtime'] = runtime;
+
+  // R2-03-F2 — fanout block (only when declared; omit undefined sub-keys).
+  if (def.fanout !== undefined) {
+    const fanout: Record<string, unknown> = {
+      drivingArtifact: def.fanout.drivingArtifact,
+      isolation: def.fanout.isolation,
+    };
+    if (def.fanout.concurrencyCap !== undefined) fanout['concurrencyCap'] = def.fanout.concurrencyCap;
+    if (def.fanout.perItemGate !== undefined) fanout['perItemGate'] = def.fanout.perItemGate;
+    data['fanout'] = fanout;
+  }
 
   data['brainAccess'] = def.brainAccess;
   data['interactivity'] = def.interactivity;

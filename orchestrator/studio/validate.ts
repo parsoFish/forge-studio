@@ -502,6 +502,27 @@ export function validateFlow(
     );
   }
 
+  // fanout-capability (R2-03-F2): a node that declares `fanOut` must target a
+  // FANOUT-CAPABLE agent (one whose definition declares a `fanout:` block).
+  // Sourced from the SAME capability descriptor the BUILD-tab fanout toggle
+  // reads client-side (agentCapabilityDescriptor(def).fanoutCapable), so lint
+  // and the UI never disagree. The unknown-agent case is `agent-ref`; the
+  // no-inbound-edge topology case is `fan-out` above.
+  for (const node of flow.nodes) {
+    if (!node.fanOut || !node.agent) continue;
+    const def = agents.get(node.agent);
+    if (!def) continue;
+    if (!agentCapabilityDescriptor(def).fanoutCapable) {
+      findings.push(
+        err(
+          obj,
+          'fanout-capability',
+          `Node "${node.id}" declares fanOut but agent "${node.agent}" is not fanout-capable (its definition declares no \`fanout:\` block)`,
+        ),
+      );
+    }
+  }
+
   // kickoff (Stage C, optional): kind must be in the enum. Loader parses it
   // leniently so a typo is a lint error here, not a load crash (kb.backend precedent).
   if (flow.kickoff !== undefined && !(FLOW_KICKOFF_KINDS as readonly string[]).includes(flow.kickoff.kind)) {

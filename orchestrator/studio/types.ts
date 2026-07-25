@@ -46,6 +46,35 @@ export type AgentBudgets = {
   maxBudgetUsdShare?: number;
 };
 
+/**
+ * R2-03-F2 — fanout as a DECLARED agent property. An agent that fans out
+ * dispatches one runtime instance per item of a driving artifact, each in a
+ * declared isolation provider, bounded by a concurrency cap. This is the
+ * CAPABILITY (in the def); the flow-side binding is the per-node `FlowNode.fanOut`
+ * string. Absent ⇒ the agent is not fanout-capable (lint rejects a node whose
+ * `fanOut` targets it).
+ */
+export type AgentFanout = {
+  /** The driving-artifact kind whose items drive multiplicity (e.g. `work-items`). */
+  drivingArtifact: string;
+  /**
+   * Per-item isolation provider: `worktree` (the only shipped provider —
+   * result-integration is part of the provider, not the generic dispatcher),
+   * `none`, or a future provider reference. Enum + open provider ref.
+   */
+  isolation: string;
+  /**
+   * Definition-declared per-run concurrency cap (R2-03-F4 — config, not
+   * env-only; clamped to the resource ceiling). Absent ⇒ the resolver default.
+   */
+  concurrencyCap?: number;
+  /**
+   * Per-item gate contract (advisory). `item-declared` ⇒ each item carries its
+   * own quality gate (the dev-loop's per-WI `quality_gate_cmd`). Absent ⇒ none.
+   */
+  perItemGate?: string;
+};
+
 /** An agent IS a skill directory; this is the parsed view of its SKILL.md. */
 export type AgentDefinition = {
   slug: string; // skill directory name
@@ -68,6 +97,8 @@ export type AgentDefinition = {
   purpose: string;
   composition: AgentComposition;
   runtime: AgentRuntime;
+  /** R2-03-F2 — fanout capability (absent ⇒ not fanout-capable). */
+  fanout?: AgentFanout;
   brainAccess: BrainAccess;
   interactivity: string;
   budgets: AgentBudgets;
