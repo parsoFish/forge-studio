@@ -57,9 +57,18 @@ export async function assertNoLiveDaemon(forgeRoot) {
       ? readdirSync(dir).filter((f) => f.endsWith('.md')).map((f) => `${q}/${f}`)
       : [];
   });
+  // R2-04 (ADR-041): staged flow-run requests are dispatch fuel — a live drain
+  // would claim them exactly like stray manifests (cron/webhook fires from a
+  // prior run must not leak into a journey's seeded state).
+  const flowRunsDir = join(forgeRoot, '_queue', 'flow-runs');
+  if (existsSync(flowRunsDir)) {
+    for (const f of readdirSync(flowRunsDir).filter((f) => f.endsWith('.json'))) {
+      strays.push(`flow-runs/${f}`);
+    }
+  }
   if (strays.length) {
     throw new Error(
-      `[e2e] REFUSING to seed: stray queue manifest(s) already present: ${strays.join(', ')} — ` +
+      `[e2e] REFUSING to seed: stray queue manifest(s)/request(s) already present: ${strays.join(', ')} — ` +
       `inspect/clear _queue before running the journey.`
     );
   }

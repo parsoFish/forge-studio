@@ -756,6 +756,380 @@ describe('validateFlow — clean flow', () => {
 });
 
 // ---------------------------------------------------------------------------
+// validateFlow — triggers (R2-04, ADR-041)
+// ---------------------------------------------------------------------------
+
+describe('validateFlow — trigger-kind', () => {
+  it('bogus "on" value → error trigger-kind', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'bogus', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-kind');
+    assert.ok(f, 'expected trigger-kind finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('bogus'));
+  });
+
+  it('shipped kind ("flow-complete") → no trigger-kind finding', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-kind'));
+  });
+});
+
+describe('validateFlow — trigger-kind-reserved', () => {
+  it('reserved kind (agent-complete) → error trigger-kind-reserved', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'agent-complete', target: { kind: 'agent', ref: 'my-agent' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-kind-reserved');
+    assert.ok(f, 'expected trigger-kind-reserved finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /schema-reserved/);
+  });
+
+  it('shipped kind ("merged") → no trigger-kind-reserved finding', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-kind-reserved'));
+  });
+});
+
+describe('validateFlow — trigger-target', () => {
+  it('flow target referencing its own flow → error trigger-target (self-loop)', () => {
+    const flow = makeFlow({
+      id: 'my-flow',
+      triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'my-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-target');
+    assert.ok(f, 'expected trigger-target finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /self-loop/);
+  });
+
+  it('flow target referencing an unregistered flow (flowIds provided) → error trigger-target', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'ghost-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowIds: new Set(['my-flow']) });
+    const f = findings.find((x) => x.check === 'trigger-target');
+    assert.ok(f, 'expected trigger-target finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('ghost-flow'));
+  });
+
+  it('flow target referencing an unregistered flow WITHOUT flowIds → no trigger-target finding (opts is optional)', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'ghost-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-target'));
+  });
+
+  it('agent target referencing an unknown agent → error trigger-target', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'ghost-agent' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-target');
+    assert.ok(f, 'expected trigger-target finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('ghost-agent'));
+  });
+
+  it('agent target referencing a real roster agent → no trigger-target finding', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-target'));
+  });
+
+  it('flow target referencing a real registered flow → no trigger-target finding', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+    });
+    assert.ok(!findings.some((x) => x.check === 'trigger-target'));
+  });
+});
+
+describe('validateFlow — trigger-cron', () => {
+  const validCron = () => ({
+    on: 'cron' as const,
+    target: { kind: 'flow' as const, ref: 'other-flow' },
+    schedule: '0 0 * * *',
+    concurrency: 'forbid' as const,
+  });
+
+  it('missing schedule → error trigger-cron', () => {
+    const t = validCron();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, schedule: undefined }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-cron');
+    assert.ok(f, 'expected trigger-cron finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /schedule/);
+  });
+
+  it('unparseable schedule pattern → error trigger-cron', () => {
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...validCron(), schedule: 'not a cron pattern' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-cron');
+    assert.ok(f, 'expected trigger-cron finding');
+    assert.equal(f.level, 'error');
+  });
+
+  it('concurrency "replace" → error trigger-cron (enum-reserved)', () => {
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...validCron(), concurrency: 'replace' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-cron');
+    assert.ok(f, 'expected trigger-cron finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /enum-reserved/);
+  });
+
+  it('flow.project null → error trigger-cron', () => {
+    const flow = makeFlow({
+      project: null,
+      triggers: [validCron()],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-cron');
+    assert.ok(f, 'expected trigger-cron finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /project/);
+  });
+
+  it('fully-valid cron trigger → no trigger-cron finding', () => {
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [validCron()],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-cron'));
+  });
+});
+
+describe('validateFlow — trigger-webhook', () => {
+  const validWebhook = () => ({
+    on: 'webhook' as const,
+    target: { kind: 'flow' as const, ref: 'other-flow' },
+    webhook: {
+      id: 'push-hook',
+      provider: 'github' as const,
+      events: ['push' as const],
+      secretEnv: 'WEBHOOK_SECRET',
+      sources: ['org/repo'],
+    },
+  });
+
+  it('missing webhook block → error trigger-webhook', () => {
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ on: 'webhook', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /webhook/);
+  });
+
+  it('bad id slug → error trigger-webhook', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, id: 'Push_Hook' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('Push_Hook'));
+  });
+
+  it('bad provider → error trigger-webhook', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, provider: 'bitbucket' as never } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('bitbucket'));
+  });
+
+  it('empty events → error trigger-webhook', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, events: [] } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /events/);
+  });
+
+  it('bad secretEnv (lowercase) → error trigger-webhook', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, secretEnv: 'webhook_secret' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('webhook_secret'));
+  });
+
+  it('bad secretEnvPrevious (lowercase) → error trigger-webhook', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, secretEnvPrevious: 'old_secret' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('old_secret'));
+  });
+
+  it('empty sources → error trigger-webhook', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, sources: [] } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /sources/);
+  });
+
+  it('flow.project null → error trigger-webhook', () => {
+    const flow = makeFlow({
+      project: null,
+      triggers: [validWebhook()],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook');
+    assert.ok(f, 'expected trigger-webhook finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /project/);
+  });
+
+  it('fully-valid webhook trigger → no trigger-webhook finding', () => {
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [validWebhook()],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-webhook'));
+  });
+
+  // trigger-webhook-unique (cross-flow id uniqueness) is enforced in
+  // cli/studio-lint.ts, which sees the full flow roster — validateFlow only
+  // sees one flow at a time and cannot check it.
+});
+
+describe('validateFlow — trigger-shape', () => {
+  it('cron fields on a flow-complete trigger → error trigger-shape (naming both stray fields)', () => {
+    const flow = makeFlow({
+      triggers: [
+        {
+          on: 'flow-complete',
+          target: { kind: 'flow', ref: 'other-flow' },
+          schedule: '0 0 * * *',
+          concurrency: 'forbid',
+        },
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const shapeFindings = findings.filter((x) => x.check === 'trigger-shape');
+    assert.ok(shapeFindings.length >= 2, 'expected both stray schedule and concurrency findings');
+    assert.ok(shapeFindings.every((f) => f.level === 'error'));
+    assert.ok(shapeFindings.some((f) => f.message.includes('schedule')));
+    assert.ok(shapeFindings.some((f) => f.message.includes('concurrency')));
+  });
+
+  it('webhook block on a non-webhook trigger → error trigger-shape', () => {
+    const flow = makeFlow({
+      triggers: [
+        {
+          on: 'flow-complete',
+          target: { kind: 'flow', ref: 'other-flow' },
+          webhook: {
+            id: 'push-hook',
+            provider: 'github',
+            events: ['push'],
+            secretEnv: 'WEBHOOK_SECRET',
+            sources: ['org/repo'],
+          },
+        },
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-shape');
+    assert.ok(f, 'expected trigger-shape finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /webhook/);
+  });
+
+  it('schedule/concurrency on cron, webhook block on webhook → no trigger-shape finding', () => {
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [
+        {
+          on: 'cron',
+          target: { kind: 'flow', ref: 'other-flow' },
+          schedule: '0 0 * * *',
+          concurrency: 'forbid',
+        },
+        {
+          on: 'webhook',
+          target: { kind: 'flow', ref: 'other-flow' },
+          webhook: {
+            id: 'push-hook',
+            provider: 'github',
+            events: ['push'],
+            secretEnv: 'WEBHOOK_SECRET',
+            sources: ['org/repo'],
+          },
+        },
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-shape'));
+  });
+});
+
+// ---------------------------------------------------------------------------
 // validateKb
 // ---------------------------------------------------------------------------
 

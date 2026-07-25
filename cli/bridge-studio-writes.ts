@@ -33,6 +33,7 @@ import {
   discoverProjects,
   serializeAgentDefinition,
   serializeFlowDefinition,
+  listFlowIds,
 } from '../orchestrator/studio/registry.ts';
 import { skillsDir as toSkillsDir, skillDir, skillPath } from '../orchestrator/skill-path.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
@@ -773,7 +774,7 @@ export async function handleStudioWriteRoutes(
       const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
 
       // 7. Validate — reject on any error-level finding
-      const findings = validateFlow(merged, agentsMap);
+      const findings = validateFlow(merged, agentsMap, { flowIds: new Set(listFlowIds(ctx.forgeRoot)) });
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {
         sendJson(res, 400, { error: 'validation failed', findings }, origin);

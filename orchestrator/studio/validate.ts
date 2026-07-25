@@ -6,11 +6,14 @@
  * validateKb intentionally checks only the slug and backend; the binding shape is enforced at load time in registry.ts.
  */
 
+import { Cron } from 'croner';
+
 import { DEMO_STEP_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
+import { TRIGGER_KINDS, TRIGGER_KIND_IDS } from '../flow-trigger.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -344,12 +347,222 @@ export function validateLibraryFlag(entryName: string, data: unknown): Finding[]
 }
 
 // ---------------------------------------------------------------------------
+// Trigger checks (R2-04, ADR-041) — extracted from validateFlow so the
+// per-trigger logic doesn't balloon its body. Check ids match the design 1:1:
+// trigger-kind, trigger-kind-reserved, trigger-target, trigger-cron,
+// trigger-webhook, trigger-shape. Cross-flow webhook-id uniqueness is NOT
+// checked here — a single flow can't see its siblings — it lives in
+// cli/studio-lint.ts (check id trigger-webhook-unique).
+// ---------------------------------------------------------------------------
+
+// Derived from the registry (no duplicated literals) — rows with
+// status:'reserved' are vocabulary-reserved but have no runtime yet.
+const RESERVED_TRIGGER_KIND_IDS = new Set<string>(
+  TRIGGER_KINDS.filter((k) => k.status === 'reserved').map((k) => k.id),
+);
+
+const WEBHOOK_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
+const WEBHOOK_PROVIDERS = new Set(['github', 'gitea', 'gitlab']);
+const WEBHOOK_EVENTS = new Set(['push', 'release']);
+const SECRET_ENV_RE = /^[A-Z][A-Z0-9_]*$/;
+
+function checkFlowTriggers(
+  flow: FlowDefinition,
+  agents: ReadonlyMap<string, AgentDefinition>,
+  opts: { flowIds?: ReadonlySet<string> } | undefined,
+): Finding[] {
+  const findings: Finding[] = [];
+  const obj = `flow:${flow.id}`;
+
+  for (const trigger of flow.triggers) {
+    // trigger-kind: `on` must be a registry vocabulary member.
+    if (!(TRIGGER_KIND_IDS as readonly string[]).includes(trigger.on)) {
+      findings.push(
+        err(
+          obj,
+          'trigger-kind',
+          `Trigger "on" value "${trigger.on}" is not a known trigger kind — must be one of ${TRIGGER_KIND_IDS.join('|')}`,
+        ),
+      );
+    }
+
+    // trigger-kind-reserved: the kind is schema-reserved (no runtime yet).
+    if (RESERVED_TRIGGER_KIND_IDS.has(trigger.on)) {
+      findings.push(
+        err(
+          obj,
+          'trigger-kind-reserved',
+          `trigger kind '${trigger.on}' is schema-reserved (not yet shipped — see the owning roadmap item); declaring it has no runtime`,
+        ),
+      );
+    }
+
+    // trigger-target: a `flow` target must not self-loop and (when the
+    // caller supplies the registered flow-id set) must reference a real
+    // flow; an `agent` target must reference a real roster agent.
+    if (trigger.target.kind === 'flow') {
+      if (trigger.target.ref === flow.id) {
+        findings.push(
+          err(
+            obj,
+            'trigger-target',
+            `Trigger target flow "${trigger.target.ref}" is this flow itself — a trigger cannot target its own flow (self-loop)`,
+          ),
+        );
+      } else if (opts?.flowIds && !opts.flowIds.has(trigger.target.ref)) {
+        findings.push(
+          err(obj, 'trigger-target', `Trigger target flow "${trigger.target.ref}" is not a registered flow`),
+        );
+      }
+    } else if (trigger.target.kind === 'agent') {
+      if (!agents.has(trigger.target.ref)) {
+        findings.push(
+          err(obj, 'trigger-target', `Trigger target agent "${trigger.target.ref}" is not a known agent`),
+        );
+      }
+    }
+
+    // trigger-cron
+    if (trigger.on === 'cron') {
+      if (!trigger.schedule || !trigger.schedule.trim()) {
+        findings.push(err(obj, 'trigger-cron', 'cron trigger requires a non-empty "schedule"'));
+      } else {
+        try {
+          new Cron(trigger.schedule, { paused: true });
+        } catch (e) {
+          findings.push(
+            err(
+              obj,
+              'trigger-cron',
+              `cron trigger "schedule" "${trigger.schedule}" is not a valid croner pattern — ${(e as Error).message}`,
+            ),
+          );
+        }
+      }
+      if (trigger.concurrency === 'replace') {
+        findings.push(
+          err(
+            obj,
+            'trigger-cron',
+            `cron trigger concurrency "replace" is enum-reserved (kill-in-flight semantics not yet shipped) — use allow|forbid`,
+          ),
+        );
+      } else if (
+        trigger.concurrency !== undefined &&
+        trigger.concurrency !== 'allow' &&
+        trigger.concurrency !== 'forbid'
+      ) {
+        findings.push(
+          err(obj, 'trigger-cron', `cron trigger concurrency "${trigger.concurrency}" must be one of allow|forbid`),
+        );
+      }
+      if (flow.project === null) {
+        findings.push(
+          err(
+            obj,
+            'trigger-cron',
+            'cron trigger requires flow.project — external triggers need a project binding to mint runs',
+          ),
+        );
+      }
+    }
+
+    // trigger-webhook
+    if (trigger.on === 'webhook') {
+      if (!trigger.webhook) {
+        findings.push(err(obj, 'trigger-webhook', 'webhook trigger requires a "webhook" block'));
+      } else {
+        const wh = trigger.webhook;
+        if (!WEBHOOK_ID_RE.test(wh.id)) {
+          findings.push(err(obj, 'trigger-webhook', `webhook.id "${wh.id}" does not match ${WEBHOOK_ID_RE}`));
+        }
+        if (!WEBHOOK_PROVIDERS.has(wh.provider)) {
+          findings.push(
+            err(
+              obj,
+              'trigger-webhook',
+              `webhook.provider "${wh.provider}" must be one of ${[...WEBHOOK_PROVIDERS].join('|')}`,
+            ),
+          );
+        }
+        if (!Array.isArray(wh.events) || wh.events.length === 0) {
+          findings.push(err(obj, 'trigger-webhook', 'webhook.events must be non-empty'));
+        } else {
+          for (const ev of wh.events) {
+            if (!WEBHOOK_EVENTS.has(ev)) {
+              findings.push(
+                err(
+                  obj,
+                  'trigger-webhook',
+                  `webhook.events entry "${ev}" must be one of ${[...WEBHOOK_EVENTS].join('|')}`,
+                ),
+              );
+            }
+          }
+        }
+        if (!SECRET_ENV_RE.test(wh.secretEnv)) {
+          findings.push(
+            err(obj, 'trigger-webhook', `webhook.secretEnv "${wh.secretEnv}" does not match ${SECRET_ENV_RE}`),
+          );
+        }
+        if (wh.secretEnvPrevious !== undefined && !SECRET_ENV_RE.test(wh.secretEnvPrevious)) {
+          findings.push(
+            err(
+              obj,
+              'trigger-webhook',
+              `webhook.secretEnvPrevious "${wh.secretEnvPrevious}" does not match ${SECRET_ENV_RE}`,
+            ),
+          );
+        }
+        if (!Array.isArray(wh.sources) || wh.sources.length === 0) {
+          findings.push(err(obj, 'trigger-webhook', 'webhook.sources must be non-empty'));
+        }
+      }
+      if (flow.project === null) {
+        findings.push(
+          err(
+            obj,
+            'trigger-webhook',
+            'webhook trigger requires flow.project — external triggers need a project binding to mint runs',
+          ),
+        );
+      }
+    }
+
+    // trigger-shape: per-kind field coherence — cron/webhook fields are
+    // stray outside their owning kind.
+    if (trigger.on !== 'cron' && trigger.schedule !== undefined) {
+      findings.push(err(obj, 'trigger-shape', `"schedule" is only valid on cron triggers (got on:"${trigger.on}")`));
+    }
+    if (trigger.on !== 'cron' && trigger.concurrency !== undefined) {
+      findings.push(
+        err(obj, 'trigger-shape', `"concurrency" is only valid on cron triggers (got on:"${trigger.on}")`),
+      );
+    }
+    if (trigger.on !== 'webhook' && trigger.webhook !== undefined) {
+      findings.push(
+        err(obj, 'trigger-shape', `"webhook" block is only valid on webhook triggers (got on:"${trigger.on}")`),
+      );
+    }
+  }
+
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
 // validateFlow
 // ---------------------------------------------------------------------------
 
+/**
+ * `opts.flowIds`, when supplied, is the full registered flow-id set (R2-04) —
+ * used by the trigger-target check to catch a `flow` target referencing a
+ * flow that doesn't exist. Omitted callers (e.g. a single-flow PUT body that
+ * hasn't consulted the registry) still get the self-loop half of that check.
+ */
 export function validateFlow(
   flow: FlowDefinition,
   agents: ReadonlyMap<string, AgentDefinition>,
+  opts?: { flowIds?: ReadonlySet<string> },
 ): Finding[] {
   const findings: Finding[] = [];
   const obj = `flow:${flow.id}`;
@@ -511,6 +724,9 @@ export function validateFlow(
       ),
     );
   }
+
+  // triggers (R2-04, ADR-041) — see checkFlowTriggers above.
+  findings.push(...checkFlowTriggers(flow, agents, opts));
 
   return findings;
 }

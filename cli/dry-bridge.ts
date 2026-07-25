@@ -187,6 +187,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/project-brain/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/approve' },
   { method: 'POST', route: '/api/project-brain/abandon', classification: 'exempt-local', reason: 'writes local session status only — confirmed it does NOT call spawnProjectBrainTurn (only /approve does)' },
   { method: 'POST', route: '/api/demo-builder/start', classification: 'exempt-local', reason: 'creates local session state; the spawn is on brief/feedback/lock/abandon' },
+  { method: 'POST', route: '/api/hooks/:hookId', classification: 'exempt-local', reason: 'signature-verified webhook receipt: stages a claimable flow-run request file only — dispatch happens in the daemon sweep behind NO_SPAWN/dry-bridge' },
 
   // ---- read-only ----------------------------------------------------------
   { method: 'GET', route: '*', classification: 'read-only', reason: 'all GET routes across the bridge are read-only by construction' },

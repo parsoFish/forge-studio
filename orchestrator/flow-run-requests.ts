@@ -97,6 +97,9 @@ export type FlowRunDrainResult = {
 
 export type DrainFlowRunDeps = {
   queueRoot?: string;
+  /** Forge root for the origination mint (flow defs + projects + _logs).
+   *  Defaults to the repo root two levels above this module. */
+  forgeRoot?: string;
   /** Dispatch one request. Default: chaining → enqueueFlowRun; origination →
    *  mintTriggeredInitiative. Injectable so tests need no real manifests. */
   startFlowRun?: (req: FlowRunRequest) => void;
@@ -114,7 +117,7 @@ export type DrainFlowRunDeps = {
  * never silently swallowed.
  */
 export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainResult[] {
-  const startFlowRun = deps.startFlowRun ?? defaultStartFlowRun(deps.queueRoot);
+  const startFlowRun = deps.startFlowRun ?? defaultStartFlowRun(deps.queueRoot, deps.forgeRoot);
   const startAgentRun =
     deps.startAgentRun ??
     ((req: FlowRunRequest) => {
@@ -162,7 +165,7 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
   return out;
 }
 
-function defaultStartFlowRun(queueRoot?: string): (req: FlowRunRequest) => void {
+function defaultStartFlowRun(queueRoot?: string, forgeRoot?: string): (req: FlowRunRequest) => void {
   return (req) => {
     if (req.sourceInitiativeId) {
       // Chaining: repoint the source initiative at the target flow. Non-enqueued
@@ -176,7 +179,12 @@ function defaultStartFlowRun(queueRoot?: string): (req: FlowRunRequest) => void 
       return;
     }
     // Origination (cron/webhook): mint a fresh initiative for the target flow.
-    const minted = mintTriggeredInitiative(req, { queueRoot });
+    // A pure queue/fs operation — the guarded scheduler claim is the only path
+    // from here to an agent spawn (ADR-041 queue-only dispatch invariant).
+    const minted = mintTriggeredInitiative(req, {
+      queueRoot,
+      ...(forgeRoot ? { forgeRoot, logsRoot: join(forgeRoot, '_logs') } : {}),
+    });
     if (minted.status !== 'minted') {
       throw new Error(`mint for ${req.target.ref}: ${minted.status}${minted.detail ? ` (${minted.detail})` : ''}`);
     }

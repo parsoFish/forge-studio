@@ -32,6 +32,7 @@ import { flowPathForId } from './flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
+import { syncCronTriggers, stopAllCronTriggers } from './cron-triggers.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import type { EventLogEntry } from './logging.ts';
@@ -131,6 +132,8 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   await runDrainSweep();
   // Stage C: dispatch any flow-trigger run-requests staged while down.
   runFlowTriggerSweep();
+  // R2-04 (ADR-041): arm the cron triggers declared across studio/flows/*.
+  runCronSync();
 
   const inFlight = new Map<string, Promise<void>>();
   let stop = false;
@@ -213,6 +216,7 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
   if (cfg.mode === 'once') {
     await tick();
     await Promise.allSettled(inFlight.values());
+    stopAllCronTriggers();
     return;
   }
 
@@ -264,7 +268,7 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
     void runRecoverySweep(cfg);
     // F-W5-7: also re-confirm ready-for-review cycles the operator has merged,
     // then (ADR 026) drain any review work-items appended since the last sweep.
-    void runFinalizeSweep().then(() => runDrainSweep());
+    void runFinalizeSweep().then(() => runDrainSweep()).then(() => runCronSync());
     // Stage C: dispatch any flow-trigger run-requests (on:complete chaining).
     runFlowTriggerSweep();
   }, cfg.recoverIntervalMs);
@@ -289,6 +293,7 @@ export async function serve(opts: { mode: RunMode } & SchedulerConfig = { mode: 
     if (idleTimer) clearInterval(idleTimer);
     process.off('SIGINT', onSignal);
     process.off('SIGTERM', onSignal);
+    stopAllCronTriggers();
   }
 
   if (inFlight.size > 0) {
@@ -561,7 +566,8 @@ async function runDrainSweep(): Promise<void> {
  */
 function runFlowTriggerSweep(): void {
   try {
-    for (const r of drainFlowRunRequests({ notify: (m) => console.log(`[serve] ${m}`) })) {
+    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    for (const r of drainFlowRunRequests({ forgeRoot, notify: (m) => console.log(`[serve] ${m}`) })) {
       if (r.status === 'dispatched') {
         console.log(`[serve] flow-trigger dispatched ${r.target?.kind}:${r.target?.ref}${r.sourceInitiativeId ? ` on ${r.sourceInitiativeId}` : ' (originated)'}`);
       } else if (r.status === 'error') {
@@ -570,6 +576,29 @@ function runFlowTriggerSweep(): void {
     }
   } catch {
     /* sweep is best-effort — never throw out of the timer */
+  }
+}
+
+/**
+ * R2-04 (ADR-041): sync the scheduler's armed cron triggers against every
+ * flow's declared `on: cron` set (stop what's no longer declared, arm what's
+ * newly declared). Best-effort, mirroring the other sweeps — a broken flow or
+ * an invalid schedule is reported inside `syncCronTriggers` via `notify` and
+ * must never throw out of the startup path or the recover-timer tick. A fire
+ * only ever stages a claimable flow-run request (never dispatches, never
+ * spawns); `onFire` is the in-process nudge that re-runs the flow-trigger
+ * drain sweep promptly instead of waiting for the next poll.
+ */
+function runCronSync(): void {
+  try {
+    const forgeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+    syncCronTriggers({
+      forgeRoot,
+      notify: (m) => console.log(`[serve] ${m}`),
+      onFire: () => runFlowTriggerSweep(),
+    });
+  } catch {
+    /* sweep is best-effort — never throw out of setInterval or startup */
   }
 }
 

@@ -375,14 +375,14 @@ remaining items below are live-path concerns, not latent ones:
   *2026-07-24 note (R4-01-F2): more relevant now that the roster has more executor-less defs; the new
   `runtime/loop-strategy` lint covers the ralph-misdeclaration case, but the bare-architect-node case
   above is still open.*
-- **`buildAgentPrompt` will carry untrusted input once R2-04 external triggers land.**
-  `orchestrator/flow-runner.ts` concatenates `def.body` + `basename(projectRepoPath)` + `initiativeId`
-  + inbound-artifact labels into the agent prompt — all forge/operator-authored today (no injection
-  vector). When R2-04 lets external systems set binding fields, validate/escape them at the trigger
-  boundary before they reach the prompt. *Owner **R2-04*** (already carries the content-trust posture:
-  HMAC, source allowlists, typed-payload isolation, injection fixture). *2026-07-24 note (R4-01-F2):
-  band-routed agents (PM/reflector) bypass `buildAgentPrompt` entirely — their pipelines build their
-  own prompts — so this item concerns only bare generic-agent nodes, unchanged.*
+- **~~`buildAgentPrompt` will carry untrusted input once R2-04 external triggers land.~~ CLOSED
+  2026-07-25 (R2-04 / ADR-041):** external payloads now enter as the typed `TriggerPayload` union
+  (strict-charset structured fields, capped free text carried as data via the `trigger-payload.json`
+  artifact); `buildAgentPrompt` interpolates only strict-validated tokens (one `- Trigger: …` line,
+  repo re-validated against `REPO_RE`), and the injection fixture proves a malicious commit message
+  cannot alter agent instructions. Minted-run initiative ids are generated from validated tokens only.
+  *(2026-07-24 note retained for context: band-routed agents (PM/reflector) bypass `buildAgentPrompt`
+  entirely — this concerned only bare generic-agent nodes.)*
 
 ### 9. R4-11 roadmap & attention — as-built follow-ups (2026-07-19)
 

@@ -10,6 +10,8 @@
  * returns the fallback value when the bridge URL is absent or the fetch fails.
  */
 
+import { Cron } from 'croner';
+
 import { resolveBridgeUrl } from './bridge-client';
 
 // ---------------------------------------------------------------------------
@@ -123,11 +125,125 @@ export type FlowEdge = {
   artifact?: string;
 };
 
+/** R2-04 (ADR-041): what a trigger starts. `agent` targets are the R4-09
+ *  standalone-reflect extension — schema-accepted, but not authorable in the
+ *  UI yet (the kind selector below always builds `{kind:'flow', ref}`). */
+export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
+
+/** R2-04 (ADR-041): a webhook trigger's receive/trust config. Secrets are
+ *  env-var NAMES — the values live in the operator's environment, never in
+ *  flow.yaml or this client. */
+export type WebhookTriggerConfig = {
+  id: string;
+  provider: 'github' | 'gitea' | 'gitlab';
+  events: Array<'push' | 'release'>;
+  secretEnv: string;
+  secretEnvPrevious?: string;
+  sources: string[];
+};
+
+/**
+ * R2-04 (ADR-041): a declared trigger row — mirrors
+ * orchestrator/studio/types.ts's server shape verbatim (the `flow: string`
+ * shape this replaced was a pre-registry skew; every consumer now reads
+ * `target.ref`, never a top-level `.flow`).
+ */
 export type FlowTrigger = {
   on: string;
-  flow: string;
+  target: TriggerTarget;
+  /** cron only: a croner-parseable pattern. */
+  schedule?: string;
+  /** cron only: K8s-style overrun policy. Default `forbid`; `replace` is enum-reserved. */
+  concurrency?: 'allow' | 'forbid' | 'replace';
+  /** webhook only. */
+  webhook?: WebhookTriggerConfig;
   note?: string;
 };
+
+/**
+ * R2-04 (ADR-041): the shipped trigger kinds authorable in the UI today.
+ * Mirrors orchestrator/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS` — the
+ * server-side SSOT (registry rows-as-data). forge-ui cannot import
+ * orchestrator TS directly, so this is a hand-kept mirror; keep it in
+ * lockstep with the registry when a new kind ships (or one is retired).
+ * `agent-complete` | `manual` | `feed` are registry-reserved (no runtime yet)
+ * and intentionally absent — FlowHeader's kind selector must never offer them.
+ */
+export const SHIPPED_TRIGGER_KINDS = ['flow-complete', 'merged', 'cron', 'webhook'] as const;
+export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
+
+/** Client-side cron syntax check (UX only) — same croner engine as the
+ *  server's `trigger-cron` lint (orchestrator/studio/validate.ts), which
+ *  remains authoritative on save. Empty/blank counts as invalid (nothing to
+ *  add yet), not a thrown error. */
+export function isValidCronSchedule(schedule: string): boolean {
+  if (!schedule.trim()) return false;
+  try {
+    new Cron(schedule, { paused: true });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Inputs FlowHeader's per-kind trigger fields collect, fed to
+ *  `buildTriggerDeclaration`. */
+export type TriggerBuilderFields = {
+  targetId: string;
+  /** cron only. */
+  schedule?: string;
+  /** cron only; default `forbid` when omitted. */
+  concurrency?: 'allow' | 'forbid';
+  /** webhook only. */
+  webhookId?: string;
+  webhookProvider?: 'github' | 'gitea' | 'gitlab';
+  webhookEvents?: Array<'push' | 'release'>;
+  webhookSecretEnv?: string;
+  /** webhook only — comma-separated `owner/repo` list, split here. */
+  webhookSources?: string;
+};
+
+/**
+ * Build a `FlowTrigger` declaration from FlowHeader's kind selector + its
+ * per-kind fields. Pure — no DOM — so it's unit-testable without mounting the
+ * component (studio-client.test.ts). Returns `null` when the kind's required
+ * fields are incomplete; FlowHeader keeps "+ add" disabled in that case, but
+ * this re-validates rather than trusting the caller.
+ *
+ * The target is always `{kind:'flow', ref: fields.targetId}` for every kind —
+ * agent targets are not authorable yet (R4-09; the request shape is schema-
+ * ready per ADR-041, just not reachable from this UI).
+ */
+export function buildTriggerDeclaration(
+  kind: ShippedTriggerKind,
+  fields: TriggerBuilderFields,
+): FlowTrigger | null {
+  if (!fields.targetId) return null;
+  const target: TriggerTarget = { kind: 'flow', ref: fields.targetId };
+  if (kind === 'cron') {
+    const schedule = fields.schedule?.trim();
+    if (!schedule) return null;
+    return { on: kind, target, schedule, concurrency: fields.concurrency ?? 'forbid' };
+  }
+  if (kind === 'webhook') {
+    const sources = (fields.webhookSources ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    const events = fields.webhookEvents ?? [];
+    if (!fields.webhookId || !fields.webhookProvider || !fields.webhookSecretEnv) return null;
+    if (sources.length === 0 || events.length === 0) return null;
+    return {
+      on: kind,
+      target,
+      webhook: {
+        id: fields.webhookId,
+        provider: fields.webhookProvider,
+        events,
+        secretEnv: fields.webhookSecretEnv,
+        sources,
+      },
+    };
+  }
+  return { on: kind, target };
+}
 
 /** Stage C — per-flow kickoff kind; drives which launch surface the UI renders. */
 export type FlowKickoff = {
