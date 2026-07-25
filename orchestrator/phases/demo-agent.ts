@@ -67,6 +67,7 @@ import {
   runOrchestratorCommand,
   commitOrchestratedCaptureArtifacts,
 } from './orchestrated-capture.ts';
+import { takeScopeSnapshot, scopeViolations } from './agent-scope-guard.ts';
 
 const DEMO_AGENT_SLUG = 'demo-agent';
 
@@ -113,6 +114,7 @@ export type DemoAgentPipelineResult =
 export function assertDemoAgentDeclaration(def: {
   budgets: { maxTurns?: number; maxBudgetUsd?: number; maxBudgetUsdShare?: number };
   composition: { skills: string[] };
+  allowedTools?: string[];
 }): void {
   if (def.budgets.maxTurns === undefined) {
     throw new Error('demo-agent SKILL.md must declare budgets.maxTurns — the live turn cap is frontmatter data (ADR-039)');
@@ -125,6 +127,11 @@ export function assertDemoAgentDeclaration(def: {
   if (!def.composition.skills.includes('demo')) {
     throw new Error(
       'demo-agent SKILL.md must declare composition.skills: [demo] — the binding inlines the demo contract the composition claims',
+    );
+  }
+  if (def.allowedTools?.includes('Bash')) {
+    throw new Error(
+      'demo-agent SKILL.md must not grant Bash — arbitrary execution defeats the mechanical scope guard and the ADR-036 authors-never-runs posture',
     );
   }
 }
@@ -144,20 +151,6 @@ function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: s
   }
 }
 
-/** Worktree-relative paths git reports as changed/untracked (rename → new side). */
-function gitDirtPaths(worktreePath: string): Set<string> {
-  const res = gitCapture(worktreePath, ['status', '--porcelain']);
-  const paths = new Set<string>();
-  if (!res.ok) return paths;
-  for (const line of res.out.split('\n')) {
-    if (!line.trim()) continue;
-    let p = line.slice(3);
-    const arrow = p.indexOf(' -> ');
-    if (arrow !== -1) p = p.slice(arrow + 4);
-    paths.add(p.replace(/^"|"$/g, ''));
-  }
-  return paths;
-}
 
 export async function runDemoAgentPipeline(
   input: DemoAgentPipelineInput,
@@ -203,7 +196,7 @@ export async function runDemoAgentPipeline(
   const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
   if (!diffStatRes.ok || !headShaRes.ok) {
     const detail = `git derivation failed: ${diffStatRes.ok ? '' : diffStatRes.err} ${headShaRes.ok ? '' : headShaRes.err}`.trim();
-    emit('demo.derive.failed', { detail }, { event_type: 'error' });
+    emit('demo.input.derive-error', { detail }, { event_type: 'error' });
     return { status: 'failed', reason: 'derive-failed', detail };
   }
   const diffStat = diffStatRes.out.trim();
@@ -213,10 +206,14 @@ export async function runDemoAgentPipeline(
   const demoDirAbs = worktreeDemoDir(input.worktreePath, input.initiativeId);
   const demoJsonAbs = join(demoDirAbs, DEMO_JSON_BASENAME);
   const proposalsAbs = join(demoDirAbs, FIX_PROPOSALS_FILENAME);
-  // Pre-spawn dirt snapshot — the mechanical scope guard diffs against this
-  // after every spawn (ADR-036: readable rules are routable; only
-  // orchestrator-owned checks count).
-  const preSpawnDirt = gitDirtPaths(input.worktreePath);
+  // Pre-spawn scope snapshot (shared agent-scope-guard: porcelain -uall +
+  // .forge/ walk — covers untracked-dir collapse and gitignored .forge trees).
+  // Guard integrity fails LOUD: no snapshot, no spawn.
+  const preSnap = takeScopeSnapshot(input.worktreePath);
+  if (!preSnap.ok) {
+    emit('demo.scope-guard-degraded', { when: 'pre-spawn', error: preSnap.error }, { event_type: 'error' });
+    return { status: 'failed', reason: 'derive-failed', detail: `scope-guard pre-snapshot unavailable: ${preSnap.error}` };
+  }
 
   // Band 2 — assemble the briefing from develop output + project config.
   const cfg = (() => {
@@ -313,14 +310,17 @@ export async function runDemoAgentPipeline(
       });
     } catch (err) {
       const detail = err instanceof Error ? err.message : String(err);
-      emit('demo.spawn.failed', { detail, attempt }, { event_type: 'error' });
+      emit('demo.spawn-error', { detail, attempt }, { event_type: 'error' });
       return { status: 'failed', reason: 'spawn-failed', detail };
     }
     emit('demo.agent-pass', { attempt, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
 
     // A budget/turn-killed spawn is an exhaustion failure, not an authoring
     // bug — retrying it spends up to the full cap again for the same outcome.
-    if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+    // Only error_max_* is exhaustion; other error_* subtypes (e.g.
+    // error_during_execution) are spawn failures — 'raise the budgets' would
+    // be a misdiagnosis for those.
+    if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_max_')) {
       emit('demo.budget-exhausted', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
       return {
         status: 'failed',
@@ -328,19 +328,31 @@ export async function runDemoAgentPipeline(
         detail: `demo-agent spawn terminated by the SDK (${spawn.resultSubtype}) — raise the declared budgets or shrink the briefing before re-running`,
       };
     }
+    if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+      emit('demo.spawn-error', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
+      return {
+        status: 'failed',
+        reason: 'spawn-failed',
+        detail: `demo-agent spawn ended with SDK subtype ${spawn.resultSubtype} (execution failure, not a budget kill)`,
+      };
+    }
 
     // Mechanical scope guard (ADR-036): NEW dirt outside the demo dir means
     // the agent edited project code — the F2 AC forbids exactly this, and the
     // orchestrated capture would produce evidence from code not on the branch.
-    // Hard failure, never a retry (an agent that edits code is not negotiated with).
-    // Porcelain collapses fully-untracked dirs to their ancestor ("?? demo/"),
-    // so a path is in-scope when it sits inside the demo dir OR is one of the
-    // demo dir's own ancestors.
+    // Hard failure, never a retry (an agent that edits code is not negotiated
+    // with). Shared agent-scope-guard covers untracked-dir collapse +
+    // gitignored .forge trees; guard integrity fails loud.
+    const postSnap = takeScopeSnapshot(input.worktreePath);
+    if (!postSnap.ok) {
+      emit('demo.scope-guard-degraded', { when: 'post-spawn', error: postSnap.error }, { event_type: 'error' });
+      return { status: 'failed', reason: 'derive-failed', detail: `scope-guard post-snapshot unavailable: ${postSnap.error}` };
+    }
     const inDemoScope = (raw: string): boolean => {
       const p = raw.replace(/\/$/, '');
-      return p === demoDirRel || p.startsWith(demoDirRel + '/') || demoDirRel.startsWith(p + '/');
+      return p === demoDirRel || p.startsWith(demoDirRel + '/');
     };
-    const newDirt = [...gitDirtPaths(input.worktreePath)].filter((p) => !preSpawnDirt.has(p) && !inDemoScope(p));
+    const newDirt = scopeViolations(preSnap, postSnap, inDemoScope);
     if (newDirt.length > 0) {
       emit('demo.scope-violation', { paths: newDirt }, { event_type: 'error' });
       return {

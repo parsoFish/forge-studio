@@ -1163,3 +1163,70 @@ test('computeFlowLineage: a copy/subset flow (same node ids) never falsely claim
   assert.ok(lineage.includes('forge-architect'), 'architect stage (distinct nodes) included');
   assert.ok(!lineage.includes('forge-develop-scratch'), 'a subset/copy flow must NOT claim the run');
 });
+
+// ---------------------------------------------------------------------------
+// R4-08-F1: the adversarial-review agent as a bare flow node — attribution
+// proof mirroring the project-scoped-review precedent above. `agent_phase`
+// deliberately carries the def's real frontmatter phase ('review') to prove
+// it cannot collide with the review-gate's own attribution: resolution keys
+// on metadata.agent_slug for phase:'orchestrator' events, never agent_phase.
+// ---------------------------------------------------------------------------
+
+test('aggregateRun: an adversarial-review flow node resolves via agent_slug — agent_phase "review" never collides', () => {
+  const root = makeTmp();
+  try {
+    const initId = 'INIT-2026-01-01-adv-review-proof';
+    const cycleId = '2026-01-01T04-00-00_INIT-2026-01-01-adv-review-proof';
+    const flowDir = join(root, 'studio', 'flows', 'critique-proof-flow');
+    mkdirSync(flowDir, { recursive: true });
+    writeFileSync(join(flowDir, 'flow.yaml'), `id: critique-proof-flow
+name: Critique Proof Flow
+version: 1
+goal: Prove the adversarial-review node is visible in the flow monitor.
+project: null
+kb: null
+costCeilingUsd: 5
+origin: seed
+nodes:
+  - { id: critique, agent: adversarial-review }
+edges: []
+triggers: []
+`);
+    const manifestPath = writeManifest(root, 'done', initId, { cycle_id: cycleId, flow_id: 'critique-proof-flow' });
+    writeCycleLog(root, cycleId, [
+      ev('orchestrator', 'start', 'cycle.start', { origin: 'human-directed' }),
+      ev('orchestrator', 'start', undefined, { agent_phase: 'review', agent_slug: 'adversarial-review' }, { skill: 'adversarial-review' }),
+      ev('orchestrator', 'end', undefined, { agent_phase: 'review', agent_slug: 'adversarial-review' }, { skill: 'adversarial-review', cost_usd: 0.2 }),
+    ]);
+    const run = aggregateRun({ root, queueState: 'done', manifestPath, nowMs: Date.now() });
+    assert.equal(run.phases['critique'], 'complete', 'adversarial-review node status resolves via agent_slug');
+    assert.equal(run.phaseMeta['critique']?.costUsd, 0.2, 'cost attributes to the critique node');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('buildAgentSlugToNodeId: adversarial-review resolves straight to its declaring node', () => {
+  const root = makeTmp();
+  try {
+    const flowDir = join(root, 'studio', 'flows', 'critique-proof-flow');
+    mkdirSync(flowDir, { recursive: true });
+    writeFileSync(join(flowDir, 'flow.yaml'), `id: critique-proof-flow
+name: Critique Proof Flow
+version: 1
+goal: Prove the agent-slug map resolves.
+project: null
+kb: null
+costCeilingUsd: 5
+origin: seed
+nodes:
+  - { id: critique, agent: adversarial-review }
+edges: []
+triggers: []
+`);
+    const agentSlugMap = buildAgentSlugToNodeId(root);
+    assert.equal(agentSlugMap.get('adversarial-review'), 'critique');
+  } finally {
+    cleanup(root);
+  }
+});

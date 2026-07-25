@@ -6,12 +6,10 @@
  * Gate mode is handled by ReviewVerdictForm (the harness asserts its data-*).
  */
 
-export type VerdictDoc = {
-  decision?: 'approve' | 'send-back';
-  by?: string;
-  at?: string;
-  reasons?: string[];
-};
+// Mapping from the on-disk VerdictRecord lives in lib/verdict-doc.ts (pure,
+// unit-tested); re-exported here so the artifact page keeps one import site.
+import type { VerdictDoc } from '@/lib/verdict-doc';
+export { verdictRecordToDoc, type VerdictDoc } from '@/lib/verdict-doc';
 
 export function VerdictRenderer({ doc }: { doc: VerdictDoc }) {
   const isApprove = doc.decision !== 'send-back';
@@ -23,7 +21,9 @@ export function VerdictRenderer({ doc }: { doc: VerdictDoc }) {
     : '0 0 32px rgba(248,113,113,.2), inset 0 0 32px rgba(248,113,113,.05)';
 
   return (
-    <div style={{
+    <div
+      data-verdict-decision={isApprove ? 'approve' : 'send-back'}
+      style={{
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'center',

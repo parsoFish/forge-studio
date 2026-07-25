@@ -115,6 +115,10 @@ test('listAgentDefinitions returns the studio agent roster', () => {
   assert.deepEqual(
     slugs,
     [
+      // R4-08: adversarial-review is a library roster agent — initiative-
+      // context critique of the developed diff, distinct from the demo's
+      // AC-proof; judges via a findings artifact, never edits, never gates.
+      'adversarial-review',
       'architect',
       'brain-ingest',
       // R4-07: the demo agent is a library roster agent — composes it takes
@@ -133,7 +137,7 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 9-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 10-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

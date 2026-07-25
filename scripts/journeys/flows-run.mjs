@@ -7,7 +7,7 @@ import {
   caption, runningTimer,
   archDir, writeStatus, archEvent, archReasoning, burst, paced, writeQuestions,
   EMULATED_ARCHITECT_COST_USD, EMULATED_ARCHITECT_DURATION_MS, writePlan,
-  cycleEvent, unifierEvent, moveManifest, seedReviewWorktree, writeDemoJson, writeReflectionQuestions,
+  cycleEvent, unifierEvent, moveManifest, seedReviewWorktree, writeDemoJson, writeReviewFindings, writeReflectionQuestions,
   writeReflectionArtifacts, writeReleaseArtifact,
   openStudioMonitor,
 } from '../lib/journey-fixtures.mjs';
@@ -685,6 +685,7 @@ export const journey = defineJourney({
               unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } });
               await sleep(THINK);
               writeDemoJson(1);
+              writeReviewFindings(1); // R4-08-F3: the critique lands beside the demo evidence
               unifierEvent('log', 'unifier.branch-pushed', { metadata: { branch: `forge/${INIT}` } });
               await sleep(THINK);
               unifierEvent('end', 'unifier.end', { cost_usd: 1.1984102000000005, duration_ms: 357551 });
@@ -809,6 +810,15 @@ export const journey = defineJourney({
               await sleep(THINK);
               await frame(page, 'r4-0b-slider', 'R4 — before/after image-comparison slider for the TOC region');
               check(await page.locator('[data-evidence="before-after-slider"]').count() > 0, 'review page shows a before/after img-comparison-slider');
+              // R4-08-F3: the adversarial-review findings render above the evidence —
+              // agent claims the operator weighs, never a gate by themselves.
+              await page.locator('[data-section="review-findings"]').scrollIntoViewIfNeeded().catch(() => {});
+              check(await page.locator('[data-section="review-findings"]').count() > 0, 'adversarial-review findings panel renders on the verdict gate');
+              check(
+                await page.locator('[data-section="review-findings"] [data-finding-severity="major"]').count() > 0,
+                'round-1 critique carries a major contract-fit finding (the same gap the send-back targets)',
+              );
+              await frame(page, 'r4-0c-findings', 'R4-08 — the adversarial critique beside the demo evidence: one major finding on the idempotency AC');
 
         },
       },
@@ -891,6 +901,7 @@ export const journey = defineJourney({
               unifierEvent('log', 'unifier.demo-skill — re-rendering demo.json (--write is byte-identical on every run)');
               await pace('fastForward');
               writeDemoJson(2);
+              writeReviewFindings(2); // round 2: an explicit clean pass — findings: []
               unifierEvent('end', 'unifier.end (round 2) — demo re-rendered', { cost_usd: 0.06 });
               cycleEvent('developer-loop', 'end', 'ralph.end (round 2)');
               moveManifest('in-flight', 'ready-for-review');
@@ -919,6 +930,12 @@ export const journey = defineJourney({
               const partialCount = await page.locator('[data-section="demo-evaluation"] [data-ac-verdict="partial"]').count();
               check(partialCount === 0, `re-review: partial AC count == 0 after dev-loop rerun (got ${partialCount})`);
               await countAtLeast(page, '[data-section="demo-evaluation"] [data-ac-verdict="met"]', 2, 're-review: all ACs show verdict "met"');
+              // R4-08-F3: the round-2 critique is an explicit clean pass — the panel
+              // still renders (findings: [] is a statement, not an absence).
+              check(
+                (await page.locator('[data-section="review-findings"][data-findings-count="0"]').count()) > 0,
+                're-review: adversarial critique reads clean pass (data-findings-count="0")',
+              );
 
               // The blocking comment from R4.1 persists across the round — resolving it is
               // what flips the DERIVED verdict from send-back back to approve.
@@ -1047,6 +1064,20 @@ export const journey = defineJourney({
               await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'completed develop slice shows its phase hexes (unifier+review)');
               await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'completed develop slice shows the dev fan-out (≥2 WI hexes)');
               await expectPhaseCost(page, 'completed develop slice shows accrued per-phase cost');
+              // R4-08-F3: the view-mode verdict now renders the REAL decision (the
+              // verdictRecordToDoc mapper — before it, every verdict stamped
+              // "Approved" regardless of kind) plus the findings panel.
+              await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=view`, { waitUntil: 'domcontentloaded' });
+              await page.waitForSelector('[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
+              check(
+                await page.locator('[data-verdict-decision="approve"]').count() > 0,
+                'view-mode verdict stamps the REAL decision (data-verdict-decision="approve")',
+              );
+              check(
+                await page.locator('[data-section="review-findings"]').count() > 0,
+                'view-mode verdict keeps the adversarial findings visible beside the stamp',
+              );
+              await frame(page, 'r4-4d-verdict-view', 'R4-08 — the durable verdict record: real decision stamp + the critique that informed it');
               // The SAME threaded run renders its architect slice under forge-architect
               // (flowLineage) — Model B proof. (The reflect slice is verified at R5, once the
               // reflection phase has actually run.)

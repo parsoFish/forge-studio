@@ -9,6 +9,10 @@ import {
   assertInboundArtifacts,
   writeVerdictJson,
   verdictJsonPath,
+  reviewFindingsJsonPath,
+  validateReviewFindings,
+  writeReviewFindingsJson,
+  type ReviewFindingsRecord,
   demoFixSpecJsonPath,
   validateDemoFixSpec,
   writeDemoFixSpecJson,
@@ -212,6 +216,94 @@ test('writeVerdictJson: writes the record; overwrite:false keeps the first', () 
   );
   assert.equal(p2, null);
   assert.equal(JSON.parse(readFileSync(p1!, 'utf8')).decidedBy, 'operator');
+  rmSync(root, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// review-findings — the R4-08-F1 critique artifact (adversarial-review → verdict gate)
+// ---------------------------------------------------------------------------
+
+function validFindings(): ReviewFindingsRecord {
+  return {
+    initiative_id: 'INIT-x',
+    cycleId: 'CY-1',
+    baseRef: 'main',
+    headSha: 'abc1234',
+    reviewedAt: '2026-07-24T00:00:00.000Z',
+    summary: 'one major correctness finding; contract fit clean',
+    findings: [
+      {
+        id: 'RF-1',
+        severity: 'major',
+        category: 'correctness',
+        title: 'off-by-one in pagination cursor',
+        detail: 'the cursor advances before the boundary check, dropping the last row of every page',
+        evidence: [{ file: 'src/page.ts', line: 42, excerpt: 'cursor += 1; if (cursor >= total) break;' }],
+      },
+    ],
+  };
+}
+
+test('validateReviewFindings: a valid record returns no errors', () => {
+  assert.deepEqual(validateReviewFindings(validFindings()), []);
+});
+
+test('validateReviewFindings: an empty findings array is a legal explicit clean pass', () => {
+  const rec = { ...validFindings(), findings: [] };
+  assert.deepEqual(validateReviewFindings(rec), []);
+});
+
+test('validateReviewFindings: missing core fields and bad shapes are named errors', () => {
+  assert.ok(validateReviewFindings(null).length > 0);
+  const errs = validateReviewFindings({ cycleId: 'CY-1' });
+  assert.ok(errs.some((e) => e.includes('initiative_id')));
+  assert.ok(errs.some((e) => e.includes('headSha')));
+  assert.ok(errs.some((e) => e.includes('findings')));
+});
+
+test('validateReviewFindings: severity/category vocabularies are enforced with alternatives named', () => {
+  const rec = validFindings();
+  (rec.findings[0] as { severity: string }).severity = 'catastrophic';
+  const errs = validateReviewFindings(rec);
+  assert.ok(errs.some((e) => e.includes('catastrophic') && e.includes('blocker') && e.includes('info')));
+
+  const rec2 = validFindings();
+  (rec2.findings[0] as { category: string }).category = 'vibes';
+  assert.ok(validateReviewFindings(rec2).some((e) => e.includes('vibes') && e.includes('correctness')));
+});
+
+test('validateReviewFindings: every finding needs ≥1 evidence pointer with a file', () => {
+  const rec = validFindings();
+  rec.findings[0].evidence = [];
+  assert.ok(validateReviewFindings(rec).some((e) => e.includes('evidence')));
+
+  const rec2 = validFindings();
+  (rec2.findings[0].evidence[0] as { file: string }).file = '';
+  assert.ok(validateReviewFindings(rec2).some((e) => e.includes('file')));
+});
+
+test('writeReviewFindingsJson: round-trips beside verdict.json without touching it', () => {
+  const root = tmp();
+  const logsRoot = join(root, '_logs');
+  const vp = writeVerdictJson(logsRoot, {
+    kind: 'approve',
+    initiative_id: 'INIT-x',
+    cycleId: 'CY-1',
+    decidedBy: 'operator',
+    at: '2026-07-24T00:00:00.000Z',
+  });
+  const before = readFileSync(vp!, 'utf8');
+  const p = writeReviewFindingsJson(logsRoot, validFindings());
+  assert.equal(p, reviewFindingsJsonPath(logsRoot, 'CY-1'));
+  assert.ok(existsSync(p!));
+  const rec = JSON.parse(readFileSync(p!, 'utf8'));
+  assert.equal(rec.findings[0].id, 'RF-1');
+  assert.equal(readFileSync(vp!, 'utf8'), before, 'verdict.json untouched — option-b isolation');
+  // Latest authoring wins (agent judgment, not an operator decision).
+  const again = validFindings();
+  again.summary = 'second pass';
+  writeReviewFindingsJson(logsRoot, again);
+  assert.equal(JSON.parse(readFileSync(p!, 'utf8')).summary, 'second pass');
   rmSync(root, { recursive: true, force: true });
 });
 

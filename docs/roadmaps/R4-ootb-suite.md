@@ -611,7 +611,53 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-08 Adversarial review agent
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **implemented (F1 + F3)** (2026-07-24/25, wave-4 session 3,
+  branch `feat/r4-08-adversarial-review`, stacked on `feat/r4-07-demo-agent`) —
+  **F2 (the ADR-026 successor send-back mechanics) is deliberately absent: its
+  own session (S4) per sizing.**  ·  **Wave:** 4
+- **Implemented-notes (2026-07-24/25):**
+  - **F1 — built.** `skills/adversarial-review` (ADR-039 one-shot artifact —
+    no Bash, no Edit: judges, never edits/runs) + the
+    `orchestrator/phases/adversarial-review.ts` pipeline: orchestrator-assembled
+    inputs (`.forge/review-input/{diff.patch,diffstat.txt,changed-files.txt}` +
+    head SHA, ADR-036) → spawn (`runAgent` caller-lifecycle) → harvest
+    (`.forge/review-findings.json`: schema + **identity-echo verification**
+    against the injected initiative/cycle/baseRef/headSha, one bounded retry) →
+    persist (the `review-findings` artifact,
+    `_logs/<cycleId>/artifacts/review-findings.json`; empty findings = an
+    explicit clean pass, still written) → scrub (review-input + worktree copy
+    deleted, try/finally). Four lenses + severity vocabulary
+    (`blocker|major|minor|info`) + evidence-pointer discipline (≥1 file:line
+    per finding, schema-enforced) live in the SKILL.md. Brain-3 profile
+    inlined as ADVISORY for the convention-drift lens.
+  - **Shared mechanical scope guard** (`orchestrator/phases/agent-scope-guard.ts`,
+    hardened by this branch's own 37-agent adversarial review): porcelain
+    `-uall` + a `.forge/` size:mtime walk close the untracked-dir-collapse and
+    gitignored-`.forge/` blind spots; guard integrity fails LOUD on git errors
+    (never fail-open/closed). Both the demo-agent and adversarial-review
+    pipelines use it. Budget kills (`error_max_*`) fail loud; other `error_*`
+    subtypes are spawn failures, never a raise-the-budget misdiagnosis.
+    Pipeline error events avoid the failure-classifier's `review`+`failed`
+    substring signature (`review.input.derive-error`/`review.spawn-error`).
+  - **Flow-node evidence + recorded deferral:** dispatchability + run-model
+    attribution proven via the synthetic-node tests (project-scoped-review
+    precedent; `agent_phase: 'review'` shown non-colliding). **The BANDED flow
+    node (pipeline as NodeExecutor) has zero production callers by design —
+    R4-10 wires it**; until then a bare `agent: adversarial-review` flow node
+    would run bandless (no assemble/harvest/guard) — do not place it in a flow
+    before R4-10. Standalone = the pipeline function (queryFn-tested); the
+    generic `forge agent run` isolation surface remains R4-10-F3.
+  - **F3 — built.** `ReviewFindingsPanel` renders the findings in BOTH verdict
+    modes on `/artifact` (`data-section="review-findings"` +
+    per-row severity/category attrs — claims the operator weighs, never a
+    gate); `verdictRecordToDoc` (`forge-ui/lib/verdict-doc.ts`) fixes the
+    pre-existing raw-shape passthrough that stamped every view-mode verdict
+    "Approved" (+ `data-verdict-decision` attr, journey-asserted);
+    `VerdictRecord`/`applyReviewVerdict`/dry-bridge table untouched (option-b
+    isolation, asserted by test). ArtifactPicker lists the two new templates.
+    Bridge `/api/artifact` cycleId segment validated (pre-existing `..`
+    traversal closed). Journeys: findings rounds seeded
+    (major-finding → clean-pass) + view-mode stamp beat.
 - **Depends on:** — (consumes R1-03 test-process results; R2-01-F4's
   `project-scoped-review` wiring is its design feed)
 - **Context:** Operator diagram: *"an adversarial review agent to catch
@@ -916,6 +962,14 @@ free R4 ID's features.
   reopen of the cascade-closed #40), R4-04 PR #41 (`4f530ba`). Verify disposition superseded: ONE
   tail-of-wave `verify:cycle` run covers the whole wave (operator decision). The R1-03-F4 merge-boundary
   gate relocation verdict is **APPROVED as specced + recorded in the ADR-036 amendment** — R4-10-F2 unblocked.
+- 2026-07-25 — **Wave-4 session 3 (cont.): R4-08 F1+F3 implemented** (branch `feat/r4-08-adversarial-review`,
+  stacked on the R4-07 branch). Adversarial-review agent (four lenses, severity + evidence-pointer discipline,
+  identity-echo harvest) + the `review-findings` artifact (option-b: verdict.json untouched) + verdict-surface
+  findings panel + the `verdictRecordToDoc` view-mode stamp fix. The branch's own 37-agent adversarial review
+  hardened the shared `agent-scope-guard` (porcelain `-uall` + `.forge/` walk, fail-loud integrity) for BOTH
+  wave-4 pipelines, split `error_max_*` from other spawn errors, dodged the failure-classifier's reviewer
+  substring signature, closed a pre-existing `/api/artifact` cycleId traversal, and recorded the banded-node
+  deferral (R4-10 wires the pipeline as a NodeExecutor; bare nodes stay out of flows until then). **F2 = S4.**
 - 2026-07-24 — **Wave-4 session 3: R4-07 implemented** (branch `feat/r4-07-demo-agent`). The demo agent as an
   ADR-039 one-shot OOTB artifact + the `demo-agent.ts` orchestrator pipeline (derive/spawn/validate/render/
   orchestrated-capture/judgment bands; AC-coverage + mechanical scope guard + hard env-failure classes). **F2 =

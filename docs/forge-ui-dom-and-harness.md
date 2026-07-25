@@ -56,13 +56,20 @@ inventory rather than one shared page-level contract:
   root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
   (that `data-page="flows"` value is the page's own literal, not a typo —
   every gate/artifact moment folded into this one route). `type=verdict&mode=gate`
-  is the sole review gate: `[data-section="demo-comparison"]` /
+  is the sole review gate: the adversarial-review findings panel (R4-08-F3,
+  rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
+  `[data-section="review-findings"][data-findings-count]` with per-row
+  `[data-finding][data-finding-severity="blocker|major|minor|info"][data-finding-category]`
+  — then `[data-section="demo-comparison"]` /
   `[data-section="demo-evaluation"][data-ac-verdict]` (DemoComparison) plus
   the verdict form —
   `[data-component="verdict-form"][data-form-state][data-form-kind][data-initiative-id][data-ac-count]`
   (`data-form-state` is `editing | submitting | submitted`, `data-form-kind`
   is `approve | send-back`), submit button
-  `[data-action="approve-and-merge"|"send-back"]`. `type=reflection&mode=view`
+  `[data-action="approve-and-merge"|"send-back"]`. View-mode verdict renders
+  the stamp with `[data-verdict-decision="approve|send-back"]` (mapped from the
+  on-disk VerdictRecord via `verdictRecordToDoc` — R4-08-F3 fixed the raw-shape
+  passthrough that rendered every verdict "Approved"). `type=reflection&mode=view`
   is the sole reflection surface (interactive ReflectionGate above a
   read-only renderer). The old `/review/[cycleId]` and `/reflect/[cycleId]`
   routes are now permanent client-side redirects into `/artifact` (M7-3,
