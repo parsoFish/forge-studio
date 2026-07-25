@@ -387,6 +387,48 @@ test('runReflector: REF-1 — derives user-questions.json from agent-written use
   }
 });
 
+test('runReflector: R4-09-F3 — automated mode stamps inferred:true + answer per question, interactive does not', async () => {
+  const mdBody = [
+    '## 1. Was the WI decomposition the right size?',
+    '',
+    'We had 5 WIs.',
+    '**Inferred answer:** right-sized — 5 WIs all delivered (dev-loop.delivered)',
+    '',
+    '## 2. General notes?',
+    '',
+    'Anything else.',
+    '**Inferred answer:** clean cycle, no wedges observed (0 wedge events)',
+    '',
+  ].join('\n');
+
+  // AUTOMATED: the inferred-answer lines are lifted into answer + inferred:true.
+  const ha = setupHarness({ suffix: 'uq-auto' });
+  try {
+    mkdirSync(ha.cycleLogDir, { recursive: true });
+    writeFileSync(resolve(ha.cycleLogDir, 'user-questions.md'), mdBody);
+    await runReflector({ ...makeInput(ha), mode: 'automated' }, ha.logger, { sdkQuery: fakeSdkQueryClean, brainLint: makeCleanLintStub() });
+    const parsed = JSON.parse(readFileSync(resolve(ha.cycleLogDir, 'user-questions.json'), 'utf8')) as Array<{ question: string; inferred?: boolean; answer?: string }>;
+    assert.equal(parsed.length, 2);
+    assert.ok(parsed.every((q) => q.inferred === true), 'every question inferred in automated mode');
+    assert.match(parsed[0].answer ?? '', /right-sized/);
+    assert.ok(!parsed[0].question.includes('Inferred answer'), 'the inferred-answer line is stripped from the question text');
+  } finally {
+    ha.cleanup();
+  }
+
+  // INTERACTIVE (default): identical .md, but no inferred/answer stamped.
+  const hi = setupHarness({ suffix: 'uq-interactive' });
+  try {
+    mkdirSync(hi.cycleLogDir, { recursive: true });
+    writeFileSync(resolve(hi.cycleLogDir, 'user-questions.md'), mdBody);
+    await runReflector(makeInput(hi), hi.logger, { sdkQuery: fakeSdkQueryClean, brainLint: makeCleanLintStub() });
+    const parsed = JSON.parse(readFileSync(resolve(hi.cycleLogDir, 'user-questions.json'), 'utf8')) as Array<{ inferred?: boolean; answer?: string }>;
+    assert.ok(parsed.every((q) => q.inferred === undefined && q.answer === undefined), 'interactive mode leaves the JSON shape unchanged (no inferred/answer)');
+  } finally {
+    hi.cleanup();
+  }
+});
+
 test('runReflector: REF-1 — section with a markdown option list → structured options parsed', async () => {
   // When the agent DOES supply a meaningful option list (≥2 bullet/dash
   // lines, optionally with an em-dash description), those become the
