@@ -6,11 +6,13 @@
  * validateKb intentionally checks only the slug and backend; the binding shape is enforced at load time in registry.ts.
  */
 
+
 import { DEMO_STEP_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
+import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -347,9 +349,18 @@ export function validateLibraryFlag(entryName: string, data: unknown): Finding[]
 // validateFlow
 // ---------------------------------------------------------------------------
 
+/**
+ * `opts` (R2-04, see {@link TriggerCheckOpts}): `flowIds` is the full
+ * registered flow-id set (enables the trigger-target existence check);
+ * `flowProjectOf` resolves a flow's project (enables the external-trigger
+ * project requirement to be checked on the TARGET flow the mint uses).
+ * Omitted callers (a single-flow PUT that hasn't consulted the registry) still
+ * get the self-loop / shape checks; studio-lint supplies both.
+ */
 export function validateFlow(
   flow: FlowDefinition,
   agents: ReadonlyMap<string, AgentDefinition>,
+  opts?: TriggerCheckOpts,
 ): Finding[] {
   const findings: Finding[] = [];
   const obj = `flow:${flow.id}`;
@@ -511,6 +522,9 @@ export function validateFlow(
       ),
     );
   }
+
+  // triggers (R2-04, ADR-041) — see checkFlowTriggers above.
+  findings.push(...checkFlowTriggers(flow, agents, opts));
 
   return findings;
 }

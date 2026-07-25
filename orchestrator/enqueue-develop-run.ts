@@ -2,40 +2,26 @@
  * S7 / DEC-3 — the "start development" trigger.
  *
  * The architect flow (forge-architect) decomposes an initiative into work items;
- * the operator then presses "start development" on the roadmap. This module is
- * the real, claimable enqueue behind that button (it replaces the dead
- * `defaultEnqueueFlowRun` marker the flow-runner shipped as an M3 placeholder):
- * it repoints the initiative's manifest at the `forge-develop` flow and drops it
- * into `_queue/pending/` so the scheduler claims it and runs dev → unifier →
- * review.
+ * the operator then presses "start development" on the roadmap. Since R2-04-F1
+ * (ADR-041) this module is a thin delegate over the generic per-flow claimable
+ * enqueue (`enqueue-flow-run.ts`) with the target pinned to `forge-develop` —
+ * it keeps its own result vocabulary (`already-developing`) for its existing
+ * callers (`POST /api/develop/start`, the trigger drain, tests).
  *
- * DEC-2 lineage: the develop run threads the SAME `cycle_id` the architect flow
- * minted (or mints one if absent), so cost / roadmap / metrics — and the WI
- * hexes pm already emitted — roll up under ONE `_logs/<cycleId>` dir. No sibling
- * cycle is born.
- *
- * S8 seam: the architect→develop worktree hand-off (a develop run resuming the
- * worktree pm wrote its work items into) lands with the forge-cycle monolith
- * retirement (S8). This module owns only the queue-state transition.
+ * DEC-2 lineage, the develop-ability state guards, and the known-gaps §9
+ * `not-planned` gate all live in the generic module now.
  */
-import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { enqueueFlowRun, DEVELOP_FLOW_ID, type EnqueueFlowRunResult } from './enqueue-flow-run.ts';
+import type { QueuePaths } from './queue.ts';
 
-import {
-  parseManifest,
-  serializeManifest,
-  mintAndPersistManifestCycleId,
-  readManifestCycleId,
-  type InitiativeManifest,
-} from './manifest.ts';
-import { getPaths, type QueuePaths } from './queue.ts';
+export { DEVELOP_FLOW_ID };
 
-export const DEVELOP_FLOW_ID = 'forge-develop';
-
-/** Matches the manifest id convention (INIT-YYYY-MM-DD-slug); also a path-traversal guard. */
-const INIT_ID_RE = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
-
-export type EnqueueDevelopStatus = 'enqueued' | 'not-found' | 'already-developing' | 'not-planned' | 'error';
+export type EnqueueDevelopStatus =
+  | 'enqueued'
+  | 'not-found'
+  | 'already-developing'
+  | 'not-planned'
+  | 'error';
 
 export type EnqueueDevelopResult = {
   status: EnqueueDevelopStatus;
@@ -47,144 +33,14 @@ export type EnqueueDevelopResult = {
   detail?: string;
 };
 
-/**
- * Locate an initiative's manifest across the queue and, when it is in a
- * develop-able state, repoint it at the forge-develop flow + make it claimable.
- *
- * - `pending` / `done` / `failed` → repoint + move to `pending` (`enqueued`).
- * - `in-flight` / `ready-for-review` → a cycle is already running or parked for
- *   review; do NOT enqueue a sibling (`already-developing`).
- * - absent / malformed id → `not-found`.
- * - a filesystem failure while writing the repointed manifest → `error`
- *   (with the underlying message in `detail`).
- *
- * Never throws — a malformed id resolves to `not-found`, a write failure to
- * `error` (defence in depth; the bridge validates too and additionally wraps
- * each batch item in its own try/catch).
- */
+/** Enqueue a develop run — `enqueueFlowRun(id, 'forge-develop')` with the
+ *  historical `already-developing` status name preserved. Never throws. */
 export function enqueueDevelopRun(
   initiativeId: string,
   opts: { queueRoot?: string } = {},
 ): EnqueueDevelopResult {
-  if (!INIT_ID_RE.test(initiativeId)) {
-    return { status: 'not-found', initiativeId, detail: 'initiativeId is not a valid INIT-YYYY-MM-DD-slug' };
-  }
-
-  const paths = getPaths(opts.queueRoot ?? '_queue');
-  const file = `${initiativeId}.md`;
-
-  // An in-flight cycle is actively running — never disturb it.
-  if (existsSync(join(paths.inFlight, file))) {
-    return { status: 'already-developing', initiativeId, detail: 'a cycle is already in-flight' };
-  }
-  // A develop cycle parked in ready-for-review is awaiting the review gate (or the
-  // ADR-026 drain owns it) — don't enqueue a sibling. But a NON-develop manifest
-  // in ready-for-review is the forge-architect hand-off state (architect+pm just
-  // finalised there with no review node): that IS develop-able, so fall through.
-  const reviewParkedPath = join(paths.readyForReview, file);
-  if (existsSync(reviewParkedPath) && manifestFlowId(reviewParkedPath) === DEVELOP_FLOW_ID) {
-    return { status: 'already-developing', initiativeId, detail: 'a develop cycle is awaiting review' };
-  }
-  // R4-11-F1: `merged` is a transient pass-through (promoted to `done/` in the
-  // same sweep) — a manifest sitting there is between a confirmed merge and its
-  // reflection, never a develop *source*; don't race the finalize sweep.
-  if (existsSync(join(paths.merged, file))) {
-    return { status: 'already-developing', initiativeId, detail: 'a merged cycle is finalizing (merged → done)' };
-  }
-
-  // Claim it from whichever develop-able state it sits in (pending, the architect
-  // hand-off in ready-for-review, or a finished/failed run being re-developed).
-  // `merged` is deliberately excluded — never a develop source (see above).
-  const sourcePath = firstExisting(
-    [paths.pending, paths.readyForReview, paths.done, paths.failed].map((d) => join(d, file)),
-  );
-  if (!sourcePath) {
-    return { status: 'not-found', initiativeId };
-  }
-
-  let manifest: InitiativeManifest;
-  try {
-    manifest = parseManifest(readFileSync(sourcePath, 'utf8'));
-  } catch (err) {
-    return { status: 'not-found', initiativeId, detail: err instanceof Error ? err.message : String(err) };
-  }
-
-  // known-gaps §9 (defense-in-depth, closed with ADR 040): R4-11-F2's
-  // blocked-until-planned lock is UI-only — a stale UI or direct API call could
-  // start development on a WI-less initiative, wasting a cycle on a doomed
-  // dev-loop ("no work items found"). Require decomposition evidence at the
-  // dispatch boundary too: the manifest's `specs` back-ref (R4-05, stamped on
-  // PM success) or, for pre-specs manifests, preserved work-items in the
-  // hand-off worktree.
-  const hasSpecs = (manifest.specs?.length ?? 0) > 0;
-  const hasWorktreeWis =
-    !!manifest.worktree_path &&
-    existsSync(manifest.worktree_path) &&
-    hasWorkItemFiles(join(manifest.worktree_path, '.forge', 'work-items'));
-  if (!hasSpecs && !hasWorktreeWis) {
-    return {
-      status: 'not-planned',
-      initiativeId,
-      detail: 'no decomposition evidence (manifest specs or preserved work-items) — plan the initiative first',
-    };
-  }
-
-  // Repoint at forge-develop + reset to a fresh, claimable build. resume_from is
-  // cleared so the scheduler runs the full dev→unifier→review spine, not a drain.
-  const repointed: InitiativeManifest = {
-    ...manifest,
-    flow_id: DEVELOP_FLOW_ID,
-    phase: 'pending',
-  };
-  delete repointed.resume_from;
-  delete repointed.claimed_at;
-  delete repointed.claimed_by;
-
-  const pendingPath = join(paths.pending, file);
-  try {
-    mkdirSync(paths.pending, { recursive: true });
-    writeFileSync(pendingPath, serializeManifest(repointed));
-    // Remove the source manifest if it was claimed from a different state dir.
-    if (sourcePath !== pendingPath) {
-      try { rmSync(sourcePath, { force: true }); } catch { /* best-effort — the pending copy is authoritative */ }
-    }
-
-    // DEC-2: thread the existing cycle_id, or mint one now. Idempotent — never
-    // re-stamps an architect-minted id.
-    mintAndPersistManifestCycleId(pendingPath, initiativeId);
-  } catch (err) {
-    // Honor the never-throws contract: a filesystem failure comes back as an
-    // error-shaped result the (batch) caller can report per-item.
-    return { status: 'error', initiativeId, detail: err instanceof Error ? err.message : String(err) };
-  }
-  const cycleId = readManifestCycleId(pendingPath) ?? undefined;
-
-  return { status: 'enqueued', initiativeId, cycleId, flowId: DEVELOP_FLOW_ID };
-}
-
-function firstExisting(candidates: string[]): string | null {
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  return null;
-}
-
-/** True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc). */
-function hasWorkItemFiles(dir: string): boolean {
-  try {
-    return readdirSync(dir).some((f) => /^WI-\d+\.md$/.test(f));
-  } catch {
-    return false;
-  }
-}
-
-/** Best-effort read of a manifest's flow_id; null on any parse failure. */
-function manifestFlowId(manifestPath: string): string | null {
-  try {
-    return parseManifest(readFileSync(manifestPath, 'utf8')).flow_id ?? null;
-  } catch {
-    return null;
-  }
+  const r: EnqueueFlowRunResult = enqueueFlowRun(initiativeId, DEVELOP_FLOW_ID, opts);
+  return { ...r, status: r.status === 'already-running' ? 'already-developing' : r.status };
 }
 
 /** Re-exported for callers that need the queue layout (the bridge route). */

@@ -107,7 +107,7 @@ export function FlowCard({
   const edgeCount = (flow.edges ?? []).length;
 
   const proj = flow.project ? projects.find((p) => p.id === flow.project) : null;
-  const hasTrigger = (flow.triggers ?? []).length > 0;
+  const triggers = flow.triggers ?? [];
 
   // Runs for this flow
   const flowRuns = runs.filter((r) => r.flowId === flow.id);
@@ -131,11 +131,18 @@ export function FlowCard({
       <div className="card-meta">
         <span className="card-stat">{nodeCount} nodes · {edgeCount} edges</span>
         {proj && <span className="badge badge-project">{proj.name}</span>}
-        {hasTrigger && (
-          <span className="badge badge-dim">
-            triggers {flow.triggers.length} {flow.triggers.length !== 1 ? 'flows' : 'flow'}
+        {/* R2-04-F4: one badge per declared trigger — the kind is the badge
+            text, the full "<kind> → <target>" reads on hover. */}
+        {triggers.map((tr, i) => (
+          <span
+            key={`${tr.on}-${tr.target?.ref ?? ''}-${i}`}
+            className="badge badge-dim"
+            data-trigger-badge={tr.on}
+            title={`${tr.on} → ${tr.target?.ref ?? ''}`}
+          >
+            {tr.on}
           </span>
-        )}
+        ))}
         {gatedRuns.length > 0 && (
           <span className="chip chip-gated pulse-ember">
             {gatedRuns.length} need{gatedRuns.length === 1 ? 's' : ''} you

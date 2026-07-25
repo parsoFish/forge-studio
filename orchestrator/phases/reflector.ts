@@ -158,7 +158,7 @@ export async function runReflector(
   const manifestPath = resolveCurrentManifestPath(input.manifestPath, forgeRoot);
 
   let projectName: string;
-  let origin: 'architect' | 'human-directed' = 'architect';
+  let origin: 'architect' | 'human-directed' | 'triggered' = 'architect';
   let disposable = false;
   try {
     const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));

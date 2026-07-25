@@ -62,6 +62,7 @@ import {
 } from './bridge-studio.ts';
 import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import { handleRecoveryRoutes } from './bridge-recovery.ts';
+import { handleHookRoutes } from './bridge-hooks.ts';
 import {
   handleStudioPostRoutes,
   applyReviewVerdict,
@@ -722,6 +723,16 @@ async function handleHttp(
     res.end();
     return;
   }
+
+  // ---- Webhook receipts (R2-04, ADR-041) ---------------------------------
+  // POST /api/hooks/:hookId is called by EXTERNAL services (github/gitea/
+  // gitlab), never by the Studio browser client — a webhook delivery cannot
+  // carry the x-forge-csrf header (that header exists to defeat CROSS-ORIGIN
+  // forgery from a browser; a server-to-server webhook is neither same-origin
+  // nor a browser fetch). Its trust boundary is signature/token verification
+  // (orchestrator/webhook-verify.ts), not the CSRF header, so this route is
+  // dispatched — and therefore EXEMPT — BEFORE the anti-CSRF guard below runs.
+  if (await handleHookRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
 
   // Anti-CSRF: every state-changing request must carry the custom header.
   // A non-safelisted header cannot be sent cross-origin without a preflight;

@@ -28,7 +28,9 @@ inventory rather than one shared page-level contract:
   `<a href="/projects/<id>">`, every item links through to its project's
   roadmap) carrying `data-attention-planned`, `data-attention-in-flight`,
   `data-attention-gated`, `data-attention-merged`, `data-attention-flagged`
-  counts.
+  counts. Each flow card (`LibraryCard.tsx` `FlowCard`) carries one badge per
+  declared trigger — `[data-trigger-badge]` (value is the trigger's `on` kind)
+  with a `title="<kind> → <target ref>"` tooltip (R2-04-F4).
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
@@ -51,6 +53,24 @@ inventory rather than one shared page-level contract:
   naming an interactive agent is rejected too (belt-and-suspenders, in
   `FlowBuilderCanvas.onDrop`), rendering
   `[data-component="canvas-drop-reject"][data-drop-reject-message]`.
+  Triggers (R2-04-F4, `FlowHeader.tsx`, under Advanced): a kind selector
+  `[data-field="trigger-kind"]` offers exactly the four SHIPPED kinds
+  (`flow-complete | merged | cron | webhook` — a hand-kept client mirror of
+  orchestrator/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS`, the SSOT;
+  registry-reserved kinds are never offered) and a target-flow select
+  `[data-field="trigger-target"]` shared by all four (every kind fires a
+  flow; agent targets are schema-ready but not authorable, R4-09). `cron`
+  additionally renders `[data-field="trigger-schedule"][data-schedule-invalid]`
+  (client-side croner syntax check — UX only, `orchestrator/studio/validate.ts`'s
+  `trigger-cron` check is authoritative on save) and
+  `[data-field="trigger-concurrency"]` (`allow|forbid`). `webhook` additionally
+  renders `[data-field="webhook-id"|"webhook-provider"|"webhook-secret-env"|"webhook-sources"]`
+  plus per-event checkboxes `[data-field="webhook-events"][data-event-value="push"|"release"]`,
+  and a read-only endpoint display `[data-hook-url="/api/hooks/<id>"]`. Adding
+  a trigger (`[data-action="add-trigger"]`, disabled until the kind's
+  required fields are complete) appends a chip
+  `[data-trigger-chip][data-trigger-kind]` (chip value is the target flow's
+  id; kind is the trigger's `on`).
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
   root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`

@@ -325,6 +325,18 @@ export async function applyReviewVerdict(
     sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
     return;
   }
+  // H2 (guard symmetry with the approve branch): the send-back path writes fix
+  // work items + the cap-exhausted marker under manifest-supplied worktree_path
+  // — bounds-check it against the two legitimate roots (in-place worktrees
+  // under projectsRoot, forge-managed worktrees under <forgeRoot>/_worktrees/)
+  // so a tampered manifest can't direct those writes at an arbitrary path.
+  const resolvedSbWt = resolve(worktreePath);
+  const sbProjectsRoot = resolve(ctx.projectsRoot);
+  const sbWorktreesRoot = resolve(sbProjectsRoot, '..', '_worktrees');
+  if (!resolvedSbWt.startsWith(sbProjectsRoot + sep) && !resolvedSbWt.startsWith(sbWorktreesRoot + sep)) {
+    sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
+    return;
+  }
   let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
   try {
     const cfg = loadProjectConfig(manifest.project_repo_path);

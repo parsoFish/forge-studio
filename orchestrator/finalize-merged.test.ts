@@ -89,7 +89,7 @@ test('finalize: merged → fires reflect from the develop declaration (default p
       // closure + reflector + trigger source so the test stays git/SDK-free.
       runClosure: async () => ({ outcome: 'merged', merged: true }),
       runReflector: async (input) => { reflectCalls.push(input.initiativeId); },
-      loadFlowTriggers: () => [{ on: 'merged', flow: 'forge-reflect' }],
+      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } }],
     });
     assert.deepEqual(results.map((r) => r.status), ['finalized']);
     assert.deepEqual(reflectCalls, ['INIT-2026-05-30-decl'], 'reflect must fire from the declaration');
@@ -272,7 +272,7 @@ test('finalize: reflector throw after confirmed merge → cycle.reflection-lost 
       confirmMerge: () => true,
       runClosure: async () => ({ outcome: 'merged', merged: true }),
       runReflector: async () => { throw new Error('rate_limit_error: usage limit reached'); },
-      loadFlowTriggers: () => [{ on: 'merged', flow: 'forge-reflect' }],
+      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } }],
     });
 
     assert.deepEqual(

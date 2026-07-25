@@ -69,6 +69,17 @@ export type ForgeConfig = {
     /** Max total fix work items appended across all rounds. Default: `DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` (24). */
     maxTotalFixWorkItems?: number;
   };
+  /**
+   * R2-04 (ADR-041): budgets stamped onto initiatives MINTED by external
+   * triggers (cron/webhook origination — no architect sized them). Spend
+   * policy: conservative defaults, operator-tunable.
+   */
+  triggers?: {
+    /** Default: `DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD` (10). */
+    defaultCostBudgetUsd?: number;
+    /** Default: `DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET` (30). */
+    defaultIterationBudget?: number;
+  };
 };
 
 /**
@@ -366,4 +377,43 @@ export function gitIdentityEnvOverlay(identity: GitIdentity): NodeJS.ProcessEnv 
  */
 export function gitIdentityConfigArgs(identity: GitIdentity): string[] {
   return ['-c', `user.name=${identity.name}`, '-c', `user.email=${identity.email}`];
+}
+
+/**
+ * R2-04 (ADR-041): default budgets for trigger-minted initiatives (no
+ * architect sized them). Conservative on purpose — an unattended cron/webhook
+ * fire must not carry architect-scale spend authority by default.
+ */
+export const DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD = 10;
+export const DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET = 30;
+
+/**
+ * Resolve the budgets stamped onto trigger-minted initiatives. Precedence per
+ * field (mirrors `resolveReviewLoopCaps`): `FORGE_TRIGGERED_RUN_COST_BUDGET_USD`
+ * / `FORGE_TRIGGERED_RUN_ITERATION_BUDGET` env > `triggers.*` config > default.
+ * Non-finite or <= 0 values fall through (a zero/negative budget would make
+ * every triggered run dead-on-arrival).
+ */
+export function resolveTriggeredRunBudgets(
+  cfg: ForgeConfig = loadConfig(),
+): { defaultCostBudgetUsd: number; defaultIterationBudget: number } {
+  const valid = (v: number): boolean => Number.isFinite(v) && v > 0;
+  const pick = (envName: string, cfgValue: number | undefined, fallback: number): number => {
+    const fromEnv = Number(process.env[envName]);
+    if (valid(fromEnv)) return fromEnv;
+    if (typeof cfgValue === 'number' && valid(cfgValue)) return cfgValue;
+    return fallback;
+  };
+  return {
+    defaultCostBudgetUsd: pick(
+      'FORGE_TRIGGERED_RUN_COST_BUDGET_USD',
+      cfg.triggers?.defaultCostBudgetUsd,
+      DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD,
+    ),
+    defaultIterationBudget: pick(
+      'FORGE_TRIGGERED_RUN_ITERATION_BUDGET',
+      cfg.triggers?.defaultIterationBudget,
+      DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET,
+    ),
+  };
 }

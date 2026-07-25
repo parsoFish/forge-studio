@@ -141,10 +141,10 @@ function makeDefaultFinalizeOne(
             input_refs: [],
             output_refs: [],
             message: 'finalize.trigger-firing',
-            metadata: { on: t.on, target_flow: t.flow, source_flow: flowId },
+            metadata: { on: t.on, target: t.target, source_flow: flowId },
           }),
         dispatch: async (t) => {
-          if (t.flow === 'forge-reflect') {
+          if (t.target.kind === 'flow' && t.target.ref === 'forge-reflect') {
             // 2.10 reflector pipeline honesty: closure already moved the
             // manifest to done/ — a reflector throw from here on used to
             // bubble to the per-manifest catch as a bare 'error' result with
@@ -180,7 +180,9 @@ function makeDefaultFinalizeOne(
               input_refs: [],
               output_refs: [],
               message: 'finalize.trigger-unhandled-target',
-              metadata: { on: t.on, target_flow: t.flow, note: 'only forge-reflect has a merge-time handler' },
+              // R4-09 seam: an `agent`-kind target lands here until the
+              // standalone-reflect dispatch is wired (loud, never silent).
+              metadata: { on: t.on, target: t.target, note: 'only the forge-reflect flow has a merge-time handler' },
             });
           }
         },

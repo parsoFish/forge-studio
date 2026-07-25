@@ -202,6 +202,8 @@ export function runStudioLint(root: string): StudioLintResult {
 
   const flowsDir = join(root, 'studio', 'flows');
   const flowIds = new Set<string>();
+  // webhook.id → declaring flow dirs (R2-04 trigger-webhook-unique).
+  const webhookIdsByFlow = new Map<string, string[]>();
 
   if (!existsSync(flowsDir)) {
     findings.push({
@@ -237,6 +239,17 @@ export function runStudioLint(root: string): StudioLintResult {
 
     flowDirs.forEach((d) => flowIds.add(d));
 
+    // Resolve a flow's project on demand (R2-04): the external-trigger project
+    // requirement is checked on the TARGET flow the mint uses, not the
+    // declaring flow. Lazy load — only cron/webhook targets consult it.
+    const flowProjectOf = (id: string): string | null | undefined => {
+      try {
+        return loadFlowDefinition(join(flowsDir, id, 'flow.yaml')).project;
+      } catch {
+        return undefined;
+      }
+    };
+
     for (const dir of flowDirs) {
       const flowPath = join(flowsDir, dir, 'flow.yaml');
       try {
@@ -249,14 +262,35 @@ export function runStudioLint(root: string): StudioLintResult {
             message: `flow id "${flow.id}" must match its directory name "${dir}"`,
           });
         }
-        findings.push(...validateFlow(flow, agentMap));
+        findings.push(...validateFlow(flow, agentMap, { flowIds, flowProjectOf }));
         findings.push(...validateArtifactRef(flow, artifactTemplateIds));
+        for (const trigger of flow.triggers) {
+          if (trigger.on === 'webhook' && trigger.webhook) {
+            const claimants = webhookIdsByFlow.get(trigger.webhook.id) ?? [];
+            claimants.push(dir);
+            webhookIdsByFlow.set(trigger.webhook.id, claimants);
+          }
+        }
       } catch (err) {
         findings.push({
           level: 'error',
           object: `flow:${dir}`,
           check: 'load',
           message: `Cannot load flow.yaml — ${(err as Error).message}`,
+        });
+      }
+    }
+
+    // Cross-flow webhook-id uniqueness (R2-04) — validateFlow only sees one
+    // flow at a time; this loop has the full roster, so the duplicate check
+    // lives here instead.
+    for (const [webhookId, claimants] of webhookIdsByFlow) {
+      if (claimants.length > 1) {
+        findings.push({
+          level: 'error',
+          object: 'studio:flows',
+          check: 'trigger-webhook-unique',
+          message: `webhook id "${webhookId}" is declared by more than one flow (${claimants.join(', ')}) — webhook ids must be unique across all flows`,
         });
       }
     }

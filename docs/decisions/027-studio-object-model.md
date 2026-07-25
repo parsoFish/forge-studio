@@ -214,3 +214,21 @@ ADR's §1 agent-definition fields as part of its R4-01-F2 dispatch-seam design:
   platform code; only the selection mechanism becomes declared data.
 
 Format only; ADR 039 owns the semantics and sequencing (R4-01-F2).
+
+## Amendment (R2-04 / ADR-041, 2026-07-25): trigger declarations reshaped
+
+The flow `triggers:` schema changes from the loose `{on, flow}` pair to a typed
+declaration ([ADR 041](./041-trigger-kind-registry.md) owns the semantics):
+
+- **`on`** must be a `TRIGGER_KINDS` registry id (`flow-complete` —
+  renamed from `complete` — `agent-complete`, `merged`, `manual`, `cron`,
+  `webhook`, `feed`); reserved kinds are accepted at parse, rejected at lint.
+- **`target: { kind: flow | agent, ref }`** replaces `flow:` — agent targets
+  are the R4-09 standalone-reflect extension (schema + lint now; dispatch seam
+  throws until R4-09 wires it).
+- **Per-kind config blocks** — `schedule`/`concurrency` (cron only),
+  `webhook: {id, provider, events, secretEnv, secretEnvPrevious?, sources}`
+  (webhook only) — enforced coherent by the `trigger-*` lint family.
+
+One-shot migration: the seed files moved to the new shape in the same change;
+`parseFlowTrigger` fails loud on a stale `flow:` key (no back-compat parsing).

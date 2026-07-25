@@ -97,7 +97,64 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 
 ### R2-04 Trigger expansion
 
-- **Status:** planned  ·  **Wave:** 3 (opportunistic slice-able)
+- **Status:** **implemented** (2026-07-25, wave-4 session 4, branch
+  `feat/r2-04-triggers` — pulled forward from wave 3 as the S4 pairing; ADR-041
+  + ADR-027 amendment)  ·  **Wave:** 3 (opportunistic slice-able)
+- **Implemented-notes (2026-07-25, ADR-041):**
+  - **F1 — built.** `orchestrator/enqueue-flow-run.ts` = the generic per-flow
+    claimable enqueue (state guards generalized; the develop-only
+    decomposition gate stays keyed to `forge-develop`; `enqueue-develop-run.ts`
+    is a thin delegate preserving its `already-developing` vocabulary).
+    `defaultStartFlowRun` dispatches ANY flow target; non-enqueued outcomes are
+    dispatch errors (request retained, never silently dropped). The declaring
+    proof is a fixture, not a committed seed (no production-dead flows).
+  - **F2 — built.** `TRIGGER_KINDS` registry rows-as-data
+    (`flow-complete | agent-complete | merged | manual | cron | webhook |
+    feed`; `merged` = OOTB row; reserved kinds parse but lint-error —
+    `trigger-kind-reserved` — zero runtime stubs; `complete` renamed
+    `flow-complete`). `FlowTrigger` reshaped to `{on, target:{kind: flow|agent,
+    ref}, …per-kind config}` — seed migrated one-shot, stale `flow:` key fails
+    loud. **Cron**: `orchestrator/cron-triggers.ts`, scheduler-armed `croner`
+    jobs (protect, diff-sync per recover tick, stopped on shutdown); fire =
+    stage-only. **Webhook**: `POST /api/hooks/:hookId` on the bridge
+    (`cli/bridge-hooks.ts`) — raw-body HMAC before parse
+    (`@octokit/webhooks-methods` for github/gitea `X-Hub-Signature-256`;
+    gitlab `timingSafeEqual` static token; rotation via `secretEnvPrevious`),
+    **fail-closed 503 on a missing secret**, mandatory `sources` allowlist
+    (403), typed extraction, 202 = staged; mounted BEFORE the CSRF guard
+    (signature is the trust boundary); dry-bridge row `exempt-local`.
+    Origination (no source initiative) mints a fresh `origin: 'triggered'`
+    manifest for the target flow's lint-required project with conservative
+    config budgets (`triggers` section, $10/30 defaults ⚑ operator-tunable).
+    Agent targets = schema + lint + a dispatch seam that throws
+    (request retained) until R4-09.
+  - **F3 — built.** Queue-only dispatch invariant (staging is a file write;
+    dispatch only in the daemon sweep behind `runAgent`'s NO_SPAWN/dry-bridge
+    enforcement) pinned by `trigger-harness-guard.test.ts` (origination's
+    COMPLETE effect set = one pending manifest + one payload artifact; no run
+    dir, no events). `TriggerPayload` union: strict-charset structured fields,
+    free text capped + control-stripped, carried verbatim as data via the
+    `trigger-payload.json` artifact; `buildAgentPrompt` interpolates ONE
+    strict-token line only; the injection fixture (malicious commit message)
+    proves confinement. `journey-daemon-guard` refuses stray
+    `_queue/flow-runs/` requests. Known-gaps §8 `buildAgentPrompt` rider
+    CLOSED.
+  - **F4 — built.** FlowHeader kind selector (4 shipped kinds) + per-kind
+    fields (cron schedule with croner client-validate + `data-schedule-invalid`;
+    webhook id/provider/events/secretEnv/sources + `data-hook-url`); chips
+    gain `data-trigger-kind`; library cards `data-trigger-badge`. The
+    flows-author journey now AUTHORS the `merged` trigger (the previously
+    unauthorable seed shape) and exercises cron validation transiently
+    (UI-authored flows have `project: null`, so a cron trigger would be
+    lint-invalid — saved triggers stay `merged`-only; noted as a follow-up
+    for when flows gain UI project binding). `data-*` contract added to
+    `docs/forge-ui-dom-and-harness.md`.
+  - **Deps added (research-first):** `croner` (0-dep cron runner + the lint
+    validator — one grammar) and `@octokit/webhooks-methods` (0-dep audited
+    constant-time HMAC). ⚑ Operator notes: the bridge binds `0.0.0.0`, so the
+    webhook endpoint is LAN-reachable day one (fail-closed verification
+    covers it; public exposure = operator ops); minted-run budget defaults
+    are a spend-policy proposal.
 - **Depends on:** R5-01 dry-bridge (every new trigger is a new unattended-spawn surface — must route through the guarded seam), R2-01 (agent-complete events exist only once agents are runnable primitives).
 - **Depended on by:** — (R4-10 develop-cycle OOTB flow consumes but does not require new kinds).
 - **Context:** Operator diagram (verbatim intent): *"triggers = user action, completion of other flows/agents, real-world events (git commits, releases, RSS feeds, etc)."* As-built: closed vocabulary `['complete','merged']` (`orchestrator/flow-trigger.ts`); the `on: complete` **drain is live** but has no producer and only `forge-develop` dispatch (see the corrected R2-B4); kickoff kinds `idea | initiative-select | trigger-only`. The 2026-07-16 bridge incident (memory: bridge real-agent surfaces; known-gaps §4.10) is the standing warning: uncovered trigger surfaces run real agents.
@@ -163,3 +220,23 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 - 2026-07-18 — **R2-01 implemented** (branch `feat/r2-01-agent-as-runnable`): the agent-as-runnable primitive shipped — F1 `runAgent` + F2 definition-driven flow-node resolution (`executor:` frontmatter replaces `AGENT_KIND`, generic `execAgent`, `execUnknown`→error) + F4 monitor attribution for generic-agent nodes + F5 `surface` enum + F3a/F3b generic `forge agent run` CLI (`cli/agent-run.ts`) + `spawnAgentTurn` collapse; status planned → implemented, as-built in R2-B8. **F5 AC amended** (surface = the validated categorical; interactivity stays prose). **F3 partial** — the deep per-runner phase-machine convergence deferred with rationale. Six per-task reviews (spec+quality; F1 security) + a 4-lens adversarial whole-branch review (opus) + re-run integration/security lenses: **zero merge-blockers**. As-built follow-ups (all latent, unreachable in shipping content) in known-gaps §8. R2-01's dependents (R2-02, R4-01/02/05, R2-04/05/06) are now unblocked.
 - 2026-07-18 — **R2-02 re-scoped (operator-approved) + R2-07 minted.** The wave-1 R2-02 understand pass found `composition.tools` and `allowed-tools` are disjoint vocabularies, making F2's composition-single-source an ADR-027 object-model change (not a rename). Per the escalation contract, **R2-02-F2 splits out to R2-07** (composition as the single authored source; ADR-027 amendment first). **Wave-1 R2-02 = F1** (server-computed capability descriptor on the wire) **+ F3** (builder interactive-placement gating via the descriptor, surfacing the existing `node-executor` lint) **+ F4** (readiness truthfulness). `{runtimeSdks}` clarified as a surfaced fact (SDK picker stays global-adapter-gated); F3 needs no surface-editing UI.
 - 2026-07-18 — **R2-02 implemented** (branch `feat/r2-02-def-driven-builder`): the agent-def-driven builder shipped — F1 server-computed `{interactive, runtimeSdks}` capability descriptor threaded onto the agents **and** starters wire (parsed verbatim client-side; the `node-executor` lint rerouted through the same derivation) + F3 BUILD-tab interactive-placement gating (palette `data-chip-placeable` + canvas `canvas-drop-reject`, over the R2-01-F2 `node-executor` save-lint backstop) + F4 descriptor-sourced readiness (`runtimeSdks.length > 0`, informational `[data-capability-interactive]` chip); status planned → implemented, as-built in R2-B9. **F2 split to R2-07** (composition-single-source = an ADR-027 object-model change — disjoint tool vocabularies). `journey-sync`: flows-author + agents. Whole-branch review (opus): zero merge-blockers. Gates green (2157/2157 under `FORGE_ARCHITECT_NO_SPAWN`, forge-ui 91/91 vitest, tsc clean). R4-01's capability-schema dependency is now satisfied by R2-02-F1.
+- 2026-07-25 — **R2-04 implemented** (branch `feat/r2-04-triggers`, wave-4
+  session 4 pairing, stacked on `feat/r4-08-f2-sendback-loop`; **ADR-041** +
+  ADR-027 triggers-schema amendment). F1 generic per-flow claimable enqueue
+  (`enqueue-flow-run.ts`; `enqueue-develop-run.ts` delegates); F2 the
+  `TRIGGER_KINDS` registry (7 kinds, reserved rows lint-rejected with zero
+  stubs; `complete`→`flow-complete`), `FlowTrigger` `{on, target, …config}`
+  reshape with one-shot seed migration, shipped **cron** (scheduler-armed
+  croner, stage-only fire) + **webhook** (`POST /api/hooks/:hookId`, raw-body
+  HMAC via `@octokit/webhooks-methods` / gitlab `timingSafeEqual`, fail-closed
+  503, mandatory source allowlist, CSRF-exempt-by-structure, dry-bridge
+  `exempt-local`), origination minting `origin: 'triggered'` initiatives with
+  config budgets, and the R4-09 agent-target seam (throws, request retained);
+  F3 queue-only-dispatch guard tests + typed-payload isolation (known-gaps §8
+  `buildAgentPrompt` rider CLOSED) + `journey-daemon-guard` flow-runs stray
+  refusal; F4 trigger authoring UI (kind selector + per-kind fields; the seed
+  `merged` trigger is now authorable) + library badges + journey-sync. Deps
+  added research-first: `croner`, `@octokit/webhooks-methods` (0-dep each).
+  Status planned → implemented. ⚑ operator notes: LAN-reachable webhook
+  endpoint (fail-closed HMAC covers; public exposure = ops), minted-run budget
+  defaults ($10/30) are a spend-policy proposal.

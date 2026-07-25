@@ -236,5 +236,6 @@ test('seed flows declare their kickoff kind', () => {
 
 test('forge-develop declares the merged→forge-reflect trigger (single source for reflect firing)', () => {
   const flow = loadFlowDefinition(join(ROOT, 'studio/flows/forge-develop/flow.yaml'));
-  assert.deepEqual(flow.triggers, [{ on: 'merged', flow: 'forge-reflect' }]);
+  // ADR-041 target shape (was {on, flow} pre-R2-04).
+  assert.deepEqual(flow.triggers, [{ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } }]);
 });

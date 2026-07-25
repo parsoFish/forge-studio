@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **041**).
+number (next free: **042**).
 
 ## Active
 
@@ -45,6 +45,7 @@ number (next free: **041**).
 | [038](./038-north-star-platform-and-ootb.md) | North-star reframe: platform (Scope 1) vs. shipped ideas machine (Scope 2 OOTB) | The mission statement every orientation doc points at |
 | [039](./039-ships-as-artifact.md) | Ships-as-artifact: every OOTB agent/flow is Scope-2 data on the runnable primitive | The R4-01 dispatch-seam design (executor enum → generic `runAgent`) |
 | [040](./040-review-send-back-develop-loop.md) | Review send-back re-dispatches the develop agent (initiative WI queue, config caps, merge-wins) | The ADR-026 successor — R4-08-F2 send-back loop |
+| [041](./041-trigger-kind-registry.md) | Trigger-kind registry + external-trigger trust (cron/webhook, queue-only dispatch, typed payloads) | The R2-04 trigger expansion |
 
 ## Retired / folded (numbers stay reserved)
 

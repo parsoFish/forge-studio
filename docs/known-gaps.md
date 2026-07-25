@@ -375,14 +375,14 @@ remaining items below are live-path concerns, not latent ones:
   *2026-07-24 note (R4-01-F2): more relevant now that the roster has more executor-less defs; the new
   `runtime/loop-strategy` lint covers the ralph-misdeclaration case, but the bare-architect-node case
   above is still open.*
-- **`buildAgentPrompt` will carry untrusted input once R2-04 external triggers land.**
-  `orchestrator/flow-runner.ts` concatenates `def.body` + `basename(projectRepoPath)` + `initiativeId`
-  + inbound-artifact labels into the agent prompt — all forge/operator-authored today (no injection
-  vector). When R2-04 lets external systems set binding fields, validate/escape them at the trigger
-  boundary before they reach the prompt. *Owner **R2-04*** (already carries the content-trust posture:
-  HMAC, source allowlists, typed-payload isolation, injection fixture). *2026-07-24 note (R4-01-F2):
-  band-routed agents (PM/reflector) bypass `buildAgentPrompt` entirely — their pipelines build their
-  own prompts — so this item concerns only bare generic-agent nodes, unchanged.*
+- **~~`buildAgentPrompt` will carry untrusted input once R2-04 external triggers land.~~ CLOSED
+  2026-07-25 (R2-04 / ADR-041):** external payloads now enter as the typed `TriggerPayload` union
+  (strict-charset structured fields, capped free text carried as data via the `trigger-payload.json`
+  artifact); `buildAgentPrompt` interpolates only strict-validated tokens (one `- Trigger: …` line,
+  repo re-validated against `REPO_RE`), and the injection fixture proves a malicious commit message
+  cannot alter agent instructions. Minted-run initiative ids are generated from validated tokens only.
+  *(2026-07-24 note retained for context: band-routed agents (PM/reflector) bypass `buildAgentPrompt`
+  entirely — this concerned only bare generic-agent nodes.)*
 
 ### 9. R4-11 roadmap & attention — as-built follow-ups (2026-07-19)
 
@@ -475,6 +475,17 @@ R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred 
   excerpts persist into a UI-rendered artifact. Mitigated by a SKILL.md redaction rule
   (describe-don't-quote for secret material) — prompt-level only; structural redaction (a
   secret-pattern scrub at harvest) is a cheap future hardening if a real leak is ever observed.
+
+### 13. R4-08-F2 / R2-04 — as-built follow-ups (2026-07-25)
+
+- **Dead `code-fix` UWI dispatch (`runCodeFixUwi`) awaits R4-01-F4 removal.** ADR-040
+  deleted the only producer of `kind: code-fix` unifier work-items, so the
+  `kind === 'code-fix'` branch + `runCodeFixUwi` (~120 lines) in
+  `orchestrator/phases/developer-loop.ts` are unreachable in shipping content (the
+  unifier queue now holds only the static packaging `UWI-1`). Left in place rather
+  than surgically excised from the hot-path dev-loop file — the whole unifier node is
+  retired wholesale at R4-01-F4, which is the clean home for the deletion. Not a
+  runtime risk (no producer, no test exercises it). *Owner R4-01-F4.*
 
 ## Strengths worth preserving (don't regress these)
 

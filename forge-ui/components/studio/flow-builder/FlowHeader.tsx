@@ -7,15 +7,16 @@
  *   - Editable flow name input
  *   - Goal textarea + data-goal-set warning when empty
  *   - Project + KB selects
- *   - Trigger chips (on complete → flow picker)
+ *   - Trigger chips + kind selector (flow-complete/merged/cron/webhook,
+ *     R2-04-F4) with per-kind fields, target-flow picker shared by all four
  *   - Save button → calls onSave() (parent PUT); handles 423 edit-lock
  *
  * Props receive the current header state; parent owns the state (FlowBuilder).
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { fetchStudioKbs } from '@/lib/studio-client';
-import type { Flow, Kb, FlowTrigger } from '@/lib/studio-client';
+import { fetchStudioKbs, buildTriggerDeclaration, isValidCronSchedule, SHIPPED_TRIGGER_KINDS } from '@/lib/studio-client';
+import type { Flow, Kb, FlowTrigger, ShippedTriggerKind } from '@/lib/studio-client';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 
@@ -73,13 +74,53 @@ export function FlowHeader({
   // Unified save feedback (X1) — the hook maps a 423/in-flight error to `locked`.
   const { saving, save: handleSave, ...saveFb } = useSaveState(onSave);
 
-  // B3: the operator chooses the target flow (no longer auto-pick the first).
+  // R2-04-F4: the operator chooses a trigger kind (data-field="trigger-kind",
+  // the four SHIPPED_TRIGGER_KINDS — flow-complete/merged/cron/webhook; the
+  // registry-reserved kinds agent-complete/manual/feed are never offered) and
+  // a target flow (data-field="trigger-target", now shared by ALL four kinds
+  // — this closes the "merged trigger unauthorable" gap). Per-kind extra
+  // fields (schedule/concurrency, webhook block) layer on top of the target.
+  const [triggerKind, setTriggerKind] = useState<ShippedTriggerKind>(SHIPPED_TRIGGER_KINDS[0]);
   const [triggerTarget, setTriggerTarget] = useState('');
-  const addTrigger = useCallback((targetId: string) => {
-    if (!targetId || targetId === flowId) return;
-    if (state.triggers.some((t) => t.flow === targetId)) return;
-    onChange({ ...state, triggers: [...state.triggers, { on: 'complete', flow: targetId }] });
-  }, [flowId, state, onChange]);
+  const [cronSchedule, setCronSchedule] = useState('');
+  const [cronConcurrency, setCronConcurrency] = useState<'allow' | 'forbid'>('forbid');
+  const [webhookId, setWebhookId] = useState('');
+  const [webhookProvider, setWebhookProvider] = useState<'github' | 'gitea' | 'gitlab'>('github');
+  const [webhookEvents, setWebhookEvents] = useState<Array<'push' | 'release'>>([]);
+  const [webhookSecretEnv, setWebhookSecretEnv] = useState('');
+  const [webhookSources, setWebhookSources] = useState('');
+
+  // Client-side only (UX) — orchestrator/studio/validate.ts's trigger-cron
+  // check (same croner engine) is authoritative on save.
+  const cronScheduleInvalid =
+    triggerKind === 'cron' && cronSchedule.trim().length > 0 && !isValidCronSchedule(cronSchedule);
+
+  const pendingTrigger = buildTriggerDeclaration(triggerKind, {
+    targetId: triggerTarget,
+    schedule: cronSchedule,
+    concurrency: cronConcurrency,
+    webhookId,
+    webhookProvider,
+    webhookEvents,
+    webhookSecretEnv,
+    webhookSources,
+  });
+  const canAddTrigger = pendingTrigger !== null && !cronScheduleInvalid;
+
+  const addTrigger = useCallback(() => {
+    if (!pendingTrigger || !canAddTrigger) return;
+    if (state.triggers.some((t) => t.on === pendingTrigger.on && t.target.ref === pendingTrigger.target.ref)) return;
+    onChange({ ...state, triggers: [...state.triggers, pendingTrigger] });
+    setTriggerTarget('');
+    if (triggerKind === 'cron') { setCronSchedule(''); setCronConcurrency('forbid'); }
+    if (triggerKind === 'webhook') {
+      setWebhookId(''); setWebhookProvider('github'); setWebhookEvents([]); setWebhookSecretEnv(''); setWebhookSources('');
+    }
+  }, [pendingTrigger, canAddTrigger, state, onChange, triggerKind]);
+
+  const toggleWebhookEvent = useCallback((ev: 'push' | 'release') => {
+    setWebhookEvents((prev) => (prev.includes(ev) ? prev.filter((e) => e !== ev) : [...prev, ev]));
+  }, []);
 
   const removeTrigger = useCallback((i: number) => {
     onChange({
@@ -89,6 +130,15 @@ export function FlowHeader({
   }, [state, onChange]);
 
   const flowName = (id: string) => flows.find((f) => f.id === id)?.name ?? id;
+
+  // Chip label's kind phrase, e.g. "on merged →", "cron 0 3 * * * →",
+  // "webhook myproj-push →" — the target-flow name is rendered separately.
+  const triggerKindPhrase = (tr: FlowTrigger): string => {
+    if (tr.on === 'cron') return `cron ${tr.schedule ?? ''} →`;
+    if (tr.on === 'webhook') return `webhook ${tr.webhook?.id ?? ''} →`;
+    if (tr.on === 'merged') return 'on merged →';
+    return 'on complete →';
+  };
 
   return (
     <div
@@ -273,13 +323,15 @@ export function FlowHeader({
           ))}
         </select>
 
-        {/* Triggers */}
-        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--faint)', marginLeft: 8 }}>On complete →</span>
+        {/* Triggers (R2-04-F4: kind selector + per-kind fields; the
+            target-flow select is shared by all four shipped kinds). */}
+        <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--faint)', marginLeft: 8 }}>Triggers</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {state.triggers.map((tr, i) => (
             <span
-              key={`${tr.flow}-${i}`}
-              data-trigger-chip={tr.flow}
+              key={`${tr.on}-${tr.target.ref}-${i}`}
+              data-trigger-chip={tr.target.ref}
+              data-trigger-kind={tr.on}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -292,11 +344,11 @@ export function FlowHeader({
                 color: 'var(--violet)',
               }}
             >
-              <span style={{ color: 'var(--faint)', fontSize: 11 }}>on complete →</span>
-              <span style={{ fontFamily: 'var(--font-display)', fontSize: 12 }}>{flowName(tr.flow)}</span>
+              <span style={{ color: 'var(--faint)', fontSize: 11 }}>{triggerKindPhrase(tr)}</span>
+              <span style={{ fontFamily: 'var(--font-display)', fontSize: 12 }}>{flowName(tr.target.ref)}</span>
               <button
                 onClick={() => removeTrigger(i)}
-                aria-label={`Remove trigger to ${flowName(tr.flow)}`}
+                aria-label={`Remove trigger to ${flowName(tr.target.ref)}`}
                 style={{ color: 'rgba(183,140,255,0.6)', cursor: 'pointer', fontSize: 13, background: 'none', border: 'none', padding: 0, lineHeight: 1 }}
                 onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.color = 'var(--red)'; }}
                 onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.color = 'rgba(183,140,255,0.6)'; }}
@@ -306,7 +358,23 @@ export function FlowHeader({
             </span>
           ))}
 
-          {/* B3: choose WHICH flow to trigger (no longer hardcoded to the first). */}
+          {/* Kind selector — the four SHIPPED kinds only (mirrors
+              orchestrator/flow-trigger.ts's SHIPPED_TRIGGER_KIND_IDS, the
+              SSOT; forge-ui cannot import orchestrator TS directly). */}
+          <select
+            value={triggerKind}
+            onChange={(e) => { setTriggerKind(e.target.value as ShippedTriggerKind); setTriggerTarget(''); }}
+            data-field="trigger-kind"
+            style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+          >
+            {SHIPPED_TRIGGER_KINDS.map((k) => (
+              <option key={k} value={k}>{k}</option>
+            ))}
+          </select>
+
+          {/* Target flow — shared by all four kinds (a cron/webhook trigger
+              fires a flow just like flow-complete/merged do; B3: the operator
+              chooses WHICH flow, no longer hardcoded to the first). */}
           <select
             value={triggerTarget}
             onChange={(e) => setTriggerTarget(e.target.value)}
@@ -314,23 +382,114 @@ export function FlowHeader({
             style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
           >
             <option value="">trigger a flow…</option>
-            {flows.filter((f) => f.id !== flowId && !state.triggers.some((t) => t.flow === f.id)).map((f) => (
+            {flows.filter((f) => f.id !== flowId && !state.triggers.some((t) => t.on === triggerKind && t.target.ref === f.id)).map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+
+          {/* cron — schedule + overrun concurrency policy. */}
+          {triggerKind === 'cron' && (
+            <>
+              <input
+                type="text"
+                value={cronSchedule}
+                onChange={(e) => setCronSchedule(e.target.value)}
+                placeholder="0 3 * * *"
+                data-field="trigger-schedule"
+                data-schedule-invalid={cronScheduleInvalid ? 'true' : 'false'}
+                style={{ background: 'var(--bg-2)', border: `1px solid ${cronScheduleInvalid ? 'var(--red)' : 'var(--line)'}`, borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 110 }}
+              />
+              <select
+                value={cronConcurrency}
+                onChange={(e) => setCronConcurrency(e.target.value as 'allow' | 'forbid')}
+                data-field="trigger-concurrency"
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="forbid">forbid</option>
+                <option value="allow">allow</option>
+              </select>
+            </>
+          )}
+
+          {/* webhook — receive/trust config; the endpoint is derived
+              read-only display, not editable. */}
+          {triggerKind === 'webhook' && (
+            <>
+              <input
+                type="text"
+                value={webhookId}
+                onChange={(e) => setWebhookId(e.target.value)}
+                placeholder="hook id"
+                data-field="webhook-id"
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 100 }}
+              />
+              <select
+                value={webhookProvider}
+                onChange={(e) => setWebhookProvider(e.target.value as 'github' | 'gitea' | 'gitlab')}
+                data-field="webhook-provider"
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
+              >
+                <option value="github">github</option>
+                <option value="gitea">gitea</option>
+                <option value="gitlab">gitlab</option>
+              </select>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--faint)' }}>
+                <input
+                  type="checkbox"
+                  checked={webhookEvents.includes('push')}
+                  onChange={() => toggleWebhookEvent('push')}
+                  data-field="webhook-events"
+                  data-event-value="push"
+                />
+                push
+              </label>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--faint)' }}>
+                <input
+                  type="checkbox"
+                  checked={webhookEvents.includes('release')}
+                  onChange={() => toggleWebhookEvent('release')}
+                  data-field="webhook-events"
+                  data-event-value="release"
+                />
+                release
+              </label>
+              <input
+                type="text"
+                value={webhookSecretEnv}
+                onChange={(e) => setWebhookSecretEnv(e.target.value)}
+                placeholder="SECRET_ENV_NAME"
+                data-field="webhook-secret-env"
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 140 }}
+              />
+              <input
+                type="text"
+                value={webhookSources}
+                onChange={(e) => setWebhookSources(e.target.value)}
+                placeholder="owner/repo, owner/repo2"
+                data-field="webhook-sources"
+                style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 170 }}
+              />
+              {webhookId && (
+                <span data-hook-url={`/api/hooks/${webhookId}`} style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>
+                  /api/hooks/{webhookId}
+                </span>
+              )}
+            </>
+          )}
+
           <button
-            onClick={() => { addTrigger(triggerTarget); setTriggerTarget(''); }}
-            disabled={!triggerTarget}
+            onClick={addTrigger}
+            disabled={!canAddTrigger}
             style={{
               background: 'transparent',
               border: '1px solid transparent',
-              color: triggerTarget ? 'var(--dim)' : 'var(--faint)',
+              color: canAddTrigger ? 'var(--dim)' : 'var(--faint)',
               fontFamily: 'var(--font-display)',
               fontSize: 12,
               fontWeight: 600,
               padding: '3px 10px',
               borderRadius: 'var(--radius-sm)',
-              cursor: triggerTarget ? 'pointer' : 'not-allowed',
+              cursor: canAddTrigger ? 'pointer' : 'not-allowed',
             }}
             data-action="add-trigger"
           >

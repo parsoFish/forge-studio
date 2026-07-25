@@ -308,7 +308,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-scratch-build',
         title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag three agents onto a blank canvas by HTML5 drag-and-drop, wire two edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and triggers/kickoff/cost-ceiling have no UI surface at all.',
+        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag three agents onto a blank canvas by HTML5 drag-and-drop, wire two edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → Reflect, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH, LIVE IN THE UI ─────────
@@ -481,11 +481,49 @@ export const journey = defineJourney({
               check(kbBound, 'author-from-scratch: Advanced kb-select binds the flow to the "cycles" KB');
 
               // Honest UI limits, narrated rather than faked: `resumable` has no UI
-              // toggle; triggers are hardcoded to on:'complete' (the seed's real
-              // trigger is on:'merged' — unreachable from this UI); kickoff and
-              // costCeilingUsd have no UI fields at all (server defaults apply).
-              // None of these gate the parity compare below — it only asserts the
-              // shapes the UI genuinely CAN author.
+              // toggle; kickoff and costCeilingUsd have no UI fields at all (server
+              // defaults apply). Triggers ARE fully authorable now (R2-04-F4, below)
+              // — this beat used to narrate a "merged trigger unreachable from this
+              // UI" gap; the kind selector closes it. None of this gates the parity
+              // compare further down — it only asserts the node/edge/gate topology
+              // the UI genuinely CAN author; trigger authoring is proven directly by
+              // the chip assertion below, not folded into that compare.
+
+              // R2-04-F4: author a "merged" trigger via the kind selector. Target
+              // forge-reflect — the real production trigger this scratch flow is
+              // modeled on (forge-develop's own `on: merged → forge-reflect`).
+              await page.locator('[data-field="trigger-kind"]').selectOption('merged').catch(() => {});
+              await page.locator('[data-field="trigger-target"]').selectOption('forge-reflect').catch(() => {});
+              await page.locator('[data-action="add-trigger"]').click().catch(() => {});
+              const mergedChip = page.locator('[data-trigger-chip][data-trigger-kind="merged"]');
+              await mergedChip.waitFor({ timeout: 5000 }).catch(() => {});
+              const mergedChipPresent = (await mergedChip.count()) > 0;
+              check(mergedChipPresent, 'author-from-scratch: authoring a "merged" trigger via the kind selector adds [data-trigger-chip][data-trigger-kind="merged"] (closes the formerly-unauthorable gap)');
+              await frame(page, 'a2-3b-trigger-merged', 'A2 — a "merged" trigger authored via the kind selector: on merged → Reflect');
+
+              // Cron client-side validation, checked transiently and NEVER saved:
+              // this scratch flow's `project` is null (B2 — a flow binds to a
+              // project at run-launch, not in the builder), and the server's
+              // trigger-cron lint requires flow.project non-null on a cron trigger.
+              // Typing an invalid then a valid pattern and reading
+              // data-schedule-invalid proves the client-side croner validation (UX
+              // only — validateFlow, same croner engine, remains authoritative on
+              // save) without ever adding a cron trigger to this flow's saved state.
+              await page.locator('[data-field="trigger-kind"]').selectOption('cron').catch(() => {});
+              const scheduleInput = page.locator('[data-field="trigger-schedule"]');
+              await scheduleInput.fill('not a cron pattern').catch(() => {});
+              const invalidFlag = await scheduleInput.getAttribute('data-schedule-invalid').catch(() => null);
+              check(invalidFlag === 'true', `author-from-scratch: an invalid cron pattern flags data-schedule-invalid="true" (got "${invalidFlag}")`);
+              const addDisabledOnInvalid = await page.locator('[data-action="add-trigger"]').isDisabled().catch(() => false);
+              check(addDisabledOnInvalid, 'author-from-scratch: "+ add" stays disabled while the cron pattern is invalid');
+              await scheduleInput.fill('0 3 * * *').catch(() => {});
+              const validFlag = await scheduleInput.getAttribute('data-schedule-invalid').catch(() => null);
+              check(validFlag === 'false', `author-from-scratch: a valid cron pattern clears data-schedule-invalid (got "${validFlag}")`);
+              // Deliberately NOT clicked "+ add" — this scratch flow's project is
+              // null, so a saved cron trigger would fail the server's trigger-cron
+              // lint. Switch back to a kind this flow can actually save.
+              await page.locator('[data-field="trigger-kind"]').selectOption('merged').catch(() => {});
+              await frame(page, 'a2-3c-cron-validated', 'A2 — cron pattern validated client-side (invalid → flagged + add disabled; valid → clears), never saved (this scratch flow has no project bound)');
 
               // Name + save.
               await page.locator('[data-field="flow-name"]').fill('Forge Develop Scratch');
