@@ -45,6 +45,7 @@ Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`G
 - `_logs/<cycle-id>/events.jsonl` — full cycle log.
 - `_logs/<cycle-id>/brain-gaps.jsonl` — questions the brain couldn't answer (may be empty/missing — tolerate).
 - Merged project tree (read-only inspection for code patterns).
+- **The merged PR (R4-09-F2):** its description at `<worktree>/.forge/pr-description.md` (the stated intent), the `reviewer.pr-opened` event (PR url), and the `dev-loop.delivered` diff-stats (what actually shipped). No `gh` — read the file + the events.
 - Existing brain knowledge (prior retros, established patterns).
 
 ## Outputs
@@ -101,6 +102,7 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 4. **Roadblocks / wedges** — find where the cycle stalled, wedged (`wedge` events), burnt
    tokens with no tool progress, hit a rate limit, or needed a recovery/resume. For each,
    capture what unblocked it (or that it stayed blocked).
+4b. **Review the PR (R4-09-F2).** Read `<worktree>/.forge/pr-description.md` for the PR's stated intent, then cross-reference the shipped diff (`dev-loop.delivered` stats + the merged tree). Note where the delivered code **diverges** from the stated intent (scope drift, dropped ACs, extra changes) — this is the grounding for the implementation-vs-design question in Stage 2, and every Stage-2 question must cite a concrete PR/log specific (a changed file, a PR claim, an event count), never a generic template.
 5. Identify notable patterns — worked unusually well, wedged or burnt token, antipatterns observed.
    - **Delivery truth = the `dev-loop.delivered` / `dev-loop.discarded` events (git diff-stat) + the merged tree, NOT per-WI status counts.** `dev-loop.delivered` fires ONLY for a WI that shipped (`outcome: 'complete'`); a failed WI's diff-stat carries the SAME fields on `dev-loop.discarded` (`outcome: 'failed'`) — attempted but not delivered. Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is itself the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
 6. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete observations, no hand-waving. Lead with the **repeated actions** and **roadblocks** found in 3-4 (or `_(none observed)_` for either).

@@ -139,6 +139,7 @@ const SAMPLE_INPUT = {
   eventLogRelPath: '_logs/CYCLE-2026-06-07-001/events.jsonl',
   brainGapsRelPath: '_logs/CYCLE-2026-06-07-001/brain-gaps.jsonl',
   mergedTreeRelPath: 'projects/testproj',
+  prDescriptionRelPath: 'projects/testproj/.forge/pr-description.md',
   projectName: 'testproj',
   userQuestionsRelPath: '_logs/CYCLE-2026-06-07-001/user-questions.md',
   userFeedbackRelPath: '_logs/CYCLE-2026-06-07-001/user-feedback.md',
@@ -173,8 +174,11 @@ test('renderReflectorUserPrompt: does NOT contain the static skill prose (that l
 
 test('renderReflectorUserPrompt: is compact (no huge static blocks)', () => {
   const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
-  // A pure dynamic brief should be well under 5 KB.
-  assert.ok(prompt.length < 5000, `user prompt is too large (${prompt.length} chars) — static prose may have leaked in`);
+  // A pure dynamic brief stays well under 6 KB (R4-09-F2 added the PR-review
+  // brief). The full static SKILL body is ~5 KB of prose that lives in the
+  // SYSTEM prompt — if it leaked here the length would roughly double, so this
+  // guard still catches a real leak.
+  assert.ok(prompt.length < 6000, `user prompt is too large (${prompt.length} chars) — static prose may have leaked in`);
 });
 
 // ---------------------------------------------------------------------------
@@ -187,6 +191,15 @@ test('renderReflectorUserPrompt: surfaces repeated actions, roadblocks, and a ge
   assert.ok(prompt.includes('repeated action'), 'Stage 1/2 must ask for repeated actions');
   assert.ok(prompt.includes('roadblock') || prompt.includes('wedge'), 'must ask for roadblocks/wedges');
   assert.ok(prompt.includes('general notes') || prompt.includes('freeform'), 'must offer a general-notes freeform question');
+});
+
+test('renderReflectorUserPrompt: R4-09-F2 — grounds the questionnaire in the PR (description + shipped diff + citation)', () => {
+  const prompt = renderReflectorUserPrompt(SAMPLE_INPUT);
+  assert.ok(prompt.includes('projects/testproj/.forge/pr-description.md'), 'must point at the PR description');
+  const lower = prompt.toLowerCase();
+  assert.ok(lower.includes('review the pr') || lower.includes('stated intent'), 'Stage 1 must review the PR');
+  assert.ok(lower.includes('dev-loop.delivered'), 'must cross-reference the shipped diff');
+  assert.ok(lower.includes('cite') || lower.includes('citation'), 'Stage 2 must require a concrete citation, not generic questions');
 });
 
 test('renderReflectorUserPrompt: scopes reflection to the whole initiative (DEC-2 threaded cycle_id)', () => {

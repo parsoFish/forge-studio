@@ -242,6 +242,9 @@ export async function runReflector(
     eventLogRelPath: logger.logFilePath,
     brainGapsRelPath: resolve(cycleLogDir, 'brain-gaps.jsonl'),
     mergedTreeRelPath: input.projectRepoPath,
+    // R4-09-F2: the unifier-authored PR description in the worktree (stated
+    // intent), so the reflector grounds the questionnaire in the actual PR.
+    prDescriptionRelPath: resolve(input.worktreePath, '.forge', 'pr-description.md'),
     projectName,
     userQuestionsRelPath: resolve(cycleLogDir, 'user-questions.md'),
     userFeedbackRelPath: resolve(cycleLogDir, 'user-feedback.md'),
