@@ -106,6 +106,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-re-review'],
   ['flows-run', 'flows-run-approve-merge'],
   ['flows-run', 'flows-run-reflect'],
+  ['flows-run', 'flows-run-reflect-automated'],
   ['flows-run', 'flows-run-monitor-deep-dive'],
   ['flows-run', 'flows-run-start-run-cta'],
   ['flows-run', 'flows-run-gate-control'],

@@ -42,8 +42,10 @@ import {
 import {
   recordBrainGateResult,
   REFLECTION_LOST_EVENT,
+  REFLECT_MODE_FILE,
   type CycleInput,
   type LintStatus,
+  type ReflectMode,
   type ReflectionStatus,
   type ReflectorPhaseResult,
 } from '../cycle-context.ts';
@@ -159,6 +161,10 @@ export async function runReflector(
   // bench harnesses that point directly at a stable manifest.
   const manifestPath = resolveCurrentManifestPath(input.manifestPath, forgeRoot);
 
+  // R4-09-F3: reflect mode (absent ⇒ interactive). Drives the Stage-2/3 prompt
+  // branch and the post-exit `inferred: true` provenance stamping.
+  const reflectMode = input.mode ?? 'interactive';
+
   let projectName: string;
   let origin: 'architect' | 'human-directed' | 'triggered' = 'architect';
   let disposable = false;
@@ -230,6 +236,15 @@ export async function runReflector(
   // this cycle" — better than ENOENT bouncing the agent's Read attempt.
   // A real orchestrator-side gap producer is deferred to pass-3 (would
   // require post-cycle event-log scanning).
+  // R4-09-F3: persist the resolved mode durably (survives the transient
+  // FlowTrigger dispatch) so the UI + a rerun read the truth, not a per-question
+  // heuristic. Written before the spawn so it's present even on a crash.
+  try {
+    mkdirSync(cycleLogDir, { recursive: true });
+    writeFileSync(resolve(cycleLogDir, REFLECT_MODE_FILE), JSON.stringify({ mode: reflectMode }));
+  } catch {
+    /* best-effort — the UI falls back to the per-question inferred heuristic */
+  }
   const brainGapsPath = resolve(cycleLogDir, 'brain-gaps.jsonl');
   if (!existsSync(brainGapsPath)) {
     mkdirSync(cycleLogDir, { recursive: true });
@@ -252,6 +267,7 @@ export async function runReflector(
     cycleArchiveRelPath: cycleArchivePath,
     themesDirRelPath: themesDir,
     forgeThemesDirRelPath: forgeThemesDir,
+    mode: reflectMode,
   });
 
   const toolUseSummary: ReflectorToolUseSummary = {
@@ -454,7 +470,7 @@ export async function runReflector(
   // array (no questions shown), which is acceptable (the .md is still readable).
   const userQuestionsPath = resolve(cycleLogDir, 'user-questions.md');
   const userQuestionsJsonPath = resolve(cycleLogDir, 'user-questions.json');
-  deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath);
+  deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath, reflectMode);
 
   // REF-4: the brain index is regenerated as the KB-health `ingest` builtin
   // above (R4-09-F5), which emits reflector.brain-index-regenerated.
@@ -806,14 +822,14 @@ function resolveCurrentManifestPath(originalPath: string, forgeRoot: string): st
  * questions, an empty array is written (the UI treats that as "no questions
  * this cycle").
  */
-function deriveUserQuestionsJson(mdPath: string, jsonPath: string): void {
+function deriveUserQuestionsJson(mdPath: string, jsonPath: string, mode: ReflectMode = 'interactive'): void {
   try {
     if (!existsSync(mdPath)) {
       writeFileSync(jsonPath, '[]');
       return;
     }
     const raw = readFileSync(mdPath, 'utf8');
-    const questions = parseUserQuestionsMd(raw);
+    const questions = parseUserQuestionsMd(raw, mode);
     writeFileSync(jsonPath, JSON.stringify(questions, null, 2));
   } catch {
     // Best-effort: fall back to empty array so the UI shows "no questions".
@@ -829,7 +845,14 @@ type UserQuestion = {
   question: string;
   header: string;
   options: Array<{ label: string; description: string }>;
+  /** R4-09-F3 (automated mode): the reflector-inferred answer for this question. */
+  answer?: string;
+  /** R4-09-F3: true when `answer` was inferred (no human), for UI provenance. */
+  inferred?: boolean;
 };
+
+/** R4-09-F3: the self-describing marker the automated prompt writes per question. */
+const INFERRED_ANSWER_RE = /^\s*\*\*Inferred answer:\*\*\s*(.+)$/i;
 
 /**
  * Parse the numbered heading format written by the agent:
@@ -839,7 +862,7 @@ type UserQuestion = {
  * Returns one entry per heading found. If no headings match the pattern,
  * falls back to treating the entire file body as a single question.
  */
-function parseUserQuestionsMd(raw: string): UserQuestion[] {
+function parseUserQuestionsMd(raw: string, mode: ReflectMode = 'interactive'): UserQuestion[] {
   const out: UserQuestion[] = [];
   // Split on lines that start a numbered or unnumbered ## heading.
   const sections = raw.split(/^(?=## )/m).filter((s) => s.trim());
@@ -847,14 +870,34 @@ function parseUserQuestionsMd(raw: string): UserQuestion[] {
     const lines = section.split(/\r?\n/);
     const heading = lines[0].replace(/^##\s+\d+\.\s*/, '').replace(/^##\s+/, '').trim();
     if (!heading) continue;
-    const body = lines.slice(1).join('\n').trim();
-    const options = parseSectionOptions(lines.slice(1));
+    const bodyLines = lines.slice(1);
+    const options = parseSectionOptions(bodyLines);
+    // R4-09-F3: in automated mode, lift the self-describing `**Inferred
+    // answer:**` line into `answer` + `inferred: true`, and strip it from the
+    // question text so it isn't duplicated into the prompt. Interactive runs
+    // ignore any such line — the JSON shape is byte-identical to pre-F3.
+    let answer: string | undefined;
+    let inferred: boolean | undefined;
+    let contentLines = bodyLines;
+    if (mode === 'automated') {
+      const idx = bodyLines.findIndex((l) => INFERRED_ANSWER_RE.test(l));
+      if (idx >= 0) {
+        const m = bodyLines[idx].match(INFERRED_ANSWER_RE);
+        answer = m?.[1]?.trim();
+        inferred = true;
+        contentLines = bodyLines.filter((_, i) => i !== idx);
+      }
+    }
+    const body = contentLines.join('\n').trim();
     // The question text is the body with any parsed option lines stripped, so
     // the freeform/options content isn't duplicated into the prompt.
     const question = stripOptionLines(body) || heading;
     // header must be ≤12 chars (AskUserQuestion constraint).
     const header = heading.slice(0, 12);
-    out.push({ question, header, options });
+    const entry: UserQuestion = { question, header, options };
+    if (answer !== undefined) entry.answer = answer;
+    if (inferred) entry.inferred = true;
+    out.push(entry);
   }
   return out;
 }

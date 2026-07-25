@@ -148,13 +148,30 @@ export type ReflectorUserPromptInput = {
    * forge lessons (e.g. `gate-too-loose`) into the project's Brain 3.
    */
   forgeThemesDirRelPath: string;
+  /**
+   * R4-09-F3: `interactive` (default) asks the operator (Stage 2 writes
+   * questions, Stage 3 reads human feedback); `automated` infers the answers
+   * from the cycle logs / demo / diff and self-answers with `inferred: true`
+   * provenance — no human round-trip.
+   */
+  mode: 'interactive' | 'automated';
 };
 
 /**
  * Render the per-cycle prompt body the reflector reads. Walks the agent through
- * the four-stage process with concrete file paths.
+ * the four-stage process with concrete file paths. Stages 2+3 branch on
+ * `input.mode` (R4-09-F3): the interactive text is byte-identical to the
+ * pre-F3 prompt so the golden spawn-capture is unaffected by default.
  */
 export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): string {
+  const stage2 =
+    input.mode === 'automated'
+      ? `3. **Stage 2 (INFER the answers — AUTOMATED mode, R4-09-F3)**: write \`${input.userQuestionsRelPath}\` with the SAME up-to-4 \`## N. <header>\` questions you would ask a human (same format: heading + one-line body + optional bullet options), grounded in Stage 1 + the PR — BUT there is no operator to answer them. For EACH question, ALSO write one \`**Inferred answer:** <chosen option label, or a one-line answer for a freeform question> — <citation>\` line immediately under its body, where the answer is INFERRED from the evidence (the event log, \`dev-loop.delivered\` stats, the demo artifacts, the PR description + shipped diff) and the citation is a concrete anchor (a changed file, an event count, a PR claim). Cap at 4. Never invent an answer the evidence doesn't support — if the evidence is genuinely silent, say so in the inferred-answer line ("_insufficient evidence — flag for operator_").`
+      : `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. Cap at 4. **Ground each non-freeform question in the PR/logs with a concrete citation** — a specific changed file, a PR claim, or an event count from Stage 1 — never a generic template question.`;
+  const stage3 =
+    input.mode === 'automated'
+      ? `4. **Stage 3 (self-answer — AUTOMATED mode)**: there is no human, so WRITE \`${input.userFeedbackRelPath}\` YOURSELF (machine-authored) — answer each numbered Stage-2 question with its inferred answer, then add any inferred general notes. Prefix the file with a first line \`_(inferred by the reflector — no operator feedback this cycle)_\` so the provenance is unmistakable. Then distil those inferred answers into Section 2 of \`${input.retroRelPath}\` and the free-form notes into Section 3, exactly as the interactive path would from real feedback.`
+      : `4. **Stage 3 (user feedback)**: read \`${input.userFeedbackRelPath}\`. If it exists, distil the answers into Section 2 of \`${input.retroRelPath}\` and the free-form feedback into Section 3. If missing, write \`_(no feedback supplied this cycle)_\` for both.`;
   return [
     '# Reflection brief',
     '',
@@ -181,8 +198,8 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     '',
     '1. **Brain query** — run `brain-query` for prior retros, antipatterns surfaced, and outstanding gaps.',
     `2. **Stage 1 (self-reflection — the WHOLE initiative, DEC-2)**: read \`${input.eventLogRelPath}\` end-to-end. The three flows (architect → develop → reflect) thread ONE cycle_id, so this log spans the entire initiative — reflect across all of it, not just the closing cycle. Compute iterations, costs, wedge events, send-back rounds, brain-gap counts. Then surface, explicitly: **(a) repeated actions** — anything the agents did more than once (re-running a gate, re-editing a file, re-deriving a fact, retrying a command), each with its count; **(b) roadblocks/wedges** — where the cycle stalled, wedged, burnt tokens with no tool progress, or needed a recovery/resume, and what (if anything) unblocked it. **Read \`dev-loop.delivered\`/\`dev-loop.discarded\` for the authoritative diff-stat (delivered=shipped, discarded=failed-with-partial-diff). Cross-check before any "nothing delivered" conclusion — per-WI status can be stale on a resume.** Identify 2-5 patterns/antipatterns worth capturing. Draft \`${input.retroRelPath}\` Section 1, leading with the repeated actions + roadblocks (\`_(none observed)_\` if none). **Also review the PR** (R4-09-F2): read \`${input.prDescriptionRelPath}\` for the stated intent, and cross-reference the shipped diff (\`dev-loop.delivered\` stats + the merged tree). Note where the delivered code diverges from the PR's stated intent — that gap is prime material for question (2).`,
-    `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. Cap at 4. **Ground each non-freeform question in the PR/logs with a concrete citation** — a specific changed file, a PR claim, or an event count from Stage 1 — never a generic template question.`,
-    `4. **Stage 3 (user feedback)**: read \`${input.userFeedbackRelPath}\`. If it exists, distil the answers into Section 2 of \`${input.retroRelPath}\` and the free-form feedback into Section 3. If missing, write \`_(no feedback supplied this cycle)_\` for both.`,
+    stage2,
+    stage3,
     `5. **Cycle archive**: write \`${input.cycleArchiveRelPath}\` with the frontmatter shown in the system prompt. Body: short summary + reference to the event log.`,
     `6. **Themes**: for each pattern/antipattern from Stage 1, write a theme file under \`${input.themesDirRelPath}/\`. Filename: \`<YYYY-MM-DD>-<kebab-slug>.md\`. Include a \`## Sources\` section listing ≥ 1 evidence path that resolves to \`_logs/${input.cycleId}/...\` or \`${input.cycleArchiveRelPath}\`.`,
     `7. **Done.** Stop. The orchestrator does not invoke you again.`,

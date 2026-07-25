@@ -147,6 +147,7 @@ const SAMPLE_INPUT = {
   cycleArchiveRelPath: 'brain/cycles/_raw/CYCLE-2026-06-07-001.md',
   themesDirRelPath: 'projects/testproj/brain/themes',
   forgeThemesDirRelPath: 'brain/cycles/themes',
+  mode: 'interactive' as const,
 };
 
 test('renderReflectorUserPrompt: contains all dynamic bindings', () => {
@@ -200,6 +201,18 @@ test('renderReflectorUserPrompt: R4-09-F2 — grounds the questionnaire in the P
   assert.ok(lower.includes('review the pr') || lower.includes('stated intent'), 'Stage 1 must review the PR');
   assert.ok(lower.includes('dev-loop.delivered'), 'must cross-reference the shipped diff');
   assert.ok(lower.includes('cite') || lower.includes('citation'), 'Stage 2 must require a concrete citation, not generic questions');
+});
+
+test('renderReflectorUserPrompt: R4-09-F3 — automated mode instructs inference + self-answer (interactive is default)', () => {
+  const interactive = renderReflectorUserPrompt(SAMPLE_INPUT).toLowerCase();
+  assert.ok(!interactive.includes('inferred answer'), 'interactive (default) prompt must NOT mention inferred answers');
+  assert.ok(interactive.includes('read `_logs') || interactive.includes('read \\`') || interactive.includes('user feedback'), 'interactive Stage 3 reads user feedback');
+
+  const automated = renderReflectorUserPrompt({ ...SAMPLE_INPUT, mode: 'automated' }).toLowerCase();
+  assert.ok(automated.includes('inferred answer'), 'automated Stage 2 must write an inferred answer per question');
+  assert.ok(automated.includes('automated mode'), 'automated Stage 2/3 flagged as automated mode');
+  assert.ok(automated.includes('machine-authored') || automated.includes('write `') , 'automated Stage 3 self-writes the feedback file');
+  assert.ok(automated.includes('insufficient evidence'), 'automated mode must not fabricate an answer the evidence lacks');
 });
 
 test('renderReflectorUserPrompt: scopes reflection to the whole initiative (DEC-2 threaded cycle_id)', () => {

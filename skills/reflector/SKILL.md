@@ -30,7 +30,7 @@ Close the learning loop. After an initiative is merged, run the four-stage retro
 
 ## Operator handoff (the reflection human moment)
 
-The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. Always supplied by a human in production — forge never simulates it.
+The **in-UI `/reflect` screen** is the operator surface (ADR 023): it renders the `user-questions.json` this skill emits, writes `user-feedback.md`, and the bridge auto-reruns the reflector. In **interactive** mode (the default) the feedback is supplied by a human. In **automated** mode (R4-09-F3, selected by the trigger's `mode: automated`) there is no human: the reflector infers each answer from the cycle logs / demo / diff and self-answers with `inferred: true` provenance — the per-cycle brief's Stage 2/3 tells you which mode you are in and exactly what to write.
 
 **Reads:** `_logs/<id>/user-questions.json` (≤4 entries; `[]` if none written); `_logs/<id>/retro.md` + `_logs/<id>/events.jsonl` for context.
 
@@ -110,6 +110,8 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 ### Stage 2 — Agent-prompted user questions (file-based handoff)
 
 **Do NOT call `AskUserQuestion`.** Write questions to `user-questions.md` only; the orchestrator derives `user-questions.json` post-exit.
+
+> **Mode (R4-09-F3).** In **automated** mode the per-cycle brief additionally directs you to write an `**Inferred answer:** <answer> — <citation>` line under each question (inferred from the logs/demo/diff, never fabricated) and to self-write `user-feedback.md`. The orchestrator stamps `inferred: true` per answer in `user-questions.json`. In **interactive** mode (default) follow the human-handoff steps below unchanged.
 
 **Before writing anything, read `_logs/<cycle-id>/user-feedback.md` if it exists (this is a rerun — the operator already answered a prior question set).** For each candidate question below (seed or Stage-1-derived), check whether `user-feedback.md` already answers it — same question, a paraphrase of it, or the underlying open item it was probing. **Do NOT re-emit a question `user-feedback.md` already answers.** Only genuinely new/unanswered questions may be written to `user-questions.md`. If every candidate is already answered, write `_logs/<cycle-id>/user-questions.md` with a single line — `_(no open questions — prior feedback covers this cycle)_` — instead of the seed set; do not pad back up to 4 with already-answered questions just to hit a count.
 

@@ -72,6 +72,10 @@ export const INIT = `INIT-${DATE}-e2e-toc-write-mode`;
 export const STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
 export const CYCLE_ID = `${STAMP}_${INIT}`;
 export const CYCLE_LOG = join(FORGE_ROOT, '_logs', CYCLE_ID);
+// R4-09-F3: a distinct cycle for the AUTOMATED-mode reflection beat (the shared
+// CYCLE_ID above drives the interactive reflect beat).
+export const AUTO_CYCLE_ID = `${CYCLE_ID}-automated`;
+export const AUTO_CYCLE_LOG = join(FORGE_ROOT, '_logs', AUTO_CYCLE_ID);
 
 // Acceptance coordinates: mdtoc is creds-free, so the demo evidence is a captured
 // CLI read-back (the `acceptance` gate runs the BUILT CLI against the fixture and
@@ -703,6 +707,56 @@ export function writeReflectionQuestions() {
       options: [],
     },
   ], null, 2));
+}
+
+/** R4-09-F3: seed an AUTOMATED-mode reflection — every question carries a
+ *  reflector-inferred answer (inferred:true) with a grounded citation, and
+ *  user-feedback.md is machine-authored, so the ReflectionGate renders the
+ *  read-only inferred view (data-reflect-automated) instead of the operator
+ *  form. Seeded on a DISTINCT cycle so it doesn't collide with the interactive
+ *  reflect beat's live-submitted answers. */
+export function writeAutomatedReflection() {
+  mkdirSync(AUTO_CYCLE_LOG, { recursive: true });
+  // R4-09-F3: the durable mode sidecar — the bridge GET surfaces it as the
+  // authoritative automated signal (independent of per-question inferred marks).
+  writeFileSync(join(AUTO_CYCLE_LOG, 'reflect-mode.json'), JSON.stringify({ mode: 'automated' }));
+  writeFileSync(join(AUTO_CYCLE_LOG, 'user-questions.json'), JSON.stringify([
+    {
+      question: 'Was the 2-work-item split the right size?',
+      header: 'WI sizing',
+      options: [
+        { label: 'Right size', description: 'Both WIs mapped cleanly to the two ACs.' },
+        { label: 'Too small', description: 'Could have been one WI.' },
+        { label: 'Too large', description: 'Should have split further.' },
+      ],
+      inferred: true,
+      answer: 'Right size — both WIs delivered (dev-loop.delivered shows 2 files changed each)',
+    },
+    {
+      question: 'Did the implementation match the design intent and stay on goal?',
+      header: 'Design fit',
+      options: [],
+      inferred: true,
+      answer: 'Exact match — the shipped diff implements the PR-stated --write idempotency (pr-description.md)',
+    },
+    {
+      question: 'Any other notes on this initiative?',
+      header: 'Notes',
+      options: [],
+      inferred: true,
+      answer: 'Clean cycle — 0 wedge events in the log',
+    },
+  ], null, 2));
+  // Machine-authored feedback (the automated Stage-3 self-write) — makes the
+  // reflection `answered`, which the read-only inferred view renders through.
+  writeFileSync(join(AUTO_CYCLE_LOG, 'user-feedback.md'), [
+    '_(inferred by the reflector — no operator feedback this cycle)_',
+    '',
+    '1. Right size.',
+    '2. Exact match.',
+    '3. Clean cycle, no wedges.',
+    '',
+  ].join('\n'));
 }
 
 /** S5 corpus-grounding (fix item 11): seed the reflector's full real artifact

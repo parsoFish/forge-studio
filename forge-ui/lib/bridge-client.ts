@@ -935,10 +935,29 @@ export async function postGate(
 
 // ---- Reflection (the third human moment, in-UI) -------------------------
 
+/**
+ * A reflection question. Structurally an ArchitectQuestion plus R4-09-F3
+ * automated-mode provenance: in automated mode the reflector self-answers
+ * each question from the cycle logs/demo/diff, so `answer` carries the
+ * inferred answer and `inferred: true` flags it for read-only rendering.
+ * Both absent in interactive mode.
+ */
+export type ReflectionQuestion = ArchitectQuestion & {
+  answer?: string;
+  inferred?: boolean;
+};
+
 export type ReflectionData = {
   cycleId: string;
-  questions: ArchitectQuestion[];
+  questions: ReflectionQuestion[];
   answered: boolean;
+  /**
+   * R4-09-F3: the durable reflect mode (from the backend's reflect-mode
+   * sidecar). The authoritative signal for the automated read-only view —
+   * robust to per-question inferred-marker compliance. Absent on pre-F3
+   * cycles ⇒ fall back to the per-question inferred heuristic.
+   */
+  mode?: 'interactive' | 'automated';
 };
 
 export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {

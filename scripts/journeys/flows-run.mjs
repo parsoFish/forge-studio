@@ -1,14 +1,14 @@
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot,
-  IDEA, DATE, INIT, CYCLE_ID,
+  IDEA, DATE, INIT, CYCLE_ID, AUTO_CYCLE_ID,
   SCRATCH_FLOW,
   READ, WORK, ACT, THINK, pace, QDIR,
   caption, runningTimer,
   archDir, writeStatus, archEvent, archReasoning, burst, paced, writeQuestions,
   EMULATED_ARCHITECT_COST_USD, EMULATED_ARCHITECT_DURATION_MS, writePlan,
   cycleEvent, unifierEvent, moveManifest, seedReviewWorktree, writeDemoJson, writeReviewFindings, writeReflectionQuestions,
-  writeReflectionArtifacts, writeReleaseArtifact,
+  writeAutomatedReflection, writeReflectionArtifacts, writeReleaseArtifact,
   openStudioMonitor,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
@@ -1298,6 +1298,43 @@ export const journey = defineJourney({
                 { readySel: '[data-page="flow-monitor"]', caption: 'From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete' },
               );
 
+        },
+      },
+      {
+        id: 'flows-run-reflect-automated',
+        title: 'Reflect (automated mode — R4-09-F3)',
+        narration: 'With no operator in the loop, the reflector runs in automated mode: it infers each answer from the cycle logs, demo, and diff and marks it inferred. The reflection screen renders those answers read-only with provenance badges — the operator sees exactly what forge concluded on their behalf, and there is nothing to submit.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R5b] Reflect — automated mode');
+              // Seed a distinct cycle's reflection where every question is
+              // reflector-inferred (inferred:true) with a machine-authored
+              // user-feedback.md — the automated-mode shape.
+              writeAutomatedReflection();
+              const url = `${watch.uiUrl}/artifact?run=${encodeURIComponent(AUTO_CYCLE_ID)}&type=reflection&mode=view`;
+              await page.goto(url, { waitUntil: 'domcontentloaded' }).catch(() => {});
+              await page.waitForSelector('[data-page-ready="true"]', { timeout: 20000 }).catch(() => {});
+              await page.waitForSelector('[data-section="reflect-questions"][data-reflect-automated="true"]', { timeout: 15000 }).catch(() => {});
+              await sleep(READ);
+              check(
+                await page.locator('[data-reflect-automated="true"]').count() > 0,
+                'automated reflection renders the read-only inferred view (data-reflect-automated)',
+              );
+              const inferredCount = await page.locator('[data-question-inferred="true"]').count();
+              check(inferredCount >= 3, `every question rendered inferred read-only (${inferredCount} data-question-inferred fieldsets)`);
+              check(
+                await page.locator('[data-question-answer]').count() >= 3,
+                'the inferred answer is shown per question (data-question-answer)',
+              );
+              check(
+                await page.locator('[data-question-inferred-badge]').count() >= 3,
+                'an "inferred" provenance badge renders per question',
+              );
+              check(
+                await page.locator('[data-action="submit-reflection"]').count() === 0,
+                'no submit button — automated mode is read-only (nothing for the operator to answer)',
+              );
+              await frame(page, 'r5-2-automated-reflection', 'R5 — automated reflection: inferred answers rendered read-only with provenance badges', { key: true });
         },
       },
       {

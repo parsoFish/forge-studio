@@ -193,6 +193,9 @@ function makeDefaultFinalizeOne(
           // `reflection-close` is the reflect consumer) — not a hardcoded slug.
           const handler = resolveMergeAgentHandler(t.target, runReflectorFn, loadAgentDef);
           if (handler) {
+            // R4-09-F3: the trigger's declared reflect mode rides on CycleInput
+            // (absent ⇒ interactive) — no handler/runReflector signature change.
+            const reflectInput = { ...input, mode: t.mode ?? 'interactive' } as const;
             // 2.10 reflector pipeline honesty: closure already moved the
             // manifest to done/ — a reflector throw from here on used to
             // bubble to the per-manifest catch as a bare 'error' result with
@@ -203,7 +206,7 @@ function makeDefaultFinalizeOne(
             // auto-retry — recovery stays with `forge reflect --rerun` / the
             // boot reconcile.
             try {
-              await handler(input, logger);
+              await handler(reflectInput, logger);
             } catch (err) {
               const errMsg = err instanceof Error ? err.message : String(err);
               const crash = classifyCrash(errMsg, null);

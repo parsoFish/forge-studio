@@ -5,8 +5,8 @@
  * reflection gate.
  */
 import { test, expect } from 'vitest';
-import { reflectionAllAnswered, buildReflectionAnswers } from './reflection-form.ts';
-import type { ArchitectQuestion } from './bridge-client.ts';
+import { reflectionAllAnswered, buildReflectionAnswers, hasInferredAnswers } from './reflection-form.ts';
+import type { ArchitectQuestion, ReflectionQuestion } from './bridge-client.ts';
 
 function q(question: string): ArchitectQuestion {
   return { question, header: question };
@@ -45,4 +45,20 @@ test('buildReflectionAnswers: marks unanswered questions as skipped', () => {
 
 test('buildReflectionAnswers: empty questions → empty payload', () => {
   expect(buildReflectionAnswers([], {})).toEqual([]);
+});
+
+// R4-09-F3 — automated-mode detection (drives the read-only inferred view)
+const inferred = (question: string, answer: string): ReflectionQuestion => ({ question, header: question, inferred: true, answer });
+
+test('hasInferredAnswers: false for interactive questions (no inferred flag)', () => {
+  expect(hasInferredAnswers(QUESTIONS)).toBe(false);
+});
+
+test('hasInferredAnswers: false when empty', () => {
+  expect(hasInferredAnswers([])).toBe(false);
+});
+
+test('hasInferredAnswers: true only when EVERY question is inferred', () => {
+  expect(hasInferredAnswers([inferred('a', 'x'), inferred('b', 'y')])).toBe(true);
+  expect(hasInferredAnswers([inferred('a', 'x'), q('b')])).toBe(false);
 });

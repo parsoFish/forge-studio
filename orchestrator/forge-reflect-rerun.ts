@@ -24,6 +24,21 @@ import { resolve } from 'node:path';
 import { runReflector } from './phases/reflector.ts';
 import { createLogger } from './logging.ts';
 import { parseManifest } from './manifest.ts';
+import { REFLECT_MODE_FILE, type ReflectMode } from './cycle-context.ts';
+
+/** R4-09-F3: recover the reflect mode a cycle originally ran in (the durable
+ *  sidecar the reflector persisted), so a rerun preserves it instead of
+ *  silently defaulting to interactive. Absent ⇒ undefined ⇒ interactive. */
+function readReflectMode(cycleId: string, logsRoot: string): ReflectMode | undefined {
+  const p = resolve(logsRoot, cycleId, REFLECT_MODE_FILE);
+  if (!existsSync(p)) return undefined;
+  try {
+    const doc = JSON.parse(readFileSync(p, 'utf8')) as { mode?: unknown };
+    return doc.mode === 'automated' ? 'automated' : doc.mode === 'interactive' ? 'interactive' : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 
@@ -82,6 +97,7 @@ export async function rerunReflector(input: RerunInput): Promise<void> {
     m.project_repo_path ?? resolve(FORGE_ROOT, 'projects', m.project);
 
   const logger = createLogger(input.cycleId, logsRoot);
+  const mode = readReflectMode(input.cycleId, logsRoot);
   await runReflector(
     {
       initiativeId: m.initiative_id,
@@ -89,6 +105,7 @@ export async function rerunReflector(input: RerunInput): Promise<void> {
       projectRepoPath,
       worktreePath: projectRepoPath,
       cycleId: input.cycleId,
+      ...(mode ? { mode } : {}),
     },
     logger,
   );
