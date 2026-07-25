@@ -142,82 +142,82 @@ Two candidate follow-up tickets fall out of this survey that are **additive to o
 
 ## Sources
 
-1. GitHub Docs — Managing a merge queue — https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue
-2. Mergify — Merge Queue docs — https://docs.mergify.com/merge-queue/
-3. Mergify — Merge Queue Batches docs — https://docs.mergify.com/merge-queue/batches/
-4. bors-ng README (GitHub) — https://github.com/bors-ng/bors-ng
-5. bors-ng FLOW_EXAMPLE.md — https://github.com/bors-ng/bors-ng/blob/master/FLOW_EXAMPLE.md
-6. bors.tech — https://bors.tech/
-7. Zuul documentation — Project Gating — https://zuul-ci.org/docs/zuul/latest/gating.html
-8. Graphite — Merge Queue docs — https://graphite.com/docs/graphite-merge-queue
-9. Graphite — 5 problems stacked diffs address — https://graphite.com/guides/5-problems-stacked-diffs-address
-10. Aviator Documentation — Batching — https://docs.aviator.co/mergequeue/concepts/batching
-11. Aviator Blog — Merge Queues for Large Monorepos — https://www.aviator.co/blog/merge-queues-for-large-monorepos/
-12. Trunk docs — How does a merge queue work? — https://docs.trunk.io/merge-queue/how-does-it-work
-13. Mergify — What Is a Merge Queue? (concept overview) — https://mergify.com/learn/merge-queue
-14. Mergify — Managing Monorepos with a Merge Queue — https://articles.mergify.com/mergify-for-monorepos-a-game-changer-feature/
-15. Claude Code Docs — Run parallel sessions with worktrees — https://code.claude.com/docs/en/worktrees
-16. Claude Code Docs — Orchestrate teams of Claude Code sessions (agent teams) — https://code.claude.com/docs/en/agent-teams
-17. OpenHands Blog — Automating Massive Refactors with Parallel Agents — https://www.openhands.dev/blog/automating-massive-refactors-with-parallel-agents
-18. OpenHands/OpenHands GitHub Issue #5251 — Enable Multi-Agent System (MAS) — https://github.com/OpenHands/OpenHands/issues/5251
-19. OpenHands: An Open Platform for AI Software Developers (arXiv:2407.16741) — https://arxiv.org/pdf/2407.16741
-20. SWE-agent documentation / background — https://swe-agent.com/latest/background/
-21. Cursor Forum — Parallel agents do not properly merge back changes (#150279) — https://forum.cursor.com/t/parallel-agents-do-not-properly-merge-back-changes-when-working-on-subfolders-of-git-repo/150279
-22. AgentMarketCap — The Multi-Agent February (Devin/MultiDevin) — https://agentmarketcap.ai/blog/2026/04/10/devin-parallel-sessions-multi-agent-concurrency
-23. Cognition — Devin can now Manage Devins — https://cognition.ai/blog/devin-can-now-manage-devins
-24. MAGIS: LLM-Based Multi-Agent Framework for GitHub Issue Resolution (arXiv:2403.17927) — https://arxiv.org/pdf/2403.17927
-25. Effective Strategies for Asynchronous Software Engineering Agents / CAID (arXiv:2603.21489) — https://arxiv.org/abs/2603.21489
-26. AgenticFlict: A Large-Scale Dataset of Merge Conflicts in AI Coding Agent PRs (arXiv:2604.03551) — https://arxiv.org/html/2604.03551v1
-27. Dissecting the SWE-Bench Leaderboards (arXiv:2506.17208) — https://arxiv.org/pdf/2506.17208
-28. AutoGen/AG2 GitHub Discussion #7144 — https://github.com/microsoft/autogen/discussions/7144
-29. CrewAI Community — Running multi agents in parallel — https://community.crewai.com/t/running-multi-agents-in-parallel/4177
-30. Parallel Agents ❤️ Sapling (ezyang's blog) — https://blog.ezyang.com/2026/03/parallel-agents-heart-sapling/
-31. Augment Code — How to Use Git Worktrees for Parallel AI Agent Execution — https://www.augmentcode.com/guides/git-worktrees-parallel-ai-agent-execution
-32. Augment Code — How to Build a Multi-Agent AI System for Code Development — https://www.augmentcode.com/guides/multi-agent-ai-system-code-development
-33. Zylos Research — Git Worktree Isolation Patterns for Parallel AI Agent Development — https://zylos.ai/research/2026-02-22-git-worktree-parallel-ai-development/
-34. MindStudio — Parallel Agentic Development With Git Worktrees — https://www.mindstudio.ai/blog/parallel-agentic-development-git-worktrees
-35. MindStudio — Git Worktrees for AI Coding: How to Run Multiple Agents Without Conflicts — https://www.mindstudio.ai/blog/git-worktrees-parallel-ai-coding-agents
-36. git-spice — https://abhinav.github.io/git-spice/
-37. GitHub Stacked PRs (gh-stack) — Overview & Workflows — https://github.github.com/gh-stack/introduction/overview/
-38. Addy Osmani — The Code Agent Orchestra — https://addyosmani.com/blog/code-agent-orchestra/
-39. Parallel Code blog — Git Worktree Isolation Patterns for Parallel AI Agents — https://parallelcode.app/blog/parallel-ai-agents/
-40. When Parallelism Pays Off: Cohesion-Aware Task Partitioning / Co-Coder (arXiv:2606.00953) — https://arxiv.org/abs/2606.00953
-41. CodeTeam: An LLM-Powered Multi-Agent Framework for Repository-Level Code Generation (arXiv:2606.22082) — https://arxiv.org/abs/2606.22082
-42. MASAI: Modular Architecture for Software-engineering AI Agents (arXiv:2406.11638) — https://arxiv.org/abs/2406.11638
-43. Bazel — Visibility — https://bazel.build/concepts/visibility
-44. Safe program merges at scale (Microsoft Research) — https://www.microsoft.com/en-us/research/blog/safe-program-merges-at-scale-a-grand-challenge-for-program-repair-research/
-45. Sourcegraph — Git vs Perforce: Key Differences and When to Use Each — https://sourcegraph.com/blog/perforce-vs-git
-46. MergeBERT: Program Merge Conflict Resolution via Neural Transformers (arXiv:2109.00084) — https://arxiv.org/abs/2109.00084
-47. DeepMerge: Learning to Merge Programs (arXiv:2105.07569) — https://arxiv.org/abs/2105.07569
-48. Merge-Bench: Resolve Merge Conflicts with Large Language Models (arXiv:2605.25890) — https://arxiv.org/abs/2605.25890
-49. benedikt-schesch/Merge-Bench (GitHub) — https://github.com/benedikt-schesch/Merge-Bench
-50. CONGRA: Benchmarking Automatic Conflict Resolution (arXiv:2409.14121) — https://arxiv.org/abs/2409.14121
-51. LLM-based vs. Search-based Merge Conflict Resolution (arXiv:2605.16646) — https://arxiv.org/abs/2605.16646
-52. Rover: Context-aware Conflict Resolution with LLM (arXiv:2605.17279) — https://arxiv.org/abs/2605.17279
-53. Mergiraf — Introduction — https://mergiraf.org/
-54. Mergiraf: syntax-aware merging for Git [LWN.net] — https://lwn.net/Articles/1042355/
-55. A Novel Refactoring and Semantic Aware AST Differencing Tool (GumTree context) — https://arxiv.org/pdf/2403.05939
-56. Pointers on abstract syntax tree differencing algorithms and tools — https://www.monperrus.net/martin/tree-differencing
-57. jj/docs — Conflicts (Jujutsu docs site) — https://docs.jj-vcs.dev/latest/conflicts/
-58. jj-vcs/jj — docs/conflicts.md (GitHub) — https://github.com/jj-vcs/jj/blob/main/docs/conflicts.md
-59. Slava Kurilyak — Use Jujutsu, Not Git — https://slavakurilyak.com/posts/use-jujutsu-not-git
-60. agentjj — Version Control for AI Agents (2389-research/agentjj) — https://github.com/2389-research/agentjj
-61. geirsson.com — Operate a local autonomous GitHub with jj workspaces — https://geirsson.com/jj-workspaces
-62. Engineering at Meta — Branching in a Sapling Monorepo — https://engineering.fb.com/2025/10/16/developer-tools/branching-in-a-sapling-monorepo/
-63. Pijul Manual — Why Pijul — https://pijul.org/manual/why_pijul.html
-64. Theory of the Pijul Version Control System (theory.md) — https://github.com/bitemyapp/Pijul/blob/master/theory.md
-65. CACM — Why Google Stores Billions of Lines of Code in a Single Repository — https://cacm.acm.org/research/why-google-stores-billions-of-lines-of-code-in-a-single-repository/
-66. extreg.com mirror — Google's ultra-large-scale monolithic source code repository — https://www.extreg.com/blog/2017/02/googles-ultra-large-scale-monolithic-source-code-repository/
-67. Clash — https://clash.sh/
-68. clash-sh/clash (GitHub) — https://github.com/clash-sh/clash
-69. AI Agent Pull Requests on GitHub: Frequency, Structure, and Merge Conflict Rates (arXiv:2607.04697) — https://arxiv.org/abs/2607.04697
-70. What Breaks When LLMs Code? Characterizing Operational Safety Failures (arXiv:2605.30777) — https://arxiv.org/abs/2605.30777
-71. VS Code docs — AI smart actions (Copilot merge-conflict resolution) — https://code.visualstudio.com/docs/editing/copilot-smart-actions
-72. InfoWorld — Visual Studio Code taps AI for merge conflict resolution — https://www.infoworld.com/article/4075822/visual-studio-code-taps-ai-for-merge-conflict-resolution.html
-73. JetBrains YouTrack — AI git merge conflict resolution (LLM-550) — https://youtrack.jetbrains.com/issue/LLM-550/AI-git-merge-conflict-resolution
-74. LWN.net — LLMinus: LLM-Assisted Merge Conflict Resolution — https://lwn.net/Articles/1053714/
-75. lkml — [RFC v2 0/7] LLMinus — https://lkml.iu.edu/2601.1/06258.html
-76. dortort.com — Monorepo vs Multi-Repo: Why AI Agents Tip the Scale — https://dortort.com/posts/monorepo-vs-multi-repo-why-ai-agents-tip-the-scale/
+1. GitHub Docs — Managing a merge queue — <https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/configuring-pull-request-merges/managing-a-merge-queue>
+2. Mergify — Merge Queue docs — <https://docs.mergify.com/merge-queue/>
+3. Mergify — Merge Queue Batches docs — <https://docs.mergify.com/merge-queue/batches/>
+4. bors-ng README (GitHub) — <https://github.com/bors-ng/bors-ng>
+5. bors-ng FLOW_EXAMPLE.md — <https://github.com/bors-ng/bors-ng/blob/master/FLOW_EXAMPLE.md>
+6. bors.tech — <https://bors.tech/>
+7. Zuul documentation — Project Gating — <https://zuul-ci.org/docs/zuul/latest/gating.html>
+8. Graphite — Merge Queue docs — <https://graphite.com/docs/graphite-merge-queue>
+9. Graphite — 5 problems stacked diffs address — <https://graphite.com/guides/5-problems-stacked-diffs-address>
+10. Aviator Documentation — Batching — <https://docs.aviator.co/mergequeue/concepts/batching>
+11. Aviator Blog — Merge Queues for Large Monorepos — <https://www.aviator.co/blog/merge-queues-for-large-monorepos/>
+12. Trunk docs — How does a merge queue work? — <https://docs.trunk.io/merge-queue/how-does-it-work>
+13. Mergify — What Is a Merge Queue? (concept overview) — <https://mergify.com/learn/merge-queue>
+14. Mergify — Managing Monorepos with a Merge Queue — <https://articles.mergify.com/mergify-for-monorepos-a-game-changer-feature/>
+15. Claude Code Docs — Run parallel sessions with worktrees — <https://code.claude.com/docs/en/worktrees>
+16. Claude Code Docs — Orchestrate teams of Claude Code sessions (agent teams) — <https://code.claude.com/docs/en/agent-teams>
+17. OpenHands Blog — Automating Massive Refactors with Parallel Agents — <https://www.openhands.dev/blog/automating-massive-refactors-with-parallel-agents>
+18. OpenHands/OpenHands GitHub Issue #5251 — Enable Multi-Agent System (MAS) — <https://github.com/OpenHands/OpenHands/issues/5251>
+19. OpenHands: An Open Platform for AI Software Developers (arXiv:2407.16741) — <https://arxiv.org/pdf/2407.16741>
+20. SWE-agent documentation / background — <https://swe-agent.com/latest/background/>
+21. Cursor Forum — Parallel agents do not properly merge back changes (#150279) — <https://forum.cursor.com/t/parallel-agents-do-not-properly-merge-back-changes-when-working-on-subfolders-of-git-repo/150279>
+22. AgentMarketCap — The Multi-Agent February (Devin/MultiDevin) — <https://agentmarketcap.ai/blog/2026/04/10/devin-parallel-sessions-multi-agent-concurrency>
+23. Cognition — Devin can now Manage Devins — <https://cognition.ai/blog/devin-can-now-manage-devins>
+24. MAGIS: LLM-Based Multi-Agent Framework for GitHub Issue Resolution (arXiv:2403.17927) — <https://arxiv.org/pdf/2403.17927>
+25. Effective Strategies for Asynchronous Software Engineering Agents / CAID (arXiv:2603.21489) — <https://arxiv.org/abs/2603.21489>
+26. AgenticFlict: A Large-Scale Dataset of Merge Conflicts in AI Coding Agent PRs (arXiv:2604.03551) — <https://arxiv.org/html/2604.03551v1>
+27. Dissecting the SWE-Bench Leaderboards (arXiv:2506.17208) — <https://arxiv.org/pdf/2506.17208>
+28. AutoGen/AG2 GitHub Discussion #7144 — <https://github.com/microsoft/autogen/discussions/7144>
+29. CrewAI Community — Running multi agents in parallel — <https://community.crewai.com/t/running-multi-agents-in-parallel/4177>
+30. Parallel Agents ❤️ Sapling (ezyang's blog) — <https://blog.ezyang.com/2026/03/parallel-agents-heart-sapling/>
+31. Augment Code — How to Use Git Worktrees for Parallel AI Agent Execution — <https://www.augmentcode.com/guides/git-worktrees-parallel-ai-agent-execution>
+32. Augment Code — How to Build a Multi-Agent AI System for Code Development — <https://www.augmentcode.com/guides/multi-agent-ai-system-code-development>
+33. Zylos Research — Git Worktree Isolation Patterns for Parallel AI Agent Development — <https://zylos.ai/research/2026-02-22-git-worktree-parallel-ai-development/>
+34. MindStudio — Parallel Agentic Development With Git Worktrees — <https://www.mindstudio.ai/blog/parallel-agentic-development-git-worktrees>
+35. MindStudio — Git Worktrees for AI Coding: How to Run Multiple Agents Without Conflicts — <https://www.mindstudio.ai/blog/git-worktrees-parallel-ai-coding-agents>
+36. git-spice — <https://abhinav.github.io/git-spice/>
+37. GitHub Stacked PRs (gh-stack) — Overview & Workflows — <https://github.github.com/gh-stack/introduction/overview/>
+38. Addy Osmani — The Code Agent Orchestra — <https://addyosmani.com/blog/code-agent-orchestra/>
+39. Parallel Code blog — Git Worktree Isolation Patterns for Parallel AI Agents — <https://parallelcode.app/blog/parallel-ai-agents/>
+40. When Parallelism Pays Off: Cohesion-Aware Task Partitioning / Co-Coder (arXiv:2606.00953) — <https://arxiv.org/abs/2606.00953>
+41. CodeTeam: An LLM-Powered Multi-Agent Framework for Repository-Level Code Generation (arXiv:2606.22082) — <https://arxiv.org/abs/2606.22082>
+42. MASAI: Modular Architecture for Software-engineering AI Agents (arXiv:2406.11638) — <https://arxiv.org/abs/2406.11638>
+43. Bazel — Visibility — <https://bazel.build/concepts/visibility>
+44. Safe program merges at scale (Microsoft Research) — <https://www.microsoft.com/en-us/research/blog/safe-program-merges-at-scale-a-grand-challenge-for-program-repair-research/>
+45. Sourcegraph — Git vs Perforce: Key Differences and When to Use Each — <https://sourcegraph.com/blog/perforce-vs-git>
+46. MergeBERT: Program Merge Conflict Resolution via Neural Transformers (arXiv:2109.00084) — <https://arxiv.org/abs/2109.00084>
+47. DeepMerge: Learning to Merge Programs (arXiv:2105.07569) — <https://arxiv.org/abs/2105.07569>
+48. Merge-Bench: Resolve Merge Conflicts with Large Language Models (arXiv:2605.25890) — <https://arxiv.org/abs/2605.25890>
+49. benedikt-schesch/Merge-Bench (GitHub) — <https://github.com/benedikt-schesch/Merge-Bench>
+50. CONGRA: Benchmarking Automatic Conflict Resolution (arXiv:2409.14121) — <https://arxiv.org/abs/2409.14121>
+51. LLM-based vs. Search-based Merge Conflict Resolution (arXiv:2605.16646) — <https://arxiv.org/abs/2605.16646>
+52. Rover: Context-aware Conflict Resolution with LLM (arXiv:2605.17279) — <https://arxiv.org/abs/2605.17279>
+53. Mergiraf — Introduction — <https://mergiraf.org/>
+54. Mergiraf: syntax-aware merging for Git [LWN.net] — <https://lwn.net/Articles/1042355/>
+55. A Novel Refactoring and Semantic Aware AST Differencing Tool (GumTree context) — <https://arxiv.org/pdf/2403.05939>
+56. Pointers on abstract syntax tree differencing algorithms and tools — <https://www.monperrus.net/martin/tree-differencing>
+57. jj/docs — Conflicts (Jujutsu docs site) — <https://docs.jj-vcs.dev/latest/conflicts/>
+58. jj-vcs/jj — docs/conflicts.md (GitHub) — <https://github.com/jj-vcs/jj/blob/main/docs/conflicts.md>
+59. Slava Kurilyak — Use Jujutsu, Not Git — <https://slavakurilyak.com/posts/use-jujutsu-not-git>
+60. agentjj — Version Control for AI Agents (2389-research/agentjj) — <https://github.com/2389-research/agentjj>
+61. geirsson.com — Operate a local autonomous GitHub with jj workspaces — <https://geirsson.com/jj-workspaces>
+62. Engineering at Meta — Branching in a Sapling Monorepo — <https://engineering.fb.com/2025/10/16/developer-tools/branching-in-a-sapling-monorepo/>
+63. Pijul Manual — Why Pijul — <https://pijul.org/manual/why_pijul.html>
+64. Theory of the Pijul Version Control System (theory.md) — <https://github.com/bitemyapp/Pijul/blob/master/theory.md>
+65. CACM — Why Google Stores Billions of Lines of Code in a Single Repository — <https://cacm.acm.org/research/why-google-stores-billions-of-lines-of-code-in-a-single-repository/>
+66. extreg.com mirror — Google's ultra-large-scale monolithic source code repository — <https://www.extreg.com/blog/2017/02/googles-ultra-large-scale-monolithic-source-code-repository/>
+67. Clash — <https://clash.sh/>
+68. clash-sh/clash (GitHub) — <https://github.com/clash-sh/clash>
+69. AI Agent Pull Requests on GitHub: Frequency, Structure, and Merge Conflict Rates (arXiv:2607.04697) — <https://arxiv.org/abs/2607.04697>
+70. What Breaks When LLMs Code? Characterizing Operational Safety Failures (arXiv:2605.30777) — <https://arxiv.org/abs/2605.30777>
+71. VS Code docs — AI smart actions (Copilot merge-conflict resolution) — <https://code.visualstudio.com/docs/editing/copilot-smart-actions>
+72. InfoWorld — Visual Studio Code taps AI for merge conflict resolution — <https://www.infoworld.com/article/4075822/visual-studio-code-taps-ai-for-merge-conflict-resolution.html>
+73. JetBrains YouTrack — AI git merge conflict resolution (LLM-550) — <https://youtrack.jetbrains.com/issue/LLM-550/AI-git-merge-conflict-resolution>
+74. LWN.net — LLMinus: LLM-Assisted Merge Conflict Resolution — <https://lwn.net/Articles/1053714/>
+75. lkml — [RFC v2 0/7] LLMinus — <https://lkml.iu.edu/2601.1/06258.html>
+76. dortort.com — Monorepo vs Multi-Repo: Why AI Agents Tip the Scale — <https://dortort.com/posts/monorepo-vs-multi-repo-why-ai-agents-tip-the-scale/>
 
 **Forge-internal references (not external sources, cited for grounding):**
 - ADR 006 — gh CLI + git worktrees + GitHub Actions — `docs/decisions/006-gh-cli-and-worktrees.md`
