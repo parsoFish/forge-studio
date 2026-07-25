@@ -30,7 +30,7 @@ number (next free: **040**).
 | [022](./022-real-capability-harness.md) | Real-capability regression harness | The cutover oracle for ADR 028 |
 | [024](./024-phases-as-subagents-invoking-skills.md) | Phases are agents composing skills | The foundation of ADR 027/028 |
 | [025](./025-live-observability.md) | Live cost/tokens via SDK stream | Adapter-uniform under ADR 029 |
-| [026](./026-review-unifier-wi-list.md) | Review feedback as unifier WIs (one cycle) | The general gate send-back |
+| [026](./026-review-unifier-wi-list.md) | Review feedback as unifier WIs (one cycle) | Superseded by ADR 040 (one-cycle + rigor invariants live on there) |
 | [027](./027-studio-object-model.md) | Studio object model: definitions as data | The object-model authority |
 | [028](./028-flow-engine.md) | Definition-driven flow engine | The flow execution engine |
 | [029](./029-runtime-adapters.md) | Runtime adapter seam (multi-SDK) | The runtime swap seam |
@@ -44,6 +44,7 @@ number (next free: **040**).
 | [037](./037-compiled-wi-contracts.md) | Compiled work-item contracts (wi-spec-compiler) | Proposed — deterministic-first compiler stage at the PM seam, closing ADR 010's brain-encoding gap |
 | [038](./038-north-star-platform-and-ootb.md) | North-star reframe: platform (Scope 1) vs. shipped ideas machine (Scope 2 OOTB) | The mission statement every orientation doc points at |
 | [039](./039-ships-as-artifact.md) | Ships-as-artifact: every OOTB agent/flow is Scope-2 data on the runnable primitive | The R4-01 dispatch-seam design (executor enum → generic `runAgent`) |
+| [040](./040-review-send-back-develop-loop.md) | Review send-back re-dispatches the develop agent (initiative WI queue, config caps, merge-wins) | The ADR-026 successor — R4-08-F2 send-back loop |
 
 ## Retired / folded (numbers stay reserved)
 
