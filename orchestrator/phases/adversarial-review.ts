@@ -48,6 +48,7 @@ import {
   REVIEW_FINDINGS_FILENAME,
   REVIEW_INPUT_REL_DIR,
 } from './adversarial-review-binding.ts';
+import { takeScopeSnapshot, scopeViolations } from './agent-scope-guard.ts';
 
 const AGENT_SLUG = 'adversarial-review';
 const BASE_REF = 'main';
@@ -98,6 +99,11 @@ export function assertAdversarialReviewDeclaration(def: {
       'adversarial-review SKILL.md must not grant Edit — the reviewer judges and never edits; fixes are the develop agent\'s job (R4-08-F2)',
     );
   }
+  if (def.allowedTools.includes('Bash')) {
+    throw new Error(
+      'adversarial-review SKILL.md must not grant Bash — arbitrary execution defeats the mechanical scope guard and the judges-never-runs posture (ADR-036)',
+    );
+  }
 }
 
 function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: string; err: string } {
@@ -109,20 +115,6 @@ function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: s
     const stderr = err.stderr ? (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString('utf8')) : (err.message ?? '');
     return { ok: false, out: '', err: stderr.slice(-500) };
   }
-}
-
-function gitDirtPaths(worktreePath: string): Set<string> {
-  const res = gitCapture(worktreePath, ['status', '--porcelain']);
-  const paths = new Set<string>();
-  if (!res.ok) return paths;
-  for (const line of res.out.split('\n')) {
-    if (!line.trim()) continue;
-    let p = line.slice(3);
-    const arrow = p.indexOf(' -> ');
-    if (arrow !== -1) p = p.slice(arrow + 4);
-    paths.add(p.replace(/^"|"$/g, ''));
-  }
-  return paths;
 }
 
 export async function runAdversarialReview(
@@ -166,8 +158,11 @@ export async function runAdversarialReview(
   const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', `${BASE_REF}...HEAD`]);
   const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
   if (!diff.ok || !diffStat.ok || !changedFilesRes.ok || !headShaRes.ok) {
-    const detail = `git derivation failed: ${[diff, diffStat, changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
-    emit('review.derive.failed', { detail }, { event_type: 'error' });
+    const detail = `git derivation error: ${[diff, diffStat, changedFilesRes, headShaRes].filter((r) => !r.ok).map((r) => r.err).join(' ')}`.trim();
+    // Event name deliberately avoids the 'review'+'failed' substring pair —
+    // failure-classifier.ts's reviewer signature would misclassify it as a
+    // terminal reviewer-convergence failure (adversarial review finding #12).
+    emit('review.input.derive-error', { detail }, { event_type: 'error' });
     return { status: 'failed', reason: 'derive-failed', detail };
   }
   const headSha = headShaRes.out.trim();
@@ -179,51 +174,8 @@ export async function runAdversarialReview(
   writeFileSync(join(inputDirAbs, 'changed-files.txt'), changedFiles.join('\n') + '\n');
   emit('review.input.assembled', { changed_files: changedFiles.length, head_sha: headSha, base_ref: BASE_REF });
 
-  // Band 2 — briefing inputs from develop output + the demo's AC-proof.
-  const wiDir = join(input.worktreePath, '.forge', 'work-items');
-  const workItems: Array<{ id: string; title: string; status: string }> = [];
-  const acceptanceCriteria: string[] = [];
-  if (existsSync(wiDir)) {
-    const { items, parseErrors } = readWorkItemsFromDir(wiDir);
-    if (Object.keys(parseErrors).length > 0) {
-      emit('review.input.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
-    }
-    for (const wi of items) {
-      workItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
-      for (const ac of wi.acceptance_criteria) {
-        acceptanceCriteria.push(`(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
-      }
-    }
-  }
-  const acEvaluations = readDemoAcEvaluations(input.worktreePath, input.initiativeId, emit);
-  const brainContext: Array<{ path: string; content: string }> = [];
-  if (input.projectName) {
-    const profileAbs = join(projectBrainDir(input.forgeRoot ?? FORGE_ROOT, input.projectName), 'profile.md');
-    if (existsSync(profileAbs)) {
-      try {
-        brainContext.push({ path: `brain/projects/${input.projectName}/profile.md`, content: readFileSync(profileAbs, 'utf8') });
-      } catch {
-        /* advisory only — skip unreadable */
-      }
-    }
-  }
-
-  const basePrompt = renderAdversarialReviewUserPrompt({
-    initiativeId: input.initiativeId,
-    cycleId: input.cycleId,
-    baseRef: BASE_REF,
-    headSha,
-    acceptanceCriteria,
-    workItems,
-    changedFiles,
-    acEvaluations,
-    brainContext,
-  });
-  const systemPrompt = buildAdversarialReviewSystemPrompt();
   const findingsAbs = join(input.worktreePath, '.forge', REVIEW_FINDINGS_FILENAME);
   const findingsRel = `.forge/${REVIEW_FINDINGS_FILENAME}`;
-  const preSpawnDirt = gitDirtPaths(input.worktreePath);
-
   const scrub = (): void => {
     try {
       if (existsSync(findingsAbs)) unlinkSync(findingsAbs);
@@ -233,8 +185,61 @@ export async function runAdversarialReview(
     }
   };
 
+  // Everything from here is scrub-covered — a throw anywhere below must never
+  // strand .forge/review-input/ or a findings copy untracked in the worktree.
   let lastErrors: string[] = [];
   try {
+    // Band 2 — briefing inputs from develop output + the demo's AC-proof.
+    const wiDir = join(input.worktreePath, '.forge', 'work-items');
+    const workItems: Array<{ id: string; title: string; status: string }> = [];
+    const acceptanceCriteria: string[] = [];
+    if (existsSync(wiDir)) {
+      const { items, parseErrors } = readWorkItemsFromDir(wiDir);
+      if (Object.keys(parseErrors).length > 0) {
+        emit('review.input.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
+      }
+      for (const wi of items) {
+        workItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
+        for (const ac of wi.acceptance_criteria) {
+          acceptanceCriteria.push(`(${wi.work_item_id}) GIVEN ${ac.given.trim()} WHEN ${ac.when.trim()} THEN ${ac.then.trim()}`);
+        }
+      }
+    }
+    const acEvaluations = readDemoAcEvaluations(input.worktreePath, input.initiativeId, emit);
+    const brainContext: Array<{ path: string; content: string }> = [];
+    if (input.projectName) {
+      const profileAbs = join(projectBrainDir(input.forgeRoot ?? FORGE_ROOT, input.projectName), 'profile.md');
+      if (existsSync(profileAbs)) {
+        try {
+          brainContext.push({ path: `brain/projects/${input.projectName}/profile.md`, content: readFileSync(profileAbs, 'utf8') });
+        } catch {
+          /* advisory only — skip unreadable */
+        }
+      }
+    }
+
+    const basePrompt = renderAdversarialReviewUserPrompt({
+      initiativeId: input.initiativeId,
+      cycleId: input.cycleId,
+      baseRef: BASE_REF,
+      headSha,
+      acceptanceCriteria,
+      workItems,
+      changedFiles,
+      acEvaluations,
+      brainContext,
+    });
+    const systemPrompt = buildAdversarialReviewSystemPrompt();
+
+    // Guard integrity fails LOUD in both directions (finding #1): a failed
+    // pre-snapshot must not blame the agent for orchestrator files, and a
+    // failed post-snapshot must not silently bypass the guard.
+    const preSnap = takeScopeSnapshot(input.worktreePath);
+    if (!preSnap.ok) {
+      emit('review.scope-guard-degraded', { when: 'pre-spawn', error: preSnap.error }, { event_type: 'error' });
+      return { status: 'failed', reason: 'derive-failed', detail: `scope-guard pre-snapshot unavailable: ${preSnap.error}` };
+    }
+
     for (let attempt = 1; attempt <= MAX_AUTHOR_ATTEMPTS; attempt += 1) {
       if (existsSync(findingsAbs)) unlinkSync(findingsAbs); // fresh attempt = fresh judgment
       const prompt =
@@ -258,12 +263,17 @@ export async function runAdversarialReview(
         });
       } catch (err) {
         const detail = err instanceof Error ? err.message : String(err);
-        emit('review.spawn.failed', { detail, attempt }, { event_type: 'error' });
+        // 'spawn-error' (not '…failed') — the failure-classifier's reviewer
+        // signature matches 'review'+'failed' substrings (finding #12).
+        emit('review.spawn-error', { detail, attempt }, { event_type: 'error' });
         return { status: 'failed', reason: 'spawn-failed', detail };
       }
       emit('review.agent-pass', { attempt, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
 
-      if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+      // Only budget/turn kills are exhaustion; other error_* subtypes (e.g.
+      // error_during_execution) are spawn failures — telling the operator to
+      // raise budgets for those is a misdiagnosis (finding #3).
+      if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_max_')) {
         emit('review.budget-exhausted', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
         return {
           status: 'failed',
@@ -271,14 +281,25 @@ export async function runAdversarialReview(
           detail: `adversarial-review spawn terminated by the SDK (${spawn.resultSubtype}) — raise the declared budgets or shrink the diff before re-running`,
         };
       }
+      if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+        emit('review.spawn-error', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
+        return {
+          status: 'failed',
+          reason: 'spawn-failed',
+          detail: `adversarial-review spawn ended with SDK subtype ${spawn.resultSubtype} (execution failure, not a budget kill)`,
+        };
+      }
 
       // Mechanical scope guard: the reviewer's only legal write is the
-      // findings file (review-input was pipeline-written pre-snapshot).
-      const inScope = (raw: string): boolean => {
-        const p = raw.replace(/\/$/, '');
-        return p === findingsRel || findingsRel.startsWith(p + '/');
-      };
-      const newDirt = [...gitDirtPaths(input.worktreePath)].filter((p) => !preSpawnDirt.has(p) && !inScope(p));
+      // findings file (review-input was pipeline-written pre-snapshot; the
+      // snapshot layers cover untracked-dir collapse + gitignored .forge —
+      // agent-scope-guard.ts).
+      const postSnap = takeScopeSnapshot(input.worktreePath);
+      if (!postSnap.ok) {
+        emit('review.scope-guard-degraded', { when: 'post-spawn', error: postSnap.error }, { event_type: 'error' });
+        return { status: 'failed', reason: 'derive-failed', detail: `scope-guard post-snapshot unavailable: ${postSnap.error}` };
+      }
+      const newDirt = scopeViolations(preSnap, postSnap, (p) => p === findingsRel);
       if (newDirt.length > 0) {
         emit('review.scope-violation', { paths: newDirt }, { event_type: 'error' });
         return {

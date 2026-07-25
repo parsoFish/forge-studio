@@ -137,7 +137,7 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 9-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 10-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

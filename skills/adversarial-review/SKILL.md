@@ -118,6 +118,11 @@ be catastrophic if true is still `blocker` — put the uncertainty in the
   finding.
 - Cite the real file and line in the worktree, never the diff hunk header
   (`@@ -12,7 +12,9 @@` is not a citation).
+- **Never quote secret material in an excerpt.** Your findings persist as a
+  durable artifact rendered in the operator UI: if the evidence line contains
+  a credential, token, key, or connection string (`.env` values, PATs, secret
+  config), cite the `file:line` and DESCRIBE the value (`"a hardcoded ADO PAT"`)
+  — the excerpt field stays redacted.
 - Adversarial does not mean nitpicky. Reserve `blocker`/`major` for
   correctness and regression-risk findings. Do not pad the findings list with
   style notes to look thorough — a short, honest list beats a long, padded

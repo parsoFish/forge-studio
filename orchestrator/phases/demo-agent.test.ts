@@ -600,6 +600,7 @@ test('assertDemoAgentDeclaration: each missing declared guard throws with the ve
   assert.throws(() => assertDemoAgentDeclaration({ ...base, budgets: { maxBudgetUsd: 1 } }), /maxTurns/);
   assert.throws(() => assertDemoAgentDeclaration({ ...base, budgets: { maxTurns: 10 } }), /silent-spend/);
   assert.throws(() => assertDemoAgentDeclaration({ ...base, composition: { skills: [] } }), /composition\.skills/);
+  assert.throws(() => assertDemoAgentDeclaration({ ...base, allowedTools: ['Read', 'Bash'] }), /scope guard/);
 });
 
 test('spawn suppression (no queryFn under FORGE_ARCHITECT_NO_SPAWN): failed/spawn-suppressed, never fake', async () => {

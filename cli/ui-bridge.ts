@@ -875,6 +875,14 @@ async function handleHttp(
       sendJson(res, 400, { error: 'cycleId and filename are required' }, origin);
       return;
     }
+    // The startsWith(safeBase) check below builds safeBase from the SAME
+    // cycleId, so a traversal INSIDE cycleId (e.g. '..') normalises into both
+    // sides identically and passes it — validate the segment itself
+    // (2026-07-24 adversarial review; same predicate as isSafeRunId).
+    if (!/^[A-Za-z0-9._-]+$/.test(cycleId) || cycleId.includes('..')) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return;
+    }
     const requested = join(ctx.logsRoot, cycleId, 'artifacts', filename);
     const safeBase = join(ctx.logsRoot, cycleId, 'artifacts') + sep;
     if (!requested.startsWith(safeBase)) {

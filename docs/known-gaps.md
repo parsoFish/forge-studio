@@ -463,9 +463,20 @@ R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred 
   allowlist cannot be applied wholesale without breaking them. Hardening = a per-project capture-env
   allowlist declared in `testProcess`/`demoProcess` config. *Re-entry:* first non-betterado live-capture
   project onboarding, or a security pass over the capture seam (adversarial review 2026-07-24, #8).
-- **The demo-agent's Write/Edit scope is enforced post-hoc, not sandboxed** — the pipeline's mechanical
-  scope guard (`demo.scope-violation`, pre/post `git status --porcelain` diff) catches out-of-demo-dir
-  writes after the spawn; a true FS sandbox per agent tool-call remains platform work (R2-06 territory).
+- **One-shot agent write scope is enforced post-hoc, not sandboxed** (demo-agent AND
+  adversarial-review) — the shared `orchestrator/phases/agent-scope-guard.ts` (porcelain `-uall` +
+  a `.forge/` size:mtime walk; fail-loud on git errors) catches out-of-scope writes after the spawn;
+  the SDK spawn itself has no path-scoped Write (`permissionMode: 'acceptEdits'`, no `canUseTool`
+  hook) — a true FS sandbox per agent tool-call remains platform work (R2-06 territory).
+  **Accepted residuals (adversarial review 2026-07-25):** overwrites of pre-existing untracked files
+  OUTSIDE `.forge/` (path present in both snapshots; content unhashed) and writes under other
+  gitignored trees (e.g. `node_modules`) — neither reaches the PR branch or forge runtime config;
+  out-of-worktree absolute-path writes are invisible to the guard entirely (the sandbox is the fix).
+- **Reviewer Read scope + excerpt channel** — the adversarial-review agent has unscoped Read over
+  worktrees that can contain live credentials (betterado `secrets.env` class), and its findings
+  excerpts persist into a UI-rendered artifact. Mitigated by a SKILL.md redaction rule
+  (describe-don't-quote for secret material) — prompt-level only; structural redaction (a
+  secret-pattern scrub at harvest) is a cheap future hardening if a real leak is ever observed.
 
 ## Strengths worth preserving (don't regress these)
 

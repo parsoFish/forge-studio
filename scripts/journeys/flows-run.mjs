@@ -1064,6 +1064,20 @@ export const journey = defineJourney({
               await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'completed develop slice shows its phase hexes (unifier+review)');
               await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'completed develop slice shows the dev fan-out (≥2 WI hexes)');
               await expectPhaseCost(page, 'completed develop slice shows accrued per-phase cost');
+              // R4-08-F3: the view-mode verdict now renders the REAL decision (the
+              // verdictRecordToDoc mapper — before it, every verdict stamped
+              // "Approved" regardless of kind) plus the findings panel.
+              await page.goto(`${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=verdict&mode=view`, { waitUntil: 'domcontentloaded' });
+              await page.waitForSelector('[data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
+              check(
+                await page.locator('[data-verdict-decision="approve"]').count() > 0,
+                'view-mode verdict stamps the REAL decision (data-verdict-decision="approve")',
+              );
+              check(
+                await page.locator('[data-section="review-findings"]').count() > 0,
+                'view-mode verdict keeps the adversarial findings visible beside the stamp',
+              );
+              await frame(page, 'r4-4d-verdict-view', 'R4-08 — the durable verdict record: real decision stamp + the critique that informed it');
               // The SAME threaded run renders its architect slice under forge-architect
               // (flowLineage) — Model B proof. (The reflect slice is verified at R5, once the
               // reflection phase has actually run.)

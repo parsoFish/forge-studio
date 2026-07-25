@@ -318,7 +318,7 @@ test('spawn suppression: failed/spawn-suppressed, never a fake review', async ()
   }
 });
 
-test('assertAdversarialReviewDeclaration: budget guards + no-Edit guard throw with vectors named', () => {
+test('assertAdversarialReviewDeclaration: budget guards + no-Edit/no-Bash guards throw with vectors named', () => {
   const base = { budgets: { maxTurns: 10, maxBudgetUsd: 1 }, allowedTools: ['Read', 'Grep', 'Glob', 'Write'] };
   assert.doesNotThrow(() => assertAdversarialReviewDeclaration(base));
   assert.throws(() => assertAdversarialReviewDeclaration({ ...base, budgets: { maxBudgetUsd: 1 } }), /maxTurns/);
@@ -327,4 +327,56 @@ test('assertAdversarialReviewDeclaration: budget guards + no-Edit guard throw wi
     () => assertAdversarialReviewDeclaration({ ...base, allowedTools: ['Read', 'Edit', 'Write'] }),
     /never edits/,
   );
+  assert.throws(
+    () => assertAdversarialReviewDeclaration({ ...base, allowedTools: ['Read', 'Bash', 'Write'] }),
+    /scope guard/,
+  );
+});
+
+test('gitignored .forge/: an agent write under an ignored .forge tree is still a scope-violation', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    // Make the whole .forge/ tree gitignored (the betterado/trafficGame layout
+    // that defeated the porcelain path-set guard — review finding #0).
+    writeFileSync(join(fx.worktree, '.gitignore'), '.forge/\n');
+    fx.git(['add', '.gitignore']);
+    fx.git(['commit', '-q', '-m', 'ignore .forge']);
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const qf = stubQueryFn([
+      (prompt) => {
+        writeFileSync(join(fx.worktree, '.forge', 'review-findings.json'), validFindingsJson(prompt));
+        writeFileSync(join(fx.worktree, '.forge', 'evil.md'), 'smuggled under the ignored tree');
+      },
+    ]);
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'scope-violation');
+    assert.ok((res as { detail: string }).detail.includes('.forge/evil.md'));
+    assert.ok(events.some((e) => e.message === 'review.scope-violation'));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('error_during_execution: spawn-failed, never budget-exhausted misdiagnosis', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger } = collectLogger(fx.logsRoot);
+    const qf = ((_p: { prompt: string }) => {
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', subtype: 'error_during_execution', total_cost_usd: 0.1, usage: { input_tokens: 1, output_tokens: 1 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+    const res = await run(fx, qf, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'spawn-failed');
+    assert.ok(!/raise the declared budgets/.test((res as { detail: string }).detail));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
 });
