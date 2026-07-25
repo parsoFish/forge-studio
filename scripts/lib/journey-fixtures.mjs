@@ -370,6 +370,12 @@ export function writePlan(sid, round) {
     // forge-reflect] (DEC-2). Under Model B each flow's monitor renders its OWN
     // slice, and the threaded run surfaces under all three.
     'flow_id: forge-develop',
+    // Real develop dispatch stamps the manifest's cycle_id (enqueue-develop-run);
+    // without it the bridge's applyReviewVerdict falls back to the initiative id
+    // and the durable verdict.json lands in a DIFFERENT _logs dir than the run
+    // page reads (surfaced by the R4-08-F3 view-mode beat; roadmap.mjs already
+    // seeds cycle_id the same way).
+    `cycle_id: ${CYCLE_ID}`,
     `architect_session_id: ${sid}`,
     `architect_cost_usd: ${EMULATED_ARCHITECT_COST_USD}`,
     `architect_duration_ms: ${EMULATED_ARCHITECT_DURATION_MS}`,
