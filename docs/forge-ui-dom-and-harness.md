@@ -53,6 +53,14 @@ inventory rather than one shared page-level contract:
   naming an interactive agent is rejected too (belt-and-suspenders, in
   `FlowBuilderCanvas.onDrop`), rendering
   `[data-component="canvas-drop-reject"][data-drop-reject-message]`.
+  A clicked node opens `[data-component="node-mini-panel"][data-panel-node-id]`
+  with its modifier toggles: `[data-modifier="gate"] [data-action="toggle-gate"]`
+  and (R2-03-F3) `[data-modifier="fanout"][data-fanout-capable]
+  [data-action="toggle-fanout"]` — the fanout toggle is **enabled only on a
+  fanout-capable agent** (`capability.fanoutCapable`, the same wire fact
+  `validateFlow`'s `fanout-capability` check lints), disabled + greyed
+  otherwise, and binds the node `fanOut` to the agent's declared
+  `fanout.drivingArtifact` rather than a hardcoded artifact.
   Triggers (R2-04-F4, `FlowHeader.tsx`, under Advanced): a kind selector
   `[data-field="trigger-kind"]` offers exactly the four SHIPPED kinds
   (`flow-complete | merged | cron | webhook` — a hand-kept client mirror of

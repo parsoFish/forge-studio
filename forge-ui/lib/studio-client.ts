@@ -91,6 +91,14 @@ export type AgentCapabilityDescriptor = {
   fanoutCapable: boolean;
 };
 
+/** R2-03-F2 — client mirror of the server AgentDefinition.fanout block. */
+export type AgentFanout = {
+  drivingArtifact: string;
+  isolation: string;
+  concurrencyCap?: number;
+  perItemGate?: string;
+};
+
 export type Agent = {
   id: string;
   name: string;
@@ -107,6 +115,8 @@ export type Agent = {
   allowedTools?: string[];
   disallowedTools?: string[];
   capability?: AgentCapabilityDescriptor;
+  /** R2-03-F2 — the agent's declared fanout block (drives the node fanOut binding). */
+  fanout?: AgentFanout;
 };
 
 export type FlowNode = {
@@ -526,6 +536,18 @@ export function parseCapability(raw: unknown): AgentCapabilityDescriptor | undef
   return { interactive: c.interactive, runtimeSdks: c.runtimeSdks as string[], fanoutCapable: c.fanoutCapable === true };
 }
 
+/** R2-03-F2 — carry the raw AgentDefinition.fanout block through; undefined if absent/malformed. */
+export function parseFanout(raw: unknown): AgentFanout | undefined {
+  const f = raw as Partial<AgentFanout> | undefined;
+  if (!f || typeof f.drivingArtifact !== 'string' || typeof f.isolation !== 'string') return undefined;
+  return {
+    drivingArtifact: f.drivingArtifact,
+    isolation: f.isolation,
+    ...(typeof f.concurrencyCap === 'number' ? { concurrencyCap: f.concurrencyCap } : {}),
+    ...(typeof f.perItemGate === 'string' ? { perItemGate: f.perItemGate } : {}),
+  };
+}
+
 /**
  * Map a raw AgentDefinition (server shape) to the client Agent type.
  * Server: slug, composition.{skills,tools,mcps,hooks}, body, name, purpose,
@@ -552,6 +574,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     allowedTools:   Array.isArray(r['allowedTools'])    ? (r['allowedTools']    as string[]) : [],
     disallowedTools:Array.isArray(r['disallowedTools']) ? (r['disallowedTools'] as string[]) : [],
     capability:     parseCapability(r['capability']),
+    fanout:         parseFanout(r['fanout']),
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
