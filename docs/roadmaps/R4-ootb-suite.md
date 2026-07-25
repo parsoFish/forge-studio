@@ -751,7 +751,46 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-09 Reflect agent
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **implemented (F1/F2/F4/F5)** (2026-07-25, wave-4 session 5,
+  branch `feat/r4-09-reflect-agent`) · **F3 deferred**  ·  **Wave:** 4
+- **Implemented-notes (2026-07-25):**
+  - **F1 — built.** forge-develop's `on: merged` trigger re-pointed from the
+    single-node forge-reflect flow wrapper to the reflect **agent** target
+    (`{kind: agent, ref: reflector}`), consuming R2-04/ADR-041's agent-target
+    seam with no schema change. `orchestrator/finalize-merged.ts` resolves it
+    via the agent's `reflection-close` band hook (`resolveMergeAgentHandler`) —
+    registry-driven, no hardcoded slug — and the pre-R4-09 `forge-reflect`
+    flow-string match is removed. Atomic cutover (flow.yaml flip + dispatch
+    rewrite in one change): exactly one reflect fires per merge (asserted);
+    reflection-lost recording + the unconditional `merged→done` promotion
+    (R4-11-F1) preserved. `validate-triggers` now errors an `on: merged` agent
+    target lacking the `reflection-close` band (lint mirrors dispatch). The
+    forge-reflect flow stays authorable (ship-both).
+  - **F2 — built.** The reflection questionnaire is grounded in the merged PR
+    (`<worktree>/.forge/pr-description.md` + `dev-loop.delivered` diff-stats,
+    no `gh`), with a per-question citation requirement. reflector-binding +
+    SKILL.md; golden regenerated.
+  - **F4 — built.** SKILL.md Stage 4 names the Q5-B routing explicitly (project
+    KB / the flow's rebound-cycles KB / forge-dev).
+  - **F5 — built.** `orchestrator/kb-health.ts` (`runPostReflectionKbHealth`) —
+    the first real consumer of `resolveKbProcesses`. Each touched KB's declared
+    `ingest`/`consolidate`/`lint` processes run post-reflect; the builtin lint
+    is a REAL, project-aware structural check over exactly the fresh theme files
+    (`lintThemeFiles`, `cli/brain-lint.ts`) — so a project KB's own writes are
+    validated (the shared `cycle-touched-themes` scan never walks
+    `brain/projects/*`) without going repo-wide-red. cmd-shaped processes get
+    the R1-01-F1 invocation contract; every process is fail-loud (`failed`
+    status at `event_type: error`), never fail-open.
+  - **F3 — DEFERRED** (operator-visible). Automated-inference mode (infer the
+    questionnaire answers from logs/demo/diff; `inferred: true` provenance;
+    per-schedule mode selection) is a distinct concern touching a new trigger
+    schema field, an inference branch, provenance UI, and a new journey beat.
+    Split to a follow-up to avoid a rushed multi-surface half-ship; the reflect
+    agent is production-complete in the interactive (default) mode without it.
+    **Re-entry:** implement `mode: interactive|automated` on the reflect
+    dispatch (trigger config, default interactive), the SKILL automated branch,
+    the `inferred` artifact provenance + `[data-question-inferred]` UI, and an
+    automated-mode journey beat.
 - **Depends on:** R1-01 (writes into contract-typed, Q5-B-scoped KBs)
 - **Context:** Operator diagram (verbatim intent): the current reflection agent
   *"except runnable as a standalone agent rather than needing a flow with a

@@ -119,6 +119,13 @@ export type ReflectorUserPromptInput = {
   brainGapsRelPath: string;
   /** Read-only path to the merged project tree (for evidence inspection). */
   mergedTreeRelPath: string;
+  /**
+   * R4-09-F2 — path to the merged PR's description (`<worktree>/.forge/
+   * pr-description.md`, the unifier-authored stated intent + what shipped).
+   * The reflector reviews it in Stage 1 so the questionnaire cites the PR's
+   * actual claims, not generic prompts. May not exist (tolerated).
+   */
+  prDescriptionRelPath: string;
   projectName: string;
   /** Path the reflector writes its stage-2 questions to. */
   userQuestionsRelPath: string;
@@ -159,6 +166,7 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     `- Cycle event log: \`${input.eventLogRelPath}\``,
     `- Brain-gaps log: \`${input.brainGapsRelPath}\` (may not exist if the cycle had zero gaps)`,
     `- Merged project tree (read-only): \`${input.mergedTreeRelPath}/\``,
+    `- PR description (the merged PR's stated intent): \`${input.prDescriptionRelPath}\` (may not exist — tolerate).`,
     '',
     '## Outputs (paths are pre-resolved; do NOT change them)',
     '',
@@ -172,8 +180,8 @@ export function renderReflectorUserPrompt(input: ReflectorUserPromptInput): stri
     '## What to do',
     '',
     '1. **Brain query** — run `brain-query` for prior retros, antipatterns surfaced, and outstanding gaps.',
-    `2. **Stage 1 (self-reflection — the WHOLE initiative, DEC-2)**: read \`${input.eventLogRelPath}\` end-to-end. The three flows (architect → develop → reflect) thread ONE cycle_id, so this log spans the entire initiative — reflect across all of it, not just the closing cycle. Compute iterations, costs, wedge events, send-back rounds, brain-gap counts. Then surface, explicitly: **(a) repeated actions** — anything the agents did more than once (re-running a gate, re-editing a file, re-deriving a fact, retrying a command), each with its count; **(b) roadblocks/wedges** — where the cycle stalled, wedged, burnt tokens with no tool progress, or needed a recovery/resume, and what (if anything) unblocked it. **Read \`dev-loop.delivered\`/\`dev-loop.discarded\` for the authoritative diff-stat (delivered=shipped, discarded=failed-with-partial-diff). Cross-check before any "nothing delivered" conclusion — per-WI status can be stale on a resume.** Identify 2-5 patterns/antipatterns worth capturing. Draft \`${input.retroRelPath}\` Section 1, leading with the repeated actions + roadblocks (\`_(none observed)_\` if none).`,
-    `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. Cap at 4.`,
+    `2. **Stage 1 (self-reflection — the WHOLE initiative, DEC-2)**: read \`${input.eventLogRelPath}\` end-to-end. The three flows (architect → develop → reflect) thread ONE cycle_id, so this log spans the entire initiative — reflect across all of it, not just the closing cycle. Compute iterations, costs, wedge events, send-back rounds, brain-gap counts. Then surface, explicitly: **(a) repeated actions** — anything the agents did more than once (re-running a gate, re-editing a file, re-deriving a fact, retrying a command), each with its count; **(b) roadblocks/wedges** — where the cycle stalled, wedged, burnt tokens with no tool progress, or needed a recovery/resume, and what (if anything) unblocked it. **Read \`dev-loop.delivered\`/\`dev-loop.discarded\` for the authoritative diff-stat (delivered=shipped, discarded=failed-with-partial-diff). Cross-check before any "nothing delivered" conclusion — per-WI status can be stale on a resume.** Identify 2-5 patterns/antipatterns worth capturing. Draft \`${input.retroRelPath}\` Section 1, leading with the repeated actions + roadblocks (\`_(none observed)_\` if none). **Also review the PR** (R4-09-F2): read \`${input.prDescriptionRelPath}\` for the stated intent, and cross-reference the shipped diff (\`dev-loop.delivered\` stats + the merged tree). Note where the delivered code diverges from the PR's stated intent — that gap is prime material for question (2).`,
+    `3. **Stage 2 (user questions)**: write \`${input.userQuestionsRelPath}\` with up to 4 questions. Each is a \`## N. <header>\` heading + a one-line body + optionally a markdown bullet list of choices (bullets → radio options; no bullets → a freeform textarea). Always include, unless literally zero deliverables: (1) decomposition size, (2) implementation-vs-design/goals, (3) a **repeated-actions/roadblocks** question grounded in the specific findings from Stage 1 (which is worth a forge fix or new tool), and (4) a **general notes** freeform question (no bullets) for any other operator notes. Cap at 4. **Ground each non-freeform question in the PR/logs with a concrete citation** — a specific changed file, a PR claim, or an event count from Stage 1 — never a generic template question.`,
     `4. **Stage 3 (user feedback)**: read \`${input.userFeedbackRelPath}\`. If it exists, distil the answers into Section 2 of \`${input.retroRelPath}\` and the free-form feedback into Section 3. If missing, write \`_(no feedback supplied this cycle)_\` for both.`,
     `5. **Cycle archive**: write \`${input.cycleArchiveRelPath}\` with the frontmatter shown in the system prompt. Body: short summary + reference to the event log.`,
     `6. **Themes**: for each pattern/antipattern from Stage 1, write a theme file under \`${input.themesDirRelPath}/\`. Filename: \`<YYYY-MM-DD>-<kebab-slug>.md\`. Include a \`## Sources\` section listing ≥ 1 evidence path that resolves to \`_logs/${input.cycleId}/...\` or \`${input.cycleArchiveRelPath}\`.`,

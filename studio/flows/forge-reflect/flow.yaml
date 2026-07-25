@@ -21,18 +21,21 @@ disposable: true
 # initiative from the shared _logs/<cycleId> (architect + develop phases land in
 # one cycle log), not just the closing cycle.
 #
-# MERGE-TRIGGERED, NOT flow-engine-triggered. The flow-engine `triggers:` field
-# fires on a flow's terminal SUCCESS — but forge-develop terminates at
-# `ready-for-review` (PR open), BEFORE the operator merges. The real merge signal
-# is async + post-run, so reflect is driven by orchestrator/finalize-merged.ts:
-# once a merged PR is confirmed it runs closure → runReflector against this flow's
-# single node. `reflect` is the flow's entry node, so it carries no inbound edge
-# (the lint rule only requires inbound artifacts for fanOut nodes).
+# AUTHORABLE FLOW FORM — NOT the shipped merge dispatch. R4-09-F1 retired the
+# single-node forge-reflect flow wrapper as the *shipped* shape: a merged
+# initiative now dispatches the reflect AGENT standalone (forge-develop declares
+# `{on: merged, target: {kind: agent, ref: reflector}}`, resolved by
+# orchestrator/finalize-merged.ts through the agent's `reflection-close` band
+# hook). This flow definition stays authorable in Studio (the roadmap's
+# ship-both principle) — a builder can still wire a reflector node into a DAG —
+# but it is not what fires on a real merge. `reflect` is the flow's entry node,
+# so it carries no inbound edge (the lint rule only requires inbound artifacts
+# for fanOut nodes).
 nodes:
   - { id: reflect, agent: reflector }
 edges: []
 triggers: []
-# Stage C — per-flow kickoff. Reflect has NO manual launch surface; it is fired
-# only by forge-develop's declared `{on: merged, flow: forge-reflect}` trigger
-# (via finalize-merged). The UI renders an "auto-triggered on merge" note.
+# Stage C — per-flow kickoff. This authorable form has NO manual launch surface
+# (trigger-only); production reflect is the standalone agent dispatch above, not
+# this flow. The UI renders an "auto-triggered on merge" note.
 kickoff: { kind: trigger-only }

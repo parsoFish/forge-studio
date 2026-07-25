@@ -10,7 +10,8 @@
  *     success (dispatch = stage a claimable flow-run request), and
  *   - orchestrator/finalize-merged.ts fires `on: merged` triggers once a merged PR
  *     is confirmed (dispatch = run the target inline with the merged cycle's
- *     context — e.g. forge-develop's `{on: merged, target: forge-reflect}`).
+ *     context — e.g. forge-develop's `{on: merged, target: {kind: agent, ref:
+ *     reflector}}`, the R4-09-F1 standalone-reflect target).
  *
  * External kinds (`cron`, `webhook`) fire from their own arms (cron-triggers.ts,
  * the bridge's /api/hooks route) but ALWAYS by staging a claimable flow-run

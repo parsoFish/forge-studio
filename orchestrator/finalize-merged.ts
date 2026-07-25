@@ -33,14 +33,16 @@ import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
-import { loadFlowDefinition } from './studio/registry.ts';
+import { loadFlowDefinition, loadAgentDefinition } from './studio/registry.ts';
 import { flowPathForId } from './flow-runner.ts';
+import { resolveBandHook } from './agent-bands.ts';
+import { skillPath } from './skill-path.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
 import { classifyCrash } from './failure-classifier.ts';
 import type { ClosureResult } from './phases/closure.ts';
 import type { CycleInput, ReviewerOutcome } from './cycle-context.ts';
-import type { FlowTrigger } from './studio/types.ts';
+import type { AgentDefinition, FlowTrigger, TriggerTarget } from './studio/types.ts';
 
 export type FinalizeStatus = 'finalized' | 'still-open' | 'no-worktree' | 'error';
 export type FinalizeResult = { initiativeId: string; status: FinalizeStatus; detail?: string };
@@ -60,8 +62,15 @@ export type FinalizeDeps = {
   finalizeOne?: (input: CycleInput, logger: EventLogger) => Promise<boolean>;
   /** Closure step. Injectable so a trigger-firing test needn't run real git/gh. */
   runClosure?: (input: CycleInput, logger: EventLogger, reviewerOutcome: ReviewerOutcome) => Promise<ClosureResult>;
-  /** Reflector action a `forge-reflect` merge-trigger dispatches to. Injectable. */
+  /** Reflector action an `on: merged` agent-target dispatches to. Injectable. */
   runReflector?: (input: CycleInput, logger: EventLogger) => Promise<void>;
+  /**
+   * Resolve an agent-target `ref` (slug) to its `AgentDefinition` so the
+   * dispatch can read its declared band hook (R4-09-F1: registry-driven, not a
+   * hardcoded slug). Defaults to the real skills/ registry; injectable so a
+   * trigger-dispatch test needn't depend on a SKILL.md on disk.
+   */
+  loadAgentDef?: (ref: string) => AgentDefinition;
   /**
    * R4-11-F1 — the second terminal move of a confirmed merge: promotes the
    * manifest `merged/ → done/`, invoked AFTER the reflect trigger fires
@@ -107,13 +116,47 @@ function defaultLoadFlowTriggers(flowId: string): FlowTrigger[] {
   }
 }
 
+/** Default agent-def resolution for an agent-target `ref` (slug). */
+function defaultLoadAgentDef(ref: string): AgentDefinition {
+  return loadAgentDefinition(skillPath(ref));
+}
+
+/**
+ * R4-09-F1 — resolve an `on: merged` trigger target to its standalone
+ * merge-time handler. The resolution is REGISTRY-DRIVEN, not a hardcoded slug:
+ * a `{kind: agent}` target whose `AgentDefinition` declares the
+ * `reflection-close` band (`agent-bands.ts`) is forge's standalone reflect
+ * consumer — the same band-hook indirection `flow-runner`'s `execReflect` uses.
+ * Returns the reflect action for that case, else `null` (a flow target, or an
+ * agent whose band is not a merge-time handler) so the caller logs it loud +
+ * unhandled rather than silently dispatching. Replaces the pre-R4-09 hardcoded
+ * `target.ref === 'forge-reflect'` flow-string special case.
+ */
+function resolveMergeAgentHandler(
+  target: TriggerTarget,
+  runReflectorFn: (input: CycleInput, logger: EventLogger) => Promise<unknown>,
+  loadAgentDef: (ref: string) => AgentDefinition,
+): ((input: CycleInput, logger: EventLogger) => Promise<unknown>) | null {
+  if (target.kind !== 'agent') return null;
+  let def: AgentDefinition;
+  try {
+    def = loadAgentDef(target.ref);
+  } catch {
+    return null;
+  }
+  if (resolveBandHook(def) === 'reflection-close') return runReflectorFn;
+  return null;
+}
+
 /**
  * Default per-cycle finalize: closure confirms+aligns+moves, then — on a
  * confirmed merge — fires the merged flow's declared `on: merged` triggers
  * through the generic FlowTrigger path. The SINGLE source of "merge fires
- * reflect" is forge-develop's `{on: merged, flow: forge-reflect}` declaration in
- * its flow.yaml, NOT a hardcoded runReflector call here. Built from `deps` so a
- * test can inject the closure + reflector + trigger source.
+ * reflect" is forge-develop's `{on: merged, target: {kind: agent, ref:
+ * reflector}}` declaration in its flow.yaml (R4-09-F1 standalone-reflect
+ * cutover), resolved here through the registry band hook — NOT a hardcoded
+ * runReflector call. Built from `deps` so a test can inject the closure +
+ * reflector + trigger source + agent-def resolver.
  */
 function makeDefaultFinalizeOne(
   deps: FinalizeDeps,
@@ -121,6 +164,7 @@ function makeDefaultFinalizeOne(
   const runClosureFn = deps.runClosure ?? runClosure;
   const runReflectorFn = deps.runReflector ?? runReflector;
   const loadFlowTriggers = deps.loadFlowTriggers ?? defaultLoadFlowTriggers;
+  const loadAgentDef = deps.loadAgentDef ?? defaultLoadAgentDef;
   const promoteMergedToDoneFn = deps.promoteMergedToDone ?? promoteMergedToDone;
 
   return async (input, logger) => {
@@ -144,7 +188,11 @@ function makeDefaultFinalizeOne(
             metadata: { on: t.on, target: t.target, source_flow: flowId },
           }),
         dispatch: async (t) => {
-          if (t.target.kind === 'flow' && t.target.ref === 'forge-reflect') {
+          // R4-09-F1: resolve the declared target to its standalone merge-time
+          // handler via the registry band hook (an agent whose def declares
+          // `reflection-close` is the reflect consumer) — not a hardcoded slug.
+          const handler = resolveMergeAgentHandler(t.target, runReflectorFn, loadAgentDef);
+          if (handler) {
             // 2.10 reflector pipeline honesty: closure already moved the
             // manifest to done/ — a reflector throw from here on used to
             // bubble to the per-manifest catch as a bare 'error' result with
@@ -155,7 +203,7 @@ function makeDefaultFinalizeOne(
             // auto-retry — recovery stays with `forge reflect --rerun` / the
             // boot reconcile.
             try {
-              await runReflectorFn(input, logger);
+              await handler(input, logger);
             } catch (err) {
               const errMsg = err instanceof Error ? err.message : String(err);
               const crash = classifyCrash(errMsg, null);
@@ -180,9 +228,11 @@ function makeDefaultFinalizeOne(
               input_refs: [],
               output_refs: [],
               message: 'finalize.trigger-unhandled-target',
-              // R4-09 seam: an `agent`-kind target lands here until the
-              // standalone-reflect dispatch is wired (loud, never silent).
-              metadata: { on: t.on, target: t.target, note: 'only the forge-reflect flow has a merge-time handler' },
+              // A flow target, or an agent target whose band is not a merge-time
+              // handler, lands here (loud, never silent). The only shipped
+              // merge-time handler is the `reflection-close`-band standalone
+              // reflect agent (R4-09-F1).
+              metadata: { on: t.on, target: t.target, note: 'no standalone merge-time handler for this target' },
             });
           }
         },

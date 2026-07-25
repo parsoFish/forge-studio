@@ -844,12 +844,28 @@ describe('validateFlow — trigger-target', () => {
     assert.ok(f.message.includes('ghost-agent'));
   });
 
-  it('agent target referencing a real roster agent → no trigger-target finding', () => {
+  it('on:merged agent target with the reflection-close band → no trigger-target finding', () => {
+    const reflectAgent = makeAgent({
+      composition: { skills: ['demo'], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] },
+    });
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(reflectAgent));
+    assert.ok(!findings.some((x) => x.check === 'trigger-target'));
+  });
+
+  it('R4-09-F1: on:merged agent target WITHOUT the reflection-close band → error trigger-target', () => {
+    // makeAgent's default hooks are ['event-log'] — no reflection-close band —
+    // so finalize-merged would never dispatch it; lint must reject it.
     const flow = makeFlow({
       triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' } }],
     });
     const findings = validateFlow(flow, makeAgentMap(makeAgent()));
-    assert.ok(!findings.some((x) => x.check === 'trigger-target'));
+    const f = findings.find((x) => x.check === 'trigger-target');
+    assert.ok(f, 'expected trigger-target finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /reflection-close/);
   });
 
   it('flow target referencing a real registered flow → no trigger-target finding', () => {

@@ -45,6 +45,7 @@ Invoke `brain-query` BEFORE writing anything. First tool calls MUST be `Read`/`G
 - `_logs/<cycle-id>/events.jsonl` — full cycle log.
 - `_logs/<cycle-id>/brain-gaps.jsonl` — questions the brain couldn't answer (may be empty/missing — tolerate).
 - Merged project tree (read-only inspection for code patterns).
+- **The merged PR (R4-09-F2):** its description at `<worktree>/.forge/pr-description.md` (the stated intent), the `reviewer.pr-opened` event (PR url), and the `dev-loop.delivered` diff-stats (what actually shipped). No `gh` — read the file + the events.
 - Existing brain knowledge (prior retros, established patterns).
 
 ## Outputs
@@ -101,6 +102,7 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 4. **Roadblocks / wedges** — find where the cycle stalled, wedged (`wedge` events), burnt
    tokens with no tool progress, hit a rate limit, or needed a recovery/resume. For each,
    capture what unblocked it (or that it stayed blocked).
+4b. **Review the PR (R4-09-F2).** Read `<worktree>/.forge/pr-description.md` for the PR's stated intent, then cross-reference the shipped diff (`dev-loop.delivered` stats + the merged tree). Note where the delivered code **diverges** from the stated intent (scope drift, dropped ACs, extra changes) — this is the grounding for the implementation-vs-design question in Stage 2, and every Stage-2 question must cite a concrete PR/log specific (a changed file, a PR claim, an event count), never a generic template.
 5. Identify notable patterns — worked unusually well, wedged or burnt token, antipatterns observed.
    - **Delivery truth = the `dev-loop.delivered` / `dev-loop.discarded` events (git diff-stat) + the merged tree, NOT per-WI status counts.** `dev-loop.delivered` fires ONLY for a WI that shipped (`outcome: 'complete'`); a failed WI's diff-stat carries the SAME fields on `dev-loop.discarded` (`outcome: 'failed'`) — attempted but not delivered. Per-WI `status: failed` can be stale after a resume. **Never** conclude "nothing delivered / empty branch" if `dev-loop.delivered` shows `files_changed > 0`. If status and diff disagree, the diff wins — and that contradiction is itself the antipattern worth a theme (stale-status-vs-real-delivery), not "the PR was empty" (cascade-v4 #1).
 6. Draft Section 1 of `retro.md` (`## Self-reflection`) — concrete observations, no hand-waving. Lead with the **repeated actions** and **roadblocks** found in 3-4 (or `_(none observed)_` for either).
@@ -131,9 +133,11 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 4 — Brain writes (unattended)
 
-10. For each notable Stage-1 observation, write a theme file **scoped to the right brain**. Two routing decisions apply, in order:
+10. For each notable Stage-1 observation, write a theme file **scoped to the right brain** (Q5-B — route by the lesson's SUBJECT). Two routing decisions apply, in order:
 
-    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
+    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → its **project KB** `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
+
+    Q5-B framing: a lesson about **running the develop flow** (repeated actions, wedges, dev-loop/unifier behaviour that recurs across projects) lands in the **flow's KB** — `brain/cycles/`, the brain bound to the `forge-develop` flow — via a `pattern`/`antipattern`/`operation` category in (b). A lesson about **forge engineering itself** (a design decision, a durable reference) lands in **`brain/forge-dev/`** via `decision`/`reference`. Project lessons stay in the project KB regardless of category.
 
     **(b) For forge-wide themes, category decides the sub-wiki — this is enforced by `checkCategoryScope` (`cli/brain-lint.ts`) and a mismatch is a lint error, not a style choice:**
     | `category` frontmatter | Brain dir |
