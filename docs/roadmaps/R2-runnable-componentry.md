@@ -239,4 +239,15 @@ The flow/agent builders read a server-computed capability descriptor instead of 
   added research-first: `croner`, `@octokit/webhooks-methods` (0-dep each).
   Status planned → implemented. ⚑ operator notes: LAN-reachable webhook
   endpoint (fail-closed HMAC covers; public exposure = ops), minted-run budget
-  defaults ($10/30) are a spend-policy proposal.
+  defaults ($10/30) are a spend-policy proposal. **MERGED 2026-07-25 on operator
+  close-out — PR #48 @ `06035180` (stacked on #47; rebased conflict-free onto the
+  merged base, retargeted to main, merged, branch deleted).** Whole-branch
+  52-agent review over the combined branch surfaced 10 confirmed findings (all
+  fixed in-branch); banked lessons in memory `project_forge_dev_roadmap_set.md`
+  S4 entry: (1) the workflow's aggregated `surviving` set dropped 4 real findings
+  after a session-limit resume — reconcile the journal UNION, never trust the
+  aggregate alone; (2) model-switch mid-Workflow works (Fable→Opus + resume);
+  (3) a defense-in-depth gate must read the SAME evidence as the UI it backstops;
+  (4) declared-data-fails-open struck again (cron `concurrency` enforced nowhere);
+  (5) corpus-ground provider fixtures (invented GitLab shapes hid a 400-every-delivery
+  bug); (6) a pre-auth 0.0.0.0 route must be structurally never-throw.
