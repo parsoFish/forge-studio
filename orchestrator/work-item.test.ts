@@ -18,6 +18,7 @@ import {
   readWorkItemsFromDir,
   detectHiddenCoupling,
   gateRequiredPaths,
+  FIX_WI_ORIGINS,
   type WorkItem,
 } from './work-item.ts';
 
@@ -240,6 +241,7 @@ test('round-trip: a minimal WI (only required fields) serialises byte-identicall
   assert.ok(!md1.includes('non_goals'), 'non_goals must not appear when undefined');
   assert.ok(!md1.includes('verification_artifact'), 'verification_artifact must not appear when undefined');
   assert.ok(!md1.includes('\ncreates:'), 'creates must not appear when undefined');
+  assert.ok(!md1.includes('origin:'), 'origin must not appear when undefined');
 });
 
 test('behavior_preserving: round-trips when true, omitted when unset', () => {
@@ -408,6 +410,26 @@ test('kind (ADR 026): packaging | code-fix round-trips; absent stays omitted', (
 test('kind (ADR 026): an unknown kind is rejected by validateWorkItem', () => {
   const errors = validateWorkItem(fixture({ kind: 'whatever' as unknown as 'packaging' }));
   assert.ok(errors.some((e) => e.includes('kind')), `got ${JSON.stringify(errors)}`);
+});
+
+test('origin (ADR 040): review-fix | demo-fix | gate-fix round-trips; absent stays omitted', () => {
+  // Absent → not serialised (PM-authored WIs stay byte-identical).
+  const plain = serializeWorkItem(fixture());
+  assert.doesNotMatch(plain, /^origin:/m);
+  assert.equal(parseWorkItem(plain).origin, undefined);
+
+  for (const o of FIX_WI_ORIGINS) {
+    const md = serializeWorkItem(fixture({ origin: o }));
+    assert.match(md, new RegExp(`origin: ${o}`));
+    const parsed = parseWorkItem(md);
+    assert.equal(parsed.origin, o);
+    assert.deepEqual(validateWorkItem(parsed), []);
+  }
+});
+
+test('origin (ADR 040): an unknown origin is rejected by validateWorkItem', () => {
+  const errors = validateWorkItem(fixture({ origin: 'bogus' as unknown as 'review-fix' }));
+  assert.ok(errors.some((e) => e.includes('origin')), `got ${JSON.stringify(errors)}`);
 });
 
 // F1.I5 removed — modify-only WIs are legitimate (e.g. WI-6 extending

@@ -21,12 +21,15 @@ import { spawn } from 'node:child_process';
 import { join, resolve, sep } from 'node:path';
 import lockfile from 'proper-lockfile';
 
-import { parseManifest, persistManifestResumeFromUnifier, serializeManifest } from '../orchestrator/manifest.ts';
+import { parseManifest, persistManifestSendBack, persistManifestSpecs, serializeManifest } from '../orchestrator/manifest.ts';
 import {
-  appendReviewUnifierItems,
-  UnifierItemsCapError,
-  ReviewConcernInvalidError,
-} from '../orchestrator/unifier-items.ts';
+  compileFixWorkItems,
+  writeReviewCapExhaustedMarker,
+  FixLoopCapError,
+  FixConcernInvalidError,
+} from '../orchestrator/fix-work-items.ts';
+import { loadConfig, resolveReviewLoopCaps } from '../orchestrator/config.ts';
+import { notify } from '../orchestrator/notify.ts';
 import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
 import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
 import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
@@ -341,20 +344,36 @@ export async function applyReviewVerdict(
     return;
   }
   try {
-    const { appended } = appendReviewUnifierItems({
+    // ADR 040: the round this send-back opens + the config-owned caps. The
+    // compiler enforces both caps BEFORE writing (reject-then-park — accepting
+    // would enqueue work that never runs).
+    const caps = resolveReviewLoopCaps();
+    const currentRound = (manifest.review_rounds ?? 0) + 1;
+    const { appended } = compileFixWorkItems({
       worktreePath,
       initiativeId,
-      concern: { rationale, acceptanceCriteria: acs, kind: concernKind, qualityGateCmd: concernGateCmd },
+      source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd },
       projectGateCmd,
       estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
+      caps,
+      currentRound,
     });
-    persistManifestResumeFromUnifier(manifestPath);
+    // Keep the manifest's specs back-reference truthful (roadmap WI lists, the
+    // planned-gate consumers) — append, never overwrite PM's list. Best-effort
+    // like persistManifestSpecs itself.
+    persistManifestSpecs(manifestPath, [...(manifest.specs ?? []), ...appended]);
+    // Stamp resume_from:'develop' + increment review_rounds in ONE locked write
+    // — throws on failure (a send-back the manifest doesn't record would leave
+    // the fix WIs undrainable).
+    const { round } = persistManifestSendBack(manifestPath);
     // Plan 2.7 — the structured send-back event. Appends to the SAME cycle's
-    // events.jsonl the drain re-claims (one lineage), carrying the operator's
-    // feedback verbatim so send-backs are auditable from the event log alone.
-    // cycle-retention + cycle-recap count `reviewer.verdict.send-back`; this is
-    // its (previously missing) emit site. Best-effort: the UWIs are already
-    // appended, so a logging failure must not fail the verdict.
+    // events.jsonl the fix-loop drain re-claims (one lineage), carrying the
+    // operator's feedback verbatim so send-backs are auditable from the event
+    // log alone. cycle-retention + cycle-recap count `reviewer.verdict.send-back`.
+    // Best-effort: the fix WIs are already compiled, so a logging failure must
+    // not fail the verdict. The per-WI `pm.work-item-emitted` emits give the
+    // run page its hex + drawer spec for each fix WI before dispatch
+    // (run-model-derive matches that exact message).
     try {
       const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
       logger.emit({
@@ -363,7 +382,7 @@ export async function applyReviewVerdict(
         skill: 'review-verdict',
         event_type: 'log',
         input_refs: [manifestPath],
-        output_refs: appended.map((id) => `.forge/unifier-items/${id}.md`),
+        output_refs: appended.map((id) => `.forge/work-items/${id}.md`),
         message: 'reviewer.verdict.send-back',
         metadata: {
           decided_by: 'operator',
@@ -371,12 +390,31 @@ export async function applyReviewVerdict(
           acceptance_criteria: acs,
           concern_kind: concernKind ?? 'code-fix',
           quality_gate_cmd: concernGateCmd ?? null,
-          appended_uwis: appended,
+          appended_work_items: appended,
+          origin: 'review-fix',
+          round,
         },
       });
+      for (const id of appended) {
+        logger.emit({
+          initiative_id: initiativeId,
+          phase: 'review-loop',
+          skill: 'review-verdict',
+          event_type: 'log',
+          input_refs: [],
+          output_refs: [`.forge/work-items/${id}.md`],
+          message: 'pm.work-item-emitted',
+          metadata: {
+            work_item_id: id,
+            task: rationale.split('\n')[0]?.slice(0, 120) ?? id,
+            depends_on: [],
+            origin: 'review-fix',
+          },
+        });
+      }
     } catch { /* best-effort — never block the send-back on logging */ }
-    // ADR-027: persist the operator's send-back (rationale + the UWI acceptance
-    // criteria) as the durable verdict artifact for the reflector.
+    // ADR-027: persist the operator's send-back (rationale + the fix-WI
+    // acceptance criteria + the round it opened) as the durable verdict artifact.
     writeVerdictJson(
       ctx.logsRoot,
       {
@@ -386,6 +424,7 @@ export async function applyReviewVerdict(
         decidedBy: 'operator',
         rationale,
         acceptanceCriteria: acs,
+        round,
         at: new Date().toISOString(),
       },
       { overwrite: true },
@@ -393,16 +432,47 @@ export async function applyReviewVerdict(
     sendJson(res, 200, {
       ok: true,
       kind,
-      appendedUnifierItems: appended,
-      note: 'work items appended to the unifier queue; the drain re-runs them in the same cycle',
+      appendedWorkItems: appended,
+      round,
+      note: 'fix work items appended to the initiative queue; the fix loop re-dispatches the develop agent in the same cycle',
     }, origin);
   } catch (appendErr) {
-    if (appendErr instanceof UnifierItemsCapError) {
-      sendJson(res, 409, { error: (appendErr as Error).message }, origin);
-    } else if (appendErr instanceof ReviewConcernInvalidError) {
+    if (appendErr instanceof FixLoopCapError) {
+      // ADR 040: reject-then-park, LOUDLY — the 409 (UI error surface), the
+      // greppable worktree marker (the drain reports needs-operator while it
+      // exists), a `sendback.cap-exhausted` event, and an operator
+      // notification. All best-effort except the 409 itself.
+      const capMsg = (appendErr as Error).message;
+      try { writeReviewCapExhaustedMarker(worktreePath, capMsg); } catch { /* best-effort */ }
+      try {
+        const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
+        logger.emit({
+          initiative_id: initiativeId,
+          phase: 'review-loop',
+          skill: 'review-verdict',
+          event_type: 'error',
+          input_refs: [manifestPath],
+          output_refs: [],
+          message: 'sendback.cap-exhausted',
+          metadata: { detail: capMsg },
+        });
+      } catch { /* best-effort */ }
+      try {
+        const uc = loadConfig();
+        void notify(
+          {
+            type: 'failed',
+            title: `${initiativeId} — send-back cap exhausted`,
+            body: capMsg,
+          },
+          { desktop: uc.notify?.desktop ?? true, webhook_url: uc.notify?.webhook_url ?? null },
+        ).catch(() => { /* best-effort */ });
+      } catch { /* best-effort */ }
+      sendJson(res, 409, { error: capMsg, parked: 'needs-operator' }, origin);
+    } else if (appendErr instanceof FixConcernInvalidError) {
       sendJson(res, 400, { error: (appendErr as Error).message }, origin);
     } else {
-      sendJson(res, 500, { error: `append review work items failed: ${String(appendErr)}` }, origin);
+      sendJson(res, 500, { error: `append fix work items failed: ${String(appendErr)}` }, origin);
     }
   } finally {
     if (release) { try { await release(); } catch { /* ignore */ } }

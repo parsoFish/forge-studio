@@ -73,12 +73,33 @@ export type WorkItem = {
    * against the write-a-failing-test-first gate (`failOnHollowIter0Gate=true`)
    * so review-originated code is held to the same rigor as PM-originated code.
    * Absent ⇒ treated as `packaging` (the legacy single-mission behaviour).
+   * ADR 040: `kind` remains a UNIFIER-ITEM-ONLY dispatch selector — it never
+   * appears on dev WIs. The analogous marker for dev-side fix WIs is `origin`
+   * (below), not a repurposing of this field.
    */
   kind?: 'packaging' | 'code-fix';
+  /**
+   * ADR 040 — set only on fix work-items compiled by the send-back/fix loops
+   * (review-loop send-back, demo-fix, gate-fix); PM-authored WIs leave it
+   * unset, so their frontmatter stays byte-identical. Distinguishes
+   * review/demo/gate-originated dev WIs from PM-authored ones without
+   * repurposing `kind` (which stays the unifier-item-only dispatch selector —
+   * see its doc comment above).
+   */
+  origin?: 'review-fix' | 'demo-fix' | 'gate-fix';
   body: string;
 };
 
 export const UNIFIER_ITEM_KINDS: readonly NonNullable<WorkItem['kind']>[] = ['packaging', 'code-fix'];
+
+/**
+ * ADR 040 — valid values for `WorkItem.origin` (fix work-items compiled by
+ * the send-back/fix loops). Exported so the fix-work-items compiler module
+ * (Q2) can validate against the same vocabulary instead of duplicating the
+ * literal list.
+ */
+export const FIX_WI_ORIGINS: readonly NonNullable<WorkItem['origin']>[] = ['review-fix', 'demo-fix', 'gate-fix'];
+export type FixWiOrigin = NonNullable<WorkItem['origin']>;
 
 // `WI-<n>` are dev work items (PM-emitted). `UWI-<n>` are unifier work items
 // (the unifier's own queue, ADR 026): UWI-1 is the static unify/PR-prep mission;
@@ -139,6 +160,9 @@ export function parseWorkItem(content: string): WorkItem {
   if (data.kind === 'packaging' || data.kind === 'code-fix') {
     w.kind = data.kind;
   }
+  if (typeof data.origin === 'string' && (FIX_WI_ORIGINS as readonly string[]).includes(data.origin)) {
+    w.origin = data.origin as WorkItem['origin'];
+  }
   if (data.behavior_preserving === true) {
     w.behavior_preserving = true;
   }
@@ -180,6 +204,9 @@ export function serializeWorkItem(w: WorkItem): string {
   }
   if (w.kind !== undefined) {
     data.kind = w.kind;
+  }
+  if (w.origin !== undefined) {
+    data.origin = w.origin;
   }
   if (w.behavior_preserving === true) {
     data.behavior_preserving = true;
@@ -360,6 +387,9 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
   }
   if (w.kind !== undefined && !UNIFIER_ITEM_KINDS.includes(w.kind)) {
     errors.push(`kind must be one of ${UNIFIER_ITEM_KINDS.join(' | ')} when set: got ${String(w.kind)}`);
+  }
+  if (w.origin !== undefined && !FIX_WI_ORIGINS.includes(w.origin)) {
+    errors.push(`origin must be one of ${FIX_WI_ORIGINS.join(' | ')} when set: got ${String(w.origin)}`);
   }
 
   return errors;

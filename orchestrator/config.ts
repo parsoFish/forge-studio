@@ -57,6 +57,18 @@ export type ForgeConfig = {
     /** Poll interval. Default: `DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS` (30 s). */
     pollIntervalMs?: number;
   };
+  /**
+   * R4-08-F2 (ADR-040): review send-back loop bounds. A verdict's send-back
+   * appends fix work items and re-runs the dev-loop/unifier spine; either cap
+   * exhausting PARKS the initiative needs-operator (`.forge/REVIEW-CAP-EXHAUSTED.md`)
+   * rather than looping forever.
+   */
+  review?: {
+    /** Max send-back rounds per initiative. Default: `DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS` (6). */
+    maxSendBackRounds?: number;
+    /** Max total fix work items appended across all rounds. Default: `DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` (24). */
+    maxTotalFixWorkItems?: number;
+  };
 };
 
 /**
@@ -187,6 +199,54 @@ export function resolvePostMergeCiConfig(
   return {
     timeoutMs: pick('FORGE_POST_MERGE_CI_TIMEOUT_MS', cfg.postMergeCi?.timeoutMs, DEFAULT_POST_MERGE_CI_TIMEOUT_MS),
     pollIntervalMs: pick('FORGE_POST_MERGE_CI_POLL_MS', cfg.postMergeCi?.pollIntervalMs, DEFAULT_POST_MERGE_CI_POLL_INTERVAL_MS),
+  };
+}
+
+/**
+ * R4-08-F2 (ADR-040): default cap on send-back rounds per initiative before
+ * the loop parks needs-operator instead of re-invoking the reviewer/dev-loop
+ * spine again.
+ */
+export const DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS = 6;
+/**
+ * R4-08-F2 (ADR-040): default cap on total fix work items appended across
+ * all send-back rounds of an initiative — the `UNIFIER_MAX_TOTAL_ITEMS`
+ * analogue for the send-back loop, now operator-tunable.
+ */
+export const DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = 24;
+
+/**
+ * Resolve the review send-back loop's caps. Precedence per field (mirrors
+ * `resolvePostMergeCiConfig`):
+ *   1. `FORGE_REVIEW_MAX_SEND_BACK_ROUNDS` / `FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` env vars
+ *   2. `review.{maxSendBackRounds,maxTotalFixWorkItems}` from `forge.config.json`
+ *   3. `DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS` (6) / `DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS` (24)
+ *
+ * Non-finite / non-integer / < 1 values are ignored (fall through) at every
+ * level — a cap below 1 would park an initiative before its first send-back
+ * round, and a fractional round/item count has no meaning here.
+ */
+export function resolveReviewLoopCaps(
+  cfg: ForgeConfig = loadConfig(),
+): { maxSendBackRounds: number; maxTotalFixWorkItems: number } {
+  const isValidCap = (value: number): boolean => Number.isFinite(value) && Number.isInteger(value) && value >= 1;
+  const pick = (envName: string, cfgValue: number | undefined, fallback: number): number => {
+    const fromEnv = Number(process.env[envName]);
+    if (isValidCap(fromEnv)) return fromEnv;
+    if (typeof cfgValue === 'number' && isValidCap(cfgValue)) return cfgValue;
+    return fallback;
+  };
+  return {
+    maxSendBackRounds: pick(
+      'FORGE_REVIEW_MAX_SEND_BACK_ROUNDS',
+      cfg.review?.maxSendBackRounds,
+      DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS,
+    ),
+    maxTotalFixWorkItems: pick(
+      'FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS',
+      cfg.review?.maxTotalFixWorkItems,
+      DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS,
+    ),
   };
 }
 

@@ -386,13 +386,11 @@ remaining items below are live-path concerns, not latent ones:
 
 ### 9. R4-11 roadmap & attention — as-built follow-ups (2026-07-19)
 
-- **Server-side develop-dispatch `planned` gate (defense-in-depth).** R4-11-F2's blocked-until-planned lock is
-  enforced in the UI only — `enqueueDevelopRun` / `POST /api/develop/start` never checks whether the initiative
-  has been decomposed, so a stale UI or a direct API call could still start development on a WI-less initiative.
-  Not a regression (pre-existing; T2 only added the UI gate), and ADR-031 makes the UI the sole sanctioned surface,
-  so the operator-facing AC is met — but the dispatch boundary should re-check `workItems` presence for
-  defense-in-depth (forge's "validate at boundaries" rule). *Follow-up: add a WI-presence gate at the
-  develop-start route.*
+- **~~Server-side develop-dispatch `planned` gate (defense-in-depth).~~ CLOSED 2026-07-25 (ADR-040 rider):**
+  `enqueueDevelopRun` now returns `not-planned` when the initiative has no decomposition evidence (manifest
+  `specs` back-ref, falling back to preserved `WI-*.md` files in the hand-off worktree) — a stale UI or direct
+  API call can no longer start development on a WI-less initiative. The batch `/api/develop/start` route
+  surfaces it per-item like the other non-enqueued statuses.
 - **Orphan-parks-in-`merged/` on hard-kill.** R4-11-F1 makes `merged` a same-sweep transient with **no new
   periodic sweep** (invariant #1). If the process is SIGKILL/OOM-killed in the window between closure's
   `→merged` move and the `merged→done` promote, the manifest strands in `_queue/merged/` (finalize scans only

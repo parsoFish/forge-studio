@@ -104,9 +104,10 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
  *
  * Reuse iff a registered worktree is present at the expected path AND it carries
  * durable, gitignored state the next phase consumes:
- *   - resume-from-unifier (ADR-019): per-WI commits + `.forge/work-items/` +
- *     `.forge/unifier-items/` live there; a fresh `add` re-checks-out the branch
- *     and wipes those untracked specs.
+ *   - a resume marker (`resume_from`): 'unifier' crash recovery (ADR-019) or
+ *     'develop' fix-loop re-entry (ADR-040). Per-WI commits +
+ *     `.forge/work-items/` + `.forge/unifier-items/` live there; a fresh `add`
+ *     re-checks-out the branch and wipes those untracked specs.
  *   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle preserved
  *     its worktree at `ready-for-review` with pm's `.forge/work-items/`; the
  *     develop run's dev node must read them. `resume_from` is cleared on the
@@ -115,11 +116,12 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
  * Anything else (no preserved worktree, or a stale empty one) → `add`.
  */
 export function decideWorktreeStrategy(opts: {
-  resumeFromUnifier: boolean;
+  /** True when the manifest carries ANY `resume_from` marker (unifier | develop). */
+  resumeMarkerPresent: boolean;
   worktreePresent: boolean;
   handoffWorkItemsPresent: boolean;
 }): 'reuse' | 'add' {
-  if (opts.worktreePresent && (opts.resumeFromUnifier || opts.handoffWorkItemsPresent)) return 'reuse';
+  if (opts.worktreePresent && (opts.resumeMarkerPresent || opts.handoffWorkItemsPresent)) return 'reuse';
   return 'add';
 }
 

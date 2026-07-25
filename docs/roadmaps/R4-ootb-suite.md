@@ -611,11 +611,59 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-08 Adversarial review agent
 
-- **Status:** **implemented (F1 + F3)** (2026-07-24/25, wave-4 session 3,
-  branch `feat/r4-08-adversarial-review`, stacked on `feat/r4-07-demo-agent`) —
-  **F2 (the ADR-026 successor send-back mechanics) is deliberately absent: its
-  own session (S4) per sizing.**  ·  **Wave:** 4
-- **Implemented-notes (2026-07-24/25):**
+- **Status:** **implemented (F1 + F2 + F3)** (F1/F3: 2026-07-24/25, wave-4
+  session 3, branch `feat/r4-08-adversarial-review`; F2: 2026-07-25, wave-4
+  session 4, branch `feat/r4-08-f2-sendback-loop`)  ·  **Wave:** 4
+- **Implemented-notes F2 (2026-07-25, S4 — ADR-040 supersedes ADR-026):**
+  - **(a) Queue substrate.** Review send-back compiles the operator's concern
+    into an ordinary `WI-<max+1>` on the initiative's own `.forge/work-items/`
+    queue, marked with the new WorkItem field `origin: 'review-fix'`
+    (`'demo-fix'`/`'gate-fix'` reserved for R4-10's loops; `kind` stays
+    UWI-only; packaging-classified concerns map to `behavior_preserving: true`,
+    never to `kind`). Compiler seam: `orchestrator/fix-work-items.ts`
+    (validate-before-write, H1 shell-pipeline gate guard parity, scope = the
+    concern's own `files_in_scope` or the dev-WI union; `depends_on: []`; no
+    terminal re-prep WI — see re-entry). Ids appended to `manifest.specs`.
+  - **(b) Bound.** `forge.config.json` `review` section:
+    `maxSendBackRounds` (default 6) + `maxTotalFixWorkItems` (default 24 — the
+    deleted `UNIFIER_MAX_TOTAL_ITEMS`'s analogue), env-overridable
+    (`FORGE_REVIEW_MAX_*`). Exhaustion = **reject-then-park**: HTTP 409 with
+    `parked: 'needs-operator'`, a greppable `.forge/REVIEW-CAP-EXHAUSTED.md`
+    marker (the drain skips marker-bearing manifests without re-notifying),
+    a `sendback.cap-exhausted` event (phase `review-loop` — clear of the
+    failure-classifier's orchestrator-phase signatures), and a desktop/webhook
+    notify. Round counter = manifest `review_rounds`, incremented with the
+    `resume_from` stamp in ONE locked write (`persistManifestSendBack`, throws
+    on write failure — a send-back the manifest doesn't record would strand
+    the fix WIs).
+  - **(c) Mutual exclusion.** `finalize-merged` swaps `pendingUnifierItems` →
+    `pendingFixWorkItems` with the pinned semantics intact (a confirmed-MERGED
+    PR wins unconditionally; the dropped fix WIs are surfaced non-silently);
+    the new `orchestrator/drain-fix-loop.ts` cedes on `confirmMerge`
+    (`pr-merged`), parks on failed fix WIs / the cap marker, and claims via
+    the atomic in-flight rename (the cross-sweep arbiter).
+  - **(d) One cycle identity.** Mechanism B carried over verbatim: the drain
+    threads `manifest.cycle_id ?? latestCycleId ?? initiativeId` into
+    `runCycle({resumeFrom: 'develop'})` — a NEW resume vocabulary member (the
+    ADR-026 inversion, recorded in ADR-040 §"the inversion, named"): PM
+    rebase-skips, the dev-loop RUNS (prior WIs fast-exit via the iter-0
+    already-complete shortcut — the N7 requeue-resume mechanics generalized),
+    fix WIs build, then the legacy spine re-presents via the **re-armed static
+    UWI-1** (`rearmStaticUnifierItem` — replaces ADR-026's terminal re-prep
+    UWI; the unifier queue now holds ONLY UWI-1 until R4-01-F4).
+    `drain-unifier-items.ts` + the whole UWI append path DELETED (no
+    back-compat). When R4-10 assembles the successor flow, only the drain's
+    re-entry target changes.
+  - **Riders closed:** known-gaps §9 server-side develop-dispatch `planned`
+    gate (`enqueueDevelopRun` → `not-planned` on missing decomposition
+    evidence); the bridge response key renamed `appendedWorkItems` (nothing
+    consumed the old key). Journeys: `flows-run` send-back beats now assert
+    the durable truth (fix-WI file with `origin`, manifest
+    `resume_from`/`review_rounds`, verdict.json `round`) + a new
+    `flows-run-sendback-cap` beat (409 + marker via the real bridge API);
+    review-worktree fixture seeds corpus-grounded WI-1/WI-2 so the real
+    compiler mints WI-3.
+- **Implemented-notes F1/F3 (2026-07-24/25):**
   - **F1 — built.** `skills/adversarial-review` (ADR-039 one-shot artifact —
     no Bash, no Edit: judges, never edits/runs) + the
     `orchestrator/phases/adversarial-review.ts` pipeline: orchestrator-assembled
@@ -991,3 +1039,18 @@ free R4 ID's features.
   (branch `feat/r1-03-contract-processes`): F1 typed `testProcess` (+ real preflight C1b/C7 + DEMO-ALIGN F3),
   F2 demo-builder folded into the project page, F4 merge-boundary-gate relocation spec ⚑ awaiting the operator
   verdict in the ADR-036 amendment.
+- 2026-07-25 — **Wave-4 session 4 (S4): R4-08-F2 implemented** (branch
+  `feat/r4-08-f2-sendback-loop`). **ADR-040 supersedes ADR-026**: review
+  send-back compiles `origin: 'review-fix'` work items onto the initiative's
+  own `.forge/work-items/` queue (`fix-work-items.ts` compiler seam — shared
+  with R4-10's future demo-fix/gate-fix loops) and the fix-loop drain
+  (`drain-fix-loop.ts`, replacing the deleted `drain-unifier-items.ts`)
+  re-enters the SAME cycle with the new `resume_from: 'develop'` (PM
+  rebase-skips, dev-loop runs, prior WIs fast-exit, fix WIs build, re-armed
+  UWI-1 re-preps demo/PR). Caps moved to `forge.config.json` `review`
+  (rounds 6 / total fix WIs 24, env-overridable); exhaustion
+  reject-then-parks needs-operator loudly (409 + `.forge/REVIEW-CAP-EXHAUSTED.md`
+  + `sendback.cap-exhausted` + notify). Merge-wins arbitration re-implemented
+  on the new queue with pinned semantics. Riders: known-gaps §9 develop-dispatch
+  `planned` gate closed (`not-planned` status); flows-run journey rewritten to
+  the durable truth + a cap beat. Status F1+F3 → F1+F2+F3.

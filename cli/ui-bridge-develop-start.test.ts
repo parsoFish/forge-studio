@@ -31,6 +31,8 @@ iteration_budget: 5
 cost_budget_usd: 2.0
 phase: pending
 flow_id: forge-architect
+specs:
+  - WI-1
 ---
 
 # ${id}

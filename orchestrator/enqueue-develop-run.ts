@@ -18,7 +18,7 @@
  * worktree pm wrote its work items into) lands with the forge-cycle monolith
  * retirement (S8). This module owns only the queue-state transition.
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 
 import {
@@ -35,7 +35,7 @@ export const DEVELOP_FLOW_ID = 'forge-develop';
 /** Matches the manifest id convention (INIT-YYYY-MM-DD-slug); also a path-traversal guard. */
 const INIT_ID_RE = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(?:-[a-z0-9]+)*$/;
 
-export type EnqueueDevelopStatus = 'enqueued' | 'not-found' | 'already-developing' | 'error';
+export type EnqueueDevelopStatus = 'enqueued' | 'not-found' | 'already-developing' | 'not-planned' | 'error';
 
 export type EnqueueDevelopResult = {
   status: EnqueueDevelopStatus;
@@ -109,6 +109,26 @@ export function enqueueDevelopRun(
     return { status: 'not-found', initiativeId, detail: err instanceof Error ? err.message : String(err) };
   }
 
+  // known-gaps §9 (defense-in-depth, closed with ADR 040): R4-11-F2's
+  // blocked-until-planned lock is UI-only — a stale UI or direct API call could
+  // start development on a WI-less initiative, wasting a cycle on a doomed
+  // dev-loop ("no work items found"). Require decomposition evidence at the
+  // dispatch boundary too: the manifest's `specs` back-ref (R4-05, stamped on
+  // PM success) or, for pre-specs manifests, preserved work-items in the
+  // hand-off worktree.
+  const hasSpecs = (manifest.specs?.length ?? 0) > 0;
+  const hasWorktreeWis =
+    !!manifest.worktree_path &&
+    existsSync(manifest.worktree_path) &&
+    hasWorkItemFiles(join(manifest.worktree_path, '.forge', 'work-items'));
+  if (!hasSpecs && !hasWorktreeWis) {
+    return {
+      status: 'not-planned',
+      initiativeId,
+      detail: 'no decomposition evidence (manifest specs or preserved work-items) — plan the initiative first',
+    };
+  }
+
   // Repoint at forge-develop + reset to a fresh, claimable build. resume_from is
   // cleared so the scheduler runs the full dev→unifier→review spine, not a drain.
   const repointed: InitiativeManifest = {
@@ -147,6 +167,15 @@ function firstExisting(candidates: string[]): string | null {
     if (existsSync(c)) return c;
   }
   return null;
+}
+
+/** True if the dir holds at least one `WI-*.md` spec (skips `_graph.md` etc). */
+function hasWorkItemFiles(dir: string): boolean {
+  try {
+    return readdirSync(dir).some((f) => /^WI-\d+\.md$/.test(f));
+  } catch {
+    return false;
+  }
 }
 
 /** Best-effort read of a manifest's flow_id; null on any parse failure. */

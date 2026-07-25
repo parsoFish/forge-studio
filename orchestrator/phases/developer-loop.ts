@@ -324,6 +324,8 @@ export async function runDeveloperLoop(
   // commits already exist on the preserved branch from the prior cycle. We
   // still read + validate the WI set above (the unifier uses it for context),
   // but run the per-WI loop over an empty list so only the unifier executes.
+  // ADR 040: resume-from-develop (the fix loop) RUNS the full list — prior WIs
+  // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
   const resumeFromUnifier = input.resumeFrom === 'unifier';
   const toRun = resumeFromUnifier ? [] : ordered;
 
@@ -334,8 +336,9 @@ export async function runDeveloperLoop(
   // deps / a gitignored fixture) is otherwise invisible until the unifier,
   // which then can't tell "my changes broke it" from "it was already broken"
   // and burns its whole budget. Fail fast with a distinct diagnosis instead.
-  // Skipped on resume (the branch already carries the WI commits — not a baseline).
-  if (!resumeFromUnifier) {
+  // Skipped on ANY resume (the branch already carries the WI commits — not a
+  // baseline; ADR 040's develop re-entry included).
+  if (!input.resumeFrom) {
     assertGreenBaseline(input, logger, start.event_id);
   }
 
@@ -1193,6 +1196,9 @@ export async function runDeveloperLoop(
       // unifier-only resume (0 WIs run, commits already on branch) from a
       // genuine 0/N total failure.
       resumed: resumeFromUnifier,
+      // ADR 040: which resume kind, when any — 'develop' is the fix-loop
+      // re-entry (full list run, prior WIs fast-exit).
+      ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
     },
   });
 

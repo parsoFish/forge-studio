@@ -623,10 +623,11 @@ async function runWithWedge<T>(
 /** architect: silent DAG marker — runCycle already emitted the synthetic events. */
 const execArchitect: NodeExecutor = async () => { /* marker only */ };
 
-/** pm: skip + rebase on unifier-resume; otherwise run the project manager. */
+/** pm: skip + rebase on any resume ('unifier' crash recovery, ADR-019;
+ *  'develop' fix-loop re-entry, ADR-040); otherwise run the project manager. */
 const execPm: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
-  if (input.resumeFrom === 'unifier') {
+  if (input.resumeFrom) {
     // Item 3: rebase the preserved branch onto main before running the dev-loop.
     deps.rebaseForResume(input, nodeLogger);
     nodeLogger.emit({

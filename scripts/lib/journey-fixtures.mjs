@@ -463,8 +463,42 @@ export function seedReviewWorktree() {
     execFileSync('git', ['init', '-q'], { cwd: wt });
     execFileSync('git', ['-c', 'user.email=e2e@forge.local', '-c', 'user.name=forge-e2e', 'commit', '-q', '--allow-empty', '-m', 'e2e sandbox'], { cwd: wt });
   } catch (err) { console.warn(`[e2e] review-worktree sandbox git init failed: ${err.message}`); }
-  // Seed the static UWI-1 ("unify & prep the PR") the unifier normally writes, so a
-  // review send-back appends UWI-2 (depends_on:[UWI-1]) rather than a self-cyclic UWI-1.
+  // ADR-040: seed the dev queue with the SAME two complete WIs the event stream
+  // describes (corpus-grounded — a real ready-for-review worktree carries the
+  // built WI specs), so the real send-back handler's compiler appends the fix
+  // WI as WI-3 (append-only over the existing ids) and its scope union is
+  // derived from real dev scopes, exactly as in a live cycle.
+  const devWis = [
+    {
+      work_item_id: 'WI-1', initiative_id: INIT, status: 'complete', depends_on: [],
+      acceptance_criteria: [{
+        given: 'a markdown doc with <!-- toc --> / <!-- /toc --> markers',
+        when: 'mdtoc --write runs against it',
+        then: 'the generated TOC is inserted between the markers in place',
+      }],
+      files_in_scope: ['src/inject.ts', 'test/inject.test.ts'],
+      creates: ['src/inject.ts', 'test/inject.test.ts'],
+      quality_gate_cmd: ['npm', 'test'], estimated_iterations: 3,
+    },
+    {
+      work_item_id: 'WI-2', initiative_id: INIT, status: 'complete', depends_on: ['WI-1'],
+      acceptance_criteria: [{
+        given: 'a doc whose TOC is already current',
+        when: 'mdtoc --write runs a second time',
+        then: 'the file is byte-identical (idempotent re-write)',
+      }],
+      files_in_scope: ['src/inject.ts', 'src/idempotency.ts', 'test/idempotency.test.ts'],
+      creates: ['src/idempotency.ts', 'test/idempotency.test.ts'],
+      quality_gate_cmd: ['npm', 'test'], estimated_iterations: 2,
+    },
+  ];
+  for (const wi of devWis) {
+    writeFileSync(join(wt, '.forge', 'work-items', `${wi.work_item_id}.md`),
+      `---\n${yaml.dump(wi)}---\n\n# ${wi.work_item_id} — seeded (mirrors the event stream's dev WIs).\n`);
+  }
+  // Seed the static UWI-1 ("unify & prep the PR") the unifier normally writes —
+  // since ADR-040 it is the queue's ONLY item (send-backs compile fix WIs onto
+  // the dev queue above; the fix-loop drain re-arms this mission per round).
   // Grounded (S5, fix item 13): real unifier-authored WI frontmatter always
   // carries an ADR-037 `creates:` list (the structural PM/unifier validator
   // rejects a pure-modification WI without it) — source gitpulse WI-1.md/WI-3.md.
