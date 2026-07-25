@@ -105,6 +105,16 @@ The flow/agent builders read a server-computed capability descriptor instead of 
     ceiling). A toy-provider (isolation:none, non-WorkItem) test proves the
     generic dispatcher is reusable with no new dispatcher code. Byte-compatible
     at concurrency 1 (existing behavior-lock tests green).
+  - **Review fixes (2026-07-25, whole-branch adversarial review).** Precedence
+    of `resolveDevWiConcurrency` corrected to **env > config > definitionCap >
+    default** (the agent's declared cap is a *default* below the ADR-009 operator
+    lever, not above it). Fixed an external-abort listener leak (`{once:true}`
+    never self-removes on normal completion → accumulated on the shared node
+    signal). Scoped the ADR-028 "no zombie work" guarantee to the reference
+    `claude` adapter (gemini/aider/example accept but don't honor `externalSignal`
+    yet — known-gaps §4.12). Added a SOFT `fanout/isolation` lint (open provider
+    ref; `FANOUT_ISOLATION_KINDS = worktree|none`). Wedge-kill firing MID-attempt
+    now reclassifies to `aborted` instead of routing through crash-retry.
     - **Deferred within F4 (residual):** parameterizing `runDeveloperLoop` by the
       NODE's agent def so a 2nd fanout-capable agent runs its OWN behaviour as a
       real flow node (today `makeAgentWithTelemetry` hardcodes `developer-ralph`'s
