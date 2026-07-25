@@ -14,7 +14,7 @@
  * `_logs/<cycleId>` dir. No sibling cycle is born.
  */
 import { existsSync, readdirSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 
 import {
   parseManifest,
@@ -122,20 +122,16 @@ export function enqueueFlowRun(
   // known-gaps §9 (defense-in-depth, closed with ADR 040) — DEVELOP-specific:
   // the dev-loop hard-fails on an empty WI dir, so dispatching an undecomposed
   // initiative at forge-develop wastes a cycle. Other flows (architect, reflect,
-  // operator-authored) have no decomposition precondition.
-  if (flowId === DEVELOP_FLOW_ID) {
-    const hasSpecs = (manifest.specs?.length ?? 0) > 0;
-    const hasWorktreeWis =
-      !!manifest.worktree_path &&
-      existsSync(manifest.worktree_path) &&
-      hasWorkItemFiles(join(manifest.worktree_path, '.forge', 'work-items'));
-    if (!hasSpecs && !hasWorktreeWis) {
-      return {
-        status: 'not-planned',
-        initiativeId,
-        detail: 'no decomposition evidence (manifest specs or preserved work-items) — plan the initiative first',
-      };
-    }
+  // operator-authored) have no decomposition precondition. The evidence sources
+  // MUST match the roadmap UI's "planned" check (bridge-studio.ts
+  // `readWorkItemsForInitiative`) — else the UI shows "start development" while
+  // this boundary rejects it (an inconsistency the roadmap journey catches).
+  if (flowId === DEVELOP_FLOW_ID && !hasDecompositionEvidence(manifest, opts.queueRoot ?? '_queue')) {
+    return {
+      status: 'not-planned',
+      initiativeId,
+      detail: 'no decomposition evidence (manifest specs, WI snapshot, or preserved work-items) — plan the initiative first',
+    };
   }
 
   // Repoint at the target flow + reset to a fresh, claimable build. resume_from
@@ -183,6 +179,36 @@ function hasWorkItemFiles(dir: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Decomposition evidence for the develop `not-planned` gate — the SAME sources
+ * the roadmap UI reads to decide an initiative is "planned"
+ * (`readWorkItemsForInitiative`): the manifest's `specs` back-ref (R4-05), the
+ * `_logs/<cycleId>/work-items-snapshot/` (post-PM, reliable for done cycles),
+ * and the preserved worktree WI dir (`.forge/work-items/` in the manifest's
+ * worktree or the forge-managed `_worktrees/<initId>/`). `_logs` and
+ * `_worktrees` are resolved as siblings of the queue root.
+ */
+function hasDecompositionEvidence(manifest: InitiativeManifest, queueRoot: string): boolean {
+  if ((manifest.specs?.length ?? 0) > 0) return true;
+
+  const queueParent = resolve(queueRoot, '..');
+  const logsRoot = resolve(queueParent, '_logs');
+  const cycleId = manifest.cycle_id;
+  if (cycleId && hasWorkItemFiles(join(logsRoot, cycleId, 'work-items-snapshot'))) return true;
+
+  if (
+    manifest.worktree_path &&
+    existsSync(manifest.worktree_path) &&
+    hasWorkItemFiles(join(manifest.worktree_path, '.forge', 'work-items'))
+  ) {
+    return true;
+  }
+  if (hasWorkItemFiles(join(queueParent, '_worktrees', manifest.initiative_id, '.forge', 'work-items'))) {
+    return true;
+  }
+  return false;
 }
 
 /** Best-effort read of a manifest's flow_id; null on any parse failure. */

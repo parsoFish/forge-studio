@@ -145,6 +145,24 @@ test('enqueueDevelopRun: no decomposition evidence → not-planned (ADR-040 ride
   });
 });
 
+test('enqueueDevelopRun: a WI snapshot under _logs/<cycleId> counts as decomposition evidence (matches the roadmap UI planned-check)', () => {
+  withTmp((queueRoot) => {
+    // The roadmap UI reads decomposition off _logs/<cycleId>/work-items-snapshot/
+    // (bridge-studio.ts readWorkItemsForInitiative). A planned initiative can
+    // reach "start development" with only that snapshot + a cycle_id, no specs —
+    // the gate must accept it or the UI shows a button the dispatch rejects.
+    const cycleId = '2026-06-21T00-00-00_INIT-2026-06-21-toc';
+    const m = manifest({ cycle_id: cycleId });
+    delete m.specs;
+    seed(queueRoot, 'pending', m);
+    const snapDir = join(queueRoot, '..', '_logs', cycleId, 'work-items-snapshot');
+    mkdirSync(snapDir, { recursive: true });
+    writeFileSync(join(snapDir, 'WI-1.md'), '---\nwork_item_id: WI-1\n---\n');
+    const result = enqueueDevelopRun('INIT-2026-06-21-toc', { queueRoot });
+    assert.equal(result.status, 'enqueued', 'the WI snapshot satisfies the planned gate');
+  });
+});
+
 test('enqueueDevelopRun: preserved worktree WI files count as decomposition evidence (pre-specs fallback)', () => {
   withTmp((queueRoot) => {
     const wt = join(queueRoot, '..', 'wt');
