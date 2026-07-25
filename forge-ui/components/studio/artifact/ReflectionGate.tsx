@@ -9,8 +9,16 @@
  * This is the interactive counterpart to the read-only ReflectionRenderer. It
  * carries the exact data-* contract the e2e harness asserts (re-homed from the
  * retired /reflect/[cycleId] screen):
- *   data-section="reflect-questions" · data-question-index · data-field="freeform"
- *   data-action="submit-reflection" · data-section="reflect-done"
+ *   data-section="reflect-questions" · data-question-index ·
+ *   data-question-mode="options|freeform" · data-question-resolved ·
+ *   data-option-label · data-option-selected · data-question-freeform ·
+ *   data-field="freeform" · data-action="submit-reflection" ·
+ *   data-section="reflect-done"
+ * R4-09-F3 (automated mode): when every question was reflector-inferred the gate
+ * renders a read-only view instead of the form —
+ *   data-reflect-automated="true" (on the reflect-questions section) ·
+ *   data-question-inferred="true" (per fieldset; "false" in the interactive form) ·
+ *   data-question-inferred-badge · data-question-answer (the inferred answer).
  *
  * The form logic (allAnswered gating, answer payload assembly) is unit-tested
  * via the pure helpers below.
@@ -22,7 +30,7 @@ import {
   postReflectionAnswers,
   type ReflectionData,
 } from '@/lib/bridge-client';
-import { reflectionAllAnswered, buildReflectionAnswers } from '@/lib/reflection-form';
+import { reflectionAllAnswered, buildReflectionAnswers, hasInferredAnswers } from '@/lib/reflection-form';
 
 export function ReflectionGate({
   cycleId,
@@ -42,6 +50,10 @@ export function ReflectionGate({
   const questions = data?.questions ?? [];
   const allAnswered = reflectionAllAnswered(questions, choices);
   const done = submitted || Boolean(data?.answered);
+  // R4-09-F3: an automated run self-answered every question — render the Q&A
+  // read-only with provenance badges instead of the operator form (and BEFORE
+  // the `done` check, since a self-written user-feedback.md makes it "answered").
+  const automated = hasInferredAnswers(questions);
 
   async function submit(): Promise<void> {
     if (submitting) return;
@@ -63,6 +75,73 @@ export function ReflectionGate({
     } finally {
       setSubmitting(false);
     }
+  }
+
+  if (automated) {
+    return (
+      <div
+        data-section="reflect-questions"
+        data-reflect-automated="true"
+        style={{
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--radius-sm)',
+          padding: 16,
+          background: 'var(--panel)',
+        }}
+      >
+        <div style={{ fontSize: 13, color: 'var(--text)', marginBottom: 4, fontWeight: 600 }}>
+          Automated reflection
+        </div>
+        <div style={{ fontSize: 12, color: 'var(--dim)', marginBottom: 16 }}>
+          No operator was in the loop — the reflector inferred these answers from the
+          cycle logs, demo, and diff. Review them; they steer what lands in the brain.
+        </div>
+        {questions.map((q, i) => (
+          <fieldset
+            key={i}
+            data-question-index={i}
+            data-question-inferred="true"
+            data-question-resolved="true"
+            style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
+          >
+            <legend style={{ fontSize: 13, color: 'var(--text)', marginBottom: 6, padding: 0 }}>
+              {q.question}
+            </legend>
+            <div
+              style={{
+                display: 'flex',
+                gap: 8,
+                alignItems: 'flex-start',
+                border: '1px solid var(--line)',
+                borderRadius: 6,
+                padding: '8px 10px',
+                background: 'rgba(88,166,255,.06)',
+              }}
+            >
+              <span
+                data-question-inferred-badge
+                style={{
+                  fontSize: 10,
+                  textTransform: 'uppercase',
+                  letterSpacing: '.04em',
+                  color: 'var(--steel)',
+                  border: '1px solid var(--steel)',
+                  borderRadius: 4,
+                  padding: '1px 5px',
+                  marginTop: 1,
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                inferred
+              </span>
+              <span data-question-answer style={{ fontSize: 13, color: 'var(--text)' }}>
+                {q.answer || '—'}
+              </span>
+            </div>
+          </fieldset>
+        ))}
+      </div>
+    );
   }
 
   if (done) {
@@ -126,6 +205,7 @@ export function ReflectionGate({
             data-question-index={i}
             data-question-resolved={choices[i] ? 'true' : 'false'}
             data-question-mode={hasOptions ? 'options' : 'freeform'}
+            data-question-inferred="false"
             style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
           >
             <legend style={{ fontSize: 13, color: 'var(--text)', marginBottom: 6, padding: 0 }}>

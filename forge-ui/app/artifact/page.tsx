@@ -895,7 +895,9 @@ function ArtifactPageInner() {
               {/* Reflection: the interactive question gate (the third human
                   moment) sits above the read-only reflection summary. The gate
                   carries data-section="reflect-questions" / "reflect-done" +
-                  data-field="freeform" + data-action="submit-reflection". */}
+                  data-field="freeform" + data-action="submit-reflection". In
+                  R4-09-F3 automated mode it renders read-only:
+                  data-reflect-automated + per-question data-question-inferred. */}
               {type === 'reflection' && (
                 <div style={{ marginBottom: 24 }}>
                   <ReflectionGate cycleId={runId} data={reflectionData} />

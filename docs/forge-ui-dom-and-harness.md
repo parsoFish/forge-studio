@@ -91,7 +91,19 @@ inventory rather than one shared page-level contract:
   on-disk VerdictRecord via `verdictRecordToDoc` — R4-08-F3 fixed the raw-shape
   passthrough that rendered every verdict "Approved"). `type=reflection&mode=view`
   is the sole reflection surface (interactive ReflectionGate above a
-  read-only renderer). The old `/review/[cycleId]` and `/reflect/[cycleId]`
+  read-only renderer). The **ReflectionGate** data-* contract:
+  `[data-section="reflect-questions"]` wraps the live form, each question a
+  `[data-question-index][data-question-mode="options|freeform"][data-question-resolved]`
+  fieldset — options render `[data-option-label][data-option-selected]`, a
+  freeform question a `[data-question-freeform]` textarea; below the list a
+  `[data-field="freeform"]` notes box and a `[data-action="submit-reflection"]`
+  button gated on all-answered; once submitted (or `answered`)
+  `[data-section="reflect-done"]`. **R4-09-F3 automated mode:** when the reflector
+  self-answered (every question inferred), the gate renders a read-only view —
+  `[data-section="reflect-questions"][data-reflect-automated="true"]`, each
+  fieldset `[data-question-inferred="true"]` (the interactive form stamps
+  `"false"`) with a `[data-question-inferred-badge]` and the inferred
+  `[data-question-answer]`, and NO submit button. The old `/review/[cycleId]` and `/reflect/[cycleId]`
   routes are now permanent client-side redirects into `/artifact` (M7-3,
   ADR-031) — `[data-page="review-redirect"|"reflect-redirect"][data-page-ready="true"]`
   — kept only so stale bookmarks keep working.
