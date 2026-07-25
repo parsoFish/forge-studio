@@ -2,9 +2,11 @@
  * R4-09-F4/F5 — post-cycle KB health dispatcher tests.
  *
  * Covers touched-KB detection (fresh themes + always-cycles), per-KB
- * ingest/consolidate/lint dispatch + events, the cmd-shaped process invocation
- * contract, and the F4 routing claim (project-subject vs flow-subject writes
- * land in distinct KBs and are health-checked separately).
+ * ingest/consolidate/lint dispatch + events, the REAL project-aware structural
+ * lint (a broken project theme must come back `flagged`, not a vacuous
+ * `clean` — the declared-data-fails-open finding), the cmd-shaped process
+ * invocation contract + its `failed` status on non-zero exit, and the F4
+ * routing claim (project-subject vs flow-subject writes land in distinct KBs).
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -34,11 +36,16 @@ function setupBrain(): { forgeRoot: string } {
 }
 
 /** Write a theme and stamp its mtime to `atMs`. */
-function writeTheme(dir: string, name: string, atMs: number): void {
+function writeTheme(dir: string, name: string, atMs: number, body?: string): void {
   const p = join(dir, name);
-  writeFileSync(p, `---\ntitle: ${name}\n---\nbody\n`);
+  writeFileSync(p, body ?? `---\ntitle: ${name}\n---\nbody\n`);
   const s = atMs / 1000;
   utimesSync(p, s, s);
+}
+
+/** A structurally valid theme (all required frontmatter, valid category). */
+function validThemeBody(): string {
+  return ['---', 'title: Valid Theme', 'description: a valid theme', 'category: pattern', 'created_at: 2026-07-25', 'updated_at: 2026-07-25', '---', 'body', ''].join('\n');
 }
 
 function fakeLogger(events: EventLogEntry[]): EventLogger {
@@ -46,53 +53,42 @@ function fakeLogger(events: EventLogEntry[]): EventLogger {
 }
 
 /** Deps that stub the shared builtins so tests stay fast + fs-light. */
-function stubDeps(overrides: Partial<KbHealthDeps> = {}): { deps: KbHealthDeps; regenCount: () => number; autoFixCalls: () => number } {
+function stubDeps(overrides: Partial<KbHealthDeps> = {}): { deps: KbHealthDeps; regenCount: () => number } {
   let regen = 0;
-  let fixes = 0;
   const deps: KbHealthDeps = {
     regenerateBrainIndex: () => { regen += 1; },
-    runBrainLint: () => ({ findings: [] as Finding[], exitCode: 0 }),
-    applyAutoFixes: () => { fixes += 1; return { applied: [], skipped: [] }; },
+    lintThemeFiles: () => [] as Finding[],
+    applyAutoFixes: () => ({ applied: [], skipped: [] }),
     ...overrides,
   };
-  return { deps, regenCount: () => regen, autoFixCalls: () => fixes };
+  return { deps, regenCount: () => regen };
 }
 
 const START = 1_000_000_000_000; // fixed base ms
 
 test('kb-health: fresh project + cycles themes → both KBs processed, index regenerated once', () => {
   const { forgeRoot } = setupBrain();
-  // fresh (after start) themes in project + cycles
   writeTheme(join(forgeRoot, 'brain', 'projects', 'demo', 'themes'), '2026-07-25-demo-lesson.md', START + 5000);
   writeTheme(join(forgeRoot, 'brain', 'cycles', 'themes'), '2026-07-25-flow-lesson.md', START + 5000);
   const events: EventLogEntry[] = [];
   const { deps, regenCount } = stubDeps();
 
   const result = runPostReflectionKbHealth({
-    forgeRoot,
-    cycleId: 'CID',
-    candidateKbIds: ['cycles', 'forge-dev', 'demo'],
-    sinceMs: START,
-    logger: fakeLogger(events),
-    initiativeId: 'INIT',
-    deps,
+    forgeRoot, cycleId: 'CID', candidateKbIds: ['cycles', 'forge-dev', 'demo'],
+    sinceMs: START, logger: fakeLogger(events), initiativeId: 'INIT', deps,
   });
 
   const kbIds = result.kbs.map((k) => k.kbId).sort();
   assert.deepEqual(kbIds, ['cycles', 'demo'], 'processes cycles (always) + demo (fresh); forge-dev has no fresh theme');
-  // index regenerated once, shared across KBs
   assert.equal(regenCount(), 1, 'ingest regenerates the index exactly once across KBs');
   assert.equal(events.filter((e) => e.message === 'reflector.brain-index-regenerated').length, 1);
-  // per-KB health events for both processed KBs
   const healthKbs = events.filter((e) => e.message === 'reflect.kb-health').map((e) => e.metadata?.kb).sort();
   assert.deepEqual(healthKbs, ['cycles', 'demo']);
-  // each processed KB reports clean lint (no findings stubbed)
   assert.ok(result.kbs.every((k) => k.lint === 'clean' && k.ingest === 'done' && k.consolidate === 'done'));
 });
 
 test('kb-health: cycles is processed even with zero fresh themes (archive lands there)', () => {
   const { forgeRoot } = setupBrain();
-  // no fresh themes anywhere
   const events: EventLogEntry[] = [];
   const { deps } = stubDeps();
   const result = runPostReflectionKbHealth({
@@ -119,16 +115,44 @@ test('kb-health: F4 routing — project vs flow themes attributed to distinct KB
   assert.ok(byId.has('cycles'), 'cycles always processed');
 });
 
+test('kb-health: REAL lint (no stub) flags a broken PROJECT theme — not a vacuous clean', () => {
+  const { forgeRoot } = setupBrain();
+  // A fresh project theme MISSING required frontmatter (no description/category/dates).
+  writeTheme(join(forgeRoot, 'brain', 'projects', 'demo', 'themes'), 'broken.md', START + 5000, '---\ntitle: only a title\n---\nbody\n');
+  const events: EventLogEntry[] = [];
+  // Only stub the index regen (fs side effect) — lintThemeFiles + applyAutoFixes are REAL.
+  const result = runPostReflectionKbHealth({
+    forgeRoot, cycleId: 'CID', candidateKbIds: ['cycles', 'demo'],
+    sinceMs: START, logger: fakeLogger(events), initiativeId: 'INIT',
+    deps: { regenerateBrainIndex: () => {} },
+  });
+  const demo = result.kbs.find((k) => k.kbId === 'demo');
+  assert.equal(demo?.lint, 'flagged', 'a broken project theme must surface as flagged, not clean');
+});
+
+test('kb-health: REAL lint (no stub) reports a valid PROJECT theme as clean', () => {
+  const { forgeRoot } = setupBrain();
+  writeTheme(join(forgeRoot, 'brain', 'projects', 'demo', 'themes'), 'valid.md', START + 5000, validThemeBody());
+  const events: EventLogEntry[] = [];
+  const result = runPostReflectionKbHealth({
+    forgeRoot, cycleId: 'CID', candidateKbIds: ['demo'],
+    sinceMs: START, logger: fakeLogger(events), initiativeId: 'INIT',
+    deps: { regenerateBrainIndex: () => {} },
+  });
+  const demo = result.kbs.find((k) => k.kbId === 'demo');
+  assert.equal(demo?.lint, 'clean', 'a structurally valid project theme is clean (index-sync is a non-gating flag)');
+});
+
 test('kb-health: consolidate auto-fix runs on a KB with fixable findings', () => {
   const { forgeRoot } = setupBrain();
   const themePath = join(forgeRoot, 'brain', 'cycles', 'themes', 'flag.md');
   writeTheme(join(forgeRoot, 'brain', 'cycles', 'themes'), 'flag.md', START + 5000);
   let fixCalls = 0;
-  const finding = { file: themePath, category: 'auto-fix', kind: 'index.not-listed', resolution: 'auto' } as unknown as Finding;
+  const finding = { file: themePath, category: 'auto-fix', kind: 'index.not-listed', resolution: 'auto', check: 'checkIndexSync', message: 'not listed' } as unknown as Finding;
   const deps: KbHealthDeps = {
     regenerateBrainIndex: () => {},
-    runBrainLint: () => ({ findings: [finding], exitCode: 1 }),
-    applyAutoFixes: (_root, findings) => { fixCalls += 1; assert.equal(findings.length, 1, 'only the cycles-KB finding is passed'); return { applied: [{ kind: 'index.not-listed', file: themePath, detail: 'linked' }], skipped: [] }; },
+    lintThemeFiles: () => [finding],
+    applyAutoFixes: (_root, findings) => { fixCalls += 1; assert.ok(findings.length >= 1, 'the KB findings are passed to auto-fix'); return { applied: [{ kind: 'index.not-listed', file: themePath, detail: 'linked' }], skipped: [] }; },
   };
   const events: EventLogEntry[] = [];
   runPostReflectionKbHealth({
@@ -146,9 +170,8 @@ test('kb-health: cmd-shaped process gets the R1-01 invocation contract (KB root,
   const seen: Array<{ cmd: string; kbRoot: string; runId: string; rawDir: string }> = [];
   const deps: KbHealthDeps = {
     regenerateBrainIndex: () => {},
-    runBrainLint: () => ({ findings: [], exitCode: 0 }),
+    lintThemeFiles: () => [],
     applyAutoFixes: () => ({ applied: [], skipped: [] }),
-    // a descriptor for 'demo' declaring cmd-shaped lint
     loadKbDescriptor: () => ({
       id: 'demo', name: 'demo', binding: { kind: 'project', ref: 'demo' }, desc: 'x',
       processes: {
@@ -170,4 +193,32 @@ test('kb-health: cmd-shaped process gets the R1-01 invocation contract (KB root,
   assert.equal(lintCmd!.runId, 'RUN-1', 'run id threaded');
   assert.ok(lintCmd!.kbRoot.endsWith(join('brain', 'projects', 'demo')), 'KB root is the brain dir');
   assert.ok(lintCmd!.rawDir.endsWith(join('brain', 'cycles', '_raw')), 'raw-material dir threaded');
+});
+
+test('kb-health: a cmd-shaped process that exits non-zero surfaces as failed, not done', () => {
+  const { forgeRoot } = setupBrain();
+  writeTheme(join(forgeRoot, 'brain', 'projects', 'demo', 'themes'), 'p.md', START + 5000);
+  const deps: KbHealthDeps = {
+    regenerateBrainIndex: () => {},
+    lintThemeFiles: () => [],
+    applyAutoFixes: () => ({ applied: [], skipped: [] }),
+    loadKbDescriptor: () => ({
+      id: 'demo', name: 'demo', binding: { kind: 'project', ref: 'demo' }, desc: 'x',
+      processes: {
+        lint: { builtin: 'forge-brain-lint' },
+        ingest: { cmd: 'failing-ingest' },
+        consolidate: { builtin: 'brain-fix' },
+        usage: { readSurface: 'navigation-index', readers: ['reflector'] },
+      },
+    }) as never,
+    runCmdProcess: () => 7, // non-zero
+  };
+  const events: EventLogEntry[] = [];
+  const result = runPostReflectionKbHealth({
+    forgeRoot, cycleId: 'CID', candidateKbIds: ['demo'],
+    sinceMs: START, logger: fakeLogger(events), initiativeId: 'INIT', deps,
+  });
+  assert.equal(result.kbs.find((k) => k.kbId === 'demo')?.ingest, 'failed', 'non-zero cmd exit → failed');
+  const ev = events.find((e) => e.message === 'reflect.kb-ingest');
+  assert.equal(ev?.event_type, 'error', 'a failed process is emitted at event_type error');
 });

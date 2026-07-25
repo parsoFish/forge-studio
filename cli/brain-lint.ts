@@ -837,6 +837,95 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- lintThemeFiles (explicit file list, project-aware) ----------
+
+/**
+ * R4-09-F5 — structurally lint an EXPLICIT list of theme files, regardless of
+ * which brain sub-wiki they live in (including `brain/projects/<name>/themes/`,
+ * which the shared checks never scan via `readThemeFiles`). Used by the
+ * post-cycle KB-health dispatcher to give a REAL per-KB lint of exactly the
+ * themes a reflect run just wrote — scoped to those files so historical themes
+ * are never touched (no repo-wide red), and project-aware so a project theme's
+ * content is actually validated (the finding that a project KB's declared lint
+ * was structurally vacuous).
+ *
+ * Emits findings with the SAME `check`/`message` shapes the shared checks use,
+ * so `classify` + `applyAutoFixes` recognise them. Deliberately runs only the
+ * checks that are unambiguously correct per-file for BOTH forge and project
+ * themes: required frontmatter, category-value whitelist, date order, broken
+ * relative links, category→sub-wiki routing (forge themes only — project
+ * themes are exempt per the reflector contract), and category-index sync.
+ * Wikilink resolution is skipped (a project theme legitimately links project
+ * siblings the forge-side resolver can't see — checking it here would false-
+ * positive), matching the shared `checkSourceLinks`' own project caveat.
+ */
+export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
+  const brainRoot = join(forgeRoot, 'brain');
+  const findings: Finding[] = [];
+  for (const file of files) {
+    const parsed = parseTheme(file);
+    if (!parsed) {
+      findings.push({ category: 'error', file, message: 'unparseable frontmatter (gray-matter failed)', check: 'checkFrontmatter' });
+      continue;
+    }
+    const { data } = parsed;
+    for (const field of REQUIRED_FRONTMATTER_FIELDS) {
+      if (data[field] === undefined || data[field] === null || data[field] === '') {
+        findings.push({ category: 'error', file, message: `missing required frontmatter field: ${field}`, check: 'checkFrontmatter' });
+      }
+    }
+    const cat = String(data.category ?? '');
+    if (data.category && !ALLOWED_CATEGORIES.has(cat)) {
+      findings.push({ category: 'error', file, message: `category "${data.category}" not in whitelist {${[...ALLOWED_CATEGORIES].join('|')}}`, check: 'checkFrontmatter' });
+    }
+    if (data.created_at && data.updated_at) {
+      const c = new Date(String(data.created_at)).getTime();
+      const u = new Date(String(data.updated_at)).getTime();
+      if (!Number.isNaN(c) && !Number.isNaN(u) && c > u) {
+        findings.push({ category: 'error', file, message: 'created_at > updated_at', check: 'checkFrontmatter' });
+      }
+    }
+    for (const link of extractLinks(parsed.content).relLinks) {
+      if (!existsSync(resolve(dirname(file), link))) {
+        findings.push({ category: 'error', file, message: `broken link: ${link}`, check: 'checkSourceLinks' });
+      }
+    }
+    // Locate the file's brain sub-wiki: forge → brain/<subdir>/themes/…,
+    // project → brain/projects/<name>/themes/…
+    const rel = file.slice(brainRoot.length).replace(/\\/g, '/');
+    const parts = rel.split('/').filter(Boolean);
+    const actualSubdir = parts[0] ?? '';
+    const isProjectTheme = actualSubdir === 'projects';
+    if (!isProjectTheme && ALLOWED_CATEGORIES.has(cat)) {
+      const expected = CATEGORY_TO_BRAIN_SUBDIR[cat];
+      if (expected && actualSubdir !== expected) {
+        findings.push({
+          category: 'error',
+          file,
+          message: `category "${cat}" belongs in brain/${expected}/themes/ but this file is in brain/${actualSubdir}/themes/ (category→brain routing: ${cat}→${expected})`,
+          check: 'checkCategoryScope',
+        });
+      }
+    }
+    if (ALLOWED_CATEGORIES.has(cat)) {
+      const indexFile = CATEGORY_TO_INDEX_FILE[cat];
+      if (indexFile) {
+        const indexDir = isProjectTheme ? join(brainRoot, 'projects', parts[1] ?? '') : join(brainRoot, actualSubdir);
+        const indexPath = join(indexDir, indexFile);
+        if (!existsSync(indexPath)) {
+          findings.push({ category: 'flag', file, message: `category index missing: ${relative(forgeRoot, indexPath)}`, check: 'checkIndexSync' });
+        } else {
+          const slug = basename(file, '.md');
+          const hit = readIndexEntries(indexPath).filter((e) => e === slug).length;
+          if (hit === 0) findings.push({ category: 'flag', file, message: `not listed in category index: ${relative(forgeRoot, indexPath)}`, check: 'checkIndexSync' });
+          else if (hit > 1) findings.push({ category: 'flag', file, message: `listed ${hit} times in category index: ${relative(forgeRoot, indexPath)}`, check: 'checkIndexSync' });
+        }
+      }
+    }
+  }
+  return findings;
+}
+
 // ---------- checkReflectorLoss ----------
 
 /**

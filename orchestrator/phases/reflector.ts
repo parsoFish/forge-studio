@@ -406,15 +406,32 @@ export async function runReflector(
   // The candidate KBs a reflect run may write: its project KB, the flow/cycles
   // KB (always touched — the cycle archive lands there), and forge-dev.
   const kbHealthFn = deps.kbHealth ?? runPostReflectionKbHealth;
-  kbHealthFn({
-    forgeRoot,
-    cycleId,
-    candidateKbIds: ['cycles', 'forge-dev', projectName],
-    sinceMs: startedAtMs,
-    logger,
-    initiativeId: input.initiativeId,
-    parentEventId: start.event_id,
-  });
+  try {
+    kbHealthFn({
+      forgeRoot,
+      cycleId,
+      candidateKbIds: ['cycles', 'forge-dev', projectName],
+      sinceMs: startedAtMs,
+      logger,
+      initiativeId: input.initiativeId,
+      parentEventId: start.event_id,
+    });
+  } catch (kbErr) {
+    // Best-effort like the rest of the post-agent pipeline — a KB-health crash
+    // must never abort the cycle close (the index regen also lives here, so a
+    // failure loses the regen; runPostReflectionLint below still runs).
+    logger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'reflection',
+      skill: 'reflector',
+      event_type: 'error',
+      input_refs: [],
+      output_refs: [],
+      message: 'reflector.kb-health-failed',
+      metadata: { error: kbErr instanceof Error ? kbErr.message : String(kbErr) },
+    });
+  }
 
   // S6A — brain-lint trigger. Run AFTER themes + archive are written (and after
   // the KB-health consolidate above) so the cycle-touched-themes scope sees the

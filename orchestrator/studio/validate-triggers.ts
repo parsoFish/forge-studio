@@ -10,6 +10,7 @@
 import { Cron } from 'croner';
 
 import { TRIGGER_KINDS, TRIGGER_KIND_IDS } from '../flow-trigger.ts';
+import { resolveBandHook } from '../agent-bands.ts';
 import type { AgentDefinition, FlowDefinition } from './types.ts';
 
 export type TriggerFinding = {
@@ -104,9 +105,24 @@ export function checkFlowTriggers(
         );
       }
     } else if (trigger.target.kind === 'agent') {
-      if (!agents.has(trigger.target.ref)) {
+      const agentDef = agents.get(trigger.target.ref);
+      if (!agentDef) {
         findings.push(
           err(obj, 'trigger-target', `Trigger target agent "${trigger.target.ref}" is not a known agent`),
+        );
+      } else if (trigger.on === 'merged' && resolveBandHook(agentDef) !== 'reflection-close') {
+        // R4-09-F1: an `on: merged` agent target is dispatched by
+        // finalize-merged.ts ONLY when the agent declares the `reflection-close`
+        // band (resolveMergeAgentHandler). Any other agent would silently land
+        // in the loud unhandled-target branch and never run — so lint must
+        // reject it here, mirroring the dispatch's own requirement (a gate must
+        // use the same evidence as the path it backstops).
+        findings.push(
+          err(
+            obj,
+            'trigger-target',
+            `Trigger target agent "${trigger.target.ref}" has no "reflection-close" band, so an "on: merged" trigger would never dispatch it — merge-time agent targets must be the reflect agent`,
+          ),
         );
       }
     }

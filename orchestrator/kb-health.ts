@@ -9,20 +9,27 @@
  * closing the gap where the descriptor's `processes` block was parsed + linted
  * + UI-surfaced but dispatched NOWHERE.
  *
- * Scope is deliberately narrow to avoid a repo-wide lint-red: the builtins
- * reuse the existing cycle-touched lint + global index regen + deterministic
- * auto-fix (they never newly-error historical themes). A KB that declares a
- * `cmd`-shaped process instead gets the R1-01-F1 invocation contract (KB root,
- * run id, raw-material dir via env). The FINAL authoritative lint status
- * (`lint_status` on the reflector result) is still produced by
- * `runPostReflectionLint`, which runs AFTER this step so it reflects the
- * consolidate fixes.
+ * The builtin `lint` runs `lintThemeFiles` over exactly the theme FILES the
+ * reflect run just wrote in that KB — a REAL, project-aware structural check
+ * (frontmatter/category/links/index) scoped to fresh files, so it never touches
+ * historical themes (no repo-wide lint-red) yet genuinely validates a project
+ * KB's own writes (the shared `cycle-touched-themes` scan never walks
+ * brain/projects/*). A KB that declares a `cmd`-shaped process instead gets the
+ * R1-01-F1 invocation contract (KB root, run id, raw-material dir via env). The
+ * authoritative aggregate `lint_status` on the reflector result is still
+ * produced by `runPostReflectionLint`, which runs AFTER this step so it
+ * reflects the consolidate fixes.
+ *
+ * Every process is fail-loud, never fail-open: a non-zero cmd exit or a thrown
+ * builtin surfaces as a `'failed'` status at `event_type: 'error'` (a declared
+ * process that promises a guard must not silently report success), and one KB's
+ * failure never aborts the others or the rest of the reflector pipeline.
  */
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, sep } from 'node:path';
+import { join } from 'node:path';
 
-import { runBrainLint, type Finding } from '../cli/brain-lint.ts';
+import { lintThemeFiles, classify, type Finding } from '../cli/brain-lint.ts';
 import { applyAutoFixes } from '../cli/brain-fix-auto.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
 import { resolveKbBrainDir } from './brain-paths.ts';
@@ -30,20 +37,23 @@ import { loadKbDescriptor, resolveKbProcesses } from './studio/kb-descriptor.ts'
 import type { KbDescriptor, KbProcessImpl } from './studio/types.ts';
 import type { EventLogger } from './logging.ts';
 
+type StepStatus = 'done' | 'skipped' | 'failed';
+type LintStatus = 'clean' | 'flagged' | 'skipped' | 'failed';
+
 /** Per-KB outcome of one health pass. */
 export type KbHealthEntry = {
   kbId: string;
   freshThemes: number;
-  ingest: 'done' | 'skipped';
-  consolidate: 'done' | 'skipped';
-  lint: 'clean' | 'flagged' | 'skipped';
+  ingest: StepStatus;
+  consolidate: StepStatus;
+  lint: LintStatus;
 };
 
 export type KbHealthResult = { kbs: KbHealthEntry[] };
 
 export type KbHealthDeps = {
-  /** The cycle-touched lint (shared across KBs, run once). */
-  runBrainLint?: typeof runBrainLint;
+  /** Structural lint of an explicit theme-file list (defaults to the real one). */
+  lintThemeFiles?: typeof lintThemeFiles;
   /** Deterministic auto-tier consolidation. */
   applyAutoFixes?: typeof applyAutoFixes;
   /** Index regeneration (the `reflector-ingest` builtin). */
@@ -66,33 +76,28 @@ export type CmdProcessContext = {
 
 const THEME_INDEX_FILES = new Set(['README.md', 'patterns.md', 'antipatterns.md', 'operations.md', 'decisions.md', 'reference.md']);
 
-/** Fresh (`mtime >= sinceMs`) theme files in a KB's `themes/` dir, excluding index pages. */
-function countFreshThemes(themesDir: string, sinceMs: number): number {
-  if (!existsSync(themesDir)) return 0;
-  let n = 0;
+/** Fresh (`mtime >= sinceMs`) theme file paths in a KB's `themes/` dir, excluding index pages. */
+function listFreshThemeFiles(themesDir: string, sinceMs: number): string[] {
+  if (!existsSync(themesDir)) return [];
+  const out: string[] = [];
   for (const name of readdirSync(themesDir)) {
     if (!name.endsWith('.md') || THEME_INDEX_FILES.has(name)) continue;
+    const p = join(themesDir, name);
     try {
-      if (statSync(join(themesDir, name)).mtimeMs >= sinceMs) n += 1;
+      if (statSync(p).mtimeMs >= sinceMs) out.push(p);
     } catch {
       /* unreadable entry — not fresh */
     }
   }
-  return n;
+  return out;
 }
 
-/** Path to a KB's kb.yaml, or null if the KB has no brain dir. */
+/** Path to a KB's kb.yaml, or null if the KB has no brain dir / descriptor. */
 function kbYamlPathFor(forgeRoot: string, kbId: string): string | null {
   const dir = resolveKbBrainDir(forgeRoot, kbId);
   if (!dir) return null;
   const p = join(dir, 'kb.yaml');
   return existsSync(p) ? p : null;
-}
-
-/** Findings whose absolute `file` sits under a KB's brain dir. */
-function findingsForKb(findings: Finding[], kbBrainDir: string): Finding[] {
-  const prefix = kbBrainDir.endsWith(sep) ? kbBrainDir : kbBrainDir + sep;
-  return findings.filter((f) => f.file === kbBrainDir || f.file.startsWith(prefix));
 }
 
 /** The default `cmd` process runner: exec with the R1-01-F1 invocation contract. */
@@ -130,20 +135,20 @@ export function runPostReflectionKbHealth(opts: {
 }): KbHealthResult {
   const { forgeRoot, cycleId, candidateKbIds, sinceMs, logger, initiativeId, parentEventId } = opts;
   const deps = opts.deps ?? {};
-  const lintFn = deps.runBrainLint ?? runBrainLint;
+  const lintFn = deps.lintThemeFiles ?? lintThemeFiles;
   const autoFixFn = deps.applyAutoFixes ?? applyAutoFixes;
   const regenFn = deps.regenerateBrainIndex ?? ((o: { cwd: string }) => { regenerateBrainIndex(o); });
   const loadDescriptor = deps.loadKbDescriptor ?? loadKbDescriptor;
   const runCmd = deps.runCmdProcess ?? defaultRunCmdProcess;
   const rawDir = join(forgeRoot, 'brain', 'cycles', '_raw');
 
-  const emit = (message: string, metadata: Record<string, unknown>, outputRefs: string[] = []): void => {
+  const emit = (message: string, eventType: 'log' | 'error', metadata: Record<string, unknown>, outputRefs: string[] = []): void => {
     logger.emit({
       initiative_id: initiativeId,
       parent_event_id: parentEventId,
       phase: 'reflection',
       skill: 'reflector',
-      event_type: 'log',
+      event_type: eventType,
       input_refs: [],
       output_refs: outputRefs,
       message,
@@ -154,44 +159,32 @@ export function runPostReflectionKbHealth(opts: {
   // Which candidate KBs were actually touched this cycle. 'cycles' is always
   // touched (the reflector archives the cycle log to brain/cycles/_raw), so it
   // is processed regardless of fresh theme count. Others require a fresh theme.
-  const touched: Array<{ kbId: string; brainDir: string; fresh: number }> = [];
+  const touched: Array<{ kbId: string; brainDir: string; freshFiles: string[] }> = [];
   for (const kbId of [...new Set(candidateKbIds)]) {
     const brainDir = resolveKbBrainDir(forgeRoot, kbId);
     if (!brainDir) continue;
-    const fresh = countFreshThemes(join(brainDir, 'themes'), sinceMs);
-    if (fresh > 0 || kbId === 'cycles') touched.push({ kbId, brainDir, fresh });
+    const freshFiles = listFreshThemeFiles(join(brainDir, 'themes'), sinceMs);
+    if (freshFiles.length > 0 || kbId === 'cycles') touched.push({ kbId, brainDir, freshFiles });
   }
 
   if (touched.length === 0) return { kbs: [] };
 
-  // Shared work, computed ONCE and attributed per KB: the index regen (the
-  // `reflector-ingest` builtin) and the cycle-touched lint (whose findings feed
-  // both the consolidate auto-fix and each KB's lint attribution).
+  // The index regen (the `reflector-ingest` builtin) is repo-wide; compute it
+  // ONCE and share across KBs.
   let indexRegenerated = false;
   const ensureIndexRegen = (): void => {
     if (indexRegenerated) return;
     try {
       regenFn({ cwd: forgeRoot });
       indexRegenerated = true;
-      emit('reflector.brain-index-regenerated', {}, [join(forgeRoot, 'brain', 'INDEX.md')]);
+      emit('reflector.brain-index-regenerated', 'log', {}, [join(forgeRoot, 'brain', 'INDEX.md')]);
     } catch (err) {
-      emit('reflector.brain-index-failed', { error: err instanceof Error ? err.message : String(err) });
+      emit('reflector.brain-index-failed', 'error', { error: err instanceof Error ? err.message : String(err) });
     }
-  };
-
-  let lintFindings: Finding[] | null = null;
-  const ensureLint = (): Finding[] => {
-    if (lintFindings) return lintFindings;
-    try {
-      lintFindings = lintFn({ cwd: forgeRoot, scope: 'cycle-touched-themes', cycle: cycleId, fix: false }).findings;
-    } catch {
-      lintFindings = [];
-    }
-    return lintFindings;
   };
 
   const entries: KbHealthEntry[] = [];
-  for (const { kbId, brainDir, fresh } of touched) {
+  for (const { kbId, brainDir, freshFiles } of touched) {
     const yamlPath = kbYamlPathFor(forgeRoot, kbId);
     let procs: ReturnType<typeof resolveKbProcesses> | null = null;
     if (yamlPath) {
@@ -202,67 +195,79 @@ export function runPostReflectionKbHealth(opts: {
       }
     }
     const cmdCtx: CmdProcessContext = { kbRoot: brainDir, runId: cycleId, rawDir, forgeRoot };
+    const builtinName = (impl: KbProcessImpl | undefined, dflt: string): string => (impl && 'builtin' in impl ? impl.builtin : dflt);
 
     // --- ingest ---
-    let ingest: KbHealthEntry['ingest'] = 'skipped';
-    const ingestImpl: KbProcessImpl | undefined = procs?.ingest;
+    let ingest: StepStatus = 'skipped';
+    const ingestImpl = procs?.ingest;
     if (ingestImpl && 'cmd' in ingestImpl) {
       const rc = runCmd(ingestImpl.cmd, cmdCtx);
-      ingest = 'done';
-      emit('reflect.kb-ingest', { kb: kbId, impl: 'cmd', cmd: ingestImpl.cmd, exit: rc, fresh_themes: fresh });
+      ingest = rc === 0 ? 'done' : 'failed';
+      emit('reflect.kb-ingest', ingest === 'failed' ? 'error' : 'log', { kb: kbId, impl: 'cmd', cmd: ingestImpl.cmd, exit: rc, fresh_themes: freshFiles.length });
     } else {
-      // builtin `reflector-ingest` (default): make fresh themes discoverable.
-      ensureIndexRegen();
-      ingest = 'done';
-      emit('reflect.kb-ingest', { kb: kbId, impl: 'builtin', builtin: ingestImpl && 'builtin' in ingestImpl ? ingestImpl.builtin : 'reflector-ingest', fresh_themes: fresh });
+      try {
+        ensureIndexRegen();
+        ingest = indexRegenerated ? 'done' : 'failed';
+      } catch (err) {
+        ingest = 'failed';
+        emit('reflect.kb-ingest', 'error', { kb: kbId, impl: 'builtin', builtin: builtinName(ingestImpl, 'reflector-ingest'), error: err instanceof Error ? err.message : String(err) });
+      }
+      if (ingest !== 'failed') {
+        emit('reflect.kb-ingest', 'log', { kb: kbId, impl: 'builtin', builtin: builtinName(ingestImpl, 'reflector-ingest'), fresh_themes: freshFiles.length });
+      }
     }
 
-    // --- consolidate ---
-    let consolidate: KbHealthEntry['consolidate'] = 'skipped';
-    const consolidateImpl: KbProcessImpl | undefined = procs?.consolidate;
-    if (consolidateImpl && 'cmd' in consolidateImpl) {
-      const rc = runCmd(consolidateImpl.cmd, cmdCtx);
-      consolidate = 'done';
-      emit('reflect.kb-consolidate', { kb: kbId, impl: 'cmd', cmd: consolidateImpl.cmd, exit: rc });
+    // --- lint (real, per-fresh-file structural check) + consolidate ---
+    // Compute the KB's fresh-file findings once, auto-fix (consolidate), then
+    // re-lint so the reported status reflects the fixes.
+    let consolidate: StepStatus = 'skipped';
+    let lint: LintStatus = 'skipped';
+    const consolidateImpl = procs?.consolidate;
+    const lintImpl = procs?.lint;
+    const cmdConsolidate = consolidateImpl && 'cmd' in consolidateImpl;
+    const cmdLint = lintImpl && 'cmd' in lintImpl;
+
+    // Builtin lint/consolidate share the structural findings; a cmd override
+    // for either replaces just that step.
+    let kbFindings: Finding[] | null = null;
+    const computeFindings = (): Finding[] => lintFn(forgeRoot, freshFiles).map(classify);
+
+    // consolidate
+    if (cmdConsolidate) {
+      const rc = runCmd((consolidateImpl as { cmd: string }).cmd, cmdCtx);
+      consolidate = rc === 0 ? 'done' : 'failed';
+      emit('reflect.kb-consolidate', consolidate === 'failed' ? 'error' : 'log', { kb: kbId, impl: 'cmd', cmd: (consolidateImpl as { cmd: string }).cmd, exit: rc });
     } else {
-      // builtin `brain-fix` (default): deterministic auto-tier fixes on this
-      // KB's cycle-touched findings (index re-link, dedupe, date/route fixes).
-      const kbFindings = findingsForKb(ensureLint(), brainDir);
-      const res = autoFixFn(forgeRoot, kbFindings);
-      consolidate = 'done';
-      emit('reflect.kb-consolidate', {
-        kb: kbId,
-        impl: 'builtin',
-        builtin: consolidateImpl && 'builtin' in consolidateImpl ? consolidateImpl.builtin : 'brain-fix',
-        applied: res.applied.length,
-        skipped: res.skipped.length,
-      });
+      try {
+        kbFindings = computeFindings();
+        const res = autoFixFn(forgeRoot, kbFindings);
+        consolidate = 'done';
+        emit('reflect.kb-consolidate', 'log', { kb: kbId, impl: 'builtin', builtin: builtinName(consolidateImpl, 'brain-fix'), applied: res.applied.length, skipped: res.skipped.length });
+      } catch (err) {
+        consolidate = 'failed';
+        emit('reflect.kb-consolidate', 'error', { kb: kbId, impl: 'builtin', builtin: builtinName(consolidateImpl, 'brain-fix'), error: err instanceof Error ? err.message : String(err) });
+      }
     }
 
-    // --- lint (per-KB attribution of the shared cycle-touched pass) ---
-    // Re-lint after consolidate so the attributed status reflects the fixes.
-    let lint: KbHealthEntry['lint'] = 'skipped';
-    const lintImpl: KbProcessImpl | undefined = procs?.lint;
-    if (lintImpl && 'cmd' in lintImpl) {
-      const rc = runCmd(lintImpl.cmd, cmdCtx);
+    // lint (final status, post-consolidate)
+    if (cmdLint) {
+      const rc = runCmd((lintImpl as { cmd: string }).cmd, cmdCtx);
       lint = rc === 0 ? 'clean' : 'flagged';
-      emit('reflect.kb-lint', { kb: kbId, impl: 'cmd', cmd: lintImpl.cmd, exit: rc });
+      emit('reflect.kb-lint', lint === 'flagged' ? 'error' : 'log', { kb: kbId, impl: 'cmd', cmd: (lintImpl as { cmd: string }).cmd, exit: rc });
     } else {
-      lintFindings = null; // force a fresh post-consolidate pass
-      const kbFindings = findingsForKb(ensureLint(), brainDir);
-      const errors = kbFindings.filter((f) => f.category === 'error').length;
-      lint = errors > 0 ? 'flagged' : 'clean';
-      emit('reflect.kb-lint', {
-        kb: kbId,
-        impl: 'builtin',
-        builtin: lintImpl && 'builtin' in lintImpl ? lintImpl.builtin : 'forge-brain-lint',
-        result: lint,
-        error_findings: errors,
-      });
+      try {
+        const post = computeFindings();
+        const errors = post.filter((f) => f.category === 'error').length;
+        lint = errors > 0 ? 'flagged' : 'clean';
+        emit('reflect.kb-lint', lint === 'flagged' ? 'error' : 'log', { kb: kbId, impl: 'builtin', builtin: builtinName(lintImpl, 'forge-brain-lint'), result: lint, error_findings: errors, fresh_themes: freshFiles.length });
+      } catch (err) {
+        lint = 'failed';
+        emit('reflect.kb-lint', 'error', { kb: kbId, impl: 'builtin', builtin: builtinName(lintImpl, 'forge-brain-lint'), error: err instanceof Error ? err.message : String(err) });
+      }
     }
 
-    emit('reflect.kb-health', { kb: kbId, fresh_themes: fresh, ingest, consolidate, lint });
-    entries.push({ kbId, freshThemes: fresh, ingest, consolidate, lint });
+    emit('reflect.kb-health', lint === 'failed' || ingest === 'failed' || consolidate === 'failed' ? 'error' : 'log', { kb: kbId, fresh_themes: freshFiles.length, ingest, consolidate, lint });
+    entries.push({ kbId, freshThemes: freshFiles.length, ingest, consolidate, lint });
   }
 
   return { kbs: entries };
