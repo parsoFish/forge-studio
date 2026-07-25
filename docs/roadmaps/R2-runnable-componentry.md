@@ -83,9 +83,22 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 
 ### R2-03 Fanout capability (research spike first)
 
-- **Status:** planned  ·  **Wave:** 3 (must land before R4-06 develop-agent refinement)
+- **Status:** **F1 done (spike complete)** · F2/F3/F4 planned  ·  **Wave:** 3 (must land before R4-06 develop-agent refinement)
+- **F1 spike result (2026-07-25):** [`docs/investigations/R2-03-fanout-merge-resolution-spike.md`](../investigations/R2-03-fanout-merge-resolution-spike.md)
+  — **NO-GO on R2-D1.** 76 external sources across 6 angles (merge queues,
+  agent-swarm frameworks, worktree-fanout, decomposition-vs-resolution,
+  LLM-merge-resolution maturity, alt-VCS). Every surveyed system converges on
+  isolate/order/decompose-then-retest, NOT semantic merge-resolution (LLM
+  conflict-resolution ceiling <60% correct — kept behind a human/test gate
+  everywhere). Forge's scheduler merge-gate ordering (dependent waits in
+  `done/`, branches fresh from post-merge main, ADR-011) already matches the
+  most rigorous pattern found. The one real gap the survey surfaced is a
+  same-wave-sibling **decomposition/detection** gap (no computed file-overlap
+  guarantee), NOT a resolution gap — cheapest fixes (a static overlap preflight
+  / a `git merge-tree` dry-run) are additive to ordering and out of scope here
+  (Q3-B). R2-D1 closes per its own re-entry clause as rejected.
 - **Depends on:** R2-02 (capability schema is where fanout-capability is declared).
-- **Depended on by:** R4-06 (develop refinement), R2-D1 (merge-resolution deferred placeholder — gated on F1 evidence).
+- **Depended on by:** R4-06 (develop refinement), R2-D1 (merge-resolution — **NO-GO per F1**; re-entry only on the 3 preconditions the spike names).
 - **Context:** Q3-B locked: fanout gets a **research-first spike** — survey parallel-agent/merge best practices **outside forge** — before any merge-resolution capability is designed. Operator diagram: fanout needs *"explicit baking into agent definitions so the option is selectable in the flow builder."* As-built: `fanOut` is a static topology hint (R2-B6, `findFanOutViolations`); real WI multiplicity is runtime-derived inside the dev-loop only; `FORGE_DEV_WI_CONCURRENCY` defaults to 1 pending soak (known-gaps §4.2); ADR-028 open note — wedge-kill AbortSignal not chained into per-WI Ralphs.
 - **Features:**
   - **R2-03-F1 Research spike (mandatory first; the gate for R2-D1).** Survey how the wider ecosystem handles parallel-agent execution + worktree/branch merging: merge queues, agent-swarm frameworks, worktree-fanout patterns, conflict-avoidance-by-decomposition vs conflict-resolution-by-agent. Deliverable: a cited evidence report in `docs/investigations/` with an explicit recommendation on whether forge needs a merge-resolution capability at all (the current scheduler merge-gate ordering — dependent waits in `done/`, branches fresh from post-merge main — may remain sufficient). ACs: report exists with ≥5 external sources; names the R2-D1 go/no-go recommendation; **no merge-resolution code is designed or written in this initiative** (Q3-B).

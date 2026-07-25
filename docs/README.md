@@ -40,6 +40,7 @@ Perishable strategy docs (dated; not onboarding material):
 
 **Direction**
 - [Roadmap set](./roadmaps/README.md) — *Explanation · Reference.* The living forge-dev roadmaps (R1–R8): the planning SSOT for everything forge builds next, with the coverage map routing every architecture pillar to its owning roadmap. Start any forge-dev work here.
+- [R2-03 fanout research spike](./investigations/R2-03-fanout-merge-resolution-spike.md) — *Explanation.* The R2-D1 go/no-go evidence (**NO-GO**): a 76-source survey of parallel-agent merge practices, concluding forge's scheduler-ordering merge-gate suffices over a merge-resolution capability. (Investigation reports are normally scratch; this one is a tracked roadmap-gate artifact.)
 
 **Decisions**
 - [ADR index](./decisions/README.md) — every load-bearing choice plus the retirement ledger.
