@@ -104,7 +104,12 @@ graphify-out/
 
 # One-shot audit/investigation reports (project-scoped-review output) — working
 # artifacts, not source; durable lessons are extracted to the brain + ADRs.
-docs/investigations/
+# Ignore the CONTENTS (not the dir) so a specific durable report can be
+# re-included below (git can't re-include under a dir-level exclude).
+docs/investigations/*
+# Exception: durable roadmap-gate research spikes ARE tracked (their go/no-go
+# recommendation is a dependency for a roadmap decision, not scratch).
+!docs/investigations/R2-03-fanout-merge-resolution-spike.md
 
 # local code-graph tool cache (tokensave MCP)
 .tokensave/
