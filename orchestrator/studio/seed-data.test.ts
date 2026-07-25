@@ -117,6 +117,9 @@ test('listAgentDefinitions returns the studio agent roster', () => {
     [
       'architect',
       'brain-ingest',
+      // R4-07: the demo agent is a library roster agent — composes it takes
+      // develop output + the demo skill to author demo.json and judge ACs.
+      'demo-agent',
       'developer-ralph',
       'developer-unifier',
       'project-manager',
@@ -130,7 +133,7 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 8-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 9-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

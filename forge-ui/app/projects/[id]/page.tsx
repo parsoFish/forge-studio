@@ -418,7 +418,13 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
       )}
 
       {tab === 'roadmap' && (
-        <RoadmapView projectId={id} roadmap={roadmap} cycleGroups={cycleGroups} onRefresh={refreshRoadmap} />
+        <RoadmapView
+          projectId={id}
+          roadmap={roadmap}
+          cycleGroups={cycleGroups}
+          onRefresh={refreshRoadmap}
+          onOpenDemo={() => setTab('editor')}
+        />
       )}
     </main>
   );
@@ -655,11 +661,14 @@ function RoadmapView({
   roadmap,
   cycleGroups,
   onRefresh,
+  onOpenDemo,
 }: {
   projectId: string;
   roadmap: ProjectRoadmap | null;
   cycleGroups: InitiativeGroup[];
   onRefresh: () => Promise<void>;
+  /** R4-07-F3: roadmap → demo-builder tie-in (switches to the editor tab's Demo Timeline). */
+  onOpenDemo?: () => void;
 }) {
   // Node selected in the serpentine timeline → highlight + scroll to its card.
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -818,6 +827,7 @@ function RoadmapView({
               onPlan={planOne}
               attempt={attemptInfoFor(init.initiativeId, cycleGroups)}
               onRecoveryDone={onRefresh}
+              onOpenDemo={onOpenDemo}
             />
           )}
         />
@@ -836,6 +846,7 @@ function InitiativeCard({
   onPlan,
   attempt,
   onRecoveryDone,
+  onOpenDemo,
 }: {
   initiative: RoadmapInitiative;
   selected?: boolean;
@@ -847,6 +858,8 @@ function InitiativeCard({
   attempt: { attemptCount: number; priorCycleIds: string[] };
   /** R4-11-T3: called after a successful requeue/abandon to refetch the roadmap + cycle groups. */
   onRecoveryDone: () => Promise<void>;
+  /** R4-07-F3: opens the project's demo surface (editor tab, Demo Timeline + builder panel). */
+  onOpenDemo?: () => void;
 }) {
   const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
   const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
@@ -968,6 +981,24 @@ function InitiativeCard({
             ));
           })}
         </div>
+      )}
+
+      {/* R4-07-F3: demo tie-in — the roadmap card links straight to the
+          project's demo surface (the editor tab's Demo Timeline + inline
+          builder panel), so demo upkeep is reachable from where the operator
+          reviews initiative state. */}
+      {onOpenDemo && (
+        <button
+          data-link="demo-builder"
+          onClick={onOpenDemo}
+          style={{
+            alignSelf: 'flex-start', fontSize: 11, color: 'var(--c-project, #1f6feb)',
+            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
+            textDecoration: 'underline',
+          }}
+        >
+          demo builder →
+        </button>
       )}
 
       {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. Runs
