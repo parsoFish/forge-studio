@@ -131,9 +131,11 @@ The reflector does NOT move the manifest to `_queue/done/` — the reviewer alre
 
 ### Stage 4 — Brain writes (unattended)
 
-10. For each notable Stage-1 observation, write a theme file **scoped to the right brain**. Two routing decisions apply, in order:
+10. For each notable Stage-1 observation, write a theme file **scoped to the right brain** (Q5-B — route by the lesson's SUBJECT). Two routing decisions apply, in order:
 
-    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
+    **(a) Project-specific vs forge-wide.** Lesson about **this project** (code, conventions, domain, a bug) → its **project KB** `brain/projects/<project>/themes/<YYYY-MM-DD>-<slug>.md`. Lesson about **forge machinery** (orchestrator, gate behaviour, unifier, Ralph loop, scheduler, PM/reflector behaviour) → forge-wide, one of the two dirs in (b). Litmus test: *"would this lesson be true for a DIFFERENT project too?"* If yes → forge-wide, NOT Brain 3.
+
+    Q5-B framing: a lesson about **running the develop flow** (repeated actions, wedges, dev-loop/unifier behaviour that recurs across projects) lands in the **flow's KB** — `brain/cycles/`, the brain bound to the `forge-develop` flow — via a `pattern`/`antipattern`/`operation` category in (b). A lesson about **forge engineering itself** (a design decision, a durable reference) lands in **`brain/forge-dev/`** via `decision`/`reference`. Project lessons stay in the project KB regardless of category.
 
     **(b) For forge-wide themes, category decides the sub-wiki — this is enforced by `checkCategoryScope` (`cli/brain-lint.ts`) and a mismatch is a lint error, not a style choice:**
     | `category` frontmatter | Brain dir |

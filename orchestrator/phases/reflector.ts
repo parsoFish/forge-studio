@@ -58,7 +58,7 @@ import {
 } from '../../cli/cycle-retention.ts';
 import { writeCycleRecap } from '../../cli/cycle-recap.ts';
 import { cyclesThemesDir, projectThemesDir } from '../brain-paths.ts';
-import { regenerateBrainIndex } from '../../cli/brain-index.ts';
+import { runPostReflectionKbHealth } from '../kb-health.ts';
 
 // The live turn/budget caps (60 turns / $1.50 — bench 5-fixture median was
 // ~$0.74, the cap gives 2x headroom) are DECLARED DATA now: `budgets.maxTurns`
@@ -82,6 +82,8 @@ export type ReflectorSdkQuery = StreamQueryFn;
 export type ReflectorDeps = {
   brainLint?: (opts: { cwd: string; cycleId: string }) => RunBrainLintResult;
   sdkQuery?: ReflectorSdkQuery;
+  /** R4-09-F5 — injectable per-KB post-cycle health dispatcher (for tests). */
+  kbHealth?: typeof runPostReflectionKbHealth;
 };
 
 /**
@@ -394,9 +396,27 @@ export async function runReflector(
     },
   });
 
-  // S6A — brain-lint trigger. Run AFTER themes + archive are written so the
-  // cycle-touched-themes scope sees the full delta. Informational only —
-  // a flagged result does NOT change reflection_status (C8 + plan 06).
+  // R4-09-F5 — per-KB post-cycle health. Run each TOUCHED KB's declared
+  // processes (ingest = regenerate the index so fresh themes are discoverable;
+  // consolidate = deterministic auto-fix of index/route/date gaps) BEFORE the
+  // authoritative lint below, so `lint_status` reflects the consolidate fixes.
+  // The candidate KBs a reflect run may write: its project KB, the flow/cycles
+  // KB (always touched — the cycle archive lands there), and forge-dev.
+  const kbHealthFn = deps.kbHealth ?? runPostReflectionKbHealth;
+  kbHealthFn({
+    forgeRoot,
+    cycleId,
+    candidateKbIds: ['cycles', 'forge-dev', projectName],
+    sinceMs: startedAtMs,
+    logger,
+    initiativeId: input.initiativeId,
+    parentEventId: start.event_id,
+  });
+
+  // S6A — brain-lint trigger. Run AFTER themes + archive are written (and after
+  // the KB-health consolidate above) so the cycle-touched-themes scope sees the
+  // full, fixed delta. Informational only — a flagged result does NOT change
+  // reflection_status (C8 + plan 06).
   const lintStatus = runPostReflectionLint({
     forgeRoot,
     cycleId,
@@ -416,33 +436,8 @@ export async function runReflector(
   const userQuestionsJsonPath = resolve(cycleLogDir, 'user-questions.json');
   deriveUserQuestionsJson(userQuestionsPath, userQuestionsJsonPath);
 
-  // REF-4: regenerate the brain index now that the agent has written new themes.
-  // Best-effort: a failure here is logged but does not block close.
-  try {
-    regenerateBrainIndex({ cwd: forgeRoot });
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'reflection',
-      skill: 'reflector',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [resolve(forgeRoot, 'brain', 'INDEX.md')],
-      message: 'reflector.brain-index-regenerated',
-    });
-  } catch (indexErr) {
-    logger.emit({
-      initiative_id: input.initiativeId,
-      parent_event_id: start.event_id,
-      phase: 'reflection',
-      skill: 'reflector',
-      event_type: 'log',
-      input_refs: [],
-      output_refs: [],
-      message: 'reflector.brain-index-failed',
-      metadata: { error: indexErr instanceof Error ? indexErr.message : String(indexErr) },
-    });
-  }
+  // REF-4: the brain index is regenerated as the KB-health `ingest` builtin
+  // above (R4-09-F5), which emits reflector.brain-index-regenerated.
 
   // S6B — write `_logs/<cycle-id>/recap.md`. Orchestrator-side, NOT agent.
   // Always written on a successful reflector close (additive — does NOT
