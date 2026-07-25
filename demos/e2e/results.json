@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-07-25T06:39:34.884Z",
+  "generatedAt": "2026-07-25T10:49:38.419Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -93,7 +93,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 4M (got 1773959)",
+              "msg": "clip skill-edit.webm under 4M (got 1739042)",
               "pass": true
             },
             {
@@ -112,7 +112,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 1773959
+              "sizeBytes": 1739042
             }
           ],
           "pass": true
@@ -134,7 +134,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 4M (got 841513)",
+              "msg": "clip sk-create.webm under 4M (got 810343)",
               "pass": true
             },
             {
@@ -157,7 +157,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 841513
+              "sizeBytes": 810343
             },
             {
               "kind": "frame",
@@ -185,7 +185,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-07-25T06-25-58)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-07-25T10-36-36)",
               "pass": true
             },
             {
@@ -201,7 +201,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 4M (got 1655924)",
+              "msg": "clip skill-agentic.webm under 4M (got 1561782)",
               "pass": true
             },
             {
@@ -231,7 +231,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 1655924
+              "sizeBytes": 1561782
             }
           ],
           "pass": true
@@ -286,7 +286,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 4M (got 1878838)",
+              "msg": "clip onboard-form.webm under 4M (got 1890033)",
               "pass": true
             },
             {
@@ -313,7 +313,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1878838
+              "sizeBytes": 1890033
             }
           ],
           "pass": true
@@ -335,7 +335,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 4M (got 1294852)",
+              "msg": "clip onboard-resolve.webm under 4M (got 1238914)",
               "pass": true
             },
             {
@@ -369,7 +369,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1294852
+              "sizeBytes": 1238914
             },
             {
               "kind": "frame",
@@ -422,7 +422,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 4M (got 875308)",
+              "msg": "clip project-create.webm under 4M (got 875760)",
               "pass": true
             },
             {
@@ -445,7 +445,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 875308
+              "sizeBytes": 875760
             },
             {
               "kind": "frame",
@@ -590,7 +590,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 4M (got 1072778)",
+              "msg": "clip instr-generate.webm under 4M (got 1154829)",
               "pass": true
             },
             {
@@ -613,7 +613,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1072778
+              "sizeBytes": 1154829
             },
             {
               "kind": "frame",
@@ -640,7 +640,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 4M (got 1058583)",
+              "msg": "clip pbrain-generate.webm under 4M (got 1065171)",
               "pass": true
             },
             {
@@ -663,7 +663,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 1058583
+              "sizeBytes": 1065171
             },
             {
               "kind": "frame",
@@ -892,7 +892,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 4M (got 810550)",
+              "msg": "clip kb-ingest.webm under 4M (got 916102)",
               "pass": true
             },
             {
@@ -926,7 +926,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 810550
+              "sizeBytes": 916102
             },
             {
               "kind": "frame",
@@ -963,7 +963,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 4M (got 1591110)",
+              "msg": "clip kb-lint.webm under 4M (got 1587274)",
               "pass": true
             }
           ],
@@ -982,7 +982,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1591110
+              "sizeBytes": 1587274
             }
           ],
           "pass": true
@@ -1121,7 +1121,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 4M (got 1173598)",
+              "msg": "clip agent-scratch-build.webm under 4M (got 993412)",
               "pass": true
             }
           ],
@@ -1160,7 +1160,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 1173598
+              "sizeBytes": 993412
             }
           ],
           "pass": true
@@ -1242,7 +1242,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 4M (got 952645)",
+              "msg": "clip agent-build.webm under 4M (got 913792)",
               "pass": true
             }
           ],
@@ -1261,7 +1261,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 952645
+              "sizeBytes": 913792
             }
           ],
           "pass": true
@@ -1312,7 +1312,7 @@
               "pass": true
             },
             {
-              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→244)",
+              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→242)",
               "pass": true
             },
             {
@@ -1320,7 +1320,7 @@
               "pass": true
             },
             {
-              "msg": "J3: node position PERSISTS across reload (x 244 → 244)",
+              "msg": "J3: node position PERSISTS across reload (x 242 → 242)",
               "pass": true
             }
           ],
@@ -1380,7 +1380,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-mrzzq732, fn-mrzzq73e, fn-mrzzq73n)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-ms08oeit, fn-ms08oej2, fn-ms08oeje)",
               "pass": true
             },
             {
@@ -1456,7 +1456,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 4M (got 1739206)",
+              "msg": "clip flow-scratch-build.webm under 4M (got 1756637)",
               "pass": true
             }
           ],
@@ -1505,7 +1505,7 @@
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → unifier → review",
-              "sizeBytes": 1739206
+              "sizeBytes": 1756637
             }
           ],
           "pass": true
@@ -1649,7 +1649,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 4M (got 1508301)",
+              "msg": "clip run-idea-interview.webm under 4M (got 1500567)",
               "pass": true
             },
             {
@@ -1668,7 +1668,7 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1508301
+              "sizeBytes": 1500567
             },
             {
               "kind": "frame",
@@ -1736,7 +1736,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 4M (got 1606040)",
+              "msg": "clip run-plan-gate.webm under 4M (got 1518384)",
               "pass": true
             }
           ],
@@ -1751,7 +1751,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1606040
+              "sizeBytes": 1518384
             }
           ],
           "pass": true
@@ -1931,7 +1931,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 4M (got 1690105)",
+              "msg": "clip run-build-monitor.webm under 4M (got 1649986)",
               "pass": true
             }
           ],
@@ -1946,7 +1946,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, unifier own-node, cost pills accruing",
-              "sizeBytes": 1690105
+              "sizeBytes": 1649986
             }
           ],
           "pass": true
@@ -2112,7 +2112,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 4M (got 1516733)",
+              "msg": "clip run-verdict-gate.webm under 4M (got 1563973)",
               "pass": true
             }
           ],
@@ -2127,7 +2127,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1516733
+              "sizeBytes": 1563973
             }
           ],
           "pass": true
@@ -2215,7 +2215,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 4M (got 1674527)",
+              "msg": "clip run-reflect-complete.webm under 4M (got 1694469)",
               "pass": true
             }
           ],
@@ -2241,7 +2241,42 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1674527
+              "sizeBytes": 1694469
+            }
+          ],
+          "pass": true
+        },
+        "flows-run-reflect-automated": {
+          "title": "Reflect (automated mode — R4-09-F3)",
+          "narration": "With no operator in the loop, the reflector runs in automated mode: it infers each answer from the cycle logs, demo, and diff and marks it inferred. The reflection screen renders those answers read-only with provenance badges — the operator sees exactly what forge concluded on their behalf, and there is nothing to submit.",
+          "checks": [
+            {
+              "msg": "automated reflection renders the read-only inferred view (data-reflect-automated)",
+              "pass": true
+            },
+            {
+              "msg": "every question rendered inferred read-only (3 data-question-inferred fieldsets)",
+              "pass": true
+            },
+            {
+              "msg": "the inferred answer is shown per question (data-question-answer)",
+              "pass": true
+            },
+            {
+              "msg": "an \"inferred\" provenance badge renders per question",
+              "pass": true
+            },
+            {
+              "msg": "no submit button — automated mode is read-only (nothing for the operator to answer)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "100-r5-2-automated-reflection.png",
+              "caption": "R5 — automated reflection: inferred answers rendered read-only with provenance badges",
+              "key": true
             }
           ],
           "pass": true
@@ -2294,12 +2329,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "100-s1-0-monitor.png",
+              "file": "101-s1-0-monitor.png",
               "caption": "S1 — Forge Develop slice: WI fan-out + unifier + review"
             },
             {
               "kind": "frame",
-              "file": "101-s1-0b-monitor-drawer.png",
+              "file": "102-s1-0b-monitor-drawer.png",
               "caption": "S1 — phase drawer open: gate sub-checks + phase log visible"
             }
           ],
@@ -2325,7 +2360,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "102-s1-1-start-run.png",
+              "file": "103-s1-1-start-run.png",
               "caption": "S1 — engine: Start Run CTA enabled on a flow with no runs"
             }
           ],
@@ -2351,7 +2386,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "103-s1-2-gate-control.png",
+              "file": "104-s1-2-gate-control.png",
               "caption": "S1 — engine: gated run parked, cost metered against the flow ceiling"
             }
           ],
@@ -2359,7 +2394,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 79,
+      "checksTotal": 84,
       "checksFailed": 0
     },
     "roadmap": {
@@ -2398,18 +2433,18 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "104-r6-0-roadmap-tab.png",
+              "file": "105-r6-0-roadmap-tab.png",
               "caption": "R6 — per-project Roadmap tab: the serpentine timeline of initiatives over time",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "105-r6-0b-popover.png",
+              "file": "106-r6-0b-popover.png",
               "caption": "R6 — clicking an initiative dot pops its detail card up off the timeline"
             },
             {
               "kind": "frame",
-              "file": "106-r6-0c-demo-link.png",
+              "file": "107-r6-0c-demo-link.png",
               "caption": "R4-07-F3 — the roadmap card links straight to the demo surface"
             }
           ],
@@ -2443,13 +2478,13 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "107-r4-11-2-plan-trigger.png",
+              "file": "108-r4-11-2-plan-trigger.png",
               "caption": "R4-11-F2 — the Plan trigger + blocked-until-planned lock on a WI-less initiative",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "108-r4-11-2b-planning-started.png",
+              "file": "109-r4-11-2b-planning-started.png",
               "caption": "R4-11-F2 — planning started: the initiative will be decomposed into work items",
               "key": true
             }
@@ -2461,7 +2496,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 4M (got 684679)",
+              "msg": "clip roadmap-drive.webm under 4M (got 759570)",
               "pass": true
             },
             {
@@ -2486,16 +2521,16 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the roadmap, pops a finished initiative’s card, then eyes the \"Start development\" trigger on the one queued up next",
-              "sizeBytes": 684679
+              "sizeBytes": 759570
             },
             {
               "kind": "frame",
-              "file": "109-r6-1-start-development.png",
+              "file": "110-r6-1-start-development.png",
               "caption": "R6 — the \"start development\" trigger on a pending initiative"
             },
             {
               "kind": "frame",
-              "file": "110-r6-1b-development-started.png",
+              "file": "111-r6-1b-development-started.png",
               "caption": "R6 — development started: the unifier will open a PR for review",
               "key": true
             }
@@ -2534,18 +2569,18 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "111-r4-11-t3-0-recovery-affordances.png",
+              "file": "112-r4-11-t3-0-recovery-affordances.png",
               "caption": "R4-11-T3 — inspect/requeue/abandon on a recoverable initiative's roadmap card",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "112-r4-11-t3-1-inspect.png",
+              "file": "113-r4-11-t3-1-inspect.png",
               "caption": "R4-11-T3 — Inspect reveals the preserved worktree state (none here — the fixture never ran a real cycle)"
             },
             {
               "kind": "frame",
-              "file": "113-r4-11-t3-2-requeue-refused.png",
+              "file": "114-r4-11-t3-2-requeue-refused.png",
               "caption": "R4-11-T3 — under the harness's safety seam, requeue honestly refuses rather than faking success"
             }
           ],
@@ -2584,7 +2619,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "114-demo-0-briefing.png",
+              "file": "115-demo-0-briefing.png",
               "caption": "The demo agent — briefing before it runs"
             }
           ],
@@ -2615,19 +2650,19 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 4M (got 1673213)",
+              "msg": "clip demo-generate.webm under 4M (got 1721403)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "115-demo-1-generating.png",
+              "file": "116-demo-1-generating.png",
               "caption": "The demo agent composes the page, element by element"
             },
             {
               "kind": "frame",
-              "file": "116-demo-2-review.png",
+              "file": "117-demo-2-review.png",
               "caption": "The demo agent — composed demo ready for review",
               "key": true
             },
@@ -2635,7 +2670,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1673213
+              "sizeBytes": 1721403
             }
           ],
           "pass": true
@@ -2656,7 +2691,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "117-demo-3-locked.png",
+              "file": "118-demo-3-locked.png",
               "caption": "The demo agent — locked in as the reproducible demo artifact"
             }
           ],
@@ -2672,9 +2707,9 @@
     "captures": []
   },
   "totals": {
-    "checksTotal": 337,
+    "checksTotal": 342,
     "checksFailed": 0,
-    "framesTotal": 117,
+    "framesTotal": 118,
     "clipsTotal": 20
   },
   "exitCode": 0
