@@ -159,6 +159,10 @@ export async function runReflector(
   // bench harnesses that point directly at a stable manifest.
   const manifestPath = resolveCurrentManifestPath(input.manifestPath, forgeRoot);
 
+  // R4-09-F3: reflect mode (absent ⇒ interactive). Drives the Stage-2/3 prompt
+  // branch and the post-exit `inferred: true` provenance stamping.
+  const reflectMode = input.mode ?? 'interactive';
+
   let projectName: string;
   let origin: 'architect' | 'human-directed' | 'triggered' = 'architect';
   let disposable = false;
@@ -252,6 +256,7 @@ export async function runReflector(
     cycleArchiveRelPath: cycleArchivePath,
     themesDirRelPath: themesDir,
     forgeThemesDirRelPath: forgeThemesDir,
+    mode: reflectMode,
   });
 
   const toolUseSummary: ReflectorToolUseSummary = {

@@ -1159,6 +1159,39 @@ describe('validateFlow — trigger-shape', () => {
     assert.match(f.message, /webhook/);
   });
 
+  // R4-09-F3 — the reflect `mode` field
+  const reflectAgent = () =>
+    makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] } });
+
+  it('mode: automated on an on:merged reflect-agent target → no trigger-mode/shape finding', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' }, mode: 'automated' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(reflectAgent()));
+    assert.ok(!findings.some((x) => x.check === 'trigger-mode' || x.check === 'trigger-shape'), `unexpected finding: ${JSON.stringify(findings)}`);
+  });
+
+  it('an invalid mode value → error trigger-mode', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' }, mode: 'bogus' as never }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(reflectAgent()));
+    const f = findings.find((x) => x.check === 'trigger-mode');
+    assert.ok(f, 'expected trigger-mode finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /interactive\|automated/);
+  });
+
+  it('mode on a non-merged / non-agent trigger → error trigger-shape', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' }, mode: 'automated' }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-shape' && /mode/.test(x.message));
+    assert.ok(f, 'expected trigger-shape finding for stray mode');
+    assert.equal(f.level, 'error');
+  });
+
   it('schedule/concurrency on cron, webhook block on webhook → no trigger-shape finding', () => {
     const flow = makeFlow({
       project: 'gitpulse',

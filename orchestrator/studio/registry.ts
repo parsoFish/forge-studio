@@ -388,6 +388,9 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
         : [],
     };
   }
+  // R4-09-F3: reflect mode. Preserve the raw string (do NOT coerce) so the
+  // `trigger-mode` enum lint can reach + reject an invalid value.
+  if (typeof t['mode'] === 'string') out.mode = t['mode'] as FlowTrigger['mode'];
   if (typeof t['note'] === 'string') out.note = t['note'];
   return out;
 }

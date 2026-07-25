@@ -16,6 +16,13 @@ import { resolve } from 'node:path';
 import type { EventLogger } from './logging.ts';
 import { parseManifest } from './manifest.ts';
 
+/**
+ * R4-09-F3: how a reflect run gathers its questionnaire answers.
+ * `interactive` (default) asks the operator; `automated` infers the answers
+ * from the cycle logs / demo / diff with `inferred: true` provenance.
+ */
+export type ReflectMode = 'interactive' | 'automated';
+
 export type CycleInput = {
   initiativeId: string;
   manifestPath: string;
@@ -23,6 +30,8 @@ export type CycleInput = {
   worktreePath: string;
   cycleId?: string;
   dryRun?: boolean;
+  /** R4-09-F3: reflect mode for a merge-dispatched reflect. Absent ⇒ interactive. */
+  mode?: ReflectMode;
   /**
    * Operator-merge confirmation hook (Phase 6 / G9 / G10). The review
    * phase NEVER merges; the operator merges the PR in GitHub. The closure

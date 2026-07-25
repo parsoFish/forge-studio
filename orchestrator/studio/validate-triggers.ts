@@ -11,6 +11,7 @@ import { Cron } from 'croner';
 
 import { TRIGGER_KINDS, TRIGGER_KIND_IDS } from '../flow-trigger.ts';
 import { resolveBandHook } from '../agent-bands.ts';
+import { TRIGGER_MODES } from './types.ts';
 import type { AgentDefinition, FlowDefinition } from './types.ts';
 
 export type TriggerFinding = {
@@ -232,6 +233,20 @@ export function checkFlowTriggers(
       findings.push(
         err(obj, 'trigger-shape', `"webhook" block is only valid on webhook triggers (got on:"${trigger.on}")`),
       );
+    }
+    // R4-09-F3: `mode` (reflect interactive|automated) is valid ONLY on an
+    // `on: merged` agent target (the reflect-agent dispatch). Enum value + placement.
+    if (trigger.mode !== undefined) {
+      if (!(TRIGGER_MODES as readonly string[]).includes(trigger.mode)) {
+        findings.push(
+          err(obj, 'trigger-mode', `"mode" must be one of ${TRIGGER_MODES.join('|')} (got "${trigger.mode}")`),
+        );
+      }
+      if (!(trigger.on === 'merged' && trigger.target.kind === 'agent')) {
+        findings.push(
+          err(obj, 'trigger-shape', `"mode" is only valid on an "on: merged" agent (reflect) target (got on:"${trigger.on}", target.kind:"${trigger.target.kind}")`),
+        );
+      }
     }
   }
 

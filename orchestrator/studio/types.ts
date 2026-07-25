@@ -120,10 +120,20 @@ export type WebhookTriggerConfig = {
 };
 
 /**
+ * R4-09-F3: the mode a reflect-agent target runs in. `interactive` (default)
+ * writes an operator questionnaire and waits for human feedback; `automated`
+ * infers the answers from the cycle logs / demo / diff (`inferred: true`
+ * provenance) with no human in the loop. Valid only on an `on: merged`
+ * agent target whose def declares the `reflection-close` band (lint).
+ */
+export const TRIGGER_MODES = ['interactive', 'automated'] as const;
+export type TriggerMode = (typeof TRIGGER_MODES)[number];
+
+/**
  * R2-04 (ADR-041): a declared trigger row. `on` must be a registry kind
  * (orchestrator/flow-trigger.ts TRIGGER_KINDS); per-kind config blocks are
  * lint-enforced (`trigger-shape`): `schedule`/`concurrency` only on cron,
- * `webhook` only on webhook.
+ * `webhook` only on webhook, `mode` only on a merged agent (reflect) target.
  */
 export type FlowTrigger = {
   on: string;
@@ -134,6 +144,8 @@ export type FlowTrigger = {
   concurrency?: 'allow' | 'forbid' | 'replace';
   /** webhook only. */
   webhook?: WebhookTriggerConfig;
+  /** R4-09-F3: reflect-agent (on:merged) only. Absent ⇒ interactive. */
+  mode?: TriggerMode;
   note?: string;
 };
 
