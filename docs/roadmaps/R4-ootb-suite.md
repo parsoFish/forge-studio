@@ -1053,4 +1053,10 @@ free R4 ID's features.
   + `sendback.cap-exhausted` + notify). Merge-wins arbitration re-implemented
   on the new queue with pinned semantics. Riders: known-gaps §9 develop-dispatch
   `planned` gate closed (`not-planned` status); flows-run journey rewritten to
-  the durable truth + a cap beat. Status F1+F3 → F1+F2+F3.
+  the durable truth + a cap beat. Status F1+F3 → F1+F2+F3. **MERGED 2026-07-25
+  on operator close-out — PR #47 @ `6b72ef92` (stacked base for R2-04 #48; merged
+  base-first, no branch delete, then deleted post-#48). Post-merge main verified:
+  2496/2496, tsc clean, studio/brain lint 0, ui:journey 337/337 CLEAN.** 52-agent
+  whole-branch review (4 lenses → dedup → 2-skeptic verify) run over the combined
+  R4-08-F2+R2-04 branch; findings fixed in-branch (see the R2-04 change log for the
+  banked lessons — the review + fixes spanned both stacked initiatives).
