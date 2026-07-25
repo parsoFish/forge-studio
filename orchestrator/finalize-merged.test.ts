@@ -72,9 +72,12 @@ test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → fina
   }
 });
 
-// Stage C — the default finalize fires reflect FROM forge-develop's declared
-// {on: merged, flow: forge-reflect} trigger, not a hardcoded runReflector call.
-test('finalize: merged → fires reflect from the develop declaration (default path)', async () => {
+// R4-09-F1 — the default finalize fires reflect FROM forge-develop's declared
+// {on: merged, target: {kind: agent, ref: reflector}} trigger, resolved through
+// the reflect agent's `reflection-close` band hook (the real reflector def on
+// disk), not a hardcoded slug. Asserts EXACTLY ONE reflect per merge (the
+// atomic-cutover AC — never zero, never two).
+test('finalize: merged → fires reflect once from the agent-target declaration (band-hook resolved)', async () => {
   const { root, queueRoot } = setup();
   try {
     const wt = join(root, 'wt');
@@ -86,13 +89,45 @@ test('finalize: merged → fires reflect from the develop declaration (default p
       logsRoot: join(root, '_logs'),
       confirmMerge: () => true,
       // No finalizeOne override → exercises makeDefaultFinalizeOne; inject its
-      // closure + reflector + trigger source so the test stays git/SDK-free.
+      // closure + reflector action + trigger source so the test stays git/SDK-
+      // free. loadAgentDef is NOT injected → the REAL reflector SKILL.md
+      // (reflection-close band) resolves the agent target, proving the cutover
+      // routes the production declaration to reflect.
       runClosure: async () => ({ outcome: 'merged', merged: true }),
       runReflector: async (input) => { reflectCalls.push(input.initiativeId); },
-      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } }],
+      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }],
     });
     assert.deepEqual(results.map((r) => r.status), ['finalized']);
-    assert.deepEqual(reflectCalls, ['INIT-2026-05-30-decl'], 'reflect must fire from the declaration');
+    assert.deepEqual(reflectCalls, ['INIT-2026-05-30-decl'], 'exactly one reflect must fire from the declaration');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// R4-09-F1 — the merge-time handler is band-specific: an `on: merged`
+// agent-target whose def does NOT declare the `reflection-close` band is
+// unhandled (loud), and reflect does NOT fire. Proves the dispatch is not
+// "any agent target fires reflect". Injects loadAgentDef so this stays
+// hermetic (no dependency on a non-reflect agent's SKILL.md).
+test('finalize: merged → non-reflect agent-target is unhandled, reflect does NOT fire', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const wt = join(root, 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-notreflect', wt);
+    let reflected = false;
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true,
+      runClosure: async () => ({ outcome: 'merged', merged: true }),
+      runReflector: async () => { reflected = true; },
+      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'agent', ref: 'some-other-agent' } }],
+      // A def that declares a DIFFERENT band (not reflection-close).
+      loadAgentDef: () => ({ composition: { hooks: ['wi-contract'] } }) as never,
+    });
+    assert.deepEqual(results.map((r) => r.status), ['finalized'], 'still finalizes (merge confirmed)');
+    assert.equal(reflected, false, 'a non-reflection-close agent target must not fire reflect');
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
@@ -272,7 +307,7 @@ test('finalize: reflector throw after confirmed merge → cycle.reflection-lost 
       confirmMerge: () => true,
       runClosure: async () => ({ outcome: 'merged', merged: true }),
       runReflector: async () => { throw new Error('rate_limit_error: usage limit reached'); },
-      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } }],
+      loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }],
     });
 
     assert.deepEqual(

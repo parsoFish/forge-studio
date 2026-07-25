@@ -234,8 +234,11 @@ test('seed flows declare their kickoff kind', () => {
   }
 });
 
-test('forge-develop declares the merged→forge-reflect trigger (single source for reflect firing)', () => {
+test('forge-develop declares the merged→reflect-agent trigger (single source for reflect firing)', () => {
   const flow = loadFlowDefinition(join(ROOT, 'studio/flows/forge-develop/flow.yaml'));
-  // ADR-041 target shape (was {on, flow} pre-R2-04).
-  assert.deepEqual(flow.triggers, [{ on: 'merged', target: { kind: 'flow', ref: 'forge-reflect' } }]);
+  // R4-09-F1 standalone-reflect cutover: the shipped merge dispatch targets the
+  // reflect AGENT (resolved via its reflection-close band hook), not the
+  // single-node forge-reflect flow wrapper. ADR-041 target shape, no schema
+  // change (was {on, flow} pre-R2-04; kind:flow→kind:agent at R4-09-F1).
+  assert.deepEqual(flow.triggers, [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }]);
 });

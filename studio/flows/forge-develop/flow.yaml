@@ -28,10 +28,13 @@ edges:
 # at `ready-for-review` (PR open), BEFORE merge, so the flow-runner (which fires
 # `on: flow-complete`) deliberately skips this `on: merged` trigger. The real
 # merge signal is async + post-run: orchestrator/finalize-merged.ts reads THIS
-# declaration and fires forge-reflect once the merged PR is confirmed. Single
-# source of "merge fires reflect" = this line (no hardcoded runReflector).
+# declaration and dispatches the standalone reflect agent once the merged PR is
+# confirmed. R4-09-F1: the target is the reflect AGENT (resolved via its
+# `reflection-close` band hook), not the single-node forge-reflect flow wrapper
+# — the shipped shape is a standalone agent (the flow form stays authorable).
+# Single source of "merge fires reflect" = this line (no hardcoded runReflector).
 triggers:
-  - { on: merged, target: { kind: flow, ref: forge-reflect } }
+  - { on: merged, target: { kind: agent, ref: reflector } }
 # Stage C — per-flow kickoff. Develop is launched by selecting a planned,
 # dependency-ready initiative (the initiative-select surface).
 kickoff: { kind: initiative-select }
