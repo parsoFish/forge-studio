@@ -11,10 +11,12 @@
  * the artifactRoot-resolved demo dir, the typed demoProcess steps, and the
  * demo-element composition block.
  *
- * Deliberately mirrors (never imports) unifier-invocation.ts's demo blocks:
- * that file is legacy-path machinery retired with R4-01-F4; parity between the
- * two consumers of the demoProcess descriptor is enforced by
- * demo-descriptor-parity.test.ts instead of a shared helper.
+ * Deliberately mirrors (never imports) unifier-invocation.ts's demo blocks —
+ * that file is legacy-path machinery retired with R4-01-F4 and is NOT covered
+ * by the parity test (it dies with the unifier). What
+ * demo-descriptor-parity.test.ts pins is the descriptor's three LIVE
+ * consumers: the preflight DEMO clause, the demo-builder composition, and
+ * this binding.
  *
  * Caching intent (S8/C23): the system prompt carries no per-run data, so the
  * server-side prompt cache hits naturally; all dynamic data lives in the user
@@ -96,7 +98,12 @@ function renderComposedElementsBlock(
     if (seen.has(s.element)) continue;
     seen.add(s.element);
     const e = byId.get(s.element);
-    if (!e) continue;
+    if (!e) {
+      // Never degrade silently: the composition names an element the library
+      // does not resolve — say so where the agent (and a prompt audit) sees it.
+      out.push('', `### ${s.element} — UNRESOLVED element id (not in the demo-element library); fall back to the step's kind (${s.kind}) guidance`);
+      continue;
+    }
     out.push('', `### ${e.id} (${e.name}, phase: ${e.phase})`, '', e.body.trim());
   }
   return out;

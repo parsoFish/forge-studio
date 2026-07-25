@@ -25,6 +25,7 @@
  * NodeExecutor is mechanical.
  */
 
+import { execFileSync } from 'node:child_process';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -96,10 +97,67 @@ export type DemoAgentPipelineResult =
         | 'tooling-unavailable'
         | 'capture-failed'
         | 'nonce-mismatch'
+        | 'scope-violation'
+        | 'budget-exhausted'
         | 'spawn-suppressed'
         | 'spawn-failed';
       detail: string;
     };
+
+/**
+ * ADR-039 declared-data fail-loud guard (exported so tests pin the throws —
+ * a declared cap that fails open re-opens the F-42/F-43 silent-spend vector,
+ * and a demo-agent def without the `demo` contract skill would spawn against
+ * a system prompt whose composition it no longer declares).
+ */
+export function assertDemoAgentDeclaration(def: {
+  budgets: { maxTurns?: number; maxBudgetUsd?: number; maxBudgetUsdShare?: number };
+  composition: { skills: string[] };
+}): void {
+  if (def.budgets.maxTurns === undefined) {
+    throw new Error('demo-agent SKILL.md must declare budgets.maxTurns — the live turn cap is frontmatter data (ADR-039)');
+  }
+  if (def.budgets.maxBudgetUsd === undefined && def.budgets.maxBudgetUsdShare === undefined) {
+    throw new Error(
+      'demo-agent SKILL.md must declare a budget cap (budgets.maxBudgetUsd and/or maxBudgetUsdShare) — an uncapped unattended agent re-opens the F-42/F-43 silent-spend vector',
+    );
+  }
+  if (!def.composition.skills.includes('demo')) {
+    throw new Error(
+      'demo-agent SKILL.md must declare composition.skills: [demo] — the binding inlines the demo contract the composition claims',
+    );
+  }
+}
+
+/** Full-stdout git capture — runOrchestratorCommand's 4096-char tail would
+ * truncate a roadmap-scale `--stat`; the derive band needs exact values.
+ * `out` is RAW (porcelain's first line starts with a significant space —
+ * trimming here once ate a status column); callers trim where safe. */
+function gitCapture(worktreePath: string, args: string[]): { ok: boolean; out: string; err: string } {
+  try {
+    const out = execFileSync('git', args, { cwd: worktreePath, stdio: 'pipe', encoding: 'utf8', timeout: 60_000 });
+    return { ok: true, out, err: '' };
+  } catch (e) {
+    const err = e as { stderr?: Buffer | string; message?: string };
+    const stderr = err.stderr ? (typeof err.stderr === 'string' ? err.stderr : err.stderr.toString('utf8')) : (err.message ?? '');
+    return { ok: false, out: '', err: stderr.slice(-500) };
+  }
+}
+
+/** Worktree-relative paths git reports as changed/untracked (rename → new side). */
+function gitDirtPaths(worktreePath: string): Set<string> {
+  const res = gitCapture(worktreePath, ['status', '--porcelain']);
+  const paths = new Set<string>();
+  if (!res.ok) return paths;
+  for (const line of res.out.split('\n')) {
+    if (!line.trim()) continue;
+    let p = line.slice(3);
+    const arrow = p.indexOf(' -> ');
+    if (arrow !== -1) p = p.slice(arrow + 4);
+    paths.add(p.replace(/^"|"$/g, ''));
+  }
+  return paths;
+}
 
 export async function runDemoAgentPipeline(
   input: DemoAgentPipelineInput,
@@ -135,40 +193,30 @@ export async function runDemoAgentPipeline(
   }
 
   const def = loadAgentDefinition(skillPath(DEMO_AGENT_SLUG));
-  if (def.budgets.maxTurns === undefined) {
-    throw new Error('demo-agent SKILL.md must declare budgets.maxTurns — the live turn cap is frontmatter data (ADR-039)');
-  }
-  if (def.budgets.maxBudgetUsd === undefined && def.budgets.maxBudgetUsdShare === undefined) {
-    throw new Error(
-      'demo-agent SKILL.md must declare a budget cap (budgets.maxBudgetUsd and/or maxBudgetUsdShare) — an uncapped unattended agent re-opens the F-42/F-43 silent-spend vector',
-    );
-  }
+  assertDemoAgentDeclaration(def);
 
-  // Band 1 — derive branch state. Injected into the prompt; the authored
-  // demo.json must echo it (stale-after-fanin theme: never trust inherited).
-  const gitTimeout = 60_000;
-  const diffStatRes = runOrchestratorCommand(['git', 'diff', '--stat', 'main...HEAD'], {
-    cwd: input.worktreePath,
-    timeoutMs: gitTimeout,
-  });
-  const headShaRes = runOrchestratorCommand(['git', 'rev-parse', 'HEAD'], {
-    cwd: input.worktreePath,
-    timeoutMs: gitTimeout,
-  });
+  // Band 1 — derive branch state (full stdout, never the 4096-char tail).
+  // `--shortstat` is the summary line the demo contract's diffStat carries —
+  // injected into the prompt; the authored demo.json must echo it verbatim
+  // (stale-after-fanin theme: never trust inherited).
+  const diffStatRes = gitCapture(input.worktreePath, ['diff', '--shortstat', 'main...HEAD']);
+  const headShaRes = gitCapture(input.worktreePath, ['rev-parse', 'HEAD']);
   if (!diffStatRes.ok || !headShaRes.ok) {
-    const detail = `git derivation failed: ${diffStatRes.ok ? '' : diffStatRes.stderrTail} ${headShaRes.ok ? '' : headShaRes.stderrTail}`.trim();
+    const detail = `git derivation failed: ${diffStatRes.ok ? '' : diffStatRes.err} ${headShaRes.ok ? '' : headShaRes.err}`.trim();
     emit('demo.derive.failed', { detail }, { event_type: 'error' });
     return { status: 'failed', reason: 'derive-failed', detail };
   }
-  const diffStat = diffStatRes.stdoutTail.trim();
-  const headSha = headShaRes.stdoutTail.trim();
+  const diffStat = diffStatRes.out.trim();
+  const headSha = headShaRes.out.trim();
 
   const demoDirRel = worktreeDemoRelDir(input.worktreePath, input.initiativeId);
   const demoDirAbs = worktreeDemoDir(input.worktreePath, input.initiativeId);
   const demoJsonAbs = join(demoDirAbs, DEMO_JSON_BASENAME);
   const proposalsAbs = join(demoDirAbs, FIX_PROPOSALS_FILENAME);
-  // Stale judgment from a prior pass must never leak into this one.
-  if (existsSync(proposalsAbs)) unlinkSync(proposalsAbs);
+  // Pre-spawn dirt snapshot — the mechanical scope guard diffs against this
+  // after every spawn (ADR-036: readable rules are routable; only
+  // orchestrator-owned checks count).
+  const preSpawnDirt = gitDirtPaths(input.worktreePath);
 
   // Band 2 — assemble the briefing from develop output + project config.
   const cfg = (() => {
@@ -184,7 +232,12 @@ export async function runDemoAgentPipeline(
   const workItems: Array<{ id: string; title: string; status: string }> = [];
   const acceptanceCriteria: string[] = [];
   if (existsSync(wiDir)) {
-    const { items } = readWorkItemsFromDir(wiDir);
+    const { items, parseErrors } = readWorkItemsFromDir(wiDir);
+    if (Object.keys(parseErrors).length > 0) {
+      // A malformed WI's ACs would silently vanish from the judging rubric —
+      // surface loudly (the demo still runs on the parseable set).
+      emit('demo.input.wi-parse-errors', { errors: parseErrors }, { event_type: 'error' });
+    }
     for (const wi of items) {
       workItems.push({ id: wi.work_item_id, title: wi.body.split('\n')[0] ?? wi.work_item_id, status: wi.status });
       for (const ac of wi.acceptance_criteria) {
@@ -194,6 +247,12 @@ export async function runDemoAgentPipeline(
   }
   const library = listDemoElements(input.forgeRoot ?? FORGE_ROOT);
   const elementIds = new Set(demoProcess.map((s) => s.element).filter(Boolean) as string[]);
+  const unknownElementIds = [...elementIds].filter((id) => !library.some((e) => e.id === id));
+  if (unknownElementIds.length > 0) {
+    // A typo'd/retired element id in .forge/project.json must not degrade the
+    // briefing silently — the binding renders an explicit unresolved note too.
+    emit('demo.input.unknown-element', { ids: unknownElementIds }, { event_type: 'error' });
+  }
   const elements =
     elementIds.size > 0
       ? demoProcess
@@ -226,6 +285,11 @@ export async function runDemoAgentPipeline(
 
   let lastErrors: string[] = [];
   for (let attempt = 1; attempt <= MAX_AUTHOR_ATTEMPTS; attempt += 1) {
+    // Fresh attempt = fresh judgment: a proposals file authored during a
+    // rejected attempt must never survive into this one (a later all-met
+    // pass would return 'complete' with a stale untracked judgment file —
+    // the untracked-merge-blocker theme).
+    if (existsSync(proposalsAbs)) unlinkSync(proposalsAbs);
     const prompt =
       attempt === 1
         ? basePrompt
@@ -254,8 +318,40 @@ export async function runDemoAgentPipeline(
     }
     emit('demo.agent-pass', { attempt, result_subtype: spawn.resultSubtype }, { cost_usd: spawn.costUsd });
 
+    // A budget/turn-killed spawn is an exhaustion failure, not an authoring
+    // bug — retrying it spends up to the full cap again for the same outcome.
+    if (spawn.resultSubtype && spawn.resultSubtype.startsWith('error_')) {
+      emit('demo.budget-exhausted', { result_subtype: spawn.resultSubtype, attempt }, { event_type: 'error' });
+      return {
+        status: 'failed',
+        reason: 'budget-exhausted',
+        detail: `demo-agent spawn terminated by the SDK (${spawn.resultSubtype}) — raise the declared budgets or shrink the briefing before re-running`,
+      };
+    }
+
+    // Mechanical scope guard (ADR-036): NEW dirt outside the demo dir means
+    // the agent edited project code — the F2 AC forbids exactly this, and the
+    // orchestrated capture would produce evidence from code not on the branch.
+    // Hard failure, never a retry (an agent that edits code is not negotiated with).
+    // Porcelain collapses fully-untracked dirs to their ancestor ("?? demo/"),
+    // so a path is in-scope when it sits inside the demo dir OR is one of the
+    // demo dir's own ancestors.
+    const inDemoScope = (raw: string): boolean => {
+      const p = raw.replace(/\/$/, '');
+      return p === demoDirRel || p.startsWith(demoDirRel + '/') || demoDirRel.startsWith(p + '/');
+    };
+    const newDirt = [...gitDirtPaths(input.worktreePath)].filter((p) => !preSpawnDirt.has(p) && !inDemoScope(p));
+    if (newDirt.length > 0) {
+      emit('demo.scope-violation', { paths: newDirt }, { event_type: 'error' });
+      return {
+        status: 'failed',
+        reason: 'scope-violation',
+        detail: `demo-agent wrote outside its demo dir (${demoDirRel}): ${newDirt.join(', ')} — fixes are proposals for the develop agent, never demo-agent edits`,
+      };
+    }
+
     // Band 4 — validate the authored demo.json against contract + injected state.
-    const validation = validateAuthoredDemo(demoJsonAbs, demoDirRel, diffStat);
+    const validation = validateAuthoredDemo(demoJsonAbs, demoDirRel, diffStat, acceptanceCriteria);
     if (!validation.ok) {
       lastErrors = validation.errors;
       emit('demo.author.invalid', { attempt, errors: validation.errors });
@@ -273,7 +369,9 @@ export async function runDemoAgentPipeline(
 
     // Band 6 — orchestrated capture (ADR-036). Environment failures are hard —
     // they must never surface as another authoring retry or a silent pass.
+    let captureRan = false;
     if (demoJsonWantsCapture(demoJsonAbs)) {
+      captureRan = true;
       const preflight = preflightDemoCaptureCommands(demoJsonAbs, input.worktreePath);
       if (!preflight.ok) {
         emit('demo.capture.tooling-unavailable', { problems: preflight.problems, failure_kind: 'environment' }, { event_type: 'error' });
@@ -316,12 +414,44 @@ export async function runDemoAgentPipeline(
       }
       const committed = commitOrchestratedCaptureArtifacts(input.worktreePath, demoDirRel, input.initiativeId);
       emit('demo.capture', { capture_ok: true, nonce_match: true, capture_nonce: nonce, exit_code: 0, committed, duration_ms: cap.durationMs });
+    } else {
+      // Notes-only demos skip capture but their artifacts must still land ON
+      // the branch — the unifier used to commit these in its own loop; the
+      // demo agent has no Bash, so the pipeline owns the commit either way.
+      const committed = commitOrchestratedCaptureArtifacts(
+        input.worktreePath,
+        demoDirRel,
+        input.initiativeId,
+        `chore(demo): demo artifacts (${input.initiativeId})`,
+      );
+      emit('demo.artifacts.committed', { committed });
     }
 
-    // Band 7 — F2 judgment: misses require scoped fix proposals.
-    const finalModel = readFinalModel(demoJsonAbs) ?? model;
+    // Band 7 — F2 judgment: misses require scoped fix proposals. After a
+    // capture, the post-capture demo.json is authoritative — if the capture
+    // invalidated it (e.g. oversized command output), that is a capture
+    // failure, never a silent fall-back to the stale pre-capture model.
+    let finalModel = model;
+    if (captureRan) {
+      const reread = readFinalModel(demoJsonAbs);
+      if (!reread.model) {
+        emit('demo.capture', { capture_ok: true, post_capture_valid: false, errors: reread.errors }, { event_type: 'error' });
+        return {
+          status: 'failed',
+          reason: 'capture-failed',
+          detail: `post-capture demo.json failed validation: ${reread.errors.join('; ')}`,
+        };
+      }
+      finalModel = reread.model;
+    }
     const misses = (finalModel.acEvaluations ?? []).filter((e) => e.verdict !== 'met');
     if (misses.length === 0) {
+      if (existsSync(proposalsAbs)) {
+        // All-met with a proposals file = a contract inconsistency; discard
+        // loudly rather than leaving a stale untracked judgment behind.
+        unlinkSync(proposalsAbs);
+        emit('demo.stale-proposals-discarded', {});
+      }
       emit('demo.complete', { ac_evaluations: finalModel.acEvaluations?.length ?? 0 });
       return { status: 'complete', demoJsonPath: join(demoDirRel, DEMO_JSON_BASENAME) };
     }
@@ -349,6 +479,7 @@ function validateAuthoredDemo(
   demoJsonAbs: string,
   demoDirRel: string,
   expectedDiffStat: string,
+  injectedCriteria: string[],
 ): { ok: true; model: DemoModel } | { ok: false; errors: string[] } {
   if (!existsSync(demoJsonAbs)) {
     return { ok: false, errors: [`demo.json not found — author it at ${demoDirRel}/${DEMO_JSON_BASENAME}`] };
@@ -371,6 +502,22 @@ function validateAuthoredDemo(
       ],
     };
   }
+  // AC-coverage enforcement: an agent that omits acEvaluations (or covers only
+  // a subset of the injected criteria) would otherwise sail to a vacuous
+  // 'complete' — the cheapest way to avoid writing fix proposals. Every
+  // injected criterion needs a verbatim entry.
+  if (injectedCriteria.length > 0) {
+    const authored = new Set((model.acEvaluations ?? []).map((e) => e.criterion));
+    const uncovered = injectedCriteria.filter((c) => !authored.has(c));
+    if (uncovered.length > 0) {
+      return {
+        ok: false,
+        errors: uncovered.map(
+          (c) => `acEvaluations is missing an entry for this criterion (author it verbatim, judge met|partial|missed): "${c}"`,
+        ),
+      };
+    }
+  }
   if (changed) writeFileSync(demoJsonAbs, JSON.stringify(coerced, null, 2) + '\n');
   return { ok: true, model };
 }
@@ -384,12 +531,15 @@ function readStampedNonce(demoJsonAbs: string): string | null {
   }
 }
 
-function readFinalModel(demoJsonAbs: string): DemoModel | null {
+/** Re-read + validate the post-capture demo.json; errors kept so a capture
+ * that invalidated the artifact fails loud instead of falling back silently. */
+function readFinalModel(demoJsonAbs: string): { model: DemoModel | null; errors: string[] } {
   try {
     const { model } = coerceDemoModel(JSON.parse(readFileSync(demoJsonAbs, 'utf8')));
-    return validateDemoModel(model).length === 0 ? (model as DemoModel) : null;
-  } catch {
-    return null;
+    const errors = validateDemoModel(model);
+    return errors.length === 0 ? { model: model as DemoModel, errors: [] } : { model: null, errors };
+  } catch (err) {
+    return { model: null, errors: [err instanceof Error ? err.message : String(err)] };
   }
 }
 

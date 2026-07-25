@@ -43,8 +43,9 @@ demo as the load-bearing act it is, not paperwork after the real work.
 
 The orchestrator's per-cycle run context, injected before you write anything:
 
-- **Initiative id + acceptance criteria** — the manifest's ACs. These are
-  your judging rubric: one `acEvaluations` entry per criterion, verbatim.
+- **Initiative id + acceptance criteria** — aggregated from the initiative's
+  work-item specs (each line prefixed with its WI id). These are your judging
+  rubric: one `acEvaluations` entry per criterion, verbatim.
 - **Work-item list + statuses** — every WI compiled into this initiative and
   how each closed. Context for what changed; not something to re-derive by
   reading diffs from scratch.

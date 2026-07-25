@@ -452,6 +452,21 @@ R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred 
   exploit). A guard inside the primitives would harden future callers. *Re-entry:* if a new request-input
   caller of these primitives is added.
 
+### 12. R4-07 demo agent — as-built follow-ups (2026-07-24)
+
+- **Capture children inherit the full orchestrator env (accepted + recorded).** The orchestrated
+  capture spawn (`orchestrator/phases/orchestrated-capture.ts` → `forge demo capture`, used by both the
+  unifier gate and the new demo-agent pipeline) passes `{ ...process.env, FORGE_CAPTURE_NONCE }`, so
+  agent-authored checkpoint `command`s execute with whatever credentials the serve process carries
+  (gh token; ADO PATs on betterado runs). This is **partially by design** — live-evidence captures
+  legitimately need project creds (the betterado live-REST tier) — and R5-02's `buildChildEnv`
+  allowlist cannot be applied wholesale without breaking them. Hardening = a per-project capture-env
+  allowlist declared in `testProcess`/`demoProcess` config. *Re-entry:* first non-betterado live-capture
+  project onboarding, or a security pass over the capture seam (adversarial review 2026-07-24, #8).
+- **The demo-agent's Write/Edit scope is enforced post-hoc, not sandboxed** — the pipeline's mechanical
+  scope guard (`demo.scope-violation`, pre/post `git status --porcelain` diff) catches out-of-demo-dir
+  writes after the spawn; a true FS sandbox per agent tool-call remains platform work (R2-06 territory).
+
 ## Strengths worth preserving (don't regress these)
 
 - The **dual-boundary gate works as designed** — the unifier catches a red

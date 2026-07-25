@@ -529,8 +529,53 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-07 Demo agent
 
-- **Status:** planned  ·  **Wave:** 4
-- **Depends on:** R1-03 (executes the demo-process clause it types), R2-05
+- **Status:** **implemented** (2026-07-24, wave-4 session 3, branch
+  `feat/r4-07-demo-agent`) — F1 + F3 as specced; **F2 delivered as the
+  artifact slice only** (see implemented-notes).  ·  **Wave:** 4
+- **Implemented-notes (2026-07-24):**
+  - **F1 — built.** `skills/demo-agent` (ADR-039 one-shot OOTB artifact, no
+    Bash, composes `skills/demo`) + the `orchestrator/phases/demo-agent.ts`
+    pipeline: derive (full-stdout `--shortstat` diffStat + head SHA, injected
+    — never trusted from an inherited demo.json) → spawn (`runAgent`
+    `lifecycle:'caller'`) → validate (schema + injected-diffStat equality +
+    **AC-coverage enforcement**, one bounded authoring retry) → in-process
+    render → orchestrated capture (reused ADR-036 machinery: producibility
+    preflight = hard `tooling-unavailable`, nonce verify = hard
+    `nonce-mismatch`, post-capture re-validation = hard `capture-failed`) →
+    commit (capture or notes-only path both land demo.json/DEMO.md on the
+    branch). A mechanical **scope guard** (pre/post `git status` diff) hard-fails
+    any agent write outside the demo dir. Budget-killed spawns
+    (`error_max_*`) fail loud, never retried. Prompt builders:
+    `orchestrator/phases/demo-agent-binding.ts` (demo-element composition in
+    demoProcess step order; unresolved element ids rendered + evented).
+  - **F2 — artifact slice.** The judgment band validates agent-authored
+    `fix-proposals.json` against the non-met `acEvaluations` (verbatim
+    criterion match both directions) and persists the **`demo-fix-spec`
+    artifact** (`orchestrator/flow-artifacts.ts`,
+    `_logs/<cycleId>/artifacts/demo-fix-spec.json`, ADR-015-shaped
+    `acceptance_criteria`/`files_in_scope`; template
+    `studio/artifact-templates/demo-fix-spec.md`). **The fix-loop dispatch
+    through the shared executor is NOT built here** — R4-10-F1 owns that
+    topology; until it lands the artifact is the complete F2 deliverable
+    (recorded in the template + pipeline header). The seeded AC-miss AC is
+    proven at the artifact level (`demo-agent.test.ts`).
+  - **F3 — built.** Descriptor parity test
+    (`orchestrator/demo-descriptor-parity.test.ts`: ONE demoProcess fixture
+    pinned across the preflight DEMO clause, `demoTaskLines`, and the
+    demo-agent briefing — step order asserted); roadmap `InitiativeCard` gains
+    `data-link="demo-builder"` → the editor tab's Demo Timeline (journey +
+    DOM-contract doc synced). The **review-surface link was dropped** — `Run`
+    carries no project id; threading one is a bridge-field change deferred
+    rather than ad-hoc added (plan risk 9 fallback). `skills/demo` composer
+    swap = dual composition (demo-agent + legacy unifier until R4-01-F4);
+    "two faces" §DEMO framing added to the contract skill body.
+  - **Not wired into any seed flow** — R4-10 assembles the successor flow;
+    the pipeline input shape mirrors the flow-node executors so wrapping it
+    as a NodeExecutor is mechanical. 52-agent whole-branch review (4 lenses →
+    dedup → 2-skeptic adversarial verify): 15 confirmed/plausible findings,
+    all closed in-branch; capture-child env inheritance recorded as
+    known-gaps §12.
+- **Depends on:** R1-03 ✅ (executes the demo-process clause it types), R2-05
   *(soft — richer dynamic demo surfaces)*
 - **Context:** Operator diagram: *"agent designed to take output of a develop
   phase, generate a project's demo from that work, and iterate on fixes if the
@@ -871,6 +916,13 @@ free R4 ID's features.
   reopen of the cascade-closed #40), R4-04 PR #41 (`4f530ba`). Verify disposition superseded: ONE
   tail-of-wave `verify:cycle` run covers the whole wave (operator decision). The R1-03-F4 merge-boundary
   gate relocation verdict is **APPROVED as specced + recorded in the ADR-036 amendment** — R4-10-F2 unblocked.
+- 2026-07-24 — **Wave-4 session 3: R4-07 implemented** (branch `feat/r4-07-demo-agent`). The demo agent as an
+  ADR-039 one-shot OOTB artifact + the `demo-agent.ts` orchestrator pipeline (derive/spawn/validate/render/
+  orchestrated-capture/judgment bands; AC-coverage + mechanical scope guard + hard env-failure classes). **F2 =
+  artifact slice**: the `demo-fix-spec` artifact (ADR-015-shaped proposals) ships; dispatch waits on R4-10-F1's
+  loop topology. F3 descriptor-parity test + roadmap-card demo tie-in (review-surface link deferred — no project
+  id on `Run`). Dual composition of `skills/demo` until R4-01-F4. Whole-branch adversarial review: 15 findings
+  closed; capture-env inheritance → known-gaps §12.
 - 2026-07-24 — **Wave-4 session 2: R4-04 implemented** (branch `feat/r4-04-architect-refinement`). Reconciliation:
   F1 (multi-round interview + revise loop), F2 (completeness critic in FINALIZE), F3 (WI-less registration +
   blocked-until-planned) were already as-built — the stale R4-B3 framing corrected in the implemented-notes. New

@@ -72,6 +72,16 @@ test('element-bearing demoProcess renders the composition block in step order wi
   assert.ok(p.includes('generator body for cli-capture'), 'element generator body inlined');
 });
 
+test('a step naming an unresolved element id renders an explicit UNRESOLVED note, never silence', () => {
+  const steps: DemoStep[] = [
+    { kind: 'capture', text: 'record it', element: 'cli-capture' },
+    { kind: 'verify', text: 'assert it', element: 'not-a-real-element' },
+  ];
+  const p = renderDemoAgentUserPrompt({ ...baseInput(), demoProcess: steps, elements: [el('cli-capture', 'capture')] });
+  assert.ok(p.includes('not-a-real-element'), 'unresolved id still named');
+  assert.ok(/UNRESOLVED/.test(p), 'explicit unresolved marker rendered');
+});
+
 test('element-less demoProcess falls back to the library index with kind guidance', () => {
   const steps: DemoStep[] = [
     { kind: 'capture', text: 'record the API response' },

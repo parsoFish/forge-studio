@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { runDemoAgentPipeline, type DemoAgentPipelineResult } from './demo-agent.ts';
+import { runDemoAgentPipeline, assertDemoAgentDeclaration, type DemoAgentPipelineResult } from './demo-agent.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import { serializeWorkItem, type WorkItem } from '../work-item.ts';
 import { validateDemoFixSpec, demoFixSpecJsonPath } from '../flow-artifacts.ts';
@@ -107,6 +107,9 @@ function diffStatFromPrompt(prompt: string): string {
   return m![1]!;
 }
 
+/** The exact criterion string the pipeline injects (WI-prefixed GWT — AC coverage matches verbatim). */
+const INJECTED_CRITERION = '(WI-1) GIVEN the CLI is built WHEN it runs bare THEN usage prints';
+
 function validDemoJson(diffStat: string, opts: { command?: string; verdict?: 'met' | 'partial' | 'missed' } = {}): Record<string, unknown> {
   return {
     title: 'CLI usage demo',
@@ -121,10 +124,10 @@ function validDemoJson(diffStat: string, opts: { command?: string; verdict?: 'me
         ...(opts.command ? { command: opts.command } : { beforeNote: 'no usage', afterNote: 'usage printed' }),
       },
     ],
-    acceptanceCriteria: ['GIVEN the CLI is built WHEN it runs bare THEN usage prints'],
+    acceptanceCriteria: [INJECTED_CRITERION],
     acEvaluations: [
       {
-        criterion: 'GIVEN the CLI is built WHEN it runs bare THEN usage prints',
+        criterion: INJECTED_CRITERION,
         verdict: opts.verdict ?? 'met',
         evidence: 'checkpoint cli-run shows the usage text',
       },
@@ -136,7 +139,7 @@ function validProposals(): unknown[] {
   return [
     {
       id: 'FIX-1',
-      criterion: 'GIVEN the CLI is built WHEN it runs bare THEN usage prints',
+      criterion: INJECTED_CRITERION,
       verdict: 'missed',
       evidence: 'the after run prints nothing',
       title: 'Print usage on bare invocation',
@@ -207,6 +210,11 @@ test('happy path all-met, no capture wanted: complete + DEMO.md rendered + demo.
     assert.equal(prompts.length, 1);
     assert.ok(prompts[0]!.includes('demo/INIT-2026-07-24-demo/demo.json'), 'prompt names the demo dir');
     assert.ok(!existsSync(demoFixSpecJsonPath(fx.logsRoot, INIT_ID)), 'no fix spec on an all-met demo');
+    // No-capture demos still land ON the branch — the pipeline owns the commit.
+    const committedEv = events.find((e) => e.message === 'demo.artifacts.committed');
+    assert.ok(committedEv, 'no-capture path emits demo.artifacts.committed');
+    assert.equal((committedEv!.metadata as Record<string, unknown>).committed, true);
+    assert.ok(fx.git(['log', '--oneline']).includes('chore(demo): demo artifacts'), 'demo.json + DEMO.md committed');
   } finally {
     fx.cleanup();
     restore();
@@ -450,6 +458,148 @@ test('AC-miss without proposals: one retry, then failed/author-invalid', async (
     fx.cleanup();
     restore();
   }
+});
+
+test('scope guard: agent edits outside the demo dir → hard scope-violation, no retry', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    const qf = stubQueryFn(fx.worktree, [
+      (prompt) => {
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(prompt))));
+        // The ADR-036 arms-race move: edit project code to make an AC demonstrable.
+        writeFileSync(join(fx.worktree, 'src.ts'), 'export const v = 3; // agent-authored edit\n');
+      },
+    ], prompts);
+    const res = await run(fx, qf, events, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'scope-violation');
+    assert.ok((res as { detail: string }).detail.includes('src.ts'));
+    assert.equal(prompts.length, 1, 'an agent that edits code is not negotiated with');
+    const ev = events.find((e) => e.message === 'demo.scope-violation');
+    assert.ok(ev);
+    assert.deepEqual((ev!.metadata as Record<string, unknown>).paths, ['src.ts']);
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('budget-exhausted spawn (error_max_turns): hard failure, never retried as an authoring bug', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    let calls = 0;
+    const qf = ((_params: { prompt: string }) => {
+      calls += 1;
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', subtype: 'error_max_turns', total_cost_usd: 2.0, usage: { input_tokens: 5, output_tokens: 7 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+    const res = await run(fx, qf, events, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'budget-exhausted');
+    assert.ok((res as { detail: string }).detail.includes('error_max_turns'));
+    assert.equal(calls, 1);
+    assert.ok(events.some((e) => e.message === 'demo.budget-exhausted'));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('AC coverage: missing acEvaluations entry for an injected criterion → retry names it verbatim', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    const qf = stubQueryFn(fx.worktree, [
+      (prompt) => {
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        const noEvals = validDemoJson(diffStatFromPrompt(prompt)) as Record<string, unknown>;
+        delete noEvals.acEvaluations; // schema-valid, judgment-vacuous
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(noEvals));
+      },
+      (prompt) => {
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(prompt))));
+      },
+    ], prompts);
+    const res = await run(fx, qf, events, logger);
+    assert.equal(res.status, 'complete');
+    assert.equal(prompts.length, 2);
+    assert.ok(prompts[1]!.includes(INJECTED_CRITERION), 'retry prompt names the uncovered criterion verbatim');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('all-met demo alongside a stray proposals file: discarded loudly, never left untracked', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const qf = stubQueryFn(fx.worktree, [
+      (prompt) => {
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(prompt))));
+        writeFileSync(join(demoDirAbs(fx.worktree), 'fix-proposals.json'), JSON.stringify(validProposals()));
+      },
+    ]);
+    const res = await run(fx, qf, events, logger);
+    assert.equal(res.status, 'complete');
+    assert.ok(!existsSync(join(demoDirAbs(fx.worktree), 'fix-proposals.json')), 'stray proposals discarded on the complete path');
+    assert.ok(events.some((e) => e.message === 'demo.stale-proposals-discarded'));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('capture that invalidates demo.json: hard capture-failed, never a silent stale-model fallback', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const qf = stubQueryFn(fx.worktree, [
+      (prompt) => {
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        writeFileSync(
+          join(demoDirAbs(fx.worktree), 'demo.json'),
+          JSON.stringify(validDemoJson(diffStatFromPrompt(prompt), { command: 'echo hi' })),
+        );
+      },
+    ]);
+    // Fake capture engine that stamps a VALID nonce but corrupts the schema —
+    // exercises the post-capture validation distinctly from the nonce check
+    // (nonce verification deliberately fires first).
+    const script = join(fx.root, 'corrupting-capture.mjs');
+    writeFileSync(
+      script,
+      `import { writeFileSync } from 'node:fs'; writeFileSync('demo/${INIT_ID}/demo.json', JSON.stringify({ title: 'only', capture: { nonce: process.env.FORGE_CAPTURE_NONCE } }));`,
+    );
+    const res = await run(fx, qf, events, logger, { argv: [process.execPath, script] });
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'capture-failed');
+    assert.ok((res as { detail: string }).detail.includes('post-capture'));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('assertDemoAgentDeclaration: each missing declared guard throws with the vector named', () => {
+  const base = { budgets: { maxTurns: 10, maxBudgetUsd: 1 }, composition: { skills: ['demo'] } };
+  assert.doesNotThrow(() => assertDemoAgentDeclaration(base));
+  assert.throws(() => assertDemoAgentDeclaration({ ...base, budgets: { maxBudgetUsd: 1 } }), /maxTurns/);
+  assert.throws(() => assertDemoAgentDeclaration({ ...base, budgets: { maxTurns: 10 } }), /silent-spend/);
+  assert.throws(() => assertDemoAgentDeclaration({ ...base, composition: { skills: [] } }), /composition\.skills/);
 });
 
 test('spawn suppression (no queryFn under FORGE_ARCHITECT_NO_SPAWN): failed/spawn-suppressed, never fake', async () => {
