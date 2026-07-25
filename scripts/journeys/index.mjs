@@ -101,6 +101,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-cost-rollup'],
   ['flows-run', 'flows-run-review-comment'],
   ['flows-run', 'flows-run-review-send-back'],
+  ['flows-run', 'flows-run-sendback-cap'],
   ['flows-run', 'flows-run-rerun'],
   ['flows-run', 'flows-run-re-review'],
   ['flows-run', 'flows-run-approve-merge'],

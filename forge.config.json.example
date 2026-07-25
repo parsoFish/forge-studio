@@ -12,5 +12,11 @@
     "_comment": "Desktop notifications via notify-send (Linux) / osascript (macOS) / BurntToast (Windows). webhook_url POSTs JSON to a URL (e.g. Slack, Discord); null disables.",
     "desktop": true,
     "webhook_url": null
+  },
+
+  "review": {
+    "_comment": "R4-08-F2 (ADR-040): review send-back loop bounds. Either cap exhausting parks the initiative needs-operator.",
+    "maxSendBackRounds": 6,
+    "maxTotalFixWorkItems": 24
   }
 }

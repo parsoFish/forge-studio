@@ -30,7 +30,7 @@ import { isPaused } from './daemon.ts';
 import { runCycle } from './cycle.ts';
 import { flowPathForId } from './flow-runner.ts';
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
-import { drainPendingUnifierItems } from './drain-unifier-items.ts';
+import { drainPendingFixWorkItems } from './drain-fix-loop.ts';
 import { drainFlowRunRequests } from './flow-run-requests.ts';
 import { parseManifest as parseFullManifest } from './manifest.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
@@ -531,19 +531,21 @@ async function runFinalizeSweep(): Promise<void> {
 }
 
 /**
- * ADR 026 drain sweep: re-run any ready-for-review cycle that has pending
- * unifier work-items (a review send-back appended them) in the SAME cycle —
- * reusing the persisted cycle_id, the worktree, and the open PR. Runs AFTER the
- * finalize sweep so a freshly-merged PR is finalized first (the drain skips
- * merged PRs). Best-effort — never throws out of the timer.
+ * ADR 040 fix-loop drain sweep: re-enter any ready-for-review cycle that has
+ * pending fix work-items (a review send-back compiled them onto the
+ * initiative's own queue) in the SAME cycle — reusing the persisted cycle_id,
+ * the worktree, and the open PR; the develop agent is the single fix executor.
+ * Runs AFTER the finalize sweep so a freshly-merged PR is finalized first (the
+ * drain skips merged PRs — a merge always wins). Best-effort — never throws
+ * out of the timer.
  */
 async function runDrainSweep(): Promise<void> {
   try {
-    for (const r of await drainPendingUnifierItems({ notify: (m) => console.log(`[serve] ${m}`) })) {
+    for (const r of await drainPendingFixWorkItems({ notify: (m) => console.log(`[serve] ${m}`) })) {
       if (r.status === 'drained') {
-        console.log(`[serve] drained ${r.initiativeId} — review work items run in the same cycle (${r.detail})`);
+        console.log(`[serve] fix loop ${r.initiativeId} — fix work items run in the same cycle (${r.detail})`);
       } else if (r.status === 'error') {
-        console.error(`[serve] drain ${r.initiativeId} failed: ${r.detail}`);
+        console.error(`[serve] fix-loop drain ${r.initiativeId} failed: ${r.detail}`);
       }
     }
   } catch {
@@ -680,7 +682,8 @@ async function runOne(
     // self-heals by rm-rf'ing the path — wiping the gitignored `.forge/work-items/`
     // + `.forge/unifier-items/` + per-WI commits that live untracked there. Two
     // cases need the preserved tree:
-    //   - resume-from-unifier (ADR-019): the drain runs against the per-WI commits.
+    //   - a resume marker: 'unifier' crash recovery (ADR-019) or 'develop'
+    //     fix-loop re-entry (ADR-040) — both run against the per-WI commits.
     //   - architect→develop hand-off (S9/DEC-3): the forge-architect cycle parked
     //     at ready-for-review with pm's `.forge/work-items/`; the develop run's
     //     dev node consumes them. `resume_from` is cleared on the hand-off, so this
@@ -692,12 +695,12 @@ async function runOne(
     const handoffWorkItemsPresent =
       worktreePresent && nonEmptyDir(resolve(expectedWtPath, '.forge', 'work-items'));
     const strategy = worktree.decideWorktreeStrategy({
-      resumeFromUnifier: manifest.resumeFrom === 'unifier',
+      resumeMarkerPresent: manifest.resumeFrom !== undefined,
       worktreePresent,
       handoffWorkItemsPresent,
     });
     if (strategy === 'reuse') {
-      const why = manifest.resumeFrom === 'unifier' ? 'resume-from-unifier' : 'architect→develop hand-off';
+      const why = manifest.resumeFrom ? `resume-from-${manifest.resumeFrom}` : 'architect→develop hand-off';
       if (tee) console.log(`[serve] ${why}: reusing preserved worktree ${expectedWtPath}`);
       wtHandle = { path: expectedWtPath, branch, projectRepoPath: manifest.projectRepoPath };
     } else {
@@ -849,11 +852,12 @@ type ParsedManifest = {
   /** The Studio flow this manifest runs under (S8/DEC-3 — required; no default). */
   flowId?: string;
   /**
-   * ADR 019 (amended by ADR 026): resume the cycle against the preserved
-   * worktree — 'unifier' skips PM + the per-WI dev-loop and runs only the
-   * unifier (draining any pending review UWIs).
+   * ADR 019 (amended by ADR 026) / ADR 040: resume the cycle against the
+   * preserved worktree — 'unifier' skips PM + the per-WI dev-loop and runs
+   * only the unifier (draining any pending review UWIs); 'develop' (ADR 040
+   * send-back re-entry) rebase-skips PM and RUNS the dev loop.
    */
-  resumeFrom?: 'unifier';
+  resumeFrom?: 'unifier' | 'develop';
 };
 
 function parseManifest(path: string): ParsedManifest {

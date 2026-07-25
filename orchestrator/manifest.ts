@@ -105,15 +105,30 @@ export type InitiativeManifest = {
    */
   quality_gate_cmd?: string[];
   /**
-   * ADR 019 (amended by ADR 026): resume a stalled cycle from the unifier
-   * sub-phase rather than re-running from scratch, reusing the preserved
-   * worktree + branch — skip architect/PM/per-WI dev-loop and run only the
-   * unifier (which drains any pending review UWIs) + downstream phases. Set by
-   * `forge requeue --resume-from=unifier` (crash recovery). Absent ⇒ normal
-   * full cycle. (The `developer` resume mode was retired with ADR 026: review
-   * feedback is handled by typed UWIs inside the unifier, not a dev re-pass.)
+   * Resume a stalled/redirected cycle from a sub-phase, reusing the preserved
+   * worktree + branch rather than re-running the full cycle from scratch.
+   * Two distinct callers set this field, for two distinct reasons:
+   *   - `'unifier'` — ADR 019 (amended by ADR 026): crash recovery. Skips
+   *     architect/PM/per-WI dev-loop and runs only the unifier (which drains
+   *     any pending review UWIs) + downstream phases. Set by
+   *     `forge requeue --resume-from=unifier`.
+   *   - `'develop'` — ADR 040: review send-back re-entry. The PM phase
+   *     rebases onto main and skips (no re-decomposition); the dev loop
+   *     RUNS (prior WIs re-verify cheaply via the iter-0 already-complete
+   *     shortcut, new review-fix WIs build); then the post-develop spine
+   *     re-presents. Set by `persistManifestSendBack` under the verdict
+   *     handler's manifest lock.
+   * Absent ⇒ normal full cycle.
    */
-  resume_from?: 'unifier';
+  resume_from?: 'unifier' | 'develop';
+  /**
+   * ADR 040: send-back round counter. Incremented by the review verdict
+   * handler (`persistManifestSendBack`) each time review feedback compiles
+   * into fix work-items and re-dispatches the develop agent. Absent ⇒ no
+   * send-back has happened yet. Checked against `review.maxSendBackRounds`
+   * (config, default 6) to bound the loop.
+   */
+  review_rounds?: number;
   /**
    * cascade-v4 #7: a throwaway / verification cycle (e.g. `verify-cycle.mjs`
    * frozen-SHA routine runs) should NOT pollute the durable brain. When
@@ -223,8 +238,15 @@ export function parseManifest(content: string): InitiativeManifest {
     const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
-  if (data.resume_from === 'unifier') {
+  if (data.resume_from === 'unifier' || data.resume_from === 'develop') {
     manifest.resume_from = data.resume_from;
+  }
+  if (
+    typeof data.review_rounds === 'number' &&
+    Number.isInteger(data.review_rounds) &&
+    data.review_rounds >= 0
+  ) {
+    manifest.review_rounds = data.review_rounds;
   }
   if (data.disposable === true) manifest.disposable = true;
   if (typeof data.cost_ceiling_usd === 'number' && data.cost_ceiling_usd > 0) {
@@ -270,8 +292,11 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
     data.depends_on_initiatives = m.depends_on_initiatives;
   }
-  if (m.resume_from === 'unifier') {
+  if (m.resume_from === 'unifier' || m.resume_from === 'develop') {
     data.resume_from = m.resume_from;
+  }
+  if (typeof m.review_rounds === 'number') {
+    data.review_rounds = m.review_rounds;
   }
   if (m.disposable === true) {
     data.disposable = true;
@@ -305,6 +330,9 @@ export function validateManifest(m: InitiativeManifest): string[] {
   if (!(m.cost_budget_usd > 0)) errors.push(`cost_budget_usd must be > 0: got ${m.cost_budget_usd}`);
   if (m.cost_ceiling_usd !== undefined && !(m.cost_ceiling_usd > 0)) {
     errors.push(`cost_ceiling_usd must be > 0 when present: got ${m.cost_ceiling_usd}`);
+  }
+  if (m.review_rounds !== undefined && !(Number.isInteger(m.review_rounds) && m.review_rounds >= 0)) {
+    errors.push(`review_rounds must be an integer >= 0 when present: got ${m.review_rounds}`);
   }
   if (!INITIATIVE_ORIGINS.includes(m.origin)) {
     errors.push(`origin must be one of ${INITIATIVE_ORIGINS.join(' | ')}: got ${String(m.origin)}`);
@@ -510,6 +538,31 @@ export function persistManifestResumeFromUnifier(manifestPath: string): void {
   } catch {
     /* best-effort — must not fail the verdict request */
   }
+}
+
+/**
+ * ADR 040: stamp `resume_from: 'develop'` and increment `review_rounds`
+ * (absent ⇒ 1) in a single read-modify-write, invoked by the review verdict
+ * handler each time review feedback compiles into fix work-items and the
+ * cycle re-dispatches the develop agent. The CALLER holds the manifest's
+ * proper-lockfile lock — same contract as `persistManifestResumeFromUnifier`
+ * — this function does no locking of its own.
+ *
+ * Unlike the other `persistManifest*` helpers, this one is deliberately NOT
+ * best-effort: it does not catch/swallow. A failed read or write throws,
+ * because the verdict handler must never report a send-back round it didn't
+ * durably record (silently swallowing here would desync the operator-facing
+ * response from what's actually on disk).
+ *
+ * Always overwrites `resume_from` regardless of its prior value — an
+ * operator-driven send-back supersedes a stale `resume_from: 'unifier'`
+ * crash-recovery stamp; the newer, more specific intent wins.
+ */
+export function persistManifestSendBack(manifestPath: string): { round: number } {
+  const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+  const round = (m.review_rounds ?? 0) + 1;
+  writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'develop', review_rounds: round }));
+  return { round };
 }
 
 // ---------- helpers ----------

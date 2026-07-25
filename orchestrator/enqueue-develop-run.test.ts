@@ -25,6 +25,9 @@ function manifest(overrides: Partial<InitiativeManifest> = {}): InitiativeManife
     cost_budget_usd: 25,
     phase: 'pending',
     origin: 'architect',
+    // ADR-040 rider (known-gaps §9): the dispatch boundary requires
+    // decomposition evidence — the specs back-ref is the normal case.
+    specs: ['WI-1'],
     body: '# TOC injection\n\nAdd --write in-place TOC injection.',
     ...overrides,
   };
@@ -125,6 +128,34 @@ test('enqueueDevelopRun: a stale resume_from is cleared when re-enqueueing for a
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
     assert.equal(onDisk.resume_from, undefined, 'resume_from is cleared so the develop run starts the full dev→unifier→review spine');
+  });
+});
+
+test('enqueueDevelopRun: no decomposition evidence → not-planned (ADR-040 rider, known-gaps §9)', () => {
+  withTmp((queueRoot) => {
+    const m = manifest();
+    delete m.specs;
+    seed(queueRoot, 'pending', m);
+    const result = enqueueDevelopRun('INIT-2026-06-21-toc', { queueRoot });
+
+    assert.equal(result.status, 'not-planned');
+    const paths = getPaths(queueRoot);
+    const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
+    assert.equal(onDisk.flow_id, undefined, 'the manifest is NOT repointed at forge-develop');
+  });
+});
+
+test('enqueueDevelopRun: preserved worktree WI files count as decomposition evidence (pre-specs fallback)', () => {
+  withTmp((queueRoot) => {
+    const wt = join(queueRoot, '..', 'wt');
+    mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
+    writeFileSync(join(wt, '.forge', 'work-items', 'WI-1.md'), '---\nwork_item_id: WI-1\n---\n');
+    const m = manifest({ worktree_path: wt });
+    delete m.specs;
+    seed(queueRoot, 'pending', m);
+    const result = enqueueDevelopRun('INIT-2026-06-21-toc', { queueRoot });
+
+    assert.equal(result.status, 'enqueued', 'worktree WI files satisfy the planned gate');
   });
 });
 

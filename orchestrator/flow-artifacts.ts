@@ -134,7 +134,9 @@ export type VerdictRecord = {
   cycleId: string;
   decidedBy: 'operator' | 'merge';
   rationale?: string;
-  acceptanceCriteria?: unknown[]; // the send-back UWI ACs, as the UI submitted them
+  acceptanceCriteria?: unknown[]; // the send-back fix-WI ACs, as the UI submitted them
+  /** ADR 040: which send-back round this verdict opened (send-back records only). */
+  round?: number;
   at: string;
   /**
    * Task A-finalfix ride-along 3: when this verdict was recorded under

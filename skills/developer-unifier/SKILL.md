@@ -48,25 +48,20 @@ Once all per-WI Ralphs have run, take the **whole initiative branch** and prove 
 5. **Commit** as `feat(<initiative-id>): unify and demo`. Skip commit if no changes (demo exists, PR body present) — gates run against per-WI tip.
 6. **Push** so `origin/<branch>` == local HEAD before the review phase opens the PR.
 
-## Review work-items (ADR 026)
+## Your work-item queue (ADR 026 as superseded by ADR 040)
 
 The unifier owns its OWN work-item queue at `.forge/unifier-items/UWI-<n>.md`
-(same `WorkItem` shape as `.forge/work-items/`). You run them ONE at a time,
-in dependency order. `UWI-1` is the static "unify & prep the PR" mission above.
-When the operator reviews the open PR and **adds work items**, each concern is
-appended as a `UWI-2+` and the cycle drains them **in place** — same branch,
-same PR, same cycle (no requeue, no send-back to a dev phase). The brief you
+(same `WorkItem` shape as `.forge/work-items/`). Since ADR 040 it holds ONE
+item: `UWI-1`, the static "unify & prep the PR" mission above (`kind:
+packaging` — unify, author the demo + PR body, prove the composed unifier
+gate; do NOT re-implement code). Review send-backs no longer append UWIs —
+the operator's concerns compile into fix work-items on the DEV queue
+(`.forge/work-items/`, `origin: review-fix`) and the develop agent fixes them;
+your `UWI-1` is then RE-ARMED so you re-author the demo + PR description
+against the fixed branch — same branch, same PR, same cycle. The brief you
 read in `PROMPT.md` is for the ONE UWI you are running now; address only that.
-
-A UWI carries a `kind`:
-
-- **`packaging`** (UWI-1, the terminal re-prep, demo/doc tweaks) — the mission
-  above: unify, author the demo + PR body, prove the composed unifier gate. Do
-  NOT re-implement code.
-- **`code-fix`** (a review concern that needs real code) — you run with the
-  **dev role**: write a FAILING test that encodes the UWI's acceptance criteria
-  first, then the minimal code to make it pass; keep the rest of the suite
-  green. A terminal `packaging` re-prep UWI re-authors the demo/PR after you.
+On a re-armed round, treat it as a fresh prep of the FINAL branch: the demo
+and PR body must reflect the post-fix state, never the round-1 snapshot.
 
 ## Hard rules
 

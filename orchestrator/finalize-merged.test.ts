@@ -11,8 +11,7 @@ import { join } from 'node:path';
 
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { runClosure as realRunClosure } from './phases/closure.ts';
-import { seedStaticUnifierItem, appendReviewUnifierItems } from './unifier-items.ts';
-import { writeWorkItemStatus } from './work-item.ts';
+import { writeWorkItem, type WorkItem } from './work-item.ts';
 
 // Captured ONCE at module load — the stable cwd to restore to after the
 // real-runClosure integration test's chdir (real `runClosure`/
@@ -178,22 +177,28 @@ test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', a
   }
 });
 
-test('finalize: merged with pending UWIs still finalizes, but surfaces the drop (B2, non-silent)', async () => {
+test('finalize: merged with pending fix work-items still finalizes, but surfaces the drop (B2, non-silent)', async () => {
   const { root, queueRoot } = setup();
   try {
     const wt = join(root, 'wt');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-merged-pending';
-    // A post-send-back worktree: UWI-1 complete, UWI-2/3 still pending.
-    const uwi1 = seedStaticUnifierItem(wt, { initiativeId: id, estimatedIterations: 6, qualityGateCmd: ['go', 'test', './...'] });
-    writeWorkItemStatus(uwi1, 'complete');
-    appendReviewUnifierItems({
-      worktreePath: wt,
-      initiativeId: id,
-      concern: { rationale: 'r', acceptanceCriteria: [{ given: 'g', when: 'w', then: 't' }] },
-      projectGateCmd: ['go', 'test', './...'],
-      estimatedIterations: 6,
-    });
+    // A post-send-back worktree (ADR 040): a review-fix work item compiled by
+    // the send-back loop onto the initiative's own `.forge/work-items/`
+    // queue, still `pending` when the operator merged anyway.
+    const fixWi: WorkItem = {
+      work_item_id: 'WI-9',
+      initiative_id: id,
+      status: 'pending',
+      depends_on: [],
+      acceptance_criteria: [{ given: 'g', when: 'w', then: 't' }],
+      files_in_scope: ['pkg/foo.go'],
+      estimated_iterations: 1,
+      quality_gate_cmd: ['go', 'test', './...'],
+      origin: 'review-fix',
+      body: '# WI-9 — review-fix concern',
+    };
+    writeWorkItem(fixWi, wt);
     writeManifest(queueRoot, 'ready-for-review', id, wt);
     let finalized = false;
     const notes: string[] = [];
@@ -206,7 +211,10 @@ test('finalize: merged with pending UWIs still finalizes, but surfaces the drop 
     });
     assert.deepEqual(results.map((r) => r.status), ['finalized']);
     assert.equal(finalized, true, 'merge is terminal — finalize wins over the drain');
-    assert.ok(notes.some((n) => /pending review work-item/.test(n)), `expected a non-silent drop note, got ${JSON.stringify(notes)}`);
+    assert.ok(
+      notes.some((n) => /pending fix work-item/.test(n) && n.includes('WI-9')),
+      `expected a non-silent drop note listing the WI id, got ${JSON.stringify(notes)}`,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

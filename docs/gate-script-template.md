@@ -102,4 +102,4 @@ echo "GATE PASS: release_definition is framework-native and green"
 - **Project quality gates / onboarding**
   ([`forge-project-contract.md`](./forge-project-contract.md) C1).
 - **Review send-back sharp gates** — the `qualityGateCmd` an operator attaches
-  to a send-back concern (`orchestrator/unifier-items.ts`, `ReviewConcern`).
+  to a send-back concern (`orchestrator/fix-work-items.ts`, `FixConcernSource`).

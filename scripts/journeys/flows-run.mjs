@@ -739,7 +739,8 @@ export const journey = defineJourney({
               REFLECT_URL = `${watch.uiUrl}/artifact?run=${encodeURIComponent(CYCLE_ID)}&type=reflection&mode=view`;
 
               // S7: seed a live worktree so the comment-derived send-back genuinely
-              // appends a UWI in place (ADR-026), not a 409.
+              // compiles a fix work-item onto the initiative's own queue in place
+              // (ADR-040), not a 409.
               REVIEW_WT = seedReviewWorktree();
 
               // CHAPTER CLIP 3 — run-build-monitor: starts at the library — the real Flows nav
@@ -866,20 +867,73 @@ export const journey = defineJourney({
               );
               await frame(page, 'r4-1b-send-back', 'R4 — the comment persists; the derived verdict is "send back"');
               await page.locator('[data-component="verdict-form"] [data-action="send-back"]').click();
-              // A 200 (the form reaches "submitted") means applyReviewVerdict appended the
-              // UWI in place — ADR-026, same cycle, no requeue.
+              // A 200 (the form reaches "submitted") means applyReviewVerdict compiled a
+              // fix work-item onto the initiative's own queue — ADR-040, same cycle,
+              // no requeue, develop agent is the fix executor.
               await page.waitForSelector('[data-component="verdict-form"][data-form-state="submitted"]', { timeout: 10000 }).catch(() => {});
               const sbState = await page.locator('[data-component="verdict-form"]').getAttribute('data-form-state');
               const sbErr = await page.locator('[data-component="verdict-form"]').getAttribute('data-submit-error');
-              check(sbState === 'submitted', `send-back submitted (ADR-026 in-place append) — state=${sbState}${sbErr ? ` err=${sbErr}` : ''}`);
-              // Belt-and-braces: the UWI landed in the SAME cycle's worktree (no sibling).
+              check(sbState === 'submitted', `send-back submitted (ADR-040 fix-WI compile) — state=${sbState}${sbErr ? ` err=${sbErr}` : ''}`);
+              // Durable evidence, not just DOM (S3 lesson — assert the real output
+              // paths): the fix WI landed on the SAME cycle's dev queue (append-only
+              // after the seeded WI-1/WI-2), origin-marked…
+              const fixWiPath = join(REVIEW_WT, '.forge', 'work-items', 'WI-3.md');
               check(
-                existsSync(join(REVIEW_WT, '.forge', 'unifier-items')) &&
-                  readdirSync(join(REVIEW_WT, '.forge', 'unifier-items')).some((f) => f.startsWith('UWI-')),
-                'send-back appended a UWI into the SAME cycle worktree (ADR-026 in place, no new cycle)',
+                existsSync(fixWiPath) && readFileSync(fixWiPath, 'utf8').includes('origin: review-fix'),
+                'send-back compiled WI-3 (origin: review-fix) onto the SAME cycle worktree dev queue (ADR-040, no new cycle)',
               );
+              // …the manifest carries the develop re-entry stamp + the round counter…
+              const sbManifest = readFileSync(join(QDIR('ready-for-review'), `${INIT}.md`), 'utf8');
+              check(/^resume_from: develop$/m.test(sbManifest), 'manifest stamped resume_from: develop (the fix-loop drain re-enters the dev node)');
+              check(/^review_rounds: 1$/m.test(sbManifest), 'manifest review_rounds incremented to 1 (the config-capped round counter)');
+              // …and the durable verdict artifact records the send-back + its round
+              // in the SAME cycle's _logs dir (one cycle identity).
+              const sbVerdict = JSON.parse(readFileSync(join(FORGE_ROOT, '_logs', CYCLE_ID, 'artifacts', 'verdict.json'), 'utf8'));
+              check(sbVerdict.kind === 'send-back' && sbVerdict.round === 1, `verdict.json records kind=send-back round=1 (got ${sbVerdict.kind}/${sbVerdict.round})`);
               await sleep(ACT);
 
+        },
+      },
+      {
+        id: 'flows-run-sendback-cap',
+        title: 'Cap exhaustion parks loudly (ADR-040)',
+        narration: 'The send-back loop is bounded: with the round cap already spent, one more send-back is rejected 409 and the initiative parks needs-operator — a greppable worktree marker, not a silent drop or an infinite loop.',
+        drive: async (ctx) => {
+              const { check } = ctx;
+              // ── R4.1b: cap exhaustion → reject-and-park (ADR-040 (b)) ─────────────────
+              console.log('\n[R4.1b] Send-back cap exhaustion parks loudly');
+              const manifestPath = join(QDIR('ready-for-review'), `${INIT}.md`);
+              const before = readFileSync(manifestPath, 'utf8');
+              // Spend the round cap (default review.maxSendBackRounds = 6): stamp the
+              // counter at the ceiling, then attempt one more send-back via the same
+              // bridge API the form submits to.
+              writeFileSync(manifestPath, before.replace(/^review_rounds: 1$/m, 'review_rounds: 6'));
+              try {
+                const res = await fetch('http://127.0.0.1:4123/api/verdict', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+                  body: JSON.stringify({
+                    initiativeId: INIT,
+                    kind: 'send-back',
+                    rationale: 'one concern past the cap',
+                    acceptanceCriteria: [{ given: 'the cap is spent', when: 'another send-back arrives', then: 'it is rejected and the initiative parks' }],
+                  }),
+                });
+                const body = await res.json().catch(() => ({}));
+                check(res.status === 409, `cap-exhausted send-back is rejected 409 (got ${res.status})`);
+                check(body.parked === 'needs-operator', `409 body says parked: needs-operator (got ${body.parked})`);
+                const marker = join(REVIEW_WT, '.forge', 'REVIEW-CAP-EXHAUSTED.md');
+                check(existsSync(marker), 'REVIEW-CAP-EXHAUSTED.md park marker written into the worktree (the loud, greppable surface)');
+                check(
+                  !existsSync(join(REVIEW_WT, '.forge', 'work-items', 'WI-4.md')),
+                  'no fix WI was compiled past the cap (reject-then-park, never accept-then-drop)',
+                );
+                // Restore: round back to 1 + marker cleared so the demo continues the
+                // normal loop (the marker would otherwise park the fix-loop drain).
+                rmSync(marker, { force: true });
+              } finally {
+                writeFileSync(manifestPath, before);
+              }
         },
       },
       {
@@ -893,11 +947,17 @@ export const journey = defineJourney({
               await caption(page, 'The dev-loop re-ran on the new criterion.');
               moveManifest('ready-for-review', 'in-flight');
               await runningTimer(page, true, 0);
-              cycleEvent('developer-loop', 'start', 'dev-loop rerun — addressing review feedback');
+              // ADR-040: the fix-loop drain re-dispatches the DEVELOP agent; the
+              // compiled WI-3 (origin: review-fix) is what builds this round — the
+              // send-back beat's real bridge call already emitted its
+              // pm.work-item-emitted, so the hex exists before these events animate it.
+              cycleEvent('developer-loop', 'start', 'dev-loop rerun (resume_from: develop) — building the review fix WI');
               for (let i = 0; i < 6; i++) {
-                cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-2', tool: 'Edit' } });
+                cycleEvent('developer-loop', 'tool_use', 'tool.Edit', { metadata: { work_item_id: 'WI-3', tool: 'Edit' } });
                 await pace('fastForward');
               }
+              cycleEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-3' } });
+              cycleEvent('developer-loop', 'end', 'WI-3 complete', { metadata: { work_item_id: 'WI-3' } });
               unifierEvent('log', 'unifier.demo-skill — re-rendering demo.json (--write is byte-identical on every run)');
               await pace('fastForward');
               writeDemoJson(2);

@@ -26,7 +26,7 @@ import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { confirmPrMerged } from './pr.ts';
-import { pendingUnifierItems } from './unifier-items.ts';
+import { pendingFixWorkItems } from './fix-work-items.ts';
 import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
@@ -236,14 +236,14 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
         out.push({ initiativeId, status: 'still-open' });
         continue;
       }
-      // ADR 026 merge-vs-drain: a merged PR is terminal — finalize WINS over the
-      // drain (running review UWIs against a merged branch is pointless). But if
-      // the operator merged with review work-items still pending, surface it so
-      // the drop is never SILENT (the merge overrides the unrun concerns).
-      const pendingUwis = pendingUnifierItems(worktreePath);
-      if (pendingUwis.length > 0) {
+      // ADR 040 merge-vs-loop: a merged PR is terminal — finalize WINS over the
+      // fix-loop drain (running fix WIs against a merged branch is pointless).
+      // But if the operator merged with fix work-items still pending, surface it
+      // so the drop is never SILENT (the merge overrides the unrun concerns).
+      const pendingFix = pendingFixWorkItems(worktreePath);
+      if (pendingFix.length > 0) {
         deps.notify?.(
-          `${initiativeId} · merged with ${pendingUwis.length} pending review work-item(s) unrun (${pendingUwis.map((p) => p.work_item_id).join(', ')}) — the operator's merge overrides them`,
+          `${initiativeId} · merged with ${pendingFix.length} pending fix work-item(s) unrun (${pendingFix.map((p) => p.work_item_id).join(', ')}) — the operator's merge overrides them`,
         );
       }
       // Re-claim to in-flight/ so closure's terminal move (in-flight → merged,

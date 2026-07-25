@@ -141,20 +141,34 @@ test('selfHealWorktreeState: REGISTERED leftover worktree → removed so the ret
 // When the develop run is claimed, it MUST reuse that worktree — `worktree.add`
 // would `clearStaleWorktree` → rm -rf → wipe the untracked work-items, and the
 // dev node's inbound `work-items` contract would then throw. Reuse also covers
-// the ADR-019 resume-from-unifier path (per-WI commits + unifier-items live in
-// the preserved worktree). A truly fresh cycle has no preserved worktree → add.
+// ANY preserved `resume_from` marker — the ADR-019 resume-from-unifier crash
+// path and the ADR-040 resume-from-develop fix-loop re-entry both land on the
+// same `resumeMarkerPresent: true` (per-WI commits + `.forge/unifier-items/`
+// live in the preserved worktree either way). A truly fresh cycle has no
+// preserved worktree → add.
 // ---------------------------------------------------------------------------
 
 test('decideWorktreeStrategy: fresh cycle (no preserved worktree) → add', () => {
   assert.equal(
-    decideWorktreeStrategy({ resumeFromUnifier: false, worktreePresent: false, handoffWorkItemsPresent: false }),
+    decideWorktreeStrategy({ resumeMarkerPresent: false, worktreePresent: false, handoffWorkItemsPresent: false }),
     'add',
   );
 });
 
-test('decideWorktreeStrategy: resume-from-unifier with a preserved worktree → reuse', () => {
+test('decideWorktreeStrategy: resume_from: unifier marker with a preserved worktree → reuse', () => {
   assert.equal(
-    decideWorktreeStrategy({ resumeFromUnifier: true, worktreePresent: true, handoffWorkItemsPresent: true }),
+    decideWorktreeStrategy({ resumeMarkerPresent: true, worktreePresent: true, handoffWorkItemsPresent: true }),
+    'reuse',
+  );
+});
+
+test('decideWorktreeStrategy: resume_from: develop marker (ADR-040 fix-loop re-entry) with a preserved worktree → reuse', () => {
+  // The widened contract: resumeMarkerPresent is true for ANY resume_from
+  // kind, not just 'unifier'. ADR-040's fix-loop re-entry sets resume_from:
+  // 'develop' on the manifest and must reuse the preserved worktree exactly
+  // like the unifier-resume case above — same boolean, same outcome.
+  assert.equal(
+    decideWorktreeStrategy({ resumeMarkerPresent: true, worktreePresent: true, handoffWorkItemsPresent: false }),
     'reuse',
   );
 });
@@ -163,21 +177,21 @@ test('decideWorktreeStrategy: architect→develop hand-off (work-items preserved
   // THE S9 case: develop is claimed after the architect cycle, resume_from is
   // cleared, but the preserved worktree carries pm's `.forge/work-items/`.
   assert.equal(
-    decideWorktreeStrategy({ resumeFromUnifier: false, worktreePresent: true, handoffWorkItemsPresent: true }),
+    decideWorktreeStrategy({ resumeMarkerPresent: false, worktreePresent: true, handoffWorkItemsPresent: true }),
     'reuse',
   );
 });
 
-test('decideWorktreeStrategy: a stale empty worktree (no work-items, no resume) → add (let add self-heal it)', () => {
+test('decideWorktreeStrategy: a stale empty worktree (no work-items, no resume marker) → add (let add self-heal it)', () => {
   assert.equal(
-    decideWorktreeStrategy({ resumeFromUnifier: false, worktreePresent: true, handoffWorkItemsPresent: false }),
+    decideWorktreeStrategy({ resumeMarkerPresent: false, worktreePresent: true, handoffWorkItemsPresent: false }),
     'add',
   );
 });
 
-test('decideWorktreeStrategy: work-items flag set but no worktree present → add (cannot reuse a missing worktree)', () => {
+test('decideWorktreeStrategy: resume marker set but no worktree present → add (cannot reuse a missing worktree)', () => {
   assert.equal(
-    decideWorktreeStrategy({ resumeFromUnifier: true, worktreePresent: false, handoffWorkItemsPresent: true }),
+    decideWorktreeStrategy({ resumeMarkerPresent: true, worktreePresent: false, handoffWorkItemsPresent: true }),
     'add',
   );
 });

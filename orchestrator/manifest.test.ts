@@ -20,6 +20,7 @@ import {
   readManifestFlowId,
   persistManifestCycleId,
   persistManifestResumeFromUnifier,
+  persistManifestSendBack,
   persistManifestSpecs,
   type InitiativeManifest,
 } from './manifest.ts';
@@ -448,6 +449,115 @@ test('R4-05-F2: persistManifestSpecs writes then re-reads the list, overwrites o
 
     // Missing file → no-op, must not throw.
     persistManifestSpecs(join(dir, 'nope.md'), ['WI-1']);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// ---------- ADR 040: send-back loop (resume_from: 'develop', review_rounds, persistManifestSendBack) ----------
+
+function frontmatterWith(field: string, raw: string): string {
+  return [
+    '---',
+    'initiative_id: INIT-2026-05-04-x',
+    'project: demo',
+    'project_repo_path: /tmp/demo',
+    "created_at: '2026-05-04T18:00:00Z'",
+    'iteration_budget: 50',
+    'cost_budget_usd: 25',
+    'phase: pending',
+    'origin: architect',
+    `${field}: ${raw}`,
+    '---',
+    '# x',
+    '',
+  ].join('\n');
+}
+
+test('ADR 040: resume_from accepts \'develop\' (send-back re-entry) and round-trips', () => {
+  const resuming = serializeManifest({ ...fixture(), resume_from: 'develop' });
+  assert.match(resuming, /resume_from: develop/);
+  assert.equal(parseManifest(resuming).resume_from, 'develop');
+});
+
+test('ADR 040: resume_from rejects unrecognised values on parse (dropped to undefined)', () => {
+  const md = frontmatterWith('resume_from', 'bogus');
+  assert.equal(parseManifest(md).resume_from, undefined);
+});
+
+test('ADR 040: review_rounds round-trips through serialize -> parse', () => {
+  const m: InitiativeManifest = { ...fixture(), review_rounds: 3 };
+  const serialised = serializeManifest(m);
+  assert.match(serialised, /review_rounds: 3/);
+  assert.equal(parseManifest(serialised).review_rounds, 3);
+});
+
+test('ADR 040: review_rounds is absent by default and omitted on serialize', () => {
+  const plain = serializeManifest(fixture());
+  assert.doesNotMatch(plain, /review_rounds/);
+  assert.equal(parseManifest(plain).review_rounds, undefined);
+});
+
+test('ADR 040: parseManifest drops invalid review_rounds values (negative, non-numeric, non-integer)', () => {
+  assert.equal(parseManifest(frontmatterWith('review_rounds', '-1')).review_rounds, undefined);
+  assert.equal(parseManifest(frontmatterWith('review_rounds', 'x')).review_rounds, undefined);
+  assert.equal(parseManifest(frontmatterWith('review_rounds', '1.5')).review_rounds, undefined);
+});
+
+test('validateManifest: rejects review_rounds that is not a non-negative integer, accepts a well-formed one', () => {
+  assert.ok(
+    validateManifest({ ...fixture(), review_rounds: -1 }).some((e) => /review_rounds/i.test(e)),
+  );
+  assert.ok(
+    validateManifest({ ...fixture(), review_rounds: 1.5 }).some((e) => /review_rounds/i.test(e)),
+  );
+  assert.equal(
+    validateManifest({ ...fixture(), review_rounds: 0 }).filter((e) => /review_rounds/i.test(e)).length,
+    0,
+  );
+  assert.equal(validateManifest(fixture()).filter((e) => /review_rounds/i.test(e)).length, 0);
+});
+
+test('ADR 040: persistManifestSendBack stamps resume_from:develop + increments review_rounds from a fresh manifest', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest(fixture()));
+
+    const first = persistManifestSendBack(p);
+    assert.deepEqual(first, { round: 1 });
+    const onDisk1 = parseManifest(readFileSync(p, 'utf8'));
+    assert.equal(onDisk1.resume_from, 'develop');
+    assert.equal(onDisk1.review_rounds, 1);
+
+    const second = persistManifestSendBack(p);
+    assert.deepEqual(second, { round: 2 });
+    const onDisk2 = parseManifest(readFileSync(p, 'utf8'));
+    assert.equal(onDisk2.review_rounds, 2);
+    assert.equal(onDisk2.resume_from, 'develop');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 040: persistManifestSendBack overwrites a stale resume_from:unifier crash-recovery stamp — an operator send-back supersedes it', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
+  try {
+    const p = join(dir, 'm.md');
+    writeFileSync(p, serializeManifest({ ...fixture(), resume_from: 'unifier' }));
+
+    const result = persistManifestSendBack(p);
+    assert.deepEqual(result, { round: 1 });
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'develop');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('ADR 040: persistManifestSendBack throws (not best-effort) when the manifest file is missing', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
+  try {
+    assert.throws(() => persistManifestSendBack(join(dir, 'nope.md')));
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

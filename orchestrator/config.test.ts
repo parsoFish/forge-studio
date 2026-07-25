@@ -20,6 +20,9 @@ import {
   resolveDevWiConcurrency,
   DEFAULT_DEV_WI_CONCURRENCY,
   DEV_WI_CONCURRENCY_CEILING,
+  resolveReviewLoopCaps,
+  DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS,
+  DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS,
   ralphGitIdentity,
   UNIFIER_GIT_IDENTITY,
   ORCHESTRATOR_GIT_IDENTITY,
@@ -274,6 +277,122 @@ test('resolvePostMergeCiConfig: config values honoured; env overrides beat confi
     else process.env.FORGE_POST_MERGE_CI_TIMEOUT_MS = origT;
     if (origP === undefined) delete process.env.FORGE_POST_MERGE_CI_POLL_MS;
     else process.env.FORGE_POST_MERGE_CI_POLL_MS = origP;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R4-08-F2 (ADR-040): review send-back loop bounds — either cap exhausting
+// parks the initiative needs-operator.
+// ---------------------------------------------------------------------------
+
+test('resolveReviewLoopCaps: defaults to DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS (6) / DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS (24)', () => {
+  const origRounds = process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  const origItems = process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  try {
+    const r = resolveReviewLoopCaps({});
+    assert.equal(r.maxSendBackRounds, DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS);
+    assert.equal(r.maxTotalFixWorkItems, DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS);
+    assert.equal(DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS, 6);
+    assert.equal(DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS, 24);
+  } finally {
+    if (origRounds === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+    else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = origRounds;
+    if (origItems === undefined) delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    else process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = origItems;
+  }
+});
+
+test('resolveReviewLoopCaps: honours review.{maxSendBackRounds,maxTotalFixWorkItems} from forge.config.json', () => {
+  const origRounds = process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  const origItems = process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  try {
+    const r = resolveReviewLoopCaps({ review: { maxSendBackRounds: 3, maxTotalFixWorkItems: 10 } });
+    assert.equal(r.maxSendBackRounds, 3);
+    assert.equal(r.maxTotalFixWorkItems, 10);
+  } finally {
+    if (origRounds === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+    else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = origRounds;
+    if (origItems === undefined) delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    else process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = origItems;
+  }
+});
+
+test('resolveReviewLoopCaps: env vars override config (operator/CI escape hatch), fields independent', () => {
+  const origRounds = process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  const origItems = process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  try {
+    process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = '9';
+    delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    const r = resolveReviewLoopCaps({ review: { maxSendBackRounds: 3, maxTotalFixWorkItems: 10 } });
+    assert.equal(r.maxSendBackRounds, 9);
+    assert.equal(r.maxTotalFixWorkItems, 10);
+  } finally {
+    if (origRounds === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+    else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = origRounds;
+    if (origItems === undefined) delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    else process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = origItems;
+  }
+});
+
+test('resolveReviewLoopCaps: invalid env values (0, negative, non-integer, non-numeric) fall through to config', () => {
+  const origRounds = process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  const origItems = process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  try {
+    for (const junk of ['0', '-3', 'abc', '2.5']) {
+      process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = junk;
+      process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = junk;
+      const r = resolveReviewLoopCaps({ review: { maxSendBackRounds: 4, maxTotalFixWorkItems: 15 } });
+      assert.equal(r.maxSendBackRounds, 4, `rounds should fall through for env=${junk}`);
+      assert.equal(r.maxTotalFixWorkItems, 15, `items should fall through for env=${junk}`);
+    }
+  } finally {
+    if (origRounds === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+    else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = origRounds;
+    if (origItems === undefined) delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    else process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = origItems;
+  }
+});
+
+test('resolveReviewLoopCaps: invalid config values (0, negative, NaN) fall through to defaults', () => {
+  const origRounds = process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  const origItems = process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  try {
+    assert.deepEqual(
+      resolveReviewLoopCaps({ review: { maxSendBackRounds: 0, maxTotalFixWorkItems: -3 } }),
+      { maxSendBackRounds: DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS, maxTotalFixWorkItems: DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS },
+    );
+    assert.deepEqual(
+      resolveReviewLoopCaps({ review: { maxSendBackRounds: -3, maxTotalFixWorkItems: Number.NaN } }),
+      { maxSendBackRounds: DEFAULT_REVIEW_MAX_SEND_BACK_ROUNDS, maxTotalFixWorkItems: DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS },
+    );
+  } finally {
+    if (origRounds === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+    else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = origRounds;
+    if (origItems === undefined) delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    else process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = origItems;
+  }
+});
+
+test('resolveReviewLoopCaps: fields resolve independently — one from env, one from default', () => {
+  const origRounds = process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+  const origItems = process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+  try {
+    process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = '2';
+    delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    const r = resolveReviewLoopCaps({});
+    assert.equal(r.maxSendBackRounds, 2);
+    assert.equal(r.maxTotalFixWorkItems, DEFAULT_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS);
+  } finally {
+    if (origRounds === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
+    else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = origRounds;
+    if (origItems === undefined) delete process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS;
+    else process.env.FORGE_REVIEW_MAX_TOTAL_FIX_WORK_ITEMS = origItems;
   }
 });
 
