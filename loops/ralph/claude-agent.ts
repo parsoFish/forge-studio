@@ -81,6 +81,14 @@ export type ClaudeAgentOptions = {
    */
   idleDeadlineMs?: number;
   /**
+   * R2-03-F4 (ADR-028 abort-chain TODO) — an EXTERNAL abort signal (the flow
+   * node's wedge-kill) chained into this iteration's own abort controller, so
+   * a wedge-kill on a fanout node actually cancels the in-flight per-item CLI
+   * subprocess instead of leaving it running as zombie work. Distinct from the
+   * internal idle-deadline controller (which this signal, when fired, aborts).
+   */
+  externalSignal?: AbortSignal;
+  /**
    * S7 / C13 — sidecar heartbeat callback. When provided, the agent
    * starts a `setInterval` BEFORE the SDK `query()` is awaited and clears
    * it on the result. The callback receives `{ tool_use_count, last_tool,
@@ -230,6 +238,14 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     // hanging the iteration forever (known-gaps 2026-06-01).
     const abortController = new AbortController();
     options.abortController = abortController;
+    // R2-03-F4: chain the external wedge-kill signal into this iteration's
+    // controller — an already-aborted signal cancels immediately; otherwise a
+    // one-shot listener aborts the moment the node is wedge-killed, terminating
+    // the CLI subprocess (via the same abortController the idle-deadline uses).
+    if (opts.externalSignal) {
+      if (opts.externalSignal.aborted) abortController.abort();
+      else opts.externalSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+    }
 
     const filesChanged = new Set<string>();
     let costUsd = 0;

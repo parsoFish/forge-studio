@@ -371,3 +371,35 @@ test('runConcurrentDispatch: a requeue never pushes concurrently in-flight dispa
   assert.equal(aAttempts, 2, 'A must be redispatched exactly once after its requeue');
   assert.ok(maxInFlight <= 2, `expected at most 2 concurrently in-flight, saw ${maxInFlight}`);
 });
+
+test('runConcurrentDispatch: R2-03-F4 — a 2nd fanout provider (isolation:none, non-WorkItem items) reuses the generic dispatcher with no new dispatcher code', async () => {
+  // A toy fanout consumer: plain string items, a dependency edge, and a
+  // no-isolation "provider" that just runs a function per item — proving the
+  // generic dispatcher is decoupled from the SWE worktree/merge-back provider
+  // (adversarial-review D5: a non-repo consumer swaps the provider, not the
+  // dispatcher). No git, no WorkItem, no new orchestrator code.
+  const items = ['a', 'b', 'c'];
+  const deps: Record<string, string[]> = { a: [], b: ['a'], c: ['a'] };
+  const order: string[] = [];
+  let maxInFlight = 0;
+  let inFlight = 0;
+  await runConcurrentDispatch<string>({
+    items,
+    idOf: (s) => s,
+    dependsOn: (s) => deps[s],
+    cap: 2,
+    dispatch: async (s) => {
+      inFlight += 1;
+      maxInFlight = Math.max(maxInFlight, inFlight);
+      await sleep(8);
+      order.push(s);
+      inFlight -= 1;
+    },
+  });
+  assert.deepEqual([...order].sort(), ['a', 'b', 'c'], 'every item dispatched exactly once');
+  assert.ok(
+    order.indexOf('a') < order.indexOf('b') && order.indexOf('a') < order.indexOf('c'),
+    'the dependency edge is respected (a before b and c) with no git/worktree involvement',
+  );
+  assert.equal(maxInFlight, 2, 'b and c genuinely fan out concurrently at cap 2 — the 2nd provider fans out through the same dispatcher');
+});

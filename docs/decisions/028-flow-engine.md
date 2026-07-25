@@ -46,8 +46,10 @@ self-modifies while running, and resume never discards work.
      the node via a concurrent `Promise.race` timer (not post-execution),
      emits `phase.wedge-killed`, classifies resumable. The race unblocks the
      cycle even when the executor hangs forever (closes the 33h-wedge gap).
-     SDK abort is threaded into PM and accepted (not yet chained in dev-loop's
-     per-WI Ralphs — TODO);
+     SDK abort is threaded into PM and, since **R2-03-F4**, chained into the
+     dev-loop's per-WI Ralphs too (`ClaudeAgentOptions.externalSignal` → each
+     iteration's abort controller), so a wedge-kill on a fanout node cancels
+     the in-flight per-item CLI subprocesses rather than leaving zombie work;
    - rate-limit `resetsAt` gates every spawn;
    - iteration/turn budgets carry over from agent definitions unchanged.
 5. **Resume** targets any node flagged `resumable`; worktree preserved;

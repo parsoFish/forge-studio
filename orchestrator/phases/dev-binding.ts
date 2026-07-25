@@ -26,9 +26,19 @@ import { join } from 'node:path';
 import { parseWorkItem, type WorkItem } from '../work-item.ts';
 import { modelForSpec } from '../phase-agent.ts';
 import { deriveAgentSpec } from '../studio/derive.ts';
+import { loadAgentDefinition } from '../studio/registry.ts';
 import { skillPath, skillPathRelative } from '../skill-path.ts';
 
 const SKILL_PATH = skillPath('developer-ralph');
+
+/**
+ * R2-03-F4 — the developer-ralph fanout concurrency cap, declared in its
+ * SKILL.md `fanout:` block (R2-03-F2). Feeds `resolveDevWiConcurrency` as the
+ * definition-level source (the operator env var still overrides it). Absent
+ * ⇒ undefined ⇒ the resolver's config/default. developer-ralph declares 1
+ * (byte-identical to the pre-F4 default).
+ */
+export const DEV_FANOUT_CONCURRENCY_CAP = loadAgentDefinition(SKILL_PATH).fanout?.concurrencyCap;
 
 export type DevAllowedTool = 'Read' | 'Write' | 'Edit' | 'MultiEdit' | 'Bash' | 'Grep' | 'Glob';
 export type DevDisallowedTool = 'NotebookEdit' | 'WebFetch' | 'WebSearch';

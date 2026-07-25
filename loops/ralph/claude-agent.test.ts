@@ -761,3 +761,63 @@ test('createClaudeAgent: idle-tail emits 1 final heartbeat when interval did not
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test('createClaudeAgent: R2-03-F4 — externalSignal (wedge-kill) chains into the iteration abort controller', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-kill-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+
+    const ext = new AbortController();
+    let captured: AbortController | undefined;
+    // A generator that yields once, then pauses until the iteration controller
+    // aborts — so the test can fire the external signal mid-flight and observe
+    // the chain propagate before the invocation settles.
+    const queryFn = ((params: { options?: Record<string, unknown> }) => {
+      captured = params.options?.abortController as AbortController;
+      async function* gen() {
+        yield { type: 'assistant', message: { content: [] } };
+        await new Promise<void>((res) => {
+          const sig = captured!.signal;
+          if (sig.aborted) res();
+          else sig.addEventListener('abort', () => res(), { once: true });
+        });
+        yield { type: 'result', subtype: 'error', total_cost_usd: 0 };
+      }
+      return gen() as never;
+    }) as unknown as QueryFn;
+
+    const agent = createClaudeAgent({ externalSignal: ext.signal, queryFn });
+    const p = agent({ promptPath, agentMdPath: join(dir, 'AGENT.md'), fixPlanPath: join(dir, 'fix_plan.md'), worktreePath: dir, iteration: 1 });
+    await new Promise((r) => setTimeout(r, 10)); // let the generator yield + capture the controller
+
+    assert.ok(captured, 'the query received the per-iteration abortController');
+    assert.equal(captured!.signal.aborted, false, 'not aborted before the external wedge-kill fires');
+    ext.abort(); // the flow node is wedge-killed
+    assert.equal(captured!.signal.aborted, true, 'external wedge-kill chained into the iteration controller — the CLI subprocess is cancelled');
+    await p.catch(() => {}); // let the invocation settle
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: R2-03-F4 — an already-aborted externalSignal cancels the iteration immediately', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-kill2-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+    const ext = new AbortController();
+    ext.abort(); // already killed before the iteration starts
+    let captured: AbortController | undefined;
+    const queryFn = ((params: { options?: Record<string, unknown> }) => {
+      captured = params.options?.abortController as AbortController;
+      async function* gen() { yield { type: 'result', subtype: 'error', total_cost_usd: 0 }; }
+      return gen() as never;
+    }) as unknown as QueryFn;
+    const agent = createClaudeAgent({ externalSignal: ext.signal, queryFn });
+    await agent({ promptPath, agentMdPath: join(dir, 'AGENT.md'), fixPlanPath: join(dir, 'fix_plan.md'), worktreePath: dir, iteration: 1 }).catch(() => {});
+    assert.equal(captured!.signal.aborted, true, 'a pre-aborted external signal aborts the iteration controller at once');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
