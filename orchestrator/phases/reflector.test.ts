@@ -429,6 +429,37 @@ test('runReflector: R4-09-F3 — automated mode stamps inferred:true + answer pe
   }
 });
 
+test('runReflector: R4-09-F3 — persists reflect-mode.json + honest per-question inferred on partial compliance', async () => {
+  // One question has the inferred-answer line, one does NOT (a plausible LLM
+  // compliance miss). Per-question honesty: only the answered one is stamped;
+  // the durable mode sidecar carries the authoritative automated signal.
+  const h = setupHarness({ suffix: 'uq-mixed' });
+  try {
+    mkdirSync(h.cycleLogDir, { recursive: true });
+    writeFileSync(resolve(h.cycleLogDir, 'user-questions.md'), [
+      '## 1. Was the split right-sized?',
+      'We had 5 WIs.',
+      '**Inferred answer:** right-sized (dev-loop.delivered)',
+      '',
+      '## 2. General notes?',
+      'Anything else — (the agent forgot the inferred-answer line here).',
+      '',
+    ].join('\n'));
+    await runReflector({ ...makeInput(h), mode: 'automated' }, h.logger, { sdkQuery: fakeSdkQueryClean, brainLint: makeCleanLintStub() });
+
+    // Durable mode sidecar written (the authoritative signal).
+    const modeDoc = JSON.parse(readFileSync(resolve(h.cycleLogDir, 'reflect-mode.json'), 'utf8')) as { mode: string };
+    assert.equal(modeDoc.mode, 'automated');
+
+    const parsed = JSON.parse(readFileSync(resolve(h.cycleLogDir, 'user-questions.json'), 'utf8')) as Array<{ inferred?: boolean; answer?: string }>;
+    assert.equal(parsed[0].inferred, true, 'the answered question is inferred');
+    assert.match(parsed[0].answer ?? '', /right-sized/);
+    assert.equal(parsed[1].inferred, undefined, 'the un-answered question is NOT falsely marked inferred (honest per-question)');
+  } finally {
+    h.cleanup();
+  }
+});
+
 test('runReflector: REF-1 — section with a markdown option list → structured options parsed', async () => {
   // When the agent DOES supply a meaningful option list (≥2 bullet/dash
   // lines, optionally with an em-dash description), those become the

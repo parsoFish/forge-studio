@@ -50,10 +50,12 @@ export function ReflectionGate({
   const questions = data?.questions ?? [];
   const allAnswered = reflectionAllAnswered(questions, choices);
   const done = submitted || Boolean(data?.answered);
-  // R4-09-F3: an automated run self-answered every question — render the Q&A
+  // R4-09-F3: an automated run self-answered the questions — render the Q&A
   // read-only with provenance badges instead of the operator form (and BEFORE
   // the `done` check, since a self-written user-feedback.md makes it "answered").
-  const automated = hasInferredAnswers(questions);
+  // The durable backend mode is authoritative; the per-question inferred
+  // heuristic is a fallback for pre-F3 cycles that predate the mode sidecar.
+  const automated = data?.mode === 'automated' || hasInferredAnswers(questions);
 
   async function submit(): Promise<void> {
     if (submitting) return;
@@ -96,50 +98,63 @@ export function ReflectionGate({
           No operator was in the loop — the reflector inferred these answers from the
           cycle logs, demo, and diff. Review them; they steer what lands in the brain.
         </div>
-        {questions.map((q, i) => (
-          <fieldset
-            key={i}
-            data-question-index={i}
-            data-question-inferred="true"
-            data-question-resolved="true"
-            style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
-          >
-            <legend style={{ fontSize: 13, color: 'var(--text)', marginBottom: 6, padding: 0 }}>
-              {q.question}
-            </legend>
-            <div
-              style={{
-                display: 'flex',
-                gap: 8,
-                alignItems: 'flex-start',
-                border: '1px solid var(--line)',
-                borderRadius: 6,
-                padding: '8px 10px',
-                background: 'rgba(88,166,255,.06)',
-              }}
+        {questions.map((q, i) => {
+          // Per-question provenance (graceful degradation): a question the
+          // reflector inferred shows its answer + badge; one it couldn't
+          // (partial compliance) shows a distinct "needs review" state rather
+          // than hiding the whole surface.
+          const isInferred = q.inferred === true;
+          return (
+            <fieldset
+              key={i}
+              data-question-index={i}
+              data-question-inferred={isInferred ? 'true' : 'false'}
+              data-question-resolved={isInferred ? 'true' : 'false'}
+              style={{ border: 'none', padding: 0, margin: '0 0 14px' }}
             >
-              <span
-                data-question-inferred-badge
+              <legend style={{ fontSize: 13, color: 'var(--text)', marginBottom: 6, padding: 0 }}>
+                {q.question}
+              </legend>
+              <div
                 style={{
-                  fontSize: 10,
-                  textTransform: 'uppercase',
-                  letterSpacing: '.04em',
-                  color: 'var(--steel)',
-                  border: '1px solid var(--steel)',
-                  borderRadius: 4,
-                  padding: '1px 5px',
-                  marginTop: 1,
-                  whiteSpace: 'nowrap',
+                  display: 'flex',
+                  gap: 8,
+                  alignItems: 'flex-start',
+                  border: `1px solid ${isInferred ? 'var(--line)' : 'rgba(210,153,34,.5)'}`,
+                  borderRadius: 6,
+                  padding: '8px 10px',
+                  background: isInferred ? 'rgba(88,166,255,.06)' : 'rgba(210,153,34,.06)',
                 }}
               >
-                inferred
-              </span>
-              <span data-question-answer style={{ fontSize: 13, color: 'var(--text)' }}>
-                {q.answer || '—'}
-              </span>
-            </div>
-          </fieldset>
-        ))}
+                <span
+                  data-question-inferred-badge
+                  style={{
+                    fontSize: 10,
+                    textTransform: 'uppercase',
+                    letterSpacing: '.04em',
+                    color: isInferred ? 'var(--steel)' : '#d29922',
+                    border: `1px solid ${isInferred ? 'var(--steel)' : '#d29922'}`,
+                    borderRadius: 4,
+                    padding: '1px 5px',
+                    marginTop: 1,
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  {isInferred ? 'inferred' : 'not inferred'}
+                </span>
+                {isInferred ? (
+                  <span data-question-answer style={{ fontSize: 13, color: 'var(--text)' }}>
+                    {q.answer || '—'}
+                  </span>
+                ) : (
+                  <span data-question-not-inferred style={{ fontSize: 13, color: 'var(--dim)' }}>
+                    The reflector could not infer an answer — worth an operator review.
+                  </span>
+                )}
+              </div>
+            </fieldset>
+          );
+        })}
       </div>
     );
   }

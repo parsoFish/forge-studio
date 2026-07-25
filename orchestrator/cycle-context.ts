@@ -23,6 +23,15 @@ import { parseManifest } from './manifest.ts';
  */
 export type ReflectMode = 'interactive' | 'automated';
 
+/**
+ * R4-09-F3: the reflector persists the resolved mode here (`_logs/<cycleId>/`)
+ * at run start so it survives past the transient FlowTrigger dispatch — the
+ * durable source of truth for the UI (bridge GET surfaces it) and for a rerun
+ * (`forge reflect --rerun` / boot reconcile) to preserve the original mode
+ * instead of silently defaulting to interactive.
+ */
+export const REFLECT_MODE_FILE = 'reflect-mode.json';
+
 export type CycleInput = {
   initiativeId: string;
   manifestPath: string;

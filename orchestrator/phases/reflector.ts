@@ -42,6 +42,7 @@ import {
 import {
   recordBrainGateResult,
   REFLECTION_LOST_EVENT,
+  REFLECT_MODE_FILE,
   type CycleInput,
   type LintStatus,
   type ReflectMode,
@@ -235,6 +236,15 @@ export async function runReflector(
   // this cycle" — better than ENOENT bouncing the agent's Read attempt.
   // A real orchestrator-side gap producer is deferred to pass-3 (would
   // require post-cycle event-log scanning).
+  // R4-09-F3: persist the resolved mode durably (survives the transient
+  // FlowTrigger dispatch) so the UI + a rerun read the truth, not a per-question
+  // heuristic. Written before the spawn so it's present even on a crash.
+  try {
+    mkdirSync(cycleLogDir, { recursive: true });
+    writeFileSync(resolve(cycleLogDir, REFLECT_MODE_FILE), JSON.stringify({ mode: reflectMode }));
+  } catch {
+    /* best-effort — the UI falls back to the per-question inferred heuristic */
+  }
   const brainGapsPath = resolve(cycleLogDir, 'brain-gaps.jsonl');
   if (!existsSync(brainGapsPath)) {
     mkdirSync(cycleLogDir, { recursive: true });

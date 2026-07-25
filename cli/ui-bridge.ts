@@ -2270,7 +2270,12 @@ async function handleReflect(
     const dir = join(ctx.logsRoot, cycleId);
     const questions = readJsonFile<unknown[]>(join(dir, 'user-questions.json')) ?? [];
     const answered = existsSync(join(dir, 'user-feedback.md'));
-    sendJson(res, 200, { cycleId, questions, answered }, origin);
+    // R4-09-F3: the durable reflect mode (REFLECT_MODE_FILE) — the authoritative
+    // signal the UI uses to render the automated read-only view, independent of
+    // per-question inferred-marker compliance.
+    const modeDoc = readJsonFile<{ mode?: string }>(join(dir, 'reflect-mode.json'));
+    const mode = modeDoc?.mode === 'automated' ? 'automated' : modeDoc?.mode === 'interactive' ? 'interactive' : undefined;
+    sendJson(res, 200, { cycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
     return true;
   }
 

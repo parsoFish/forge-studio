@@ -951,6 +951,13 @@ export type ReflectionData = {
   cycleId: string;
   questions: ReflectionQuestion[];
   answered: boolean;
+  /**
+   * R4-09-F3: the durable reflect mode (from the backend's reflect-mode
+   * sidecar). The authoritative signal for the automated read-only view —
+   * robust to per-question inferred-marker compliance. Absent on pre-F3
+   * cycles ⇒ fall back to the per-question inferred heuristic.
+   */
+  mode?: 'interactive' | 'automated';
 };
 
 export async function fetchReflection(cycleId: string): Promise<ReflectionData | null> {

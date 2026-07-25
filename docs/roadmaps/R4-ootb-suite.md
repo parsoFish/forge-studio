@@ -751,8 +751,8 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-09 Reflect agent
 
-- **Status:** **implemented (F1/F2/F4/F5)** (2026-07-25, wave-4 session 5,
-  branch `feat/r4-09-reflect-agent`) · **F3 deferred**  ·  **Wave:** 4
+- **Status:** **implemented (F1–F5)** (F1/F2/F4/F5 2026-07-25 wave-4 S5 @ #50
+  `d61157a8`; F3 2026-07-25 wave-4 S6, branch `feat/r4-09-f3-automated-mode`)  ·  **Wave:** 4
 - **Implemented-notes (2026-07-25):**
   - **F1 — built.** forge-develop's `on: merged` trigger re-pointed from the
     single-node forge-reflect flow wrapper to the reflect **agent** target
@@ -781,16 +781,24 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     `brain/projects/*`) without going repo-wide-red. cmd-shaped processes get
     the R1-01-F1 invocation contract; every process is fail-loud (`failed`
     status at `event_type: error`), never fail-open.
-  - **F3 — DEFERRED** (operator-visible). Automated-inference mode (infer the
-    questionnaire answers from logs/demo/diff; `inferred: true` provenance;
-    per-schedule mode selection) is a distinct concern touching a new trigger
-    schema field, an inference branch, provenance UI, and a new journey beat.
-    Split to a follow-up to avoid a rushed multi-surface half-ship; the reflect
-    agent is production-complete in the interactive (default) mode without it.
-    **Re-entry:** implement `mode: interactive|automated` on the reflect
-    dispatch (trigger config, default interactive), the SKILL automated branch,
-    the `inferred` artifact provenance + `[data-question-inferred]` UI, and an
-    automated-mode journey beat.
+  - **F3 — built (2026-07-25, wave-4 S6).** Automated-inference mode.
+    `mode: interactive|automated` on `FlowTrigger` (`TRIGGER_MODES` + lenient
+    parse + `trigger-mode` enum / `trigger-shape` lint — mode only on an
+    `on: merged` agent target), riding on `CycleInput.mode` (default
+    interactive; no runReflector signature change → golden byte-identical by
+    default). In automated mode the reflector infers each answer from the
+    logs/demo/diff (never fabricated — "insufficient evidence" when silent) and
+    self-writes `user-feedback.md`; `deriveUserQuestionsJson` lifts the
+    per-question `**Inferred answer:**` line into additive `answer`/`inferred`
+    fields. The **resolved mode is persisted durably** (`reflect-mode.json`
+    sidecar) — the authoritative signal the bridge GET surfaces to the UI and a
+    rerun reads back (not a fragile per-question heuristic; the review's
+    top finding). ReflectionGate renders a read-only view
+    (`data-reflect-automated`, per-question `data-question-inferred` +
+    badge + `data-question-answer`, graceful "not inferred" per question).
+    Journey: `flows-run-reflect-automated`. **Deferred within F3:** authoring
+    the mode via the Studio FlowHeader UI (blocked on agent-target trigger
+    authoring, ADR-041) — mode is authored in flow.yaml data for now.
 - **Depends on:** R1-01 (writes into contract-typed, Q5-B-scoped KBs)
 - **Context:** Operator diagram (verbatim intent): the current reflection agent
   *"except runnable as a standalone agent rather than needing a flow with a

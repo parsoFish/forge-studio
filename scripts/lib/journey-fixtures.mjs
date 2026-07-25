@@ -717,6 +717,9 @@ export function writeReflectionQuestions() {
  *  reflect beat's live-submitted answers. */
 export function writeAutomatedReflection() {
   mkdirSync(AUTO_CYCLE_LOG, { recursive: true });
+  // R4-09-F3: the durable mode sidecar — the bridge GET surfaces it as the
+  // authoritative automated signal (independent of per-question inferred marks).
+  writeFileSync(join(AUTO_CYCLE_LOG, 'reflect-mode.json'), JSON.stringify({ mode: 'automated' }));
   writeFileSync(join(AUTO_CYCLE_LOG, 'user-questions.json'), JSON.stringify([
     {
       question: 'Was the 2-work-item split the right size?',
