@@ -563,9 +563,9 @@ function runFlowTriggerSweep(): void {
   try {
     for (const r of drainFlowRunRequests({ notify: (m) => console.log(`[serve] ${m}`) })) {
       if (r.status === 'dispatched') {
-        console.log(`[serve] flow-trigger dispatched ${r.flowId} on ${r.sourceInitiativeId}`);
+        console.log(`[serve] flow-trigger dispatched ${r.target?.kind}:${r.target?.ref}${r.sourceInitiativeId ? ` on ${r.sourceInitiativeId}` : ' (originated)'}`);
       } else if (r.status === 'error') {
-        console.error(`[serve] flow-trigger ${r.flowId} failed: ${r.detail}`);
+        console.error(`[serve] flow-trigger ${r.target?.kind}:${r.target?.ref} failed: ${r.detail}`);
       }
     }
   } catch {

@@ -168,7 +168,7 @@ export type FlowRunnerDeps = {
    */
   enqueueFlowRun: (
     flowId: string,
-    opts: { origin: string; triggeredBy: string; sourceInitiativeId?: string },
+    opts: { origin: 'trigger'; triggeredBy: string; sourceInitiativeId?: string; targetKind?: 'flow' | 'agent' },
   ) => void;
 };
 
@@ -313,10 +313,10 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
  */
 function defaultEnqueueFlowRun(
   flowId: string,
-  opts: { origin: string; triggeredBy: string; sourceInitiativeId?: string },
+  opts: { origin: 'trigger'; triggeredBy: string; sourceInitiativeId?: string; targetKind?: 'flow' | 'agent' },
 ): void {
   stageFlowRunRequest({
-    flowId,
+    target: { kind: opts.targetKind ?? 'flow', ref: flowId },
     origin: opts.origin,
     triggeredBy: opts.triggeredBy,
     sourceInitiativeId: opts.sourceInitiativeId,
@@ -1083,12 +1083,12 @@ export async function runFlow({
     costTracker.checkCeiling({ throw: true, nextNodeId: nextNodeId ?? undefined });
   }
 
-  // Stage C: fire `on: complete` triggers on terminal SUCCESS only (failures
+  // Fire `on: flow-complete` triggers on terminal SUCCESS only (failures
   // exit via throw before reaching here), through the generic declaration-driven
   // path. `on: merged` triggers — e.g. forge-develop's reflect trigger — are NOT
   // fired here: the develop flow terminates at `ready-for-review` (PR open),
   // before the operator merges, so finalize-merged fires those post-merge.
-  await fireFlowTriggers(flow, 'complete', {
+  await fireFlowTriggers(flow, 'flow-complete', {
     onFire: (trigger) => {
       logger.emit({
         initiative_id: input.initiativeId,
@@ -1098,14 +1098,15 @@ export async function runFlow({
         input_refs: [],
         output_refs: [],
         message: 'flow-runner.trigger-firing',
-        metadata: { on: trigger.on, target_flow: trigger.flow, source_flow: flow.id },
+        metadata: { on: trigger.on, target: trigger.target, source_flow: flow.id },
       });
     },
     dispatch: (trigger) => {
-      deps.enqueueFlowRun(trigger.flow, {
+      deps.enqueueFlowRun(trigger.target.ref, {
         origin: 'trigger',
         triggeredBy: flow.id,
         sourceInitiativeId: input.initiativeId,
+        targetKind: trigger.target.kind,
       });
     },
   });

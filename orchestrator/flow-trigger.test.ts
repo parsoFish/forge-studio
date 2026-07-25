@@ -1,32 +1,39 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { fireFlowTriggers, type FlowTriggerEvent } from './flow-trigger.ts';
+import {
+  fireFlowTriggers,
+  SHIPPED_TRIGGER_KIND_IDS,
+  TRIGGER_KIND_IDS,
+  TRIGGER_KINDS,
+  type FlowTriggerEvent,
+} from './flow-trigger.ts';
 import type { FlowTrigger } from './studio/types.ts';
 
 function flow(triggers: FlowTrigger[]): { id: string; triggers: FlowTrigger[] } {
   return { id: 'forge-develop', triggers };
 }
 
+function t(on: string, ref: string): FlowTrigger {
+  return { on, target: { kind: 'flow', ref } };
+}
+
 test('fires only the triggers whose `on` matches the event', async () => {
-  const dispatched: Array<{ flow: string; event: FlowTriggerEvent }> = [];
+  const dispatched: Array<{ ref: string; event: FlowTriggerEvent }> = [];
   const fired = await fireFlowTriggers(
-    flow([
-      { on: 'merged', flow: 'forge-reflect' },
-      { on: 'complete', flow: 'other-flow' },
-    ]),
+    flow([t('merged', 'forge-reflect'), t('flow-complete', 'other-flow')]),
     'merged',
-    { dispatch: (t, event) => { dispatched.push({ flow: t.flow, event }); } },
+    { dispatch: (tr, event) => { dispatched.push({ ref: tr.target.ref, event }); } },
   );
 
-  assert.deepEqual(fired, [{ on: 'merged', flow: 'forge-reflect' }]);
-  assert.deepEqual(dispatched, [{ flow: 'forge-reflect', event: 'merged' }]);
+  assert.deepEqual(fired, [t('merged', 'forge-reflect')]);
+  assert.deepEqual(dispatched, [{ ref: 'forge-reflect', event: 'merged' }]);
 });
 
 test('no matching trigger → dispatch never called, returns []', async () => {
   let called = false;
   const fired = await fireFlowTriggers(
-    flow([{ on: 'complete', flow: 'other-flow' }]),
+    flow([t('flow-complete', 'other-flow')]),
     'merged',
     { dispatch: () => { called = true; } },
   );
@@ -42,15 +49,12 @@ test('empty triggers → returns [] (the common case)', async () => {
 test('dispatches every matching trigger in declaration order and awaits async dispatch', async () => {
   const order: string[] = [];
   const fired = await fireFlowTriggers(
-    flow([
-      { on: 'complete', flow: 'a' },
-      { on: 'complete', flow: 'b' },
-    ]),
-    'complete',
+    flow([t('flow-complete', 'a'), t('flow-complete', 'b')]),
+    'flow-complete',
     {
-      dispatch: async (t) => {
+      dispatch: async (tr) => {
         await Promise.resolve();
-        order.push(t.flow);
+        order.push(tr.target.ref);
       },
     },
   );
@@ -61,12 +65,22 @@ test('dispatches every matching trigger in declaration order and awaits async di
 test('onFire observability hook runs before each dispatch', async () => {
   const seen: string[] = [];
   await fireFlowTriggers(
-    flow([{ on: 'merged', flow: 'forge-reflect' }]),
+    flow([t('merged', 'forge-reflect')]),
     'merged',
     {
-      onFire: (t) => { seen.push(`fire:${t.flow}`); },
-      dispatch: (t) => { seen.push(`dispatch:${t.flow}`); },
+      onFire: (tr) => { seen.push(`fire:${tr.target.ref}`); },
+      dispatch: (tr) => { seen.push(`dispatch:${tr.target.ref}`); },
     },
   );
   assert.deepEqual(seen, ['fire:forge-reflect', 'dispatch:forge-reflect']);
+});
+
+test('ADR-041 registry: seven kinds, reserved rows have no runtime, merged is an OOTB row', () => {
+  assert.deepEqual(
+    [...TRIGGER_KIND_IDS],
+    ['flow-complete', 'agent-complete', 'merged', 'manual', 'cron', 'webhook', 'feed'],
+  );
+  assert.deepEqual([...SHIPPED_TRIGGER_KIND_IDS], ['flow-complete', 'merged', 'cron', 'webhook']);
+  const merged = TRIGGER_KINDS.find((k) => k.id === 'merged');
+  assert.equal(merged?.origin, 'ootb', 'merged is a domain-event row the OOTB suite contributes, not a platform literal');
 });

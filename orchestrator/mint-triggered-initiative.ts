@@ -1,0 +1,94 @@
+/**
+ * R2-04 (ADR-041) — mint a fresh initiative for a cron/webhook-originated
+ * flow-run request (no source initiative to repoint).
+ *
+ * The target flow's `project` binding supplies the project; lint requires it
+ * non-null on flows targeted by external triggers, and the mint fail-louds if
+ * it is absent anyway (defence in depth). The initiative id is generated from
+ * VALIDATED fields only — never payload free-text (prompt-injection posture:
+ * external text must not reach id/path space). Budgets come from the
+ * `triggers` section of forge.config.json. The typed payload is persisted as
+ * `_logs/<cycleId>/artifacts/trigger-payload.json` — the read-as-data artifact
+ * agents may consult; prompts never interpolate it.
+ */
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+
+import { loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from './config.ts';
+import { serializeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
+import { getPaths } from './queue.ts';
+import { loadFlowDefinition } from './studio/registry.ts';
+import type { FlowRunRequest } from './flow-run-requests.ts';
+
+export type MintTriggeredResult = {
+  status: 'minted' | 'no-project' | 'error';
+  initiativeId?: string;
+  detail?: string;
+};
+
+/** Lowercase-slugify a validated token for the initiative id (never free text). */
+function idToken(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'run';
+}
+
+export function mintTriggeredInitiative(
+  req: FlowRunRequest,
+  opts: { queueRoot?: string; forgeRoot?: string; logsRoot?: string } = {},
+): MintTriggeredResult {
+  try {
+    const forgeRoot = opts.forgeRoot ?? resolve(import.meta.dirname, '..');
+    const flowId = req.target.ref;
+    const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'));
+    if (!flow.project) {
+      return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook)` };
+    }
+    const cfg = loadConfig();
+    const projectRepoPath = join(resolveProjectsDir(forgeRoot, cfg), flow.project);
+    if (!existsSync(projectRepoPath)) {
+      return { status: 'error', detail: `project repo not found at ${projectRepoPath}` };
+    }
+
+    const budgets = resolveTriggeredRunBudgets(cfg);
+    const now = new Date();
+    const date = now.toISOString().slice(0, 10);
+    const hms = now.toISOString().slice(11, 19).replace(/:/g, '');
+    // Id from validated tokens only: kind + flow ref + a time suffix.
+    const initiativeId = `INIT-${date}-${idToken(req.origin)}-${idToken(flowId)}-${hms}`;
+
+    const paths = getPaths(opts.queueRoot ?? '_queue');
+    const manifest: InitiativeManifest = {
+      initiative_id: initiativeId,
+      project: flow.project,
+      project_repo_path: projectRepoPath,
+      created_at: now.toISOString(),
+      iteration_budget: budgets.defaultIterationBudget,
+      cost_budget_usd: budgets.defaultCostBudgetUsd,
+      phase: 'pending',
+      origin: 'triggered',
+      flow_id: flowId,
+      body: [
+        `# ${initiativeId}`,
+        '',
+        `Originated by an external trigger (${req.origin}: ${req.triggeredBy}) targeting flow \`${flowId}\`.`,
+        'The typed trigger payload is persisted as the `trigger-payload` artifact in the cycle log',
+        '(data, never prompt text — ADR-041).',
+      ].join('\n'),
+    };
+    mkdirSync(paths.pending, { recursive: true });
+    const manifestPath = join(paths.pending, `${initiativeId}.md`);
+    writeFileSync(manifestPath, serializeManifest(manifest));
+    mintAndPersistManifestCycleId(manifestPath, initiativeId);
+
+    // Persist the typed payload beside the cycle's artifacts (read-as-data).
+    if (req.payload) {
+      const cycleId = readManifestCycleId(manifestPath) ?? initiativeId;
+      const logsRoot = opts.logsRoot ?? join(forgeRoot, '_logs');
+      const artDir = join(logsRoot, cycleId, 'artifacts');
+      mkdirSync(artDir, { recursive: true });
+      writeFileSync(join(artDir, 'trigger-payload.json'), JSON.stringify(req.payload, null, 2) + '\n');
+    }
+    return { status: 'minted', initiativeId };
+  } catch (err) {
+    return { status: 'error', detail: err instanceof Error ? err.message : String(err) };
+  }
+}

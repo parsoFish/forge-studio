@@ -343,10 +343,52 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
     throw new Error(`${file}: triggers[${index}] must be a mapping`);
   }
   const t = raw as Record<string, unknown>;
-  return {
+  // R2-04 (ADR-041): the `target: {kind, ref}` shape replaced the legacy
+  // `flow: <id>` key one-shot — fail loud on a stale declaration rather than
+  // guessing (no back-compat parsing; the seed files migrated in the same change).
+  if ('flow' in t && !('target' in t)) {
+    throw new Error(
+      `${file}: triggers[${index}] uses the retired "flow:" key — declare "target: { kind: flow, ref: <id> }" (ADR-041)`,
+    );
+  }
+  const rawTarget = t['target'];
+  if (rawTarget === null || typeof rawTarget !== 'object' || Array.isArray(rawTarget)) {
+    throw new Error(`${file}: triggers[${index}].target must be a mapping { kind, ref }`);
+  }
+  const tt = rawTarget as Record<string, unknown>;
+  const kind = reqString(tt, 'kind', file);
+  if (kind !== 'flow' && kind !== 'agent') {
+    throw new Error(`${file}: triggers[${index}].target.kind must be "flow" or "agent" (got "${kind}")`);
+  }
+  const out: FlowTrigger = {
     on: reqString(t, 'on', file),
-    flow: reqString(t, 'flow', file),
+    target: { kind, ref: reqString(tt, 'ref', file) },
   };
+  // Per-kind config blocks — parsed leniently here (shape coherence is the
+  // `trigger-*` lint family's job, so authoring surfaces get findings, not throws).
+  if (typeof t['schedule'] === 'string') out.schedule = t['schedule'];
+  if (t['concurrency'] === 'allow' || t['concurrency'] === 'forbid' || t['concurrency'] === 'replace') {
+    out.concurrency = t['concurrency'];
+  }
+  if (t['webhook'] !== null && typeof t['webhook'] === 'object' && !Array.isArray(t['webhook'])) {
+    const w = t['webhook'] as Record<string, unknown>;
+    out.webhook = {
+      id: typeof w['id'] === 'string' ? w['id'] : '',
+      provider: (w['provider'] === 'github' || w['provider'] === 'gitea' || w['provider'] === 'gitlab'
+        ? w['provider']
+        : 'github') as 'github' | 'gitea' | 'gitlab',
+      events: Array.isArray(w['events'])
+        ? (w['events'] as unknown[]).filter((e): e is 'push' | 'release' => e === 'push' || e === 'release')
+        : [],
+      secretEnv: typeof w['secretEnv'] === 'string' ? w['secretEnv'] : '',
+      ...(typeof w['secretEnvPrevious'] === 'string' ? { secretEnvPrevious: w['secretEnvPrevious'] } : {}),
+      sources: Array.isArray(w['sources'])
+        ? (w['sources'] as unknown[]).filter((s): s is string => typeof s === 'string')
+        : [],
+    };
+  }
+  if (typeof t['note'] === 'string') out.note = t['note'];
+  return out;
 }
 
 export function loadFlowDefinition(flowYamlPath: string): FlowDefinition {

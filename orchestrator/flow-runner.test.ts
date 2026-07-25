@@ -603,10 +603,10 @@ describe('flow-runner trigger firing', () => {
   /**
    * Build a minimal single-node flow that carries a trigger.
    * The node is an agent-only node (no gate), so the flow must be
-   * disposable:true (zero-gate rule). The trigger fires `on: complete`
+   * disposable:true (zero-gate rule). The trigger fires `on: flow-complete`
    * → enqueues the target flow.
    */
-  function makeTriggerFlow(triggers: Array<{ on: string; flow: string }>): FlowDefinition {
+  function makeTriggerFlow(triggers: Array<{ on: string; target: { kind: 'flow' | 'agent'; ref: string } }>): FlowDefinition {
     return {
       id: 'trigger-test',
       name: 'Trigger Test',
@@ -639,8 +639,8 @@ describe('flow-runner trigger firing', () => {
     assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when triggers is empty');
   });
 
-  it('flow with trigger {on:complete, flow:forge-reflect} → enqueueFlowRun called on terminal success', async () => {
-    const flow = makeTriggerFlow([{ on: 'complete', flow: 'forge-reflect' }]);
+  it('flow with trigger {on:flow-complete, target:forge-reflect} → enqueueFlowRun called on terminal success', async () => {
+    const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-reflect' } }]);
     const enqueueCalls: Array<{ flowId: string; opts: { origin: string; triggeredBy: string } }> = [];
 
     const deps: Partial<FlowRunnerDeps> = {
@@ -665,7 +665,7 @@ describe('flow-runner trigger firing', () => {
   });
 
   it('flow with trigger → enqueueFlowRun NOT called on executor failure (triggers fire only on terminal success)', async () => {
-    const flow = makeTriggerFlow([{ on: 'complete', flow: 'forge-reflect' }]);
+    const flow = makeTriggerFlow([{ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-reflect' } }]);
     const enqueueCalls: string[] = [];
 
     const deps: Partial<FlowRunnerDeps> = {
@@ -689,10 +689,10 @@ describe('flow-runner trigger firing', () => {
     assert.deepEqual(enqueueCalls, [], 'enqueueFlowRun must NOT be called when the run fails');
   });
 
-  it('flow with multiple triggers → enqueueFlowRun called for each complete trigger', async () => {
+  it('flow with multiple triggers → enqueueFlowRun called for each flow-complete trigger', async () => {
     const flow = makeTriggerFlow([
-      { on: 'complete', flow: 'forge-reflect' },
-      { on: 'complete', flow: 'other-flow' },
+      { on: 'flow-complete', target: { kind: 'flow', ref: 'forge-reflect' } },
+      { on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' } },
     ]);
     const enqueueCalls: string[] = [];
 

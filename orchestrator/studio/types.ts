@@ -91,7 +91,51 @@ export type FlowNode = {
 };
 
 export type FlowEdge = { from: string; to: string; artifact: string };
-export type FlowTrigger = { on: string; flow: string };
+
+/**
+ * R2-04 (ADR-041): what a trigger starts. `flow` targets have a claimable
+ * enqueue today; `agent` targets are the R4-09 standalone-reflect extension —
+ * schema + lint accept them, the drain's dispatcher throws until R4-09 wires
+ * the standalone-agent dispatch (the request is retained, never dropped).
+ */
+export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
+
+/**
+ * R2-04 (ADR-041): a webhook trigger's receive/trust config. Secrets are
+ * env-var NAMES (the values live in the operator's environment, never in
+ * flow.yaml). `sources` is a mandatory repo-full-name allowlist checked
+ * AFTER signature verification (scoping, not the trust root).
+ */
+export type WebhookTriggerConfig = {
+  /** Endpoint slug: POST /api/hooks/<id>. Unique across flows (lint). */
+  id: string;
+  /** github/gitea share the X-Hub-Signature-256 HMAC scheme; gitlab is a static token header. */
+  provider: 'github' | 'gitea' | 'gitlab';
+  events: Array<'push' | 'release'>;
+  /** Env-var NAME holding the shared secret (^[A-Z][A-Z0-9_]*$). */
+  secretEnv: string;
+  /** Optional previous-secret env-var name — rotation via verifyWithFallback. */
+  secretEnvPrevious?: string;
+  sources: string[];
+};
+
+/**
+ * R2-04 (ADR-041): a declared trigger row. `on` must be a registry kind
+ * (orchestrator/flow-trigger.ts TRIGGER_KINDS); per-kind config blocks are
+ * lint-enforced (`trigger-shape`): `schedule`/`concurrency` only on cron,
+ * `webhook` only on webhook.
+ */
+export type FlowTrigger = {
+  on: string;
+  target: TriggerTarget;
+  /** cron only: a croner-parseable pattern. */
+  schedule?: string;
+  /** cron only: K8s-style overrun policy. Default `forbid`; `replace` is enum-reserved. */
+  concurrency?: 'allow' | 'forbid' | 'replace';
+  /** webhook only. */
+  webhook?: WebhookTriggerConfig;
+  note?: string;
+};
 
 // Stage C — per-flow kickoff. Declares which launch surface the UI renders for a
 // flow: `idea` (free-text idea → architect), `initiative-select` (pick a planned

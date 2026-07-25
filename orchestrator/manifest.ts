@@ -35,9 +35,10 @@ export type ManifestPhase = 'pending' | 'in-flight' | 'ready-for-review' | 'merg
  * Defaults to `architect` when absent (back-compat for manifests authored
  * before this field existed — NOT a feature flag, just a schema default).
  */
-export type InitiativeOrigin = 'architect' | 'human-directed';
+/** `triggered` = born from an external trigger fire (cron/webhook — ADR-041). */
+export type InitiativeOrigin = 'architect' | 'human-directed' | 'triggered';
 
-const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed'];
+const INITIATIVE_ORIGINS: readonly InitiativeOrigin[] = ['architect', 'human-directed', 'triggered'];
 const DEFAULT_ORIGIN: InitiativeOrigin = 'architect';
 
 export type InitiativeManifest = {

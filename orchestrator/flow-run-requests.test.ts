@@ -20,14 +20,14 @@ test('staged request lands in _queue/flow-runs/, NOT _queue/pending/ (no mis-cla
   const root = setup();
   try {
     stageFlowRunRequest(
-      { flowId: 'forge-develop', origin: 'trigger', triggeredBy: 'forge-architect', sourceInitiativeId: 'INIT-2026-06-26-x' },
+      { target: { kind: 'flow', ref: 'forge-develop' }, origin: 'trigger', triggeredBy: 'forge-architect', sourceInitiativeId: 'INIT-2026-06-26-x' },
       { queueRoot: root },
     );
     assert.equal(existsSync(join(root, 'pending')), false, 'must not write into pending/');
     assert.equal(readdirSync(flowRunsDir(root)).length, 1);
     const reqs = listFlowRunRequests({ queueRoot: root });
     assert.equal(reqs.length, 1);
-    assert.equal(reqs[0].req.flowId, 'forge-develop');
+    assert.equal(reqs[0].req.target.ref, 'forge-develop');
     assert.equal(reqs[0].req.sourceInitiativeId, 'INIT-2026-06-26-x');
   } finally {
     rmSync(root, { recursive: true, force: true });
@@ -38,14 +38,14 @@ test('drain dispatches each request via injected startFlowRun, then removes it',
   const root = setup();
   try {
     stageFlowRunRequest(
-      { flowId: 'forge-develop', origin: 'trigger', triggeredBy: 'forge-architect', sourceInitiativeId: 'INIT-2026-06-26-a', createdAt: '2026-06-26T10-00-00' },
+      { target: { kind: 'flow', ref: 'forge-develop' }, origin: 'trigger', triggeredBy: 'forge-architect', sourceInitiativeId: 'INIT-2026-06-26-a', createdAt: '2026-06-26T10-00-00' },
       { queueRoot: root },
     );
     const dispatched: FlowRunRequest[] = [];
     const results = drainFlowRunRequests({ queueRoot: root, startFlowRun: (r) => dispatched.push(r) });
 
     assert.equal(dispatched.length, 1);
-    assert.equal(dispatched[0].flowId, 'forge-develop');
+    assert.equal(dispatched[0].target.ref, 'forge-develop');
     assert.equal(dispatched[0].sourceInitiativeId, 'INIT-2026-06-26-a');
     assert.deepEqual(results.map((r) => r.status), ['dispatched']);
     assert.equal(listFlowRunRequests({ queueRoot: root }).length, 0, 'dispatched request must be removed');
@@ -58,7 +58,7 @@ test('drain drops a context-free request (no source initiative) without dispatch
   const root = setup();
   try {
     stageFlowRunRequest(
-      { flowId: 'some-flow', origin: 'trigger', triggeredBy: 'other', createdAt: '2026-06-26T11-00-00' },
+      { target: { kind: 'flow', ref: 'some-flow' }, origin: 'trigger', triggeredBy: 'other', createdAt: '2026-06-26T11-00-00' },
       { queueRoot: root },
     );
     let called = false;
@@ -75,7 +75,7 @@ test('drain surfaces a dispatch error and leaves the request in place', () => {
   const root = setup();
   try {
     stageFlowRunRequest(
-      { flowId: 'forge-develop', origin: 'trigger', triggeredBy: 'x', sourceInitiativeId: 'INIT-2026-06-26-b', createdAt: '2026-06-26T12-00-00' },
+      { target: { kind: 'flow', ref: 'forge-develop' }, origin: 'trigger', triggeredBy: 'x', sourceInitiativeId: 'INIT-2026-06-26-b', createdAt: '2026-06-26T12-00-00' },
       { queueRoot: root },
     );
     const results = drainFlowRunRequests({
