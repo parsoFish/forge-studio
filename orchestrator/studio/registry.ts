@@ -374,9 +374,10 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
     const w = t['webhook'] as Record<string, unknown>;
     out.webhook = {
       id: typeof w['id'] === 'string' ? w['id'] : '',
-      provider: (w['provider'] === 'github' || w['provider'] === 'gitea' || w['provider'] === 'gitlab'
-        ? w['provider']
-        : 'github') as 'github' | 'gitea' | 'gitlab',
+      // Preserve the raw provider string (do NOT coerce a typo to 'github') so
+      // the `trigger-webhook` provider-enum lint can actually reach + reject an
+      // invalid value; a non-string becomes '' (also lint-rejected).
+      provider: (typeof w['provider'] === 'string' ? w['provider'] : '') as 'github' | 'gitea' | 'gitlab',
       events: Array.isArray(w['events'])
         ? (w['events'] as unknown[]).filter((e): e is 'push' | 'release' => e === 'push' || e === 'release')
         : [],

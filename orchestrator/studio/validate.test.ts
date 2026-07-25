@@ -861,6 +861,18 @@ describe('validateFlow — trigger-target', () => {
     });
     assert.ok(!findings.some((x) => x.check === 'trigger-target'));
   });
+
+  it('trigger missing "target" entirely (hand-crafted PUT body) → error trigger-target, no thrown TypeError', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged' } as any],
+    });
+    assert.doesNotThrow(() => validateFlow(flow, makeAgentMap(makeAgent())));
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-target');
+    assert.ok(f, 'expected trigger-target finding');
+    assert.equal(f.level, 'error');
+    assert.match(f.message, /missing a well-formed/);
+  });
 });
 
 describe('validateFlow — trigger-cron', () => {
@@ -907,16 +919,28 @@ describe('validateFlow — trigger-cron', () => {
     assert.match(f.message, /enum-reserved/);
   });
 
-  it('flow.project null → error trigger-cron', () => {
-    const flow = makeFlow({
-      project: null,
-      triggers: [validCron()],
-    });
-    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+  it('TARGET flow has no project → error trigger-cron (ADR-041: the mint uses the target flow project)', () => {
+    // validCron targets `other-flow`; the DECLARING flow's project is irrelevant.
+    const flow = makeFlow({ project: 'someproj', triggers: [validCron()] });
+    const flowProjectOf = (id: string) => (id === 'other-flow' ? null : 'someproj');
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowProjectOf });
     const f = findings.find((x) => x.check === 'trigger-cron');
     assert.ok(f, 'expected trigger-cron finding');
     assert.equal(f.level, 'error');
     assert.match(f.message, /project/);
+  });
+
+  it('target flow HAS a project → no trigger-cron project finding (declaring flow project null is fine)', () => {
+    const flow = makeFlow({ project: null, triggers: [validCron()] });
+    const flowProjectOf = (id: string) => (id === 'other-flow' ? 'someproj' : null);
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowProjectOf });
+    assert.equal(findings.filter((x) => x.check === 'trigger-cron' && /project/.test(x.message)).length, 0);
+  });
+
+  it('no flowProjectOf supplied → project check skipped (single-flow PUT without registry)', () => {
+    const flow = makeFlow({ project: null, triggers: [validCron()] });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.equal(findings.filter((x) => x.check === 'trigger-cron' && /project/.test(x.message)).length, 0);
   });
 
   it('fully-valid cron trigger → no trigger-cron finding', () => {
@@ -980,6 +1004,19 @@ describe('validateFlow — trigger-webhook', () => {
     assert.ok(f.message.includes('bitbucket'));
   });
 
+  it('provider typo ("gitllab") is preserved, not silently coerced to "github" → error trigger-webhook matching /provider/', () => {
+    const t = validWebhook();
+    const flow = makeFlow({
+      project: 'gitpulse',
+      triggers: [{ ...t, webhook: { ...t.webhook, provider: 'gitllab' as any } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-webhook' && /provider/.test(x.message));
+    assert.ok(f, 'expected trigger-webhook provider finding');
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('gitllab'));
+  });
+
   it('empty events → error trigger-webhook', () => {
     const t = validWebhook();
     const flow = makeFlow({
@@ -1032,16 +1069,21 @@ describe('validateFlow — trigger-webhook', () => {
     assert.match(f.message, /sources/);
   });
 
-  it('flow.project null → error trigger-webhook', () => {
-    const flow = makeFlow({
-      project: null,
-      triggers: [validWebhook()],
-    });
-    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+  it('TARGET flow has no project → error trigger-webhook (ADR-041: the mint uses the target flow project)', () => {
+    const flow = makeFlow({ project: 'someproj', triggers: [validWebhook()] });
+    const flowProjectOf = (id: string) => (id === 'other-flow' ? null : 'someproj');
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowProjectOf });
     const f = findings.find((x) => x.check === 'trigger-webhook');
     assert.ok(f, 'expected trigger-webhook finding');
     assert.equal(f.level, 'error');
     assert.match(f.message, /project/);
+  });
+
+  it('webhook target flow HAS a project → no trigger-webhook project finding', () => {
+    const flow = makeFlow({ project: null, triggers: [validWebhook()] });
+    const flowProjectOf = (id: string) => (id === 'other-flow' ? 'someproj' : null);
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowProjectOf });
+    assert.equal(findings.filter((x) => x.check === 'trigger-webhook' && /project/.test(x.message)).length, 0);
   });
 
   it('fully-valid webhook trigger → no trigger-webhook finding', () => {

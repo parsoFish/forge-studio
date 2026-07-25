@@ -20,6 +20,7 @@ const FLOW_ID = 'hook-fixture-flow';
 const TARGET_FLOW_ID = 'hook-fixture-target';
 const HOOK_ID = 'my-fixture-hook';
 const ALLOWED_REPO = 'acme/widgets';
+const GITLAB_REPO = 'group/proj';
 
 function githubSig(secret: string, payload: string): string {
   return `sha256=${createHmac('sha256', secret).update(payload).digest('hex')}`;
@@ -297,7 +298,7 @@ test('POST /api/hooks/:hookId — gitlab release event maps "Release Hook" heade
       '      events: [release]',
       `      secretEnv: ${glSecretEnv}`,
       '      sources:',
-      `        - ${ALLOWED_REPO}`,
+      `        - ${GITLAB_REPO}`,
       '',
     ].join('\n'),
   );
@@ -306,9 +307,15 @@ test('POST /api/hooks/:hookId — gitlab release event maps "Release Hook" heade
   process.env[glSecretEnv] = 'gitlab-token-value';
   const { url, close } = await startBridge({ forgeRoot, port: 0 });
   try {
+    // Real GitLab "Release Hook" shape: object_kind:'release', with tag/name/
+    // description at the TOP LEVEL and repo at project.path_with_namespace —
+    // there is NO nested "release" object (that's the github/gitea shape).
     const raw = JSON.stringify({
-      repository: { path_with_namespace: ALLOWED_REPO },
-      release: { tag_name: 'v2.0.0', name: 'v2.0.0', published_at: '2026-07-25T00:00:00Z', body: 'notes' },
+      object_kind: 'release',
+      tag: 'v1.0.0',
+      name: 'Release 1.0.0',
+      description: 'notes',
+      project: { path_with_namespace: GITLAB_REPO },
     });
     const { status, json } = await post(url, `/api/hooks/${gitlabHookId}`, raw, {
       'x-gitlab-event': 'Release Hook',
@@ -342,6 +349,51 @@ test('POST /api/hooks/:hookId does not require the x-forge-csrf header (external
       body: raw,
     });
     assert.equal(res.status, 202, 'must not be rejected by the CSRF guard');
+  } finally {
+    if (saved === undefined) delete process.env[SECRET_ENV]; else process.env[SECRET_ENV] = saved;
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Never-throw hardening (handleHookRoutes is wrapped end-to-end and must
+// never crash the always-on daemon — see the doc comment on handleHookRoutes).
+// ---------------------------------------------------------------------------
+
+test('POST /api/hooks/% — malformed percent-encoding in the hook id segment → 404 unknown hook, never throws', async () => {
+  const { forgeRoot } = setup();
+  const { url, close } = await startBridge({ forgeRoot, port: 0 });
+  try {
+    // decodeURIComponent('%') throws a URIError — the route regex matches a
+    // bare "%" segment before decoding is attempted, so this exercises the
+    // catch-and-treat-as-unknown-hook path rather than an escaped throw.
+    const { status, json } = await post(url, '/api/hooks/%', '{}', {
+      'x-github-event': 'push',
+    });
+    assert.equal(status, 404);
+    assert.equal((json as { error: string }).error, 'unknown hook');
+  } finally {
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/hooks/:hookId — 401 on a zero-length body with x-hub-signature-256 present (empty-body guard fires before verify)', async () => {
+  const { forgeRoot } = setup();
+  const saved = process.env[SECRET_ENV];
+  process.env[SECRET_ENV] = 'correct-secret';
+  const { url, close } = await startBridge({ forgeRoot, port: 0 });
+  try {
+    // An empty body would make @octokit/webhooks-methods `verify` throw a
+    // TypeError on the falsy payload; the fix rejects it (401, fail-closed)
+    // BEFORE verification runs, so this must never surface as a 500/hang.
+    const { status } = await post(url, `/api/hooks/${HOOK_ID}`, '', {
+      'x-github-event': 'push',
+      'x-hub-signature-256': githubSig('correct-secret', ''),
+    });
+    assert.equal(status, 401);
+    assert.equal(flowRunFiles(forgeRoot).length, 0, 'no request staged on a rejected empty body');
   } finally {
     if (saved === undefined) delete process.env[SECRET_ENV]; else process.env[SECRET_ENV] = saved;
     await close();

@@ -101,6 +101,15 @@ The typed-UWI append path (`appendReviewUnifierItems`, `ReviewConcern`,
 `UNIFIER_MAX_TOTAL_ITEMS` constant (caps move to config), and
 `drain-unifier-items.ts` (replaced by `drain-fix-loop.ts`).
 
+**Deliberately NOT removed here:** the `code-fix` UWI dispatch path in
+`developer-loop.ts` (`runCodeFixUwi` + the `kind === 'code-fix'` branch). Its
+only producer (`appendReviewUnifierItems`) is deleted, so it is unreachable in
+shipping content — the unifier queue now holds only the static packaging
+`UWI-1`. It is left in place, rather than surgically excised from the hot-path
+dev-loop file, because the whole unifier node is retired wholesale at R4-01-F4;
+removing it there avoids a risky partial deletion in this change. Tracked as a
+known-gaps cleanup rider.
+
 ## Consequences
 
 - One executor for all post-develop fixes; the R4-10 loops (demo-miss, merge-gate)

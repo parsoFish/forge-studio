@@ -90,6 +90,28 @@ test('github: missing signature header → 401', () =>
     assert.equal((result as { status: number }).status, 401);
   }));
 
+test('github: empty rawBody with signature header present → 401 without throwing (octokit verify TypeError on falsy payload, wrapped)', () =>
+  withEnv({ [SECRET_ENV]: 'sekrit' }, async () => {
+    const rawBody = Buffer.alloc(0);
+    const sig = githubSig('sekrit', '');
+    await assert.doesNotReject(
+      verifyWebhookSignature({
+        provider: 'github',
+        rawBody,
+        headers: { 'x-hub-signature-256': sig },
+        secretEnv: SECRET_ENV,
+      }),
+    );
+    const result = await verifyWebhookSignature({
+      provider: 'github',
+      rawBody,
+      headers: { 'x-hub-signature-256': sig },
+      secretEnv: SECRET_ENV,
+    });
+    assert.equal(result.ok, false);
+    assert.equal((result as { status: number }).status, 401);
+  }));
+
 test('gitea: shares the X-Hub-Signature-256 scheme', () =>
   withEnv({ [SECRET_ENV]: 'gitea-secret' }, async () => {
     const rawBody = Buffer.from('{"push":true}');

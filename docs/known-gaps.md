@@ -476,6 +476,17 @@ R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred 
   (describe-don't-quote for secret material) — prompt-level only; structural redaction (a
   secret-pattern scrub at harvest) is a cheap future hardening if a real leak is ever observed.
 
+### 13. R4-08-F2 / R2-04 — as-built follow-ups (2026-07-25)
+
+- **Dead `code-fix` UWI dispatch (`runCodeFixUwi`) awaits R4-01-F4 removal.** ADR-040
+  deleted the only producer of `kind: code-fix` unifier work-items, so the
+  `kind === 'code-fix'` branch + `runCodeFixUwi` (~120 lines) in
+  `orchestrator/phases/developer-loop.ts` are unreachable in shipping content (the
+  unifier queue now holds only the static packaging `UWI-1`). Left in place rather
+  than surgically excised from the hot-path dev-loop file — the whole unifier node is
+  retired wholesale at R4-01-F4, which is the clean home for the deletion. Not a
+  runtime risk (no producer, no test exercises it). *Owner R4-01-F4.*
+
 ## Strengths worth preserving (don't regress these)
 
 - The **dual-boundary gate works as designed** — the unifier catches a red

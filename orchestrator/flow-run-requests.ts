@@ -28,6 +28,8 @@ import { fileURLToPath } from 'node:url';
 
 import { enqueueFlowRun } from './enqueue-flow-run.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
+import { getPaths } from './queue.ts';
+import { parseManifest } from './manifest.ts';
 import type { TriggerTarget } from './studio/types.ts';
 import type { TriggerPayload } from './trigger-payload.ts';
 
@@ -43,6 +45,13 @@ export type FlowRunRequest = {
   sourceInitiativeId?: string;
   /** External kinds only: the typed, extraction-validated payload (data, not prompt text). */
   payload?: TriggerPayload;
+  /**
+   * cron only (ADR-041 §2): overrun policy carried from the trigger so the
+   * drain can enforce it at origination. Absent ⇒ `forbid` (skip minting a new
+   * run while a prior triggered run of the same target flow is still active).
+   * `replace` is enum-reserved (lint-blocked) — treated as `forbid` here.
+   */
+  concurrency?: 'allow' | 'forbid' | 'replace';
   createdAt: string;
 };
 
@@ -87,7 +96,12 @@ export function listFlowRunRequests(
   return out;
 }
 
-export type FlowRunDrainStatus = 'dispatched' | 'skipped-no-initiative' | 'skipped-malformed' | 'error';
+export type FlowRunDrainStatus =
+  | 'dispatched'
+  | 'skipped-no-initiative'
+  | 'skipped-malformed'
+  | 'skipped-concurrency'
+  | 'error';
 export type FlowRunDrainResult = {
   target?: TriggerTarget;
   sourceInitiativeId?: string;
@@ -141,6 +155,28 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
       rmSync(path, { force: true });
       continue;
     }
+    // ADR-041 §2 concurrency: `concurrency` is a CRON field (webhooks fire on
+    // discrete real pushes — each legitimately mints its own run, guarded
+    // against same-instant id collisions in mintTriggeredInitiative). For a
+    // cron origination the default `forbid` policy skips minting a fresh run
+    // while a prior triggered run of the SAME target flow is still active
+    // (pending / in-flight / awaiting its gate) — the K8s-style overrun guard
+    // the field promises, enforced HERE per the module doc. `allow` opts out;
+    // `replace` (enum-reserved) falls through to forbid. Only meaningful with a
+    // real queue root (injected-startFlowRun tests run against empty dirs ⇒ no
+    // active run ⇒ never skipped).
+    if (
+      !req.sourceInitiativeId &&
+      req.origin === 'cron' &&
+      req.target.kind === 'flow' &&
+      (req.concurrency ?? 'forbid') !== 'allow' &&
+      hasActiveTriggeredRun(deps.queueRoot, req.target.ref)
+    ) {
+      out.push({ target: req.target, status: 'skipped-concurrency' });
+      deps.notify?.(`flow-trigger: ${req.triggeredBy} → ${req.target.ref} SKIPPED (concurrency: forbid — a prior triggered run is still active)`);
+      rmSync(path, { force: true });
+      continue;
+    }
     try {
       if (req.target.kind === 'agent') {
         startAgentRun(req);
@@ -163,6 +199,29 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
     }
   }
   return out;
+}
+
+/**
+ * True if an `origin: 'triggered'` initiative for `flowId` is currently active
+ * — sitting in pending / in-flight / ready-for-review (a completed run has
+ * moved to done/ or failed/, so it no longer counts). The concurrency guard's
+ * "is a prior run still running?" predicate. Best-effort: an unreadable
+ * manifest is skipped, not treated as active.
+ */
+function hasActiveTriggeredRun(queueRoot: string | undefined, flowId: string): boolean {
+  const paths = getPaths(queueRoot ?? '_queue');
+  for (const dir of [paths.pending, paths.inFlight, paths.readyForReview]) {
+    if (!existsSync(dir)) continue;
+    for (const name of readdirSync(dir).filter((f) => f.endsWith('.md'))) {
+      try {
+        const m = parseManifest(readFileSync(join(dir, name), 'utf8'));
+        if (m.origin === 'triggered' && m.flow_id === flowId) return true;
+      } catch {
+        /* unreadable manifest — don't let it block or falsely satisfy the guard */
+      }
+    }
+  }
+  return false;
 }
 
 function defaultStartFlowRun(queueRoot?: string, forgeRoot?: string): (req: FlowRunRequest) => void {

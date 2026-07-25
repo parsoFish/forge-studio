@@ -26,6 +26,14 @@ export type MintTriggeredResult = {
   detail?: string;
 };
 
+/** True if `<id>.md` already exists in ANY queue state dir (collision guard). */
+function idExistsInQueue(paths: ReturnType<typeof getPaths>, id: string): boolean {
+  const file = `${id}.md`;
+  return [paths.pending, paths.inFlight, paths.readyForReview, paths.merged, paths.done, paths.failed].some(
+    (d) => existsSync(join(d, file)),
+  );
+}
+
 /** Lowercase-slugify a validated token for the initiative id (never free text). */
 function idToken(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'run';
@@ -52,10 +60,20 @@ export function mintTriggeredInitiative(
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
     const hms = now.toISOString().slice(11, 19).replace(/:/g, '');
-    // Id from validated tokens only: kind + flow ref + a time suffix.
-    const initiativeId = `INIT-${date}-${idToken(req.origin)}-${idToken(flowId)}-${hms}`;
-
     const paths = getPaths(opts.queueRoot ?? '_queue');
+    // Id from validated tokens only: kind + flow ref + a time suffix. Two
+    // origination fires for the SAME flow within one second would otherwise
+    // collide (identical date/origin/flow/hms) and the second write would
+    // silently clobber the first's manifest — so append the smallest numeric
+    // suffix that is free across EVERY queue state dir (a `-2` slug stays
+    // INIT_ID_RE-valid). Deterministic + no reliance on sub-second clock
+    // resolution.
+    const baseId = `INIT-${date}-${idToken(req.origin)}-${idToken(flowId)}-${hms}`;
+    let initiativeId = baseId;
+    for (let n = 2; idExistsInQueue(paths, initiativeId); n++) {
+      initiativeId = `${baseId}-${n}`;
+    }
+
     const manifest: InitiativeManifest = {
       initiative_id: initiativeId,
       project: flow.project,

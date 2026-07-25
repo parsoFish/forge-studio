@@ -239,6 +239,17 @@ export function runStudioLint(root: string): StudioLintResult {
 
     flowDirs.forEach((d) => flowIds.add(d));
 
+    // Resolve a flow's project on demand (R2-04): the external-trigger project
+    // requirement is checked on the TARGET flow the mint uses, not the
+    // declaring flow. Lazy load — only cron/webhook targets consult it.
+    const flowProjectOf = (id: string): string | null | undefined => {
+      try {
+        return loadFlowDefinition(join(flowsDir, id, 'flow.yaml')).project;
+      } catch {
+        return undefined;
+      }
+    };
+
     for (const dir of flowDirs) {
       const flowPath = join(flowsDir, dir, 'flow.yaml');
       try {
@@ -251,7 +262,7 @@ export function runStudioLint(root: string): StudioLintResult {
             message: `flow id "${flow.id}" must match its directory name "${dir}"`,
           });
         }
-        findings.push(...validateFlow(flow, agentMap, { flowIds }));
+        findings.push(...validateFlow(flow, agentMap, { flowIds, flowProjectOf }));
         findings.push(...validateArtifactRef(flow, artifactTemplateIds));
         for (const trigger of flow.triggers) {
           if (trigger.on === 'webhook' && trigger.webhook) {

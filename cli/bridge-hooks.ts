@@ -143,12 +143,44 @@ export async function handleHookRoutes(
 ): Promise<boolean> {
   if (method !== 'POST') return false;
   const url = pathOnly(rawUrl);
-  const origin = allowedOrigin(req);
-
   const hookMatch = url.match(/^\/api\/hooks\/([^/]+)$/);
   if (!hookMatch) return false;
 
-  const rawHookId = decodeURIComponent(hookMatch[1]);
+  // Never-throw contract (this route is pre-auth on a 0.0.0.0-bound bridge): an
+  // unhandled rejection here escapes `handleHttp` — which the server callback
+  // runs as `void handleHttp(...)` with no `.catch()` and no process-level
+  // handler — and under Node's default `--unhandled-rejections=throw` would
+  // CRASH the always-on daemon, hard-resetting in-flight cycles. Every failure
+  // mode must map to an HTTP status. This wrapper is the backstop for any throw
+  // the per-step guards below don't already convert (e.g. a future extractor).
+  const origin = allowedOrigin(req);
+  try {
+    return await processHookReceipt(req, res, ctx, origin, hookMatch[1]);
+  } catch (err) {
+    console.warn(`bridge-hooks: unexpected error handling hook receipt: ${err instanceof Error ? err.message : String(err)}`);
+    try { sendJson(res, 500, { error: 'hook processing failed' }, origin); } catch { /* response may already be partially written */ }
+    return true;
+  }
+}
+
+async function processHookReceipt(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HookRoutesContext,
+  origin: string | undefined,
+  rawSegment: string,
+): Promise<boolean> {
+  // decodeURIComponent throws URIError on malformed percent-encoding (`%`,
+  // `%zz`); the route regex matches a bare `%`, so decode BEFORE validation is
+  // a pre-auth crash vector — treat a malformed segment as an unknown hook.
+  let rawHookId: string;
+  try {
+    rawHookId = decodeURIComponent(rawSegment);
+  } catch {
+    console.warn('bridge-hooks: rejected hook id with malformed percent-encoding');
+    sendJson(res, 404, { error: 'unknown hook' }, origin);
+    return true;
+  }
   if (!HOOK_ID_RE.test(rawHookId)) {
     console.warn(`bridge-hooks: rejected malformed hook id slug: ${JSON.stringify(rawHookId.slice(0, 200))}`);
     sendJson(res, 404, { error: 'unknown hook' }, origin);
@@ -180,6 +212,15 @@ export async function handleHookRoutes(
     }
     console.warn(`bridge-hooks: body read error for hook "${hookId}": ${err instanceof Error ? err.message : String(err)}`);
     sendJson(res, 400, { error: 'unreadable request body' }, origin);
+    return true;
+  }
+
+  // An empty body cannot carry a valid signature and makes
+  // `@octokit/webhooks-methods` `verify` throw a TypeError on a falsy payload —
+  // reject it as a bad signature (fail closed) before verification runs.
+  if (rawBody.length === 0) {
+    console.warn(`bridge-hooks: empty body for hook "${hookId}"`);
+    sendJson(res, 401, { error: 'signature verification failed' }, origin);
     return true;
   }
 

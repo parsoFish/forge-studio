@@ -78,9 +78,30 @@ function reqMatch(value: unknown, re: RegExp, field: string): string {
 }
 
 /**
- * Extract the typed push payload from a verified webhook body. All three
- * providers share the shape used here (`repository.full_name`, `ref`, `after`,
- * `head_commit.message`, `pusher.name`/`user_username`, `commits[]`).
+ * The `owner/repo` full name across providers: github/gitea put it at
+ * `repository.full_name`; gitlab puts it at `project.path_with_namespace`
+ * (its `repository` object has no full name). Falls through the known
+ * locations so one extractor serves all three.
+ */
+function repoOf(body: Record<string, unknown>): unknown {
+  const repoObj = (body['repository'] ?? {}) as Record<string, unknown>;
+  const projectObj = (body['project'] ?? {}) as Record<string, unknown>;
+  return (
+    repoObj['full_name'] ??
+    repoObj['path_with_namespace'] ??
+    projectObj['path_with_namespace'] ??
+    projectObj['full_name']
+  );
+}
+
+/**
+ * Extract the typed push payload from a verified webhook body.
+ * - github/gitea: `repository.full_name`, `after`, `head_commit.message`,
+ *   `pusher.name`.
+ * - gitlab: the repo lives at `project.path_with_namespace` (NOT under
+ *   `repository`, which gitlab keeps as a minimal legacy object), the head sha
+ *   at `checkout_sha`, the pusher at `user_username`, and there is no
+ *   `head_commit` (use the last `commits[]` entry). `repoOf` unifies these.
  * Throws {@link TriggerPayloadInvalidError} on any malformed structured field —
  * a verified-but-weird payload is rejected, never partially trusted.
  */
@@ -88,12 +109,7 @@ export function extractPushPayload(
   provider: 'github' | 'gitea' | 'gitlab',
   body: Record<string, unknown>,
 ): WebhookPushPayload {
-  const repoObj = (body['repository'] ?? {}) as Record<string, unknown>;
-  const repo = reqMatch(
-    repoObj['full_name'] ?? repoObj['path_with_namespace'],
-    REPO_RE,
-    'repository.full_name',
-  );
+  const repo = reqMatch(repoOf(body), REPO_RE, 'repository/project');
   const ref = reqMatch(body['ref'], GIT_REF_RE, 'ref');
   const headSha = reqMatch(body['after'] ?? body['checkout_sha'], SHA_RE, 'after');
   const pusherObj = (body['pusher'] ?? {}) as Record<string, unknown>;
@@ -120,27 +136,27 @@ export function extractPushPayload(
 }
 
 /**
- * Extract the typed release payload from a verified webhook body
- * (`release.tag_name`, `release.name`, `release.published_at`, `release.body`).
+ * Extract the typed release payload from a verified webhook body.
+ * - github/gitea: the fields live under a `release` object
+ *   (`release.tag_name`, `release.name`, `release.published_at`,
+ *   `release.body`), repo at `repository.full_name`.
+ * - gitlab ("Release Hook"): there is NO `release` sub-object — `tag`, `name`,
+ *   `description` are top-level and the repo is `project.path_with_namespace`.
+ * Each lookup falls back from the release object to the top-level gitlab field.
  */
 export function extractReleasePayload(
   provider: 'github' | 'gitea' | 'gitlab',
   body: Record<string, unknown>,
 ): WebhookReleasePayload {
-  const repoObj = (body['repository'] ?? {}) as Record<string, unknown>;
-  const repo = reqMatch(
-    repoObj['full_name'] ?? repoObj['path_with_namespace'],
-    REPO_RE,
-    'repository.full_name',
-  );
+  const repo = reqMatch(repoOf(body), REPO_RE, 'repository/project');
   const rel = (body['release'] ?? {}) as Record<string, unknown>;
-  const tag = reqMatch(rel['tag_name'] ?? body['tag'], TAG_RE, 'release.tag_name');
-  const name = freeText(rel['name']);
+  const tag = reqMatch(rel['tag_name'] ?? body['tag'], TAG_RE, 'release.tag_name/tag');
+  const name = freeText(rel['name'] ?? body['name']);
   const publishedAt =
     typeof rel['published_at'] === 'string' && ISO_RE.test(rel['published_at'])
       ? rel['published_at']
       : new Date().toISOString();
-  const relBody = freeText(rel['body']);
+  const relBody = freeText(rel['body'] ?? body['description']);
   return {
     kind: 'webhook',
     provider,

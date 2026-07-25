@@ -172,6 +172,49 @@ test('mintTriggeredInitiative: a project binding whose directory does not exist 
 });
 
 // ---------------------------------------------------------------------------
+// (4b) collision: two origination mints for the SAME flow+origin get distinct
+// ids (a numeric suffix when they land in the same second) and neither
+// manifest is overwritten.
+// ---------------------------------------------------------------------------
+
+test('mintTriggeredInitiative: two back-to-back mints for the same flow+origin never collide on disk', () => {
+  withFixture(({ forgeRoot, queueRoot, logsRoot }) => {
+    const req: FlowRunRequest = {
+      target: { kind: 'flow', ref: 'tick' },
+      origin: 'webhook',
+      triggeredBy: 'github:acme/widgets',
+      payload: pushPayload(),
+      createdAt: new Date().toISOString(),
+    };
+
+    const first = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+    const second = mintTriggeredInitiative(req, { forgeRoot, queueRoot, logsRoot });
+
+    assert.equal(first.status, 'minted');
+    assert.equal(second.status, 'minted');
+    assert.notEqual(second.initiativeId, first.initiativeId, 'the second mint must not reuse the first id');
+
+    // Whether they landed in the same second (idExistsInQueue forces a `-2`
+    // suffix) or different seconds (distinct hms), both ids stay well-formed.
+    const idRe = /^INIT-\d{4}-\d{2}-\d{2}-webhook-tick-\d{6}(-\d+)?$/;
+    assert.match(first.initiativeId!, idRe);
+    assert.match(second.initiativeId!, idRe);
+
+    const paths = getPaths(queueRoot);
+    const firstPath = join(paths.pending, `${first.initiativeId}.md`);
+    const secondPath = join(paths.pending, `${second.initiativeId}.md`);
+    assert.ok(existsSync(firstPath), `first manifest exists at ${firstPath}`);
+    assert.ok(existsSync(secondPath), `second manifest exists at ${secondPath}`);
+
+    const firstOnDisk = parseManifest(readFileSync(firstPath, 'utf8'));
+    const secondOnDisk = parseManifest(readFileSync(secondPath, 'utf8'));
+    assert.equal(firstOnDisk.initiative_id, first.initiativeId, 'first manifest was not overwritten by the second mint');
+    assert.equal(secondOnDisk.initiative_id, second.initiativeId);
+    assert.notEqual(firstOnDisk.initiative_id, secondOnDisk.initiative_id);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (4) id NEVER derived from payload text
 // ---------------------------------------------------------------------------
 

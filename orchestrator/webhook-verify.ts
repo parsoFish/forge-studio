@@ -60,9 +60,9 @@ function constantTimeStringEqual(a: string, b: string): boolean {
  * Verify a webhook receipt's signature/token per provider. Resolves the
  * secret(s) from `process.env` by the NAMES the caller supplies (never takes
  * a secret value directly) so the fail-closed check lives in exactly one
- * place. Returns a typed ok/reason result — never throws on a bad or missing
- * signature (only a truly unexpected error, e.g. from the underlying crypto
- * calls, escapes as a rejected promise).
+ * place. Returns a typed ok/reason result and NEVER throws — a bad/missing
+ * signature, an empty payload, or an underlying crypto/octokit throw all map
+ * to a fail-closed 401 (or 503 for a missing secret).
  */
 export async function verifyWebhookSignature(
   input: VerifyWebhookSignatureInput,
@@ -79,9 +79,19 @@ export async function verifyWebhookSignature(
       return { ok: false, status: 401, reason: 'missing signature header' };
     }
     const payload = input.rawBody.toString('utf8');
-    const valid = previous
-      ? await verifyWithFallback(secret, payload, sig, [previous])
-      : await verify(secret, payload, sig);
+    // `@octokit/webhooks-methods` throws a TypeError on a falsy payload/secret/
+    // signature (e.g. an empty body) rather than returning false. A verify that
+    // cannot run is a FAILED verification (401 fail-closed), never a server
+    // error — this is the security-correct mapping and keeps the never-throw
+    // contract on this pre-auth path.
+    let valid: boolean;
+    try {
+      valid = previous
+        ? await verifyWithFallback(secret, payload, sig, [previous])
+        : await verify(secret, payload, sig);
+    } catch {
+      return { ok: false, status: 401, reason: 'signature verification failed' };
+    }
     if (!valid) {
       return { ok: false, status: 401, reason: 'signature verification failed' };
     }

@@ -154,22 +154,60 @@ test('extractReleasePayload: a body over the cap is truncated + flagged', () => 
 });
 
 // ---------------------------------------------------------------------------
-// (6) gitlab shape extracts
+// (5b) gitea release: same shape family as github (release sub-object,
+// repository.full_name) — sanity-check the third provider on the happy path.
 // ---------------------------------------------------------------------------
 
-test('extractPushPayload: gitlab shape (path_with_namespace, checkout_sha, user_username) extracts', () => {
-  const gitlabBody: Record<string, unknown> = {
-    repository: { path_with_namespace: 'acme/widgets' },
+test('extractReleasePayload: gitea happy path (github-shaped release object) extracts', () => {
+  const result = extractReleasePayload('gitea', releaseBody());
+  assert.equal(result.provider, 'gitea');
+  assert.equal(result.repo, 'acme/widgets');
+  assert.equal(result.tag, 'v1.2.3');
+  assert.equal(result.releaseName, 'Version 1.2.3');
+  assert.equal(result.body, 'Release notes here.');
+});
+
+// ---------------------------------------------------------------------------
+// (6) gitlab REAL webhook shapes — push + release hooks
+//
+// GitLab's push/release webhooks do NOT nest under `repository.full_name`
+// (github/gitea shape) and do NOT carry a `release: {tag_name: ...}` object
+// (github-shaped release shape). repoOf() unifies the repo lookup via
+// project.path_with_namespace; extractReleasePayload falls back from the
+// (absent) `release` object to gitlab's top-level `tag`/`name`/`description`.
+// ---------------------------------------------------------------------------
+
+test('extractPushPayload: gitlab Push Hook (real shape) extracts via project.path_with_namespace', () => {
+  const gitlabPush: Record<string, unknown> = {
+    object_kind: 'push',
     ref: 'refs/heads/main',
     checkout_sha: 'b'.repeat(40),
-    user_username: 'gitlab-user',
-    commits: [{ message: 'gitlab commit' }],
+    user_username: 'alice',
+    project: { path_with_namespace: 'group/proj' },
+    commits: [{ message: 'first commit' }, { message: 'head msg' }],
   };
-  const result = extractPushPayload('gitlab', gitlabBody);
+  const result = extractPushPayload('gitlab', gitlabPush);
   assert.equal(result.provider, 'gitlab');
-  assert.equal(result.repo, 'acme/widgets');
-  assert.equal(result.headSha, 'b'.repeat(40));
-  assert.equal(result.pusherLogin, 'gitlab-user');
-  assert.equal(result.commitCount, 1);
-  assert.equal(result.headCommitMessage, 'gitlab commit');
+  assert.equal(result.repo, 'group/proj');
+  assert.equal(result.headSha, gitlabPush.checkout_sha);
+  assert.equal(result.pusherLogin, 'alice');
+  assert.equal(result.commitCount, 2);
+  assert.equal(result.headCommitMessage, 'head msg', 'the LAST commit is the head commit (no head_commit field)');
+});
+
+test('extractReleasePayload: gitlab Release Hook (real shape, no `release` sub-object) extracts', () => {
+  const gitlabRelease: Record<string, unknown> = {
+    object_kind: 'release',
+    action: 'create',
+    tag: 'v1.2.0',
+    name: 'Release 1.2.0',
+    description: 'notes here',
+    project: { path_with_namespace: 'group/proj' },
+  };
+  const result = extractReleasePayload('gitlab', gitlabRelease);
+  assert.equal(result.provider, 'gitlab');
+  assert.equal(result.repo, 'group/proj');
+  assert.equal(result.tag, 'v1.2.0');
+  assert.equal(result.releaseName, 'Release 1.2.0');
+  assert.equal(result.body, 'notes here');
 });

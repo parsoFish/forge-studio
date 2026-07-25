@@ -77,6 +77,7 @@ type DeclaredCronTrigger = {
   flowId: string;
   schedule: string;
   target: TriggerTarget;
+  concurrency: 'allow' | 'forbid' | 'replace';
 };
 
 function cronKey(flowId: string, index: number, schedule: string, target: TriggerTarget): string {
@@ -107,7 +108,13 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
     triggers.forEach((t, index) => {
       if (t.on !== 'cron') return;
       if (typeof t.schedule !== 'string' || t.schedule.trim() === '') return;
-      out.push({ key: cronKey(flowId, index, t.schedule, t.target), flowId, schedule: t.schedule, target: t.target });
+      out.push({
+        key: cronKey(flowId, index, t.schedule, t.target),
+        flowId,
+        schedule: t.schedule,
+        target: t.target,
+        concurrency: t.concurrency ?? 'forbid',
+      });
     });
   }
   return out;
@@ -133,6 +140,7 @@ function makeFireFn(
           target: d.target,
           origin: 'cron',
           triggeredBy: `cron:${d.flowId}`,
+          concurrency: d.concurrency,
           payload: { kind: 'cron', schedule: d.schedule, firedAt: new Date().toISOString() },
         },
         { queueRoot },

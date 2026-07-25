@@ -791,8 +791,9 @@ function buildAgentPrompt(def: AgentDefinition, ctx: NodeExecContext): string {
  * enums + a REPO_RE-revalidated repo). Free-text payload fields (commit
  * messages, release bodies) NEVER reach prompt assembly — agents read the
  * `trigger-payload.json` artifact as data. Best-effort: any failure ⇒ no line.
+ * Exported for the prompt-isolation test (the OWASP LLM01 boundary the AC names).
  */
-function triggeredRunContextLine(input: CycleInput): string | null {
+export function triggeredRunContextLine(input: CycleInput): string | null {
   try {
     const manifest = parseManifest(readFileSync(input.manifestPath, 'utf8'));
     if (manifest.origin !== 'triggered' || !manifest.cycle_id) return null;

@@ -773,8 +773,23 @@ export async function handleStudioWriteRoutes(
       }
       const agentsMap = new Map(agentsList.map((a) => [a.slug, a]));
 
-      // 7. Validate — reject on any error-level finding
-      const findings = validateFlow(merged, agentsMap, { flowIds: new Set(listFlowIds(ctx.forgeRoot)) });
+      // 7. Validate — reject on any error-level finding. `flowProjectOf`
+      // resolves the TARGET flow's project (R2-04) so the external-trigger
+      // project requirement checks the flow the mint actually uses. `merged`
+      // (the flow being saved) is resolved from memory so an in-flight edit to
+      // its own project is honored; other targets load from disk.
+      const flowProjectOf = (id: string): string | null | undefined => {
+        if (id === merged.id) return merged.project;
+        try {
+          return loadFlowDefinition(join(ctx.forgeRoot, 'studio', 'flows', id, 'flow.yaml')).project;
+        } catch {
+          return undefined;
+        }
+      };
+      const findings = validateFlow(merged, agentsMap, {
+        flowIds: new Set(listFlowIds(ctx.forgeRoot)),
+        flowProjectOf,
+      });
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {
         sendJson(res, 400, { error: 'validation failed', findings }, origin);
