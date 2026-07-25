@@ -75,6 +75,17 @@ export type AgentFanout = {
   perItemGate?: string;
 };
 
+/**
+ * The shipped fanout isolation providers (R2-03). `worktree` is the reference
+ * provider (git worktree per item + merge-back integration); `none` runs items
+ * in-place with no isolation. A value outside this set is not rejected — it may
+ * name a future/custom provider — but `forge studio lint` warns on it so a typo
+ * (`worktre`) surfaces instead of silently disabling isolation. Extend this list
+ * when a new provider ships.
+ */
+export const FANOUT_ISOLATION_KINDS = ['worktree', 'none'] as const;
+export type FanoutIsolationKind = (typeof FANOUT_ISOLATION_KINDS)[number];
+
 /** An agent IS a skill directory; this is the parsed view of its SKILL.md. */
 export type AgentDefinition = {
   slug: string; // skill directory name

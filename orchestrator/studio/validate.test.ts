@@ -174,6 +174,36 @@ describe('validateAgent — readiness/hook', () => {
   });
 });
 
+describe('validateAgent — fanout/isolation (R2-03)', () => {
+  it('shipped provider (worktree) → no fanout/isolation finding', () => {
+    const findings = validateAgent(
+      makeAgent({ fanout: { drivingArtifact: 'work-items', isolation: 'worktree', concurrencyCap: 1 } }),
+    );
+    assert.ok(!findings.some((x) => x.check === 'fanout/isolation'));
+  });
+
+  it('none provider → no fanout/isolation finding', () => {
+    const findings = validateAgent(
+      makeAgent({ fanout: { drivingArtifact: 'work-items', isolation: 'none' } }),
+    );
+    assert.ok(!findings.some((x) => x.check === 'fanout/isolation'));
+  });
+
+  it('typo provider (worktre) → flag (soft, not error)', () => {
+    const findings = validateAgent(
+      makeAgent({ fanout: { drivingArtifact: 'work-items', isolation: 'worktre' } }),
+    );
+    const f = findings.find((x) => x.check === 'fanout/isolation');
+    assert.ok(f, 'expected fanout/isolation finding');
+    assert.equal(f.level, 'flag', 'isolation ref is open — an unknown value warns, never errors');
+  });
+
+  it('no fanout block → no fanout/isolation finding', () => {
+    const findings = validateAgent(makeAgent());
+    assert.ok(!findings.some((x) => x.check === 'fanout/isolation'));
+  });
+});
+
 describe('validateAgent — readiness/process', () => {
   it('blank body → error readiness/process', () => {
     const findings = validateAgent(makeAgent({ body: '' }));

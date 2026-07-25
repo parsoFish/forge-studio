@@ -10,6 +10,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -794,7 +795,9 @@ test('createClaudeAgent: R2-03-F4 — externalSignal (wedge-kill) chains into th
     assert.ok(captured, 'the query received the per-iteration abortController');
     assert.equal(captured!.signal.aborted, false, 'not aborted before the external wedge-kill fires');
     ext.abort(); // the flow node is wedge-killed
-    assert.equal(captured!.signal.aborted, true, 'external wedge-kill chained into the iteration controller — the CLI subprocess is cancelled');
+    // The abortController the SDK receives is aborted — the SDK/idle-deadline
+    // wiring cancels the CLI subprocess off this same controller.
+    assert.equal(captured!.signal.aborted, true, 'external wedge-kill aborts the iteration controller the SDK query received');
     await p.catch(() => {}); // let the invocation settle
   } finally {
     rmSync(dir, { recursive: true, force: true });
@@ -817,6 +820,26 @@ test('createClaudeAgent: R2-03-F4 — an already-aborted externalSignal cancels 
     const agent = createClaudeAgent({ externalSignal: ext.signal, queryFn });
     await agent({ promptPath, agentMdPath: join(dir, 'AGENT.md'), fixPlanPath: join(dir, 'fix_plan.md'), worktreePath: dir, iteration: 1 }).catch(() => {});
     assert.equal(captured!.signal.aborted, true, 'a pre-aborted external signal aborts the iteration controller at once');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('createClaudeAgent: R2-03-F4 — the external-abort listener does not accumulate across iterations', async () => {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-claude-agent-listener-'));
+  try {
+    const promptPath = join(dir, 'PROMPT.md');
+    writeFileSync(promptPath, 'noop');
+    const ext = new AbortController();
+    // A queryFn that completes normally (the common case) — the leak the review
+    // flagged: {once:true} does NOT self-remove a listener that never fires.
+    const queryFn = fakeQuery([{ type: 'result', subtype: 'success', total_cost_usd: 0 }], []);
+    const agent = createClaudeAgent({ externalSignal: ext.signal, queryFn });
+    for (let i = 0; i < 5; i++) {
+      await agent({ promptPath, agentMdPath: join(dir, 'AGENT.md'), fixPlanPath: join(dir, 'fix_plan.md'), worktreePath: dir, iteration: i });
+    }
+    const listeners = getEventListeners(ext.signal, 'abort');
+    assert.ok(listeners.length <= 1, `abort listeners must not accumulate across iterations — saw ${listeners.length} after 5 non-aborted runs`);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

@@ -202,22 +202,24 @@ test('resolveDevWiConcurrency: env var overrides config (operator/CI escape hatc
   }
 });
 
-test('resolveDevWiConcurrency: R2-03-F4 — the definition cap sits above config, below env, clamped to the ceiling', () => {
+test('resolveDevWiConcurrency: R2-03-F4 — the definition cap is the DEFAULT (below env + operator config), clamped to the ceiling', () => {
   const original = process.env.FORGE_DEV_WI_CONCURRENCY;
   delete process.env.FORGE_DEV_WI_CONCURRENCY;
   try {
-    // definition cap chosen over forge.config.json + the default
-    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 2 } }, 4), 4);
+    // an explicit operator config value WINS over the agent-declared default
+    // (ADR-009's dev.maxConcurrentWorkItems lever is preserved).
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 2 } }, 4), 2);
+    // no config → the definition cap is the effective default.
     assert.equal(resolveDevWiConcurrency({}, 3), 3);
-    // developer-ralph declares 1 → byte-identical to the pre-F4 default
+    // developer-ralph declares 1 → byte-identical to the pre-F4 default.
     assert.equal(resolveDevWiConcurrency({}, 1), 1);
-    // never unbounded — a definition cap is still clamped to the ceiling
+    // never unbounded — a definition cap is still clamped to the ceiling.
     assert.equal(resolveDevWiConcurrency({}, 999), 8);
-    // env still wins over the definition cap (operator override)
+    // env still wins over everything (operator/CI override).
     process.env.FORGE_DEV_WI_CONCURRENCY = '2';
-    assert.equal(resolveDevWiConcurrency({}, 6), 2);
+    assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 6 } }, 4), 2);
     delete process.env.FORGE_DEV_WI_CONCURRENCY;
-    // an absent/invalid definition cap falls through to config/default
+    // an absent/invalid definition cap falls through to config/default.
     assert.equal(resolveDevWiConcurrency({ dev: { maxConcurrentWorkItems: 5 } }, undefined), 5);
     assert.equal(resolveDevWiConcurrency({}, 0), 1);
   } finally {

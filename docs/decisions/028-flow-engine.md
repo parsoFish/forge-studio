@@ -49,7 +49,10 @@ self-modifies while running, and resume never discards work.
      SDK abort is threaded into PM and, since **R2-03-F4**, chained into the
      dev-loop's per-WI Ralphs too (`ClaudeAgentOptions.externalSignal` → each
      iteration's abort controller), so a wedge-kill on a fanout node cancels
-     the in-flight per-item CLI subprocesses rather than leaving zombie work;
+     the in-flight per-item CLI subprocesses rather than leaving zombie work
+     — scoped to the reference `claude` adapter, the only one that wires
+     `externalSignal` into its SDK cancellation today (other adapters accept
+     the field but do not yet honor it; known-gaps §4.12);
    - rate-limit `resetsAt` gates every spawn;
    - iteration/turn budgets carry over from agent definitions unchanged.
 5. **Resume** targets any node flagged `resumable`; worktree preserved;

@@ -240,11 +240,19 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
     options.abortController = abortController;
     // R2-03-F4: chain the external wedge-kill signal into this iteration's
     // controller — an already-aborted signal cancels immediately; otherwise a
-    // one-shot listener aborts the moment the node is wedge-killed, terminating
-    // the CLI subprocess (via the same abortController the idle-deadline uses).
+    // listener aborts the moment the node is wedge-killed, terminating the CLI
+    // subprocess (via the same abortController the idle-deadline uses). The
+    // returned closure runs once per Ralph iteration against the SAME long-lived
+    // node signal, so the listener is REMOVED in the finally below — `{once}`
+    // alone only self-removes when the signal fires, leaking one dead listener
+    // per completed iteration otherwise.
+    let onExternalAbort: (() => void) | undefined;
     if (opts.externalSignal) {
       if (opts.externalSignal.aborted) abortController.abort();
-      else opts.externalSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+      else {
+        onExternalAbort = () => abortController.abort();
+        opts.externalSignal.addEventListener('abort', onExternalAbort, { once: true });
+      }
     }
 
     const filesChanged = new Set<string>();
@@ -298,6 +306,7 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
       }, intervalMs);
     }
 
+    try {
     for await (const msg of withIdleDeadline(queryFn({ prompt, options }), {
       idleMs: opts.idleDeadlineMs,
       label: 'ralph-iteration',
@@ -415,6 +424,12 @@ export function createClaudeAgent(opts: ClaudeAgentOptions = {}): AgentInvocatio
           }
         }
       }
+    }
+    } finally {
+      // R2-03-F4: always detach the external-abort listener (whether the
+      // iteration completed or threw) so it never accumulates on the shared
+      // long-lived node signal across a fanout node's many WIs/iterations.
+      if (onExternalAbort) opts.externalSignal?.removeEventListener('abort', onExternalAbort);
     }
 
     // S7 / C13 — sidecar shutdown. Always clear the interval, then check

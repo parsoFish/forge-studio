@@ -800,6 +800,16 @@ export async function runDeveloperLoop(
         };
       }
 
+      // R2-03-F4: a wedge-kill that fires MID-attempt surfaces here as a thrown
+      // abort — it must not be misclassified as a transient agent crash and
+      // retried (that would re-spawn the very work the kill was meant to stop).
+      // Reclassify to `aborted` and break, mirroring the between-attempt guard
+      // at the top of this loop.
+      if (runnerError && signal?.aborted) {
+        runnerError = { kind: 'aborted', message: 'wedge-kill: node aborted mid-attempt' };
+        break;
+      }
+
       // F-44: success (or a real quality-gate `result`) → done, no retry.
       // Only a thrown agent-subprocess crash is retryable, and only while
       // attempts remain. A persistent crash exhausts retries → fails as

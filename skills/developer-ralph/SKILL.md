@@ -19,7 +19,10 @@ runtime:
 # capability (was an implicit slug-restricted behaviour). Each item of the
 # `work-items` driving artifact runs in its own git worktree, each carrying its
 # own quality gate; concurrencyCap 1 = the current default (byte-compatible —
-# raised after soak, known-gaps §4.2). Consumed at runtime by R2-03-F4.
+# raised after soak, known-gaps §4.2). Of these keys only `concurrencyCap` is
+# consumed at runtime (R2-03-F4 threads it into the dev-loop dispatcher as the
+# default per-WI concurrency); the rest are declarative facts the descriptor
+# projects (`fanoutCapable`) and the BUILD-tab fanout gate reads.
 fanout:
   drivingArtifact: work-items
   isolation: worktree

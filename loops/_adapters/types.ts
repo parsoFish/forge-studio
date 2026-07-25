@@ -22,6 +22,16 @@ import type { QueryFn, ClaudeAgentOptions } from '../ralph/claude-agent.ts';
  * The options an adapter's `createAgent` accepts. Starts as the full
  * ClaudeAgentOptions superset — a real second adapter implements the subset it
  * supports and documents any unsupported fields.
+ *
+ * R2-03-F4 caveat — `externalSignal` (the fanout node's wedge-kill, chained so
+ * an in-flight per-item subprocess is actually cancelled) is honored ONLY by
+ * the reference `claude` adapter today. Other adapters (`gemini`, `aider`,
+ * `example`) accept the field but do not yet wire it into their SDK's
+ * cancellation, so a wedge-kill on a node running under one of those adapters
+ * still leaves the in-flight iteration to finish on its own. The conformance
+ * suite does not assert cancellation because those adapters are unprovisioned.
+ * Tracked in known-gaps §4.12; the ADR-028 "no zombie work" guarantee is
+ * therefore scoped to the claude adapter until a second adapter honors it.
  */
 export type AdapterAgentOptions = ClaudeAgentOptions;
 
