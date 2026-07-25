@@ -962,6 +962,12 @@ free R4 ID's features.
   reopen of the cascade-closed #40), R4-04 PR #41 (`4f530ba`). Verify disposition superseded: ONE
   tail-of-wave `verify:cycle` run covers the whole wave (operator decision). The R1-03-F4 merge-boundary
   gate relocation verdict is **APPROVED as specced + recorded in the ADR-036 amendment** — R4-10-F2 unblocked.
+- 2026-07-25 — **Wave-4 S3 MERGED**: R4-07 PR #44 (merge commit `302643b`) + R4-08 F1/F3 PR #45
+  (merge commit `63f550e`, main tip). Stacked merge executed base-first without branch deletion,
+  #45 retargeted to main, branches deleted after both merges (the S1 stacked-PR discipline).
+  Post-merge main: suite 2354/2354 under `FORGE_ARCHITECT_NO_SPAWN=1`, studio/brain lint 0 errors.
+  Wave-4 remaining: S4 = R4-08-F2 + R2-04; then R4-09 …; the single tail-of-wave
+  `verify:cycle --project gitpulse` run stays the wave's real-money gate.
 - 2026-07-25 — **Wave-4 session 3 (cont.): R4-08 F1+F3 implemented** (branch `feat/r4-08-adversarial-review`,
   stacked on the R4-07 branch). Adversarial-review agent (four lenses, severity + evidence-pointer discipline,
   identity-echo harvest) + the `review-findings` artifact (option-b: verdict.json untouched) + verdict-surface
