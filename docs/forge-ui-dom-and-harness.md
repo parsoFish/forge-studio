@@ -104,7 +104,10 @@ inventory rather than one shared page-level contract:
   (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
   dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
-  the `forge-architect` flow monitor. A brand-new project renders
+  the `forge-architect` flow monitor. Every popped initiative card carries
+  `[data-link="demo-builder"]` (R4-07-F3) — switches to the editor tab's Demo
+  Timeline (+ inline builder panel), tying demo upkeep to initiative state.
+  A brand-new project renders
   `ProjectOnboardForm` instead:
   `[data-section="project-onboard"]`, collapsible
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight

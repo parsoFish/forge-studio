@@ -121,6 +121,9 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       'adversarial-review',
       'architect',
       'brain-ingest',
+      // R4-07: the demo agent is a library roster agent — composes it takes
+      // develop output + the demo skill to author demo.json and judge ACs.
+      'demo-agent',
       'developer-ralph',
       'developer-unifier',
       'project-manager',

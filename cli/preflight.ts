@@ -405,7 +405,9 @@ function checkC8(dir: string): ClauseResult {
  * a structural violation the throw is caught and downgraded to an advisory WARN —
  * DEMO is never a hard blocker.
  */
-function checkDemo(dir: string): ClauseResult {
+// Exported for the R4-07 descriptor-parity test (one fixture, three consumers:
+// preflight DEMO clause, demo-builder composition, demo-agent briefing).
+export function checkDemo(dir: string): ClauseResult {
   const base = { clause: 'DEMO' as const, title: 'Demo process declared (.forge/project.json demoProcess)', hard: false };
   const cfgPath = join(dir, '.forge', 'project.json');
   if (!existsSync(cfgPath)) {

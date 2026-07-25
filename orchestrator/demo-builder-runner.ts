@@ -397,8 +397,10 @@ function elementGeneratorLines(els: DemoElementDefinition[]): string[] {
   return out;
 }
 
-/** The task-specific instruction block: per-element iteration, composed, or legacy. */
-function demoTaskLines(args: {
+/** The task-specific instruction block: per-element iteration, composed, or legacy.
+ * Exported (read-only) for the R4-07 descriptor-parity test — the builder and the
+ * demo agent must consume the same demoProcess descriptor in the same step order. */
+export function demoTaskLines(args: {
   status: DemoBuilderStatus;
   target?: string;
   composed: boolean;

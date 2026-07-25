@@ -30,6 +30,7 @@ import { existsSync, readdirSync, mkdirSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import type { FlowDefinition } from './studio/types.ts';
+import type { AcceptanceCriterion } from './work-item.ts';
 import { worktreeDemoRelDir } from './demo-paths.ts';
 
 /** The subset of CycleInput the guard needs to resolve artifact locations. */
@@ -173,6 +174,116 @@ export function writeVerdictJson(
 }
 
 // ---------------------------------------------------------------------------
+// Demo-fix-spec persistence — the `demo-fix-spec` artifact (R4-07-F2)
+//
+// The demo agent's AC-miss judgment: when the demo cannot show an acceptance
+// criterion passing, the agent scopes fix proposals; the pipeline persists them
+// here for the R4-10-F1 shared fix executor (the develop agent) to compile into
+// real work items. Field names deliberately mirror ADR-015's WorkItem
+// (`acceptance_criteria` GWT shape, `files_in_scope`) so that compilation is a
+// mechanical id/kind assignment, not a translation. This artifact is judgment
+// output only — nothing in this module dispatches or enqueues anything.
+// ---------------------------------------------------------------------------
+
+export type DemoFixProposal = {
+  id: string; // 'FIX-1'…
+  /** Verbatim from the demo.json acEvaluations entry that failed. */
+  criterion: string;
+  /** AcEvaluation vocabulary minus 'met' — a met criterion never yields a proposal. */
+  verdict: 'partial' | 'missed';
+  /** Why the demo cannot show the criterion passing. */
+  evidence: string;
+  /** One-line scoped fix mission. */
+  title: string;
+  acceptance_criteria: AcceptanceCriterion[];
+  files_in_scope: string[]; // worktree-relative
+  rationale: string;
+};
+
+export type DemoFixSpecRecord = {
+  initiative_id: string;
+  cycleId: string;
+  /** Worktree-relative path of the demo.json this judgment was made against. */
+  demoJsonPath: string;
+  authoredAt: string;
+  proposals: DemoFixProposal[]; // ≥1 — an all-met demo writes no fix spec at all
+};
+
+export function demoFixSpecJsonPath(logsRoot: string, cycleId: string): string {
+  return resolve(logsRoot, cycleId, 'artifacts', 'demo-fix-spec.json');
+}
+
+const FIX_VERDICTS = ['partial', 'missed'] as const;
+
+function isRecord(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function nonBlank(v: unknown): v is string {
+  return typeof v === 'string' && v.trim().length > 0;
+}
+
+/** Pure shape validation; returns human-readable errors naming the offending field. */
+export function validateDemoFixSpec(raw: unknown): string[] {
+  const errors: string[] = [];
+  if (!isRecord(raw)) return ['demo-fix-spec must be a JSON object'];
+  if (!nonBlank(raw.initiative_id)) errors.push('initiative_id must be a non-empty string');
+  if (!nonBlank(raw.cycleId)) errors.push('cycleId must be a non-empty string');
+  if (!nonBlank(raw.demoJsonPath)) errors.push('demoJsonPath must be a non-empty string');
+  if (!nonBlank(raw.authoredAt)) errors.push('authoredAt must be a non-empty string');
+  if (!Array.isArray(raw.proposals) || raw.proposals.length === 0) {
+    errors.push('proposals must be a non-empty array');
+    return errors;
+  }
+  raw.proposals.forEach((p, i) => {
+    const at = `proposals[${i}]`;
+    if (!isRecord(p)) {
+      errors.push(`${at} must be an object`);
+      return;
+    }
+    if (!nonBlank(p.id)) errors.push(`${at}.id must be a non-empty string`);
+    if (!nonBlank(p.criterion)) errors.push(`${at}.criterion must be a non-empty string`);
+    if (!FIX_VERDICTS.includes(p.verdict as (typeof FIX_VERDICTS)[number])) {
+      errors.push(`${at}.verdict "${String(p.verdict)}" invalid — allowed: partial | missed (never met)`);
+    }
+    if (!nonBlank(p.evidence)) errors.push(`${at}.evidence must be a non-empty string`);
+    if (!nonBlank(p.title)) errors.push(`${at}.title must be a non-empty string`);
+    if (!Array.isArray(p.acceptance_criteria) || p.acceptance_criteria.length === 0) {
+      errors.push(`${at}.acceptance_criteria must be a non-empty array of {given, when, then}`);
+    } else {
+      p.acceptance_criteria.forEach((c, j) => {
+        if (!isRecord(c) || !nonBlank(c.given) || !nonBlank(c.when) || !nonBlank(c.then)) {
+          errors.push(`${at}.acceptance_criteria[${j}] must have non-empty given/when/then`);
+        }
+      });
+    }
+    if (!Array.isArray(p.files_in_scope) || p.files_in_scope.length === 0 || !p.files_in_scope.every(nonBlank)) {
+      errors.push(`${at}.files_in_scope must be a non-empty array of paths`);
+    }
+    if (!nonBlank(p.rationale)) errors.push(`${at}.rationale must be a non-empty string`);
+  });
+  return errors;
+}
+
+/**
+ * Persist the demo-fix-spec artifact. Always overwrites: unlike the verdict
+ * (an operator decision that must never be clobbered), this is agent judgment
+ * output where the latest authoring for the cycle wins — a re-run demo pass
+ * replaces its own earlier proposals. Returns the path written, or null on an
+ * IO error (best-effort durable record, never breaks the pipeline).
+ */
+export function writeDemoFixSpecJson(logsRoot: string, record: DemoFixSpecRecord): string | null {
+  const p = demoFixSpecJsonPath(logsRoot, record.cycleId);
+  try {
+    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
+    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Review-findings persistence — the `review-findings` artifact (R4-08-F1)
 //
 // The adversarial-review agent's critique of the developed diff: severity-
@@ -254,7 +365,7 @@ export function validateReviewFindings(raw: unknown): string[] {
     if (!Array.isArray(f.evidence) || f.evidence.length === 0) {
       errors.push(`${at}.evidence must be a non-empty array of {file, line?, excerpt?} — every claim is pointer-backed`);
     } else {
-      f.evidence.forEach((e, j) => {
+      f.evidence.forEach((e: unknown, j: number) => {
         if (!isObj(e) || blank(e.file)) errors.push(`${at}.evidence[${j}].file must be a non-empty path`);
       });
     }
