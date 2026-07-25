@@ -173,6 +173,113 @@ export function writeVerdictJson(
 }
 
 // ---------------------------------------------------------------------------
+// Review-findings persistence — the `review-findings` artifact (R4-08-F1)
+//
+// The adversarial-review agent's critique of the developed diff: severity-
+// ranked findings with file:line evidence pointers, weighed by the OPERATOR at
+// the verdict gate. Deliberately a separate artifact from verdict.json (the
+// operator's decision record) — agent claims never live inside the decision,
+// and every consumer of the verdict keeps its shape untouched. `headSha`
+// records what was reviewed (the SHA-change guard hook for R4-08-F2's rounds).
+// An empty findings array is an explicit clean pass and is still written.
+// ---------------------------------------------------------------------------
+
+export type ReviewFindingSeverity = 'blocker' | 'major' | 'minor' | 'info';
+
+export type ReviewFindingCategory = 'correctness' | 'regression-risk' | 'contract-fit' | 'convention-drift';
+
+export type ReviewFinding = {
+  id: string; // 'RF-1'…
+  severity: ReviewFindingSeverity;
+  category: ReviewFindingCategory;
+  title: string;
+  detail: string;
+  /** ≥1 — every claim is pointer-backed. */
+  evidence: Array<{ file: string; line?: number; excerpt?: string }>;
+  /** Optional back-reference to the acceptance criterion the finding bears on. */
+  acRef?: string;
+};
+
+export type ReviewFindingsRecord = {
+  initiative_id: string;
+  cycleId: string;
+  baseRef: string;
+  headSha: string;
+  reviewedAt: string;
+  summary: string;
+  findings: ReviewFinding[];
+};
+
+export function reviewFindingsJsonPath(logsRoot: string, cycleId: string): string {
+  return resolve(logsRoot, cycleId, 'artifacts', 'review-findings.json');
+}
+
+const FINDING_SEVERITIES = ['blocker', 'major', 'minor', 'info'] as const;
+const FINDING_CATEGORIES = ['correctness', 'regression-risk', 'contract-fit', 'convention-drift'] as const;
+
+function isObj(v: unknown): v is Record<string, unknown> {
+  return typeof v === 'object' && v !== null && !Array.isArray(v);
+}
+
+function blank(v: unknown): boolean {
+  return typeof v !== 'string' || v.trim().length === 0;
+}
+
+/** Pure shape validation; errors name the offending field and the allowed vocabulary. */
+export function validateReviewFindings(raw: unknown): string[] {
+  const errors: string[] = [];
+  if (!isObj(raw)) return ['review-findings must be a JSON object'];
+  for (const f of ['initiative_id', 'cycleId', 'baseRef', 'headSha', 'reviewedAt', 'summary'] as const) {
+    if (blank(raw[f])) errors.push(`${f} must be a non-empty string`);
+  }
+  if (!Array.isArray(raw.findings)) {
+    errors.push('findings must be an array ([] = an explicit clean pass)');
+    return errors;
+  }
+  raw.findings.forEach((f, i) => {
+    const at = `findings[${i}]`;
+    if (!isObj(f)) {
+      errors.push(`${at} must be an object`);
+      return;
+    }
+    if (blank(f.id)) errors.push(`${at}.id must be a non-empty string`);
+    if (!FINDING_SEVERITIES.includes(f.severity as (typeof FINDING_SEVERITIES)[number])) {
+      errors.push(`${at}.severity "${String(f.severity)}" invalid — allowed: ${FINDING_SEVERITIES.join(' | ')}`);
+    }
+    if (!FINDING_CATEGORIES.includes(f.category as (typeof FINDING_CATEGORIES)[number])) {
+      errors.push(`${at}.category "${String(f.category)}" invalid — allowed: ${FINDING_CATEGORIES.join(' | ')}`);
+    }
+    if (blank(f.title)) errors.push(`${at}.title must be a non-empty string`);
+    if (blank(f.detail)) errors.push(`${at}.detail must be a non-empty string`);
+    if (!Array.isArray(f.evidence) || f.evidence.length === 0) {
+      errors.push(`${at}.evidence must be a non-empty array of {file, line?, excerpt?} — every claim is pointer-backed`);
+    } else {
+      f.evidence.forEach((e, j) => {
+        if (!isObj(e) || blank(e.file)) errors.push(`${at}.evidence[${j}].file must be a non-empty path`);
+      });
+    }
+  });
+  return errors;
+}
+
+/**
+ * Persist the review-findings artifact. Always overwrites: agent judgment
+ * output where the latest pass for the cycle wins (unlike the verdict, an
+ * operator decision that is never clobbered). Returns the path written, or
+ * null on an IO error — best-effort durable record, never breaks the cycle.
+ */
+export function writeReviewFindingsJson(logsRoot: string, record: ReviewFindingsRecord): string | null {
+  const p = reviewFindingsJsonPath(logsRoot, record.cycleId);
+  try {
+    mkdirSync(resolve(logsRoot, record.cycleId, 'artifacts'), { recursive: true });
+    writeFileSync(p, JSON.stringify(record, null, 2) + '\n', 'utf8');
+    return p;
+  } catch {
+    return null;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Release persistence — the `release` terminal record (WS-A · final-loop)
 // ---------------------------------------------------------------------------
 
