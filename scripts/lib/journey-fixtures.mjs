@@ -598,6 +598,40 @@ export function writeDemoJson(revision) {
   ].join('\n'));
 }
 
+/**
+ * R4-08-F3: the adversarial-review findings artifact beside the demo evidence.
+ * Mirrors what the real critique pipeline persists (orchestrator/phases/
+ * adversarial-review.ts → _logs/<cycleId>/artifacts/review-findings.json) —
+ * grounded in the same mdtoc --write story the demo.json fixture tells:
+ * round 1 carries one major contract-fit finding on the idempotency AC (the
+ * same gap the operator sends back on); round 2 is an explicit clean pass.
+ */
+export function writeReviewFindings(revision) {
+  const artifacts = join(CYCLE_LOG, 'artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(join(artifacts, 'review-findings.json'), JSON.stringify({
+    initiative_id: INIT,
+    cycleId: CYCLE_ID,
+    baseRef: 'main',
+    headSha: revision > 1 ? 'c9d2f1b' : 'b7c4e9a',
+    reviewedAt: '2026-07-16T03:24:00.000Z',
+    summary: revision > 1
+      ? 'Clean pass — the trailing-newline drift is fixed and asserted across consecutive writes; no correctness or regression findings against the round-2 diff.'
+      : 'One major contract-fit finding: the idempotency AC is only partially demonstrable — the second --write pass drifts a trailing newline, so the demo cannot show byte-identical re-runs.',
+    findings: revision > 1 ? [] : [
+      {
+        id: 'RF-1',
+        severity: 'major',
+        category: 'contract-fit',
+        title: 'idempotency AC not byte-identical on the second --write pass',
+        detail: 'injectToc appends a trailing newline when the marker region ends the file, so the 2nd write produces a one-line diff — the AC promises no diff on every re-run.',
+        evidence: [{ file: 'src/inject.ts', line: 31, excerpt: "out.push('') // trailing newline appended unconditionally" }],
+        acRef: 'idempotency: re-running --write on a current doc produces no diff',
+      },
+    ],
+  }, null, 2) + '\n');
+}
+
 /** Reflector stage-2 emit: operator-facing questions for the reflect screen.
  *  S8: the deeper retrospective — beyond WI sizing, the reflector now surfaces
  *  repeated actions / roadblocks it found in the cycle log + a general-notes

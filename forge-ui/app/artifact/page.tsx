@@ -41,7 +41,8 @@ import { GateBar, type GateState } from '@/components/studio/artifact/GateBar';
 import { PlanRenderer, type PlanDoc } from '@/components/studio/artifact/PlanRenderer';
 import { WorkItemsRenderer, type WorkItemEntry } from '@/components/studio/artifact/WorkItemsRenderer';
 import { PrRenderer, type PrDoc } from '@/components/studio/artifact/PrRenderer';
-import { VerdictRenderer, type VerdictDoc } from '@/components/studio/artifact/VerdictRenderer';
+import { VerdictRenderer, verdictRecordToDoc, type VerdictDoc } from '@/components/studio/artifact/VerdictRenderer';
+import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
 import { ReflectionRenderer, type ReflectionDoc } from '@/components/studio/artifact/ReflectionRenderer';
 import { ReflectionGate } from '@/components/studio/artifact/ReflectionGate';
 import { DemoComparison } from '@/components/DemoComparison';
@@ -219,7 +220,10 @@ async function fetchArtifactDoc(
     }
 
     if (type === 'verdict') {
-      const verdictJson = await fetchJsonArtifact<VerdictDoc>(runId, 'verdict.json');
+      // The on-disk shape is VerdictRecord ({kind, decidedBy, rationale}) —
+      // map it onto the renderer's VerdictDoc (fixes the always-"Approved"
+      // view-mode stamp, R4-08-F3).
+      const verdictJson = verdictRecordToDoc(await fetchJsonArtifact<unknown>(runId, 'verdict.json'));
       if (verdictJson) return { type: 'verdict', doc: verdictJson };
       // In gate mode the verdict doesn't exist yet (it's being authored).
       // Return empty so gate-mode path shows the form unconditionally.
@@ -417,6 +421,8 @@ function ArtifactPageInner() {
   const [verdictDoc, setVerdictDoc] = useState<VerdictDoc | null>(null);
   // For verdict gate-mode: the demo evidence shown above the verdict form
   const [demoModel,  setDemoModel]  = useState<DemoModel | null>(null);
+  // R4-08-F3: adversarial-review findings for the verdict surface (both modes).
+  const [reviewFindings, setReviewFindings] = useState<ReviewFindingsDoc | null>(null);
   // For plan gate-mode via an architect session (runId = '_architect-<sessionId>')
   const [archSession, setArchSession] = useState<ArchitectSessionSummary | null>(null);
   // For reflection: the live Stage-2 questions (user-questions.json) the operator answers.
@@ -488,8 +494,16 @@ function ArtifactPageInner() {
 
       // Also fetch verdict doc for view-mode stamp (when type != verdict)
       if (type !== 'verdict' && effectiveMode !== 'gate') {
-        const vd = await fetchJsonArtifact<VerdictDoc>(runId, 'verdict.json');
+        const vd = verdictRecordToDoc(await fetchJsonArtifact<unknown>(runId, 'verdict.json'));
         if (!signal.cancelled) setVerdictDoc(vd);
+      }
+
+      // R4-08-F3: the adversarial-review findings render beside the demo
+      // evidence in BOTH verdict modes. Absent artifact (pre-R4-10 cycles)
+      // ⇒ null ⇒ the panel renders nothing.
+      if (type === 'verdict') {
+        const rf = await fetchJsonArtifact<ReviewFindingsDoc>(runId, 'review-findings.json');
+        if (!signal.cancelled) setReviewFindings(rf);
       }
     } catch {
       // keep defaults — reach page-ready on error
@@ -693,6 +707,9 @@ function ArtifactPageInner() {
                   yet — we're authoring it). */}
               {type === 'verdict' && isGateMode && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  {/* R4-08-F3: findings above the evidence — the operator weighs
+                      the critique before deciding. Claims only; never a gate. */}
+                  <ReviewFindingsPanel doc={reviewFindings} />
                   {demoModel ? (
                     <>
                       {/* Structured evidence (harness: data-section="demo-comparison"/"demo-evaluation"). */}
@@ -869,7 +886,10 @@ function ArtifactPageInner() {
               )}
 
               {artifact && artifact.type === 'verdict' && !isGateMode && (
-                <VerdictRenderer doc={artifact.doc} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                  <ReviewFindingsPanel doc={reviewFindings} />
+                  <VerdictRenderer doc={artifact.doc} />
+                </div>
               )}
 
               {/* Reflection: the interactive question gate (the third human
