@@ -277,7 +277,49 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-02 Project onboarding agent
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **in-progress** — F1/F2/F3 implemented (2026-07-26, wave-4 tail,
+  branch `feat/r4-02-onboarding-agent`); **F4/F5 deferred** to a stacked
+  follow-up (re-entry condition: F1–F3 merged — the onboarding agent def + the
+  convergence loop they extend are the substrate F4's seed-authoring and F5's
+  constraint-tagging hang off).  ·  **Wave:** 4
+- **Implemented-notes (F1–F3, 2026-07-26):**
+  - **F1 — built.** `skills/onboarding-agent/SKILL.md` — a non-interactive
+    (`surface: operator-triggered`, `phase: onboarding`, `library: true`)
+    studio agent with Bash/Read/Grep/Glob/Edit/Write, composing the
+    `forge-onboard-project` playbook. Auto-appears in `listAgentDefinitions`
+    and is **dispatchable through the R2-01-F3 generic run host with zero new
+    dispatch plumbing** (PR #57). **Both entry points reach the same runner**
+    (`dispatchAgentRun` → `POST /api/agents/onboarding-agent/run`): the agent
+    page `RunPanel` (now with a generic `key: value` inputs surface —
+    `data-run-inputs` — carrying `{repo, northStar}`) and the `/projects`
+    `OnboardWithAgent` block (`data-section="onboard-with-agent"`,
+    `data-action="run-onboarding-agent"`). Events/cost visible via the F1
+    `GET /api/agents/runs/:runId` poll. Roster snapshot updated (11 agents).
+  - **F2 — built.** `cli/contract-compliance-loop.ts`
+    `runContractComplianceLoop` — a **deterministic, bounded, orchestrator-
+    authored** preflight→auto-fix→re-check convergence loop, exposed as
+    `forge preflight converge --project <p> [--accept <clause>=<rationale>]`
+    (writes `<project>/.forge/contract-compliance-report.json`, exits 0 iff
+    hard-green). The authoritative "contract-green" signal is
+    `runPreflight().ok` computed HERE, never the agent's claim (closes the
+    recurring declared-data-fails-open trap); a full per-clause disposition
+    ledger (`passed`/`fixed`/`accepted`/`failed`) makes it never-silent. Reuses
+    `applyPreflightAutoFixes` (C2/ARTIFACTS/C4) + the exported `AUTO_ORDER`.
+    AC proven by a hermetic broken-fixture test reaching hard-green unattended.
+  - **F3 — built.** The onboard create route (`cli/bridge-studio-writes.ts`)
+    now sets `project.json.kb = <id>` — provably the seeded KB id
+    (`buildKbYaml` binds `id`/`ref` to the project id; a fresh create carries
+    no divergent kb.yaml). Closes known-gaps §4.3(a)/(d): ContractReadiness
+    shows a **bound KB** on a fresh onboard. Tested in `bridge-studio-write.test.ts`.
+- **Deferred (re-enter as `planned` when F1–F3 merge):**
+  - **F4 Instructions check** — unattended AGENTS.md authoring from the R3-05
+    seed library (matchInstructionSeeds), gate-declared-before-authoring
+    ordering, passing R1-04's C8 coverage path. (Advisory clause C8; the loop
+    reaches HARD-green without it.)
+  - **F5 profile.md constraint tagging** — onboarding authors live
+    `<!-- forge:constraint applies_to:.. -->` blocks into central profile.md
+    (ADR-037 input R4-05-F3 consumes). (Advisory; loud-parse hazard — validate
+    authored blocks at write time.)
 - **Depends on:** R3-05 (instructions sourcing), R1-03/R1-04 (contract process
   clauses to tick), R1-01 (KB binding at onboarding), R2-01 (standalone runnable)
 - **Context:** Operator diagram (verbatim intent): tailored to onboarding an
