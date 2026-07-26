@@ -31,7 +31,12 @@ import {
 const DEFAULT_MAX_ITERATIONS = 6;
 const AUTO_FIXABLE = new Set<ClauseId>(AUTO_ORDER);
 
-export type ComplianceStopReason = 'converged' | 'no-progress' | 'max-iterations' | 'unfixable-hard-clause';
+export type ComplianceStopReason =
+  | 'converged'
+  | 'advisory-undispositioned' // hard-green reached, but an advisory clause was left neither fixed nor accepted
+  | 'no-progress'
+  | 'max-iterations'
+  | 'unfixable-hard-clause';
 
 /** Per-clause final outcome. `fixed` = failing at the start, passing at the end
  *  via the loop; `accepted` = an advisory clause the caller explicitly waived
@@ -149,11 +154,14 @@ function resolveStopReason(args: {
   maxIterations: number;
 }): ComplianceStopReason {
   if (args.converged) return 'converged';
+  // Hard-green reached, but the caller left an advisory clause un-accepted —
+  // real progress, not a stall; must not read as 'no-progress'.
+  if (args.finalHardGreen) return 'advisory-undispositioned';
   // A HARD clause with no deterministic fixer is unfixable by this loop.
   const unfixableHard = args.dispositions.some(
     (d) => d.hard && d.outcome === 'failed' && !AUTO_FIXABLE.has(d.clause),
   );
-  if (!args.finalHardGreen && unfixableHard) return 'unfixable-hard-clause';
-  if (!args.finalHardGreen && args.iterations.length >= args.maxIterations) return 'max-iterations';
+  if (unfixableHard) return 'unfixable-hard-clause';
+  if (args.iterations.length >= args.maxIterations) return 'max-iterations';
   return 'no-progress';
 }

@@ -12,7 +12,23 @@
  */
 import { test, expect } from 'vitest';
 
-import { parseCapability, buildTriggerDeclaration, isValidCronSchedule } from './studio-client';
+import { parseCapability, buildTriggerDeclaration, isValidCronSchedule, parseRunInputs } from './studio-client';
+
+test('parseRunInputs: one key:value per line → inputs map; blanks ignored', () => {
+  expect(parseRunInputs('repo: ./projects/foo\nnorthStar: ship X\n\n')).toEqual({
+    repo: './projects/foo',
+    northStar: 'ship X',
+  });
+});
+
+test('parseRunInputs: the FIRST colon splits, so a value may contain colons (a URL)', () => {
+  expect(parseRunInputs('repo: https://github.com/x/y')).toEqual({ repo: 'https://github.com/x/y' });
+});
+
+test('parseRunInputs: a line with no colon (or empty key) is skipped, no throw', () => {
+  expect(parseRunInputs('novalue\n: orphan\nok: yes')).toEqual({ ok: 'yes' });
+  expect(parseRunInputs('')).toEqual({});
+});
 
 test('parseCapability: a well-formed descriptor is carried through verbatim', () => {
   expect(parseCapability({ interactive: true, runtimeSdks: ['claude-code'], fanoutCapable: true }))

@@ -32,6 +32,7 @@ import {
   saveAgent,
   dispatchAgentRun,
   getAgentRunStatus,
+  parseRunInputs,
   type Agent,
   type AgentCapabilityDescriptor,
   type AgentRunStatus,
@@ -597,23 +598,6 @@ const RUN_PANEL_STYLE: CSSProperties = {
   padding: '12px 14px',
   marginTop: 12,
 };
-
-/** Parse the RunPanel inputs textarea — one `key: value` per line — into the
- *  flat inputs map the generic run host accepts. Blank lines are ignored; the
- *  first ':' splits key from value (so a value may itself contain ':' / a URL). */
-function parseRunInputs(text: string): Record<string, string> {
-  const out: Record<string, string> = {};
-  for (const line of text.split('\n')) {
-    const t = line.trim();
-    if (!t) continue;
-    const eq = t.indexOf(':');
-    if (eq <= 0) continue;
-    const key = t.slice(0, eq).trim();
-    const value = t.slice(eq + 1).trim();
-    if (key) out[key] = value;
-  }
-  return out;
-}
 
 function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: boolean; canRun: boolean }) {
   const [project, setProject] = useState('');

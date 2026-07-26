@@ -485,6 +485,34 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 400, { error: 'repo path escapes the forge root' }, origin); return true;
       }
 
+      // Create the project + .forge dir up front so the artifact/brain scaffolds
+      // below (git init, roadmap.md, project.json) have a directory to write into.
+      const forgeDir = resolve(projectRoot, '.forge');
+      if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
+
+      // B3: scaffold the C4 artifacts the architect/PM need so a freshly
+      // onboarded project is preflight-green (or at least clear about what is
+      // missing). All writes are idempotent — never clobber an existing
+      // operator file, and the stubs are clearly marked as TODO scaffolding.
+      const scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
+
+      // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
+      // profile.md + themes/) so the KB pillar — and the C4 preflight clause,
+      // which requires the central profile.md — are never empty for a
+      // freshly onboarded project. Idempotent per file (never clobbers an
+      // operator-authored brain). Seeded BEFORE project.json so the KB binding
+      // below can only point at a KB that provably exists on disk (R4-02-F3
+      // review fix — a bound-on-field-presence signal would fail open).
+      const brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
+
+      // R4-02-F3: bind the project to its central KB — but ONLY if the seeded
+      // kb.yaml is genuinely on disk (buildKbYaml binds it to id === this
+      // project id; a fresh create rejected a duplicate id above, so no
+      // divergent pre-existing kb.yaml). If the seed somehow didn't land the
+      // KB, leave the binding null rather than advertise a non-existent KB.
+      // Closes known-gaps §4.3(a)/(d): ContractReadiness shows a real bound KB.
+      const kbBound = existsSync(join(brainSeed.brainDir, 'kb.yaml')) ? id : null;
+
       // Scaffold the .forge/project.json (validated before write).
       const cfg: Record<string, unknown> = {
         name,
@@ -500,33 +528,13 @@ export async function handleStudioWriteRoutes(
         // fields (flat keys are rejected by the validator). The legacy `demo`
         // block (shape/command) had no reader and is no longer scaffolded.
         testProcess: { local: { cmd: qualityGate } },
-        // R4-02-F3: bind the project to its central KB at onboard. seedProjectBrain
-        // (below) deterministically creates brain/projects/<id>/kb.yaml with id ===
-        // this project id (buildKbYaml), and a fresh create can carry no divergent
-        // pre-existing kb.yaml (a duplicate id was rejected above) — so the binding
-        // is provably this id. Closes known-gaps §4.3(a)/(d): ContractReadiness now
-        // shows a BOUND KB on a fresh onboard instead of an unbound gap.
-        kb: id,
+        kb: kbBound,
       };
       try { validateProjectConfig(cfg); }
       catch (err) { sendJson(res, 400, { error: String(err) }, origin); return true; }
 
-      const forgeDir = resolve(projectRoot, '.forge');
-      if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
       writeFileSync(resolve(forgeDir, 'project.json'), JSON.stringify(cfg, null, 2), 'utf8');
 
-      // B3: scaffold the C4 artifacts the architect/PM need so a freshly
-      // onboarded project is preflight-green (or at least clear about what is
-      // missing). All writes are idempotent — never clobber an existing
-      // operator file, and the stubs are clearly marked as TODO scaffolding.
-      const scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
-
-      // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
-      // profile.md + themes/) so the KB pillar — and the C4 preflight clause,
-      // which requires the central profile.md — are never empty for a
-      // freshly onboarded project. Idempotent per file (never clobbers an
-      // operator-authored brain).
-      const brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
       const scaffolded = [
         ...scaffoldedLocal,
         ...brainSeed.files.filter((f) => f.action === 'created').map((f) => f.path),

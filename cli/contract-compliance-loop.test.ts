@@ -14,7 +14,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runContractComplianceLoop } from './contract-compliance-loop.ts';
+import { runContractComplianceLoop, formatComplianceReport } from './contract-compliance-loop.ts';
 import type { ClauseId, ClauseResult, PreflightReport } from './preflight.ts';
 import type { PreflightAutoFixResult } from './preflight-fix-auto.ts';
 
@@ -104,6 +104,7 @@ test('advisory clause left un-accepted → hard-green but NOT converged (surface
   });
   assert.equal(out.finalHardGreen, true);
   assert.equal(out.converged, false, 'an un-dispositioned advisory clause blocks convergence');
+  assert.equal(out.stopReason, 'advisory-undispositioned', 'hard-green with an open advisory is not "no-progress"');
   assert.equal(out.dispositions.find((d) => d.clause === 'C8')?.outcome, 'failed');
 });
 
@@ -118,6 +119,26 @@ test('advisory clause explicitly accepted with a rationale → converged', () =>
   const c8 = out.dispositions.find((d) => d.clause === 'C8');
   assert.equal(c8?.outcome, 'accepted');
   assert.match(c8?.detail ?? '', /README covers it/);
+});
+
+// ---------------------------------------------------------------------------
+// formatComplianceReport — the "operator-readable, never silent" AC half
+// ---------------------------------------------------------------------------
+
+test('formatComplianceReport: names every clause + its outcome + the terminal reason', () => {
+  const failing = report([clause('C1', true, true), clause('C2', false, true), clause('C8', false, false)]);
+  const fixed = report([clause('C1', true, true), clause('C2', true, true), clause('C8', false, false)]);
+  const out = runContractComplianceLoop({
+    projectDir: '/x', forgeRoot: '/f',
+    acceptAdvisory: { C8: 'README covers agent guidance' },
+    deps: { runPreflight: seqPreflight([failing, fixed, fixed]), applyPreflightAutoFixes: autoFixStub(['C2']) },
+  });
+  const text = formatComplianceReport(out);
+  // Every clause is named — nothing silently omitted.
+  for (const c of ['C1', 'C2', 'C8']) assert.match(text, new RegExp(c));
+  assert.match(text, /fixed/);    // C2 was fixed
+  assert.match(text, /accepted/); // C8 was accepted
+  assert.match(text, /stop: converged/);
 });
 
 // ---------------------------------------------------------------------------

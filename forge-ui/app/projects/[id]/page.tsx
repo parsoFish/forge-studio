@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, createProject, fetchPreflight, dispatchAgentRun,
+  saveProject, createProject, fetchPreflight, dispatchAgentRun, getAgentRunStatus,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
-  type FailingClause,
+  type FailingClause, type AgentRunStatus,
 } from '@/lib/studio-client';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
@@ -443,12 +443,33 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 
 function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
+  const [status, setStatus] = useState<AgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Poll the dispatched run inline so events/cost are visible from the /projects
+  // entry point too (F1 AC), not only the agent page. Bounded like RunPanel.
+  useEffect(() => {
+    if (!runId) return;
+    let active = true;
+    let attempts = 0;
+    const poll = async (): Promise<string> => {
+      const s = await getAgentRunStatus(runId);
+      if (active) setStatus(s);
+      return s.state;
+    };
+    void poll();
+    const id = setInterval(() => {
+      attempts += 1;
+      void poll().then((st) => { if (st !== 'running' || attempts >= 90) clearInterval(id); });
+    }, 2000);
+    return () => { active = false; clearInterval(id); };
+  }, [runId]);
 
   const onRun = async () => {
     setBusy(true);
     setError(null);
+    setStatus(null);
     try {
       const r = await dispatchAgentRun('onboarding-agent', { project: projectId });
       if (r.ok && r.runId) setRunId(r.runId);
@@ -458,10 +479,13 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
     }
   };
 
+  const runState = status?.state ?? (runId ? 'running' : 'idle');
+
   return (
     <section
       data-section="onboard-with-agent"
       data-onboard-run-id={runId ?? ''}
+      data-onboard-run-status={runState}
       style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px', marginTop: 12 }}
     >
       <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Onboarding agent</h3>
@@ -480,8 +504,11 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
       {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
       {runId && (
         <div style={{ marginTop: 8, fontSize: 12 }}>
-          dispatched <code>{runId}</code> —{' '}
-          <a href="/agents/onboarding-agent">watch on the agent page</a>
+          <div>run <code>{runId}</code> — <a href="/agents/onboarding-agent">agent page</a></div>
+          <div>
+            status: <strong>{runState}</strong>
+            {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
+          </div>
         </div>
       )}
     </section>

@@ -715,32 +715,58 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
  *  `<project>/.forge/contract-compliance-report.json`; exits 0 iff hard-green.
  */
 function cmdPreflightConverge(rest: string[]): void {
+  // A valued flag's argument is never mistaken for another flag: return the
+  // next token only when it isn't itself a `--flag`.
   const flag = (name: string): string | undefined => {
     const i = rest.indexOf(`--${name}`);
-    return i >= 0 ? rest[i + 1] : undefined;
+    const v = i >= 0 ? rest[i + 1] : undefined;
+    return v !== undefined && !v.startsWith('--') ? v : undefined;
   };
-  const project = flag('project') ?? rest.find((a) => !a.startsWith('--'));
+  // A positional project is accepted ONLY as the first token (so it can never
+  // be a preceding flag's value, e.g. `--max-iterations 3 foo` → not '3').
+  const project = flag('project') ?? (rest[0] && !rest[0].startsWith('--') ? rest[0] : undefined);
+  // Validate ALL flags BEFORE touching the filesystem (project resolution),
+  // so a malformed invocation errors cleanly regardless of whether the project
+  // exists.
+  // `--accept C8=rationale` may repeat. The rationale must be non-empty — the
+  // loop only counts an advisory as accepted WITH a rationale, so `--accept C8=`
+  // would otherwise pass the boundary yet silently not waive the clause.
+  const acceptAdvisory: Record<string, string> = {};
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--accept') {
+      const kv = rest[i + 1] ?? '';
+      const eq = kv.indexOf('=');
+      if (eq <= 0 || kv.slice(eq + 1).trim() === '') {
+        console.error(`forge preflight converge: --accept expects <clause>=<non-empty rationale>, got ${JSON.stringify(kv)}`);
+        process.exit(2);
+        return;
+      }
+      acceptAdvisory[kv.slice(0, eq)] = kv.slice(eq + 1);
+    }
+  }
+  const maxRaw = flag('max-iterations');
+  let maxIterations: number | undefined;
+  if (maxRaw !== undefined) {
+    // Number() (not parseInt) so a typo like "3x" → NaN is rejected, not
+    // silently truncated to 3.
+    const n = Number(maxRaw);
+    if (!Number.isInteger(n) || n < 1) {
+      console.error(`forge preflight converge: --max-iterations expects a positive integer, got ${JSON.stringify(maxRaw)}`);
+      process.exit(2);
+      return;
+    }
+    maxIterations = n;
+  }
   if (!project) {
     console.error('forge preflight converge: requires --project <name> [--accept <clause>=<rationale>] [--max-iterations N]');
     process.exit(2);
     return;
   }
   const projectDir = resolvePreflightProjectDir(project);
-  // `--accept C8=rationale` may repeat.
-  const acceptAdvisory: Record<string, string> = {};
-  for (let i = 0; i < rest.length; i++) {
-    if (rest[i] === '--accept') {
-      const kv = rest[i + 1] ?? '';
-      const eq = kv.indexOf('=');
-      if (eq <= 0) { console.error(`forge preflight converge: --accept expects <clause>=<rationale>, got ${JSON.stringify(kv)}`); process.exit(2); return; }
-      acceptAdvisory[kv.slice(0, eq)] = kv.slice(eq + 1);
-    }
-  }
-  const maxRaw = flag('max-iterations');
   const report = runContractComplianceLoop({
     projectDir,
     forgeRoot: FORGE_ROOT,
-    ...(maxRaw ? { maxIterations: Number(maxRaw) } : {}),
+    ...(maxIterations !== undefined ? { maxIterations } : {}),
     acceptAdvisory: acceptAdvisory as Parameters<typeof runContractComplianceLoop>[0]['acceptAdvisory'],
   });
   console.log(formatComplianceReport(report));
