@@ -119,7 +119,34 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
 
 ### R1-04 Project contract: instructions + release + build processes
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **F1–F4 implemented** (2026-07-26, wave-4 closeout, branch
+  `feat/r1-04-contract-processes`)  ·  **Wave:** 4
+- **Implemented-notes (2026-07-26 — reconciled against a stale baseline: the
+  typed `releaseProcess` + finalizer consumption were ALREADY built as the
+  MVUS/WS-A release seam, so F2's "typed steps" half was as-built; the
+  `docs|changelog|version` model supersedes the roadmap's stale
+  `notes|cd|validation` proposal):**
+  - **F1 — built.** `checkC8` gains a COVERAGE check beyond presence: the
+    instruction file must mention the declared quality-gate command
+    (`mentionsCommand` — whole command or head token). A miss is advisory and
+    routes to the instructions agent (edit mode) via the existing
+    `preflight-resolve` C8→instructions mapping — no new clause id / routing.
+  - **F2 — built.** The documented-but-uncoded **C10** preflight clause: when
+    `releaseProcess` is declared, assert each declared substrate
+    (`changelogPath`/`versionFile`/`docsDir`) exists + a `changelog`/`version`
+    step has its path. Closes the doc-vs-code drift (C10 was prose-only). The
+    typed steps + `releaseFinalizeSteps`/`releaseDraftAcs` consumption were
+    already as-built.
+  - **F3 — built.** New typed `buildProcess {local, remote}` in project-config
+    (fail-closed parse, path-traversal-guarded), distinct from `testProcess`;
+    new advisory **BUILD** clause (declared `remote` workflow must exist;
+    inferable-but-undeclared build nudges). **ARTIFACTS kept a SEPARATE clause**
+    (not folded into BUILD) to preserve its `.gitignore`-append auto-fix; the
+    two are grouped under "build" in the doc.
+  - **F4 — built.** Contract doc: process-vocabulary map (6 processes → clause
+    ids, ids stay anchors), C8 coverage + C10 substrate + a new BUILD section,
+    enforcement table + betterADO worked-example rows regenerated; the
+    `forge-onboard-project` skill Face-B list re-pointed.
 - **Depends on:** R1-03 (shape — reuses the typed-process pattern F1 establishes)
 - **Depended on by:** R4-02/R4-03 (onboarding/creation agents scaffold these processes) · R4-05 (soft — plan agent reads them as planning inputs)
 - **Context:** The remaining three diagram clauses: **instructions check**, **release process** ("release communications/notes, CD, validation"), **build process** ("local and remote/CI"). As-built: instructions = Face-A field + advisory C8 + the Stage-A creator; release = C10 advisory + `releaseProcess` opt-in + release-finalizer (MVUS phase 4); build = conflated with the test gate (R1-B7). Sources: operator diagram; ADR-034 §2; `docs/forge-project-contract.md` C8/C10; MVUS (`docs/product/minimum-viable-user-story.md`) phase 4; memory "bridge real-agent surfaces" (finalize is a real-agent path — R5-01's dry-bridge must cover whatever this initiative adds).
