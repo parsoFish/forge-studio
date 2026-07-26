@@ -124,9 +124,13 @@ inventory rather than one shared page-level contract:
   a `runtime` check sourced from the server-computed F1 capability descriptor,
   never re-derived client-side). The descriptor's `interactive` fact also
   surfaces as its own informational (non-gating) chip,
-  `[data-capability-interactive]`. `/agents/new` shows the curated starter
-  picker first (`[data-section="starter-picker"]`, per-option
-  `[data-starter-option]`).
+  `[data-capability-interactive]`. A saved **non-interactive** agent gets a run
+  surface (R2-01-F3 generic run host): `[data-section="agent-run"]` with
+  `[data-run-dispatchable]` (`false` for interactive agents — they keep their
+  bespoke session page), a `[data-action="run-agent"]` button, and after
+  dispatch `[data-run-id][data-run-status][data-run-cost]` reflecting the polled
+  `GET /api/agents/runs/:runId`. `/agents/new` shows the curated starter picker
+  first (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
 - **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
   just redirects to the first registered project
   (`[data-page="projects-index"]` while empty/loading). The project page is

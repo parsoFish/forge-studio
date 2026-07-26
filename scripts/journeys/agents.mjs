@@ -332,7 +332,7 @@ export const journey = defineJourney({
       {
         id: 'agents-builder',
         title: 'Agent builder — /agents/project-manager',
-        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract hook, a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
+        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract hook, a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. Because it is unattended, the agent also carries a generic run surface (R2-01-F3): it dispatches standalone straight from the agent page — no flow required — the runnable primitive reaching the UI. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────
@@ -400,6 +400,32 @@ export const journey = defineJourney({
                     `agent-builder: [data-capability-interactive] reflects the descriptor's interactive fact — project-manager is unattended (got "${capabilityInteractive}")`,
                   );
                   await frame(page, 'a3-0-agent-builder', 'A3 — agent builder: catalog, drop zones, runtime, readiness panel');
+                  // R2-01-F3: a saved non-interactive agent gets the generic run
+                  // surface (interactive agents keep their bespoke session page).
+                  // project-manager is unattended + already on disk, so it's
+                  // dispatchable straight from the agent page.
+                  const runDispatchable = await page.evaluate(() =>
+                    document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
+                  check(runDispatchable === 'true',
+                    `agent-builder (R2-01-F3): the saved unattended agent shows a dispatchable run surface (got "${runDispatchable}")`);
+                  // Drive the dispatch entry point. Under the demo's no-spawn seam the
+                  // bridge returns a runId + skip marker — the agent turn itself is
+                  // stubbed — which is exactly enough to prove the agent page reaches
+                  // the generic runner (R4-02-F1's "both entry points reach the same
+                  // runner"). The real agent run only happens off the no-spawn seam.
+                  await page.locator('[data-action="run-agent"]').click().catch(() => {});
+                  let genRunId = '';
+                  try {
+                    await page.waitForFunction(
+                      () => (document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-id') ?? '').length > 0,
+                      null, { timeout: 8000 },
+                    );
+                    genRunId = await page.evaluate(() =>
+                      document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-id') ?? '');
+                  } catch { /* dispatch did not surface a runId in time */ }
+                  check(genRunId.length > 0,
+                    `agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got "${genRunId}")`);
+                  await frame(page, 'a3-0b-agent-run', 'A3 — a saved unattended agent runs standalone from the agent page (R2-01-F3 generic run host; turn stubbed under the demo no-spawn seam)');
                   // Dirty-flag → SAVE (not discard): edit the purpose field, save, and
                   // prove the edit round-trips onto the REAL SKILL.md on disk.
                   // #process-input, not #purpose-input: process-field edits provably
