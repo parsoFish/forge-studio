@@ -4,7 +4,7 @@ title: TypeScript / Node conventions
 kind: language
 appliesTo: [typescript, node, javascript]
 scope: both
-provenance: "forge's own CLAUDE.md + global code-style rules; corroborated by the managed-project instruction corpora projects/mdtoc/CLAUDE.md and projects/gitpulse/CLAUDE.md"
+provenance: "forge's own CLAUDE.md + global code-style rules; corroborated by projects/mdtoc/CLAUDE.md and the gitpulse corpus (brain/projects/gitpulse/ + github.com/parsoFish/gitpulse)"
 ---
 
 ## TypeScript / Node conventions
@@ -25,6 +25,7 @@ Distilled from forge's own toolchain and the managed TypeScript CLIs it builds.
   scripts and CI config; state the exact `npm run build` / `npm test`
   invocations. A single, deterministic, creds-free test command is the quality
   gate.
-- **Types are the contract.** `tsc --noEmit` is authoritative — a runtime that
-  strips types (e.g. `--experimental-strip-types`, `tsx`) does NOT typecheck, so
-  a green test run is not proof of a clean build.
+- **Types are the contract.** The `tsc` build is the authoritative typecheck — a
+  runtime that strips types (e.g. `--experimental-strip-types`, `tsx`) does NOT
+  typecheck, so a green test run under it is not proof of a clean build. Run the
+  real `tsc` (build or `--noEmit`) as its own gate.

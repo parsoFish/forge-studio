@@ -4,7 +4,7 @@ title: Go Terraform-provider conventions
 kind: domain
 appliesTo: [go, terraform-provider, terraform]
 scope: project
-provenance: "projects/terraform-provider-betterado/AGENTS.md (proven across the betterado SDKv2→plugin-framework migration + release-pipeline cycles; see brain/projects/betterado/themes)"
+provenance: "brain/projects/terraform-provider-betterado/themes/ + the project's own AGENTS.md (github.com/parsoFish/terraform-provider-betterado) — proven across the SDKv2→plugin-framework migration + release-pipeline cycles"
 ---
 
 ## Go Terraform-provider conventions

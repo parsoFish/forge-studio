@@ -166,17 +166,20 @@ export async function runInstructionsTurn(
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
 
   // R3-05-F3: match the library's instruction seeds to this project's detected
-  // shape/language once per turn (empty ⇒ from-scratch fallback). Best-effort —
-  // a broken/absent library must never block authoring AGENTS.md.
+  // shape/language (empty ⇒ from-scratch fallback). Best-effort — a broken/absent
+  // library must never block authoring AGENTS.md. Only computed for the phases
+  // that consume it (interview + draft); terminal/waiting turns skip the fs reads.
   let matchedSeeds: InstructionSeed[] = [];
-  try {
-    const seedsRoot = input.forgeRoot ?? resolve('.');
-    matchedSeeds = matchInstructionSeeds(
-      listInstructionSeeds(seedsRoot),
-      detectProjectTags(status.project_repo_path),
-    );
-  } catch {
-    matchedSeeds = [];
+  if (status.phase === 'interviewing' || status.phase === 'drafting') {
+    try {
+      const seedsRoot = input.forgeRoot ?? resolve('.');
+      matchedSeeds = matchInstructionSeeds(
+        listInstructionSeeds(seedsRoot),
+        detectProjectTags(status.project_repo_path),
+      );
+    } catch {
+      matchedSeeds = [];
+    }
   }
 
   const startEv = logger.emit({

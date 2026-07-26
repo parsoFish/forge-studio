@@ -82,6 +82,12 @@ function hasTopLevelExt(repoPath: string, ext: string): boolean {
  * Select the seeds whose `appliesTo` intersects the project's tags, restricted
  * to seeds usable on the project side (`scope` of `project` or `both`). Sorted
  * by id for a stable prompt. Empty ⇒ the caller falls back to from-scratch.
+ *
+ * Note: with the shipped corpus the `forge-managed-project` seed
+ * (`appliesTo: [forge-managed]`) matches EVERY real project (`detectProjectTags`
+ * always emits `forge-managed`), so the empty-match/from-scratch branch is in
+ * practice a library-absence fallback (no seeds installed, or a bespoke library
+ * lacking the contract seed), not a per-project one.
  */
 export function matchInstructionSeeds(
   seeds: readonly InstructionSeed[],
@@ -117,15 +123,23 @@ export function renderSeedPromptSection(matched: readonly InstructionSeed[]): st
   ].join('\n');
 }
 
+/**
+ * The single marker literal for the composed-seeds footer — shared by the
+ * writer (`composedSeedsFooter`) and the stripper regex so they can never drift
+ * (a one-sided rename would silently stop the stripper matching → the
+ * footer-duplication bug regresses).
+ */
+const COMPOSED_FOOTER_MARKER = 'forge:composed-instruction-seeds';
+
 /** The machine-greppable footer recording which seeds an AGENTS.md composed from (R3-05-F3 traceability). */
 export function composedSeedsFooter(ids: readonly string[]): string {
   const clean = [...new Set(ids.filter((id) => id.trim().length > 0))].sort();
   if (clean.length === 0) return '';
-  return `\n<!-- forge:composed-instruction-seeds: ${clean.join(', ')} -->\n`;
+  return `\n<!-- ${COMPOSED_FOOTER_MARKER}: ${clean.join(', ')} -->\n`;
 }
 
 /** Matches the composed-seeds footer comment (any leading/trailing whitespace). */
-const COMPOSED_FOOTER_RE = /\n*<!--\s*forge:composed-instruction-seeds:[^>]*-->\s*$/;
+const COMPOSED_FOOTER_RE = new RegExp(`\\n*<!--\\s*${COMPOSED_FOOTER_MARKER}:[^>]*-->\\s*$`);
 
 /**
  * Strip an existing composed-seeds footer from an AGENTS.md body so re-appending
