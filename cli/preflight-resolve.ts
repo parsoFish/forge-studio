@@ -35,7 +35,7 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   C4: { resolution: 'auto', fixHint: 'Scaffold the missing roadmap.md / brain/projects/<name>/profile.md stubs.' },
 
   // AGENT — route to the matching agentic runner.
-  C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author AGENTS.md with the instructions agent (operator-confirmed).' },
+  C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author or edit AGENTS.md with the instructions agent (operator-confirmed) — absent ⇒ create it, present-but-missing-the-gate ⇒ edit it.' },
   DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Build the demo with the demo agent (declares demoProcess + machinery).' },
   // DEMO-SKILL is the per-project demo machinery — authored by the demo agent
   // (there is no deterministic generator), so it routes to demo-builder too.
@@ -51,6 +51,10 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   C7: { resolution: 'user', fixHint: 'External-resource projects declare testProcess.acceptance ({match, required, requiresEnv}) so merges are backed by a live acceptance test.' },
   C5: { resolution: 'user', fixHint: 'Declare locked-core constraints (CLAUDE.md / AGENTS.md / CONSTRAINTS.md).' },
   C6: { resolution: 'user', fixHint: 'Add a GitHub remote so forge can open + merge PRs.' },
+  // R1-04-F2: release substrate is operator-owned (creating a changelog/version file blind is presumptuous).
+  C10: { resolution: 'user', fixHint: 'Add the missing release substrate (changelogPath / versionFile / docsDir) or correct the releaseProcess declaration.' },
+  // R1-04-F3: the build process is operator-declared project policy.
+  BUILD: { resolution: 'user', fixHint: 'Declare buildProcess.local (the compile/package command) and buildProcess.remote (the CI workflow) so a broken build is its own obligation.' },
 };
 
 /**

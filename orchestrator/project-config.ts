@@ -20,6 +20,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
 import type {
+  BuildProcess,
   DemoStep,
   DemoStepKind,
   ReleaseConfig,
@@ -30,7 +31,7 @@ import type {
 
 export type { DemoStep, DemoStepKind } from './studio/types.ts';
 export { DEMO_STEP_KINDS } from './studio/types.ts';
-export type { ReleaseStep, ReleaseConfig } from './studio/types.ts';
+export type { ReleaseStep, ReleaseConfig, BuildProcess } from './studio/types.ts';
 
 export const PROJECT_CONFIG_REL_PATH = '.forge/project.json';
 
@@ -234,6 +235,13 @@ export type ProjectConfig = {
    * release steps.
    */
   releaseProcess?: ReleaseConfig;
+  /**
+   * R1-04-F3 — optional build process, declared separately from `testProcess`:
+   * `local` (compile/package command) + `remote` (CI-workflow path). A project
+   * can gate on tests while its build breaks; this makes the build a first-class,
+   * checkable obligation. Fail-closed when malformed. Absent ⇒ no build clause.
+   */
+  buildProcess?: BuildProcess;
 };
 
 /**
@@ -393,6 +401,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const kb = parseKb(obj.kb);
   const artifactRoot = parseArtifactRoot(obj.artifactRoot);
   const releaseProcess = parseReleaseProcess(obj.releaseProcess);
+  const buildProcess = parseBuildProcess(obj.buildProcess);
 
   return {
     testProcess,
@@ -412,6 +421,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(kb !== undefined ? { kb } : {}),
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
     ...(releaseProcess !== undefined ? { releaseProcess } : {}),
+    ...(buildProcess !== undefined ? { buildProcess } : {}),
   };
 }
 
@@ -653,6 +663,27 @@ function parseReleasePath(v: unknown, label: string): string | undefined {
   if (s === undefined) return undefined;
   assertCleanRelativePath(s, label);
   return s;
+}
+
+/**
+ * R1-04-F3 — parse the optional typed `buildProcess`. Fail-closed, mirrors
+ * `parseReleaseProcess`: absent/null ⇒ `undefined`; present-but-malformed
+ * throws (surfaced by preflight / studio lint). `local` is an argv command;
+ * `remote` is a clean worktree-relative CI-workflow path.
+ */
+function parseBuildProcess(raw: unknown): BuildProcess | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error('project-config: buildProcess must be an object when present');
+  }
+  const b = raw as Record<string, unknown>;
+  const local = optionalArgv(b.local, 'buildProcess.local');
+  const remote = parseReleasePath(b.remote, 'buildProcess.remote');
+  return {
+    // An empty `local` argv is not a declaration — treat it as absent (fail-closed).
+    ...(local && local.length > 0 ? { local } : {}),
+    ...(remote !== undefined ? { remote } : {}),
+  };
 }
 
 

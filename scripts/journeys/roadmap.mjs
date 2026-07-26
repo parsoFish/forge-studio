@@ -270,8 +270,17 @@ export const journey = defineJourney({
                 check(afterState === 'planning', `plan-initiative transitions to [data-plan-state="planning"] (got ${afterState})`);
                 await frame(page, 'r4-11-2b-planning-started', 'R4-11-F2 — planning started: the initiative will be decomposed into work items', { key: true });
 
-                // The manifest is now claimable on the forge-architect flow.
-                const planManifest = readFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), 'utf8');
+                // The manifest is now claimable on the forge-architect flow. The
+                // UI reaches [data-plan-state="planning"] as soon as the POST is
+                // in flight, but the bridge's manifest write settles a beat later
+                // — poll the on-disk repoint rather than racing it (the write is
+                // synchronous in enqueuePlanRun; this only absorbs fs/roundtrip lag).
+                let planManifest = '';
+                for (let i = 0; i < 20; i++) {
+                  planManifest = readFileSync(join(QDIR('pending'), `${INIT_PLAN}.md`), 'utf8');
+                  if (/^flow_id:\s*forge-architect\s*$/m.test(planManifest)) break;
+                  await sleep(150);
+                }
                 check(/^flow_id:\s*forge-architect\s*$/m.test(planManifest), 'plan-initiative repoints the manifest at the forge-architect flow');
               } else {
                 check(false, `roadmap: [data-action="plan-initiative"] present on the WI-less initiative ${INIT_PLAN}`);
@@ -352,7 +361,13 @@ export const journey = defineJourney({
                 check(devState === 'started', `start-development enqueues the develop run (data-develop-state=${devState})`);
                 await frame(page, 'r6-1b-development-started', 'R6 — development started: the unifier will open a PR for review', { key: true });
                 // The manifest is now claimable on the forge-develop flow, threading its cycle_id.
-                const devManifest = readFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), 'utf8');
+                // Poll the repoint (same read-after-write settle as the plan trigger above).
+                let devManifest = '';
+                for (let i = 0; i < 20; i++) {
+                  devManifest = readFileSync(join(QDIR('pending'), `${INIT_DEV}.md`), 'utf8');
+                  if (/^flow_id:\s*forge-develop\s*$/m.test(devManifest)) break;
+                  await sleep(150);
+                }
                 check(/^flow_id:\s*forge-develop\s*$/m.test(devManifest), 'start-development repoints the manifest at the forge-develop flow');
                 check(devManifest.includes(DEV_CYCLE_ID), 'the develop run threads the architect-minted cycle_id (DEC-2)');
               } else {

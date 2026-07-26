@@ -38,7 +38,8 @@ function happyProject(): { dir: string; forgeRoot: string; cleanup: () => void }
     ['node_modules/', 'dist/', '.forge/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n'),
   );
   writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n');
-  writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\n');
+  // C8 coverage (R1-04-F1): the instruction file mentions the declared gate command.
+  writeFileSync(join(dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\nQuality gate: `vitest run`.\n');
   // Brain 3 (ADR 035): profile lives CENTRAL under the forge root.
   mkdirSync(join(forgeRoot, 'brain', 'projects', name), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'projects', name, 'profile.md'), '# profile\n');
@@ -84,7 +85,7 @@ test('preflight: a fully-conformant project passes every clause and ok=true', ()
   try {
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(r.ok, true);
-    for (const id of ['C1', 'C1b', 'C2', 'C4', 'C5', 'C6', 'C7', 'C8', 'BRAIN', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
+    for (const id of ['C1', 'C1b', 'C2', 'C4', 'C5', 'C6', 'C7', 'C8', 'C10', 'BUILD', 'BRAIN', 'DEMO', 'DEMO-SKILL', 'ARTIFACTS'] as ClauseId[]) {
       assert.equal(clause(r, id).pass, true, `${id} should pass: ${clause(r, id).detail}`);
     }
     assert.match(formatPreflightReport(r), /CONTRACT MET/);
@@ -462,7 +463,8 @@ test('C8 (ADVISORY): AGENTS.md at root passes', () => {
   const p = happyProject();
   try {
     rmSync(join(p.dir, 'CLAUDE.md'));
-    writeFileSync(join(p.dir, 'AGENTS.md'), '# Build: npm test\n');
+    // Mentions the declared gate (`vitest run`) → C8 coverage passes (R1-04-F1).
+    writeFileSync(join(p.dir, 'AGENTS.md'), '# Agents\n\nBuild/test: `vitest run`.\n');
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'C8').pass, true);
   } finally {
@@ -580,5 +582,181 @@ test('DEMO-ALIGN: no capture steps (or no config) → not applicable, pass', () 
     assert.match(al.detail, /not applicable/);
   } finally {
     cleanup();
+  }
+});
+
+// --- R1-04-F1: C8 coverage ---
+
+test('C8 coverage (R1-04-F1): file present but omitting the declared gate → advisory fail', () => {
+  const p = happyProject();
+  try {
+    // Overwrite CLAUDE.md so it no longer mentions `vitest run` (the declared gate).
+    writeFileSync(join(p.dir, 'CLAUDE.md'), '# Constraints\nUser owns git.\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c8 = clause(r, 'C8');
+    assert.equal(c8.pass, false, 'present-but-no-gate-mention fails coverage');
+    assert.match(c8.detail, /never mentions the declared quality-gate command/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C8 coverage (R1-04-F1): a matching head token (npm test) covers a longer declared gate', () => {
+  const p = happyProject();
+  try {
+    // Declared gate = `vitest run`; file mentions it → pass (already covered by happyProject).
+    // Now prove the head-token match: declare `npm test --silent`, file says `npm test`.
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test', '--silent'] } }, demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }] }),
+    );
+    writeFileSync(join(p.dir, 'CLAUDE.md'), '# Constraints\nRun `npm test` before committing.\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'C8').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+// --- R1-04-F2: C10 release substrate ---
+
+test('C10 (R1-04-F2): no releaseProcess → inert pass', () => {
+  const p = happyProject();
+  try {
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c10 = clause(r, 'C10');
+    assert.equal(c10.pass, true);
+    assert.match(c10.detail, /inert/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C10 (R1-04-F2): a changelog step with a missing changelogPath substrate → advisory fail', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }],
+        releaseProcess: { steps: [{ kind: 'changelog', phase: 'in-cycle', text: 'draft' }], changelogPath: 'CHANGELOG.md' },
+      }),
+    );
+    // No CHANGELOG.md written → substrate missing.
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const c10 = clause(r, 'C10');
+    assert.equal(c10.pass, false);
+    assert.match(c10.detail, /changelogPath "CHANGELOG.md" does not exist/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C10 (R1-04-F2): declared substrate present → pass', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(join(p.dir, 'CHANGELOG.md'), '# Changelog\n\n## [Unreleased]\n');
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }],
+        releaseProcess: { steps: [{ kind: 'changelog', phase: 'in-cycle', text: 'draft' }], changelogPath: 'CHANGELOG.md' },
+      }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'C10').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+// --- R1-04-F3: BUILD ---
+
+test('BUILD (R1-04-F3): buildProcess.local declared → pass', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }],
+        buildProcess: { local: ['npm', 'run', 'build'] },
+      }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const b = clause(r, 'BUILD');
+    assert.equal(b.pass, true);
+    assert.match(b.detail, /npm run build/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('BUILD (R1-04-F3): buildProcess.remote pointing at a missing workflow → advisory fail', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({
+        testProcess: { local: { cmd: ['vitest', 'run'] } },
+        demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }],
+        buildProcess: { local: ['npm', 'run', 'build'], remote: '.github/workflows/ci.yml' },
+      }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const b = clause(r, 'BUILD');
+    assert.equal(b.pass, false);
+    assert.match(b.detail, /does not exist/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('BUILD (R1-04-F3): an inferable but undeclared build → PASS with an opt-in note (not a fail)', () => {
+  const p = happyProject();
+  try {
+    writeFileSync(
+      join(p.dir, 'package.json'),
+      JSON.stringify({ name: 'x', scripts: { test: 'vitest run', build: 'tsc' } }),
+    );
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    const b = clause(r, 'BUILD');
+    assert.equal(b.pass, true, 'inferable-but-undeclared is an opt-in note, not a failure');
+    assert.match(b.detail, /a build is inferable/);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('BUILD (R1-04-F3): no build inferable and none declared → inert pass', () => {
+  const p = happyProject();
+  try {
+    // happyProject's package.json has only a `test` script → no build inferable.
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'BUILD').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C8 coverage (R1-04-F1): a bare runner prefix does NOT falsely cover an unrelated script', () => {
+  const p = happyProject();
+  try {
+    // Declared gate = `npm run test:unit`; the file only mentions `npm run build`.
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['npm', 'run', 'test:unit'] } }, demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }] }),
+    );
+    writeFileSync(join(p.dir, 'CLAUDE.md'), '# Constraints\nBuild with `npm run build`.\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'C8').pass, false, 'npm run build must not cover a declared npm run test:unit');
+    // And the file DOES cover it once it names the real script.
+    writeFileSync(join(p.dir, 'CLAUDE.md'), '# Constraints\nGate: `npm run test:unit`.\n');
+    const r2 = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r2, 'C8').pass, true);
+  } finally {
+    p.cleanup();
   }
 });
