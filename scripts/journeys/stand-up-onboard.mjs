@@ -27,7 +27,7 @@ export const journey = defineJourney({
       {
         id: 'su-onboard-project',
         title: 'Onboard a project from the UI',
-        narration: 'Filling in only a name and north star (the quality gate defaults sensibly), the operator onboards a new project from the library; .forge/project.json lands on disk with the hard contract fields, the project appears in the library, and `studio lint` stays green. A second, fresh pass re-drives the same form to show the contract-readiness checklist with its failures visible, before anything is resolved.',
+        narration: 'Filling in only a name and north star (the quality gate defaults sensibly), the operator onboards a new project from the library; .forge/project.json lands on disk with the hard contract fields — now including a bound KB (R4-02-F3) — the project appears in the library, and `studio lint` stays green. From the project page the operator can hand the rest to the onboarding agent (R4-02): "Run onboarding agent" dispatches it through the same generic run host as the agent page, to drive the project to contract-green. A second, fresh pass re-drives the same form to show the contract-readiness checklist with its failures visible, before anything is resolved.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── J4: ONBOARD A PROJECT (in the UI) ─────────────────────────────────────
@@ -111,6 +111,28 @@ export const journey = defineJourney({
               });
               check(readyCount >= 3, `J4: onboarded project passes ≥3 contract-readiness checks (got ${readyCount})`);
               await frame(page, 'j4-1-project-readiness', 'J4 — onboarded project: contract readiness reflects the hard fields');
+
+              // R4-02-F1: the /projects SECOND entry point into the onboarding agent —
+              // the same runner as the agent page's RunPanel (dispatchAgentRun →
+              // POST /api/agents/onboarding-agent/run). Under the demo's no-spawn
+              // seam the bridge returns a runId; the agent turn itself is stubbed.
+              const onboardAgentPresent = await page.evaluate(() =>
+                document.querySelector('[data-section="onboard-with-agent"] [data-action="run-onboarding-agent"]') !== null);
+              check(onboardAgentPresent,
+                'J4 (R4-02-F1): the project page offers "Run onboarding agent" — the /projects entry into the generic run host');
+              await page.locator('[data-action="run-onboarding-agent"]').click().catch(() => {});
+              let onbRunId = '';
+              try {
+                await page.waitForFunction(
+                  () => (document.querySelector('[data-section="onboard-with-agent"]')?.getAttribute('data-onboard-run-id') ?? '').length > 0,
+                  null, { timeout: 8000 },
+                );
+                onbRunId = await page.evaluate(() =>
+                  document.querySelector('[data-section="onboard-with-agent"]')?.getAttribute('data-onboard-run-id') ?? '');
+              } catch { /* dispatch did not surface a runId in time */ }
+              check(onbRunId.length > 0,
+                `J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got "${onbRunId}") — same runner as the agent page`);
+              await frame(page, 'j4-2-onboard-agent', 'J4 — the onboarding agent dispatched from /projects (R4-02; turn stubbed under the demo no-spawn seam)');
 
               // Clip: a fresh context re-drives the SAME onboarding form, but with its own
               // slug + cleanup — a first-time operator would see this failing checklist

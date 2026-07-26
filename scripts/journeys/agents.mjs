@@ -408,6 +408,13 @@ export const journey = defineJourney({
                     document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
                   check(runDispatchable === 'true',
                     `agent-builder (R2-01-F3): the saved unattended agent shows a dispatchable run surface (got "${runDispatchable}")`);
+                  // R4-02-F1: the generic key:value inputs surface (the onboarding
+                  // agent's repo/northStar ride through it). Assert it's present +
+                  // type a line so the inputs surface is inside the regression gate.
+                  const inputsPresent = await page.evaluate(() =>
+                    document.querySelector('[data-section="agent-run"] [data-run-inputs]') !== null);
+                  check(inputsPresent, 'agent-builder (R4-02-F1): the run surface exposes a generic [data-run-inputs] field');
+                  await page.locator('[data-section="agent-run"] [data-run-inputs]').fill('note: journey-e2e').catch(() => {});
                   // Drive the dispatch entry point. Under the demo's no-spawn seam the
                   // bridge returns a runId + skip marker — the agent turn itself is
                   // stubbed — which is exactly enough to prove the agent page reaches

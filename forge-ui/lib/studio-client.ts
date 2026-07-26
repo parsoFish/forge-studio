@@ -776,6 +776,24 @@ export async function getAgentFixStatus(
   }
 }
 
+/** Parse the RunPanel inputs textarea — one `key: value` per line — into the
+ *  flat inputs map the generic run host accepts (R2-01-F3 / R4-02-F1). Blank
+ *  lines are ignored; the FIRST ':' splits key from value, so a value may itself
+ *  contain ':' (e.g. a `repo: https://…` URL). Exported for unit coverage. */
+export function parseRunInputs(text: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const line of text.split('\n')) {
+    const t = line.trim();
+    if (!t) continue;
+    const eq = t.indexOf(':');
+    if (eq <= 0) continue;
+    const key = t.slice(0, eq).trim();
+    const value = t.slice(eq + 1).trim();
+    if (key) out[key] = value;
+  }
+  return out;
+}
+
 /** Dispatch a non-interactive roster agent standalone (R2-01-F3). Returns the
  *  runId whose events/cost land under `_logs/<runId>/` — poll via
  *  {@link getAgentRunStatus}. */

@@ -126,7 +126,9 @@ inventory rather than one shared page-level contract:
   surfaces as its own informational (non-gating) chip,
   `[data-capability-interactive]`. A saved **non-interactive** agent gets a run
   surface (R2-01-F3 generic run host): `[data-section="agent-run"]
-  [data-run-dispatchable="true"]` with a `[data-action="run-agent"]` button and
+  [data-run-dispatchable="true"]` with a `[data-action="run-agent"]` button, a
+  generic `[data-run-inputs]` textarea (one `key: value` per line → the run
+  host's `inputs` map — e.g. the onboarding agent's `repo`/`northStar`), and
   `[data-run-id][data-run-status][data-run-cost]` (idle values `""` / `idle` /
   `0` before dispatch; after dispatch they reflect the polled `GET
   /api/agents/runs/:runId`, `running` → `done`/`failed`/`suppressed`). An
@@ -160,6 +162,12 @@ inventory rather than one shared page-level contract:
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —
   `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
+  An existing project's editor aside carries the R4-02-F1 second onboarding
+  entry point: `[data-section="onboard-with-agent"]` with a
+  `[data-action="run-onboarding-agent"]` button that dispatches the
+  onboarding agent through the SAME runner as `/agents/[id]`'s RunPanel
+  (`dispatchAgentRun('onboarding-agent', {project})`); `[data-onboard-run-id]`
+  carries the dispatched runId.
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
   `pending`/`done`) gets recovery affordances right on its `InitiativeCard`

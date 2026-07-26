@@ -99,6 +99,16 @@ test('resolveDispatchableAgent: a non-interactive runnable agent resolves', () =
   assert.equal(def.slug, 'project-scoped-review');
 });
 
+test('resolveDispatchableAgent: the R4-02 onboarding-agent is dispatchable (both entry points reach it)', () => {
+  // Both F1 entry points — the agent page RunPanel and the /projects
+  // OnboardWithAgent button — dispatch via the same client → the same route →
+  // resolveDispatchableAgent. If the onboarding agent resolves here, both reach
+  // the same runner.
+  const def = resolveDispatchableAgent('onboarding-agent', listAgentDefinitions(SKILLS));
+  assert.equal(def.slug, 'onboarding-agent');
+  assert.notEqual(def.surface, 'interactive', 'onboarding agent must be non-interactive to dispatch');
+});
+
 // ---------------------------------------------------------------------------
 // dispatchAgentRun — wiring under the no-spawn seam (no real SDK spawn)
 // ---------------------------------------------------------------------------

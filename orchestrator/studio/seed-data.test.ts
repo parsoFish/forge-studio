@@ -126,6 +126,11 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       'demo-agent',
       'developer-ralph',
       'developer-unifier',
+      // R4-02: the onboarding agent — brings an existing project up to the
+      // forge↔project contract (declare the gate, converge preflight to
+      // contract-green, bind the KB); non-interactive, dispatched via the
+      // generic run host from the agent page or /projects.
+      'onboarding-agent',
       'project-manager',
       // REFINEMENT-PLAN Phase 5 (§8): project-scoped-review is a library
       // roster agent with no invocation module and no flow wiring — launched
@@ -137,7 +142,7 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 10-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 11-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

@@ -4,9 +4,9 @@ import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, createProject, fetchPreflight,
+  saveProject, createProject, fetchPreflight, dispatchAgentRun, getAgentRunStatus,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
-  type FailingClause,
+  type FailingClause, type AgentRunStatus,
 } from '@/lib/studio-client';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
@@ -412,6 +412,8 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               />
             )}
 
+            <OnboardWithAgent projectId={id} />
+
             <UsedByFlows flows={flows} projectId={id} />
           </aside>
         </div>
@@ -431,6 +433,88 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// OnboardWithAgent (R4-02-F1) — the /projects entry point into the onboarding
+// agent. Reaches the SAME runner as the agent page's RunPanel: the shared
+// `dispatchAgentRun('onboarding-agent', {project})` client → POST
+// /api/agents/onboarding-agent/run → generic host. Dispatching the agent drives
+// this project to contract-green (F2 loop); events/cost show on /agents/onboarding-agent.
+// ---------------------------------------------------------------------------
+
+function OnboardWithAgent({ projectId }: { projectId: string }) {
+  const [runId, setRunId] = useState<string | null>(null);
+  const [status, setStatus] = useState<AgentRunStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  // Poll the dispatched run inline so events/cost are visible from the /projects
+  // entry point too (F1 AC), not only the agent page. Bounded like RunPanel.
+  useEffect(() => {
+    if (!runId) return;
+    let active = true;
+    let attempts = 0;
+    const poll = async (): Promise<string> => {
+      const s = await getAgentRunStatus(runId);
+      if (active) setStatus(s);
+      return s.state;
+    };
+    void poll();
+    const id = setInterval(() => {
+      attempts += 1;
+      void poll().then((st) => { if (st !== 'running' || attempts >= 90) clearInterval(id); });
+    }, 2000);
+    return () => { active = false; clearInterval(id); };
+  }, [runId]);
+
+  const onRun = async () => {
+    setBusy(true);
+    setError(null);
+    setStatus(null);
+    try {
+      const r = await dispatchAgentRun('onboarding-agent', { project: projectId });
+      if (r.ok && r.runId) setRunId(r.runId);
+      else setError(r.error ?? 'dispatch failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const runState = status?.state ?? (runId ? 'running' : 'idle');
+
+  return (
+    <section
+      data-section="onboard-with-agent"
+      data-onboard-run-id={runId ?? ''}
+      data-onboard-run-status={runState}
+      style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px', marginTop: 12 }}
+    >
+      <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Onboarding agent</h3>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+        Run the onboarding agent to drive this project to contract-green (declares the gate,
+        converges preflight, disposes advisory clauses).
+      </p>
+      <button
+        className="btn btn-primary"
+        data-action="run-onboarding-agent"
+        onClick={() => void onRun()}
+        disabled={busy}
+      >
+        {busy ? 'Dispatching…' : 'Run onboarding agent'}
+      </button>
+      {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
+      {runId && (
+        <div style={{ marginTop: 8, fontSize: 12 }}>
+          <div>run <code>{runId}</code> — <a href="/agents/onboarding-agent">agent page</a></div>
+          <div>
+            status: <strong>{runState}</strong>
+            {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ProjectOnboardForm — minimal "register a project" form (UX spec §6).
 // Required: name, quality-gate command, north star. Everything else (repo path,
 // demo shape/command, instructions) has a working default behind Advanced.

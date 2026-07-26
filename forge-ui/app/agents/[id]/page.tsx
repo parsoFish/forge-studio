@@ -32,6 +32,7 @@ import {
   saveAgent,
   dispatchAgentRun,
   getAgentRunStatus,
+  parseRunInputs,
   type Agent,
   type AgentCapabilityDescriptor,
   type AgentRunStatus,
@@ -600,6 +601,7 @@ const RUN_PANEL_STYLE: CSSProperties = {
 
 function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: boolean; canRun: boolean }) {
   const [project, setProject] = useState('');
+  const [inputsText, setInputsText] = useState('');
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<AgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -645,7 +647,11 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
     setDispatching(true);
     setStatus(null);
     try {
-      const r = await dispatchAgentRun(slug, project.trim() ? { project: project.trim() } : undefined);
+      const inputs = parseRunInputs(inputsText);
+      const opts: { project?: string; inputs?: Record<string, string> } = {};
+      if (project.trim()) opts.project = project.trim();
+      if (Object.keys(inputs).length > 0) opts.inputs = inputs;
+      const r = await dispatchAgentRun(slug, Object.keys(opts).length ? opts : undefined);
       if (r.ok && r.runId) setRunId(r.runId);
       else setError(r.error ?? 'dispatch failed');
     } finally {
@@ -671,6 +677,16 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
         onChange={(e) => setProject(e.target.value)}
         disabled={!canRun || dispatching}
         style={{ marginBottom: 8 }}
+      />
+      <textarea
+        className="input"
+        data-run-inputs
+        rows={2}
+        placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
+        value={inputsText}
+        onChange={(e) => setInputsText(e.target.value)}
+        disabled={!canRun || dispatching}
+        style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
       />
       <button
         className="btn btn-primary"

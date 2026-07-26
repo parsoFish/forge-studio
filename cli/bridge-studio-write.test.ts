@@ -240,6 +240,32 @@ test('PUT /api/studio/agents/write-agent with empty purpose → 400 + findings, 
 });
 
 // ---------------------------------------------------------------------------
+// POST /api/studio/projects — R4-02-F3: a fresh onboard binds the project KB
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/projects (R4-02-F3): fresh onboard binds project.json.kb to the seeded KB', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/projects`, {
+    name: 'F3 Onboard Proj',
+    qualityGateCmd: 'tsc --noEmit',
+    northStar: 'ship the thing',
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; id: string };
+  assert.equal(body.ok, true);
+  const id = body.id; // 'f3-onboard-proj'
+
+  // project.json now carries the kb binding (was omitted → unbound before F3).
+  const cfg = JSON.parse(
+    readFileSync(join(forgeRoot, 'projects', id, '.forge', 'project.json'), 'utf8'),
+  ) as { kb?: string };
+  assert.equal(cfg.kb, id, 'project.json.kb bound to the project id');
+
+  // The seeded central KB exists and its binding ref matches the bound id.
+  const kbYaml = readFileSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml'), 'utf8');
+  assert.match(kbYaml, new RegExp(`ref:\\s*${id}`), 'seeded kb.yaml binds to the same id');
+});
+
+// ---------------------------------------------------------------------------
 // POST /api/studio/skills — a plain skill is stamped library: true (R3-01-F2),
 // so it is palette-visible via the union AND passes the library lint immediately.
 // ---------------------------------------------------------------------------
