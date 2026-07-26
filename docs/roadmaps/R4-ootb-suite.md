@@ -277,11 +277,9 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-02 Project onboarding agent
 
-- **Status:** **in-progress** — F1/F2/F3 implemented (2026-07-26, wave-4 tail,
-  branch `feat/r4-02-onboarding-agent`); **F4/F5 deferred** to a stacked
-  follow-up (re-entry condition: F1–F3 merged — the onboarding agent def + the
-  convergence loop they extend are the substrate F4's seed-authoring and F5's
-  constraint-tagging hang off).  ·  **Wave:** 4
+- **Status:** **implemented** (F1–F5, 2026-07-26, wave-4 tail) — F1/F2/F3 in
+  PR #58 (`feat/r4-02-onboarding-agent`), F4/F5 in the stacked follow-up
+  (`feat/r4-02-instructions-constraints`).  ·  **Wave:** 4
 - **Implemented-notes (F1–F3, 2026-07-26):**
   - **F1 — built.** `skills/onboarding-agent/SKILL.md` — a non-interactive
     (`surface: operator-triggered`, `phase: onboarding`, `library: true`)
@@ -311,15 +309,25 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     (`buildKbYaml` binds `id`/`ref` to the project id; a fresh create carries
     no divergent kb.yaml). Closes known-gaps §4.3(a)/(d): ContractReadiness
     shows a **bound KB** on a fresh onboard. Tested in `bridge-studio-write.test.ts`.
-- **Deferred (re-enter as `planned` when F1–F3 merge):**
-  - **F4 Instructions check** — unattended AGENTS.md authoring from the R3-05
-    seed library (matchInstructionSeeds), gate-declared-before-authoring
-    ordering, passing R1-04's C8 coverage path. (Advisory clause C8; the loop
-    reaches HARD-green without it.)
-  - **F5 profile.md constraint tagging** — onboarding authors live
-    `<!-- forge:constraint applies_to:.. -->` blocks into central profile.md
-    (ADR-037 input R4-05-F3 consumes). (Advisory; loud-parse hazard — validate
-    authored blocks at write time.)
+- **Implemented-notes (F4–F5, 2026-07-26, branch `feat/r4-02-instructions-constraints`):**
+  - **F4 — built.** `orchestrator/agents-md-compose.ts` `composeAgentsMd` +
+    `forge instructions compose --project <p>` — deterministic, unattended
+    AGENTS.md authoring: `detectProjectTags` → `matchInstructionSeeds` (the
+    forge-managed seed always matches) → concatenate seed bodies, and — for the
+    R1-04-F1 **C8 coverage** clause — name the declared gate command at the top
+    (so C8 passes on coverage, not presence). Gate-declared-before-authoring is
+    the SKILL.md step order. Idempotent; footer records composed seed ids.
+    Tested (incl. C8 passing) in `agents-md-compose.test.ts`.
+  - **F5 — built.** `orchestrator/constraint-author.ts` `authorConstraintBlocks`
+    + `forge constraints author --project <p>` — reads the project's constraints
+    (a `CONSTRAINTS.md`, or a Locked-core/Constraints/Never-do section of
+    CLAUDE.md/AGENTS.md), authors ONE live `<!-- forge:constraint id:
+    <project>-locked-core applies_to: all -->` block into central profile.md
+    under a stable marker section (idempotent upsert), and **validates the whole
+    profile via `parseConstraintBlocks` BEFORE writing** — a malformed/duplicate
+    block throws loudly, never lands silent (the loud-parse hazard). No source ⇒
+    no-op, profile still compiles (ADR-037 default). The onboarding SKILL.md runs
+    both after declaring the gate. Feeds R4-05-F3. Tested in `constraint-author.test.ts`.
 - **Depends on:** R3-05 (instructions sourcing), R1-03/R1-04 (contract process
   clauses to tick), R1-01 (KB binding at onboarding), R2-01 (standalone runnable)
 - **Context:** Operator diagram (verbatim intent): tailored to onboarding an
