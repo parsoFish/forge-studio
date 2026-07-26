@@ -13,7 +13,7 @@
  *   On save: flat → PUT {composition:{...}, process, name, purpose, interactivity, brainAccess, runtime}
  */
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveStatus } from '@/components/SaveStatus';
@@ -30,8 +30,11 @@ import {
   fetchStudioFlows,
   fetchStarters,
   saveAgent,
+  dispatchAgentRun,
+  getAgentRunStatus,
   type Agent,
   type AgentCapabilityDescriptor,
+  type AgentRunStatus,
   type AgentRuntime,
   type Catalog,
   type Flow,
@@ -561,6 +564,11 @@ export default function AgentBuilderPage() {
             catalog={catalog}
           />
           <ReadinessPanel state={readinessState} />
+          <RunPanel
+            slug={state.slug}
+            interactive={state.capability?.interactive === true}
+            canRun={!isNew && !dirty && state.slug.length > 0}
+          />
           <UsedInFlows agentSlug={state.slug} flows={flows} />
         </aside>
 
@@ -573,6 +581,118 @@ export default function AgentBuilderPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// RunPanel — dispatch a non-interactive agent standalone (R2-01-F3) from the
+// agent page and poll its run for live status + cost (the F1 "events/cost
+// visible" AC). Interactive agents keep their bespoke session pages — the
+// generic host refuses them here, mirroring the server-side guard.
+// ---------------------------------------------------------------------------
+
+const RUN_PANEL_STYLE: CSSProperties = {
+  border: '1px solid var(--line)',
+  borderRadius: 'var(--radius)',
+  padding: '12px 14px',
+  marginTop: 12,
+};
+
+function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: boolean; canRun: boolean }) {
+  const [project, setProject] = useState('');
+  const [runId, setRunId] = useState<string | null>(null);
+  const [status, setStatus] = useState<AgentRunStatus | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [dispatching, setDispatching] = useState(false);
+
+  // Poll the dispatched run's status until it leaves 'running' (done/failed/
+  // suppressed) or a bounded backstop trips — a run that dies without a
+  // terminal marker, or a suppressed run that writes no events, must never
+  // poll forever.
+  useEffect(() => {
+    if (!runId) return;
+    let active = true;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 90; // ~3 min at 2s
+    const poll = async (): Promise<string> => {
+      const s = await getAgentRunStatus(runId);
+      if (active) setStatus(s);
+      return s.state;
+    };
+    void poll();
+    const id = setInterval(() => {
+      attempts += 1;
+      void poll().then((st) => { if (st !== 'running' || attempts >= MAX_ATTEMPTS) clearInterval(id); });
+    }, 2000);
+    return () => { active = false; clearInterval(id); };
+  }, [runId]);
+
+  if (interactive) {
+    return (
+      <section data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
+        <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
+        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
+          Interactive agent — run it from its own session page.
+        </p>
+      </section>
+    );
+  }
+
+  const runState = status?.state ?? (runId ? 'running' : 'idle');
+
+  const onRun = async () => {
+    setError(null);
+    setDispatching(true);
+    setStatus(null);
+    try {
+      const r = await dispatchAgentRun(slug, project.trim() ? { project: project.trim() } : undefined);
+      if (r.ok && r.runId) setRunId(r.runId);
+      else setError(r.error ?? 'dispatch failed');
+    } finally {
+      setDispatching(false);
+    }
+  };
+
+  return (
+    <section
+      data-section="agent-run"
+      data-run-dispatchable="true"
+      data-run-id={runId ?? ''}
+      data-run-status={runState}
+      data-run-cost={status?.costUsd ?? 0}
+      style={RUN_PANEL_STYLE}
+    >
+      <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
+      <input
+        className="input"
+        type="text"
+        placeholder="project (optional)"
+        value={project}
+        onChange={(e) => setProject(e.target.value)}
+        disabled={!canRun || dispatching}
+        style={{ marginBottom: 8 }}
+      />
+      <button
+        className="btn btn-primary"
+        data-action="run-agent"
+        onClick={() => void onRun()}
+        disabled={!canRun || dispatching}
+        title={canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it'}
+      >
+        {dispatching ? 'Dispatching…' : 'Run agent'}
+      </button>
+      {!canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
+      {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
+      {runId && (
+        <div style={{ marginTop: 8, fontSize: 12 }}>
+          <div>run <code>{runId}</code></div>
+          <div>
+            status: <strong>{runState}</strong>
+            {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }
 

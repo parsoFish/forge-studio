@@ -776,6 +776,46 @@ export async function getAgentFixStatus(
   }
 }
 
+/** Dispatch a non-interactive roster agent standalone (R2-01-F3). Returns the
+ *  runId whose events/cost land under `_logs/<runId>/` — poll via
+ *  {@link getAgentRunStatus}. */
+export async function dispatchAgentRun(
+  slug: string,
+  opts?: { project?: string; inputs?: Record<string, string> },
+): Promise<{ ok: boolean; error?: string; runId?: string }> {
+  const r = await studioPost(`/api/agents/${encodeURIComponent(slug)}/run`, {
+    ...(opts?.project ? { project: opts.project } : {}),
+    ...(opts?.inputs ? { inputs: opts.inputs } : {}),
+  });
+  return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
+}
+
+export type AgentRunStatus = {
+  ok: boolean;
+  state: 'running' | 'done' | 'suppressed' | 'failed' | 'unknown';
+  costUsd: number;
+  events: number;
+};
+
+/** Poll a dispatched generic agent run's state (reads its `_logs/<runId>/`
+ *  event log server-side). */
+export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, state: 'unknown', costUsd: 0, events: 0 };
+  try {
+    const res = await fetch(`${base}/api/agents/runs/${encodeURIComponent(runId)}`);
+    const data = (await res.json()) as { state?: string; costUsd?: number; events?: number };
+    return {
+      ok: res.ok,
+      state: (data.state as AgentRunStatus['state']) ?? 'unknown',
+      costUsd: typeof data.costUsd === 'number' ? data.costUsd : 0,
+      events: typeof data.events === 'number' ? data.events : 0,
+    };
+  } catch {
+    return { ok: false, state: 'unknown', costUsd: 0, events: 0 };
+  }
+}
+
 /** A preflight clause the onboarded project still fails (surfaced to the UI). */
 export type FailingClause = { id: string; title: string; detail: string };
 
