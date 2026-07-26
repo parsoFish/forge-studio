@@ -101,6 +101,14 @@ test('POST /api/agents/<slug>/run: non-string input value → 400', async () => 
   assert.match((await res.json() as { error: string }).error, /must be a string/);
 });
 
+test('POST /api/agents/<slug>/run: invalid input KEY → 400 (never silently dropped)', async () => {
+  const res = await fetch(`${url}/api/agents/test-runnable/run`, {
+    method: 'POST', headers: CSRF, body: JSON.stringify({ inputs: { 'north star': 'x' } }),
+  });
+  assert.equal(res.status, 400);
+  assert.match((await res.json() as { error: string }).error, /invalid input key/);
+});
+
 test('POST /api/agents/<slug>/run: dispatchable agent → 200, ok:true, runId returned', async () => {
   const res = await fetch(`${url}/api/agents/test-runnable/run`, {
     method: 'POST',
@@ -112,4 +120,57 @@ test('POST /api/agents/<slug>/run: dispatchable agent → 200, ok:true, runId re
   assert.equal(body.ok, true);
   assert.equal(body.slug, 'test-runnable');
   assert.match(body.runId, /^_agent-test-runnable-/);
+});
+
+// ---- GET /api/agents/runs/<runId> (the RunPanel status poll) ----------------
+
+test('GET /api/agents/runs/<runId>: invalid runId → 400', async () => {
+  const res = await fetch(`${url}/api/agents/runs/${encodeURIComponent('../escape')}`);
+  assert.equal(res.status, 400);
+});
+
+test('GET /api/agents/runs/<runId>: no events yet → running', async () => {
+  const res = await fetch(`${url}/api/agents/runs/_agent-never-dispatched`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { state: string; events: number };
+  assert.equal(body.state, 'running');
+  assert.equal(body.events, 0);
+});
+
+test('GET /api/agents/runs/<runId>: start+end events → done with cost', async () => {
+  const runId = '_agent-status-done';
+  const dir = join(forgeRoot, '_logs', runId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'events.jsonl'),
+    JSON.stringify({ event_type: 'start', skill: 'test-runnable' }) + '\n' +
+    JSON.stringify({ event_type: 'end', skill: 'test-runnable', cost_usd: 0.42 }) + '\n');
+  const res = await fetch(`${url}/api/agents/runs/${runId}`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { state: string; costUsd: number; events: number };
+  assert.equal(body.state, 'done');
+  assert.equal(body.costUsd, 0.42);
+  assert.equal(body.events, 2);
+});
+
+test('GET /api/agents/runs/<runId>: dispatch-failure marker → failed (not perpetual running)', async () => {
+  const runId = '_agent-status-failed';
+  const dir = join(forgeRoot, '_logs', runId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'events.jsonl'),
+    JSON.stringify({ event_type: 'start', skill: 'test-runnable' }) + '\n' +
+    JSON.stringify({ event_type: 'log', message: 'agent-dispatch.failed', metadata: { error: 'boom' } }) + '\n');
+  const res = await fetch(`${url}/api/agents/runs/${runId}`);
+  assert.equal(res.status, 200);
+  assert.equal((await res.json() as { state: string }).state, 'failed');
+});
+
+test('GET /api/agents/runs/<runId>: spawn-suppressed marker → suppressed', async () => {
+  const runId = '_agent-status-suppressed';
+  const dir = join(forgeRoot, '_logs', runId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'events.jsonl'),
+    JSON.stringify({ event_type: 'start', skill: 'test-runnable' }) + '\n' +
+    JSON.stringify({ event_type: 'log', message: 'run-agent.spawn-suppressed' }) + '\n');
+  const res = await fetch(`${url}/api/agents/runs/${runId}`);
+  assert.equal((await res.json() as { state: string }).state, 'suppressed');
 });

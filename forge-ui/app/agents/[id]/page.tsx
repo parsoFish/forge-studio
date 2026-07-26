@@ -605,10 +605,15 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
   const [error, setError] = useState<string | null>(null);
   const [dispatching, setDispatching] = useState(false);
 
-  // Poll the dispatched run's status until it leaves the 'running' state.
+  // Poll the dispatched run's status until it leaves 'running' (done/failed/
+  // suppressed) or a bounded backstop trips — a run that dies without a
+  // terminal marker, or a suppressed run that writes no events, must never
+  // poll forever.
   useEffect(() => {
     if (!runId) return;
     let active = true;
+    let attempts = 0;
+    const MAX_ATTEMPTS = 90; // ~3 min at 2s
     const poll = async (): Promise<string> => {
       const s = await getAgentRunStatus(runId);
       if (active) setStatus(s);
@@ -616,7 +621,8 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
     };
     void poll();
     const id = setInterval(() => {
-      void poll().then((st) => { if (st !== 'running') clearInterval(id); });
+      attempts += 1;
+      void poll().then((st) => { if (st !== 'running' || attempts >= MAX_ATTEMPTS) clearInterval(id); });
     }, 2000);
     return () => { active = false; clearInterval(id); };
   }, [runId]);

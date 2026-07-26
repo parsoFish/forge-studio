@@ -1081,8 +1081,13 @@ async function handleHttp(
         .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
         .filter((e): e is Record<string, unknown> => e !== null);
       const suppressed = parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed');
+      // `runAgent` emits `end` only on success; a crashed dispatch writes a
+      // terminal 'agent-dispatch.failed' marker (cli/agent-run.ts) instead —
+      // without it the run would read 'running' forever and the RunPanel would
+      // poll a dead run indefinitely.
+      const failed = parsed.some((e) => e['message'] === 'agent-dispatch.failed');
       const endEvent = parsed.find((e) => e['event_type'] === 'end');
-      const state = suppressed ? 'suppressed' : endEvent ? 'done' : 'running';
+      const state = failed ? 'failed' : suppressed ? 'suppressed' : endEvent ? 'done' : 'running';
       const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : 0;
       sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length }, origin);
     } catch (err) {
@@ -1116,7 +1121,7 @@ async function handleHttp(
       }
       let project: string | undefined;
       if (body.project !== undefined) {
-        if (typeof body.project !== 'string' || !SAFE_AGENT_SLUG_RE.test(body.project)) {
+        if (typeof body.project !== 'string' || !SAFE_PROJECT_NAME_RE.test(body.project)) {
           sendJson(res, 400, { error: `invalid project: ${JSON.stringify(body.project)}` }, origin);
           return;
         }
@@ -1126,7 +1131,10 @@ async function handleHttp(
         }
         project = body.project;
       }
-      // inputs: a flat string→string map, rendered as prompt DATA by dispatchAgentRun.
+      // inputs: a flat string→string map, rendered as prompt DATA by
+      // dispatchAgentRun. Validate KEYS too — an invalid key must 400, never be
+      // silently dropped downstream in spawnAgentDispatch (this repo bans
+      // swallowed failures: a dropped input the operator never learns about).
       const inputs: Record<string, string> = {};
       if (body.inputs !== undefined) {
         if (typeof body.inputs !== 'object' || body.inputs === null || Array.isArray(body.inputs)) {
@@ -1134,6 +1142,10 @@ async function handleHttp(
           return;
         }
         for (const [k, v] of Object.entries(body.inputs as Record<string, unknown>)) {
+          if (!SAFE_INPUT_KEY_RE.test(k)) {
+            sendJson(res, 400, { error: `invalid input key: ${JSON.stringify(k)} (expected ${SAFE_INPUT_KEY_RE})` }, origin);
+            return;
+          }
           if (typeof v !== 'string') {
             sendJson(res, 400, { error: `input "${k}" must be a string` }, origin);
             return;
@@ -1318,17 +1330,26 @@ function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: s
   } catch { /* best-effort */ }
 }
 
-/** Studio agent slug + project-name shape (skill dir names): lowercase, digits,
- *  hyphen. Pre-validates the URL slug / body project so no value can inject a
- *  CLI flag into the detached spawn below. */
-const SAFE_AGENT_SLUG_RE = /^[a-z0-9-]+$/;
+/** Studio agent slug shape (skill dir names): lowercase alnum + hyphen, no
+ *  leading hyphen (so a flag-shaped slug can't reach a detached spawn even from
+ *  a future caller that skips roster resolution). The TRUE injection guard is
+ *  `resolveDispatchableAgent` rejecting non-roster slugs + argv-array/no-shell
+ *  spawn semantics; this regex is defense-in-depth, not the sole barrier. */
+const SAFE_AGENT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
+/** Project dir name: real projects carry uppercase / `_` (e.g. `trafficGame`,
+ *  `terraform-provider-betterado`), so this is broader than a slug — but still
+ *  no `.`/`/` (traversal) and no leading `-` (flag shape). */
+const SAFE_PROJECT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
-const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_-]+$/;
+const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
-/** Timestamp stamp for a generated run id — YYYY-MM-DDTHH-mm-ss-SSS
- *  (ms precision so two runs in the same second don't collide). */
+/** Timestamp stamp + short random suffix for a generated run id
+ *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
+ *  dispatches of the same slug in the same millisecond (a programmatic driver,
+ *  e.g. R4-02 fanout) don't collide onto one `_logs/<runId>/` dir. */
 function newRunStamp(): string {
-  return new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
 /**

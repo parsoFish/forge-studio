@@ -30,6 +30,7 @@ import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
 import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-runner.ts';
 import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
+import { createLogger } from '../orchestrator/logging.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
@@ -206,7 +207,23 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       console.log(`agent dispatch complete — ${out.slug} run ${out.runId} — cost $${result.costUsd.toFixed(4)}`);
     }
   } catch (err) {
-    console.error(`forge agent dispatch: ${err instanceof Error ? err.message : String(err)}`);
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`forge agent dispatch: ${msg}`);
+    // Emit a terminal failure marker to the run log so the bridge's status
+    // endpoint reports `failed` instead of a perpetual `running` (the RunPanel
+    // polls it). Best-effort — never masks the original error / exit code.
+    try {
+      createLogger(runId, '_logs').emit({
+        initiative_id: runId,
+        phase: 'orchestrator',
+        skill: slug,
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: 'agent-dispatch.failed',
+        metadata: { error: msg, agent_slug: slug },
+      });
+    } catch { /* best-effort */ }
     process.exit(1);
   }
 }

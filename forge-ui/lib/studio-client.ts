@@ -792,7 +792,7 @@ export async function dispatchAgentRun(
 
 export type AgentRunStatus = {
   ok: boolean;
-  state: 'running' | 'done' | 'suppressed' | 'unknown';
+  state: 'running' | 'done' | 'suppressed' | 'failed' | 'unknown';
   costUsd: number;
   events: number;
 };
