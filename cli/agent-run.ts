@@ -28,6 +28,8 @@ import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
 import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
 import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-runner.ts';
+import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
+import { skillsDir } from '../orchestrator/skill-path.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
@@ -126,10 +128,87 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
 export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void> {
   const sub = rest[0];
   if (sub === 'run') return await cmdAgentRun(rest.slice(1), forgeRoot);
-  console.error('forge agent: subcommands: run <agent-id> <session-id>');
+  if (sub === 'dispatch') return await cmdAgentDispatch(rest.slice(1), forgeRoot);
+  console.error('forge agent: subcommands: run <agent-id> <session-id> | dispatch <slug>');
   console.error('  forge agent run <agent-id> <session-id> [--project <name>]');
-  console.error(`  <agent-id> is one of: ${Object.keys(AGENT_RUNNERS).join(', ')}`);
+  console.error('  forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v ...]');
+  console.error(`  run <agent-id> is one of: ${Object.keys(AGENT_RUNNERS).join(', ')}`);
   process.exit(2);
+}
+
+/**
+ * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]`
+ * — the generic standalone-run path for a NON-interactive roster agent
+ * (R2-01-F3 dispatch half). Unlike `forge agent run` (the four bespoke
+ * interactive turn-runners in `AGENT_RUNNERS`), this resolves ANY studio agent
+ * def by slug and runs it once through the F1 `runAgent` primitive via
+ * `dispatchAgentRun`. This is the CLI the bridge's `POST /api/agents/:slug/run`
+ * spawns detached (mirroring `spawnAgentTurn`), so the run's events/cost land
+ * under `_logs/<run-id>/` for the monitor.
+ */
+export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promise<void> {
+  const slug = rest[0];
+  if (!slug || slug.startsWith('--')) {
+    console.error('forge agent dispatch: missing <slug>');
+    console.error('Usage: forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v ...]');
+    process.exit(2);
+    return;
+  }
+  const flags = rest.slice(1);
+  const flagValue = (name: string): string | undefined => {
+    const i = flags.indexOf(name);
+    return i >= 0 ? flags[i + 1] : undefined;
+  };
+  const runId = flagValue('--run-id');
+  if (!runId) {
+    console.error('forge agent dispatch: --run-id <id> is required');
+    process.exit(2);
+    return;
+  }
+  const projectArg = flagValue('--project');
+  const project = projectArg
+    ? { name: projectArg, repoPath: resolve('projects', projectArg) }
+    : undefined;
+
+  // `--input k=v` may repeat; each is surfaced as prompt DATA (never instructions).
+  const inputs: Record<string, string> = {};
+  for (let i = 0; i < flags.length; i++) {
+    if (flags[i] === '--input') {
+      const kv = flags[i + 1] ?? '';
+      const eq = kv.indexOf('=');
+      if (eq <= 0) {
+        console.error(`forge agent dispatch: --input expects k=v, got ${JSON.stringify(kv)}`);
+        process.exit(2);
+        return;
+      }
+      inputs[kv.slice(0, eq)] = kv.slice(eq + 1);
+    }
+  }
+
+  if (project && !existsSync(project.repoPath)) {
+    console.error(`forge agent dispatch: project root not found: ${project.repoPath}`);
+    process.exit(2);
+    return;
+  }
+
+  try {
+    const out = await dispatchAgentRun({
+      slug,
+      skillsDir: skillsDir(forgeRoot),
+      runId,
+      project,
+      inputs: Object.keys(inputs).length > 0 ? inputs : undefined,
+    });
+    const { result } = out;
+    if (result.suppressed) {
+      console.log(`agent dispatch: ${out.slug} run ${out.runId} — spawn suppressed (dry-bridge / no-spawn seam)`);
+    } else {
+      console.log(`agent dispatch complete — ${out.slug} run ${out.runId} — cost $${result.costUsd.toFixed(4)}`);
+    }
+  } catch (err) {
+    console.error(`forge agent dispatch: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }
 
 /**

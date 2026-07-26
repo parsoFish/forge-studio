@@ -148,6 +148,8 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawnDemoBuilderTurn — bookkeeping proceeds; the agent turn is skipped with marker + event' },
   { method: 'POST', route: '/api/studio/projects/:id/preflight/fix-agent', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnPreflightFix — marker on the user-tier spawn branch (auto/agent-tier branches never spawn)' },
+  { method: 'POST', route: '/api/agents/:id/run', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnAgentDispatch (R2-01-F3 generic run host) — validation + runId proceed; the agent dispatch is skipped with marker + event' },
 
   // ---- stub-actions: verdict-approve special case -----------------------
   { method: 'POST', route: '/api/verdict', classification: 'stub-actions',

@@ -101,6 +101,9 @@ import {
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
+import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
+import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
+import { skillsDir } from '../orchestrator/skill-path.ts';
 import {
   readSessionStatus,
   writeSessionStatus,
@@ -1056,6 +1059,102 @@ async function handleHttp(
     return;
   }
 
+  // Generic agent run status (R2-01-F3) — GET /api/agents/runs/<runId>. Reads
+  // the run's `_logs/<runId>/events.jsonl` and reports {state, costUsd, events}
+  // so the agent-page RunPanel shows live status + cost (the F1 "events/cost
+  // visible" AC) without a bespoke per-agent monitor.
+  if (method === 'GET' && url.startsWith('/api/agents/runs/')) {
+    const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length));
+    if (!isSafeRunId(runId)) {
+      sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
+      return;
+    }
+    const eventsPath = join(ctx.logsRoot, runId, 'events.jsonl');
+    if (!existsSync(eventsPath)) {
+      // Dispatched but no event yet (or spawn suppressed with no log dir).
+      sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0 }, origin);
+      return;
+    }
+    try {
+      const parsed = readFileSync(eventsPath, 'utf8')
+        .trim().split('\n').filter(Boolean)
+        .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
+        .filter((e): e is Record<string, unknown> => e !== null);
+      const suppressed = parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed');
+      const endEvent = parsed.find((e) => e['event_type'] === 'end');
+      const state = suppressed ? 'suppressed' : endEvent ? 'done' : 'running';
+      const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : 0;
+      sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Generic agent run (R2-01-F3 dispatch half) — POST /api/agents/<slug>/run.
+  // Dispatches ONE non-interactive roster agent standalone through the F1
+  // runAgent primitive: the agent-page run surface any runnable agent plugs
+  // into (the onboarding agent's first consumer, R4-02-F1). Mirrors
+  // spawnAgentTurn — validate + generate a runId, spawn `agent dispatch`
+  // detached (dry-bridge guarded), and hand the runId back so the UI links to
+  // the monitor. Interactive agents (architect/instructions/…) are refused
+  // here, not just hidden in the UI — resolveDispatchableAgent is the backstop.
+  if (method === 'POST' && url.startsWith('/api/agents/') && url.endsWith('/run')) {
+    const slug = decodeURIComponent(url.slice('/api/agents/'.length, url.length - '/run'.length));
+    if (!SAFE_AGENT_SLUG_RE.test(slug)) {
+      sendJson(res, 400, { error: `invalid agent slug: ${JSON.stringify(slug)}` }, origin);
+      return;
+    }
+    try {
+      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown };
+      // Resolve + validate against the live roster (unknown/interactive → 400).
+      try {
+        resolveDispatchableAgent(slug, listAgentDefinitions(skillsDir(ctx.forgeRoot)));
+      } catch (err) {
+        sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return;
+      }
+      let project: string | undefined;
+      if (body.project !== undefined) {
+        if (typeof body.project !== 'string' || !SAFE_AGENT_SLUG_RE.test(body.project)) {
+          sendJson(res, 400, { error: `invalid project: ${JSON.stringify(body.project)}` }, origin);
+          return;
+        }
+        if (!existsSync(join(ctx.projectsRoot, body.project))) {
+          sendJson(res, 404, { error: `project not found: ${body.project}` }, origin);
+          return;
+        }
+        project = body.project;
+      }
+      // inputs: a flat string→string map, rendered as prompt DATA by dispatchAgentRun.
+      const inputs: Record<string, string> = {};
+      if (body.inputs !== undefined) {
+        if (typeof body.inputs !== 'object' || body.inputs === null || Array.isArray(body.inputs)) {
+          sendJson(res, 400, { error: 'inputs must be an object of string values' }, origin);
+          return;
+        }
+        for (const [k, v] of Object.entries(body.inputs as Record<string, unknown>)) {
+          if (typeof v !== 'string') {
+            sendJson(res, 400, { error: `input "${k}" must be a string` }, origin);
+            return;
+          }
+          inputs[k] = v;
+        }
+      }
+      const runId = `_agent-${slug}-${newRunStamp()}`;
+      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs);
+      sendJson(
+        res,
+        200,
+        { ok: true, runId, slug, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/agents/:slug/run', runId) },
+        origin,
+      );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
   // Plan (R4-05 / F4) — the roadmap's per-initiative "Plan" trigger. Repoints
   // ONE WI-less initiative's manifest at the forge-architect flow (decompose
   // only) and makes it claimable — the same manifest-move queue-state
@@ -1214,6 +1313,56 @@ function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: s
       ['--experimental-strip-types', 'orchestrator/cli.ts', verb, 'run', sessionId, '--project', project],
       { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
+    closeSync(stderrFd);
+    proc.unref();
+  } catch { /* best-effort */ }
+}
+
+/** Studio agent slug + project-name shape (skill dir names): lowercase, digits,
+ *  hyphen. Pre-validates the URL slug / body project so no value can inject a
+ *  CLI flag into the detached spawn below. */
+const SAFE_AGENT_SLUG_RE = /^[a-z0-9-]+$/;
+/** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
+const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_-]+$/;
+
+/** Timestamp stamp for a generated run id — YYYY-MM-DDTHH-mm-ss-SSS
+ *  (ms precision so two runs in the same second don't collide). */
+function newRunStamp(): string {
+  return new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+}
+
+/**
+ * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
+ * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
+ * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
+ * never bubbles into the request). slug/runId/project are pre-validated by the
+ * route; input keys are re-checked here (defense-in-depth) so no arg injects a
+ * flag. Input VALUES are arbitrary — safe as a single `k=v` arg since spawn()
+ * runs no shell.
+ */
+function spawnAgentDispatch(
+  forgeRoot: string,
+  slug: string,
+  runId: string,
+  project?: string,
+  inputs?: Record<string, string>,
+): void {
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
+    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
+    return;
+  }
+  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', slug, '--run-id', runId];
+  if (project) args.push('--project', project);
+  for (const [k, v] of Object.entries(inputs ?? {})) {
+    if (!SAFE_INPUT_KEY_RE.test(k)) continue;
+    args.push('--input', `${k}=${v}`);
+  }
+  try {
+    const logDir = join(forgeRoot, '_logs', runId);
+    mkdirSync(logDir, { recursive: true });
+    const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
+    const proc = spawn(process.execPath, args, { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] });
     closeSync(stderrFd);
     proc.unref();
   } catch { /* best-effort */ }
