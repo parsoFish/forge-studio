@@ -53,6 +53,7 @@ import {
   matchInstructionSeeds,
   renderSeedPromptSection,
   composedSeedsFooter,
+  stripComposedSeedsFooter,
 } from './instruction-seed-match.ts';
 
 export { type InterviewQuestion } from './interactive-session.ts';
@@ -119,10 +120,11 @@ export type RunInstructionsTurnInput = {
   /** Safety cap on interview rounds before forcing a draft. Default 4. */
   maxInterviewRounds?: number;
   /**
-   * R3-05-F3 — forge root holding the `studio/instruction-seeds/` library.
+   * R3-05-F3 — forge root holding the `studio/instruction-seeds/` library
+   * (threaded by `cmdAgentRun` via `needsForgeRoot`, mirroring demo-builder).
    * Defaults to `cwd` (the forge process root); tests inject a fixture root.
    */
-  seedsRoot?: string;
+  forgeRoot?: string;
 };
 
 export type RunInstructionsTurnResult = {
@@ -168,7 +170,7 @@ export async function runInstructionsTurn(
   // a broken/absent library must never block authoring AGENTS.md.
   let matchedSeeds: InstructionSeed[] = [];
   try {
-    const seedsRoot = input.seedsRoot ?? resolve('.');
+    const seedsRoot = input.forgeRoot ?? resolve('.');
     matchedSeeds = matchInstructionSeeds(
       listInstructionSeeds(seedsRoot),
       detectProjectTags(status.project_repo_path),
@@ -390,7 +392,9 @@ async function runDraftStep(args: {
     onToolUse, onHeartbeat, onText, label: 'instructions-structured',
   });
 
-  const agentsMd = (output?.agents_md ?? '').trim();
+  // Strip any prior composed-seeds footer the LLM echoed back (edit-mode
+  // revisions include the existing file verbatim) so re-appending is idempotent.
+  const agentsMd = stripComposedSeedsFooter((output?.agents_md ?? '').trim()).trim();
   if (!agentsMd) {
     throw new Error(
       'instructions runner: draft step returned empty AGENTS.md content — re-run to retry, or refine the brief / interview answers.',

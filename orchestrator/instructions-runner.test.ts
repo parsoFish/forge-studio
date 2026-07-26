@@ -230,7 +230,7 @@ test('R3-05-F3: a matching-shape project injects seeds into the draft prompt + r
     return gen();
   };
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, seedsRoot, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   // The matched seed was injected into the draft prompt.
@@ -266,12 +266,47 @@ test('R3-05-F3: a no-match project falls back to a from-scratch draft (no seed s
     return gen();
   };
 
-  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, seedsRoot, logger: logger(logsRoot, sessionId) });
+  const result = await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
 
   assert.equal(result.phase, 'awaiting-verdict');
   assert.doesNotMatch(draftPrompt, /Matching instruction seeds/);
   const draft = readFileSync(join(sessionDir, DRAFT_FILENAME), 'utf8');
   assert.doesNotMatch(draft, /forge:composed-instruction-seeds/);
 
+  rmSync(seedsRoot, { recursive: true, force: true });
+});
+
+test('R3-05-F3: edit-mode revision does not duplicate the composed-seeds footer (idempotent)', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'drafting', mode: 'edit' });
+  const seedsRoot = mkdtempSync(join(tmpdir(), 'seeds-root-'));
+  const seedDir = join(seedsRoot, 'studio', 'instruction-seeds');
+  mkdirSync(seedDir, { recursive: true });
+  writeFileSync(
+    join(seedDir, 'typescript-node.md'),
+    '---\nid: typescript-node\ntitle: TS/Node\nkind: language\nappliesTo: [typescript]\nscope: both\nprovenance: forge CLAUDE.md\n---\n\nUse tsc.\n',
+  );
+  // Existing AGENTS.md ALREADY carries a footer (from a prior compose).
+  writeFileSync(join(repoPath, 'package.json'), JSON.stringify({ devDependencies: { typescript: '^5' } }));
+  writeFileSync(
+    join(repoPath, 'AGENTS.md'),
+    '# Demo\n\nBuild: `npm run build`.\n\n<!-- forge:composed-instruction-seeds: typescript-node -->\n',
+  );
+
+  // The LLM echoes the existing file (footer included) as the revised draft.
+  const queryFn: QueryFn = ({ prompt }) => {
+    async function* gen(): AsyncGenerator<unknown> {
+      const structured = prompt.includes('draft AGENTS.md')
+        ? { agents_md: '# Demo\n\nBuild: `npm run build`. Test: `npm test`.\n\n<!-- forge:composed-instruction-seeds: typescript-node -->', composed_seed_ids: ['typescript-node'] }
+        : null;
+      yield { type: 'result', total_cost_usd: 0, structured_output: structured };
+    }
+    return gen();
+  };
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, forgeRoot: seedsRoot, logger: logger(logsRoot, sessionId) });
+
+  const draft = readFileSync(join(sessionDir, DRAFT_FILENAME), 'utf8');
+  const footerCount = (draft.match(/forge:composed-instruction-seeds/g) ?? []).length;
+  assert.equal(footerCount, 1, `exactly one footer after an edit-mode revision, got ${footerCount}`);
   rmSync(seedsRoot, { recursive: true, force: true });
 });

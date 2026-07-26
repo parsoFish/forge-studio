@@ -123,3 +123,16 @@ export function composedSeedsFooter(ids: readonly string[]): string {
   if (clean.length === 0) return '';
   return `\n<!-- forge:composed-instruction-seeds: ${clean.join(', ')} -->\n`;
 }
+
+/** Matches the composed-seeds footer comment (any leading/trailing whitespace). */
+const COMPOSED_FOOTER_RE = /\n*<!--\s*forge:composed-instruction-seeds:[^>]*-->\s*$/;
+
+/**
+ * Strip an existing composed-seeds footer from an AGENTS.md body so re-appending
+ * on an edit-mode revision stays idempotent (the LLM echoes the prior footer as
+ * part of "the existing file, revised"). Returns the body with the trailing
+ * footer removed; a body without one is returned unchanged.
+ */
+export function stripComposedSeedsFooter(md: string): string {
+  return md.replace(COMPOSED_FOOTER_RE, '');
+}

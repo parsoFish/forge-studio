@@ -14,6 +14,7 @@ import {
   matchInstructionSeeds,
   renderSeedPromptSection,
   composedSeedsFooter,
+  stripComposedSeedsFooter,
 } from './instruction-seed-match.ts';
 import type { InstructionSeed } from './studio/types.ts';
 
@@ -81,4 +82,13 @@ test('composedSeedsFooter: dedups + sorts; empty → empty string', () => {
   assert.equal(composedSeedsFooter(['', '  ']), '', 'blank ids dropped');
   const footer = composedSeedsFooter(['cli-project-shape', 'typescript-node', 'typescript-node']);
   assert.match(footer, /forge:composed-instruction-seeds: cli-project-shape, typescript-node/);
+});
+
+test('stripComposedSeedsFooter: removes a trailing footer, idempotent, leaves footer-less bodies alone', () => {
+  const body = '# AGENTS\n\nBuild: `npm run build`.';
+  const withFooter = `${body}\n\n<!-- forge:composed-instruction-seeds: cli-project-shape, typescript-node -->\n`;
+  assert.equal(stripComposedSeedsFooter(withFooter).trim(), body);
+  assert.equal(stripComposedSeedsFooter(body), body, 'no footer → unchanged');
+  // Re-strip is idempotent.
+  assert.equal(stripComposedSeedsFooter(stripComposedSeedsFooter(withFooter)).trim(), body);
 });
