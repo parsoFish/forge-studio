@@ -967,3 +967,59 @@ test('validateProjectConfig: derived flat accessors equal the declared testProce
     requires_env: ['TF_ACC'],
   });
 });
+
+test('loadProjectConfig: buildProcess round-trips (R1-04-F3)', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(
+      root,
+      JSON.stringify({
+        testProcess: { local: { cmd: ['npm', 'test'] } },
+        buildProcess: { local: ['npm', 'run', 'build'], remote: '.github/workflows/ci.yml' },
+      }),
+    );
+    const cfg = loadProjectConfig(root);
+    assert.ok(cfg);
+    assert.deepEqual(cfg.buildProcess, { local: ['npm', 'run', 'build'], remote: '.github/workflows/ci.yml' });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: buildProcess absent → undefined (byte-compatible)', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(root, JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } } }));
+    const cfg = loadProjectConfig(root);
+    assert.ok(cfg);
+    assert.equal(cfg.buildProcess, undefined);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: malformed buildProcess throws (fail-closed)', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(
+      root,
+      JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, buildProcess: { local: 'not-an-array' } }),
+    );
+    assert.throws(() => loadProjectConfig(root), /buildProcess\.local/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('loadProjectConfig: buildProcess.remote path traversal is rejected', () => {
+  const root = newTempDir();
+  try {
+    writeConfig(
+      root,
+      JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } }, buildProcess: { remote: '../../etc/passwd' } }),
+    );
+    assert.throws(() => loadProjectConfig(root), /buildProcess\.remote/);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -16,7 +16,11 @@ The contract now has **two faces that must both be green**:
 - **Face A — the Studio object** (`.forge/project.json`, authored/edited in the UI
   project builder, checked by `ContractReadiness`): `northStar`, `instructions`,
   `demoProcess`, `skills`, `kb`.
-- **Face B — the operational clauses** (`forge preflight`): C1–C9 + DEMO + BRAIN.
+- **Face B — the operational clauses** (`forge preflight`), grouped by the six
+  processes (test / demo / instructions / release / build / kb): C1/C1b/C7
+  (test), DEMO/DEMO-SKILL/DEMO-ALIGN (demo), C5/C8 incl. its coverage check
+  (instructions), C10 (release), BUILD/ARTIFACTS (build), plus the structural
+  invariants C2/C4/C6/C9 + BRAIN. See `docs/forge-project-contract.md`.
 
 A project is **flow-ready** only when both are satisfied (the UI's
 `data-flow-ready` requires all five Studio-field checks AND zero failing hard

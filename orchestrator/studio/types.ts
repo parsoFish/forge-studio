@@ -428,6 +428,22 @@ export type ReleaseConfig = {
   docsDir?: string;
 };
 
+/**
+ * R1-04-F3 — the build process, declared SEPARATELY from the test gate
+ * (testProcess) because the diagram names them as distinct obligations: a
+ * project can gate on tests while its *build* breaks. `local` is the
+ * compile/package command run on a dev machine (e.g. `['npm','run','build']`,
+ * `['go','build','./...']`); `remote` names the CI workflow that builds on the
+ * server (a worktree-relative path, e.g. `.github/workflows/ci.yml`). Both
+ * optional — a project with no build step declares neither (advisory clause).
+ * Build-OUTPUT hygiene (artifacts gitignored) stays the companion ARTIFACTS
+ * clause (auto-fixable); the contract doc groups the two under "build".
+ */
+export type BuildProcess = {
+  local?: string[];
+  remote?: string;
+};
+
 export type ProjectDefinition = {
   id: string;
   name: string;

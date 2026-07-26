@@ -49,12 +49,32 @@ protocol, its bound skills and knowledge base.
 **Face B — Operational clauses** (enforced by `forge preflight`): the structural
 properties that make unattended development safe — truthful done-signal, hermetic
 commits, decomposable source, locked-core declarations, satisfiable merge model,
-external-resource verification, agent-instruction file, non-default fixtures.
+external-resource verification, agent-instruction file, non-default fixtures,
+release substrate, and a declared build process.
 
 A project that is **flow-ready** in the Studio UI is simultaneously
 **preflight-green**: `data-flow-ready="true"` requires all five Studio-field
 checks AND zero failing HARD preflight clauses. This is the readiness convergence
 point.
+
+### The process vocabulary (how the clauses group)
+
+The clauses read as fourteen ids, but they enforce **six processes** — the way
+the operator diagram frames a project. Clause ids stay the stable anchors; each
+process is the lens (R1-04):
+
+| Process | What it declares | Clauses |
+|---------|------------------|---------|
+| **test** | the done-signal: a fast per-WI gate, the CI net, the live-acceptance tier | C1, C1b, C7 |
+| **demo** | how a change is shown: capture + verify + present, aligned to the test process | DEMO, DEMO-SKILL, DEMO-ALIGN |
+| **instructions** | the human-owned agent-instruction file — present AND covering the declared gate/untouchables | C8 (+ C5 locked-core) |
+| **release** | repo-side pre-merge prep (docs / changelog / version) whose substrate exists; CI owns tag/publish | C10 (`releaseProcess`) |
+| **build** | the compile/package step (local + remote CI), distinct from test; outputs gitignored | BUILD (`buildProcess`), ARTIFACTS |
+| **kb** | the bound knowledge base (flow / project / unique) | Face-A `kb` + KB binding (R1-01) |
+
+Plus the structural invariants that don't map to a single process — hermetic
+commits (C2), decomposable planning inputs (C4), a satisfiable merge model (C6),
+non-default fixtures (C9), and brain freshness (BRAIN).
 
 ---
 
@@ -300,6 +320,15 @@ The per-cycle forge scratchpad `AGENT.md` (written by forge during the dev-loop)
 is distinct from `AGENTS.md`/`CLAUDE.md` (operator-owned). The scratchpad must
 be gitignored (C2); the instruction file must be present and operator-owned (C8).
 
+**Coverage (R1-04-F1).** Beyond presence, preflight checks that the file
+actually *mentions the declared quality-gate command* (`testProcess.local.cmd`,
+the sidecar, or the package.json `test` script) — machine-greppable (whole
+command or its distinctive head token, e.g. `npm test`). An instruction file
+that never names the gate it must pass every iteration is stale/thin; the miss
+is advisory and routes to the instructions agent (edit mode) to add it — the
+file stays operator-owned (no auto-generation). Skipped when no gate is declared
+yet (pre-onboarding): presence-only then.
+
 ---
 
 ### C9 — Non-default fixtures with read-back assertions *(advisory; HARD for C7 projects)*
@@ -349,6 +378,40 @@ When declared, the clause has three parts, all enforced by forge's release flow:
 The point: a merged feature whose docs/changelog/version are stale ships a lie;
 this clause makes "the release artifacts are truthful and tagged by CI" a
 structural property when the project opts in.
+
+**Preflight substrate check (R1-04-F2).** Beyond the release flow above,
+`forge preflight` now asserts — when (and only when) `releaseProcess` is
+declared — that each declared path-substrate exists on disk (`changelogPath`,
+`versionFile`, `docsDir`) and that a `changelog`/`version` step has its
+corresponding path declared (the finalizer has somewhere to write). Advisory,
+opt-in: a missing target would otherwise surface only when the finalizer runs
+(log-and-continue, silently). Resolution is operator-owned (`user` tier — adding
+a changelog/version file blind is presumptuous).
+
+---
+
+### BUILD — The build process, distinct from test *(advisory; R1-04-F3)*
+
+A project can gate on tests while its **build** breaks, so the compile/package
+step is its own obligation — declared in `.forge/project.json` as
+`buildProcess`, separate from `testProcess`:
+
+- **`local`** — the compile/package command run on a dev machine
+  (`['npm','run','build']`, `['go','build','./...']`).
+- **`remote`** — the CI workflow that builds on the server, a worktree-relative
+  path (`.github/workflows/ci.yml`).
+
+Both optional. When `buildProcess` is declared, a declared `remote` workflow
+must exist on disk; when it is *not* declared but a build is inferable (a
+package.json `build` script), preflight nudges the operator to declare it so a
+broken build is caught as its own obligation rather than conflated with the test
+gate. A pure-script project with no build passes inert. Resolution is
+operator-owned (`user` tier).
+
+Build-**output** hygiene — compiled artifacts gitignored so `git add -A` never
+sweeps a binary into the PR — is the companion **ARTIFACTS** clause below, kept
+a separate clause so its `.gitignore`-append auto-fix survives; the two together
+are the "build process".
 
 ---
 
@@ -581,12 +644,13 @@ part of this spec.
 | C5 | `forge preflight` — advisory | Constraints doc presence |
 | C6 | `forge preflight` — advisory | GitHub remote existence |
 | C7 | PM phase — **HARD** (when `required: true`) + dev-loop gate (`requiresEnv` guard) | `testProcess.acceptance` enforcement; `testProcess.ci.unsetEnv` on final delivery gate |
-| C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence |
+| C8 | `forge preflight` — advisory | `AGENTS.md` / `CLAUDE.md` presence **+ coverage (R1-04-F1): the file mentions the declared quality-gate command**; a miss routes to the instructions agent |
 | C9 | Hand-verified at onboarding; HARD for C7 projects (fixture review) | Not yet machine-checked |
-| C10 | Release flow — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed |
+| C10 | Release flow + `forge preflight` — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed; **R1-04-F2: preflight now asserts each declared step's substrate exists (`changelogPath` / `versionFile` / `docsDir`)** |
+| BUILD | `forge preflight` — advisory (R1-04-F3) | `buildProcess` declared (`local` compile/package cmd + `remote` CI-workflow path); a declared `remote` must exist; an inferable-but-undeclared build nudges. Distinct from the test gate (C1) |
 | DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
-| ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` |
+| ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
 | MB-GATE | spec-only — operator review required | execution home: R4-10 flow (`docs/roadmaps/R4-ootb-suite.md` R4-10-F2) |
 
@@ -613,8 +677,10 @@ flow-ready — the flow engine will not accept it.
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
 | C7 | `testProcess.acceptance: { match: "acceptancetests", required: true, requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
-| C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions |
+| C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions — and it names the declared gate (`make test`), so the C8 coverage check passes |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
+| C10 | `releaseProcess` with in-cycle `changelog` + pre-merge `version` steps; `changelogPath` + `versionFile` substrate present (preflight asserts they exist) |
+| BUILD | `buildProcess.local`: `go build -mod=vendor .` (the entry-point compile — NOT `go build ./...`, which the C5 constraint forbids as it fills the disk), distinct from the `go test` gate; ARTIFACTS ignores the compiled provider binary |
 | DEMO | `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; requires real ADO REST round-trip evidence (API GET response) when creds are present |
 
 ---

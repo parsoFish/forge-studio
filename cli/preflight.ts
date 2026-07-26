@@ -33,7 +33,7 @@ import {
 } from '../orchestrator/project-config.ts';
 import { projectBrainDir, projectThemesDir } from '../orchestrator/brain-paths.ts';
 
-export type ClauseId = 'C1' | 'C1b' | 'C2' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'DEMO-ALIGN' | 'ARTIFACTS';
+export type ClauseId = 'C1' | 'C1b' | 'C2' | 'C4' | 'C5' | 'C6' | 'C7' | 'C8' | 'C10' | 'BUILD' | 'BRAIN' | 'DEMO' | 'DEMO-SKILL' | 'DEMO-ALIGN' | 'ARTIFACTS';
 
 export type ClauseResult = {
   clause: ClauseId;
@@ -134,10 +134,12 @@ export function runPreflight(
     checkC5(dir),
     checkC6(dir),
     checkC7(cfg),
-    checkC8(dir),
+    checkC8(dir, cfg),
+    checkC10(dir, cfg),
     checkDemo(dir),
     checkDemoSkill(dir),
     checkDemoAlignment(cfg),
+    checkBuild(dir, cfg),
     checkBuildArtifacts(dir),
     checkBrainStaleness(dir, projectName, forgeRoot),
   ];
@@ -376,24 +378,127 @@ function checkC6(dir: string): ClauseResult {
  * at its root. Research shows ~4pp uplift from human-authored agent-instruction
  * files; auto-generated files hurt. This clause requires *presence*, never
  * auto-generation. Advisory (never blocks).
+ *
+ * R1-04-F1 — beyond presence, a COVERAGE check: an instruction file that never
+ * mentions the project's declared quality-gate command is stale/thin (the agent
+ * won't learn the gate it must pass every iteration from a file that omits it).
+ * Machine-greppable: the file text must contain the declared gate command. A
+ * miss routes to the instructions-creator (edit mode) via `preflight-resolve`'s
+ * C8→instructions mapping — the file stays operator-owned (no auto-generation).
+ * Skipped when no gate is declared yet (pre-onboarding) — presence-only then.
  */
-function checkC8(dir: string): ClauseResult {
+function checkC8(dir: string, cfg: ProjectConfig | null): ClauseResult {
   const base = { clause: 'C8' as const, title: 'Agent-instruction file (AGENTS.md or CLAUDE.md)', hard: false };
   const found = AGENT_INSTRUCTION_CANDIDATES.find((f) => existsSync(join(dir, f)));
-  if (found) {
+  if (!found) {
     return {
       ...base,
-      pass: true,
-      detail: `${found} present — build/test/lint commands and locked-core mandates available to the agent`,
+      pass: false,
+      detail:
+        `no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files ` +
+        `give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint ` +
+        `commands at the top and any locked-core mandates (e.g. "never edit tests to pass").`,
+    };
+  }
+  // Coverage (R1-04-F1): does the present file mention the declared gate command?
+  const gate = readQualityGateCmd(dir, cfg);
+  if (gate) {
+    let content = '';
+    try {
+      content = readFileSync(join(dir, found), 'utf8');
+    } catch {
+      /* unreadable → treat as no coverage evidence below */
+    }
+    if (!mentionsCommand(content, gate.cmd)) {
+      return {
+        ...base,
+        pass: false,
+        detail:
+          `${found} present but never mentions the declared quality-gate command (${gate.source}: \`${gate.cmd}\`). ` +
+          `Advisory: an instruction file that omits the gate it must pass every iteration is stale/thin. ` +
+          `Add the build/test/lint commands (and any locked-core mandates) — route to the instructions agent to edit it.`,
+      };
+    }
+  }
+  return {
+    ...base,
+    pass: true,
+    detail: gate
+      ? `${found} present and mentions the declared gate (\`${gate.cmd}\`) — commands + locked-core available to the agent`
+      : `${found} present — build/test/lint commands and locked-core mandates available to the agent`,
+  };
+}
+
+/**
+ * True iff `content` mentions `cmd` — machine-greppable coverage. Checks the
+ * whole command (whitespace-normalized, case-insensitive) AND its distinctive
+ * head token (`npm test`, `go test`, `make test`) so a file that documents
+ * `npm test` still covers a declared `npm test --silent`, and vice-versa.
+ */
+function mentionsCommand(content: string, cmd: string): boolean {
+  const hay = content.toLowerCase().replace(/\s+/g, ' ');
+  const needle = cmd.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!needle) return true;
+  if (hay.includes(needle)) return true;
+  // The distinctive first two tokens (runner + subcommand) — e.g. "npm test".
+  const head = needle.split(' ').slice(0, 2).join(' ');
+  return head.length > 0 && hay.includes(head);
+}
+
+// --- C10: documentation parity & release substrate (ADVISORY; opt-in) ---
+
+/**
+ * R1-04-F2 — the preflight side of the already-documented C10 clause
+ * (docs/forge-project-contract.md). `releaseProcess` is typed + consumed by the
+ * release-finalizer, but NOTHING checked at preflight that the substrate each
+ * declared step targets actually exists — so a project could declare a
+ * `changelog` step whose `changelogPath` file is absent and only discover it
+ * when the finalizer runs (log-and-continue, silently). C10 closes that: when
+ * (and only when) `releaseProcess` is declared, assert each declared
+ * path-substrate (`changelogPath`, `versionFile`, `docsDir`) exists, and that a
+ * `changelog`/`version` step has its corresponding path declared. Advisory,
+ * opt-in (inert without `releaseProcess`) — mirrors the doc's C10 semantics.
+ */
+function checkC10(dir: string, cfg: ProjectConfig | null): ClauseResult {
+  const base = { clause: 'C10' as const, title: 'Documentation parity & release substrate', hard: false };
+  const rel = cfg?.releaseProcess;
+  if (!rel || rel.steps.length === 0) {
+    return { ...base, pass: true, detail: 'no releaseProcess declared — release clause inert (opt-in)' };
+  }
+  const problems: string[] = [];
+  const kinds = new Set(rel.steps.map((s) => s.kind));
+  // Declared path-substrate must exist on disk.
+  const pathChecks: [string, string | undefined][] = [
+    ['changelogPath', rel.changelogPath],
+    ['versionFile', rel.versionFile],
+    ['docsDir', rel.docsDir],
+  ];
+  for (const [field, p] of pathChecks) {
+    if (p && !existsSync(join(dir, p))) {
+      problems.push(`${field} "${p}" does not exist`);
+    }
+  }
+  // A changelog / version step needs its path declared so the finalizer knows where to write.
+  if (kinds.has('changelog') && !rel.changelogPath) {
+    problems.push('a `changelog` step is declared but `changelogPath` is not — the finalizer has nowhere to write the entry');
+  }
+  if (kinds.has('version') && !rel.versionFile) {
+    problems.push('a `version` step is declared but `versionFile` is not — the finalizer cannot bump a version file');
+  }
+  if (problems.length > 0) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `releaseProcess declared (${rel.steps.length} step(s)) but its substrate is incomplete: ${problems.join('; ')}. ` +
+        `Advisory: the release-finalizer log-and-continues on a missing target, so the release ships stale. ` +
+        `Add the missing file(s)/path(s) or correct the releaseProcess declaration.`,
     };
   }
   return {
     ...base,
-    pass: false,
-    detail:
-      `no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files ` +
-      `give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint ` +
-      `commands at the top and any locked-core mandates (e.g. "never edit tests to pass").`,
+    pass: true,
+    detail: `releaseProcess substrate present for ${rel.steps.length} step(s) (${[...kinds].join(', ')})`,
   };
 }
 
@@ -568,6 +673,64 @@ function checkBuildArtifacts(dir: string): ClauseResult {
       `A compiled binary / dist / coverage left un-ignored will be swept into the PR by \`git add -A\` ` +
       `(betterado committed a 35 MB binary this way). Advisory — add the build-output ignores for this project.`,
   };
+}
+
+// --- BUILD: the project's build process is declared (ADVISORY, R1-04-F3) ---
+
+/**
+ * R1-04-F3 — the build process, distinct from the test gate (C1/testProcess).
+ * A project can gate on tests while its *build* breaks, so the compile/package
+ * step is a first-class obligation. Advisory: when a `buildProcess` is declared,
+ * a declared `remote` CI-workflow path must exist on disk; when it is NOT
+ * declared but a build is inferable (a package.json `build` script), nudge the
+ * operator to declare it. A project with no build step (pure-script) passes.
+ *
+ * Build-OUTPUT hygiene (compiled artifacts gitignored) is the companion
+ * ARTIFACTS clause (kept separate so its `.gitignore`-append auto-fix survives);
+ * the contract doc groups BUILD + ARTIFACTS under "build process".
+ */
+function checkBuild(dir: string, cfg: ProjectConfig | null): ClauseResult {
+  const base = { clause: 'BUILD' as const, title: 'Build process declared (local + remote/CI, distinct from test)', hard: false };
+  const bp = cfg?.buildProcess;
+  if (bp && (bp.local || bp.remote)) {
+    const problems: string[] = [];
+    if (bp.remote && !existsSync(join(dir, bp.remote))) {
+      problems.push(`buildProcess.remote "${bp.remote}" (the CI workflow) does not exist`);
+    }
+    if (problems.length > 0) {
+      return { ...base, pass: false, detail: `buildProcess declared but ${problems.join('; ')}. Advisory — add the workflow or correct the path.` };
+    }
+    const parts = [
+      bp.local ? `local \`${bp.local.join(' ')}\`` : null,
+      bp.remote ? `remote ${bp.remote}` : null,
+    ].filter(Boolean);
+    return { ...base, pass: true, detail: `buildProcess declared (${parts.join(', ')})` };
+  }
+  // Not declared — nudge only when a build is clearly inferable.
+  const inferred = inferredBuildCommand(dir);
+  if (inferred) {
+    return {
+      ...base,
+      pass: false,
+      detail:
+        `a build step is inferable (${inferred}) but no buildProcess is declared. Advisory: declare ` +
+        `buildProcess.local (+ remote CI workflow) so a broken build is caught as its own obligation, not conflated with the test gate.`,
+    };
+  }
+  return { ...base, pass: true, detail: 'no buildProcess declared and none inferable (pure-script project) — build clause inert' };
+}
+
+/** The inferable build command for the advisory nudge — today just a package.json `build` script. `null` if none. */
+function inferredBuildCommand(dir: string): string | null {
+  const pkgPath = join(dir, 'package.json');
+  if (!existsSync(pkgPath)) return null;
+  try {
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { scripts?: Record<string, string> };
+    const b = pkg.scripts?.build;
+    return b && b.trim() ? 'package.json "build" script' : null;
+  } catch {
+    return null;
+  }
 }
 
 // --- helpers ---
