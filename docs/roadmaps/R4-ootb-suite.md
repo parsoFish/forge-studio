@@ -504,13 +504,58 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-06 Develop agent refinement
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **implemented — reconciliation only** (2026-07-26, wave-4 S8;
+  all three features landed via prior initiatives + refinement, verified
+  as-built end-to-end this session)  ·  **Wave:** 4
 - **Depends on:** R4-05 (spec format), R2-03 (declared fanout property)
 - **Context:** Operator diagram: *"essentially the exact dev agent we have
   today other than any logical refinements with the changes from the rest of
   the agents; designed around autonomous development of specs through a ralph
   loop"* — the plan agent holds this context when writing specs. Fanout is
   selected in the flow builder **only because the def declares it** (R2-02/R2-03).
+- **Implemented-notes (2026-07-26 — the R4-04 stale-baseline pattern: the
+  develop agent's declared refinements had all already landed as their
+  dependencies + the 2026-07-11 reflection fixes shipped; this initiative is a
+  verify-and-reconcile, no new code):**
+  - **F1 — as-built (existing pipeline).** Develop's single source of intent is
+    the plan agent's per-WI specs at `.forge/work-items/WI-*.md` (dev-binding
+    threads each `specRelPath` into the Ralph prompt; brain-read policy
+    unchanged — Brain-3 advisory only, dev-loop never reads Brains 1+2). The
+    `specs:` manifest back-ref R4-05-F2 persists (`persistManifestSpecs`,
+    `project-manager.ts`) is consumed as the **planned-evidence dispatch gate**
+    (`enqueue-flow-run.ts` `manifest.specs?.length > 0` → develop may run),
+    which is what makes "plan→develop on specs end-to-end" the enforced path.
+  - **F2 — as-built (R2-03-F2/F3/F4).** `developer-ralph` declares the fanout
+    block `{drivingArtifact: work-items, isolation: worktree, concurrencyCap:
+    1, perItemGate: item-declared}`; the flow-builder toggle is capability-gated
+    (`data-fanout-capable`, greyed on non-declaring agents — the flows-author
+    `a2-3b-fanout-gate` beat asserts developer-ralph ON / developer-unifier
+    OFF); per-WI multiplicity stays runtime-derived from the WI specs; the
+    declared `concurrencyCap` feeds the dispatcher as a default via
+    `DEV_FANOUT_CONCURRENCY_CAP` → `resolveDevWiConcurrency` (env > config >
+    definitionCap > default). AC "fanout selectable on the dev node, greyed on
+    non-declaring agents" is exactly the shipped R2-03-F3 beat.
+  - **F3 — as-built (2026-07-11 "Phase 4/2 honest delivery events" +
+    failure-classifier).** `dev-loop.delivered` is SUCCESS-ONLY
+    (`wiDeliveryEvent`, `developer-loop.ts`): a failed WI fires
+    `dev-loop.discarded` carrying the SAME diff-stat + `outcome: failed`;
+    `dev-loop.branch-pushed` is gated on `finalStatus === 'complete'` (no longer
+    fires for a 0-commit branch). Systematic-vs-flake is distinct:
+    `classifyCrash` splits `deterministic` (context-overflow / identical repeat
+    → `dev-loop.crash-deterministic`, terminal) from `transient`
+    (rate-limit/OOM/network → `dev-loop.agent-crash-retry`), and
+    `classifyCycleFailure` separates environment (gate-timeout, lint-contention,
+    rate-limit → transient/retry) from terminal work defects. AC "event names
+    truthful in a failed-WI replay" is covered by
+    `orchestrator/phases/dev-loop-delivery-outcome.test.ts` (delivered never
+    fires for a non-`complete` status) + `failure-classifier.crash.test.ts`.
+  - **Deferred (NOT R4-06 — out of scope per the register below):** the R2-03-F4
+    residual — parameterizing `runDeveloperLoop` by the *node's* agent def so a
+    2nd fanout-capable agent runs its OWN behaviour (today the dev-loop pipeline
+    hardcodes `developer-ralph`'s identity via `makeAgentWithTelemetry`). That is
+    "fanout mechanics (R2-03)", a hot-path orchestrator refactor with no consumer
+    until R4-02/R4-03 mint a second fanout-capable agent; it stays deferred
+    (operator decision, wave-4 S8). No behaviour gap for the OOTB develop agent.
 - **Features:**
   - **R4-06-F1 Spec consumption.** Develop reads plan-agent specs (R4-05-F2)
     as its single source of intent (brain-read policy unchanged: Brain-3
