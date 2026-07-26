@@ -244,6 +244,48 @@ export type ArtifactTemplate = {
 };
 
 /**
+ * Instruction-seed kinds (R3-05-F1). A seed is a composable building block for
+ * authoring a project's AGENTS.md — NOT a whole file. `language` (idioms for a
+ * language/runtime), `domain` (a problem space, e.g. terraform-provider),
+ * `practice` (a cross-cutting discipline, e.g. TDD), `project-shape` (a whole
+ * project archetype mirroring the contract clauses in
+ * docs/forge-project-contract.md).
+ */
+export const INSTRUCTION_SEED_KINDS = ['language', 'domain', 'practice', 'project-shape'] as const;
+export type InstructionSeedKind = (typeof INSTRUCTION_SEED_KINDS)[number];
+
+/**
+ * Where a seed's guidance belongs (R3-05-F1). `project` seeds compose into a
+ * project's AGENTS.md; `agent` seeds seed an agent's own instructions; `both`
+ * is applicable either side.
+ */
+export const INSTRUCTION_SEED_SCOPES = ['project', 'agent', 'both'] as const;
+export type InstructionSeedScope = (typeof INSTRUCTION_SEED_SCOPES)[number];
+
+/**
+ * An instruction seed (R3-05) — a vetted, composable AGENTS.md building block
+ * stored as studio/instruction-seeds/<id>.md (gray-matter). The instructions-creator
+ * interview matches a project's shape/language to `appliesTo` tags and proposes
+ * matching seeds as pre-filled material (composition-from-vetted-blocks, not
+ * generation-from-nothing). `provenance` is mandatory — the corpus-grounding
+ * rule: every shipped seed cites where the practice was actually proven (a repo
+ * path, a cycle archive under brain/_raw/cycles/, or an upstream source URL),
+ * never a hand-invented best practice.
+ */
+export type InstructionSeed = {
+  id: string; // slug; matches the filename stem
+  title: string;
+  kind: InstructionSeedKind;
+  /** Match tags — languages/domains/shapes this seed applies to (e.g. `typescript`, `go`, `terraform-provider`, `cli`, `monorepo`). Non-empty. */
+  appliesTo: string[];
+  scope: InstructionSeedScope;
+  /** Where the practice was proven — repo path / cycle archive / upstream URL. Mandatory (corpus-grounding). */
+  provenance: string;
+  body: string; // the composable markdown block
+  path: string;
+};
+
+/**
  * Valid KB storage backends (ADR-018 amendment — backend-selection seam).
  * Filesystem is the only implementation today; the seam is preserved for a
  * future graph-memory backend (an earlier Zep attempt was removed).

@@ -79,6 +79,9 @@ export const AGENT_RUNNERS: Record<string, AgentRunnerEntry> = {
   instructions: {
     verb: 'instructions run',
     requiresProject: true,
+    // R3-05-F3 — the runner reads the studio/instruction-seeds/ library under
+    // forgeRoot to compose AGENTS.md from vetted blocks.
+    needsForgeRoot: true,
     loadRunTurn: async () => runInstructionsTurn as unknown as AgentTurnFn,
     printResult: (raw) => {
       const result = raw as Awaited<ReturnType<typeof runInstructionsTurn>>;

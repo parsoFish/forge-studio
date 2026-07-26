@@ -381,8 +381,41 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
 
 ### R3-05 Instructions library
 
-- **Status:** planned  ·  **Wave:** 3 (must precede R4-02/R4-03 — Q6-A
-  "interleaved at dependency points")
+- **Status:** **F1–F3 implemented** (2026-07-26, wave-4 S8, branch
+  `feat/r3-05-instructions-library`); **F4 deferred** (see notes)  ·  **Wave:** 3
+  (must precede R4-02/R4-03 — Q6-A "interleaved at dependency points")
+- **Implemented-notes (2026-07-26):**
+  - **F1 — built.** `InstructionSeed` type + `INSTRUCTION_SEED_KINDS`
+    (`language|domain|practice|project-shape`) / `INSTRUCTION_SEED_SCOPES`
+    (`project|agent|both`) in `studio/types.ts`; `loadInstructionSeed` /
+    `listInstructionSeeds` (`studio/instruction-seeds/<id>.md`, gray-matter,
+    mirrors `loadDemoElement` — absent-dir tolerant, sorted by id);
+    `validateInstructionSeed` + a `forge studio lint` block (slug id, ≥1
+    `appliesTo` tag, slug-shaped tags, non-blank `provenance` per the
+    corpus-grounding rule, non-empty body). Lenient-parse-then-lint: a bad
+    `kind`/`scope` enum throws at load (surfaced by lint).
+  - **F2 — built (5 provenance-cited seeds).** `typescript-node` (forge's own
+    conventions + mdtoc/gitpulse corpora), `go-terraform-provider`
+    (`projects/terraform-provider-betterado/AGENTS.md`), `cli-project-shape`
+    (mdtoc/gitpulse verify grounds), `tdd-red-green` (forge rules + the shipped
+    `superpowers-tdd` community skill), `forge-managed-project` (ADR-034
+    contract). ≥1 per listed domain; every seed cites a real artifact.
+  - **F3 — built.** `orchestrator/instruction-seed-match.ts`: `detectProjectTags`
+    (from on-disk evidence — package.json/tsconfig→typescript/node/cli,
+    go.mod→go/terraform-provider, always `forge-managed`; never fabricates) +
+    `matchInstructionSeeds` (appliesTo∩tags, `project`/`both` scope). The
+    instructions-runner injects matched seeds into the interview + draft prompts
+    and records `composed_seed_ids` in a machine-greppable AGENTS.md footer
+    (drops any id the LLM returns that wasn't actually matched). No-match ⇒
+    today's from-scratch interview (additive, unchanged).
+  - **F4 — DEFERRED.** The browse/edit library surface "follows the R3-01-F3
+    pattern" — but R3-01-F3 (the `/skills` view) + R3-01-F4 (marketplace) were
+    themselves deferred to the operator's §4b.1 design session (known-gaps §11).
+    F4 has no surface pattern to build against yet, and the consumers (R4-02/R4-03)
+    read seeds server-side via `listInstructionSeeds`, so F1–F3 fully unblock them.
+    When R3-01-F3 lands, F4's natural first step is a read-only
+    `GET /api/studio/instruction-seeds` bridge route (mirroring demo-elements) +
+    the browse/edit view + a journey beat.
 - **Depends on:** — . **Depended on by:** R4-02 project-onboarding agent and
   R4-03 project-creation agent (both source AGENTS.md/instructions material
   from this library, alongside R1 contract clauses — index dependency table

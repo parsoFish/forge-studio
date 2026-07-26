@@ -46,6 +46,15 @@ import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { readAgentInstructionsFile } from './project-config.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
+import { listInstructionSeeds } from './studio/registry.ts';
+import type { InstructionSeed } from './studio/types.ts';
+import {
+  detectProjectTags,
+  matchInstructionSeeds,
+  renderSeedPromptSection,
+  composedSeedsFooter,
+  stripComposedSeedsFooter,
+} from './instruction-seed-match.ts';
 
 export { type InterviewQuestion } from './interactive-session.ts';
 
@@ -110,6 +119,12 @@ export type RunInstructionsTurnInput = {
   skillPromptPath?: string;
   /** Safety cap on interview rounds before forcing a draft. Default 4. */
   maxInterviewRounds?: number;
+  /**
+   * R3-05-F3 — forge root holding the `studio/instruction-seeds/` library
+   * (threaded by `cmdAgentRun` via `needsForgeRoot`, mirroring demo-builder).
+   * Defaults to `cwd` (the forge process root); tests inject a fixture root.
+   */
+  forgeRoot?: string;
 };
 
 export type RunInstructionsTurnResult = {
@@ -150,6 +165,23 @@ export async function runInstructionsTurn(
   const queryFn: QueryFn = input.queryFn ?? (sdkQuery as unknown as QueryFn);
   const maxRounds = input.maxInterviewRounds ?? DEFAULT_MAX_INTERVIEW_ROUNDS;
 
+  // R3-05-F3: match the library's instruction seeds to this project's detected
+  // shape/language (empty ⇒ from-scratch fallback). Best-effort — a broken/absent
+  // library must never block authoring AGENTS.md. Only computed for the phases
+  // that consume it (interview + draft); terminal/waiting turns skip the fs reads.
+  let matchedSeeds: InstructionSeed[] = [];
+  if (status.phase === 'interviewing' || status.phase === 'drafting') {
+    try {
+      const seedsRoot = input.forgeRoot ?? resolve('.');
+      matchedSeeds = matchInstructionSeeds(
+        listInstructionSeeds(seedsRoot),
+        detectProjectTags(status.project_repo_path),
+      );
+    } catch {
+      matchedSeeds = [];
+    }
+  }
+
   const startEv = logger.emit({
     initiative_id: initiativeId,
     phase: 'architect',
@@ -176,7 +208,7 @@ export async function runInstructionsTurn(
 
   if (phase === 'interviewing') {
     const interview = readAnswerRounds(sessionDir);
-    const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, onToolUse, onHeartbeat, onText });
+    const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       const questionsPath = writeQuestions(sessionDir, decision.questions);
       writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-answers' });
@@ -194,7 +226,7 @@ export async function runInstructionsTurn(
   }
 
   if (phase === 'drafting') {
-    result = await runDraftStep({ input, sessionDir, status, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText });
+    result = await runDraftStep({ input, sessionDir, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText });
   } else if (phase === 'finalizing') {
     result = runFinalizeStep({ input, sessionDir, status, logger, initiativeId });
   } else if (phase === 'rejected') {
@@ -247,16 +279,18 @@ async function runInterviewStep(args: {
   interview: InterviewAnswer[];
   queryFn: QueryFn;
   skillPromptPath?: string;
+  matchedSeeds?: readonly InstructionSeed[];
   onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, onToolUse, onHeartbeat, onText } = args;
+  const { status, interview, queryFn, skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
   const skill = loadSkillPrompt(skillPromptPath);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(no answers yet — this is the first round)_';
   const editContext = editContextLines(status);
+  const seedSection = renderSeedPromptSection(matchedSeeds ?? []);
   const prompt = [
     skill,
     '',
@@ -265,6 +299,7 @@ async function runInterviewStep(args: {
     `Project: ${status.project}`,
     `Project repo path: ${status.project_repo_path}`,
     ...editContext,
+    ...(seedSection ? [seedSection] : []),
     '',
     status.mode === 'edit' ? 'Operator change-notes:' : 'Operator brief:',
     status.prompt || '_(no brief — author AGENTS.md from the repo as you find it)_',
@@ -297,7 +332,13 @@ async function runInterviewStep(args: {
 
 const DRAFT_SCHEMA = {
   type: 'object',
-  properties: { agents_md: { type: 'string' } },
+  properties: {
+    agents_md: { type: 'string' },
+    // R3-05-F3 — the ids of the library seeds the draft actually composed from
+    // (traceability for later seed improvements). Optional; [] when authored
+    // from scratch with no matching seeds.
+    composed_seed_ids: { type: 'array', items: { type: 'string' } },
+  },
   required: ['agents_md'],
 };
 
@@ -308,16 +349,18 @@ async function runDraftStep(args: {
   queryFn: QueryFn;
   logger: EventLogger;
   initiativeId: string;
+  matchedSeeds?: readonly InstructionSeed[];
   onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
 }): Promise<RunInstructionsTurnResult> {
-  const { input, sessionDir, status, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText } = args;
+  const { input, sessionDir, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
   const interview = readAnswerRounds(sessionDir);
   const feedback = readFeedback(sessionDir);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
   const editContext = editContextLines(status);
+  const seedSection = renderSeedPromptSection(matchedSeeds ?? []);
   const prompt = [
     skill,
     '',
@@ -326,6 +369,7 @@ async function runDraftStep(args: {
     `Project: ${status.project}`,
     `Project repo path: ${status.project_repo_path}`,
     ...editContext,
+    ...(seedSection ? [seedSection] : []),
     '',
     status.mode === 'edit' ? 'Operator change-notes:' : 'Operator brief:',
     status.prompt || '_(none)_',
@@ -337,36 +381,46 @@ async function runDraftStep(args: {
     ...(feedback ? ['', 'Revision feedback from the operator (apply it):', feedback] : []),
     '',
     status.mode === 'edit'
-      ? 'Return `{ "agents_md": "<full markdown>" }` — the existing AGENTS.md above, REVISED to ' +
+      ? 'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the existing AGENTS.md above, REVISED to ' +
         'incorporate the operator\'s change-notes. Preserve everything they did not ask to change; ' +
-        'keep commands copy-accurate; keep it tight.'
-      : 'Return `{ "agents_md": "<full markdown>" }` — the complete AGENTS.md content, ' +
-        'ready to write verbatim to the repo root. Keep commands copy-accurate; keep it tight.',
+        'keep commands copy-accurate; keep it tight. List any seed ids you composed from in composed_seed_ids.'
+      : 'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the complete AGENTS.md content, ' +
+        'ready to write verbatim to the repo root. Keep commands copy-accurate; keep it tight. ' +
+        'List any seed ids you composed from in composed_seed_ids ([] if none applied).',
   ].join('\n');
 
-  const { output } = await runStructuredTurn<{ agents_md?: string }>({
+  const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
     queryFn, prompt, schema: DRAFT_SCHEMA,
     model: INSTRUCTIONS_MODEL, allowedTools: instructionsAgentSpec.allowedTools,
     onToolUse, onHeartbeat, onText, label: 'instructions-structured',
   });
 
-  const agentsMd = (output?.agents_md ?? '').trim();
+  // Strip any prior composed-seeds footer the LLM echoed back (edit-mode
+  // revisions include the existing file verbatim) so re-appending is idempotent.
+  const agentsMd = stripComposedSeedsFooter((output?.agents_md ?? '').trim()).trim();
   if (!agentsMd) {
     throw new Error(
       'instructions runner: draft step returned empty AGENTS.md content — re-run to retry, or refine the brief / interview answers.',
     );
   }
 
+  // R3-05-F3: record which library seeds the draft composed from — restricted to
+  // ids that were ACTUALLY matched for this project (a hallucinated id the LLM
+  // returns is dropped), machine-greppable footer for later seed improvements.
+  const matchedIds = new Set((matchedSeeds ?? []).map((s) => s.id));
+  const composedIds = (output?.composed_seed_ids ?? []).filter((id) => matchedIds.has(id));
+  const footer = composedSeedsFooter(composedIds);
+
   if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
   const draftPath = join(sessionDir, DRAFT_FILENAME);
-  writeFileSync(draftPath, `${agentsMd}\n`);
+  writeFileSync(draftPath, `${agentsMd}\n${footer}`);
   writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
     event_type: 'log', input_refs: [], output_refs: [draftPath],
     message: 'instructions-drafted (AGENTS.md awaiting operator verdict)',
-    metadata: { session_id: input.sessionId, bytes: agentsMd.length },
+    metadata: { session_id: input.sessionId, bytes: agentsMd.length, composed_seed_ids: composedIds },
   });
 
   return { phase: 'awaiting-verdict', wrote: [draftPath], draftPath };

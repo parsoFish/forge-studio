@@ -21,11 +21,13 @@ import {
   validateArtifactTemplate,
   validateCatalog,
   validateFlow,
+  validateInstructionSeed,
   validateKb,
   validateLibraryFlag,
   validateProject,
   validateDiscoveredProjects,
 } from './validate.ts';
+import type { InstructionSeed } from './types.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -1760,5 +1762,59 @@ describe('validateAgent composition/band-hook + budgets/range', () => {
     }));
     const range = findings.filter((x) => x.check === 'budgets/range');
     assert.equal(range.length, 3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateInstructionSeed (R3-05-F1)
+// ---------------------------------------------------------------------------
+
+function mkSeed(overrides: Partial<InstructionSeed> = {}): InstructionSeed {
+  return {
+    id: 'ts-node',
+    title: 'TypeScript conventions',
+    kind: 'language',
+    appliesTo: ['typescript'],
+    scope: 'project',
+    provenance: 'forge CLAUDE.md',
+    body: 'Use tsc --noEmit.',
+    path: '/studio/instruction-seeds/ts-node.md',
+    ...overrides,
+  };
+}
+
+describe('validateInstructionSeed (R3-05)', () => {
+  it('a well-formed seed produces no findings', () => {
+    assert.deepEqual(validateInstructionSeed(mkSeed()), []);
+  });
+
+  it('a non-slug id → error', () => {
+    const f = validateInstructionSeed(mkSeed({ id: 'Bad Id' }));
+    assert.ok(f.some((x) => x.check === 'slug'));
+  });
+
+  it('empty appliesTo → error (can never match a project)', () => {
+    const f = validateInstructionSeed(mkSeed({ appliesTo: [] }));
+    assert.ok(f.some((x) => x.check === 'applies-to'));
+  });
+
+  it('a non-slug appliesTo tag → error', () => {
+    const f = validateInstructionSeed(mkSeed({ appliesTo: ['type script'] }));
+    assert.ok(f.some((x) => x.check === 'applies-to/slug'));
+  });
+
+  it('blank provenance → error (corpus-grounding: no hand-invented practices)', () => {
+    const f = validateInstructionSeed(mkSeed({ provenance: '   ' }));
+    assert.ok(f.some((x) => x.check === 'provenance'));
+  });
+
+  it('empty body → error', () => {
+    const f = validateInstructionSeed(mkSeed({ body: '' }));
+    assert.ok(f.some((x) => x.check === 'body'));
+  });
+
+  it('blank title → error', () => {
+    const f = validateInstructionSeed(mkSeed({ title: '  ' }));
+    assert.ok(f.some((x) => x.check === 'title'));
   });
 });

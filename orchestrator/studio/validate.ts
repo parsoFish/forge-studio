@@ -19,6 +19,7 @@ import type {
   ArtifactTemplate,
   Catalog,
   FlowDefinition,
+  InstructionSeed,
   KbDescriptor,
   ProjectDefinition,
 } from './types.ts';
@@ -590,6 +591,49 @@ export function validateArtifactTemplate(t: ArtifactTemplate): Finding[] {
     if (slug !== undefined && !SLUG_RE.test(slug)) {
       findings.push(err(obj, `${field}/slug`, `${field} "${slug}" does not match ${SLUG_RE}`));
     }
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// validateInstructionSeed (R3-05-F1)
+// ---------------------------------------------------------------------------
+
+/**
+ * An instruction seed (`studio/instruction-seeds/<id>.md`) is a vetted,
+ * composable AGENTS.md building block. The loader (`loadInstructionSeed`)
+ * already enforces the presence of `id/title/kind/appliesTo/scope/provenance`
+ * and the `kind`/`scope` enums (a malformed file throws at load, surfaced by
+ * `forge studio lint`). This validator adds the SEMANTIC rules the loader can't:
+ * a slug-shaped id, non-blank title, ≥1 `appliesTo` tag, slug-shaped tags, and
+ * — the corpus-grounding rule (no hand-invented best practices) — a non-blank
+ * `provenance` citation and a non-trivial body.
+ */
+export function validateInstructionSeed(s: InstructionSeed): Finding[] {
+  const findings: Finding[] = [];
+  const obj = `instruction-seed:${s.id}`;
+  if (!SLUG_RE.test(s.id)) {
+    findings.push(err(obj, 'slug', `Instruction-seed id "${s.id}" does not match ${SLUG_RE}`));
+  }
+  if (!s.title.trim()) {
+    findings.push(err(obj, 'title', 'Instruction-seed title is missing or blank'));
+  }
+  if (s.appliesTo.length === 0) {
+    findings.push(err(obj, 'applies-to', 'Instruction-seed must declare ≥1 appliesTo tag (else it can never match a project)'));
+  }
+  for (const tag of s.appliesTo) {
+    if (!SLUG_RE.test(tag)) {
+      findings.push(err(obj, 'applies-to/slug', `appliesTo tag "${tag}" does not match ${SLUG_RE}`));
+    }
+  }
+  // Corpus-grounding — provenance is mandatory (loader) AND must be non-blank
+  // (the loader's reqString tolerates a whitespace-only value); every shipped
+  // seed cites where the practice was proven.
+  if (!s.provenance.trim()) {
+    findings.push(err(obj, 'provenance', 'Instruction-seed provenance is blank — every seed must cite a real artifact (repo path, cycle archive, or upstream URL); no hand-invented best practices'));
+  }
+  if (!s.body.trim()) {
+    findings.push(err(obj, 'body', 'Instruction-seed body is empty — a seed must carry a composable AGENTS.md block'));
   }
   return findings;
 }
