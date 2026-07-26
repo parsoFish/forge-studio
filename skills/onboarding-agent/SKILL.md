@@ -50,7 +50,22 @@ report green, not to claim it did.
    **This must precede any AGENTS.md authoring** — the instructions-coverage
    check only engages once the gate command is declared.
 
-3. **Converge the mechanical clauses.** Run:
+3. **Author AGENTS.md from the seed library (R4-02-F4).** After the gate is
+   declared, run `forge instructions compose --project <name>`. This composes
+   AGENTS.md deterministically from the R3-05 instruction seeds matched to the
+   project's shape and names the declared gate command at the top (so the C8
+   coverage clause passes, not merely presence). If the seeds don't fit the repo
+   well, refine AGENTS.md by hand afterward — but the gate command must stay named.
+
+4. **Author locked-core constraints (R4-02-F5).** If the project declares
+   constraints (a `CONSTRAINTS.md`, or a Locked-core / Constraints / Never-do
+   section in `CLAUDE.md`/`AGENTS.md`), run
+   `forge constraints author --project <name>` to tag them as live
+   `forge:constraint` blocks in the project's central `profile.md` (the plan
+   agent injects these into every matching work item). It validates the blocks
+   at write time; if it errors on a malformed block, fix the source and re-run.
+
+5. **Converge the mechanical clauses.** Run:
    `forge preflight converge --project <name> [--accept <clause>=<rationale>]…`
    This auto-fixes the deterministic clauses (C2 scratch hygiene, ARTIFACTS
    build-output gitignore, C4 architecture context) and re-checks until
@@ -58,18 +73,18 @@ report green, not to claim it did.
    `<project>/.forge/contract-compliance-report.json` and exits 0 iff every
    **hard** clause passes.
 
-4. **Fix remaining hard clauses by hand.** If the converge report's `stopReason`
+6. **Fix remaining hard clauses by hand.** If the converge report's `stopReason`
    is `unfixable-hard-clause` or `no-progress`, read the failing hard clauses in
    the report, make the minimal real edit (e.g. a mis-declared gate, tracked
    scratch that `.gitignore` alone can't fix → `git rm --cached`), and re-run
    `forge preflight converge`. Never fabricate a pass.
 
-5. **Dispose of advisory clauses explicitly.** For each advisory clause still
+7. **Dispose of advisory clauses explicitly.** For each advisory clause still
    failing, either fix it or **accept it with a genuine rationale** via
    `--accept <clause>=<why-it's-fine-for-this-project>`. Never silently leave an
    advisory gap unaddressed — the report must name every clause's disposition.
 
-6. **Verify + report.** Run `forge preflight --project <name>` and confirm it
+8. **Verify + report.** Run `forge preflight --project <name>` and confirm it
    exits 0 (hard-green). Summarise the final
    `.forge/contract-compliance-report.json`: what was fixed, what was accepted
    (with rationale), and anything that still needs an operator. If a hard clause
