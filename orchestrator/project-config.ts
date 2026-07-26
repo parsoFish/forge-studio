@@ -680,7 +680,8 @@ function parseBuildProcess(raw: unknown): BuildProcess | undefined {
   const local = optionalArgv(b.local, 'buildProcess.local');
   const remote = parseReleasePath(b.remote, 'buildProcess.remote');
   return {
-    ...(local ? { local } : {}),
+    // An empty `local` argv is not a declaration — treat it as absent (fail-closed).
+    ...(local && local.length > 0 ? { local } : {}),
     ...(remote !== undefined ? { remote } : {}),
   };
 }

@@ -429,20 +429,38 @@ function checkC8(dir: string, cfg: ProjectConfig | null): ClauseResult {
   };
 }
 
+/** Generic dispatch words that don't identify a script — a `<runner> run <script>` needs the script to be distinctive. */
+const GENERIC_SUBCOMMANDS = new Set(['run', 'exec', '-c', '--']);
+
 /**
- * True iff `content` mentions `cmd` — machine-greppable coverage. Checks the
- * whole command (whitespace-normalized, case-insensitive) AND its distinctive
- * head token (`npm test`, `go test`, `make test`) so a file that documents
- * `npm test` still covers a declared `npm test --silent`, and vice-versa.
+ * The distinctive coverage needle for a gate command: `runner + subcommand`,
+ * extended to the real target when the subcommand is a generic dispatch word
+ * (`npm run <script>`). So `npm test` → "npm test", `go test …` → "go test",
+ * but `npm run test:unit` → "npm run test:unit" (NOT the bare "npm run" prefix,
+ * which would falsely match an unrelated `npm run build` in the file). `''` for
+ * a single-token command (matched only by the whole-command check).
+ */
+function coverageNeedle(cmd: string): string {
+  const toks = cmd.toLowerCase().replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+  if (toks.length < 2) return '';
+  const n = toks.length >= 3 && GENERIC_SUBCOMMANDS.has(toks[1]!) ? 3 : 2;
+  return toks.slice(0, n).join(' ');
+}
+
+/**
+ * True iff `content` mentions `cmd` — machine-greppable coverage. Matches the
+ * whole command (whitespace-normalized, case-insensitive) OR its distinctive
+ * needle (runner + subcommand / script), so a file that documents `npm test`
+ * still covers a declared `npm test --silent` without a bare `npm run` prefix
+ * covering an unrelated script.
  */
 function mentionsCommand(content: string, cmd: string): boolean {
   const hay = content.toLowerCase().replace(/\s+/g, ' ');
-  const needle = cmd.toLowerCase().replace(/\s+/g, ' ').trim();
-  if (!needle) return true;
-  if (hay.includes(needle)) return true;
-  // The distinctive first two tokens (runner + subcommand) — e.g. "npm test".
-  const head = needle.split(' ').slice(0, 2).join(' ');
-  return head.length > 0 && hay.includes(head);
+  const full = cmd.toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!full) return true;
+  if (hay.includes(full)) return true;
+  const needle = coverageNeedle(cmd);
+  return needle !== '' && hay.includes(needle);
 }
 
 // --- C10: documentation parity & release substrate (ADVISORY; opt-in) ---
@@ -680,10 +698,13 @@ function checkBuildArtifacts(dir: string): ClauseResult {
 /**
  * R1-04-F3 — the build process, distinct from the test gate (C1/testProcess).
  * A project can gate on tests while its *build* breaks, so the compile/package
- * step is a first-class obligation. Advisory: when a `buildProcess` is declared,
- * a declared `remote` CI-workflow path must exist on disk; when it is NOT
- * declared but a build is inferable (a package.json `build` script), nudge the
- * operator to declare it. A project with no build step (pure-script) passes.
+ * step is a first-class obligation. Opt-in like C10: inert unless a
+ * `buildProcess` is declared. A DECLARED `remote` CI-workflow path that doesn't
+ * exist is the one real fail (a broken pointer). An inferable-but-undeclared
+ * build (a package.json `build` script) is surfaced as a passing INFO note, not
+ * a failure — forge already knows the command, `buildProcess.local` has no
+ * runtime consumer yet (R1-05-F2), and a fail would nag every Node project while
+ * staying silent on the Go project that motivates the clause.
  *
  * Build-OUTPUT hygiene (compiled artifacts gitignored) is the companion
  * ARTIFACTS clause (kept separate so its `.gitignore`-append auto-fix survives);
@@ -693,12 +714,8 @@ function checkBuild(dir: string, cfg: ProjectConfig | null): ClauseResult {
   const base = { clause: 'BUILD' as const, title: 'Build process declared (local + remote/CI, distinct from test)', hard: false };
   const bp = cfg?.buildProcess;
   if (bp && (bp.local || bp.remote)) {
-    const problems: string[] = [];
     if (bp.remote && !existsSync(join(dir, bp.remote))) {
-      problems.push(`buildProcess.remote "${bp.remote}" (the CI workflow) does not exist`);
-    }
-    if (problems.length > 0) {
-      return { ...base, pass: false, detail: `buildProcess declared but ${problems.join('; ')}. Advisory — add the workflow or correct the path.` };
+      return { ...base, pass: false, detail: `buildProcess declared but buildProcess.remote "${bp.remote}" (the CI workflow) does not exist. Advisory — add the workflow or correct the path.` };
     }
     const parts = [
       bp.local ? `local \`${bp.local.join(' ')}\`` : null,
@@ -706,18 +723,15 @@ function checkBuild(dir: string, cfg: ProjectConfig | null): ClauseResult {
     ].filter(Boolean);
     return { ...base, pass: true, detail: `buildProcess declared (${parts.join(', ')})` };
   }
-  // Not declared — nudge only when a build is clearly inferable.
+  // Not declared — pass, but note the opportunity when a build is inferable.
   const inferred = inferredBuildCommand(dir);
-  if (inferred) {
-    return {
-      ...base,
-      pass: false,
-      detail:
-        `a build step is inferable (${inferred}) but no buildProcess is declared. Advisory: declare ` +
-        `buildProcess.local (+ remote CI workflow) so a broken build is caught as its own obligation, not conflated with the test gate.`,
-    };
-  }
-  return { ...base, pass: true, detail: 'no buildProcess declared and none inferable (pure-script project) — build clause inert' };
+  return {
+    ...base,
+    pass: true,
+    detail: inferred
+      ? `no buildProcess declared (a build is inferable — ${inferred}). Optional: declare buildProcess.local (+ remote CI workflow) so a broken build is a first-class obligation, not conflated with the test gate.`
+      : 'no buildProcess declared and none inferable (pure-script project) — build clause inert',
+  };
 }
 
 /** The inferable build command for the advisory nudge — today just a package.json `build` script. `null` if none. */

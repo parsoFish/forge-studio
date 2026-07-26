@@ -59,15 +59,16 @@ point.
 
 ### The process vocabulary (how the clauses group)
 
-The clauses read as fourteen ids, but they enforce **six processes** — the way
-the operator diagram frames a project. Clause ids stay the stable anchors; each
-process is the lens (R1-04):
+The clauses read as fifteen preflight ids (plus C9, documented but not yet
+machine-checked), but they enforce **six processes** — the way the operator
+diagram frames a project. Clause ids stay the stable anchors; each process is
+the lens (R1-04):
 
 | Process | What it declares | Clauses |
 |---------|------------------|---------|
 | **test** | the done-signal: a fast per-WI gate, the CI net, the live-acceptance tier | C1, C1b, C7 |
 | **demo** | how a change is shown: capture + verify + present, aligned to the test process | DEMO, DEMO-SKILL, DEMO-ALIGN |
-| **instructions** | the human-owned agent-instruction file — present AND covering the declared gate/untouchables | C8 (+ C5 locked-core) |
+| **instructions** | the human-owned agent-instruction file — present AND naming the declared gate command | C8 (+ C5 locked-core presence) |
 | **release** | repo-side pre-merge prep (docs / changelog / version) whose substrate exists; CI owns tag/publish | C10 (`releaseProcess`) |
 | **build** | the compile/package step (local + remote CI), distinct from test; outputs gitignored | BUILD (`buildProcess`), ARTIFACTS |
 | **kb** | the bound knowledge base (flow / project / unique) | Face-A `kb` + KB binding (R1-01) |
@@ -323,11 +324,14 @@ be gitignored (C2); the instruction file must be present and operator-owned (C8)
 **Coverage (R1-04-F1).** Beyond presence, preflight checks that the file
 actually *mentions the declared quality-gate command* (`testProcess.local.cmd`,
 the sidecar, or the package.json `test` script) — machine-greppable (whole
-command or its distinctive head token, e.g. `npm test`). An instruction file
-that never names the gate it must pass every iteration is stale/thin; the miss
-is advisory and routes to the instructions agent (edit mode) to add it — the
-file stays operator-owned (no auto-generation). Skipped when no gate is declared
-yet (pre-onboarding): presence-only then.
+command or its distinctive runner+subcommand needle, e.g. `npm test`, `go test`;
+a bare `npm run` prefix never counts). An instruction file that never names the
+gate it must pass every iteration is stale/thin; the miss is advisory and routes
+to the instructions agent (edit mode) to add it — the file stays operator-owned
+(no auto-generation). Skipped when no gate is declared yet (pre-onboarding):
+presence-only then. Coverage checks the **gate command** only; C5 locked-core
+"untouchables" are unstructured prose, so C5 verifies their *presence*, not
+their in-file mention.
 
 ---
 
@@ -649,6 +653,7 @@ part of this spec.
 | C10 | Release flow + `forge preflight` — advisory (active when `releaseProcess` declared) | Draft changelog (PM standing AC) + pre-merge finalisation (release-finalizer) + CI release workflow installed; **R1-04-F2: preflight now asserts each declared step's substrate exists (`changelogPath` / `versionFile` / `docsDir`)** |
 | BUILD | `forge preflight` — advisory (R1-04-F3) | `buildProcess` declared (`local` compile/package cmd + `remote` CI-workflow path); a declared `remote` must exist; an inferable-but-undeclared build nudges. Distinct from the test gate (C1) |
 | DEMO | `forge preflight` — advisory | `demoProcess` structural validation: ≥1 capture step + ≥1 verify step |
+| DEMO-SKILL | `forge preflight` — advisory | generated demo-design skill present (`.forge/skills/demo-design/SKILL.md`); routes to demo agent |
 | DEMO-ALIGN | `forge preflight` — advisory | routes to demo agent |
 | ARTIFACTS | `forge preflight` — advisory | Language-specific build-output hints in `.gitignore` (build-**output** hygiene; grouped under the build process with BUILD, kept separate to preserve its `.gitignore`-append auto-fix) |
 | BRAIN | `forge preflight` — advisory | `brain/projects/<name>/themes/` (central forge repo) path-existence scan |
@@ -677,10 +682,10 @@ flow-ready — the flow engine will not accept it.
 | C5 | `CLAUDE.md`: never run `go build ./...`, never edit tests to pass, user owns git |
 | C6 | GitHub remote at `parsoFish/terraform-provider-betterado` |
 | C7 | `testProcess.acceptance: { match: "acceptancetests", required: true, requiresEnv: ["TF_ACC"] }`. `testProcess.ci.unsetEnv: ["TF_ACC"]`. Two `standing_work_item_acs`. Live tests: unique names, destroy on success/failure, `SharedReleaseFixture`, API GET read-back |
-| C8 | Operator-authored `CLAUDE.md` with exact `go test` invocations, `make` targets, and hazard prohibitions — and it names the declared gate (`make test`), so the C8 coverage check passes |
+| C8 | Operator-authored `AGENTS.md` with exact `go test`/`make` invocations and hazard prohibitions — it names the declared local gate (the `.forge/quality_gate_cmd` sidecar `go test …`, matched by the `go test` needle), so the C8 coverage check passes |
 | C9 | `SharedReleaseFixture` uses non-default values (UUID prefix, explicit retention, explicit approvals). `TestCheckResourceAttr` + `ImportStateVerify: true` + `ExpectNonEmptyPlan: false` |
 | C10 | `releaseProcess` with in-cycle `changelog` + pre-merge `version` steps; `changelogPath` + `versionFile` substrate present (preflight asserts they exist) |
-| BUILD | `buildProcess.local`: `go build -mod=vendor .` (the entry-point compile — NOT `go build ./...`, which the C5 constraint forbids as it fills the disk), distinct from the `go test` gate; ARTIFACTS ignores the compiled provider binary |
+| BUILD | Inert — Go project, no `package.json` build script to infer, and no `buildProcess` declared. The build (`go build -mod=vendor .`, deliberately NOT `go build ./...`, which C5 forbids as it fills the disk) lives in `AGENTS.md` prose; ARTIFACTS ignores the compiled provider binary |
 | DEMO | `demoProcess` capture/verify steps drive the apply → API GET → portal screenshot → destroy flow; requires real ADO REST round-trip evidence (API GET response) when creds are present |
 
 ---

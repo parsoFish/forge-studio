@@ -35,7 +35,7 @@ const TABLE: Record<ClauseId, ClauseClassification> = {
   C4: { resolution: 'auto', fixHint: 'Scaffold the missing roadmap.md / brain/projects/<name>/profile.md stubs.' },
 
   // AGENT — route to the matching agentic runner.
-  C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author AGENTS.md with the instructions agent (operator-confirmed).' },
+  C8: { resolution: 'agent', route: 'instructions', fixHint: 'Author or edit AGENTS.md with the instructions agent (operator-confirmed) — absent ⇒ create it, present-but-missing-the-gate ⇒ edit it.' },
   DEMO: { resolution: 'agent', route: 'demo-builder', fixHint: 'Build the demo with the demo agent (declares demoProcess + machinery).' },
   // DEMO-SKILL is the per-project demo machinery — authored by the demo agent
   // (there is no deterministic generator), so it routes to demo-builder too.

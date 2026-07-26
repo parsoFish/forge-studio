@@ -714,7 +714,7 @@ test('BUILD (R1-04-F3): buildProcess.remote pointing at a missing workflow → a
   }
 });
 
-test('BUILD (R1-04-F3): an inferable but undeclared build → advisory nudge', () => {
+test('BUILD (R1-04-F3): an inferable but undeclared build → PASS with an opt-in note (not a fail)', () => {
   const p = happyProject();
   try {
     writeFileSync(
@@ -723,8 +723,8 @@ test('BUILD (R1-04-F3): an inferable but undeclared build → advisory nudge', (
     );
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     const b = clause(r, 'BUILD');
-    assert.equal(b.pass, false);
-    assert.match(b.detail, /inferable.*no buildProcess is declared/);
+    assert.equal(b.pass, true, 'inferable-but-undeclared is an opt-in note, not a failure');
+    assert.match(b.detail, /a build is inferable/);
   } finally {
     p.cleanup();
   }
@@ -736,6 +736,26 @@ test('BUILD (R1-04-F3): no build inferable and none declared → inert pass', ()
     // happyProject's package.json has only a `test` script → no build inferable.
     const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
     assert.equal(clause(r, 'BUILD').pass, true);
+  } finally {
+    p.cleanup();
+  }
+});
+
+test('C8 coverage (R1-04-F1): a bare runner prefix does NOT falsely cover an unrelated script', () => {
+  const p = happyProject();
+  try {
+    // Declared gate = `npm run test:unit`; the file only mentions `npm run build`.
+    writeFileSync(
+      join(p.dir, '.forge', 'project.json'),
+      JSON.stringify({ testProcess: { local: { cmd: ['npm', 'run', 'test:unit'] } }, demoProcess: [{ kind: 'capture', text: 'x' }, { kind: 'verify', text: 'y' }] }),
+    );
+    writeFileSync(join(p.dir, 'CLAUDE.md'), '# Constraints\nBuild with `npm run build`.\n');
+    const r = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r, 'C8').pass, false, 'npm run build must not cover a declared npm run test:unit');
+    // And the file DOES cover it once it names the real script.
+    writeFileSync(join(p.dir, 'CLAUDE.md'), '# Constraints\nGate: `npm run test:unit`.\n');
+    const r2 = runPreflight(p.dir, { forgeRoot: p.forgeRoot });
+    assert.equal(clause(r2, 'C8').pass, true);
   } finally {
     p.cleanup();
   }
