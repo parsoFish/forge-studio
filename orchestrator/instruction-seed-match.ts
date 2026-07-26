@@ -1,0 +1,125 @@
+/**
+ * R3-05-F3 — match instruction seeds to a project.
+ *
+ * Turns the instructions-creator interview from generation-from-nothing into
+ * composition-from-vetted-blocks: detect a project's shape/language tags from
+ * what's actually on disk, then select the library seeds whose `appliesTo` tags
+ * intersect. Deterministic + pure (I/O confined to `detectProjectTags`) so the
+ * runner's prompt assembly stays unit-testable.
+ *
+ * Additive by design: no matching seeds ⇒ an empty match ⇒ the runner falls
+ * back to today's from-scratch interview.
+ */
+
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
+import { join } from 'node:path';
+
+import type { InstructionSeed } from './studio/types.ts';
+
+/** Every forge-managed project matches the contract seed. */
+const FORGE_MANAGED_TAG = 'forge-managed';
+
+/**
+ * Detect a project's shape/language tags from the files on disk. Conservative —
+ * only emits a tag when there's concrete on-disk evidence, so a match is never
+ * fabricated. Always includes `forge-managed` (this IS a forge-managed project).
+ */
+export function detectProjectTags(repoPath: string): string[] {
+  const tags = new Set<string>([FORGE_MANAGED_TAG]);
+  const has = (rel: string): boolean => existsSync(join(repoPath, rel));
+
+  // TypeScript / Node / JS.
+  const hasPackageJson = has('package.json');
+  if (hasPackageJson) {
+    tags.add('node');
+    tags.add('javascript');
+    let pkgRaw = '';
+    try {
+      pkgRaw = readFileSync(join(repoPath, 'package.json'), 'utf8');
+    } catch {
+      /* unreadable → treat as bare node */
+    }
+    if (has('tsconfig.json') || /"typescript"\s*:/.test(pkgRaw)) tags.add('typescript');
+    // A `bin` field (or a bin/ dir) is the CLI signal.
+    if (/"bin"\s*:/.test(pkgRaw) || has('bin')) tags.add('cli');
+  }
+
+  // Go.
+  if (has('go.mod')) {
+    tags.add('go');
+    let goMod = '';
+    try {
+      goMod = readFileSync(join(repoPath, 'go.mod'), 'utf8');
+    } catch {
+      /* ignore */
+    }
+    if (/terraform-provider|terraform-plugin/.test(goMod)) {
+      tags.add('terraform');
+      tags.add('terraform-provider');
+    }
+  }
+
+  // Terraform / provider by convention (repo name or top-level HCL).
+  const base = repoPath.replace(/\/+$/, '').split('/').pop() ?? '';
+  if (base.startsWith('terraform-provider-')) {
+    tags.add('terraform');
+    tags.add('terraform-provider');
+  }
+  if (hasTopLevelExt(repoPath, '.tf')) tags.add('terraform');
+
+  return [...tags].sort();
+}
+
+function hasTopLevelExt(repoPath: string, ext: string): boolean {
+  try {
+    return readdirSync(repoPath).some((f) => f.endsWith(ext));
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Select the seeds whose `appliesTo` intersects the project's tags, restricted
+ * to seeds usable on the project side (`scope` of `project` or `both`). Sorted
+ * by id for a stable prompt. Empty ⇒ the caller falls back to from-scratch.
+ */
+export function matchInstructionSeeds(
+  seeds: readonly InstructionSeed[],
+  tags: readonly string[],
+): InstructionSeed[] {
+  const tagSet = new Set(tags);
+  return seeds
+    .filter((s) => s.scope === 'project' || s.scope === 'both')
+    .filter((s) => s.appliesTo.some((t) => tagSet.has(t)))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+/**
+ * Render matched seeds as a prompt section the interview/draft steps inject.
+ * Empty match ⇒ `''` (no section, from-scratch fallback).
+ */
+export function renderSeedPromptSection(matched: readonly InstructionSeed[]): string {
+  if (matched.length === 0) return '';
+  const blocks = matched
+    .map((s) => `### seed: ${s.id} — ${s.title} (${s.kind}; applies-to: ${s.appliesTo.join(', ')})\n${s.body}`)
+    .join('\n\n');
+  return [
+    '',
+    '## Matching instruction seeds (pre-vetted building blocks)',
+    '',
+    'These are proven AGENTS.md building blocks the library matched to this ' +
+      "project's shape/language. COMPOSE from them where they genuinely fit this " +
+      'repo — adapt commands to what you actually find, drop what does not apply. ' +
+      'They are starting material, not a template to copy wholesale. List the seed ' +
+      'ids you actually composed from in `composed_seed_ids`.',
+    '',
+    blocks,
+  ].join('\n');
+}
+
+/** The machine-greppable footer recording which seeds an AGENTS.md composed from (R3-05-F3 traceability). */
+export function composedSeedsFooter(ids: readonly string[]): string {
+  const clean = [...new Set(ids.filter((id) => id.trim().length > 0))].sort();
+  if (clean.length === 0) return '';
+  return `\n<!-- forge:composed-instruction-seeds: ${clean.join(', ')} -->\n`;
+}

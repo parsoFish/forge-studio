@@ -10,7 +10,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
-import { ARTIFACT_KINDS, DEMO_STEP_KINDS } from './types.ts';
+import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
 import type {
   AgentBudgets,
   AgentComposition,
@@ -30,6 +30,7 @@ import type {
   FlowKickoffKind,
   FlowNode,
   FlowTrigger,
+  InstructionSeed,
   ProjectRef,
 } from './types.ts';
 
@@ -610,6 +611,47 @@ export function listDemoElements(studioRoot: string): DemoElementDefinition[] {
     return [];
   }
   return files.map((f) => loadDemoElement(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
+}
+
+// ---------------------------------------------------------------------------
+// Instruction seeds (R3-05) — studio/instruction-seeds/<id>.md (gray-matter).
+// A vetted, composable AGENTS.md building block. Lenient-parse-then-lint: a
+// malformed seed throws here so `forge studio lint` surfaces it, and the enum
+// fields are checked at load (kind/scope) mirroring artifact-template `kind`.
+// ---------------------------------------------------------------------------
+
+/** Load one instruction seed (`studio/instruction-seeds/<id>.md`). Throws on a malformed file. */
+export function loadInstructionSeed(mdPath: string): InstructionSeed {
+  let raw: string;
+  try {
+    raw = readFileSync(mdPath, 'utf8');
+  } catch (err) {
+    throw new Error(`${mdPath}: cannot read file — ${(err as Error).message}`);
+  }
+  const { data, content } = matter(raw);
+  const d = data as Record<string, unknown>;
+  return {
+    id: reqString(d, 'id', mdPath),
+    title: reqString(d, 'title', mdPath),
+    kind: oneOf(reqString(d, 'kind', mdPath), INSTRUCTION_SEED_KINDS, mdPath, 'kind'),
+    appliesTo: stringArray(d, 'appliesTo', mdPath),
+    scope: oneOf(reqString(d, 'scope', mdPath), INSTRUCTION_SEED_SCOPES, mdPath, 'scope'),
+    provenance: reqString(d, 'provenance', mdPath),
+    body: content.trim(),
+    path: mdPath,
+  };
+}
+
+/** List the forge instruction-seed library (`studio/instruction-seeds/*.md`). Absent ⇒ []. */
+export function listInstructionSeeds(studioRoot: string): InstructionSeed[] {
+  const dir = join(studioRoot, 'studio', 'instruction-seeds');
+  let files: string[];
+  try {
+    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+  } catch {
+    return []; // absent dir → no seeds (tolerated)
+  }
+  return files.map((f) => loadInstructionSeed(join(dir, f))).sort((a, b) => a.id.localeCompare(b.id));
 }
 
 // ---------------------------------------------------------------------------

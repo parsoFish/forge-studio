@@ -30,6 +30,7 @@ import {
   isStudioAgent,
   listArtifactTemplates,
   listDemoElements,
+  listInstructionSeeds,
   loadAgentDefinition,
   loadCatalog,
   loadFlowDefinition,
@@ -42,6 +43,7 @@ import {
   validateArtifactTemplate,
   validateCatalog,
   validateFlow,
+  validateInstructionSeed,
   validateKb,
   validateDiscoveredProjects,
   validateLibraryFlag,
@@ -129,6 +131,35 @@ export function runStudioLint(root: string): StudioLintResult {
       object: 'studio:demo-elements',
       check: 'load',
       message: `Cannot load demo elements — ${(err as Error).message}`,
+    });
+  }
+
+  // Instruction-seed library (R3-05 — composable AGENTS.md building blocks under
+  // studio/instruction-seeds/). A malformed seed fails lint at load (the loader
+  // validates id/title/kind/appliesTo/scope/provenance + the kind/scope enums);
+  // validateInstructionSeed adds the semantic rules (slug, non-blank provenance
+  // per the corpus-grounding rule, tag shape).
+  const instructionSeedIds = new Set<string>();
+  try {
+    for (const seed of listInstructionSeeds(root)) {
+      findings.push(...validateInstructionSeed(seed));
+      if (instructionSeedIds.has(seed.id)) {
+        findings.push({
+          level: 'error',
+          object: `instruction-seed:${seed.id}`,
+          check: 'unique-ids',
+          message: `Duplicate instruction-seed id "${seed.id}"`,
+        });
+      } else {
+        instructionSeedIds.add(seed.id);
+      }
+    }
+  } catch (err) {
+    findings.push({
+      level: 'error',
+      object: 'studio:instruction-seeds',
+      check: 'load',
+      message: `Cannot load instruction seeds — ${(err as Error).message}`,
     });
   }
 
