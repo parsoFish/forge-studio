@@ -31,7 +31,9 @@ type FixContext = { projectDir: string; forgeRoot: string; projectName: string }
 type FixOutcome = { ok: boolean; detail: string };
 
 // Stable apply order — C2 ensures `.gitignore` exists before ARTIFACTS appends to it.
-const AUTO_ORDER: ClauseId[] = ['C2', 'ARTIFACTS', 'C4'];
+// Exported so the contract-compliance loop (cli/contract-compliance-loop.ts) shares
+// the one definition of "which clauses have a deterministic auto-fix" (DRY).
+export const AUTO_ORDER: ClauseId[] = ['C2', 'ARTIFACTS', 'C4'];
 
 const FIXERS: Partial<Record<ClauseId, (ctx: FixContext) => FixOutcome>> = {
   C2: fixScratchHygiene,

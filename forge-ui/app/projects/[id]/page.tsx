@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, createProject, fetchPreflight,
+  saveProject, createProject, fetchPreflight, dispatchAgentRun,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause,
 } from '@/lib/studio-client';
@@ -412,6 +412,8 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               />
             )}
 
+            <OnboardWithAgent projectId={id} />
+
             <UsedByFlows flows={flows} projectId={id} />
           </aside>
         </div>
@@ -431,6 +433,61 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 }
 
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// OnboardWithAgent (R4-02-F1) — the /projects entry point into the onboarding
+// agent. Reaches the SAME runner as the agent page's RunPanel: the shared
+// `dispatchAgentRun('onboarding-agent', {project})` client → POST
+// /api/agents/onboarding-agent/run → generic host. Dispatching the agent drives
+// this project to contract-green (F2 loop); events/cost show on /agents/onboarding-agent.
+// ---------------------------------------------------------------------------
+
+function OnboardWithAgent({ projectId }: { projectId: string }) {
+  const [runId, setRunId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const onRun = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await dispatchAgentRun('onboarding-agent', { project: projectId });
+      if (r.ok && r.runId) setRunId(r.runId);
+      else setError(r.error ?? 'dispatch failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <section
+      data-section="onboard-with-agent"
+      data-onboard-run-id={runId ?? ''}
+      style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px', marginTop: 12 }}
+    >
+      <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Onboarding agent</h3>
+      <p className="muted" style={{ fontSize: 12, margin: '0 0 8px' }}>
+        Run the onboarding agent to drive this project to contract-green (declares the gate,
+        converges preflight, disposes advisory clauses).
+      </p>
+      <button
+        className="btn btn-primary"
+        data-action="run-onboarding-agent"
+        onClick={() => void onRun()}
+        disabled={busy}
+      >
+        {busy ? 'Dispatching…' : 'Run onboarding agent'}
+      </button>
+      {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
+      {runId && (
+        <div style={{ marginTop: 8, fontSize: 12 }}>
+          dispatched <code>{runId}</code> —{' '}
+          <a href="/agents/onboarding-agent">watch on the agent page</a>
+        </div>
+      )}
+    </section>
+  );
+}
+
 // ProjectOnboardForm — minimal "register a project" form (UX spec §6).
 // Required: name, quality-gate command, north star. Everything else (repo path,
 // demo shape/command, instructions) has a working default behind Advanced.

@@ -21,6 +21,7 @@ import { loadBrainIndex, regenerateBrainIndex } from '../cli/brain-index.ts';
 import { runBrainLint, type Scope as BrainLintScope } from '../cli/brain-lint.ts';
 import { runStudioLint } from '../cli/studio-lint.ts';
 import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/preflight.ts';
+import { runContractComplianceLoop, formatComplianceReport } from '../cli/contract-compliance-loop.ts';
 import { assertEnv } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
@@ -96,6 +97,7 @@ process.chdir(FORGE_ROOT);
       return await cmdProjectBrain(args.slice(1));
     case 'preflight':
       if (args[1] === 'fix') return await cmdPreflightFix(args.slice(2));
+      if (args[1] === 'converge') return cmdPreflightConverge(args.slice(2));
       return cmdPreflight(args.slice(1));
     case '--help':
     case '-h':
@@ -702,6 +704,51 @@ async function cmdPreflightFix(rest: string[]): Promise<void> {
     forgeRoot: FORGE_ROOT,
   });
   console.log(`preflight-fix [${runId}]: ${r.cleared ? 'CLEARED' : 'NOT cleared'} — ${clause}`);
+}
+
+/**
+ * `forge preflight converge --project <name> [--accept <clause>=<rationale>]…
+ *  [--max-iterations N]` (R4-02-F2) — run the deterministic contract-compliance
+ *  loop: auto-fix the AUTO-tier clauses + re-check until hard-green (or a
+ *  bounded terminal state). The onboarding agent invokes this after declaring
+ *  the test command. Writes the authoritative report to
+ *  `<project>/.forge/contract-compliance-report.json`; exits 0 iff hard-green.
+ */
+function cmdPreflightConverge(rest: string[]): void {
+  const flag = (name: string): string | undefined => {
+    const i = rest.indexOf(`--${name}`);
+    return i >= 0 ? rest[i + 1] : undefined;
+  };
+  const project = flag('project') ?? rest.find((a) => !a.startsWith('--'));
+  if (!project) {
+    console.error('forge preflight converge: requires --project <name> [--accept <clause>=<rationale>] [--max-iterations N]');
+    process.exit(2);
+    return;
+  }
+  const projectDir = resolvePreflightProjectDir(project);
+  // `--accept C8=rationale` may repeat.
+  const acceptAdvisory: Record<string, string> = {};
+  for (let i = 0; i < rest.length; i++) {
+    if (rest[i] === '--accept') {
+      const kv = rest[i + 1] ?? '';
+      const eq = kv.indexOf('=');
+      if (eq <= 0) { console.error(`forge preflight converge: --accept expects <clause>=<rationale>, got ${JSON.stringify(kv)}`); process.exit(2); return; }
+      acceptAdvisory[kv.slice(0, eq)] = kv.slice(eq + 1);
+    }
+  }
+  const maxRaw = flag('max-iterations');
+  const report = runContractComplianceLoop({
+    projectDir,
+    forgeRoot: FORGE_ROOT,
+    ...(maxRaw ? { maxIterations: Number(maxRaw) } : {}),
+    acceptAdvisory: acceptAdvisory as Parameters<typeof runContractComplianceLoop>[0]['acceptAdvisory'],
+  });
+  console.log(formatComplianceReport(report));
+  const artifactDir = join(projectDir, '.forge');
+  mkdirSync(artifactDir, { recursive: true });
+  writeFileSync(join(artifactDir, 'contract-compliance-report.json'), JSON.stringify(report, null, 2) + '\n');
+  // Hard-green ⇒ 0 so the onboarding agent (and any gate) can branch on it.
+  process.exit(report.finalHardGreen ? 0 : 1);
 }
 
 function cmdPreflight(rest: string[]): void {

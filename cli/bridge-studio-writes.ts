@@ -500,6 +500,13 @@ export async function handleStudioWriteRoutes(
         // fields (flat keys are rejected by the validator). The legacy `demo`
         // block (shape/command) had no reader and is no longer scaffolded.
         testProcess: { local: { cmd: qualityGate } },
+        // R4-02-F3: bind the project to its central KB at onboard. seedProjectBrain
+        // (below) deterministically creates brain/projects/<id>/kb.yaml with id ===
+        // this project id (buildKbYaml), and a fresh create can carry no divergent
+        // pre-existing kb.yaml (a duplicate id was rejected above) — so the binding
+        // is provably this id. Closes known-gaps §4.3(a)/(d): ContractReadiness now
+        // shows a BOUND KB on a fresh onboard instead of an unbound gap.
+        kb: id,
       };
       try { validateProjectConfig(cfg); }
       catch (err) { sendJson(res, 400, { error: String(err) }, origin); return true; }
