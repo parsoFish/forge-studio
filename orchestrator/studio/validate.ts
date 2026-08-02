@@ -14,6 +14,7 @@ import { KB_BACKENDS } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
 import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
+import { BAND_CANONICAL_SLUG } from '../agent-bands.ts';
 import type {
   AgentDefinition,
   ArtifactTemplate,
@@ -206,10 +207,9 @@ export function validateAgent(
   // The INVERSE also lints: the canonical phase agents must CARRY their band
   // hook — deleting it would silently degrade the phase node to the bare
   // generic spawn (no WI validation, no brain gate) with lint green.
-  const CANONICAL_BAND_SLUGS: Record<string, string> = {
-    'wi-contract': 'project-manager',
-    'reflection-close': 'reflector',
-  };
+  // Single source shared with execAgent's runtime backstop (agent-bands.ts) —
+  // the "lint must mirror the dispatch it backstops" rule made structural.
+  const CANONICAL_BAND_SLUGS: Record<string, string> = BAND_CANONICAL_SLUG;
   const declaredBands = def.composition.hooks.filter((h) => h in CANONICAL_BAND_SLUGS);
   for (const band of declaredBands) {
     if (CANONICAL_BAND_SLUGS[band] !== def.slug) {

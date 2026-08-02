@@ -29,5 +29,8 @@ record (`verdict.json`) keeps its own shape untouched.
 - **Producer:** `adversarial-review` (the R4-08 critique pipeline).
 - **Consumer:** the `review` verdict gate (rendered beside the demo evidence) — and the
   reflector, for retro context.
-- Like `verdict`, deliberately **not runtime-guarded** by `assertInboundArtifacts` — pre-R4-10
-  cycles have none.
+- R4-10-F1 wired this onto the live `adversarial-review → review` edge. `execAdversarialReview`
+  fails loud on a pipeline failure (no PR opens without a completed review), so when the verdict
+  node runs the findings file is ALWAYS present — the `assertInboundArtifacts` guard is therefore
+  satisfied by construction. A clean review is still an explicit `findings: []`, never an absence.
+  Pre-R4-10 cycles (the retired unifier flow) carry no such edge and are unaffected.

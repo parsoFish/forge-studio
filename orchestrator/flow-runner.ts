@@ -5,10 +5,15 @@
  * executor function. Phase functions are UNCHANGED — they are invoked as node
  * executors and receive the same CycleInput they always have.
  *
- * Unifier node (M8-0): the unifier is its own independently-dispatchable node.
- * execDev runs the per-WI loop only; execUnifier runs runUnifierPhase + the
- * close-contract gates (items 4-8). On a `resumeFrom: 'unifier'` run the dev
- * node is skipped and the unifier node is the resume target.
+ * Develop-flow nodes (R4-10-F1, ADR-039/040): the live forge-develop flow is
+ * dev → demo → adversarial-review → verdict. execDev runs the per-WI loop only;
+ * execDemo (the `demo-band`) wraps the R4-07 demo pipeline + the RELOCATED
+ * close-contract gates (items 4-8) and the demo-fix loop; execAdversarialReview
+ * (the `review-band`) wraps the R4-08 critique pipeline. Both are selected by a
+ * declared `composition.hooks` band, not a privileged executor enum. The former
+ * unifier node — execUnifier / the `developer-unifier` slug — STAYS in the
+ * registry (retired at R4-01-F4) but is off the live flow; it still executes for
+ * the retained forge-cycle-shaped DAG fixtures.
  *
  * Architect node: the PLAN gate is satisfied before the queue picks up the
  * run (the architect ran out-of-cycle via the UI). When flow-runner encounters
@@ -56,7 +61,14 @@ import type { FlowDefinition, FlowNode, AgentBudgets, AgentDefinition } from './
 import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flow-budgets.ts';
 
 import { runProjectManager as realRunProjectManager } from './phases/project-manager.ts';
-import { runDeveloperLoop as realRunDeveloperLoop, runUnifierPhase as realRunUnifierPhase } from './phases/developer-loop.ts';
+import {
+  runDeveloperLoop as realRunDeveloperLoop,
+  runUnifierPhase as realRunUnifierPhase,
+  emitDeliverySummary,
+} from './phases/developer-loop.ts';
+import { runDemoAgentPipeline, type DemoAgentPipelineResult } from './phases/demo-agent.ts';
+import { runAdversarialReview, type AdversarialReviewResult } from './phases/adversarial-review.ts';
+import { enqueueDemoFixWorkItems } from './demo-fix-loop.ts';
 import { runClosure, promoteMergedToDone } from './phases/closure.ts';
 import { runReflector } from './phases/reflector.ts';
 import { rebasePreservedBranchOntoMain } from './pr.ts';
@@ -69,7 +81,7 @@ import {
   preservingForgeScratch,
 } from './cycle-helpers.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
-import { resolveBandHook, type BandHookId } from './agent-bands.ts';
+import { resolveBandHook, BAND_CANONICAL_SLUG, type BandHookId } from './agent-bands.ts';
 import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
@@ -109,6 +121,41 @@ export type FlowRunnerDeps = {
     filesChanged: number;
     insertions: number;
   }>;
+
+  /**
+   * R4-10-F1 demo node: the R4-07 demo pipeline (author demo.json + the
+   * relocated `.forge/pr-description.md`, render, orchestrated capture, AC
+   * judgment). Wrapped by execDemo, which relocates the close-contract gates
+   * around it. Returns the pipeline result so execDemo can gate on `failed`
+   * and drive the demo-fix loop on `complete-with-misses`.
+   */
+  runDemoAgent: (
+    input: CycleInput,
+    logger: EventLogger,
+    signal?: AbortSignal,
+  ) => Promise<DemoAgentPipelineResult>;
+
+  /**
+   * R4-10-F1 review node: the R4-08 adversarial-review pipeline (assemble the
+   * diff, critique, persist the `review-findings` artifact for the verdict
+   * gate). Wrapped by execAdversarialReview.
+   */
+  runAdversarialReview: (
+    input: CycleInput,
+    logger: EventLogger,
+    signal?: AbortSignal,
+  ) => Promise<AdversarialReviewResult>;
+
+  /**
+   * Branch delivery ground-truth (commits-ahead / files-changed / insertions),
+   * emitted as the reflector's `dev-loop.delivered` grounding event and fed to
+   * `assertNonEmptyDelivery`. Formerly returned by the unifier phase; the demo
+   * node computes it now (execDemo). Injectable so hermetic tests need no git.
+   */
+  computeDeliveryStats: (
+    input: CycleInput,
+    logger: EventLogger,
+  ) => { commitsAhead: number; filesChanged: number; insertions: number };
 
   openPrInline: (input: CycleInput, logger: EventLogger) => Promise<ReviewerOutcome>;
 
@@ -324,6 +371,16 @@ function defaultEnqueueFlowRun(
   });
 }
 
+/** Best-effort manifest `cost_budget_usd` read (resolves a def's declared
+ *  share cap; a fixture/dry manifest simply yields undefined → flat floor). */
+function readCostBudgetUsd(input: CycleInput): number | undefined {
+  try {
+    return parseManifest(readFileSync(input.manifestPath, 'utf8')).cost_budget_usd;
+  } catch {
+    return undefined;
+  }
+}
+
 const DEFAULT_DEPS: FlowRunnerDeps = {
   // Thread the optional wedge-abort signal into real phase functions.
   runProjectManager: (input, logger, signal?) =>
@@ -332,6 +389,37 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
     realRunDeveloperLoop(input, logger, signal),
   runUnifier: (input, logger, signal?) =>
     realRunUnifierPhase(input, logger, signal),
+  runDemoAgent: (input, logger, signal?) =>
+    runDemoAgentPipeline(
+      {
+        initiativeId: input.initiativeId,
+        worktreePath: input.worktreePath,
+        cycleId: input.cycleId ?? input.initiativeId,
+        logsRoot: resolve('_logs'),
+        costBudgetUsd: readCostBudgetUsd(input),
+        forgeRoot: FLOW_RUNNER_ROOT,
+      },
+      logger,
+      { signal },
+    ),
+  runAdversarialReview: (input, logger, signal?) =>
+    runAdversarialReview(
+      {
+        initiativeId: input.initiativeId,
+        worktreePath: input.worktreePath,
+        cycleId: input.cycleId ?? input.initiativeId,
+        logsRoot: resolve('_logs'),
+        costBudgetUsd: readCostBudgetUsd(input),
+        projectName: basename(input.projectRepoPath),
+        forgeRoot: FLOW_RUNNER_ROOT,
+      },
+      logger,
+      { signal },
+    ),
+  computeDeliveryStats: (input, logger) => {
+    const s = emitDeliverySummary(input, logger);
+    return { commitsAhead: s.commits, filesChanged: s.filesChanged, insertions: s.insertions };
+  },
   openPrInline,
   runClosure,
   runReflector,
@@ -686,6 +774,129 @@ const execUnifier: NodeExecutor = async (ctx) => {
   deps.enforceFinalCiGate(input, nodeLogger);
 };
 
+/**
+ * demo (the `demo-band`, ADR-039): the R4-07 demo pipeline + the relocated
+ * dev-loop close contract (items 4,5,7,8) — the develop flow's successor to the
+ * unifier node (R4-10-F1). The demo agent authors demo.json AND the relocated
+ * `.forge/pr-description.md`; the pipeline renders + orchestrated-captures. The
+ * boundary start/end events (agent_slug metadata) let the run model resolve the
+ * demo node's hex to complete, exactly as a generic execAgent spawn would.
+ */
+const execDemo: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps, nodeId } = ctx;
+  const start = nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'demo-agent',
+    event_type: 'start',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId },
+  });
+
+  const result = await runWithWedge(ctx, (sig) => deps.runDemoAgent(input, nodeLogger, sig));
+
+  // Item 6 (delivery gate) — the demo pipeline must have produced a bundle. A
+  // miss is a JUDGMENT (`complete-with-misses`), never a failure; only a hard
+  // pipeline `failed` blocks the PR, in the same spot the unifier gate did.
+  if (result.status === 'failed') {
+    throw new Error(
+      `delivery gate: demo pipeline failed (${result.reason}: ${result.detail}) — ` +
+        `the branch is not review-ready, so no PR is opened. Triage the demo failure before re-running.`,
+    );
+  }
+
+  // Items 4,5,7,8 — the relocated dev-loop close contract (was execUnifier).
+  deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId); // 4
+  deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId); // 5
+  const delivery = deps.computeDeliveryStats(input, nodeLogger);
+  deps.assertNonEmptyDelivery(delivery, input.initiativeId, input.worktreePath, nodeLogger); // 7
+  deps.enforceFinalCiGate(input, nodeLogger); // 8
+
+  // Demo-fix loop (ADR-040 / R4-10-F1): a `complete-with-misses` demo compiles
+  // the agent's scoped fix proposals into `demo-fix` WIs on the initiative's own
+  // queue + stamps the manifest send-back, so the fix-loop drain re-enters
+  // (resume_from:'develop' → dev builds the fixes → this demo node re-authors).
+  // Done AFTER the gates so a red gate never enqueues an undrainable fix loop.
+  if (result.status === 'complete-with-misses') {
+    const enqueue = enqueueDemoFixWorkItems({
+      worktreePath: input.worktreePath,
+      manifestPath: input.manifestPath,
+      initiativeId: input.initiativeId,
+      fixSpecPath: result.fixSpecPath,
+      projectGateCmd: input.qualityGateCmd ?? [],
+    });
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'demo-agent',
+      event_type: enqueue.status === 'compiled' ? 'log' : 'error',
+      input_refs: [],
+      output_refs:
+        enqueue.status === 'compiled' ? enqueue.appended.map((id) => `.forge/work-items/${id}.md`) : [],
+      message: `demo.fix-loop.${enqueue.status}`,
+      metadata: {
+        misses: result.misses.length,
+        origin: 'demo-fix',
+        ...(enqueue.status === 'compiled'
+          ? { appended_work_items: enqueue.appended, round: enqueue.round }
+          : { detail: 'detail' in enqueue ? enqueue.detail : undefined }),
+      },
+    });
+  }
+
+  nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'orchestrator',
+    skill: 'demo-agent',
+    event_type: 'end',
+    input_refs: [],
+    output_refs: [result.demoJsonPath],
+    metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, demo_status: result.status },
+  });
+};
+
+/**
+ * adversarial-review (the `review-band`, ADR-039): the R4-08 critique pipeline
+ * — assemble the diff, critique across four lenses, persist the
+ * `review-findings` artifact for the verdict gate. Finding CONTENT is an
+ * operator signal weighed at the verdict (ADR-021), never an auto-block; but a
+ * pipeline FAILURE produced NO findings, so it fails loud (symmetric with the
+ * demo delivery gate) rather than open a PR the operator would review blind.
+ */
+const execAdversarialReview: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, deps, nodeId } = ctx;
+  const start = nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'adversarial-review',
+    event_type: 'start',
+    input_refs: [input.worktreePath],
+    output_refs: [],
+    metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId },
+  });
+
+  const result = await runWithWedge(ctx, (sig) => deps.runAdversarialReview(input, nodeLogger, sig));
+  if (result.status === 'failed') {
+    throw new Error(
+      `adversarial review pipeline failed (${result.reason}: ${result.detail}) — ` +
+        `no findings artifact was produced for the verdict gate. Triage before re-running.`,
+    );
+  }
+
+  nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'orchestrator',
+    skill: 'adversarial-review',
+    event_type: 'end',
+    input_refs: [],
+    output_refs: [result.findingsPath],
+    metadata: { agent_phase: 'review', agent_slug: 'adversarial-review', node_id: nodeId, counts: result.counts },
+  });
+};
+
 /** review: open the PR, then run closure. */
 const execReview: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, state } = ctx;
@@ -835,7 +1046,7 @@ const execAgent: NodeExecutor = async (ctx) => {
   // would silently run the wrong identity — fail loud instead.
   const bandHook = resolveBandHook(def);
   if (bandHook) {
-    const canonicalSlug = bandHook === 'wi-contract' ? 'project-manager' : 'reflector';
+    const canonicalSlug = BAND_CANONICAL_SLUG[bandHook];
     if (def.slug !== canonicalSlug) {
       throw new Error(
         `execAgent: agent "${def.slug}" declares band hook "${bandHook}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
@@ -913,6 +1124,8 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
 const AGENT_BAND_EXECUTORS: Readonly<Record<BandHookId, NodeExecutor>> = {
   'wi-contract': execPm,
   'reflection-close': execReflect,
+  'demo-band': execDemo,
+  'review-band': execAdversarialReview,
 };
 
 // ---------------------------------------------------------------------------

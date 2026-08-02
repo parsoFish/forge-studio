@@ -78,7 +78,7 @@ function seedDrainableQueue(wt: string): void {
   writeWorkItemStatus(uwi1, 'complete');
 }
 
-test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFrom; UWI-1 re-armed BEFORE the cycle runs; sendback.loop-completed event recorded', async () => {
+test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFrom; leaves UWI-1 untouched (the demo node re-authors, R4-10-F1); sendback.loop-completed event recorded', async () => {
   const { root, queueRoot, wt } = setup();
   try {
     seedDrainableQueue(wt);
@@ -92,8 +92,9 @@ test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFr
       confirmMerge: () => false,
       runDrainCycle: async (input) => {
         calls.push(input);
-        // Capture UWI-1's on-disk status INSIDE the stub, before it returns —
-        // proves the re-arm happened before the cycle ran, not after.
+        // Capture UWI-1's on-disk status INSIDE the stub — R4-10-F1 removed the
+        // drain's UWI re-arm (the develop flow's demo node re-authors demo.json
+        // + the PR body on re-entry), so the drain must leave UWI-1 UNTOUCHED.
         const { items } = readUnifierItems(wt);
         uwiStatusAtCallTime.push(items.find((w) => w.work_item_id === 'UWI-1')?.status);
         return { status: 'pr-open' };
@@ -104,7 +105,7 @@ test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFr
     assert.equal(calls.length, 1, 'runDrainCycle was called once');
     assert.equal(calls[0]!.cycleId, 'CYCLE-XYZ', 'threads the persisted cycle_id');
     assert.equal(calls[0]!.resumeFrom, 'develop');
-    assert.equal(uwiStatusAtCallTime[0], 'pending', 'UWI-1 was re-armed before runDrainCycle ran');
+    assert.equal(uwiStatusAtCallTime[0], 'complete', 'the drain leaves UWI-1 untouched — the demo node owns the re-demo now (R4-10-F1)');
 
     // The stub did not run closure, so the drain returns the stranded manifest
     // from in-flight back to ready-for-review.

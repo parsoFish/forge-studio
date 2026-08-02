@@ -147,6 +147,14 @@ const CANONICAL_PHASE_OVERRIDES: Record<string, string | null> = {
   reflection: 'reflect',   // events say 'reflection'; frontmatter says 'reflector'
   'review-loop': 'review', // gate-only node has no agent
   closure: 'review',       // closure folds into review node
+  // R4-10-F1: the adversarial-review AGENT carries `phase: review` in its
+  // frontmatter, so the flow-node derivation below would otherwise claim
+  // `review → adversarial-review` and steal the mapping from the verdict GATE
+  // node (id `review`). Pin it: literal `review`-phase events (a user-authored
+  // flow's review node, the seeded spine runs) resolve to the `review` gate,
+  // while the adversarial-review NODE resolves via its `agent_slug` (the
+  // pipeline emits `phase:'orchestrator' + agent_slug`, never `phase:'review'`).
+  review: 'review',
   orchestrator: null,      // ignored for phase status
   brain: null,             // ignored for phase status
 };
@@ -162,6 +170,7 @@ const FALLBACK_PHASE_TO_NODE: Record<string, string | null> = {
   unifier: 'unifier',
   'review-loop': 'review',
   closure: 'review',
+  review: 'review', // R4-10-F1: pin the verdict gate (see CANONICAL_PHASE_OVERRIDES)
   reflection: 'reflect',
   orchestrator: null,
   brain: null,

@@ -150,6 +150,15 @@ function validProposals(): unknown[] {
   ];
 }
 
+/** Write a valid relocated PR body (R4-10-F1) — the demo agent authors this
+ *  alongside demo.json; the pipeline hard-requires it (Why/What/How). */
+function writeValidPrDescription(worktree: string): void {
+  writeFileSync(
+    join(worktree, '.forge', 'pr-description.md'),
+    '## Why\n\nThe initiative intent.\n\n## What\n\nThe behavioural change delivered.\n\n## How\n\nHow the diff achieves it.\n',
+  );
+}
+
 /** A queryFn stub whose Nth call runs the matching writer side-effect, then yields a result message. */
 function stubQueryFn(
   _worktree: string,
@@ -163,6 +172,10 @@ function stubQueryFn(
     calls.push(params.prompt);
     const writer = writers[Math.min(i, writers.length - 1)]!;
     async function* gen(): AsyncGenerator<unknown> {
+      // R4-10-F1: every real demo spawn authors the relocated PR body — write a
+      // valid default so the pipeline's pr-description gate passes; a writer can
+      // still author project-code dirt (scope-guard test) or a bad demo.json.
+      writeValidPrDescription(_worktree);
       writer(params.prompt);
       yield { type: 'result', subtype: 'success', total_cost_usd: 0.1, usage: { input_tokens: 5, output_tokens: 7 } };
     }
@@ -613,6 +626,69 @@ test('spawn suppression (no queryFn under FORGE_ARCHITECT_NO_SPAWN): failed/spaw
     assert.equal(res.status, 'failed');
     assert.equal((res as { reason: string }).reason, 'spawn-suppressed');
     assert.ok(events.some((e) => e.message === 'demo.spawn-suppressed'));
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R4-10-F1: the relocated PR body (.forge/pr-description.md)
+// ---------------------------------------------------------------------------
+
+test('pr-description relocation: a missing PR body is author-invalid, retried, then complete', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    const prPath = join(fx.worktree, '.forge', 'pr-description.md');
+    const qf = stubQueryFn(fx.worktree, [
+      (prompt) => {
+        // Attempt 1: author a valid demo.json but FORGET the PR body (the stub
+        // wrote a default — delete it to simulate the omission).
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(prompt))));
+        rmSync(prPath, { force: true });
+      },
+      (prompt) => {
+        // Attempt 2: author both (the stub's default PR body stands).
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(prompt))));
+      },
+    ], prompts);
+    const res = await run(fx, qf, events, logger);
+    assert.equal(res.status, 'complete');
+    assert.equal(prompts.length, 2, 'exactly one retry for the missing PR body');
+    assert.ok(/pr-description/.test(prompts[1]!), 'retry prompt names the missing PR body');
+    assert.ok(existsSync(prPath), 'the PR body is present on success');
+    assert.ok(readFileSync(prPath, 'utf8').includes('## Why'), 'the PR body carries the Why/What/How sections');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});
+
+test('pr-description relocation: a section-less PR body is author-invalid (names the missing section)', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const prompts: string[] = [];
+    const prPath = join(fx.worktree, '.forge', 'pr-description.md');
+    const qf = stubQueryFn(fx.worktree, [
+      (prompt) => {
+        // Author a valid demo.json but a PR body missing the "## How" section
+        // (both attempts) — the pipeline must reject it, never silently pass.
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(prompt))));
+        writeFileSync(prPath, '## Why\n\nintent\n\n## What\n\nchange\n');
+      },
+    ], prompts);
+    const res = await run(fx, qf, events, logger);
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'author-invalid');
+    assert.ok((res as { detail: string }).detail.includes('## How'), 'the failure names the missing section');
+    assert.equal(events.filter((e) => e.message === 'demo.author.invalid').length, 2);
   } finally {
     fx.cleanup();
     restore();

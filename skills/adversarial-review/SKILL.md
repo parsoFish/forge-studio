@@ -9,7 +9,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: [event-log]
+  hooks: [event-log, review-band]
 runtime:
   sdk: claude
   strategy: fixed

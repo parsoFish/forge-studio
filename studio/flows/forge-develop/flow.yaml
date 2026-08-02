@@ -1,16 +1,31 @@
 id: forge-develop
 name: Forge Develop
-version: 1
-goal: Take a decomposed initiative's work items to a reviewed, merged PR — developer fan-out, unify+demo+open-PR, interactive review.
+version: 2
+goal: Take a decomposed initiative's work items to a reviewed, merged PR — developer fan-out, demo, adversarial review, verdict.
 project: null
 kb: cycles
 costCeilingUsd: 25
 origin: seed
 # DEC-3 (S7): the second of the three flows that replace the forge-cycle
-# monolith. Architect (forge-architect) decomposes; Develop builds → reviews;
-# Reflect (S8) captures the brain. DEC-2: a Develop run threads the SAME
+# monolith. Architect (forge-architect) decomposes; Develop builds → demos →
+# reviews; Reflect (S8) captures the brain. DEC-2: a Develop run threads the SAME
 # initiativeId + cycle_id the architect flow minted, so cost/roadmap/metrics
 # (and the WI hexes pm already emitted) roll up under one _logs/<cycleId>.
+#
+# R4-10-F1 (ADR-039/040): the monolithic unifier node is retired from the live
+# flow in favour of the two Q3-B successor agents on the R2 engine —
+#   dev → demo → adversarial-review → verdict
+# `demo` (the `demo-band`, skills/demo-agent) authors demo.json + the relocated
+# `.forge/pr-description.md` and carries the dev-loop close contract (boundary
+# commit, sync invariant, empty-branch guard, final CI gate); `adversarial-review`
+# (the `review-band`, skills/adversarial-review) critiques the diff into the
+# `review-findings` artifact the operator weighs at the verdict gate. Every
+# post-develop fix loop — demo AC-miss, verdict send-back — re-dispatches the ONE
+# develop executor via orchestrator-band re-entry (resume_from:'develop',
+# drain-fix-loop.ts); the flow stays a DAG as data (no back-edges). The demo node
+# is `resumable` — it is the resume target once dev's per-WI commits are on the
+# branch. `execUnifier`/the `developer-unifier` slug stay in the registry until
+# R4-01-F4 retires them, but are no longer on this flow.
 #
 # `dev` is the flow's entry node, so it carries NO `fanOut:` — the lint rule
 # requires a fanOut artifact to be fed by an inbound edge, and an entry node
@@ -19,11 +34,13 @@ origin: seed
 # events in the shared cycle log (not from this static topology hint).
 nodes:
   - { id: dev, agent: developer-ralph }
-  - { id: unifier, agent: developer-unifier, resumable: true }
+  - { id: demo, agent: demo-agent, resumable: true }
+  - { id: adversarial-review, agent: adversarial-review }
   - { id: review, gate: verdict }
 edges:
-  - { from: dev, to: unifier, artifact: wi-branches }
-  - { from: unifier, to: review, artifact: pr }
+  - { from: dev, to: demo, artifact: wi-branches }
+  - { from: demo, to: adversarial-review, artifact: pr }
+  - { from: adversarial-review, to: review, artifact: review-findings }
 # Declaration-driven reflect trigger (ADR-041 target shape). Develop terminates
 # at `ready-for-review` (PR open), BEFORE merge, so the flow-runner (which fires
 # `on: flow-complete`) deliberately skips this `on: merged` trigger. The real

@@ -9,7 +9,7 @@ composition:
   skills: [demo]
   tools: []
   mcps: []
-  hooks: [event-log]
+  hooks: [event-log, demo-band]
 runtime:
   sdk: claude
   strategy: fixed
@@ -73,7 +73,8 @@ The orchestrator's per-cycle run context, injected before you write anything:
 
 ## What you author
 
-Exactly two files, both under the given demo directory — write nothing else:
+Three files — the two demo files under the given demo directory, plus the PR
+body at `.forge/pr-description.md`. Write nothing else (no project code):
 
 1. **`demo.json`** — the `skills/demo` contract (schema `DemoModel`,
    `cli/demo-model.ts`). Required core: `title`, `essence`, `project`,
@@ -84,7 +85,16 @@ Exactly two files, both under the given demo directory — write nothing else:
    as a JSON ARRAY of `{ name, result: "pass"|"fail"|"skip", delta? }`; never
    an object map (the schema only tolerates a map as a legacy back-compat
    coercion — always author the array form).
-2. **`fix-proposals.json`** — ONLY when at least one `acEvaluations` verdict
+2. **`.forge/pr-description.md`** — the pull-request body (relocated from the
+   retired unifier). Treat the whole initiative branch as ONE self-contained
+   PR and author exactly three sections, in order: `## Why` (the intent — what
+   problem this solves), `## What` (the behavioural change delivered), `## How`
+   (how the diff achieves it). Anchor What/How ONLY on the injected changed-file
+   list — never claim a file the diff does not contain. Do NOT add a `## Demo`
+   section: the orchestrator appends it from your `demo.json`. This file is the
+   ONLY thing you write outside the demo directory; `openPrInline` reads it via
+   `--body-file`, so a missing or section-less body means no PR opens.
+3. **`fix-proposals.json`** — ONLY when at least one `acEvaluations` verdict
    is `partial` or `missed`. An all-`met` demo writes no fix-proposals file
    at all. An array of proposals, field names deliberately mirroring the
    WorkItem shape (`acceptance_criteria` GWT, `files_in_scope`) so a later
@@ -117,8 +127,9 @@ Exactly two files, both under the given demo directory — write nothing else:
   Your job is authoring WHAT to capture; producing the evidence is forge's.
 - **Never edit project code.** A fix is a proposal FOR the develop agent to
   execute next, never an edit you make yourself.
-- **Write nothing outside the demo directory.** `demo.json` and
-  (conditionally) `fix-proposals.json` are the only two files you touch.
+- **Write only the demo directory and `.forge/pr-description.md`.** `demo.json`,
+  the PR body, and (conditionally) `fix-proposals.json` are the only files you
+  touch — anything else on the branch is project-code editing and hard-fails.
 - **A checkpoint that needs before/after output declares a `command` and
   LEAVES `beforeOutput`/`afterOutput` absent.** The orchestrated capture run
   fills them; anything you hand-write there is overwritten anyway.

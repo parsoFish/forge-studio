@@ -11,11 +11,14 @@ import { execFileSync } from 'node:child_process';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 
-// The three agents authored, live, into the from-scratch flow — same roles as
-// the forge-develop seed (developer-ralph → developer-unifier → a gated
-// review node), so the topological parity compare below has something real
-// to compare against.
-const SCRATCH_CHAIN = ['developer-ralph', 'developer-unifier', 'project-scoped-review'];
+// The four agents authored, live, into the from-scratch flow — same roles as
+// the R4-10-F1 forge-develop seed (developer-ralph → demo-agent →
+// adversarial-review → a gated terminal node), so the topological parity
+// compare below has something real to compare against. The seed's terminal
+// `review` node is a bare, agent-less verdict gate; the UI can't author a
+// bare gate, so the scratch gates its 4th agent node (project-scoped-review) —
+// the compare excludes the gate node's agent identity, an honest UI limit.
+const SCRATCH_CHAIN = ['developer-ralph', 'demo-agent', 'adversarial-review', 'project-scoped-review'];
 
 // R2-02-F3: no shipped library agent is currently `capability.interactive:
 // true` — the roster's few `surface: interactive` skills (demo-builder,
@@ -33,7 +36,7 @@ const CAPABILITY_FIXTURE_AGENT = 'project-manager';
 // pixel-based) so it scales with whatever viewport is recording. Widened from
 // the original 0.22/0.28-step spacing after hexes were observed dropping
 // overlapped at the recorder's wider default canvas.
-const SCRATCH_DROP_X_FRACTIONS = [0.18, 0.42, 0.66];
+const SCRATCH_DROP_X_FRACTIONS = [0.14, 0.34, 0.54, 0.74];
 const SCRATCH_DROP_Y_FRACTION = 0.45;
 
 // ── HTML5 DnD: AgentPalette agent chip → FlowBuilderCanvas ──────────────────
@@ -105,7 +108,7 @@ async function pickArtifact(page, artifactId, { timeout = 6000, calloutText } = 
 //     `review` node is a bare gate placeholder with NO `agent:` field at all
 //     — a from-scratch UI rebuild structurally cannot reproduce that exactly.
 //     An honest, source-confirmed UI limit, not something to fake around.
-//   - the ordered edge artifact-label sequence (wi-branches, then pr)
+//   - the ordered edge artifact-label sequence (wi-branches, pr, review-findings)
 //   - gate PLACEMENT: which position in the chain carries a gate, and which
 //     gate kind (verdict) — not that node's agent identity.
 function topoChain(doc) {
@@ -308,7 +311,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-scratch-build',
         title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag three agents onto a blank canvas by HTML5 drag-and-drop, wire two edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → Reflect, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
+        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag four agents onto a blank canvas by HTML5 drag-and-drop, wire three edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → Reflect, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH, LIVE IN THE UI ─────────
@@ -343,7 +346,7 @@ export const journey = defineJourney({
                 () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-active-tab') === 'build',
                 null, { timeout: 15000 },
               ).catch(() => {});
-              await caption(page, 'Building the forge-develop flow from scratch, live: three agents dropped from the palette, two edges wired by hand, one verdict gate — the same shape as the production seed.');
+              await caption(page, 'Building the forge-develop flow from scratch, live: four agents dropped from the palette, three edges wired by hand, one verdict gate — the same shape as the production seed.');
 
               // R2-02-F3: BUILD-tab capability gate, checked against the fixture
               // above before anything else — a non-placeable palette chip, and a
@@ -406,8 +409,8 @@ export const journey = defineJourney({
               await sleep(READ);
               await frame(page, 'a2-0-blank-canvas', 'A2 — a genuinely blank canvas: cleared, ready to author from scratch');
 
-              // Drop the three agents from the palette by HTML5 DnD.
-              await countAtLeast(page, '[data-palette-chip="agent"]', 3, 'author-from-scratch: palette agent chips loaded before dropping');
+              // Drop the four agents from the palette by HTML5 DnD.
+              await countAtLeast(page, '[data-palette-chip="agent"]', 4, 'author-from-scratch: palette agent chips loaded before dropping');
               const canvasBox = await page.locator('[data-component="flow-builder-canvas"]').boundingBox();
               for (let i = 0; i < SCRATCH_CHAIN.length; i += 1) {
                 const ref = SCRATCH_CHAIN[i];
@@ -421,8 +424,8 @@ export const journey = defineJourney({
               }
               const droppedCount = await page.evaluate(() =>
                 parseInt(document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-node-count') ?? '0', 10));
-              check(droppedCount === 3, `author-from-scratch: 3 agent nodes dropped onto the canvas via HTML5 DnD (data-node-count=${droppedCount})`);
-              await frame(page, 'a2-1-nodes-dropped', 'A2 — dev → unifier → review agent nodes dropped from the palette (real HTML5 DnD)');
+              check(droppedCount === 4, `author-from-scratch: 4 agent nodes dropped onto the canvas via HTML5 DnD (data-node-count=${droppedCount})`);
+              await frame(page, 'a2-1-nodes-dropped', 'A2 — dev → demo → adversarial-review → gate agent nodes dropped from the palette (real HTML5 DnD)');
 
               // CRITICAL settle wait — FitOnChange's 60ms-delayed, 300ms-transition
               // auto-fit must finish before edge-wiring reads stable handle boxes.
@@ -430,33 +433,40 @@ export const journey = defineJourney({
 
               const idFor = async (ref) => page.evaluate((r) =>
                 document.querySelector(`[data-flow-node][data-agent-ref="${r}"]`)?.getAttribute('data-node-id') ?? null, ref);
-              const [devId, unifierId, reviewId] = await Promise.all(SCRATCH_CHAIN.map(idFor));
-              check(!!devId && !!unifierId && !!reviewId,
-                `author-from-scratch: dropped nodes resolve to real node ids (${devId}, ${unifierId}, ${reviewId})`);
+              const [devId, demoId, advId, gateNodeId] = await Promise.all(SCRATCH_CHAIN.map(idFor));
+              check(!!devId && !!demoId && !!advId && !!gateNodeId,
+                `author-from-scratch: dropped nodes resolve to real node ids (${devId}, ${demoId}, ${advId}, ${gateNodeId})`);
 
-              // Edge 1: dev → unifier, artifact wi-branches (real ReactFlow handle-drag).
-              const wired1 = devId && unifierId ? await wireEdge(page, devId, unifierId) : false;
-              check(wired1, 'author-from-scratch: ReactFlow handle-drag wires dev → unifier');
+              // Edge 1: dev → demo, artifact wi-branches (real ReactFlow handle-drag).
+              const wired1 = devId && demoId ? await wireEdge(page, devId, demoId) : false;
+              check(wired1, 'author-from-scratch: ReactFlow handle-drag wires dev → demo');
               const picked1 = wired1 ? await pickArtifact(page, 'wi-branches') : false;
-              check(picked1, 'author-from-scratch: ArtifactPicker labels the dev → unifier edge "wi-branches"');
+              check(picked1, 'author-from-scratch: ArtifactPicker labels the dev → demo edge "wi-branches"');
               await sleep(THINK);
 
-              // Edge 2: unifier → review, artifact pr.
-              const wired2 = unifierId && reviewId ? await wireEdge(page, unifierId, reviewId) : false;
-              check(wired2, 'author-from-scratch: ReactFlow handle-drag wires unifier → review');
+              // Edge 2: demo → adversarial-review, artifact pr.
+              const wired2 = demoId && advId ? await wireEdge(page, demoId, advId) : false;
+              check(wired2, 'author-from-scratch: ReactFlow handle-drag wires demo → adversarial-review');
               const picked2 = wired2 ? await pickArtifact(page, 'pr') : false;
-              check(picked2, 'author-from-scratch: ArtifactPicker labels the unifier → review edge "pr"');
+              check(picked2, 'author-from-scratch: ArtifactPicker labels the demo → adversarial-review edge "pr"');
+              await sleep(THINK);
+
+              // Edge 3: adversarial-review → gate, artifact review-findings.
+              const wired3 = advId && gateNodeId ? await wireEdge(page, advId, gateNodeId) : false;
+              check(wired3, 'author-from-scratch: ReactFlow handle-drag wires adversarial-review → gate');
+              const picked3 = wired3 ? await pickArtifact(page, 'review-findings') : false;
+              check(picked3, 'author-from-scratch: ArtifactPicker labels the adversarial-review → gate edge "review-findings"');
               const edgeCount = await page.evaluate(() =>
                 document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-edge-count'));
-              check(edgeCount === '2', `author-from-scratch: 2 edges wired (data-edge-count="${edgeCount}")`);
-              await frame(page, 'a2-2-edges-wired', 'A2 — edges wired by real handle-drag; ArtifactPicker labels each (wi-branches, pr)');
+              check(edgeCount === '3', `author-from-scratch: 3 edges wired (data-edge-count="${edgeCount}")`);
+              await frame(page, 'a2-2-edges-wired', 'A2 — edges wired by real handle-drag; ArtifactPicker labels each (wi-branches, pr, review-findings)');
 
               // Gate: click the terminal node to open its mini-panel; toggle the gate.
               let gateToggled = false;
-              if (reviewId) {
-                await page.locator(`[data-testid="rf__node-${reviewId}"]`).click({ force: true }).catch(() => {});
+              if (gateNodeId) {
+                await page.locator(`[data-testid="rf__node-${gateNodeId}"]`).click({ force: true }).catch(() => {});
                 try {
-                  await page.waitForSelector(`[data-component="node-mini-panel"][data-panel-node-id="${reviewId}"]`, { timeout: 6000 });
+                  await page.waitForSelector(`[data-component="node-mini-panel"][data-panel-node-id="${gateNodeId}"]`, { timeout: 6000 });
                   await page.locator('[data-action="toggle-gate"]').click();
                   await sleep(THINK);
                   gateToggled = true;
@@ -469,7 +479,7 @@ export const journey = defineJourney({
               // R2-03-F3: the fanout toggle is enabled ONLY on a fanout-capable
               // agent (driven by the SAME capability descriptor the server lints).
               // developer-ralph declares a fanout: block (capable → enabled);
-              // developer-unifier does not (not capable → disabled).
+              // demo-agent (a one-shot agent) does not (not capable → disabled).
               async function fanoutGateState(nodeId) {
                 await page.locator(`[data-testid="rf__node-${nodeId}"]`).click({ force: true }).catch(() => {});
                 await page.waitForSelector(`[data-component="node-mini-panel"][data-panel-node-id="${nodeId}"]`, { timeout: 6000 }).catch(() => {});
@@ -482,10 +492,10 @@ export const journey = defineJourney({
               const ralphGate = devId ? await fanoutGateState(devId) : { cap: null, disabled: null };
               check(ralphGate.cap === 'true' && ralphGate.disabled === false,
                 `author-from-scratch: R2-03-F3 — developer-ralph (fanout-capable) has an ENABLED fanout toggle (data-fanout-capable="${ralphGate.cap}", disabled=${ralphGate.disabled})`);
-              const unifierGate = unifierId ? await fanoutGateState(unifierId) : { cap: null, disabled: null };
-              check(unifierGate.cap === 'false' && unifierGate.disabled === true,
-                `author-from-scratch: R2-03-F3 — developer-unifier (not fanout-capable) has a DISABLED fanout toggle (data-fanout-capable="${unifierGate.cap}", disabled=${unifierGate.disabled})`);
-              await frame(page, 'a2-3b-fanout-gate', 'A2 — the fanout toggle is enabled only on fanout-capable agents (R2-03-F3): developer-ralph on, developer-unifier off');
+              const demoGate = demoId ? await fanoutGateState(demoId) : { cap: null, disabled: null };
+              check(demoGate.cap === 'false' && demoGate.disabled === true,
+                `author-from-scratch: R2-03-F3 — demo-agent (not fanout-capable) has a DISABLED fanout toggle (data-fanout-capable="${demoGate.cap}", disabled=${demoGate.disabled})`);
+              await frame(page, 'a2-3b-fanout-gate', 'A2 — the fanout toggle is enabled only on fanout-capable agents (R2-03-F3): developer-ralph on, demo-agent off');
 
               // KB bind — Advanced → kb-select (this one WORKS; not a UI limit).
               await page.locator('summary[data-action="toggle-flow-advanced"]').click().catch(() => {});
@@ -614,7 +624,7 @@ export const journey = defineJourney({
 
                 const box = await p.locator('[data-component="flow-builder-canvas"]').boundingBox();
                 if (box) {
-                  await caption(p, 'Three agents, dropped one by one from the palette — dev, unifier, review.');
+                  await caption(p, 'Four agents, dropped one by one from the palette — dev, demo, adversarial-review, gate.');
                   for (let i = 0; i < SCRATCH_CHAIN.length; i += 1) {
                     const ref = SCRATCH_CHAIN[i];
                     const cx = box.x + box.width * SCRATCH_DROP_X_FRACTIONS[i];
@@ -633,13 +643,13 @@ export const journey = defineJourney({
 
                 const clipIdFor = async (ref) => p.evaluate((r) =>
                   document.querySelector(`[data-flow-node][data-agent-ref="${r}"]`)?.getAttribute('data-node-id') ?? null, ref);
-                const [d1, d2, d3] = await Promise.all(SCRATCH_CHAIN.map(clipIdFor));
+                const [d1, d2, d3, d4] = await Promise.all(SCRATCH_CHAIN.map(clipIdFor));
 
                 if (d1 && d2) {
                   const wired = await wireEdge(p, d1, d2).catch(() => false);
                   if (wired) {
                     await pickArtifact(p, 'wi-branches', {
-                      calloutText: 'The ArtifactPicker pops — it labels the dev → unifier edge "wi-branches".',
+                      calloutText: 'The ArtifactPicker pops — it labels the dev → demo edge "wi-branches".',
                     }).catch(() => false);
                   }
                 }
@@ -648,7 +658,16 @@ export const journey = defineJourney({
                   const wired = await wireEdge(p, d2, d3).catch(() => false);
                   if (wired) {
                     await pickArtifact(p, 'pr', {
-                      calloutText: 'And here — the picker labels the unifier → review edge as a PR hand-off.',
+                      calloutText: 'And here — the picker labels the demo → adversarial-review edge as a PR hand-off.',
+                    }).catch(() => false);
+                  }
+                }
+                await sleep(300);
+                if (d3 && d4) {
+                  const wired = await wireEdge(p, d3, d4).catch(() => false);
+                  if (wired) {
+                    await pickArtifact(p, 'review-findings', {
+                      calloutText: 'The last edge — adversarial-review → gate, labelled "review-findings".',
                     }).catch(() => false);
                   }
                 }
@@ -659,16 +678,16 @@ export const journey = defineJourney({
                 let edgesConfirmed = false;
                 try {
                   await p.waitForFunction(
-                    () => document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-edge-count') === '2',
+                    () => document.querySelector('[data-component="flow-builder-canvas"]')?.getAttribute('data-edge-count') === '3',
                     null, { timeout: 5000 },
                   );
                   edgesConfirmed = true;
                 } catch { /* the clip still holds on whatever state it reached */ }
 
-                if (edgesConfirmed && d3) {
-                  await caption(p, 'Both edges wired — now gate the terminal node: a human verdict before this flow can complete.');
+                if (edgesConfirmed && d4) {
+                  await caption(p, 'All three edges wired — now gate the terminal node: a human verdict before this flow can complete.');
                   await sleep(THINK);
-                  await p.locator(`[data-testid="rf__node-${d3}"]`).click({ force: true }).catch(() => {});
+                  await p.locator(`[data-testid="rf__node-${d4}"]`).click({ force: true }).catch(() => {});
                   await p.locator('[data-action="toggle-gate"]').click().catch(() => {});
                   await p.keyboard.press('Escape').catch(() => {});
                   await sleep(400);
@@ -678,7 +697,7 @@ export const journey = defineJourney({
                   await p.waitForURL(new RegExp(`/flows/${SCRATCH_FLOW}`), { timeout: 12000 }).catch(() => {});
                   await sleep(1000);
                 }
-              }, { readySel: '[data-page="library"]', caption: 'From the library "+ New Flow" CTA to a saved, edge-proven flow — dev → unifier → review', holdTailMs: 1500 });
+              }, { readySel: '[data-page="library"]', caption: 'From the library "+ New Flow" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate', holdTailMs: 1500 });
 
         },
       },

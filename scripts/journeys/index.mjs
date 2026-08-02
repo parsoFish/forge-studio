@@ -98,7 +98,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-tdd-red'],
   ['flows-run', 'flows-run-grind'],
   ['flows-run', 'flows-run-dependency-gate'],
-  ['flows-run', 'flows-run-unifier'],
+  ['flows-run', 'flows-run-demo-review'],
   ['flows-run', 'flows-run-cost-rollup'],
   ['flows-run', 'flows-run-review-comment'],
   ['flows-run', 'flows-run-review-send-back'],

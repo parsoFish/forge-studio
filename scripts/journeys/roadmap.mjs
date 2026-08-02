@@ -104,7 +104,7 @@ export const journey = defineJourney({
               }
               // S7 / DEC-3: seed a SECOND, decomposed-but-not-yet-developing initiative
               // (pending) so the roadmap shows the "start development" trigger. A real
-              // develop run (dev→unifier→review) is the scheduler's job — exercised by the
+              // develop run (dev→demo→adversarial-review→verdict) is the scheduler's job — exercised by the
               // operator-gated verify:cycle; here we prove the trigger flips the manifest
               // onto the forge-develop flow.
               INIT_DEV = `INIT-${DATE}-e2e-develop-trigger`;
@@ -359,7 +359,7 @@ export const journey = defineJourney({
                 await page.waitForSelector(`[data-initiative-id="${INIT_DEV}"][data-develop-state="started"]`, { timeout: 12000 }).catch(() => {});
                 const devState = await devCard.getAttribute('data-develop-state');
                 check(devState === 'started', `start-development enqueues the develop run (data-develop-state=${devState})`);
-                await frame(page, 'r6-1b-development-started', 'R6 — development started: the unifier will open a PR for review', { key: true });
+                await frame(page, 'r6-1b-development-started', 'R6 — development started: dev → demo → adversarial-review → verdict, ending at a PR for review', { key: true });
                 // The manifest is now claimable on the forge-develop flow, threading its cycle_id.
                 // Poll the repoint (same read-after-write settle as the plan trigger above).
                 let devManifest = '';

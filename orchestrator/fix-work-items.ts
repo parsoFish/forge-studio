@@ -70,6 +70,14 @@ export function writeReviewCapExhaustedMarker(worktreePath: string, detail: stri
 }
 
 /**
+ * Default iteration budget stamped on a compiled fix WI when the caller names
+ * none (the review-fix path passes the unifier cap; the demo-fix path uses
+ * this). A code-fix is a scoped remediation, not a fresh initiative — a handful
+ * of iterations, not a whole build budget.
+ */
+export const DEFAULT_FIX_WI_ITERATIONS = 15;
+
+/**
  * One post-develop fix concern, ready to compile into a work item. The verdict
  * form supplies the `review-fix` shape today; R4-10-F1 maps `DemoFixProposal`
  * (`demo-fix`) and gate-failure remediation (`gate-fix`) onto the same type.
