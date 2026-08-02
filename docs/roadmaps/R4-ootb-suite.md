@@ -970,7 +970,7 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-10 Develop-cycle OOTB flow
 
-- **Status:** **implemented (F1, F2)**; F3–F6 planned  ·  **Wave:** 4 (assembles last)
+- **Status:** **implemented (F1, F2, F3, F4)**; F5–F6 planned  ·  **Wave:** 4 (assembles last)
 - **Implemented-notes F1 (2026-08-02 — in-place cutover, ADR-039/040):** the live
   `forge-develop` flow was rewritten IN PLACE `dev→unifier→review` →
   `dev→demo→adversarial-review→verdict` (v2). The two successor agents are wired
@@ -1041,7 +1041,19 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     The seeded cross-WI-break real run rides the tail verify:cycle (F5).
   - **R4-10-F3 Isolation parity.** Every node agent runs standalone with the
     same artifacts (the diagram's ship-both principle). ACs: per-agent
-    standalone runs documented in journeys.
+    standalone runs documented in journeys. **— built (2026-08-02):**
+    developer-ralph's standalone unit is `runDeveloperLoop` (the dev node);
+    `orchestrator/band-agent-run.ts` `runBandAgentStandalone` is the isolation
+    surface for the two BANDED one-shot agents — it runs the SAME pipeline the
+    flow band runs (`runDemoAgentPipeline` / `runAdversarialReview`), against an
+    existing initiative's worktree resolved from the queue, so a standalone run
+    yields the identical artifacts (demo.json/DEMO.md, review-findings). Wired
+    through the existing R2-01-F3 dispatch surface: `forge agent dispatch
+    demo-agent --input initiative=<id>` (CLI routes band agents to the pipeline;
+    the bridge `POST /api/agents/:slug/run` + `/agents/[id]` RunPanel forward the
+    `initiative` input unchanged). Bare `runAgent` dispatch is bypassed for these
+    two (it would skip the pipeline bands). Journey: an `agents` beat drives the
+    demo-agent + adversarial-review agent pages' standalone run surface.
   - **R4-10-F4 Succession mechanics.** Decide forge-develop's fate (supersede
     vs version) — flow-seed residue only; the reflect-trigger cutover itself
     is owned atomically by R4-09-F1 (via the R2-04 registry). ACs: stale flow
@@ -1049,7 +1061,15 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     deprecated-seed treatment "marked" needs); **the cycles KB
     `binding.ref` is updated to the successor flow id in the same change** —
     `forge studio lint` + `forge brain lint` green (R1-01's dangling-ref lint
-    would otherwise go red).
+    would otherwise go red). **— reconcile (2026-08-02):** F1's operator-chosen
+    IN-PLACE rewrite decided succession = **supersede** — `forge-develop` keeps
+    its flow id (version bumped 1→2, F1). So there is NO stale/deprecated flow
+    seed to remove or mark (the successor IS the seed; no `forge studio lint`
+    deprecated-seed treatment is needed), and the cycles KB `binding.ref`
+    (`brain/cycles/kb.yaml`) already points at `forge-develop` — still valid, no
+    rebind, R1-01's dangling-ref lint stays green. `forge studio lint` +
+    `forge brain lint` confirmed green. Nothing to change beyond recording the
+    decision.
   - **R4-10-F5 verify:cycle harness migration.** The standing regression
     harness (ADR-022) structurally encodes the unifier pipeline ("dev →
     unifier → review" spine, `--send-back adds an extra unifier pass`,

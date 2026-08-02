@@ -29,6 +29,7 @@ import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
 import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-runner.ts';
 import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
+import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/band-agent-run.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
 import { createLogger } from '../orchestrator/logging.ts';
 
@@ -193,6 +194,22 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
   }
 
   try {
+    // R4-10-F3 isolation surface: the two band-hook node agents (demo-agent /
+    // adversarial-review) run standalone through their FLOW pipeline (parity),
+    // against an existing initiative's worktree — NOT the bare `runAgent` spawn
+    // the generic dispatch uses (which would skip the pipeline bands entirely).
+    if (isStandaloneBandAgent(slug)) {
+      const initiativeId = inputs.initiative;
+      if (!initiativeId) {
+        console.error(`forge agent dispatch: standalone "${slug}" needs --input initiative=<id> (the post-develop initiative to run against)`);
+        process.exit(2);
+        return;
+      }
+      const out = await runBandAgentStandalone({ slug, initiativeId, runId, forgeRoot, queryFn: undefined });
+      console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`);
+      return;
+    }
+
     const out = await dispatchAgentRun({
       slug,
       skillsDir: skillsDir(forgeRoot),
