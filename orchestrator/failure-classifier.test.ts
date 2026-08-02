@@ -597,3 +597,35 @@ test('classifyCycleFailure: pm.empty-decomposition unchanged — still terminal'
   assert.equal(c.kind, 'terminal');
   assert.match(c.reason, /zero work items/i);
 });
+
+// ── R4-10-F1: the successor nodes' delivery-gate failures classify accurately ──
+
+test('classifyCycleFailure: execDemo delivery-gate throw → terminal "demo pipeline failed" (NOT reviewer-Ralph)', () => {
+  const events = [
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'delivery gate: demo pipeline failed (author-invalid: demo.json never validated) — the branch is not review-ready, so no PR is opened.',
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /demo pipeline failed/i);
+  assert.doesNotMatch(c.reason, /reviewer-Ralph/i);
+});
+
+test('classifyCycleFailure: execAdversarialReview throw → terminal "adversarial-review pipeline failed" (NOT reviewer-Ralph)', () => {
+  const events = [
+    ev({
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'error',
+      message: 'adversarial review pipeline failed (spawn-failed: sdk error) — no findings artifact was produced for the verdict gate.',
+    }),
+  ];
+  const c = classifyCycleFailure(events);
+  assert.equal(c.kind, 'terminal');
+  assert.match(c.reason, /adversarial-review pipeline failed/i);
+  assert.doesNotMatch(c.reason, /reviewer-Ralph/i);
+});

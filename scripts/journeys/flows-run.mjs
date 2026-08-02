@@ -7,7 +7,7 @@ import {
   caption, runningTimer,
   archDir, writeStatus, archEvent, archReasoning, burst, paced, writeQuestions,
   EMULATED_ARCHITECT_COST_USD, EMULATED_ARCHITECT_DURATION_MS, writePlan,
-  cycleEvent, unifierEvent, moveManifest, seedReviewWorktree, writeDemoJson, writeReviewFindings, writeReflectionQuestions,
+  cycleEvent, unifierEvent, demoAgentEvent, adversarialReviewEvent, writePrDescription, moveManifest, seedReviewWorktree, writeDemoJson, writeReviewFindings, writeReflectionQuestions,
   writeAutomatedReflection, writeReflectionArtifacts, writeReleaseArtifact,
   openStudioMonitor,
 } from '../lib/journey-fixtures.mjs';
@@ -474,9 +474,10 @@ export const journey = defineJourney({
               await frame(page, 'r2-2b-monitor-landing', 'R2 — "Watch it build →" lands on the Studio flow monitor');
               await openStudioMonitor(page, watch); // forge-develop — the build slice (Model B)
               await frame(page, 'r2-2c-monitor-live', 'R2 — Forge Develop monitor shows the build slice live (run rail + topology)');
-              // Model B: /flows/forge-develop renders ONLY the develop slice (dev→unifier→review,
-              // the dev node fanning out into per-WI hexes). It does NOT show architect/pm/reflect.
-              await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'monitor: forge-develop slice shows its phase hexes (unifier/review)');
+              // Model B: /flows/forge-develop renders ONLY the develop slice
+              // (dev→demo→adversarial-review→review, the dev node fanning out into
+              // per-WI hexes). It does NOT show architect/pm/reflect.
+              await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'monitor: forge-develop slice shows its phase hexes (demo/adversarial-review/review)');
               // P4: the architect ran in the architect FLOW — assert it reaches complete
               // on the forge-architect slice (the threaded run surfaces there via
               // flowLineage). Grounded (S5, fix item 1): real cycles meter the architect
@@ -636,79 +637,70 @@ export const journey = defineJourney({
               // ralph.end sums the two WIs' real costs/durations above (0.6676 + 1.0856 ≈ 1.7533).
               cycleEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 1.7532643999999998, duration_ms: 585747 });
               await sleep(WORK);
-              await frame(page, 'r3-3b-devloop-green', 'R3 — dev-loop hex greens (both WIs done); unifier runs next on its own hex');
+              await frame(page, 'r3-3b-devloop-green', 'R3 — dev-loop hex greens (both WIs done); the demo node runs next on its own hex');
 
         },
       },
       {
-        id: 'flows-run-unifier',
-        title: 'Unifier on its own hex',
-        narration: 'With both work items green, the unifier phase\'s own hex activates and merges them into one branch, runs the gate, and authors the demo — the seam between many parallel WIs and one reviewable change, made visible.',
+        id: 'flows-run-demo-review',
+        title: 'Demo + adversarial review on their own hexes',
+        narration: 'With both work items green, R4-10\'s two successor agents run on their own hexes: the demo node composes the initiative demo from the develop output and authors both demo.json and the PR body (the unifier\'s relocated job), then the adversarial-review node critiques the diff across four lenses into a findings artifact the operator weighs at the verdict — the seam between many parallel WIs and one reviewable, critiqued change, made visible.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
-              // ── R3.4: Unifier on its OWN hex ──────────────────────────────────────────
-              console.log('\n[R3.4] Unifier on its own hex');
-              await caption(page, 'A separate phase reviews the branch and authors the demo — with captured CLI read-back evidence.');
-              // Grounded (S5, fix items 3/8/14): a representative dozen+ real unifier
-              // events (not the ~5 invented ones, and not the full 130-event corpus
-              // breakdown either) — real message names + skill developer-unifier, real
-              // cost/duration (source: gitpulse events.jsonl unifier phase: 56 log/51
-              // tool_use/23 heartbeat/3 file_change, cost 1.1984, dur 357551ms). Filler
-              // events use fastForward pacing so the video doesn't lengthen materially.
+              // ── R3.4: Demo node + adversarial-review node on their OWN hexes (R4-10-F1) ──
+              console.log('\n[R3.4] Demo + adversarial review on their own hexes');
+              await caption(page, 'Two successor agents (R4-10): the demo node authors demo.json + the PR body; the adversarial-review node critiques the diff — each on its own hex.');
+              // The demo node (skills/demo-agent, ADR-039 `demo-band`) authors the demo
+              // bundle + the relocated `.forge/pr-description.md`, then the pipeline
+              // renders + orchestrated-captures. Events mirror runDemoAgentPipeline
+              // (phase:'orchestrator', skill:'demo-agent', metadata.agent_slug) — the
+              // frozen generic-agent contract eventToNodeId resolves to the `demo` node.
               await paced([
-                () => unifierEvent('start', 'unifier-phase.start', { metadata: { resumed: false } }),
-                () => unifierEvent('tool_use', 'tool.TodoWrite', { metadata: { tool: 'TodoWrite' } }),
+                () => demoAgentEvent('start', 'demo-node.start'),
+                () => demoAgentEvent('log', 'demo.input.derived', { metadata: { diff_stat: '4 files changed, 213 insertions(+), 6 deletions(-)', acceptance_criteria: 2, work_items: 2 } }),
               ], WORK);
-              await frame(page, 'r3-4-unifier-midpulse', 'R3 (mid-pulse) — unifier hex active, running the gate + acceptance on the merged branch');
-              unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: npm test && npm run acceptance' } });
+              await frame(page, 'r3-4-demo-midpulse', 'R3 (mid-pulse) — demo hex active, composing demo.json + the PR body from the develop output');
+              demoAgentEvent('log', 'demo.capture', { metadata: { capture_ok: true, nonce_match: true, committed: true } });
               await pace('fastForward');
-              unifierEvent('log', 'usage_delta', {
-                metadata: { input_tokens: 3200, output_tokens: 1100, cache_read_tokens: 18200, cache_creation_tokens: 900 },
-              });
-              await pace('fastForward');
-              unifierEvent('agent_heartbeat', 'agent.heartbeat');
-              await pace('fastForward');
-              for (const [checkId, detail] of [
-                ['initiative_gate', 'PLAN.md present, ACs match manifest'],
-                ['pr_self_contained', 'no cross-WI dependency leakage'],
-                ['demo_fanin_honesty', 'demo metadata matches the post-fan-in branch (diffStat re-derived + refreshed)'],
-                ['branches_in_sync', 'branch up-to-date with main'],
-                ['complete_delivery', 'both WIs delivered, no orphan work'],
-              ]) {
-                unifierEvent('log', 'unifier.gate.sub-check', { metadata: { check_id: checkId, pass: true, detail } });
-                await pace('fastForward');
-              }
-              unifierEvent('log', 'unifier.demo-capture', { metadata: { kind: 'screenshot', label: 'README TOC region — before vs after --write' } });
-              await pace('fastForward');
-              unifierEvent('log', 'unifier.demo-metadata-refreshed', { metadata: { branch: `forge/${INIT}` } });
-              await sleep(THINK);
-              unifierEvent('tool_use', 'tool.Bash', { metadata: { tool: 'Bash: forge demo render' } });
-              await sleep(THINK);
               writeDemoJson(1);
-              writeReviewFindings(1); // R4-08-F3: the critique lands beside the demo evidence
-              unifierEvent('log', 'unifier.branch-pushed', { metadata: { branch: `forge/${INIT}` } });
+              writePrDescription(); // R4-10-F1: the demo node authors the relocated PR body
+              demoAgentEvent('log', 'demo.complete', { metadata: { ac_evaluations: 2 } });
               await sleep(THINK);
-              unifierEvent('end', 'unifier.end', { cost_usd: 1.1984102000000005, duration_ms: 357551 });
+              demoAgentEvent('end', 'demo.end', { cost_usd: 0.7284102, duration_ms: 214300, metadata: { demo_status: 'complete' } });
+              await sleep(WORK);
+              // The adversarial-review node (skills/adversarial-review, ADR-039
+              // `review-band`) critiques the diff into `review-findings.json` — claims
+              // the operator weighs at the verdict, never an auto-block (ADR-021).
+              await paced([
+                () => adversarialReviewEvent('start', 'review-node.start'),
+                () => adversarialReviewEvent('log', 'review.input.assembled', { metadata: { changed_files: 4, base_ref: 'main' } }),
+              ], WORK);
+              writeReviewFindings(1); // the critique lands beside the demo evidence
+              adversarialReviewEvent('log', 'review.findings.authored', { metadata: { total: 1, blocker: 0, major: 0, minor: 1, info: 0 } });
+              await sleep(THINK);
+              adversarialReviewEvent('end', 'review.end', { cost_usd: 0.4700000, duration_ms: 143551 });
               await openStudioMonitor(page, watch);
-              try {
-                await page.waitForFunction(
-                  () => document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') === 'complete',
-                  null, { timeout: 10000 },
-                );
-                check(true, 'monitor: unifier node lit its own status complete (not folded into dev-loop)');
-              } catch {
-                const got = await page.evaluate(() =>
-                  document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') ?? '(absent)');
-                check(false, `monitor: unifier node should reach complete (got "${got}")`);
+              for (const nodeId of ['demo', 'adversarial-review']) {
+                try {
+                  await page.waitForFunction(
+                    (id) => document.querySelector(`[data-mon-node][data-node-id="${id}"]`)?.getAttribute('data-status') === 'complete',
+                    nodeId, { timeout: 10000 },
+                  );
+                  check(true, `monitor: ${nodeId} node lit its own status complete (its own hex, not folded into dev-loop)`);
+                } catch {
+                  const got = await page.evaluate((id) =>
+                    document.querySelector(`[data-mon-node][data-node-id="${id}"]`)?.getAttribute('data-status') ?? '(absent)', nodeId);
+                  check(false, `monitor: ${nodeId} node should reach complete (got "${got}")`);
+                }
               }
-              await frame(page, 'r3-4b-unifier-green', 'R3 — unifier (own node) greens after authoring the demo');
+              await frame(page, 'r3-4b-demo-review-green', 'R3 — demo + adversarial-review nodes green on their own hexes (demo authored, diff critiqued)');
 
         },
       },
       {
         id: 'flows-run-cost-rollup',
         title: 'Cost rollup',
-        narration: 'The cycle badge sums exactly what dev-loop and unifier already accrued ($1.75 + $1.20) — the rollup is arithmetic on real per-phase numbers the operator watched tick up, not a separate estimate.',
+        narration: 'The cycle badge sums exactly what dev-loop, demo, and adversarial-review already accrued ($1.75 + $0.73 + $0.47) — the rollup is arithmetic on real per-phase numbers the operator watched tick up, not a separate estimate.',
         drive: async (ctx) => {
               const { page, watch, frame, check, expectPhaseCost, browser, recordClip } = ctx;
               // ── R3.5: Cost rollup across the spine ────────────────────────────────────
@@ -716,9 +708,10 @@ export const journey = defineJourney({
               cycleEvent('review-loop', 'start', 'review-loop start');
               cycleEvent('review-loop', 'log', 'reviewer.pr-opened');
               moveManifest('in-flight', 'ready-for-review');
-              // Grounded (S5, fix items 7/8): dev-loop $1.75 (0.6676 + 1.0856), unifier $1.20 —
-              // paired with the grounded costs in flows-run-dependency-gate + flows-run-unifier.
-              await caption(page, 'Forge Develop, costed per phase — dev-loop $1.75, unifier $1.20 — under its ceiling. (The Architect flow bills separately.)');
+              // dev-loop $1.75 (0.6676 + 1.0856), demo $0.73, adversarial-review $0.47 —
+              // paired with the seeded per-node costs in flows-run-dependency-gate +
+              // flows-run-demo-review (R4-10-F1 successor topology).
+              await caption(page, 'Forge Develop, costed per phase — dev-loop $1.75, demo $0.73, review $0.47 — under its ceiling. (The Architect flow bills separately.)');
               await openStudioMonitor(page, watch);
               await sleep(READ);
               await frame(page, 'r3-5-cost-rollup', 'R3 — cost rollup across the spine (Studio monitor)', { key: true });
@@ -764,21 +757,21 @@ export const journey = defineJourney({
                 ).catch(() => {});
                 const runCard = p.locator(`[data-run-id="${CYCLE_ID}"]`).first();
                 if (await runCard.count() > 0) { await runCard.click().catch(() => {}); await sleep(ACT); }
-                await caption(p, 'Watch it build — the WI hexes fan out, the unifier reviews on its own node, cost accrues live.');
+                await caption(p, 'Watch it build — the WI hexes fan out, the demo node authors on its own hex, cost accrues live.');
                 await sleep(WORK);
                 await p.locator('[data-mon-node][data-hex-kind="wi"]').first().scrollIntoViewIfNeeded().catch(() => {});
                 await sleep(READ);
-                const unifierHex = p.locator('[data-mon-node][data-node-id="unifier"]').first();
-                if (await unifierHex.count() > 0) {
-                  await unifierHex.scrollIntoViewIfNeeded().catch(() => {});
-                  await unifierHex.click().catch(() => {});
+                const demoHex = p.locator('[data-mon-node][data-node-id="demo"]').first();
+                if (await demoHex.count() > 0) {
+                  await demoHex.scrollIntoViewIfNeeded().catch(() => {});
+                  await demoHex.click().catch(() => {});
                   await p.waitForFunction(
                     () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true',
                     null, { timeout: 8000 },
                   ).catch(() => {});
                 }
                 await sleep(WORK);
-              }, { readySel: '[data-page="library"]', caption: 'From the library, into the flow monitor — WI fan-out, unifier own-node, cost pills accruing' });
+              }, { readySel: '[data-page="library"]', caption: 'From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing' });
 
         },
       },
@@ -958,11 +951,14 @@ export const journey = defineJourney({
               }
               cycleEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-3' } });
               cycleEvent('developer-loop', 'end', 'WI-3 complete', { metadata: { work_item_id: 'WI-3' } });
-              unifierEvent('log', 'unifier.demo-skill — re-rendering demo.json (--write is byte-identical on every run)');
+              // R4-10-F1: the re-entry re-runs dev → demo → adversarial-review; the
+              // demo node re-authors demo.json + the PR body (no unifier re-arm).
+              demoAgentEvent('log', 'demo.complete — re-rendered demo.json (--write is byte-identical on every run)');
               await pace('fastForward');
               writeDemoJson(2);
               writeReviewFindings(2); // round 2: an explicit clean pass — findings: []
-              unifierEvent('end', 'unifier.end (round 2) — demo re-rendered', { cost_usd: 0.06 });
+              demoAgentEvent('end', 'demo.end (round 2) — demo re-rendered', { cost_usd: 0.06, metadata: { demo_status: 'complete' } });
+              adversarialReviewEvent('end', 'review.end (round 2) — clean re-critique', { cost_usd: 0.05 });
               cycleEvent('developer-loop', 'end', 'ralph.end (round 2)');
               moveManifest('in-flight', 'ready-for-review');
               await runningTimer(page, false);
@@ -1120,8 +1116,8 @@ export const journey = defineJourney({
                 check(got === 'active', `monitor: merged run stays "active" while reflection is in flight (got "${got}")`);
               }
               // Model B: the completed spine is split across the 3 flow monitors. This develop
-              // slice shows the dev fan-out (≥2 WI hexes) + unifier + review.
-              await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'completed develop slice shows its phase hexes (unifier+review)');
+              // slice shows the dev fan-out (≥2 WI hexes) + demo + adversarial-review + review.
+              await countAtLeast(page, '[data-mon-node][data-hex-kind="phase"]', 2, 'completed develop slice shows its phase hexes (demo/adversarial-review/review)');
               await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'completed develop slice shows the dev fan-out (≥2 WI hexes)');
               await expectPhaseCost(page, 'completed develop slice shows accrued per-phase cost');
               // R4-08-F3: the view-mode verdict now renders the REAL decision (the
@@ -1150,18 +1146,20 @@ export const journey = defineJourney({
                 'Model B: /flows/forge-architect renders the architect slice (architect+pm, not dev) of the threaded run',
               );
               await caption(page, 'The same run, seen on the Forge Architect flow — its own monitor, architect + PM only.');
-              await frame(page, 'r4-4d-architect-flow', 'The Forge Architect flow on its own monitor — architect + PM hexes only, no dev or unifier');
+              await frame(page, 'r4-4d-architect-flow', 'The Forge Architect flow on its own monitor — architect + PM hexes only, no dev/demo/review');
               await openStudioMonitor(page, watch); // back to the develop slice
-              try {
-                await page.waitForFunction(
-                  () => document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') === 'complete',
-                  null, { timeout: 8000 },
-                );
-                check(true, 'unifier node complete on its own monitor slot (not folded into dev-loop)');
-              } catch {
-                const got = await page.evaluate(() =>
-                  document.querySelector('[data-mon-node][data-node-id="unifier"]')?.getAttribute('data-status') ?? '(absent)');
-                check(false, `unifier node should reach complete (got "${got}")`);
+              for (const nodeId of ['demo', 'adversarial-review']) {
+                try {
+                  await page.waitForFunction(
+                    (id) => document.querySelector(`[data-mon-node][data-node-id="${id}"]`)?.getAttribute('data-status') === 'complete',
+                    nodeId, { timeout: 8000 },
+                  );
+                  check(true, `${nodeId} node complete on its own monitor slot (not folded into dev-loop)`);
+                } catch {
+                  const got = await page.evaluate((id) =>
+                    document.querySelector(`[data-mon-node][data-node-id="${id}"]`)?.getAttribute('data-status') ?? '(absent)', nodeId);
+                  check(false, `${nodeId} node should reach complete (got "${got}")`);
+                }
               }
 
         },
@@ -1340,7 +1338,7 @@ export const journey = defineJourney({
       {
         id: 'flows-run-monitor-deep-dive',
         title: 'Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)',
-        narration: 'On a freshly gated run, clicking the unifier hex opens its own drawer of gate sub-checks and phase log — every phase and WI hex from a live cycle stays this inspectable, not just while it\'s running.',
+        narration: 'On a freshly gated run, clicking the demo hex opens its own drawer of phase log — every phase and WI hex from a live cycle stays this inspectable, not just while it\'s running.',
         drive: async (ctx) => {
               const { page, watch, frame, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
@@ -1369,9 +1367,10 @@ export const journey = defineJourney({
                 '---', `initiative_id: ${INIT2}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
                 `created_at: '${new Date().toISOString()}'`, `cycle_id: ${CYCLE_ID2}`,
                 // S9/DEC-3: the gated demo run names forge-develop (the build flow). Its events
-                // span architect→pm→dev→unifier→review (gated — no reflect yet), so its
-                // flowLineage is [forge-architect, forge-develop] and the S1 monitor deep-dive
-                // renders the develop slice (WI fan-out + unifier + review) under Model B.
+                // span architect→pm→dev→demo→adversarial-review→review (gated — no reflect yet),
+                // so its flowLineage is [forge-architect, forge-develop] and the S1 monitor
+                // deep-dive renders the develop slice (WI fan-out + demo + adversarial-review +
+                // review) under Model B.
                 'flow_id: forge-develop',
                 // Grounded (S5, fix item 2): distinct-but-realistic from the primary
                 // cycle's grounded 10/4 (real range 6-24 / $4-$80).
@@ -1392,21 +1391,16 @@ export const journey = defineJourney({
               studioEvent('developer-loop', 'log', 'gate.pass', { metadata: { work_item_id: 'WI-2' } });
               studioEvent('developer-loop', 'end', 'WI-2 complete', { metadata: { work_item_id: 'WI-2' } });
               studioEvent('developer-loop', 'end', 'ralph.end', { cost_usd: 0.48 });
-              studioEvent('unifier', 'start', 'unifier.start', { skill: 'developer-unifier' });
-              // Grounded (S5, fix item 14): 'demo_runs_clean' renamed to the real
-              // check_id 'demo_fanin_honesty' — the other 4 check_ids were already real
-              // (source: gitpulse/betterado unifier.gate.sub-check events).
-              for (const [checkId, pass, detail] of [
-                ['initiative_gate',    true,  'PLAN.md present'],
-                ['demo_fanin_honesty', true,  'demo metadata matches the post-fan-in branch (diffStat re-derived + refreshed)'],
-                ['pr_self_contained',  true,  'no cross-WI deps'],
-                ['branches_in_sync',   true,  'branch up-to-date'],
-                ['complete_delivery',  true,  'all WIs delivered'],
-              ]) {
-                studioEvent('unifier', 'log', 'unifier.gate.sub-check',
-                  { skill: 'developer-unifier', metadata: { check_id: checkId, pass, detail } });
-              }
-              studioEvent('unifier', 'end', 'unifier.end', { skill: 'developer-unifier', cost_usd: 0.11 });
+              // R4-10-F1 successor nodes: the demo node authors the bundle + PR body,
+              // then the adversarial-review node critiques. Both emit the frozen
+              // generic-agent shape (phase:'orchestrator' + agent_slug) so eventToNodeId
+              // resolves them to the demo / adversarial-review flow nodes.
+              studioEvent('orchestrator', 'start', 'demo-node.start', { skill: 'demo-agent', metadata: { agent_slug: 'demo-agent' } });
+              studioEvent('orchestrator', 'log', 'demo.complete', { skill: 'demo-agent', metadata: { agent_slug: 'demo-agent', ac_evaluations: 2 } });
+              studioEvent('orchestrator', 'end', 'demo.end', { skill: 'demo-agent', metadata: { agent_slug: 'demo-agent', demo_status: 'complete' }, cost_usd: 0.11 });
+              studioEvent('orchestrator', 'start', 'review-node.start', { skill: 'adversarial-review', metadata: { agent_slug: 'adversarial-review' } });
+              studioEvent('orchestrator', 'log', 'review.findings.authored', { skill: 'adversarial-review', metadata: { agent_slug: 'adversarial-review', total: 1, minor: 1 } });
+              studioEvent('orchestrator', 'end', 'review.end', { skill: 'adversarial-review', metadata: { agent_slug: 'adversarial-review' }, cost_usd: 0.06 });
               studioEvent('review-loop', 'start', 'review-loop start');
               studioEvent('review-loop', 'log', 'reviewer.pr-opened');
               const artifacts2 = join(CYCLE_LOG2, 'artifacts');
@@ -1416,12 +1410,15 @@ export const journey = defineJourney({
               }, null, 2));
               // F4: the single DEMO.md (DEMO.html is retired — the review page renders markdown).
               writeFileSync(join(artifacts2, 'DEMO.md'), '# Studio demo — gated run\n\n> A gated run for the flow-engine controls.\n');
+              // R4-10-F1: the demo node authors the relocated PR body.
+              writeFileSync(join(artifacts2, 'pr-description.md'), '## Why\n\nStale TOCs ship silently.\n\n## What\n\nA `--check` mode that exits non-zero on a stale embedded TOC.\n\n## How\n\nReuse the injector to compare, exit 1 on drift.\n');
 
               // ── S1.0: Flow monitor deep-dive (Model B develop slice + lineage) ────────
               // S9/DEC-3 + Model B: each flow's monitor shows ONLY its own hexes; the ONE
               // threaded run surfaces under all three spine flows via its flowLineage. Deep-dive
-              // the develop slice (the dev node fans out into per-WI hexes → unifier → review),
-              // then prove the SAME run also renders its architect slice under forge-architect.
+              // the develop slice (the dev node fans out into per-WI hexes → demo →
+              // adversarial-review → review), then prove the SAME run also renders its architect
+              // slice under forge-architect.
               console.log('\n[S1.0] Flow monitor deep-dive — /flows/forge-develop (Model B develop slice)');
               await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
               try {
@@ -1435,42 +1432,42 @@ export const journey = defineJourney({
                   document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') ?? '(no data-page=flow-monitor)');
                 check(false, `monitor: data-page-ready (got "${pr}")`);
               }
-              await caption(page, 'The Forge Develop monitor — its own slice of the threaded run: the dev-loop fans out into per-WI hexes, then unifier + review. Pan + zoom the hex graph.');
+              await caption(page, 'The Forge Develop monitor — its own slice of the threaded run: the dev-loop fans out into per-WI hexes, then demo + adversarial-review + review. Pan + zoom the hex graph.');
               await sleep(ACT);
               await countAtLeast(page, '[data-run-id]', 1, 'monitor: run rail shows ≥1 [data-run-id]');
-              await countAtLeast(page, '[data-mon-node]', 4, 'monitor: develop slice renders ≥4 [data-mon-node] hexes (WI fan-out + unifier + review)');
+              await countAtLeast(page, '[data-mon-node]', 4, 'monitor: develop slice renders ≥4 [data-mon-node] hexes (WI fan-out + demo + adversarial-review + review)');
               await countAtLeast(page, '[data-mon-node][data-hex-kind="wi"]', 2, 'monitor: the dev node fans out into ≥2 per-WI hexes (run-driven)');
-              await countAtLeast(page, '[data-mon-node][data-node-id="unifier"]', 1, 'monitor: develop slice shows the unifier phase hex');
+              await countAtLeast(page, '[data-mon-node][data-node-id="demo"]', 1, 'monitor: develop slice shows the demo phase hex');
               await sleep(READ);
-              await frame(page, 's1-0-monitor', 'S1 — Forge Develop slice: WI fan-out + unifier + review');
-              const unifierHex = page.locator('[data-node-id="unifier"]').first();
+              await frame(page, 's1-0-monitor', 'S1 — Forge Develop slice: WI fan-out + demo + adversarial-review + review');
+              const demoHex = page.locator('[data-node-id="demo"]').first();
               let drawerOpened = false;
-              if ((await unifierHex.count()) > 0) {
-                await unifierHex.click();
+              if ((await demoHex.count()) > 0) {
+                await demoHex.click();
                 try {
                   await page.waitForFunction(
                     () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true',
                     null, { timeout: 8000 },
                   );
                   drawerOpened = true;
-                  check(true, 'monitor: clicking unifier hex opens drawer (data-drawer-open="true")');
+                  check(true, 'monitor: clicking demo hex opens drawer (data-drawer-open="true")');
                 } catch {
                   const state = await page.evaluate(() =>
                     document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') ?? '(absent)');
-                  check(false, `monitor: unifier hex opens drawer (got data-drawer-open="${state}")`);
+                  check(false, `monitor: demo hex opens drawer (got data-drawer-open="${state}")`);
                 }
               } else {
-                check(false, 'monitor: [data-node-id="unifier"] hex present to click');
+                check(false, 'monitor: [data-node-id="demo"] hex present to click');
               }
               if (drawerOpened) {
                 await sleep(ACT);
-                const hasGateSection = await page.evaluate(() =>
-                  document.querySelector('#phase-drawer')?.textContent?.includes('Gate sub-checks') ?? false);
-                check(hasGateSection, 'monitor: drawer shows Gate sub-checks section');
+                // The demo node emits a phase log (its own agent events); Gate
+                // sub-checks are the merge-boundary gate's surface (R4-10-F2), not
+                // the demo node's — so the drawer shows Phase log here, no gate checks.
                 const hasPhaseLog = await page.evaluate(() =>
                   document.querySelector('#phase-drawer')?.textContent?.includes('Phase log') ?? false);
                 check(hasPhaseLog, 'monitor: drawer shows Phase log section');
-                await frame(page, 's1-0b-monitor-drawer', 'S1 — phase drawer open: gate sub-checks + phase log visible');
+                await frame(page, 's1-0b-monitor-drawer', 'S1 — phase drawer open: the demo node\'s phase log visible');
                 const stderrCheck = page.locator('#phase-drawer input[type="checkbox"]').first();
                 if ((await stderrCheck.count()) > 0) {
                   await stderrCheck.check();

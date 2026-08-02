@@ -74,6 +74,18 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
       tracker.calls.push('runUnifier');
       return { unifierSucceeded: true, unifierFailureClass: null, commitsAhead: 1, filesChanged: 1, insertions: 10 };
     },
+    runDemoAgent: async (_input, _logger) => {
+      tracker.calls.push('runDemoAgent');
+      return { status: 'complete', demoJsonPath: 'demo/test-initiative/demo.json' };
+    },
+    runAdversarialReview: async (_input, _logger) => {
+      tracker.calls.push('runAdversarialReview');
+      return { status: 'complete', findingsPath: '_logs/test-cycle-id/artifacts/review-findings.json', counts: { total: 0 } };
+    },
+    computeDeliveryStats: (_input, _logger) => {
+      tracker.calls.push('computeDeliveryStats');
+      return { commitsAhead: 1, filesChanged: 1, insertions: 10 };
+    },
     openPrInline: async (_input, _logger) => {
       tracker.calls.push('openPrInline');
       return 'pr-open';
@@ -381,24 +393,32 @@ describe('flow-runner with real forge-architect.yaml', () => {
 // Test 5b: forge-develop flow — 3-node (dev + unifier + review), no architect/pm/reflect
 // ---------------------------------------------------------------------------
 
-describe('flow-runner with real forge-develop.yaml', () => {
-  it('loads the forge-develop flow and runs dev → unifier → review — no architect, pm, or reflect', async () => {
+describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)', () => {
+  it('loads the forge-develop flow and runs dev → demo → adversarial-review → verdict — no unifier, architect, pm, or reflect', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     assert.strictEqual(flow.id, 'forge-develop', 'flow id must be forge-develop');
-    assert.strictEqual(flow.nodes.length, 3, 'forge-develop must have exactly 3 nodes (dev + unifier + review)');
+    assert.strictEqual(flow.nodes.length, 4, 'forge-develop must have exactly 4 nodes (dev + demo + adversarial-review + verdict)');
     assert.ok(
       flow.nodes.some((n) => n.agent === 'developer-ralph'),
       'forge-develop must have a dev node (developer-ralph)',
     );
     assert.ok(
-      flow.nodes.some((n) => n.agent === 'developer-unifier' && n.resumable === true),
-      'forge-develop must have a resumable unifier node',
+      flow.nodes.some((n) => n.agent === 'demo-agent' && n.resumable === true),
+      'forge-develop must have a resumable demo node (the unifier successor — R4-10-F1)',
+    );
+    assert.ok(
+      flow.nodes.some((n) => n.agent === 'adversarial-review'),
+      'forge-develop must have an adversarial-review node',
     );
     assert.ok(
       flow.nodes.some((n) => n.gate === 'verdict'),
-      'forge-develop must have a review node with gate:verdict (the human gate — zero-gate flows are rejected)',
+      'forge-develop must have a verdict gate (the human gate — zero-gate flows are rejected)',
+    );
+    assert.ok(
+      !flow.nodes.some((n) => n.agent === 'developer-unifier'),
+      'forge-develop must NOT have a unifier node — it was retired from the live flow (R4-10-F1)',
     );
     assert.ok(
       !flow.nodes.some((n) => n.agent === 'project-manager' || n.gate === 'plan' || n.agent === 'reflector'),
@@ -412,33 +432,99 @@ describe('flow-runner with real forge-develop.yaml', () => {
 
     const result = await runFlow({ flow, input, logger, deps });
 
-    // Dev-loop + unifier + review (openPr → closure) run; pm/architect/reflect do not.
-    assert.deepEqual(tracker.calls, ['runDeveloperLoop', 'runUnifier', 'openPrInline', 'runClosure'],
-      'forge-develop: dev → unifier → review(openPr→closure) only — no pm/architect/reflect');
+    // dev → demo (pipeline + relocated delivery stats/gates) → adversarial-review
+    // → verdict(openPr → closure). No unifier/pm/architect/reflect.
+    assert.deepEqual(
+      tracker.calls,
+      ['runDeveloperLoop', 'runDemoAgent', 'computeDeliveryStats', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      'forge-develop: dev → demo → adversarial-review → verdict only',
+    );
+    assert.ok(!tracker.calls.includes('runUnifier'), 'the unifier executor must NOT run on the live develop flow');
 
     // Closure confirmed a merge in the mock, but there is no reflect node, so
-    // reflection never runs — the develop flow ends at the merged PR (S8 adds reflect).
+    // reflection never runs — the develop flow ends at the merged PR.
     assert.strictEqual(result.reflectionStatus, 'skipped',
-      'reflectionStatus must be skipped — forge-develop has no reflect node (S8 carves it)');
+      'reflectionStatus must be skipped — forge-develop has no reflect node');
   });
 
-  it('forge-develop resumes the unifier in place (ADR-026 drain) — skips the per-WI dev work but keeps the spine', async () => {
+  it('re-entry (resume_from:develop — the demo-fix + review-fix loops\' shared path) re-dispatches the SINGLE develop executor + re-authors the demo', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    // A send-back drain re-claims the manifest with resumeFrom:'unifier'.
+    // BOTH the demo-fix loop and the review-fix send-back re-enter through the
+    // same drain (drain-fix-loop.ts) with resumeFrom:'develop' — the develop
+    // agent is the single fix executor (R4-10-F1 loop topology).
+    const input = makeInput({ resumeFrom: 'develop' });
+    const logger = makeLogger();
+
+    await runFlow({ flow, input, logger, deps });
+
+    // The dev node (execDev → the ONE develop executor) re-dispatches; the demo
+    // node re-authors demo.json + the PR body; the verdict re-presents. No
+    // separate unifier re-arm — the demo node owns the re-demo now.
+    assert.deepEqual(
+      tracker.calls,
+      ['runDeveloperLoop', 'runDemoAgent', 'computeDeliveryStats', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      'resume_from:develop re-runs the full dev→demo→adversarial-review→verdict spine through the one develop executor',
+    );
+    assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the demo node re-authors');
+  });
+
+  it('resume_from:unifier (ADR-019 crash recovery) still runs — the demo node becomes the resume target', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    // A legacy crash-recovery resume stamp: the dev node self-no-ops its per-WI
+    // work (inside runDeveloperLoop) but the spine still re-runs, now landing on
+    // the demo node instead of the retired unifier (R4-10-F6 re-homes the stamp).
     const input = makeInput({ resumeFrom: 'unifier' });
     const logger = makeLogger();
 
     await runFlow({ flow, input, logger, deps });
 
-    // The dev node still runs (it self-no-ops the per-WI loop on resume but emits
-    // the phase-boundary events); the unifier + review spine re-runs in place.
-    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on resume)');
-    assert.ok(tracker.calls.includes('runUnifier'), 'unifier re-runs the pending UWIs on resume');
-    assert.ok(tracker.calls.includes('openPrInline'), 'review re-opens/updates the PR on resume');
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on a unifier resume)');
+    assert.ok(tracker.calls.includes('runDemoAgent'), 'the demo node re-authors the bundle (the resume target now)');
+    assert.ok(tracker.calls.includes('openPrInline'), 'the verdict gate re-opens/updates the PR on resume');
+    assert.ok(!tracker.calls.includes('runUnifier'), 'no unifier executor on the live flow');
+  });
+
+  it('demo delivery gate: a FAILED demo pipeline blocks the PR (never opens a review-less PR)', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    deps.runDemoAgent = async () => {
+      tracker.calls.push('runDemoAgent');
+      return { status: 'failed', reason: 'author-invalid', detail: 'demo.json never validated' };
+    };
+    const input = makeInput();
+    const logger = makeLogger();
+
+    await assert.rejects(runFlow({ flow, input, logger, deps }), /delivery gate: demo pipeline failed/);
+    assert.ok(!tracker.calls.includes('runAdversarialReview'), 'no review on a failed demo');
+    assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed demo');
+  });
+
+  it('a FAILED adversarial-review pipeline blocks the PR (the verdict gate never renders a blind review)', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    deps.runAdversarialReview = async () => {
+      tracker.calls.push('runAdversarialReview');
+      return { status: 'failed', reason: 'spawn-failed', detail: 'sdk error' };
+    };
+    const input = makeInput();
+    const logger = makeLogger();
+
+    await assert.rejects(runFlow({ flow, input, logger, deps }), /adversarial review pipeline failed/);
+    assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens when the review pipeline failed');
   });
 });
 

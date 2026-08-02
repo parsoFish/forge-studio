@@ -8,10 +8,12 @@
  * `drain-unifier-items` sweep) that, for each `ready-for-review/` manifest with
  * PENDING fix WIs and an UNMERGED PR, re-claims the manifest threading the SAME
  * `cycle_id` (mechanism B) and re-enters `runCycle({ resumeFrom: 'develop' })`:
- * PM rebase-skips, the dev-loop RUNS (prior WIs fast-exit via the iter-0
- * already-complete shortcut, fix WIs build), then the re-armed static UWI-1
- * re-authors demo.json + the PR description and the spine re-presents. One
- * cycleId ⇒ one `_logs` dir ⇒ cost/status lineage + WI hexes never fork.
+ * the dev-loop RUNS (prior WIs fast-exit via the iter-0 already-complete
+ * shortcut, fix WIs build), then the develop flow's demo node re-authors
+ * demo.json + the PR description against the fixed branch and the spine
+ * re-presents (R4-10-F1 — no re-armed unifier UWI; the demo node owns the
+ * re-demo). One cycleId ⇒ one `_logs` dir ⇒ cost/status lineage + WI hexes
+ * never fork.
  *
  * Mutual exclusion (ADR 040): the atomic in-flight rename is the claim; the
  * drain skips a MERGED PR (finalize's domain — a merged PR always wins), a
@@ -37,7 +39,6 @@ import {
   hasReviewCapExhaustedMarker,
   pendingFixWorkItems,
 } from './fix-work-items.ts';
-import { rearmStaticUnifierItem } from './unifier-items.ts';
 import type { CycleInput } from './cycle-context.ts';
 
 /** Keep the claimed manifest's heartbeat fresh during a (possibly long) drain so
@@ -120,8 +121,11 @@ export async function drainPendingFixWorkItems(
       }
 
       // Operator territory — never auto-retry. The cap marker was already
-      // notified loudly at rejection time (verdict handler); don't re-notify
-      // every sweep, just report the parked status.
+      // notified loudly at rejection time by whichever writer set it (the
+      // verdict handler for a review-fix send-back, or the demo node's
+      // demo-fix loop, R4-10-F1 — both fire notify()); don't re-notify every
+      // sweep, just report the parked status. Both writers respect the marker,
+      // so its presence means no fresh fix WI was enqueued behind it.
       if (hasReviewCapExhaustedMarker(worktreePath)) {
         out.push({ initiativeId, status: 'needs-operator', detail: 'review-cap-exhausted marker present' });
         continue;
@@ -177,10 +181,11 @@ export async function drainPendingFixWorkItems(
         continue;
       }
 
-      // ADR 040: re-arm UWI-1 so the unifier node re-authors demo.json + the PR
-      // description against the fixed branch (the legacy-spine re-demo).
-      // Idempotent + crash-safe — a repeat sweep just re-runs it.
-      rearmStaticUnifierItem(worktreePath);
+      // R4-10-F1: no UWI re-arm — the develop flow's demo node re-authors
+      // demo.json + the PR description against the fixed branch on every
+      // re-entry (resume_from:'develop' runs dev→demo→adversarial-review→verdict).
+      // The unifier node (and its static UWI-1) is off the live flow; the
+      // re-demo is the demo node's own job now, not a re-armed unifier mission.
 
       // Heartbeat the claimed manifest so a daemon crash mid-drain leaves a
       // STALE heartbeat the recovery sweep reclaims — and resumes correctly

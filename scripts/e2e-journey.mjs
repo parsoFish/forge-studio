@@ -44,8 +44,8 @@
  *         send-back → revise → approve. No auto-approve path (ADR-020).
  *     R3  Watch the autonomous build (/flows/forge-develop): PM decomposes ACs →
  *         dev-loop TDD (red → grind → gate.pass, dependency-ordered) fans off the
- *         dev hex → the unifier on its OWN hex authors the demo (captured CLI
- *         read-back evidence).
+ *         dev hex → the demo node on its OWN hex authors demo.json + the PR body,
+ *         then the adversarial-review node critiques the diff (R4-10-F1 successors).
  *     R4  Human gate #2 — review → send-back → re-review → approve+merge
  *         (/artifact …type=verdict): a per-AC evaluated demo (AC-2 PARTIAL) → the
  *         operator anchors a blocking comment → the dev-loop reruns in place
@@ -74,8 +74,8 @@
  * and every data-* invariant are REAL; the honest end-to-end proof is verify-cycle.
  *
  * REGRESSION GUARDS (soft-asserted; non-zero exit at end): ≥2 develop-slice phase
- * hexes, ≥2 WI hexes, phase + WI drawer opens, per-phase cost rollup, unifier
- * own-node complete, per-AC demo-evaluation, partial-count==0 on re-review,
+ * hexes, ≥2 WI hexes, phase + WI drawer opens, per-phase cost rollup, demo +
+ * adversarial-review own-node complete, per-AC demo-evaluation, partial-count==0 on re-review,
  * reflection hex complete, the four architect surfaces (P1–P4), and the
  * author-from-scratch parity + `forge studio lint` proof.
  *

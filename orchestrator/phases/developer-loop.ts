@@ -1420,7 +1420,9 @@ export function wiDeliveryEvent(
 export function emitDeliverySummary(
   input: CycleInput,
   logger: EventLogger,
-  parentEventId: string,
+  // Optional so the R4-10-F1 demo node can emit the delivery ground-truth
+  // (the reflector's grounding event) without threading a per-node parent id.
+  parentEventId?: string,
 ): { filesChanged: number; insertions: number; deletions: number; commits: number } {
   const wt = input.worktreePath;
   const git = (args: string[]): string => {

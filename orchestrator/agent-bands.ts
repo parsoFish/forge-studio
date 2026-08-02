@@ -22,8 +22,24 @@ import type { AgentDefinition } from './studio/types.ts';
  * `studio/catalog.yaml`'s `hooks:` section (the palette surface) and an
  * executor registered in flow-runner's band table.
  */
-export const BAND_HOOK_IDS = ['wi-contract', 'reflection-close'] as const;
+export const BAND_HOOK_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] as const;
 export type BandHookId = (typeof BAND_HOOK_IDS)[number];
+
+/**
+ * Band hook id → the ONE canonical agent slug the band's pipeline loads its
+ * SKILL.md from. The band implementations (flow-runner's executor table) load
+ * the canonical agent's intent themselves, so a non-canonical def declaring the
+ * hook would silently run the wrong identity — every declared-dispatch consumer
+ * (execAgent's runtime backstop + validate.ts's `composition/band-hook` lint)
+ * checks the declarer's slug against THIS single source. Each hook stays pinned
+ * to its slug until the bands generalise (R4-06+).
+ */
+export const BAND_CANONICAL_SLUG: Readonly<Record<BandHookId, string>> = {
+  'wi-contract': 'project-manager',
+  'reflection-close': 'reflector',
+  'demo-band': 'demo-agent',
+  'review-band': 'adversarial-review',
+};
 
 /**
  * First declared band hook on the def, or undefined for a bare generic

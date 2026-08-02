@@ -56,6 +56,7 @@ import {
   buildDemoAgentSystemPrompt,
   renderDemoAgentUserPrompt,
   FIX_PROPOSALS_FILENAME,
+  PR_DESCRIPTION_REL,
 } from './demo-agent-binding.ts';
 import {
   buildDemoCaptureArgv,
@@ -201,11 +202,17 @@ export async function runDemoAgentPipeline(
   }
   const diffStat = diffStatRes.out.trim();
   const headSha = headShaRes.out.trim();
+  // The branch's changed-file list — anchors the PR-body What/How so the agent
+  // (which has no Bash) names only files the diff actually contains. Best-effort:
+  // a failure just yields an empty list (the PR body degrades to intent-only).
+  const changedFilesRes = gitCapture(input.worktreePath, ['diff', '--name-only', 'main...HEAD']);
+  const changedFiles = changedFilesRes.ok ? changedFilesRes.out.trim().split('\n').filter(Boolean) : [];
 
   const demoDirRel = worktreeDemoRelDir(input.worktreePath, input.initiativeId);
   const demoDirAbs = worktreeDemoDir(input.worktreePath, input.initiativeId);
   const demoJsonAbs = join(demoDirAbs, DEMO_JSON_BASENAME);
   const proposalsAbs = join(demoDirAbs, FIX_PROPOSALS_FILENAME);
+  const prDescriptionAbs = join(input.worktreePath, PR_DESCRIPTION_REL);
   // Pre-spawn scope snapshot (shared agent-scope-guard: porcelain -uall +
   // .forge/ walk — covers untracked-dir collapse and gitignored .forge trees).
   // Guard integrity fails LOUD: no snapshot, no spawn.
@@ -274,11 +281,19 @@ export async function runDemoAgentPipeline(
     qualityGateCmd,
     diffStat,
     headSha,
+    changedFiles,
     demoDir: demoDirRel,
     demoProcess,
     elements,
   });
   const systemPrompt = buildDemoAgentSystemPrompt();
+
+  // Freshness (R4-10-F1): unlike demo.json (anchored to the injected diffStat),
+  // the PR body has no staleness anchor and `.forge/` is gitignored + reused
+  // across fix-loop re-entries — a round-N-1 body would otherwise satisfy
+  // validatePrDescription and ship stale. Delete it up front so every run
+  // (fresh or re-entry) forces the agent to re-author it against THIS branch.
+  if (existsSync(prDescriptionAbs)) unlinkSync(prDescriptionAbs);
 
   let lastErrors: string[] = [];
   for (let attempt = 1; attempt <= MAX_AUTHOR_ATTEMPTS; attempt += 1) {
@@ -348,9 +363,12 @@ export async function runDemoAgentPipeline(
       emit('demo.scope-guard-degraded', { when: 'post-spawn', error: postSnap.error }, { event_type: 'error' });
       return { status: 'failed', reason: 'derive-failed', detail: `scope-guard post-snapshot unavailable: ${postSnap.error}` };
     }
+    // The demo agent's ONLY legal writes: its demo dir, and the relocated PR
+    // body (R4-10-F1). Anything else is project-code editing (the F2 AC forbids
+    // it) — a hard failure, never a retry.
     const inDemoScope = (raw: string): boolean => {
       const p = raw.replace(/\/$/, '');
-      return p === demoDirRel || p.startsWith(demoDirRel + '/');
+      return p === demoDirRel || p.startsWith(demoDirRel + '/') || p === PR_DESCRIPTION_REL;
     };
     const newDirt = scopeViolations(preSnap, postSnap, inDemoScope);
     if (newDirt.length > 0) {
@@ -358,7 +376,7 @@ export async function runDemoAgentPipeline(
       return {
         status: 'failed',
         reason: 'scope-violation',
-        detail: `demo-agent wrote outside its demo dir (${demoDirRel}): ${newDirt.join(', ')} — fixes are proposals for the develop agent, never demo-agent edits`,
+        detail: `demo-agent wrote outside its demo dir (${demoDirRel}) and ${PR_DESCRIPTION_REL}: ${newDirt.join(', ')} — fixes are proposals for the develop agent, never demo-agent edits`,
       };
     }
 
@@ -370,6 +388,18 @@ export async function runDemoAgentPipeline(
       continue;
     }
     const model = validation.model;
+
+    // R4-10-F1: the relocated PR body is a HARD authoring requirement.
+    // openPrInline reads `.forge/pr-description.md` via `--body-file`, so a
+    // missing/empty/section-less one means no PR ever opens — treat it exactly
+    // like an invalid demo.json (retryable, with the gap named in the retry
+    // prompt), never a silent pass.
+    const prErrors = validatePrDescription(prDescriptionAbs);
+    if (prErrors.length > 0) {
+      lastErrors = prErrors;
+      emit('demo.author.invalid', { attempt, errors: prErrors, band: 'pr-description' });
+      continue;
+    }
 
     // Band 5 — render (orchestrator-owned; live evidence back-fill included).
     const render = renderDemoBundle(demoDirAbs, input.worktreePath);
@@ -532,6 +562,35 @@ function validateAuthoredDemo(
   }
   if (changed) writeFileSync(demoJsonAbs, JSON.stringify(coerced, null, 2) + '\n');
   return { ok: true, model };
+}
+
+/**
+ * Validate the relocated PR body (R4-10-F1). It must exist, be non-empty, and
+ * carry the three Why/What/How sections `openPrInline` + the demo-append expect.
+ * Returns human-readable errors (empty ⇒ valid) that feed the authoring retry.
+ */
+function validatePrDescription(prDescAbs: string): string[] {
+  if (!existsSync(prDescAbs)) {
+    return [
+      `${PR_DESCRIPTION_REL} was not authored — the PR body is required (openPrInline reads it via --body-file, so a missing one means no PR opens). Author "## Why", "## What", and "## How".`,
+    ];
+  }
+  let body: string;
+  try {
+    body = readFileSync(prDescAbs, 'utf8');
+  } catch (err) {
+    return [`${PR_DESCRIPTION_REL} is unreadable: ${err instanceof Error ? err.message : String(err)}`];
+  }
+  if (body.trim().length === 0) {
+    return [`${PR_DESCRIPTION_REL} is empty — author the "## Why", "## What", and "## How" sections.`];
+  }
+  const errors: string[] = [];
+  for (const section of ['## Why', '## What', '## How']) {
+    if (!body.includes(section)) {
+      errors.push(`${PR_DESCRIPTION_REL} is missing the "${section}" section (author all three: Why/What/How).`);
+    }
+  }
+  return errors;
 }
 
 function readStampedNonce(demoJsonAbs: string): string | null {

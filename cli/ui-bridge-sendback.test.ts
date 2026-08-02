@@ -27,7 +27,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
-import { reviewCapExhaustedPath } from '../orchestrator/fix-work-items.ts';
+import { reviewCapExhaustedPath, writeReviewCapExhaustedMarker } from '../orchestrator/fix-work-items.ts';
 
 function makeManifest(worktreePath: string, initiativeId: string, cycleId: string): string {
   return [
@@ -244,6 +244,37 @@ test('send-back cap exhaustion: round cap reached → 409 parked needs-operator,
   } finally {
     if (prevCap === undefined) delete process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS;
     else process.env.FORGE_REVIEW_MAX_SEND_BACK_ROUNDS = prevCap;
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('send-back with a REVIEW-CAP-EXHAUSTED marker present → 409 parked needs-operator, no new WI (R4-10-F1: honour the demo node\'s marker)', async () => {
+  // The demo-fix loop (demo-fix-loop.ts) is a SECOND writer of the shared
+  // marker, and the drain skips any marker-bearing manifest before reading
+  // pending WIs — so a send-back that enqueued a WI here (its own per-WI cap
+  // still has headroom) would be silently stranded. The handler must reject
+  // instead: marker ⟹ no new fix work, for both origins.
+  const { forgeRoot, worktreePath, initiativeId } = setup('marker');
+  writeReviewCapExhaustedMarker(worktreePath, 'a prior demo-fix total cap was hit');
+
+  const { url, close } = await startBridge({
+    forgeRoot,
+    port: 0,
+    mergePr: () => { throw new Error('mergePr must not be called on send-back'); },
+    finalizeAfterMerge: async () => { throw new Error('finalizeAfterMerge must not be called on send-back'); },
+  });
+  try {
+    const { status, json } = await postVerdict(url, {
+      initiativeId,
+      kind: 'send-back',
+      rationale: 'operator concern on a marker-parked initiative',
+      acceptanceCriteria: [{ given: 'a user', when: 'clicking submit', then: 'data is saved' }],
+    });
+    assert.equal(status, 409, `expected 409 when the marker is present, got ${status}: ${JSON.stringify(json)}`);
+    assert.equal((json as Record<string, unknown>).parked, 'needs-operator');
+    assert.ok(!existsSync(join(worktreePath, '.forge', 'work-items', 'WI-1.md')), 'no new WI written when the marker parks the send-back');
+  } finally {
     await close();
     rmSync(forgeRoot, { recursive: true, force: true });
   }

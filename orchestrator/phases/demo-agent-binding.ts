@@ -34,6 +34,14 @@ const DEMO_CONTRACT_SKILL_PATH = skillPath('demo');
 /** The agent-authored judgment file, sibling to demo.json in the demo dir. */
 export const FIX_PROPOSALS_FILENAME = 'fix-proposals.json';
 
+/**
+ * Worktree-relative path of the PR body the demo agent authors (relocated from
+ * the retired unifier, R4-10-F1). `openPrInline` HARD-requires this exact path
+ * via `--body-file` — get the relocation wrong and no PR opens. Lives in the
+ * gitignored `.forge/` scratch dir (read at PR-open time, not committed).
+ */
+export const PR_DESCRIPTION_REL = '.forge/pr-description.md';
+
 let cachedSystemPrompt: string | null = null;
 
 /** Demo-agent system prompt: own SKILL.md + the skills/demo contract, verbatim. */
@@ -64,6 +72,12 @@ export type DemoAgentUserPromptInput = {
   diffStat: string;
   /** Orchestrator-derived branch head SHA at derivation time. */
   headSha: string;
+  /**
+   * Orchestrator-derived `git diff --name-only main...HEAD` — the exact files in
+   * the branch's net diff. The PR description's What/How must reference ONLY
+   * these (never re-derive; never list a file absent from the diff).
+   */
+  changedFiles?: string[];
   /** Worktree-relative, artifactRoot-resolved demo dir (demo-paths.ts SSOT). */
   demoDir: string;
   /** The project's typed demoProcess steps (project.json), when declared. */
@@ -168,8 +182,12 @@ export function renderDemoAgentUserPrompt(input: DemoAgentUserPromptInput): stri
     `- diffStat: \`${input.diffStat}\``,
     `- head SHA: \`${input.headSha}\``,
     `- Quality-gate command the dev loop ran: \`${input.qualityGateCmd.join(' ')}\``,
+    ...(input.changedFiles && input.changedFiles.length > 0
+      ? ['- Changed files (the branch\'s net diff — reference ONLY these in the PR body):',
+         ...input.changedFiles.map((f) => `  - \`${f}\``)]
+      : []),
     '',
-    '## What to author (both under the demo dir — write nothing else)',
+    '## What to author (under the demo dir + the one PR-body file — write nothing else)',
     '',
     `1. \`${input.demoDir}/demo.json\` — the skills/demo contract. Use the injected diffStat verbatim.`,
     '   Every `acEvaluations` verdict is `met | partial | missed` — `met` only with real evidence.',
@@ -178,13 +196,19 @@ export function renderDemoAgentUserPrompt(input: DemoAgentUserPromptInput): stri
     '   stdout IS the evidence and LEAVE `beforeOutput`/`afterOutput` absent — the ORCHESTRATOR',
     '   runs render and capture after you finish (ADR 036); never run `forge demo render` or',
     '   `forge demo capture` yourself, and never hand-write capture output.',
-    `2. \`${input.demoDir}/${FIX_PROPOSALS_FILENAME}\` — ONLY when any verdict is \`partial\` or \`missed\`:`,
+    `2. \`${PR_DESCRIPTION_REL}\` — the pull-request body (Markdown). Treat the whole initiative`,
+    '   branch as ONE self-contained PR. Author exactly three sections, in order:',
+    '   `## Why` (the initiative\'s intent — what problem this solves), `## What` (the behavioural',
+    '   change delivered), `## How` (how the diff achieves it). Anchor What/How ONLY on the changed',
+    '   files listed above — never claim a file the diff does not contain. Do NOT add a `## Demo`',
+    '   section: the orchestrator appends it from your demo.json after you finish.',
+    `3. \`${input.demoDir}/${FIX_PROPOSALS_FILENAME}\` — ONLY when any verdict is \`partial\` or \`missed\`:`,
     '   one proposal per failing criterion: `{ id: "FIX-<n>", criterion (verbatim), verdict,',
     '   evidence (why the demo cannot show it), title, acceptance_criteria: [{given, when, then}],',
     '   files_in_scope: [worktree-relative paths], rationale }`. A miss is a judgment, not a',
     '   failure — never soften a verdict to avoid writing proposals. All-met → do NOT create it.',
     ...(processBlock.length > 0 ? ['', ...processBlock] : []),
     '',
-    'When both files are complete (or demo.json alone when all ACs are met), stop.',
+    `When demo.json + \`${PR_DESCRIPTION_REL}\` are complete (plus ${FIX_PROPOSALS_FILENAME} when any AC missed), stop.`,
   ].join('\n');
 }

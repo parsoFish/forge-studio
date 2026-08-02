@@ -427,9 +427,51 @@ export function cycleEvent(phase, eventType, message, opts = {}) {
     event_type: eventType, input_refs, output_refs, message, metadata, ...extras,
   }) + '\n');
 }
-/** Sugar for the unifier phase — phase:'unifier', skill:'developer-unifier'. */
+/** Sugar for the unifier phase — phase:'unifier', skill:'developer-unifier'.
+ *  Retained for pre-R4-10 corpus grounding; the LIVE forge-develop flow uses
+ *  the demo + adversarial-review nodes below (R4-10-F1). */
 export function unifierEvent(eventType, message, opts = {}) {
   return cycleEvent('unifier', eventType, message, { ...opts, skill: 'developer-unifier' });
+}
+
+/** Sugar for the demo node (R4-10-F1) — phase:'orchestrator', skill:'demo-agent',
+ *  metadata.agent_slug:'demo-agent' (the frozen generic-agent event contract that
+ *  eventToNodeId resolves straight to the `demo` flow node). */
+export function demoAgentEvent(eventType, message, opts = {}) {
+  const { metadata = {}, ...rest } = opts;
+  return cycleEvent('orchestrator', eventType, message, {
+    ...rest,
+    skill: 'demo-agent',
+    metadata: { agent_slug: 'demo-agent', ...metadata },
+  });
+}
+
+/** Sugar for the adversarial-review node (R4-10-F1) — phase:'orchestrator',
+ *  skill:'adversarial-review', metadata.agent_slug:'adversarial-review'. */
+export function adversarialReviewEvent(eventType, message, opts = {}) {
+  const { metadata = {}, ...rest } = opts;
+  return cycleEvent('orchestrator', eventType, message, {
+    ...rest,
+    skill: 'adversarial-review',
+    metadata: { agent_slug: 'adversarial-review', ...metadata },
+  });
+}
+
+/** Write the relocated PR body (.forge/pr-description.md) into the cycle-log
+ *  artifacts dir — the demo node authors it now (R4-10-F1), and the run page's
+ *  `pr` artifact readiness resolves it there. */
+export function writePrDescription() {
+  const artifacts = join(CYCLE_LOG, 'artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(join(artifacts, 'pr-description.md'), [
+    '## Why', '',
+    'mdtoc regenerates a table of contents but only to stdout — there is no way to update a doc in place.',
+    '', '## What', '',
+    'Adds a `--write` mode that inserts or refreshes the generated TOC between the `<!-- toc -->` / `<!-- /toc -->` markers, idempotently.',
+    '', '## How', '',
+    'A new pure `src/inject.ts` computes the marker-bounded replacement; `src/cli.ts` wires the `--write` flag; a unit suite + a creds-free acceptance read-back cover it.',
+    '',
+  ].join('\n'));
 }
 
 export function moveManifest(from, to) {
