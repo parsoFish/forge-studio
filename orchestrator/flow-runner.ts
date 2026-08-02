@@ -78,8 +78,11 @@ import {
   commitDevLoopBoundary,
   enforceDevLoopCloseInvariant,
   enforceFinalCiGate,
+  runMergeBoundaryGate,
   preservingForgeScratch,
+  type MergeGateResult,
 } from './cycle-helpers.ts';
+import { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
 import { resolveBandHook, BAND_CANONICAL_SLUG, type BandHookId } from './agent-bands.ts';
 import { skillsDir } from './skill-path.ts';
@@ -156,6 +159,15 @@ export type FlowRunnerDeps = {
     input: CycleInput,
     logger: EventLogger,
   ) => { commitsAhead: number; filesChanged: number; insertions: number };
+
+  /**
+   * R4-10-F2 merge-boundary full-suite gate: runs testProcess.local (the
+   * relocated composedUnifierGate.initiative_gate — the full suite, unscoped) +
+   * testProcess.ci on the integrated branch tip, and RETURNS the verdict (never
+   * throws) so execDemo can drive the bounded gate-fix loop. Injectable so
+   * hermetic tests need no real suite run.
+   */
+  runMergeBoundaryGate: (input: CycleInput, logger: EventLogger) => MergeGateResult;
 
   openPrInline: (input: CycleInput, logger: EventLogger) => Promise<ReviewerOutcome>;
 
@@ -420,6 +432,7 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
     const s = emitDeliverySummary(input, logger);
     return { commitsAhead: s.commits, filesChanged: s.filesChanged, insertions: s.insertions };
   },
+  runMergeBoundaryGate,
   openPrInline,
   runClosure,
   runReflector,
@@ -657,6 +670,14 @@ type NodeRunState = {
   lintStatus: string;
   reviewerOutcome: ReviewerOutcome;
   closure: ClosureResult | null;
+  /**
+   * R4-10-F2: set by execDemo when the merge-boundary full-suite gate is RED —
+   * the branch is not shippable, so the DAG walk stops here and runFlow routes
+   * the manifest to `ready-for-review` (no PR opened; the preserved invariant).
+   * The fix-loop drain re-enters `resume_from:'develop'` off the compiled
+   * gate-fix WIs.
+   */
+  terminateEarly: boolean;
 };
 
 /** Everything a node executor needs. Built fresh per node by runFlow. */
@@ -783,7 +804,7 @@ const execUnifier: NodeExecutor = async (ctx) => {
  * demo node's hex to complete, exactly as a generic execAgent spawn would.
  */
 const execDemo: NodeExecutor = async (ctx) => {
-  const { input, nodeLogger, deps, nodeId } = ctx;
+  const { input, nodeLogger, deps, nodeId, state } = ctx;
   const start = nodeLogger.emit({
     initiative_id: input.initiativeId,
     phase: 'orchestrator',
@@ -794,6 +815,62 @@ const execDemo: NodeExecutor = async (ctx) => {
     metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId },
   });
 
+  // Close-contract prep (items 4,5): commit stragglers + push/sync so the
+  // merge-boundary gate and the demo run on the true integrated branch tip.
+  deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId); // 4
+  deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId); // 5
+  // Empty-branch guard (item 7) — nothing to gate/ship if the dev-loop produced nothing.
+  const delivery = deps.computeDeliveryStats(input, nodeLogger);
+  deps.assertNonEmptyDelivery(delivery, input.initiativeId, input.worktreePath, nodeLogger); // 7
+
+  // R4-10-F2 merge-boundary full-suite gate (relocated composedUnifierGate.
+  // initiative_gate + the CI delivery net; item 8's successor). Runs the WHOLE
+  // suite on the integrated branch tip BEFORE the demo — a build-breaking
+  // cross-WI regression would otherwise fail the demo capture (a hard cycle
+  // failure) instead of the auto-remediable gate-fix loop. A red baseline never
+  // opens a PR (the preserved invariant): compile a scoped gate-fix WI + stamp
+  // the send-back, then terminate the walk to ready-for-review so the drain
+  // re-enters resume_from:'develop' and the develop agent turns the suite green.
+  const gate = deps.runMergeBoundaryGate(input, nodeLogger);
+  if (!gate.ok) {
+    const enqueue = enqueueGateFixWorkItems({
+      worktreePath: input.worktreePath,
+      manifestPath: input.manifestPath,
+      initiativeId: input.initiativeId,
+      failedGate: gate.failedGate,
+      projectGateCmd: input.qualityGateCmd ?? [],
+    });
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: enqueue.status === 'compiled' ? 'log' : 'error',
+      input_refs: [input.worktreePath],
+      output_refs: enqueue.status === 'compiled' ? enqueue.appended.map((id) => `.forge/work-items/${id}.md`) : [],
+      message: `merge-gate.fix-loop.${enqueue.status}`,
+      metadata: {
+        failed_gate: gate.failedGate,
+        origin: 'gate-fix',
+        ...(enqueue.status === 'compiled'
+          ? { appended_work_items: enqueue.appended, round: enqueue.round }
+          : { detail: enqueue.detail }),
+      },
+    });
+    state.terminateEarly = true;
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'orchestrator',
+      skill: 'demo-agent',
+      event_type: 'end',
+      input_refs: [],
+      output_refs: [],
+      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, demo_status: 'gate-red' },
+    });
+    return;
+  }
+
+  // Gate green → the demo pipeline (the build is proven, so capture succeeds).
   const result = await runWithWedge(ctx, (sig) => deps.runDemoAgent(input, nodeLogger, sig));
 
   // Item 6 (delivery gate) — the demo pipeline must have produced a bundle. A
@@ -805,13 +882,6 @@ const execDemo: NodeExecutor = async (ctx) => {
         `the branch is not review-ready, so no PR is opened. Triage the demo failure before re-running.`,
     );
   }
-
-  // Items 4,5,7,8 — the relocated dev-loop close contract (was execUnifier).
-  deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId); // 4
-  deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId); // 5
-  const delivery = deps.computeDeliveryStats(input, nodeLogger);
-  deps.assertNonEmptyDelivery(delivery, input.initiativeId, input.worktreePath, nodeLogger); // 7
-  deps.enforceFinalCiGate(input, nodeLogger); // 8
 
   // Demo-fix loop (ADR-040 / R4-10-F1): a `complete-with-misses` demo compiles
   // the agent's scoped fix proposals into `demo-fix` WIs on the initiative's own
@@ -1205,6 +1275,7 @@ export async function runFlow({
     lintStatus: 'skipped',
     reviewerOutcome: 'ready-for-review',
     closure: null,
+    terminateEarly: false,
   };
 
   // Registry dispatch: defaults + any caller-injected overrides (ADR-028 seam).
@@ -1313,6 +1384,18 @@ export async function runFlow({
         if (resetsAt !== null) rateLimitGate.recordRateLimit(resetsAt);
       }
       throw err;
+    }
+
+    // R4-10-F2: a node (execDemo, on a red merge-boundary full-suite gate)
+    // requested early termination — the branch is not shippable, so STOP the
+    // DAG walk (no demo/adversarial/verdict, no PR) and route the manifest to
+    // ready-for-review via closure. The gate-fix WIs it compiled make the drain
+    // re-enter resume_from:'develop'; only a green baseline ever reaches openPr.
+    if (state.terminateEarly) {
+      state.reviewerOutcome = 'ready-for-review';
+      state.closure = await deps.runClosure(input, nodeLogger, 'ready-for-review');
+      state.cycleOutcome = state.closure.outcome as CycleOutcome;
+      break;
     }
 
     // M3-3: Cost-ceiling check — at every clean node boundary (after the node

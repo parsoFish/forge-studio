@@ -14,8 +14,8 @@
  */
 
 import { execFileSync } from 'node:child_process';
-import { cpSync, existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { cpSync, existsSync, mkdirSync, readdirSync, rmSync, unlinkSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 
 import { gitIdentityConfigArgs, ORCHESTRATOR_GIT_IDENTITY } from './config.ts';
 import type { EventLogger } from './logging.ts';
@@ -446,4 +446,176 @@ export function enforceFinalCiGate(input: CycleInput, logger: EventLogger): void
         decision.gateOutput.slice(-1200),
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// runMergeBoundaryGate (R4-10-F2 — the relocated dual-boundary full-suite gate)
+// ---------------------------------------------------------------------------
+
+/**
+ * `.forge/last-gate-failure.md` — the results-flow seam (ADR-036 §2, present ⇒
+ * fresh). Mirrors `developer-loop.ts`'s `lastGateFailurePath` (the dev-loop /
+ * retired-unifier writers of the SAME file); a fix agent reads whichever writer
+ * last wrote it, so the merge-boundary gate uses the identical path + a
+ * compatible "AUTHORITATIVE … FRESH … fix exactly what is below" body.
+ */
+const LAST_GATE_FAILURE_REL = ['.forge', 'last-gate-failure.md'] as const;
+
+function mergeGateFeedbackPath(worktreePath: string): string {
+  return join(worktreePath, ...LAST_GATE_FAILURE_REL);
+}
+
+/** Write the merge-boundary gate's failure to `.forge/last-gate-failure.md`. */
+function writeMergeGateFeedback(worktreePath: string, which: 'local' | 'ci', cmd: string[], output: string): void {
+  const body = [
+    `# Live quality-gate failure — AUTHORITATIVE (forge merge-boundary full-suite gate: ${which})`,
+    '',
+    "This is the result of the orchestrator's OWN gate run at the develop flow's merge",
+    'boundary — the full-suite gate that decides whether the PR can open (R4-10-F2). It runs',
+    'the WHOLE suite on the integrated branch tip, so it catches a cross-WI regression the',
+    'scoped per-WI gates structurally cannot see. Forge deletes this file on every passing',
+    'gate run and at session start, so if you are reading it, it is FRESH. Fix exactly what',
+    'is below; the initiative is NOT review-ready until the full suite is green.',
+    '',
+    `## Failing gate (${which})`,
+    '',
+    '```',
+    `$ ${cmd.join(' ')}`,
+    output.slice(-4000).trimEnd(),
+    '```',
+    '',
+  ].join('\n');
+  const dir = join(worktreePath, '.forge');
+  if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
+  writeFileSync(mergeGateFeedbackPath(worktreePath), body);
+}
+
+/** Delete the feedback file on a passing gate (present ⇒ fresh). Best-effort. */
+function clearMergeGateFeedback(worktreePath: string): void {
+  try {
+    const p = mergeGateFeedbackPath(worktreePath);
+    if (existsSync(p)) unlinkSync(p);
+  } catch {
+    /* best-effort */
+  }
+}
+
+export type MergeGateResult =
+  | { ok: true }
+  | { ok: false; failedGate: 'local' | 'ci'; cmd: string[]; output: string };
+
+/**
+ * R4-10-F2 — the relocated dual-boundary full-suite gate (ADR-036 amendment,
+ * R1-03-F4 spec). Runs, on the INTEGRATED branch tip, keyed off the typed
+ * `testProcess` contract:
+ *   1. `testProcess.local` (the full suite — today's `quality_gate_cmd`),
+ *      UNSCOPED. This is the relocated `composedUnifierGate.initiative_gate`:
+ *      it catches a red full-suite baseline the scoped per-WI gates can't see.
+ *   2. `testProcess.ci` (the hermetic delivery net — `ci_gate`, env-stripped,
+ *      after its `ci_fix_cmd` formatters), when declared.
+ *
+ * Unlike `enforceFinalCiGate` (which THROWS, failing the cycle), this RETURNS
+ * the verdict so the caller (execDemo) can drive the bounded gate-fix loop.
+ * Writes `.forge/last-gate-failure.md` on a red gate (the results-flow seam the
+ * fix agent reads) and clears it on a green one. Never throws; a dry run passes.
+ *
+ * Preserved invariant (verbatim, R1-03-F4): **no path to merge exists with a red
+ * full-suite baseline** — the caller must not open a PR when this returns red.
+ */
+export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): MergeGateResult {
+  if (input.dryRun) return { ok: true };
+
+  let localCmd: string[] | null = null;
+  let localTimeoutMs: number | undefined;
+  let ciGate: string[] | null = null;
+  let ciFixCmd: string[] | null = null;
+  let ciGateUnsetEnv: string[] = [];
+  let ciDeclaredTimeoutMs: number | undefined;
+  try {
+    const cfg = loadProjectConfig(input.projectRepoPath);
+    localCmd = cfg?.quality_gate_cmd && cfg.quality_gate_cmd.length > 0 ? cfg.quality_gate_cmd : null;
+    localTimeoutMs = cfg?.testProcess.local?.timeoutMs;
+    ciGate = cfg?.ci_gate && cfg.ci_gate.length > 0 ? cfg.ci_gate : null;
+    ciFixCmd = cfg?.ci_fix_cmd && cfg.ci_fix_cmd.length > 0 ? cfg.ci_fix_cmd : null;
+    ciGateUnsetEnv = cfg?.ci_gate_unset_env && cfg.ci_gate_unset_env.length > 0 ? cfg.ci_gate_unset_env : [];
+    ciDeclaredTimeoutMs = cfg?.testProcess.ci?.timeoutMs;
+  } catch (err) {
+    // A malformed project.json is fail-closed where it's loaded for real (the
+    // dev-loop); here we log-and-skip so a config-read hiccup can't wedge the
+    // gate — the branch's own CI still backstops the merge.
+    logger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: 'log',
+      input_refs: [input.projectRepoPath],
+      output_refs: [],
+      message: 'cycle.merge-gate-skipped',
+      metadata: { reason: err instanceof Error ? err.message : String(err) },
+    });
+    return { ok: true };
+  }
+
+  // (1) Full-suite local gate — the relocated initiative_gate. UNSCOPED.
+  if (localCmd) {
+    const local = execCommandVector(localCmd, input.worktreePath, 'gate', undefined, localTimeoutMs);
+    logger.emit({
+      initiative_id: input.initiativeId,
+      phase: 'orchestrator',
+      skill: 'cycle',
+      event_type: local.ok ? 'log' : 'error',
+      input_refs: [input.worktreePath],
+      output_refs: [],
+      message: 'cycle.merge-gate',
+      metadata: { gate: 'local', ok: local.ok, cmd: localCmd, output_tail: local.output.slice(-1200) },
+    });
+    if (!local.ok) {
+      writeMergeGateFeedback(input.worktreePath, 'local', localCmd, local.output);
+      return { ok: false, failedGate: 'local', cmd: localCmd, output: local.output };
+    }
+  }
+
+  // (2) CI delivery net — env-stripped, after formatters. Reuses the same
+  //     decision core the final CI delivery gate uses today.
+  if (ciGate) {
+    const decision = decideFinalCiGate({
+      ciGate,
+      ciFixCmd,
+      worktreePath: input.worktreePath,
+      run: (cmd, wt, kind, unsetEnv) => execCommandVector(cmd, wt, kind, unsetEnv, ciDeclaredTimeoutMs),
+      unsetEnv: ciGateUnsetEnv,
+    });
+    if (decision) {
+      // Commit + push any formatter changes so the PR is fmt-clean (only when green;
+      // a red gate re-dispatches develop, which re-runs the formatter itself).
+      if (decision.ranFixer && decision.gateOk) {
+        commitAndPushCiFix(input.worktreePath, logger, input.initiativeId);
+      }
+      logger.emit({
+        initiative_id: input.initiativeId,
+        phase: 'orchestrator',
+        skill: 'cycle',
+        event_type: decision.gateOk ? 'log' : 'error',
+        input_refs: [input.worktreePath],
+        output_refs: [],
+        message: 'cycle.merge-gate',
+        metadata: {
+          gate: 'ci',
+          ok: decision.gateOk,
+          ran_fixer: decision.ranFixer,
+          cmd: ciGate,
+          ...(ciGateUnsetEnv.length > 0 ? { ci_gate_unset_env: ciGateUnsetEnv } : {}),
+          output_tail: decision.gateOutput.slice(-1200),
+        },
+      });
+      if (!decision.gateOk) {
+        writeMergeGateFeedback(input.worktreePath, 'ci', ciGate, decision.gateOutput);
+        return { ok: false, failedGate: 'ci', cmd: ciGate, output: decision.gateOutput };
+      }
+    }
+  }
+
+  // Both green — the full-suite baseline is clean; clear the feedback seam.
+  clearMergeGateFeedback(input.worktreePath);
+  return { ok: true };
 }

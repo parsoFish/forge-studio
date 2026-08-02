@@ -11,7 +11,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -141,5 +141,82 @@ test('commitDevLoopBoundary: --allow-empty boundary snapshot on a clean tree als
     rmSync(logsDir, { recursive: true, force: true });
   } finally {
     cleanup();
+  }
+});
+
+// ── R4-10-F2: runMergeBoundaryGate (the relocated dual-boundary full-suite gate) ──
+
+function setupGateProject(testProcess: Record<string, unknown>): { wt: string; input: CycleInput; logger: ReturnType<typeof createLogger>; lastFailurePath: string; cleanup: () => void } {
+  const dir = mkdtempSync(join(tmpdir(), 'forge-merge-gate-'));
+  const wt = join(dir, 'wt');
+  mkdirSync(join(wt, '.forge'), { recursive: true });
+  writeFileSync(join(wt, '.forge', 'project.json'), JSON.stringify({ testProcess }));
+  const logsDir = mkdtempSync(join(tmpdir(), 'forge-merge-gate-logs-'));
+  const logger = createLogger('TEST-merge-gate', logsDir);
+  const input: CycleInput = {
+    initiativeId: 'INIT-merge-gate',
+    manifestPath: join(dir, 'manifest.md'),
+    projectRepoPath: wt,
+    worktreePath: wt,
+  };
+  return {
+    wt,
+    input,
+    logger,
+    lastFailurePath: join(wt, '.forge', 'last-gate-failure.md'),
+    cleanup: () => { rmSync(dir, { recursive: true, force: true }); rmSync(logsDir, { recursive: true, force: true }); },
+  };
+}
+
+test('runMergeBoundaryGate: green full-suite → ok, clears the last-gate-failure seam', async () => {
+  const { runMergeBoundaryGate } = await import('./cycle-helpers.ts');
+  const fx = setupGateProject({ local: { cmd: ['true'] } });
+  try {
+    writeFileSync(fx.lastFailurePath, '# stale prior failure'); // must be cleared on a green pass
+    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    assert.deepEqual(res, { ok: true });
+    assert.ok(!existsSync(fx.lastFailurePath), 'a passing gate clears .forge/last-gate-failure.md (present ⇒ fresh)');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('runMergeBoundaryGate: red full-suite local baseline → not ok, writes the authoritative seam', async () => {
+  const { runMergeBoundaryGate } = await import('./cycle-helpers.ts');
+  const fx = setupGateProject({ local: { cmd: ['false'] } });
+  try {
+    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    assert.equal(res.ok, false);
+    if (res.ok) return;
+    assert.equal(res.failedGate, 'local');
+    assert.ok(existsSync(fx.lastFailurePath), 'a red gate writes .forge/last-gate-failure.md');
+    assert.ok(readFileSync(fx.lastFailurePath, 'utf8').includes('AUTHORITATIVE'), 'the seam carries the AUTHORITATIVE header the fix agent reads');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('runMergeBoundaryGate: local green but CI red → not ok (failedGate ci)', async () => {
+  const { runMergeBoundaryGate } = await import('./cycle-helpers.ts');
+  const fx = setupGateProject({ local: { cmd: ['true'] }, ci: { cmd: ['false'] } });
+  try {
+    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    assert.equal(res.ok, false);
+    if (res.ok) return;
+    assert.equal(res.failedGate, 'ci');
+  } finally {
+    fx.cleanup();
+  }
+});
+
+test('runMergeBoundaryGate: dryRun passes without running anything', async () => {
+  const { runMergeBoundaryGate } = await import('./cycle-helpers.ts');
+  const fx = setupGateProject({ local: { cmd: ['false'] } }); // would be red if it ran
+  try {
+    const res = runMergeBoundaryGate({ ...fx.input, dryRun: true }, fx.logger);
+    assert.deepEqual(res, { ok: true });
+    assert.ok(!existsSync(fx.lastFailurePath), 'dry run never writes the seam');
+  } finally {
+    fx.cleanup();
   }
 });
