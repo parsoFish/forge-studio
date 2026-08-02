@@ -970,7 +970,31 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-10 Develop-cycle OOTB flow
 
-- **Status:** planned  ·  **Wave:** 4 (assembles last)
+- **Status:** **implemented (F1)**; F2–F6 planned  ·  **Wave:** 4 (assembles last)
+- **Implemented-notes F1 (2026-08-02 — in-place cutover, ADR-039/040):** the live
+  `forge-develop` flow was rewritten IN PLACE `dev→unifier→review` →
+  `dev→demo→adversarial-review→verdict` (v2). The two successor agents are wired
+  via **band hooks** (not new executor kinds): `agent-bands.ts` gains
+  `demo-band`/`review-band` + a single-source `BAND_CANONICAL_SLUG` map consumed by
+  both `execAgent`'s runtime backstop and `validate.ts`'s band-hook lint;
+  `demo-agent`/`adversarial-review` SKILL.md declare the hooks. **`execDemo`** wraps
+  `runDemoAgentPipeline` and carries the RELOCATED unifier residual — the demo agent
+  authors `.forge/pr-description.md` alongside `demo.json` (hard-required by
+  `openPrInline`; a missing/section-less body is a retryable authoring failure, and
+  the scope guard admits the one file), plus the four close-contract gates
+  (boundary commit / sync invariant / empty-branch guard via `computeDeliveryStats`
+  / final CI gate); delivery gate = demo pipeline `ok` (`complete-with-misses` is a
+  judgment, not a failure). **`execAdversarialReview`** wraps `runAdversarialReview`
+  (fails loud on a pipeline failure — never a blind PR). **Loop topology:** a
+  `complete-with-misses` demo compiles the agent's fix proposals into `demo-fix` WIs
+  (`demo-fix-loop.ts`) + stamps the manifest send-back; the drain re-enters
+  `resume_from:'develop'` and the demo node re-authors (no unifier re-arm — removed
+  from `drain-fix-loop.ts`). The round/total caps are SHARED with review-fix
+  (`resolveReviewLoopCaps` / `fixWorkItemCount`). `execUnifier`/the
+  `developer-unifier` slug **stay** (retired at R4-01-F4) but are off the live flow.
+  Journeys (`flows-run` demo+adversarial beat), `forge studio lint`, `npm run build`,
+  and the suite (2636/2636) all green. The separate architect/pm "plan node"
+  restructure was deferred (not this feature).
 - **Depends on:** R4-05, R4-07, R4-08 (its nodes)
 - **Context:** Operator diagram: *"put the chain of automated development
   agents into an out of the box develop cycle that can progress work between
@@ -990,7 +1014,8 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     re-entry, not flow back-edges (the flow stays a DAG as data). ACs:
     `forge studio lint` green; flow runs a real initiative end-to-end on the
     routine verify tier (after F5's harness migration); each loop kind
-    demonstrably routes through the single executor.
+    demonstrably routes through the single executor. **— built (2026-08-02);
+    real end-to-end run rides the tail verify:cycle (F5).**
   - **R4-10-F2 Orchestrator merge-boundary gate ⚑ FOR OPERATOR REVIEW.** The
     relocated dual-boundary full-suite gate (spec: R1-03-F4) executes as an
     orchestrator-owned band at the flow's merge boundary — not an agent node.

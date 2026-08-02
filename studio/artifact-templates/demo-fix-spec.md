@@ -21,8 +21,11 @@ fix proposals — verbatim criterion, evidence for the miss, a one-line fix miss
 
 This artifact is **judgment output, never a dispatch**: the R4-10-F1 loop topology's shared fix
 executor (the develop agent) compiles proposals into real work items with only id/kind
-assignment. Until that executor lands, the artifact is the complete F2 deliverable. An all-met
-demo writes no fix spec at all — absence means nothing needed fixing.
+assignment. **That executor landed in R4-10-F1** — `execDemo`'s `complete-with-misses` path
+calls `demo-fix-loop.ts`, which maps each proposal onto a `demo-fix` work item
+(`compileFixWorkItems`) and stamps the manifest send-back so the fix-loop drain re-enters
+`resume_from:'develop'`. An all-met demo writes no fix spec at all — absence means nothing
+needed fixing.
 
 - **Producer:** `demo-agent` (the R4-07 demo pipeline's judgment band).
 - **Consumer:** `developer-ralph` — the single post-develop fix executor (R4-10-F1). Until
