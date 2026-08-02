@@ -25,6 +25,7 @@ import { parseManifest, persistManifestSendBack, persistManifestSpecs, serialize
 import {
   compileFixWorkItems,
   writeReviewCapExhaustedMarker,
+  hasReviewCapExhaustedMarker,
   FixLoopCapError,
   FixConcernInvalidError,
 } from '../orchestrator/fix-work-items.ts';
@@ -356,6 +357,19 @@ export async function applyReviewVerdict(
     return;
   }
   try {
+    // R4-10-F1: honour the shared REVIEW-CAP-EXHAUSTED marker. The demo node is
+    // now a SECOND writer of it (demo-fix-loop.ts) — and the drain skips ANY
+    // marker-bearing manifest before it reads pending WIs. If this handler
+    // enqueued a WI while the marker is present (its own per-WI cap still has
+    // headroom), that WI would be silently stranded (drainable never). Reject
+    // with the same reject-then-park path so marker ⟹ no new fix work, for both
+    // origins — and the operator gets an honest 409, not a false 200.
+    if (hasReviewCapExhaustedMarker(worktreePath)) {
+      throw new FixLoopCapError(
+        `initiative is parked needs-operator — a prior fix-loop cap was hit (.forge/REVIEW-CAP-EXHAUSTED.md present). ` +
+          `Delete the marker after taking action (or raise review.maxSendBackRounds / review.maxTotalFixWorkItems) to re-enable send-backs.`,
+      );
+    }
     // ADR 040: the round this send-back opens + the config-owned caps. The
     // compiler enforces both caps BEFORE writing (reject-then-park — accepting
     // would enqueue work that never runs).

@@ -694,3 +694,33 @@ test('pr-description relocation: a section-less PR body is author-invalid (names
     restore();
   }
 });
+
+test('pr-description relocation: a STALE pr-description is deleted at pipeline start (a fix-loop re-entry must re-author, not inherit)', async () => {
+  const restore = withoutSpawnSuppressionEnv();
+  const fx = makeFixture();
+  try {
+    const { logger, events } = collectLogger(fx.logsRoot);
+    const prPath = join(fx.worktree, '.forge', 'pr-description.md');
+    // A round-N-1 PR body already on disk (gitignored .forge/, reused worktree).
+    writeFileSync(prPath, '## Why\n\nSTALE round-1 body\n\n## What\n\nstale\n\n## How\n\nstale\n');
+    // A spawn that authors ONLY demo.json (never a fresh PR body) — bypasses
+    // stubQueryFn's default writeValidPrDescription to isolate the start-unlink.
+    const qf = ((params: { prompt: string }) => {
+      async function* gen(): AsyncGenerator<unknown> {
+        mkdirSync(demoDirAbs(fx.worktree), { recursive: true });
+        writeFileSync(join(demoDirAbs(fx.worktree), 'demo.json'), JSON.stringify(validDemoJson(diffStatFromPrompt(params.prompt))));
+        yield { type: 'result', subtype: 'success', total_cost_usd: 0.1, usage: { input_tokens: 5, output_tokens: 7 } };
+      }
+      return gen();
+    }) as unknown as StreamQueryFn;
+    const res = await run(fx, qf, events, logger);
+    // The stale body must NOT have satisfied the gate — it was unlinked at start,
+    // and the agent authored no fresh one, so the run is author-invalid.
+    assert.equal(res.status, 'failed');
+    assert.equal((res as { reason: string }).reason, 'author-invalid');
+    assert.ok((res as { detail: string }).detail.includes('pr-description'), 'the failure names the missing PR body');
+  } finally {
+    fx.cleanup();
+    restore();
+  }
+});

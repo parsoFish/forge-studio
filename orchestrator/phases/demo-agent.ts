@@ -288,6 +288,13 @@ export async function runDemoAgentPipeline(
   });
   const systemPrompt = buildDemoAgentSystemPrompt();
 
+  // Freshness (R4-10-F1): unlike demo.json (anchored to the injected diffStat),
+  // the PR body has no staleness anchor and `.forge/` is gitignored + reused
+  // across fix-loop re-entries — a round-N-1 body would otherwise satisfy
+  // validatePrDescription and ship stale. Delete it up front so every run
+  // (fresh or re-entry) forces the agent to re-author it against THIS branch.
+  if (existsSync(prDescriptionAbs)) unlinkSync(prDescriptionAbs);
+
   let lastErrors: string[] = [];
   for (let attempt = 1; attempt <= MAX_AUTHOR_ATTEMPTS; attempt += 1) {
     // Fresh attempt = fresh judgment: a proposals file authored during a

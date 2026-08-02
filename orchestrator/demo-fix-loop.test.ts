@@ -210,3 +210,30 @@ test('enqueue: a missing/invalid demo-fix-spec is spec-unreadable (never silentl
     fx.cleanup();
   }
 });
+
+test('enqueue: an out-of-tree files_in_scope is rejected BEFORE any write (no partial batch)', () => {
+  const fx = setup({ reviewRounds: 0 });
+  try {
+    writeFixSpec(fx.fixSpecPath, [
+      proposal({ id: 'FIX-1', criterion: 'C1' }), // safe
+      proposal({ id: 'FIX-2', criterion: 'C2', files_in_scope: ['orchestrator/x.ts', '../../etc/passwd'] }), // unsafe
+    ]);
+    const result = enqueueDemoFixWorkItems({
+      worktreePath: fx.wt,
+      manifestPath: fx.manifestPath,
+      initiativeId: ID,
+      fixSpecPath: fx.fixSpecPath,
+      projectGateCmd: GATE,
+    });
+    assert.equal(result.status, 'spec-unreadable');
+    assert.ok((result as { detail: string }).detail.includes('..') || (result as { detail: string }).detail.includes('out-of-tree'));
+    // The safe FIX-1 must NOT have been written — the whole batch is rejected atomically.
+    assert.equal(
+      readWorkItemsFromDir(join(fx.wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'demo-fix').length,
+      0,
+      'no partial write — nothing enqueued when any proposal is unsafe',
+    );
+  } finally {
+    fx.cleanup();
+  }
+});

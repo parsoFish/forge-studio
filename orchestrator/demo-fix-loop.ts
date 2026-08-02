@@ -27,7 +27,8 @@
 import { existsSync, readFileSync } from 'node:fs';
 
 import { parseManifest, persistManifestSendBack, persistManifestSpecs } from './manifest.ts';
-import { resolveReviewLoopCaps } from './config.ts';
+import { loadConfig, resolveReviewLoopCaps } from './config.ts';
+import { notify } from './notify.ts';
 import { validateDemoFixSpec, type DemoFixProposal, type DemoFixSpecRecord } from './flow-artifacts.ts';
 import {
   compileFixWorkItems,
@@ -35,6 +36,7 @@ import {
   writeReviewCapExhaustedMarker,
   DEFAULT_FIX_WI_ITERATIONS,
   FixLoopCapError,
+  FixConcernInvalidError,
   type FixConcernSource,
 } from './fix-work-items.ts';
 
@@ -63,6 +65,39 @@ export type EnqueueDemoFixInput = {
  * scope; the criterion + evidence + rationale become the WI's rationale so the
  * develop agent sees exactly WHY the demo couldn't show it.
  */
+/**
+ * Mirror the WorkItem `files_in_scope` path-safety rule (work-item.ts:314-317):
+ * worktree-relative, no leading `/`, no `..` segment. `validateDemoFixSpec` only
+ * checks each entry is a non-blank string, so an untrusted (or prompt-injected)
+ * demo agent could author an out-of-tree scope that `writeWorkItem`'s validator
+ * would later reject with a plain throw — AFTER earlier proposals in the batch
+ * were already written. We pre-reject the whole batch here so nothing is written.
+ */
+function unsafeScopePaths(proposals: DemoFixProposal[]): string[] {
+  const bad: string[] = [];
+  for (const p of proposals) {
+    for (const f of p.files_in_scope ?? []) {
+      if (typeof f !== 'string' || f.startsWith('/') || f.split('/').includes('..')) {
+        bad.push(String(f));
+      }
+    }
+  }
+  return bad;
+}
+
+/** Fire the operator notification for a demo-fix cap park — mirrors the verdict
+ *  handler so the drain's "already notified at rejection time" assumption holds
+ *  for the demo-fix origin too (best-effort; never throws). */
+function notifyCapPark(initiativeId: string, detail: string): void {
+  try {
+    const uc = loadConfig();
+    void notify(
+      { type: 'failed', title: `${initiativeId} — demo-fix cap exhausted`, body: detail },
+      { desktop: uc.notify?.desktop ?? true, webhook_url: uc.notify?.webhook_url ?? null },
+    ).catch(() => { /* best-effort */ });
+  } catch { /* best-effort */ }
+}
+
 export function demoFixProposalToConcern(p: DemoFixProposal): FixConcernSource {
   return {
     origin: 'demo-fix',
@@ -104,6 +139,17 @@ export function enqueueDemoFixWorkItems(input: EnqueueDemoFixInput): DemoFixEnqu
   }
   const proposals = record.proposals;
 
+  // Path-safety pre-check (BEFORE any write) — an unsafe files_in_scope would
+  // otherwise pass validateDemoFixSpec, get compiled into earlier WIs, then
+  // throw inside writeWorkItem for a later proposal, stranding a partial batch.
+  const unsafe = unsafeScopePaths(proposals);
+  if (unsafe.length > 0) {
+    return {
+      status: 'spec-unreadable',
+      detail: `demo-fix proposal has out-of-tree files_in_scope (worktree-relative, no leading '/' or '..'): ${unsafe.join(', ')}`,
+    };
+  }
+
   // Shared caps: the round counter is manifest `review_rounds` (shared with
   // review-fix), the total is `fixWorkItemCount` over EVERY origin. Pre-check
   // BOTH before writing anything — a partial write with no send-back stamp
@@ -116,16 +162,22 @@ export function enqueueDemoFixWorkItems(input: EnqueueDemoFixInput): DemoFixEnqu
     /* a missing/unreadable manifest falls back to round 1 — the compile below still cap-checks */
   }
   const existingFixCount = fixWorkItemCount(worktreePath);
-  if (currentRound > caps.maxSendBackRounds) {
-    const detail = `demo-fix send-back round cap reached (round ${currentRound} > ${caps.maxSendBackRounds})`;
+  const park = (detail: string): DemoFixEnqueueResult => {
+    // Reject-then-park, LOUDLY — the greppable marker (the drain reports
+    // needs-operator while it exists) AND an operator notification, mirroring
+    // the verdict handler so the drain's "already notified at rejection time"
+    // assumption holds for the demo-fix origin too (finding: silent park).
     writeReviewCapExhaustedMarker(worktreePath, detail);
+    notifyCapPark(initiativeId, detail);
     return { status: 'cap-parked', detail };
+  };
+  if (currentRound > caps.maxSendBackRounds) {
+    return park(`demo-fix send-back round cap reached (round ${currentRound} > ${caps.maxSendBackRounds})`);
   }
   if (existingFixCount + proposals.length > caps.maxTotalFixWorkItems) {
-    const detail =
-      `demo-fix total fix work-item cap reached (${existingFixCount} existing + ${proposals.length} demo misses > ${caps.maxTotalFixWorkItems})`;
-    writeReviewCapExhaustedMarker(worktreePath, detail);
-    return { status: 'cap-parked', detail };
+    return park(
+      `demo-fix total fix work-item cap reached (${existingFixCount} existing + ${proposals.length} demo misses > ${caps.maxTotalFixWorkItems})`,
+    );
   }
 
   const appended: string[] = [];
@@ -143,11 +195,12 @@ export function enqueueDemoFixWorkItems(input: EnqueueDemoFixInput): DemoFixEnqu
       appended.push(...ids);
     }
   } catch (err) {
-    // A cap slipping through the pre-check (a concurrent write) still parks
-    // rather than half-enqueuing — mirror the verdict handler's reject-then-park.
-    if (err instanceof FixLoopCapError) {
-      writeReviewCapExhaustedMarker(worktreePath, err.message);
-      return { status: 'cap-parked', detail: err.message };
+    // A cap slipping through the pre-check (a concurrent write), or a malformed
+    // concern that the pre-checks missed, still parks rather than half-enqueuing
+    // — mirror the verdict handler's reject-then-park (never let a mid-batch
+    // throw strand a partial write undrainable).
+    if (err instanceof FixLoopCapError || err instanceof FixConcernInvalidError) {
+      return park(err.message);
     }
     throw err;
   }

@@ -121,8 +121,11 @@ export async function drainPendingFixWorkItems(
       }
 
       // Operator territory — never auto-retry. The cap marker was already
-      // notified loudly at rejection time (verdict handler); don't re-notify
-      // every sweep, just report the parked status.
+      // notified loudly at rejection time by whichever writer set it (the
+      // verdict handler for a review-fix send-back, or the demo node's
+      // demo-fix loop, R4-10-F1 — both fire notify()); don't re-notify every
+      // sweep, just report the parked status. Both writers respect the marker,
+      // so its presence means no fresh fix WI was enqueued behind it.
       if (hasReviewCapExhaustedMarker(worktreePath)) {
         out.push({ initiativeId, status: 'needs-operator', detail: 'review-cap-exhausted marker present' });
         continue;
