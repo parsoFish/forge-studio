@@ -1,5 +1,18 @@
 # ADR 019 — Cycle resume-from-unifier
 
+> **Amended 2026-08-03 (R4-10-F6 — resume target re-homed to the demo node).**
+> The successor develop flow ([R4-10-F1](../roadmaps/R4-ootb-suite.md)) retired
+> the `unifier` node: the live flow is now `dev → demo → adversarial-review →
+> verdict`, with the `demo` node declared `resumable`. The crash / env-failure
+> resume described below is unchanged in mechanism — skip architect/PM/per-WI
+> dev-loop, rebase the preserved branch, re-enter the post-develop band against
+> the committed WI work — but its **entry node and marker value moved**: the
+> manifest stamp is now `resume_from: demo` (was `unifier`) and the walk re-enters
+> at the `demo` node, not the retired unifier. Identifiers followed the value
+> (`persistManifestResumeFromDemo`, `--resume-from=demo`, `resumeFromDemo`). The
+> held legacy `unifier` executor is removed in R4-01-F4; this ADR's title keeps
+> its historical name. Everything else below stands.
+
 > **Amended 2026-06-07 ([ADR 026](./026-review-unifier-wi-list.md)).** The
 > `resume_from`-on-**review-send-back** mechanism described here is retired:
 > review feedback now appends work-items to the unifier's in-place queue and the

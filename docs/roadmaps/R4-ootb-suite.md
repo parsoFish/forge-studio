@@ -264,8 +264,10 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     delete the ADR-026 UWI machinery (`orchestrator/unifier-items.ts`,
     `drain-unifier-items.ts`, `appendReviewUnifierItems`) per R4-08-F2's
     successor spec; **drain before cutover** — zero pending UWIs across
-    `_queue/ready-for-review/` before the unifier node is removed; migrate the
-    `resume_from: 'unifier'` stamp per R4-10-F6. ACs: no flow/skill references
+    `_queue/ready-for-review/` before the unifier node is removed. (The
+    `resume_from` stamp is already re-homed to `'demo'` — **R4-10-F6 did this**,
+    merged PR #64 — so F4 only removes the held `unifier` executor, not the
+    resume marker.) ACs: no flow/skill references
     the retired slug; ADR-026 gains a superseded-by note and ADR-028 an
     amendment in the same PR; send-back demonstrably works on both sides of
     the cutover (journey + verify evidence); a pre-cutover check proves no
@@ -970,7 +972,7 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-10 Develop-cycle OOTB flow
 
-- **Status:** **implemented (F1, F2, F3, F4)**; F5–F6 planned  ·  **Wave:** 4 (assembles last)
+- **Status:** **implemented (F1–F6)** (F5 harness migration proven by the operator's real verify:cycle run)  ·  **Wave:** 4 (assembles last)
 - **Implemented-notes F1 (2026-08-02 — in-place cutover, ADR-039/040):** the live
   `forge-develop` flow was rewritten IN PLACE `dev→unifier→review` →
   `dev→demo→adversarial-review→verdict` (v2). The two successor agents are wired
@@ -1080,6 +1082,17 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     sequenced so the old-shape tier stays runnable until the new flow's first
     green verify run. ACs: verify:cycle green on the successor flow;
     old-shape tier retired only after that first green run.
+    **— built (2026-08-03, PR #64):** `scripts/verify-cycle.mjs` migrated —
+    the header/spine comments now read `dev → demo → adversarial-review →
+    verdict`; the live-evidence gate reads demo.json from the **merged repo**
+    (`<repoPath>/<artifactRoot demo dir>/<initiativeId>/demo.json`, mirroring
+    `orchestrator/demo-paths.ts`) since the R4-07 demo agent commits it to the
+    branch, NOT `_logs/<cycleId>/artifacts/` the retired unifier used, with a
+    **legacy `_logs` fallback** so the old-shape tier stays runnable until the
+    first green successor run; the changelog-draft note re-attributed to the
+    develop flow's release contract; the `--send-back` rationale/ACs re-pointed
+    at the ADR-040 review→develop fix-loop. The green successor verify:cycle run
+    (the F5 proof + wave gate) is **operator-triggered** (real money).
   - **R4-10-F6 Resume semantics re-home (ADR-019 successor).** The
     all-WIs-complete environment-failure resume (`resume_from: 'unifier'`,
     `orchestrator/requeue-resume.ts`) re-targets the successor topology:
@@ -1090,6 +1103,17 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     never discards per-WI work. ACs: a seeded post-develop environment
     failure resumes from demo without re-running WIs; ADR-019 amendment
     merged.
+    **— built (2026-08-03, PR #64):** the marker value `resume_from: 'unifier'`
+    → `'demo'` end-to-end — manifest parse/serialize guards + type union +
+    `persistManifestResumeFromUnifier` → `persistManifestResumeFromDemo`;
+    `requeue-resume.ts` stamps `demo` when all WIs are complete; `forge requeue`
+    flag `--resume-from=demo` + option `resumeFromDemo`; the bridge wire field
+    `resumeFromUnifier` → `resumeFromDemo` (recovery + studio-runs routes +
+    forge-ui bridge-client); dev-loop self-no-op keys on `resumeFrom === 'demo'`;
+    flow-runner resume comments follow the topology. The held legacy `unifier`
+    executor is untouched (R4-01-F4 retires it). ADR-019 amended (banner). Tests
+    migrated; a legacy-shaped fixture still proves the generic resume-skip, the
+    live forge-develop flow proves the demo node is the target.
 - **Session sizing:** ~4 sessions (flow+topology; gate F2; succession+KB
   rebind; harness migration + resume re-home).
 - **Out of scope:** node agents (R4-05/06/07/08); trigger kinds (R2-04, which
