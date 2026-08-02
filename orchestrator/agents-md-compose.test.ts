@@ -68,6 +68,20 @@ test('buildAgentsMdBody: no declared gate → no Quality-gate section, still nam
   assert.match(body, /forge:composed-instruction-seeds: x-seed/);
 });
 
+test('composeAgentsMd: NEVER clobbers an existing operator AGENTS.md', () => {
+  const dir = fixtureProject();
+  try {
+    const authored = '# hand-authored\n\nRun `npm test` before merging. Operator content.\n';
+    writeFileSync(join(dir, 'AGENTS.md'), authored);
+    const out = composeAgentsMd({ projectDir: dir, forgeRoot: FORGE_ROOT });
+    assert.equal(out.wrote, false, 'an existing instruction file is left in place');
+    assert.equal(out.gateCovered, true, "reports the existing file's gate coverage");
+    assert.equal(readFileSync(join(dir, 'AGENTS.md'), 'utf8'), authored, 'operator AGENTS.md is byte-unchanged');
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('composeAgentsMd: deterministic — identical output on a second run', () => {
   const dir = fixtureProject();
   try {

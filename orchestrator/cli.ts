@@ -522,10 +522,15 @@ function cmdInstructionsCompose(rest: string[]): void {
   if (!project) { console.error('forge instructions compose: requires --project <name>'); process.exit(2); return; }
   const projectDir = resolvePreflightProjectDir(project);
   const out = composeAgentsMd({ projectDir, forgeRoot: FORGE_ROOT });
+  const gateNote = out.gateCmd
+    ? ` — gate "${out.gateCmd}" covered: ${out.gateCovered}`
+    : ' — no gate declared yet (declare it first for C8 coverage)';
   console.log(
-    `instructions compose: wrote ${out.path} — ${out.seedIds.length} seed(s): ${out.seedIds.join(', ') || '(none)'}` +
-      (out.gateCmd ? ` — gate "${out.gateCmd}" covered: ${out.gateCovered}` : ' — no gate declared yet (declare it first for C8 coverage)'),
+    out.wrote
+      ? `instructions compose: wrote ${out.path} — ${out.seedIds.length} seed(s): ${out.seedIds.join(', ') || '(none)'}${gateNote}`
+      : `instructions compose: ${out.path} already exists — left untouched${gateNote}${out.gateCmd && !out.gateCovered ? ' (edit it by hand to name the gate)' : ''}`,
   );
+  // A declared-but-uncovered gate is a real C8 miss the caller must address.
   if (out.gateCmd && !out.gateCovered) process.exit(1);
 }
 

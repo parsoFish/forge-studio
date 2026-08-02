@@ -15,7 +15,7 @@
  * SKILL.md sequences "declare the gate" before "compose AGENTS.md".
  */
 
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 
 import {
@@ -29,14 +29,16 @@ import { loadProjectConfig } from './project-config.ts';
 import type { InstructionSeed } from './studio/types.ts';
 
 export type ComposeAgentsMdResult = {
-  /** Absolute path to the written AGENTS.md. */
+  /** Absolute path to the AGENTS.md/CLAUDE.md considered. */
   path: string;
-  /** Ids of the seeds composed from (also recorded in the greppable footer). */
+  /** Ids of the seeds composed from ([] when an existing file was left in place). */
   seedIds: string[];
   /** The declared gate command, or '' if none is declared yet. */
   gateCmd: string;
-  /** True iff AGENTS.md names the declared gate command (the C8 coverage bar). */
+  /** True iff the file names the declared gate command (the C8 coverage bar). */
   gateCovered: boolean;
+  /** False when an operator instruction file already existed and was NOT clobbered. */
+  wrote: boolean;
 };
 
 /** The declared per-iteration quality gate, joined to a single command string. */
@@ -70,19 +72,40 @@ export function buildAgentsMdBody(projectName: string, gateCmd: string, matched:
  * seeds + the declared gate command. Idempotent — deterministic output for a
  * given project shape + gate.
  */
-export function composeAgentsMd(input: { projectDir: string; forgeRoot: string }): ComposeAgentsMdResult {
+export function composeAgentsMd(input: {
+  projectDir: string;
+  forgeRoot: string;
+  /** Overwrite an existing instruction file (default false — never clobber). */
+  overwrite?: boolean;
+}): ComposeAgentsMdResult {
   const { projectDir, forgeRoot } = input;
+  const gateCmd = declaredGateCmd(projectDir);
+
+  // Never clobber an operator's hand-authored AGENTS.md/CLAUDE.md. Report its
+  // gate coverage instead; the onboarding agent edits it by hand if it's thin.
+  const agentsPath = join(projectDir, 'AGENTS.md');
+  const claudePath = join(projectDir, 'CLAUDE.md');
+  const existingPath = existsSync(agentsPath) ? agentsPath : existsSync(claudePath) ? claudePath : null;
+  if (existingPath && input.overwrite !== true) {
+    const existing = readFileSync(existingPath, 'utf8');
+    return {
+      path: existingPath,
+      seedIds: [],
+      gateCmd,
+      gateCovered: gateCmd !== '' && existing.includes(gateCmd),
+      wrote: false,
+    };
+  }
+
   const tags = detectProjectTags(projectDir);
   const matched = matchInstructionSeeds(listInstructionSeeds(forgeRoot), tags);
-  const gateCmd = declaredGateCmd(projectDir);
   const projectName = basename(projectDir.replace(/[\\/]+$/, ''));
   const body = buildAgentsMdBody(projectName, gateCmd, matched);
-  const path = join(projectDir, 'AGENTS.md');
-  writeFileSync(path, body.endsWith('\n') ? body : body + '\n', 'utf8');
-  // Coverage: the whole-command mention (the C8 needle logic is stricter, but a
-  // verbatim mention always satisfies it — that's what we author).
+  writeFileSync(agentsPath, body.endsWith('\n') ? body : body + '\n', 'utf8');
+  // Coverage: a verbatim whole-command mention always satisfies C8's
+  // mentionsCommand (which also accepts a runner+subcommand needle).
   const gateCovered = gateCmd !== '' && body.includes(gateCmd);
-  return { path, seedIds: matched.map((s) => s.id), gateCmd, gateCovered };
+  return { path: agentsPath, seedIds: matched.map((s) => s.id), gateCmd, gateCovered, wrote: true };
 }
 
 /** True iff the project already has an AGENTS.md/CLAUDE.md (C8 presence). */

@@ -51,11 +51,14 @@ report green, not to claim it did.
    check only engages once the gate command is declared.
 
 3. **Author AGENTS.md from the seed library (R4-02-F4).** After the gate is
-   declared, run `forge instructions compose --project <name>`. This composes
-   AGENTS.md deterministically from the R3-05 instruction seeds matched to the
-   project's shape and names the declared gate command at the top (so the C8
-   coverage clause passes, not merely presence). If the seeds don't fit the repo
-   well, refine AGENTS.md by hand afterward — but the gate command must stay named.
+   declared, run `forge instructions compose --project <name>`. When the project
+   has **no** AGENTS.md/CLAUDE.md, this composes one deterministically from the
+   R3-05 instruction seeds matched to the project's shape and names the declared
+   gate command at the top (so the C8 coverage clause passes, not merely
+   presence). It **never clobbers an existing operator instruction file** — if
+   one is present it's left untouched; if that file doesn't name the gate command
+   (compose exits non-zero), **edit it by hand** to add the build/test/lint
+   commands rather than overwriting the operator's content.
 
 4. **Author locked-core constraints (R4-02-F5).** If the project declares
    constraints (a `CONSTRAINTS.md`, or a Locked-core / Constraints / Never-do
