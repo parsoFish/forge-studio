@@ -205,8 +205,8 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
         process.exit(2);
         return;
       }
-      const out = await runBandAgentStandalone({ slug, initiativeId, forgeRoot, queryFn: undefined });
-      console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) on ${out.initiativeId} → ${out.result.status}`);
+      const out = await runBandAgentStandalone({ slug, initiativeId, runId, forgeRoot, queryFn: undefined });
+      console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`);
       return;
     }
 

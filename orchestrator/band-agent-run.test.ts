@@ -1,13 +1,15 @@
 /**
  * Tests for orchestrator/band-agent-run.ts (R4-10-F3) — the standalone isolation
- * surface for the band-hook node agents. Proves resolution boundary errors + a
- * real standalone demo pipeline run against a seeded initiative worktree (parity
- * with the flow band: same runDemoAgentPipeline, same demo.json artifact).
+ * surface for the band-hook node agents. Proves resolution boundary errors, the
+ * isolation invariants (runId-scoped events, in-flight refusal, input validation,
+ * worktree bounds), and a real standalone demo pipeline run against a seeded
+ * initiative worktree (parity with the flow band: same runDemoAgentPipeline, same
+ * demo.json artifact).
  */
 
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -17,6 +19,7 @@ import { serializeWorkItem, type WorkItem } from './work-item.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
 const INIT = 'INIT-2026-08-02-standalone-demo';
+const RUN = 'RUN-2026-08-02-band-standalone';
 
 function withoutSpawnSuppressionEnv(): () => void {
   const p1 = process.env.FORGE_ARCHITECT_NO_SPAWN;
@@ -29,6 +32,17 @@ function withoutSpawnSuppressionEnv(): () => void {
   };
 }
 
+/** Write an initiative manifest (worktree_path → wt) into a queue state dir. */
+function writeManifest(stateDir: string, worktreePath: string): void {
+  mkdirSync(stateDir, { recursive: true });
+  writeFileSync(join(stateDir, `${INIT}.md`), [
+    '---', `initiative_id: ${INIT}`, 'project: fix', `project_repo_path: ${worktreePath}`,
+    "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1',
+    'phase: ready-for-review', 'origin: architect', `worktree_path: ${worktreePath}`, `cycle_id: ${INIT}`,
+    '---', `# ${INIT}`, '',
+  ].join('\n'));
+}
+
 test('isStandaloneBandAgent: only the two band-hook node agents', () => {
   assert.equal(isStandaloneBandAgent('demo-agent'), true);
   assert.equal(isStandaloneBandAgent('adversarial-review'), true);
@@ -38,8 +52,22 @@ test('isStandaloneBandAgent: only the two band-hook node agents', () => {
 
 test('runBandAgentStandalone: a non-band agent is refused', async () => {
   await assert.rejects(
-    runBandAgentStandalone({ slug: 'project-manager', initiativeId: INIT, queueRoot: '/tmp/none' }),
+    runBandAgentStandalone({ slug: 'project-manager', initiativeId: INIT, runId: RUN, forgeRoot: '/tmp/none' }),
     /not a standalone-runnable band agent/,
+  );
+});
+
+test('runBandAgentStandalone: a missing runId is refused', async () => {
+  await assert.rejects(
+    runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: '', forgeRoot: '/tmp/none' }),
+    /runId is required/,
+  );
+});
+
+test('runBandAgentStandalone: an unsafe initiative id is refused before any path is joined', async () => {
+  await assert.rejects(
+    runBandAgentStandalone({ slug: 'demo-agent', initiativeId: '../../etc/passwd', runId: RUN, forgeRoot: '/tmp/none' }),
+    /invalid initiative id/,
   );
 });
 
@@ -48,23 +76,59 @@ test('runBandAgentStandalone: no manifest for the initiative → clear boundary 
   try {
     mkdirSync(join(root, '_queue', 'ready-for-review'), { recursive: true });
     await assert.rejects(
-      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, queueRoot: join(root, '_queue') }),
-      /no manifest for initiative/,
+      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }),
+      /no runnable manifest for initiative/,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
 });
 
-test('runBandAgentStandalone: standalone demo pipeline runs against a seeded worktree → complete, same demo.json artifact', async () => {
+test('runBandAgentStandalone: an in-flight initiative is refused (a live cycle owns the worktree)', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'band-run-inflight-'));
+  try {
+    // A bounds-valid worktree so the refusal is proven to come from the state, not bounds.
+    const wt = join(root, '_worktrees', 'wt');
+    mkdirSync(wt, { recursive: true });
+    writeManifest(join(root, '_queue', 'in-flight'), wt);
+    await assert.rejects(
+      runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }),
+      /is in-flight — a live scheduler cycle owns its worktree/,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runBandAgentStandalone: a worktree outside the forge roots is refused', async () => {
+  const root = mkdtempSync(join(tmpdir(), 'band-run-oob-'));
+  try {
+    const outside = mkdtempSync(join(tmpdir(), 'band-run-oob-elsewhere-'));
+    try {
+      writeManifest(join(root, '_queue', 'ready-for-review'), outside);
+      await assert.rejects(
+        runBandAgentStandalone({ slug: 'demo-agent', initiativeId: INIT, runId: RUN, forgeRoot: root }),
+        /is outside the forge roots/,
+      );
+    } finally {
+      rmSync(outside, { recursive: true, force: true });
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('runBandAgentStandalone: standalone demo pipeline runs against a seeded worktree → complete, same demo.json artifact, runId-scoped log', async () => {
   const restore = withoutSpawnSuppressionEnv();
   const root = mkdtempSync(join(tmpdir(), 'band-run-'));
   try {
     // A real post-develop worktree (bare origin + clone + feature branch), the
-    // same shape the flow's demo band derives from.
+    // same shape the flow's demo band derives from — placed UNDER the forge
+    // `_worktrees` root so the standalone bounds-check accepts it.
     const bare = join(root, 'origin.git');
     execFileSync('git', ['init', '--bare', '-b', 'main', bare], { stdio: 'pipe' });
-    const wt = join(root, 'wt');
+    const wt = join(root, '_worktrees', 'wt');
+    mkdirSync(join(root, '_worktrees'), { recursive: true });
     execFileSync('git', ['clone', bare, wt], { stdio: 'pipe' });
     const git = (args: string[]) => execFileSync('git', args, { cwd: wt, stdio: 'pipe', encoding: 'utf8' });
     git(['config', 'user.email', 'test@forge']);
@@ -86,14 +150,7 @@ test('runBandAgentStandalone: standalone demo pipeline runs against a seeded wor
     git(['add', 'src.ts']); git(['commit', '-q', '-m', 'feat: change']); git(['push', '-q', '-u', 'origin', `feat/${INIT}`]);
 
     // The initiative's manifest in the queue (worktree_path points at wt).
-    const rfr = join(root, '_queue', 'ready-for-review');
-    mkdirSync(rfr, { recursive: true });
-    writeFileSync(join(rfr, `${INIT}.md`), [
-      '---', `initiative_id: ${INIT}`, 'project: fix', `project_repo_path: ${wt}`,
-      "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1',
-      'phase: ready-for-review', 'origin: architect', `worktree_path: ${wt}`, `cycle_id: ${INIT}`,
-      '---', `# ${INIT}`, '',
-    ].join('\n'));
+    writeManifest(join(root, '_queue', 'ready-for-review'), wt);
 
     // A queryFn standing in for the demo agent: authors demo.json + the PR body,
     // exactly as the flow band's spawn would.
@@ -116,13 +173,22 @@ test('runBandAgentStandalone: standalone demo pipeline runs against a seeded wor
     }) as unknown as StreamQueryFn;
 
     const out = await runBandAgentStandalone({
-      slug: 'demo-agent', initiativeId: INIT,
-      logsRoot: join(root, '_logs'), queueRoot: join(root, '_queue'), queryFn: qf,
+      slug: 'demo-agent', initiativeId: INIT, runId: RUN,
+      forgeRoot: root, queryFn: qf,
     });
     assert.equal(out.kind, 'demo');
+    assert.equal(out.runId, RUN);
     assert.equal(out.result.status, 'complete', 'the standalone demo pipeline completed against the seeded worktree');
     assert.ok(existsSync(join(wt, 'demo', INIT, 'demo.json')), 'the SAME demo.json artifact a flow run produces');
     assert.ok(existsSync(join(wt, 'demo', INIT, 'DEMO.md')), 'the pipeline rendered DEMO.md in-process (parity)');
+
+    // Isolation: events land under _logs/<runId>/, NOT the initiative's cycle_id,
+    // and a terminal `end` marks the run 'done' for the runId-keyed status endpoint.
+    const runEvents = join(root, '_logs', RUN, 'events.jsonl');
+    assert.ok(existsSync(runEvents), 'events were written under the runId, not the cycle_id');
+    assert.ok(!existsSync(join(root, '_logs', INIT, 'events.jsonl')), 'the initiative cycle_id log was never touched');
+    const parsed = readFileSync(runEvents, 'utf8').trim().split('\n').filter(Boolean).map((l) => JSON.parse(l));
+    assert.ok(parsed.some((e) => e.event_type === 'end'), 'a terminal end event was emitted (status endpoint reads it as done)');
   } finally {
     rmSync(root, { recursive: true, force: true });
     restore();
