@@ -9,7 +9,7 @@
  *                                     branch / commits / diff-stat / PR draft)
  *   POST /api/recovery/:id/abandon  → move it to failed/ + clean worktree + branch
  *   POST /api/recovery/:id/requeue  → move it back to pending/ (resetRetries /
- *                                     resumeFromUnifier), wrapping runRequeue
+ *                                     resumeFromDemo), wrapping runRequeue
  *   POST /api/initiatives           → enqueue a fresh manifest from a spec body
  *                                     (recovery-grade; the architect flow is the
  *                                     canonical authoring path)
@@ -170,7 +170,7 @@ export async function handleRecoveryRoutes(
     return true;
   }
 
-  // POST /api/recovery/:id/requeue {resetRetries?, resumeFromUnifier?}
+  // POST /api/recovery/:id/requeue {resetRetries?, resumeFromDemo?}
   const requeueMatch = url.match(/^\/api\/recovery\/([^/]+)\/requeue$/);
   if (method === 'POST' && requeueMatch) {
     if (isDryBridge()) {
@@ -183,7 +183,7 @@ export async function handleRecoveryRoutes(
       const body = (await readJson(req).catch(() => ({}))) as Record<string, unknown>;
       const result = runRequeue(id, {
         resetRetries: body['resetRetries'] === true,
-        resumeFromUnifier: body['resumeFromUnifier'] === true,
+        resumeFromDemo: body['resumeFromDemo'] === true,
         forgeRoot: ctx.forgeRoot,
       });
       sendJson(res, 200, { ok: true, ...result }, origin);

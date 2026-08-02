@@ -608,11 +608,11 @@ export type ResumeRebaseResult = {
 };
 
 /**
- * cascade-v4 #4: on a resume-from-unifier, another cycle may have merged to
+ * cascade-v4 #4: on a resume run, another cycle may have merged to
  * `main` between the stall and the resume — so the preserved initiative branch
  * no longer has `main` as its merge-base, and the dev-loop-close invariant
  * (`main == merge-base`) fails at the END of the resumed cycle, wasting the
- * whole unifier run. Rebase the preserved branch onto current main at the START
+ * whole resumed run. Rebase the preserved branch onto current main at the START
  * of the resume instead:
  *   - no divergence (base is an ancestor of HEAD) → no-op, ok.
  *   - clean rebase → replay the branch's commits onto main + force-with-lease

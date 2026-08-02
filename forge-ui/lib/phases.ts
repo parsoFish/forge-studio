@@ -93,7 +93,7 @@ function cycleTerminallyFailed(events: readonly EventLogEntry[]): boolean {
  *  status, any failed units, or fewer completed units than it took on. */
 function endMetaIndicatesFailure(meta: EventLogEntry['metadata']): boolean {
   if (!meta) return false;
-  // A resume-from-unifier dev-loop ran 0 per-WI Ralphs BY DESIGN (their commits
+  // A resume-from-demo dev-loop ran 0 per-WI Ralphs BY DESIGN (their commits
   // are already on the preserved branch), so its `complete:0 / failed:N` end is
   // not a failure — don't redden the dev-loop hex on a legitimate resume.
   if (meta.resumed === true) return false;

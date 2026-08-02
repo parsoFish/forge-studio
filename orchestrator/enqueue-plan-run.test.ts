@@ -158,7 +158,7 @@ test('enqueuePlanRun: a done initiative is re-planned (re-plan parallels re-deve
 
 test('enqueuePlanRun: a stale resume_from is cleared when re-enqueueing', () => {
   withTmp((queueRoot) => {
-    seed(queueRoot, 'pending', manifest({ resume_from: 'unifier' }));
+    seed(queueRoot, 'pending', manifest({ resume_from: 'demo' }));
     enqueuePlanRun('INIT-2026-06-21-toc', { queueRoot });
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));

@@ -733,7 +733,7 @@ async function runWithWedge<T>(
 /** architect: silent DAG marker — runCycle already emitted the synthetic events. */
 const execArchitect: NodeExecutor = async () => { /* marker only */ };
 
-/** pm: skip + rebase on any resume ('unifier' crash recovery, ADR-019;
+/** pm: skip + rebase on any resume ('demo' crash recovery, ADR-019;
  *  'develop' fix-loop re-entry, ADR-040); otherwise run the project manager. */
 const execPm: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps, nodeId } = ctx;
@@ -756,12 +756,13 @@ const execPm: NodeExecutor = async (ctx) => {
 };
 
 /**
- * dev: the per-WI developer loop. The unifier is its own node (execUnifier).
- * On a `resumeFrom: 'unifier'` run, runDeveloperLoop self-no-ops the per-WI work
- * (toRun=[]) and STILL emits the dev-loop start/end{resumed:true} events — so the
- * dev hex resolves to complete and the unifier node is the resume target. We do
- * NOT short-circuit here: skipping the call would drop those phase-boundary
- * events and leave the dev hex stuck active on a resume cycle.
+ * dev: the per-WI developer loop. The post-develop band (demo → adversarial-review)
+ * are their own nodes. On a `resumeFrom: 'demo'` run (ADR-019 crash recovery),
+ * runDeveloperLoop self-no-ops the per-WI work (toRun=[]) and STILL emits the
+ * dev-loop start/end{resumed:true} events — so the dev hex resolves to complete and
+ * the `demo` node (declared `resumable`) is the resume target. We do NOT
+ * short-circuit here: skipping the call would drop those phase-boundary events and
+ * leave the dev hex stuck active on a resume cycle.
  */
 const execDev: NodeExecutor = async (ctx) => {
   const { input, nodeLogger, deps } = ctx;
@@ -1215,11 +1216,12 @@ const AGENT_BAND_EXECUTORS: Readonly<Record<BandHookId, NodeExecutor>> = {
  * The caller (runCycle) must have already resolved resolveQualityGateCmd and
  * threaded inputWithGate — runFlow receives the already-resolved input (item 1).
  *
- * resumeFrom: when `input.resumeFrom === 'unifier'`, the pm node rebases + skips
+ * resumeFrom: when `input.resumeFrom === 'demo'`, the pm node rebases + skips
  * (item 3), the dev node runs but self-no-ops the per-WI work (toRun=[], still
  * emitting its start/end{resumed:true} events so the dev hex resolves complete),
- * and the unifier node (execUnifier → runUnifierPhase) is the resume target —
- * it publishes the preserved branch, runs the unifier, then the close gates.
+ * and the `demo` node (declared `resumable`) is the resume target — the DAG walk
+ * re-enters the post-develop band (demo → adversarial-review → verdict) against
+ * the preserved branch without rebuilding any WI.
  *
  * Returns enough for runCycle to build the full CycleResult.
  */

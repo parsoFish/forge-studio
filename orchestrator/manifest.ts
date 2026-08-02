@@ -109,10 +109,12 @@ export type InitiativeManifest = {
    * Resume a stalled/redirected cycle from a sub-phase, reusing the preserved
    * worktree + branch rather than re-running the full cycle from scratch.
    * Two distinct callers set this field, for two distinct reasons:
-   *   - `'unifier'` — ADR 019 (amended by ADR 026): crash recovery. Skips
-   *     architect/PM/per-WI dev-loop and runs only the unifier (which drains
-   *     any pending review UWIs) + downstream phases. Set by
-   *     `forge requeue --resume-from=unifier`.
+   *   - `'demo'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
+   *     recovery when every WI is already `complete`. Skips architect/PM/per-WI
+   *     dev-loop and resumes at the `demo` node — the post-develop band that is
+   *     the flow's declared `resumable` re-entry point (dev→demo→review) — reusing
+   *     the completed per-WI commits. Set by `forge requeue --resume-from=demo`.
+   *     (Was `'unifier'` before the topology cutover retired that node.)
    *   - `'develop'` — ADR 040: review send-back re-entry. The PM phase
    *     rebases onto main and skips (no re-decomposition); the dev loop
    *     RUNS (prior WIs re-verify cheaply via the iter-0 already-complete
@@ -121,7 +123,7 @@ export type InitiativeManifest = {
    *     handler's manifest lock.
    * Absent ⇒ normal full cycle.
    */
-  resume_from?: 'unifier' | 'develop';
+  resume_from?: 'demo' | 'develop';
   /**
    * ADR 040: send-back round counter. Incremented by the review verdict
    * handler (`persistManifestSendBack`) each time review feedback compiles
@@ -239,7 +241,7 @@ export function parseManifest(content: string): InitiativeManifest {
     const deps = (data.depends_on_initiatives as unknown[]).filter((s): s is string => typeof s === 'string');
     if (deps.length > 0) manifest.depends_on_initiatives = deps;
   }
-  if (data.resume_from === 'unifier' || data.resume_from === 'develop') {
+  if (data.resume_from === 'demo' || data.resume_from === 'develop') {
     manifest.resume_from = data.resume_from;
   }
   if (
@@ -293,7 +295,7 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.depends_on_initiatives && m.depends_on_initiatives.length > 0) {
     data.depends_on_initiatives = m.depends_on_initiatives;
   }
-  if (m.resume_from === 'unifier' || m.resume_from === 'develop') {
+  if (m.resume_from === 'demo' || m.resume_from === 'develop') {
     data.resume_from = m.resume_from;
   }
   if (typeof m.review_rounds === 'number') {
@@ -524,18 +526,20 @@ export function persistManifestSpecs(manifestPath: string, specs: string[]): voi
 }
 
 /**
- * ADR 026: stamp `resume_from: unifier` on the manifest when a review send-back
- * appends UWIs, so that if the daemon CRASHES mid-drain the recovery sweep can
- * move the manifest to pending and the scheduler resumes it correctly (reuse the
- * worktree, skip PM + dev-loop) instead of re-running a full cycle. Idempotent +
- * best-effort. `forge requeue` (full re-run) clears it.
+ * ADR 019 (successor develop flow, R4-10-F6): stamp `resume_from: demo` on the
+ * manifest when a cycle has every WI `complete` but the post-develop band has not
+ * yet finished, so that if the daemon CRASHES the recovery sweep can move the
+ * manifest to pending and the scheduler resumes it correctly (reuse the worktree,
+ * skip PM + dev-loop, re-enter at the `demo` node) instead of re-running a full
+ * cycle. Idempotent + best-effort. `forge requeue` (full re-run) clears it.
+ * (Was `persistManifestResumeFromUnifier` / `resume_from: unifier` pre-cutover.)
  */
-export function persistManifestResumeFromUnifier(manifestPath: string): void {
+export function persistManifestResumeFromDemo(manifestPath: string): void {
   try {
     if (!existsSync(manifestPath)) return;
     const m = parseManifest(readFileSync(manifestPath, 'utf8'));
-    if (m.resume_from === 'unifier') return;
-    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'unifier' }));
+    if (m.resume_from === 'demo') return;
+    writeFileSync(manifestPath, serializeManifest({ ...m, resume_from: 'demo' }));
   } catch {
     /* best-effort — must not fail the verdict request */
   }
@@ -546,7 +550,7 @@ export function persistManifestResumeFromUnifier(manifestPath: string): void {
  * (absent ⇒ 1) in a single read-modify-write, invoked by the review verdict
  * handler each time review feedback compiles into fix work-items and the
  * cycle re-dispatches the develop agent. The CALLER holds the manifest's
- * proper-lockfile lock — same contract as `persistManifestResumeFromUnifier`
+ * proper-lockfile lock — same contract as `persistManifestResumeFromDemo`
  * — this function does no locking of its own.
  *
  * Unlike the other `persistManifest*` helpers, this one is deliberately NOT
@@ -556,7 +560,7 @@ export function persistManifestResumeFromUnifier(manifestPath: string): void {
  * response from what's actually on disk).
  *
  * Always overwrites `resume_from` regardless of its prior value — an
- * operator-driven send-back supersedes a stale `resume_from: 'unifier'`
+ * operator-driven send-back supersedes a stale `resume_from: 'demo'`
  * crash-recovery stamp; the newer, more specific intent wins.
  */
 export function persistManifestSendBack(manifestPath: string): { round: number } {

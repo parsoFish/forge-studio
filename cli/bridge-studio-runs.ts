@@ -734,7 +734,7 @@ export async function handleStudioPostRoutes(
       return true;
     }
     try {
-      runRequeue(runId, { forgeRoot: ctx.forgeRoot, resumeFromUnifier: true });
+      runRequeue(runId, { forgeRoot: ctx.forgeRoot, resumeFromDemo: true });
       sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
