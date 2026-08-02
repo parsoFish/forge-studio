@@ -38,6 +38,7 @@ import type { EventLogEntry } from '../orchestrator/logging.ts';
 import {
   listAgentDefinitions,
   listStarterAgents,
+  // (listProjectStarters imported below from project-create)
   loadStarterFlow,
   loadFlowDefinition,
   discoverProjects,
@@ -45,6 +46,7 @@ import {
   listDemoElements,
   listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
+import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
@@ -571,6 +573,17 @@ export async function handleStudioRoutes(
         { starters: starters.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) })), flow },
         origin,
       );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/projects/starters (R4-03) ------------------------------
+  // The curated greenfield app-type templates the create form offers.
+  if (url === '/api/studio/projects/starters') {
+    try {
+      sendJson(res, 200, { appTypes: listProjectStarters(ctx.forgeRoot) }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

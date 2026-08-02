@@ -24,6 +24,7 @@ import { runPreflight, formatPreflightReport, buildVerdictEvent } from '../cli/p
 import { runContractComplianceLoop, formatComplianceReport } from '../cli/contract-compliance-loop.ts';
 import { composeAgentsMd } from './agents-md-compose.ts';
 import { authorConstraintBlocks } from './constraint-author.ts';
+import { scaffoldGreenfieldProject, listProjectStarters } from './project-create.ts';
 import { assertEnv } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
@@ -90,6 +91,9 @@ process.chdir(FORGE_ROOT);
 
     case 'constraints':
       return cmdConstraints(args.slice(1));
+
+    case 'create':
+      return cmdCreate(args.slice(1));
     case 'demo-builder':
       return await cmdDemoBuilder(args.slice(1));
     case 'agent':
@@ -502,6 +506,56 @@ async function cmdProjectBrain(rest: string[]): Promise<void> {
 // printed summary) is unchanged.
 async function cmdProjectBrainRun(rest: string[]): Promise<void> {
   return cmdAgentRun(['project-brain', ...rest], FORGE_ROOT);
+}
+
+/**
+ * `forge create --name <name> --app-type <type> [--language ts] --north-star
+ * <text> [--architecture <notes>]` (R4-03) — the creation interview as CLI
+ * flags → a typed manifest → scaffold a greenfield project from its framework
+ * template + seed the central brain, then preflight. Exits 0 iff contract-green
+ * (ready for the first architect run).
+ */
+function cmdCreate(rest: string[]): void {
+  if (rest[0] === 'list' || rest.includes('--list')) {
+    console.log(`available app types: ${listProjectStarters(FORGE_ROOT).join(', ') || '(none)'}`);
+    return;
+  }
+  const flag = (name: string): string | undefined => {
+    const i = rest.indexOf(`--${name}`);
+    const v = i >= 0 ? rest[i + 1] : undefined;
+    return v !== undefined && !v.startsWith('--') ? v : undefined;
+  };
+  const name = flag('name');
+  const appType = flag('app-type');
+  const northStar = flag('north-star');
+  if (!name || !appType || !northStar) {
+    console.error('forge create: requires --name <name> --app-type <type> --north-star <text> [--language ts] [--architecture <notes>]');
+    console.error(`  app types: ${listProjectStarters(FORGE_ROOT).join(', ') || '(none)'}  (or: forge create list)`);
+    process.exit(2);
+    return;
+  }
+  try {
+    const out = scaffoldGreenfieldProject({
+      manifest: {
+        name,
+        appType,
+        language: flag('language') ?? 'typescript',
+        northStar,
+        ...(flag('architecture') ? { architecture: flag('architecture') as string } : {}),
+      },
+      forgeRoot: FORGE_ROOT,
+    });
+    console.log(`create: scaffolded "${out.id}" (${out.appType}) at ${out.projectDir} — ${out.filesWritten.length} file(s)`);
+    if (out.hardGreen) {
+      console.log('create: contract-green — ready for the first architect run.');
+    } else {
+      console.log(`create: NOT contract-green — failing hard clauses: ${out.failingClauses.map((c) => c.clause).join(', ')}`);
+    }
+    process.exit(out.hardGreen ? 0 : 1);
+  } catch (err) {
+    console.error(`forge create: ${err instanceof Error ? err.message : String(err)}`);
+    process.exit(1);
+  }
 }
 
 async function cmdInstructions(rest: string[]): Promise<void> {
