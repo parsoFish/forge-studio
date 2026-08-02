@@ -970,7 +970,7 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-10 Develop-cycle OOTB flow
 
-- **Status:** **implemented (F1)**; F2–F6 planned  ·  **Wave:** 4 (assembles last)
+- **Status:** **implemented (F1, F2)**; F3–F6 planned  ·  **Wave:** 4 (assembles last)
 - **Implemented-notes F1 (2026-08-02 — in-place cutover, ADR-039/040):** the live
   `forge-develop` flow was rewritten IN PLACE `dev→unifier→review` →
   `dev→demo→adversarial-review→verdict` (v2). The two successor agents are wired
@@ -1029,7 +1029,16 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     this feature starts. ACs: red full-suite baseline blocks merge even when
     scoped per-WI gates are green; nothing ships red; a seeded cross-WI
     integration break (dead-shared-helper fixture, the recurring brain-corpus
-    class) is fixed and reaches merge without operator intervention.
+    class) is fixed and reaches merge without operator intervention. **— built
+    (2026-08-02):** `runMergeBoundaryGate` (cycle-helpers.ts) runs testProcess.local
+    (the relocated `composedUnifierGate.initiative_gate` — full suite, UNSCOPED) +
+    testProcess.ci on the integrated branch tip, INSIDE the demo band (execDemo),
+    BEFORE the demo (a build-breaking cross-WI break would otherwise fail the demo
+    capture, not the gate). Red → `.forge/last-gate-failure.md` + a scoped `gate-fix`
+    WI (`gate-fix-loop.ts`, shared caps + reject-then-park) + the DAG walk terminates
+    to ready-for-review with NO PR (invariant: no red baseline merges); the drain
+    re-enters resume_from:'develop'. Contract doc + ADR-036 amendment marked ENFORCED.
+    The seeded cross-WI-break real run rides the tail verify:cycle (F5).
   - **R4-10-F3 Isolation parity.** Every node agent runs standalone with the
     same artifacts (the diagram's ship-both principle). ACs: per-agent
     standalone runs documented in journeys.

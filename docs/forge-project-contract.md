@@ -551,15 +551,20 @@ consistently locatable; the durable plan/verdict record is forge-owned and centr
 
 ---
 
-## The merge-boundary full-suite gate (relocation spec — ⚠ operator review required, not yet enforced)
+## The merge-boundary full-suite gate (relocation spec — ENFORCED, R4-10-F2)
 
-> **Nothing in this section is enforced today.** This is the R1-03-F4 relocation
-> spec for the unifier's dual-boundary full-suite gate. It is gated on an operator
-> verdict recorded in the [ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md)
-> — until that verdict lands, `composedUnifierGate` keeps running exactly as it
-> does today (`orchestrator/phases/developer-loop.ts`), and `R4-10-F2`
-> (`docs/roadmaps/R4-ootb-suite.md`) — the sole build-and-prove owner of the
-> runnable replacement — may not start.
+> **ENFORCED as of R4-10-F2 (2026-08-02).** The operator verdict is recorded in
+> the [ADR-036 amendment](./decisions/036-orchestrator-owned-gate-execution.md)
+> (APPROVED 2026-07-24), and this spec is now live: `runMergeBoundaryGate`
+> (`orchestrator/cycle-helpers.ts`) runs the full-suite gate at the develop
+> flow's merge boundary — inside the demo band (`flow-runner.ts`'s `execDemo`),
+> BEFORE the demo, on the integrated branch tip. A red baseline compiles a
+> `gate-fix` work item (`orchestrator/gate-fix-loop.ts`) + stamps the send-back,
+> and the DAG walk terminates to `ready-for-review` with NO PR opened — the
+> fix-loop drain re-enters `resume_from:'develop'` and only a green baseline ever
+> reaches `openPrInline`. `composedUnifierGate` still runs for the retained
+> forge-cycle-shaped fixtures (retired with the unifier at R4-01-F4); it is off
+> the live develop flow.
 
 **Preserved invariant.** The regression criterion this relocation must hold,
 verbatim: **no path to merge exists with a red full-suite baseline.** This is

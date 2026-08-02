@@ -9,8 +9,13 @@
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from './work-item.ts';
+import { parseManifest } from './manifest.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowDefinition } from './studio/types.ts';
@@ -85,6 +90,10 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
     computeDeliveryStats: (_input, _logger) => {
       tracker.calls.push('computeDeliveryStats');
       return { commitsAhead: 1, filesChanged: 1, insertions: 10 };
+    },
+    runMergeBoundaryGate: (_input, _logger) => {
+      tracker.calls.push('runMergeBoundaryGate');
+      return { ok: true };
     },
     openPrInline: async (_input, _logger) => {
       tracker.calls.push('openPrInline');
@@ -436,7 +445,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     // → verdict(openPr → closure). No unifier/pm/architect/reflect.
     assert.deepEqual(
       tracker.calls,
-      ['runDeveloperLoop', 'runDemoAgent', 'computeDeliveryStats', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runDemoAgent', 'runAdversarialReview', 'openPrInline', 'runClosure'],
       'forge-develop: dev → demo → adversarial-review → verdict only',
     );
     assert.ok(!tracker.calls.includes('runUnifier'), 'the unifier executor must NOT run on the live develop flow');
@@ -466,7 +475,7 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     // separate unifier re-arm — the demo node owns the re-demo now.
     assert.deepEqual(
       tracker.calls,
-      ['runDeveloperLoop', 'runDemoAgent', 'computeDeliveryStats', 'runAdversarialReview', 'openPrInline', 'runClosure'],
+      ['runDeveloperLoop', 'computeDeliveryStats', 'runMergeBoundaryGate', 'runDemoAgent', 'runAdversarialReview', 'openPrInline', 'runClosure'],
       'resume_from:develop re-runs the full dev→demo→adversarial-review→verdict spine through the one develop executor',
     );
     assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the demo node re-authors');
@@ -508,6 +517,65 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     await assert.rejects(runFlow({ flow, input, logger, deps }), /delivery gate: demo pipeline failed/);
     assert.ok(!tracker.calls.includes('runAdversarialReview'), 'no review on a failed demo');
     assert.ok(!tracker.calls.includes('openPrInline'), 'no PR opens on a failed demo');
+  });
+
+  it('R4-10-F2: a RED merge-boundary full-suite gate opens NO PR — compiles a gate-fix WI + stamps send-back, terminates to ready-for-review', async () => {
+    const flowPath = flowPathForId('forge-develop');
+    const flow = loadFlowDefinition(flowPath);
+
+    // A real tmp worktree + manifest so the gate-fix compiler runs for real.
+    const root = mkdtempSync(join(tmpdir(), 'flow-mergegate-'));
+    const wt = join(root, 'wt');
+    mkdirSync(join(wt, '.forge', 'work-items'), { recursive: true });
+    const pmWi: WorkItem = {
+      work_item_id: 'WI-1', initiative_id: 'INIT-2026-08-02-mg', status: 'complete', depends_on: [],
+      acceptance_criteria: [{ given: 'a', when: 'b', then: 'c' }], files_in_scope: ['src/x.ts'],
+      estimated_iterations: 1, quality_gate_cmd: ['npm', 'test'], body: 'x',
+    };
+    writeWorkItem(pmWi, wt);
+    writeFileSync(join(wt, '.forge', 'last-gate-failure.md'), '# gate red\n\n`npm test` failed: dead-shared-helper');
+    const manifestPath = join(root, 'manifest.md');
+    writeFileSync(manifestPath, [
+      '---', 'initiative_id: INIT-2026-08-02-mg', 'project: demo', `project_repo_path: ${wt}`,
+      "created_at: '2026-08-02T00:00:00.000Z'", 'iteration_budget: 2', 'cost_budget_usd: 1',
+      'phase: in-flight', 'origin: architect', `worktree_path: ${wt}`, '---', '# INIT-2026-08-02-mg', '',
+    ].join('\n'));
+
+    try {
+      const tracker = makeCallTracker();
+      const deps = makeMockDeps(tracker);
+      deps.runMergeBoundaryGate = (_input, _logger) => {
+        tracker.calls.push('runMergeBoundaryGate');
+        return { ok: false, failedGate: 'local', cmd: ['npm', 'test'], output: 'dead-shared-helper: 1 failing' };
+      };
+      // NOT a dry run (so the gate-fix compiler + closure run); the demo node's
+      // only inbound is wi-branches (git-state — the artifact guard skips it).
+      const input = makeInput({ initiativeId: 'INIT-2026-08-02-mg', worktreePath: wt, projectRepoPath: wt, manifestPath, qualityGateCmd: ['npm', 'test'], dryRun: false });
+      const logger = makeLogger();
+
+      await runFlow({ flow, input, logger, deps });
+
+      // No demo, no adversarial review, NO PR — a red baseline never merges.
+      assert.ok(!tracker.calls.includes('runDemoAgent'), 'demo does not run on a red merge-gate');
+      assert.ok(!tracker.calls.includes('runAdversarialReview'), 'adversarial review does not run on a red merge-gate');
+      assert.ok(!tracker.calls.includes('openPrInline'), 'NO PR opens on a red full-suite baseline (the preserved invariant)');
+      assert.ok(tracker.calls.includes('runClosure'), 'closure runs — routes the manifest to ready-for-review for the drain');
+
+      // The gate-fix WI is on the queue + the send-back is stamped (drain re-enters).
+      const gateFix = readWorkItemsFromDir(join(wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'gate-fix');
+      assert.equal(gateFix.length, 1, 'one gate-fix WI compiled from the red gate');
+      assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'develop', 'manifest stamped resume_from:develop');
+
+      // The demo node's terminal 'end' carries status:'failed' so its hex renders
+      // failed/blocked, NOT the green 'complete' of a real demo (the demo never ran).
+      const demoEnd = (logger.events as Array<Record<string, unknown>>).find(
+        (e) => e.event_type === 'end' && (e.metadata as Record<string, unknown>)?.agent_slug === 'demo-agent',
+      );
+      assert.ok(demoEnd, 'the demo node emits a terminal end on a gate-red');
+      assert.equal((demoEnd!.metadata as Record<string, unknown>).status, 'failed', 'gate-red demo hex is NOT rendered green/complete');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it('a FAILED adversarial-review pipeline blocks the PR (the verdict gate never renders a blind review)', async () => {
