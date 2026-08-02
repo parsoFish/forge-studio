@@ -220,3 +220,37 @@ test('runMergeBoundaryGate: dryRun passes without running anything', async () =>
     fx.cleanup();
   }
 });
+
+test('runMergeBoundaryGate: the LOCAL gate honours FORGE_GATE_TIMEOUT_MS, NOT FORGE_CI_GATE_TIMEOUT_MS (finding 2)', async () => {
+  const { runMergeBoundaryGate } = await import('./cycle-helpers.ts');
+  const priorLocal = process.env.FORGE_GATE_TIMEOUT_MS;
+  const priorCi = process.env.FORGE_CI_GATE_TIMEOUT_MS;
+  // A CI timeout so short it would SIGTERM a passing local suite; a local
+  // timeout with ample headroom. The local gate must use the LOCAL knob.
+  process.env.FORGE_CI_GATE_TIMEOUT_MS = '50';
+  process.env.FORGE_GATE_TIMEOUT_MS = '5000';
+  const fx = setupGateProject({ local: { cmd: ['sleep', '0.3'] } }); // ~300ms
+  try {
+    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    assert.deepEqual(res, { ok: true }, 'the slow-but-under-FORGE_GATE local suite passes (CI timeout must not apply to the local gate)');
+  } finally {
+    fx.cleanup();
+    if (priorLocal === undefined) delete process.env.FORGE_GATE_TIMEOUT_MS; else process.env.FORGE_GATE_TIMEOUT_MS = priorLocal;
+    if (priorCi === undefined) delete process.env.FORGE_CI_GATE_TIMEOUT_MS; else process.env.FORGE_CI_GATE_TIMEOUT_MS = priorCi;
+  }
+});
+
+test('runMergeBoundaryGate: FORGE_GATE_TIMEOUT_MS caps a too-slow local suite (red)', async () => {
+  const { runMergeBoundaryGate } = await import('./cycle-helpers.ts');
+  const priorLocal = process.env.FORGE_GATE_TIMEOUT_MS;
+  process.env.FORGE_GATE_TIMEOUT_MS = '50'; // 50ms — sleep 0.3 exceeds it
+  const fx = setupGateProject({ local: { cmd: ['sleep', '0.3'] } });
+  try {
+    const res = runMergeBoundaryGate(fx.input, fx.logger);
+    assert.equal(res.ok, false, 'a local suite over FORGE_GATE_TIMEOUT_MS goes red');
+    if (!res.ok) assert.equal(res.failedGate, 'local');
+  } finally {
+    fx.cleanup();
+    if (priorLocal === undefined) delete process.env.FORGE_GATE_TIMEOUT_MS; else process.env.FORGE_GATE_TIMEOUT_MS = priorLocal;
+  }
+});

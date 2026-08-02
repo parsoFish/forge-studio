@@ -24,6 +24,7 @@ import { DEMO_MD_BASENAME, worktreeDemoMdPath, worktreeDemoRelDir } from './demo
 import { assertLocalRemoteSynced, openPullRequest, pushInitiativeBranch } from './pr.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { decideFinalCiGate, execCommandVector } from './cycle.ts';
+import { resolveGateTimeoutMs } from '../loops/ralph/stop-conditions.ts';
 
 // ---------------------------------------------------------------------------
 // openPrInline
@@ -505,6 +506,33 @@ export type MergeGateResult =
   | { ok: false; failedGate: 'local' | 'ci'; cmd: string[]; output: string };
 
 /**
+ * Run the LOCAL full-suite gate with LOCAL-gate timeout semantics
+ * (`resolveGateTimeoutMs`: `FORGE_GATE_TIMEOUT_MS` env → `testProcess.local.timeoutMs`
+ * → 30-min default) — NOT `execCommandVector`'s CI semantics (`FORGE_CI_GATE_TIMEOUT_MS`
+ * → 20-min), which would false-red a slow suite the operator already gave
+ * `FORGE_GATE_TIMEOUT_MS` headroom for. It is the SAME command the per-WI local
+ * gate ran, so it must honour the SAME timeout knob. No env-strip (that is the
+ * CI delivery net's job, keyed off `testProcess.ci.unsetEnv`).
+ */
+function runLocalSuiteGate(cmd: string[], worktreePath: string, declaredTimeoutMs?: number): { ok: boolean; output: string } {
+  const [head, ...rest] = cmd;
+  try {
+    const out = execFileSync(head, rest, {
+      cwd: worktreePath,
+      stdio: 'pipe',
+      encoding: 'utf8',
+      timeout: resolveGateTimeoutMs(declaredTimeoutMs),
+    });
+    return { ok: true, output: out.toString() };
+  } catch (err) {
+    const e = err as { stdout?: Buffer | string; stderr?: Buffer | string; message?: string };
+    const stdout = e.stdout ? e.stdout.toString() : '';
+    const stderr = e.stderr ? e.stderr.toString() : '';
+    return { ok: false, output: (stdout + stderr) || (e.message ?? '') };
+  }
+}
+
+/**
  * R4-10-F2 — the relocated dual-boundary full-suite gate (ADR-036 amendment,
  * R1-03-F4 spec). Runs, on the INTEGRATED branch tip, keyed off the typed
  * `testProcess` contract:
@@ -557,8 +585,9 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
   }
 
   // (1) Full-suite local gate — the relocated initiative_gate. UNSCOPED.
+  //     LOCAL-gate timeout semantics (the same command + knob the per-WI gate used).
   if (localCmd) {
-    const local = execCommandVector(localCmd, input.worktreePath, 'gate', undefined, localTimeoutMs);
+    const local = runLocalSuiteGate(localCmd, input.worktreePath, localTimeoutMs);
     logger.emit({
       initiative_id: input.initiativeId,
       phase: 'orchestrator',
@@ -586,9 +615,16 @@ export function runMergeBoundaryGate(input: CycleInput, logger: EventLogger): Me
       unsetEnv: ciGateUnsetEnv,
     });
     if (decision) {
-      // Commit + push any formatter changes so the PR is fmt-clean (only when green;
-      // a red gate re-dispatches develop, which re-runs the formatter itself).
-      if (decision.ranFixer && decision.gateOk) {
+      // Commit + push any formatter changes WHENEVER the fixer ran — even on a
+      // red gate. A red gate now RETURNS (not throws): execDemo terminates to
+      // ready-for-review and the drain re-enters resume_from:'develop', whose
+      // first step rebases the preserved branch onto main. Leaving the
+      // formatter's tracked-file edits uncommitted would make that rebase abort
+      // with "unstaged changes" (the pre-R4-10 enforceFinalCiGate committed on
+      // ranFixer regardless of gateOk for exactly this reason; it just threw
+      // instead of resuming). Guarded internally on a dirty tree, so a no-op
+      // fixer adds no commit.
+      if (decision.ranFixer) {
         commitAndPushCiFix(input.worktreePath, logger, input.initiativeId);
       }
       logger.emit({

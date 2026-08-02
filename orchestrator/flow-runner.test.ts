@@ -565,6 +565,14 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
       const gateFix = readWorkItemsFromDir(join(wt, '.forge', 'work-items')).items.filter((w) => w.origin === 'gate-fix');
       assert.equal(gateFix.length, 1, 'one gate-fix WI compiled from the red gate');
       assert.equal(parseManifest(readFileSync(manifestPath, 'utf8')).resume_from, 'develop', 'manifest stamped resume_from:develop');
+
+      // The demo node's terminal 'end' carries status:'failed' so its hex renders
+      // failed/blocked, NOT the green 'complete' of a real demo (the demo never ran).
+      const demoEnd = (logger.events as Array<Record<string, unknown>>).find(
+        (e) => e.event_type === 'end' && (e.metadata as Record<string, unknown>)?.agent_slug === 'demo-agent',
+      );
+      assert.ok(demoEnd, 'the demo node emits a terminal end on a gate-red');
+      assert.equal((demoEnd!.metadata as Record<string, unknown>).status, 'failed', 'gate-red demo hex is NOT rendered green/complete');
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

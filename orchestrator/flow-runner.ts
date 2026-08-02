@@ -857,6 +857,10 @@ const execDemo: NodeExecutor = async (ctx) => {
       },
     });
     state.terminateEarly = true;
+    // `status: 'failed'` so the demo hex renders as a failed/blocked state, not
+    // the green 'complete' a real demo earns — the demo never ran here; the
+    // merge-boundary gate blocked the band on a red full-suite baseline
+    // (endMetaIndicatesFailure keys on `status:'failed'`, run-model-derive.ts).
     nodeLogger.emit({
       initiative_id: input.initiativeId,
       parent_event_id: start.event_id,
@@ -865,7 +869,7 @@ const execDemo: NodeExecutor = async (ctx) => {
       event_type: 'end',
       input_refs: [],
       output_refs: [],
-      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, demo_status: 'gate-red' },
+      metadata: { agent_phase: 'demo', agent_slug: 'demo-agent', node_id: nodeId, status: 'failed', demo_status: 'gate-red' },
     });
     return;
   }
