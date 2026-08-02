@@ -17,9 +17,9 @@
  *      decomposes the initiative into work items).
  *   2. forge-develop — POST /api/develop/start hands the initiative off to the
  *      develop flow (same cycle_id; reuses the architect worktree + its work
- *      items). `forge serve --once` runs dev → unifier → review, parking at
- *      ready-for-review (the VERDICT GATE). Approve via /api/verdict; the bridge
- *      merges the PR and fires finalize.
+ *      items). `forge serve --once` runs dev → demo → adversarial-review →
+ *      verdict, parking at ready-for-review (the VERDICT GATE). Approve via
+ *      /api/verdict; the bridge merges the PR and fires finalize.
  *   3. forge-reflect — finalize (in the bridge process) runs the reflector, which
  *      writes the central project brain. The harness WAITS for `reflector.end`
  *      before teardown (the prior harness killed the bridge mid-reflect).
@@ -96,9 +96,10 @@ const IDEA_FILE = flag('idea-file', null);
 // mdtoc/gitpulse reference projects, so they get a higher default ceiling.
 const LIVE_PROJECTS = new Set(['terraform-provider-betterado']);
 const IS_LIVE_PROJECT = LIVE_PROJECTS.has(PROJECT);
-// The 3-stage spine (real architect interview + draft, pm, dev fan-out, unifier,
-// review, reflect) costs more than the old single collapsed run — bump the
-// defaults. --send-back adds an extra unifier pass; live projects add infra cost.
+// The 3-stage spine (real architect interview + draft, pm, dev fan-out, demo,
+// adversarial-review, reflect) costs more than the old single collapsed run — bump
+// the defaults. --send-back adds an extra develop→demo→review pass; live projects
+// add infra cost.
 const _ceilingDefault = IS_LIVE_PROJECT ? (SEND_BACK ? 90 : 70) : (SEND_BACK ? 50 : 35);
 const COST_CEILING = parseFloat(flag('cost-ceiling', String(_ceilingDefault))) || _ceilingDefault;
 // The live-demo-evidence gate: on by default for live-resource projects; force
@@ -295,23 +296,57 @@ function runProjectTests(repoPath) {
   return { ran: false, ok: true, label: '' };
 }
 
+/** Read a project's `artifactRoot` from `.forge/project.json` (mirrors
+ *  orchestrator/brain-paths.ts readArtifactRoot); `"."` on any failure. */
+function readArtifactRoot(repoPath) {
+  try {
+    const p = join(repoPath, '.forge', 'project.json');
+    if (!existsSync(p)) return '.';
+    const v = JSON.parse(readFileSync(p, 'utf8'))?.artifactRoot;
+    if (typeof v !== 'string') return '.';
+    const t = v.trim();
+    if (t === '' || t.startsWith('/') || t.includes('\\') || t.split('/').includes('..')) return '.';
+    return t;
+  } catch { return '.'; }
+}
+
+/** The successor develop flow's tracked demo bundle location (R4-10-F5): the
+ *  demo agent (R4-07) authors demo.json at the artifactRoot-resolved demo dir on
+ *  the branch (orchestrator/demo-paths.ts projectDemoRelDir), which merges to the
+ *  project repo. Mirrors that rule so the harness reads the SAME path. */
+function mergedDemoJsonPath(repoPath, initiativeId) {
+  const root = readArtifactRoot(repoPath);
+  const relDir = root === '.' ? `demo/${initiativeId}` : `${root}/history/${initiativeId}/demo`;
+  return join(repoPath, relDir, 'demo.json');
+}
+
 /** Live demo evidence (the demos-are-visual-evidence policy): the merged cycle's
  *  demo.json must carry a checkpoint with a real REST GET (liveEvidence.url +
- *  expectedFields) — not just a test-name table. The unifier writes demo.json into
- *  the cycle log artifacts. */
-function liveEvidenceFromDemo(cycleId) {
-  const demoPath = join(FORGE_ROOT, '_logs', cycleId, 'artifacts', 'demo.json');
-  if (!existsSync(demoPath)) return { present: false, reason: 'no demo.json in cycle artifacts' };
+ *  expectedFields) — not just a test-name table.
+ *
+ *  R4-10-F5: the successor develop flow's demo agent commits demo.json to the
+ *  branch (→ merged project repo), NOT to `_logs/<cycleId>/artifacts/` the retired
+ *  unifier used. Read the merged-repo location first; fall back to the legacy log
+ *  artifacts so the old-shape tier stays runnable until the successor's first green
+ *  verify run (F5 AC). */
+function liveEvidenceFromDemo(repoPath, initiativeId, cycleId) {
+  const successorPath = mergedDemoJsonPath(repoPath, initiativeId);
+  const legacyPath = join(FORGE_ROOT, '_logs', cycleId, 'artifacts', 'demo.json');
+  const demoPath = existsSync(successorPath) ? successorPath : legacyPath;
+  const via = demoPath === successorPath ? 'merged repo' : 'legacy log artifacts';
+  if (!existsSync(demoPath)) {
+    return { present: false, reason: `no demo.json (checked merged repo ${successorPath} + legacy ${legacyPath})` };
+  }
   try {
     const demo = JSON.parse(readFileSync(demoPath, 'utf8'));
     const cps = Array.isArray(demo.checkpoints) ? demo.checkpoints : [];
     const live = cps.find((c) => c && c.liveEvidence && c.liveEvidence.url);
     if (live) {
       const m = live.liveEvidence.method ?? 'GET';
-      return { present: true, reason: `live_api checkpoint → ${m} ${String(live.liveEvidence.url).slice(0, 64)}…` };
+      return { present: true, reason: `live_api checkpoint (${via}) → ${m} ${String(live.liveEvidence.url).slice(0, 64)}…` };
     }
-    return { present: false, reason: 'demo.json has no checkpoint with liveEvidence.url' };
-  } catch (e) { return { present: false, reason: `demo.json unreadable: ${e.message}` }; }
+    return { present: false, reason: `demo.json (${via}) has no checkpoint with liveEvidence.url` };
+  } catch (e) { return { present: false, reason: `demo.json (${via}) unreadable: ${e.message}` }; }
 }
 
 /** Read the project's declared `releaseProcess` from `.forge/project.json`, or
@@ -336,9 +371,10 @@ function releaseEvidence(repoPath, cycleId, releaseProcess) {
     return { present: false, reason: `changelog ${changelogPath} absent on merged tree` };
   }
   const changelog = readFileSync(changelogAbs, 'utf8');
-  // The unifier seeds a DRAFT under `## [Unreleased]`; the finaliser promotes it
-  // to a versioned `## [X.Y.Z] - <date>` heading. A finalised release-bearing
-  // cycle shows the versioned heading on the merged tree.
+  // The develop flow seeds a DRAFT under `## [Unreleased]` (the release contract,
+  // one bullet per WI); the finaliser promotes it to a versioned
+  // `## [X.Y.Z] - <date>` heading. A finalised release-bearing cycle shows the
+  // versioned heading on the merged tree.
   const hasVersioned = /^##\s*\[\d+\.\d+\.\d+[^\]]*\]/m.test(changelog);
   if (!hasVersioned) {
     return { present: false, reason: `no finalised (versioned) changelog heading in ${changelogPath}` };
@@ -391,7 +427,7 @@ function assessOutcomes({ finalStatus, cost, repoPath, cycleId, initiativeId, pr
   // Live-resource projects: assert the demo carries real REST evidence, so a
   // green-unit-gate-but-no-live-proof cycle fails the gate (demos-are-visual-evidence).
   if (REQUIRE_LIVE_EVIDENCE) {
-    const le = liveEvidenceFromDemo(cycleId);
+    const le = liveEvidenceFromDemo(repoPath, initiativeId, cycleId);
     checks.push({ name: 'live demo evidence present (REST GET)', pass: le.present, detail: le.reason });
   }
   // WS-A: release-bearing projects must prove the full release loop fired
@@ -643,11 +679,11 @@ async function postSendBack(bridgeUrl, initiativeId) {
   const payload = {
     initiativeId,
     kind: 'send-back',
-    rationale: 'Automated send-back by scripts/verify-cycle.mjs --send-back: verifying the unifier re-run path (ADR 026). Please re-examine the implementation for any issues raised in acceptance criteria and address them.',
+    rationale: 'Automated send-back by scripts/verify-cycle.mjs --send-back: verifying the review→develop fix-loop re-run path (ADR 040). Please re-examine the implementation for any issues raised in acceptance criteria and address them.',
     acceptanceCriteria: [
       {
-        given: 'the send-back cycle completes a second unifier pass',
-        when: 'the re-run unifier reviews the branch output',
+        given: 'the send-back compiles review feedback into fix work-items',
+        when: 'the develop flow re-runs (dev → demo → adversarial-review)',
         then: 'it produces an updated demo and the cycle reaches ready-for-review again',
       },
     ],

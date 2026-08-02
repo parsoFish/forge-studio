@@ -141,7 +141,7 @@ test('selfHealWorktreeState: REGISTERED leftover worktree → removed so the ret
 // When the develop run is claimed, it MUST reuse that worktree — `worktree.add`
 // would `clearStaleWorktree` → rm -rf → wipe the untracked work-items, and the
 // dev node's inbound `work-items` contract would then throw. Reuse also covers
-// ANY preserved `resume_from` marker — the ADR-019 resume-from-unifier crash
+// ANY preserved `resume_from` marker — the ADR-019 resume-from-demo crash
 // path and the ADR-040 resume-from-develop fix-loop re-entry both land on the
 // same `resumeMarkerPresent: true` (per-WI commits + `.forge/unifier-items/`
 // live in the preserved worktree either way). A truly fresh cycle has no
@@ -155,7 +155,7 @@ test('decideWorktreeStrategy: fresh cycle (no preserved worktree) → add', () =
   );
 });
 
-test('decideWorktreeStrategy: resume_from: unifier marker with a preserved worktree → reuse', () => {
+test('decideWorktreeStrategy: resume_from: demo marker with a preserved worktree → reuse', () => {
   assert.equal(
     decideWorktreeStrategy({ resumeMarkerPresent: true, worktreePresent: true, handoffWorkItemsPresent: true }),
     'reuse',
@@ -164,9 +164,9 @@ test('decideWorktreeStrategy: resume_from: unifier marker with a preserved workt
 
 test('decideWorktreeStrategy: resume_from: develop marker (ADR-040 fix-loop re-entry) with a preserved worktree → reuse', () => {
   // The widened contract: resumeMarkerPresent is true for ANY resume_from
-  // kind, not just 'unifier'. ADR-040's fix-loop re-entry sets resume_from:
+  // kind, not just 'demo'. ADR-040's fix-loop re-entry sets resume_from:
   // 'develop' on the manifest and must reuse the preserved worktree exactly
-  // like the unifier-resume case above — same boolean, same outcome.
+  // like the demo-resume case above — same boolean, same outcome.
   assert.equal(
     decideWorktreeStrategy({ resumeMarkerPresent: true, worktreePresent: true, handoffWorkItemsPresent: false }),
     'reuse',

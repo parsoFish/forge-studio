@@ -220,25 +220,27 @@ describe('flow-runner full run', () => {
 });
 
 // ---------------------------------------------------------------------------
-// Test 2: resumeFrom='unifier' — pm NOT called; dev IS called
+// Test 2: resumeFrom='demo' — pm NOT called; dev IS called. Uses a legacy-shaped
+// fixture flow (dev→unifier→review) to prove the generic resume-skip mechanics:
+// pm skips, dev self-no-ops, the walk resumes at the post-dev node.
 // ---------------------------------------------------------------------------
 
-describe('flow-runner resumeFrom=unifier', () => {
-  it('skips runProjectManager; runs the dev node (self-no-ops per-WI) then the unifier; rebase before the dev node', async () => {
+describe('flow-runner resumeFrom=demo', () => {
+  it('skips runProjectManager; runs the dev node (self-no-ops per-WI) then the post-dev node; rebase before the dev node', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    const input = makeInput({ resumeFrom: 'unifier' });
+    const input = makeInput({ resumeFrom: 'demo' });
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
     await runFlow({ flow, input, logger, deps });
 
-    assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on unifier resume');
+    assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on a demo resume');
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'the dev node still runs on resume (self-no-ops per-WI, emits start/end{resumed:true})');
-    assert.ok(tracker.calls.includes('runUnifier'), 'runUnifier must be called on unifier resume');
+    assert.ok(tracker.calls.includes('runUnifier'), 'this legacy-shaped fixture resumes at its post-dev node (runUnifier)');
 
     // Highest-risk resume step: rebase must have been called AND must precede the dev node.
-    assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on unifier resume');
+    assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on a demo resume');
     assert.ok(
       tracker.calls.indexOf('rebaseForResume') < tracker.calls.indexOf('runDeveloperLoop'),
       'rebaseForResume must execute before the dev node',
@@ -248,14 +250,14 @@ describe('flow-runner resumeFrom=unifier', () => {
     const events = (logger as ReturnType<typeof makeLogger>).events as Array<{ message?: string }>;
     assert.ok(
       events.some((e) => e.message === 'flow-runner.pm-skipped-resume'),
-      'logger must capture a flow-runner.pm-skipped-resume event on unifier resume',
+      'logger must capture a flow-runner.pm-skipped-resume event on a demo resume',
     );
   });
 
-  it('still calls openPrInline, runClosure, runReflector on unifier resume', async () => {
+  it('still calls openPrInline, runClosure, runReflector on a demo resume', async () => {
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    const input = makeInput({ resumeFrom: 'unifier' });
+    const input = makeInput({ resumeFrom: 'demo' });
     const logger = makeLogger();
     const flow = makeForgeCycleFlow();
 
@@ -481,21 +483,22 @@ describe('flow-runner with real forge-develop.yaml (R4-10-F1 successor topology)
     assert.ok(!tracker.calls.includes('runUnifier'), 're-entry never re-arms a unifier — the demo node re-authors');
   });
 
-  it('resume_from:unifier (ADR-019 crash recovery) still runs — the demo node becomes the resume target', async () => {
+  it('resume_from:demo (ADR-019 crash recovery, R4-10-F6) resumes at the demo node', async () => {
     const flowPath = flowPathForId('forge-develop');
     const flow = loadFlowDefinition(flowPath);
 
     const tracker = makeCallTracker();
     const deps = makeMockDeps(tracker);
-    // A legacy crash-recovery resume stamp: the dev node self-no-ops its per-WI
-    // work (inside runDeveloperLoop) but the spine still re-runs, now landing on
-    // the demo node instead of the retired unifier (R4-10-F6 re-homes the stamp).
-    const input = makeInput({ resumeFrom: 'unifier' });
+    // The crash-recovery resume stamp: the dev node self-no-ops its per-WI work
+    // (inside runDeveloperLoop) but the spine still re-runs, landing on the demo
+    // node — the successor develop flow's resume target (R4-10-F6 re-homed the
+    // stamp off the retired unifier node).
+    const input = makeInput({ resumeFrom: 'demo' });
     const logger = makeLogger();
 
     await runFlow({ flow, input, logger, deps });
 
-    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on a unifier resume)');
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'dev node runs (self-no-ops per-WI on a demo resume)');
     assert.ok(tracker.calls.includes('runDemoAgent'), 'the demo node re-authors the bundle (the resume target now)');
     assert.ok(tracker.calls.includes('openPrInline'), 'the verdict gate re-opens/updates the PR on resume');
     assert.ok(!tracker.calls.includes('runUnifier'), 'no unifier executor on the live flow');

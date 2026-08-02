@@ -19,7 +19,7 @@ import {
   readManifestCycleId,
   readManifestFlowId,
   persistManifestCycleId,
-  persistManifestResumeFromUnifier,
+  persistManifestResumeFromDemo,
   persistManifestSendBack,
   persistManifestSpecs,
   type InitiativeManifest,
@@ -246,9 +246,9 @@ test('ADR 019: resume_from round-trips and is omitted when absent', () => {
   assert.equal(parseManifest(plain).resume_from, undefined);
 
   // Present → serialised + parsed back.
-  const resuming = serializeManifest({ ...fixture(), resume_from: 'unifier' });
-  assert.match(resuming, /resume_from: unifier/);
-  assert.equal(parseManifest(resuming).resume_from, 'unifier');
+  const resuming = serializeManifest({ ...fixture(), resume_from: 'demo' });
+  assert.match(resuming, /resume_from: demo/);
+  assert.equal(parseManifest(resuming).resume_from, 'demo');
 
   // ADR 026: the retired 'developer' resume value is dropped on parse (undefined).
   const legacy = `---\ninitiative_id: INIT-2026-05-04-x\nproject: demo\nproject_repo_path: /tmp/demo\ncreated_at: '2026-05-04T18:00:00Z'\niteration_budget: 50\ncost_budget_usd: 25\nphase: pending\norigin: architect\nresume_from: developer\n---\n# x\n`;
@@ -332,18 +332,18 @@ test('ADR 026: persistManifestCycleId anchors once; readManifestCycleId reads it
   }
 });
 
-test('ADR 026: persistManifestResumeFromUnifier stamps the resume marker (crash recovery)', () => {
+test('ADR 019 (R4-10-F6): persistManifestResumeFromDemo stamps the resume marker (crash recovery)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-resume-'));
   try {
     const p = join(dir, 'm.md');
     writeFileSync(p, serializeManifest(fixture()));
     assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, undefined);
-    persistManifestResumeFromUnifier(p);
-    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'unifier');
+    persistManifestResumeFromDemo(p);
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'demo');
     // Idempotent + missing-file safe.
-    persistManifestResumeFromUnifier(p);
-    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'unifier');
-    persistManifestResumeFromUnifier(join(dir, 'nope.md')); // no-op, must not throw
+    persistManifestResumeFromDemo(p);
+    assert.equal(parseManifest(readFileSync(p, 'utf8')).resume_from, 'demo');
+    persistManifestResumeFromDemo(join(dir, 'nope.md')); // no-op, must not throw
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -540,11 +540,11 @@ test('ADR 040: persistManifestSendBack stamps resume_from:develop + increments r
   }
 });
 
-test('ADR 040: persistManifestSendBack overwrites a stale resume_from:unifier crash-recovery stamp — an operator send-back supersedes it', () => {
+test('ADR 040: persistManifestSendBack overwrites a stale resume_from:demo crash-recovery stamp — an operator send-back supersedes it', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-sendback-'));
   try {
     const p = join(dir, 'm.md');
-    writeFileSync(p, serializeManifest({ ...fixture(), resume_from: 'unifier' }));
+    writeFileSync(p, serializeManifest({ ...fixture(), resume_from: 'demo' }));
 
     const result = persistManifestSendBack(p);
     assert.deepEqual(result, { round: 1 });

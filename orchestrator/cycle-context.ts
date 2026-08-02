@@ -85,11 +85,12 @@ export type CycleInput = {
    * Resume a previously-stalled/redirected cycle from a sub-phase, reusing
    * the preserved worktree + branch rather than a full re-run. Set by the
    * scheduler from the manifest's `resume_from` field. Two values:
-   *   - `'unifier'` — ADR 019 (amended by ADR 026): crash recovery. Skips
-   *     the architect, PM, and per-WI dev-loop (the WI commits already exist
-   *     on the branch) and runs only the unifier (which drains any pending
-   *     review UWIs) + downstream closure/reflector. Set by
-   *     `forge requeue --resume-from=unifier`.
+   *   - `'demo'` — ADR 019 (successor develop flow, R4-10-F6): crash / env-failure
+   *     recovery when every WI is already `complete`. Skips the architect, PM, and
+   *     per-WI dev-loop (the WI commits already exist on the branch) and resumes at
+   *     the `demo` node — the post-develop band's `resumable` re-entry point — then
+   *     adversarial-review/verdict. Set by `forge requeue --resume-from=demo`.
+   *     (Was `'unifier'` before the topology cutover retired that node.)
    *   - `'develop'` — ADR 040: review send-back re-entry. PM rebases onto
    *     main and skips (no re-decomposition); the dev loop RUNS (prior WIs
    *     re-verify cheaply via the iter-0 already-complete shortcut, new
@@ -97,7 +98,7 @@ export type CycleInput = {
    *     by the review→develop fix-loop drain.
    * Absent ⇒ normal full cycle.
    */
-  resumeFrom?: 'unifier' | 'develop';
+  resumeFrom?: 'demo' | 'develop';
   /** Project quality-gate command run by the orchestrator between review iterations. Defaults to `npm test` if package.json is present, otherwise `true`. */
   qualityGateCmd?: string[];
   /**

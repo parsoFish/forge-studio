@@ -123,11 +123,11 @@ test('enqueueDevelopRun: a path-traversal id never escapes the queue dir', () =>
 
 test('enqueueDevelopRun: a stale resume_from is cleared when re-enqueueing for a fresh build', () => {
   withTmp((queueRoot) => {
-    seed(queueRoot, 'pending', manifest({ resume_from: 'unifier' }));
+    seed(queueRoot, 'pending', manifest({ resume_from: 'demo' }));
     enqueueDevelopRun('INIT-2026-06-21-toc', { queueRoot });
     const paths = getPaths(queueRoot);
     const onDisk = parseManifest(readFileSync(join(paths.pending, 'INIT-2026-06-21-toc.md'), 'utf8'));
-    assert.equal(onDisk.resume_from, undefined, 'resume_from is cleared so the develop run starts the full dev→unifier→review spine');
+    assert.equal(onDisk.resume_from, undefined, 'resume_from is cleared so the develop run starts the full dev→demo→adversarial-review→verdict spine');
   });
 });
 

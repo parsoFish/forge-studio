@@ -290,10 +290,10 @@ export async function fetchRecovery(initiativeId: string): Promise<RecoveryInspe
   return bridgeGet<RecoveryInspect | null>(`/api/recovery/${encodeURIComponent(initiativeId)}`, null);
 }
 
-/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-unifier). */
+/** Requeue a stuck initiative back to pending/ (optionally reset retries / resume-from-demo). */
 export async function recoveryRequeue(
   initiativeId: string,
-  opts: { resetRetries?: boolean; resumeFromUnifier?: boolean } = {},
+  opts: { resetRetries?: boolean; resumeFromDemo?: boolean } = {},
 ): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/recovery/${encodeURIComponent(initiativeId)}/requeue`, opts);
 }
@@ -915,7 +915,7 @@ export async function startRun(
   return { ok: r.ok, error: r.error, runId: r.data?.runId as string | undefined };
 }
 
-/** Resume a failed run (wraps forge requeue --resume-from=unifier). */
+/** Resume a failed run (wraps forge requeue --resume-from=demo). */
 export async function resumeRun(runId: string): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/runs/${encodeURIComponent(runId)}/resume`);
 }

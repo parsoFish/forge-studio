@@ -321,14 +321,15 @@ export async function runDeveloperLoop(
   }
 
   const ordered = topologicalOrder(items);
-  // ADR 019: resume-from-unifier skips the per-WI dev-loop entirely — the WI
+  // ADR 019: resume-from-demo skips the per-WI dev-loop entirely — the WI
   // commits already exist on the preserved branch from the prior cycle. We
-  // still read + validate the WI set above (the unifier uses it for context),
-  // but run the per-WI loop over an empty list so only the unifier executes.
+  // still read + validate the WI set above (the post-develop band uses it for
+  // context), but run the per-WI loop over an empty list so the walk re-enters
+  // at the `demo` node without rebuilding any WI.
   // ADR 040: resume-from-develop (the fix loop) RUNS the full list — prior WIs
   // fast-exit via the iter-0 already-complete shortcut, fix WIs build.
-  const resumeFromUnifier = input.resumeFrom === 'unifier';
-  const toRun = resumeFromUnifier ? [] : ordered;
+  const resumeFromDemo = input.resumeFrom === 'demo';
+  const toRun = resumeFromDemo ? [] : ordered;
 
   // cascade-v4 #2: establish a known-green baseline ONCE before any WI work.
   // On a fresh (non-resume) dev-loop the worktree sits at the initiative
@@ -1213,7 +1214,7 @@ export async function runDeveloperLoop(
       // ADR 019: flag resume runs so the report/UI can distinguish a
       // unifier-only resume (0 WIs run, commits already on branch) from a
       // genuine 0/N total failure.
-      resumed: resumeFromUnifier,
+      resumed: resumeFromDemo,
       // ADR 040: which resume kind, when any — 'develop' is the fix-loop
       // re-entry (full list run, prior WIs fast-exit).
       ...(input.resumeFrom ? { resumed_from: input.resumeFrom } : {}),
@@ -1225,10 +1226,10 @@ export async function runDeveloperLoop(
   // and src/ is non-empty, the reviewer can run, the simulator/human can
   // identify what's missing, and feedback rounds can complete the work.
   // Only throw when ZERO WIs succeeded (total dev-loop failure); otherwise
-  // emit the partial outcome and hand off to the unifier.
-  // ADR 019: on resume-from-unifier zero WIs run by design (their commits are
+  // emit the partial outcome and hand off to the post-develop band.
+  // ADR 019: on resume-from-demo zero WIs run by design (their commits are
   // already on the branch), so the total-failure guard must not fire.
-  if (!resumeFromUnifier && completeCount === 0 && items.length > 0) {
+  if (!resumeFromDemo && completeCount === 0 && items.length > 0) {
     throw new Error(
       `developer-loop: 0/${items.length} work items completed — total failure`,
     );
@@ -1244,8 +1245,10 @@ export async function runDeveloperLoop(
  * runUnifierPhase — the unifier as an independently-dispatchable flow node
  * (M8-0; ADR-028/019). Extracted from the former tail of runDeveloperLoop so
  * the flow DAG's `unifier` node is a real executor, not a marker. Runs once per
- * dev-loop (initial-prep) or once per send-back round (the drain), and is the
- * resume target for `resumeFrom: 'unifier'` (the per-WI dev node is skipped).
+ * dev-loop (initial-prep) or once per send-back round (the drain). Held legacy
+ * executor: the successor develop flow (R4-10-F1) dropped the `unifier` node and
+ * re-homed the crash-recovery resume target to the `demo` node (`resumeFrom:
+ * 'demo'`, R4-10-F6); this function is retired in R4-01-F4.
  *
  * Order is preserved exactly vs the old runDeveloperLoop tail: (resume-only
  * branch publish) → runUnifier → assertDevLoopCloseSync → emitDeliverySummary.
@@ -1260,7 +1263,7 @@ export async function runUnifierPhase(
   // flow-runner. Accepted (not yet chained into the unifier's Ralph instances).
   _signal?: AbortSignal,
 ): Promise<{ unifierSucceeded: boolean; unifierFailureClass: string | null; commitsAhead: number; filesChanged: number; insertions: number }> {
-  const resumeFromUnifier = input.resumeFrom === 'unifier';
+  const resumeFromDemo = input.resumeFrom === 'demo';
 
   // Phase-boundary event: anchors the unifier's child events (parent_event_id)
   // and lights the unifier hex in the UI — the node is now a real executor.
@@ -1272,7 +1275,7 @@ export async function runUnifierPhase(
     input_refs: [input.worktreePath],
     output_refs: [],
     message: 'unifier-phase.start',
-    metadata: { resumed: resumeFromUnifier },
+    metadata: { resumed: resumeFromDemo },
   });
 
   // S4: run the unifier sub-phase. The unifier owns the initiative-level
@@ -1286,7 +1289,7 @@ export async function runUnifierPhase(
   // incrementally via dev-loop.branch-pushed) was skipped, so origin/<branch>
   // may not exist yet — the unifier's sync gate requires it. Publish the
   // preserved branch now so the resumed unifier sees a synced remote.
-  if (resumeFromUnifier) {
+  if (resumeFromDemo) {
     const push = pushInitiativeBranch(input.worktreePath);
     logger.emit({
       initiative_id: input.initiativeId,
@@ -2174,7 +2177,8 @@ export async function runUnifier(
       itemOutcome = await runOnce();
     }
     // #2: a still-crashed UWI persists as re-runnable `pending` (so a later
-    // resume-from-unifier re-drains it) rather than operator-deferred `failed`.
+    // unifier-drain re-runs it) rather than operator-deferred `failed`. (Legacy
+    // UWI path; the drain node is retired in R4-01-F4.)
     // A real gate failure persists as `failed` (deferred to the operator).
     writeWorkItemStatus(uwiPath, itemOutcome.crashed ? 'pending' : itemOutcome.status);
     uwiOutcomes.push(itemOutcome);
@@ -2582,7 +2586,7 @@ async function runPackagingUwi(args: UnifierItemArgs): Promise<UnifierItemOutcom
         qualityGate: unifierGate,
         // The unifier's gate (demo.json + pr-description present & valid) can
         // legitimately PASS at iter-0 — it is not a write-a-failing-test loop,
-        // and on a resume-from-unifier the prior cycle's demo/PR are already on
+        // and on a resume run the prior cycle's demo/PR are already on
         // the preserved branch. So the iter-0 hollow-gate check would misfire as
         // `gate-too-loose` (cascade-v4 #7, iter-0-on-resume). Disable it here;
         // the per-WI Ralphs keep it on. (Aligns the code with the runner's

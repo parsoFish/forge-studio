@@ -104,7 +104,7 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
  *
  * Reuse iff a registered worktree is present at the expected path AND it carries
  * durable, gitignored state the next phase consumes:
- *   - a resume marker (`resume_from`): 'unifier' crash recovery (ADR-019) or
+ *   - a resume marker (`resume_from`): 'demo' crash recovery (ADR-019) or
  *     'develop' fix-loop re-entry (ADR-040). Per-WI commits +
  *     `.forge/work-items/` + `.forge/unifier-items/` live there; a fresh `add`
  *     re-checks-out the branch and wipes those untracked specs.
@@ -116,7 +116,7 @@ export function selfHealWorktreeState(projectRepoPath: string, path: string): vo
  * Anything else (no preserved worktree, or a stale empty one) → `add`.
  */
 export function decideWorktreeStrategy(opts: {
-  /** True when the manifest carries ANY `resume_from` marker (unifier | develop). */
+  /** True when the manifest carries ANY `resume_from` marker (demo | develop). */
   resumeMarkerPresent: boolean;
   worktreePresent: boolean;
   handoffWorkItemsPresent: boolean;
