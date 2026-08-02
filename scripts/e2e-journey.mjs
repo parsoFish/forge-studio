@@ -383,6 +383,12 @@ async function main() {
           try { cleanDemoBuilderSession(journeyCtx.seeded.demoSid); } catch { /* best-effort */ }
         }
         cleanOnboardedProject(ONB_EXISTING_SLUG);    // Part 1 — SU onboard-existing
+        // Part 1 — SU create-new: crash-safe backstop for the create/template
+        // beats' own in-beat cleanup (they seed brain/projects/<slug> in the
+        // tracked brain/ tree). Slugs mirror stand-up-create.mjs's constants.
+        for (const s of ['journey-fresh-project', 'journey-fresh-project-clip', 'journey-template-project']) {
+          try { cleanOnboardedProject(s); } catch { /* best-effort */ }
+        }
         cleanSkillArtifacts();                        // Part 2 — skills pillar
         cleanScratchFlow();
         cleanStarterAgents();

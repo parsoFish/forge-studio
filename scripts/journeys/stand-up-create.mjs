@@ -41,9 +41,16 @@ const CREATE_CLIP_NAME = 'Journey Fresh Project Clip';
 const CREATE_CLIP_SLUG = `${CREATE_SLUG}-clip`;
 const CREATE_CLIP_NORTH_STAR = 'A second from-scratch project, created live in an isolated browser context, to prove the path is real.';
 
+// R4-03: a greenfield project created from a framework TEMPLATE (distinct from
+// the onboard-form create above), on its own slug.
+const TEMPLATE_NAME = 'Journey Template Project';
+const TEMPLATE_SLUG = 'journey-template-project';
+const TEMPLATE_NORTH_STAR = 'Prove Studio scaffolds a greenfield project from a curated framework template, contract-green.';
+
 function cleanCreateProjects() {
   cleanOnboardedProject(CREATE_SLUG);
   cleanOnboardedProject(CREATE_CLIP_SLUG);
+  cleanOnboardedProject(TEMPLATE_SLUG);
 }
 
 export const journey = defineJourney({
@@ -154,6 +161,51 @@ export const journey = defineJourney({
               // even if a later beat throws, since nothing downstream depends on this project.
               cleanCreateProjects();
 
+        },
+      },
+      {
+        id: 'su-create-from-template',
+        title: 'Create a greenfield project from a framework template — /projects/new',
+        narration: 'Beyond onboarding an existing repo, the operator stands up a brand-new project from a curated framework template (R4-03): a name, a north star, and an app type (typescript-cli / typescript-api). Studio scaffolds the whole skeleton — package.json with a real quality gate, a unit test, .gitignore, an AGENTS.md that names the gate, roadmap, CI — seeds the central brain, and lands on the project page contract-green, ready for the first architect run. No manual repo surgery.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R4-03] Create a greenfield project from a template');
+              cleanOnboardedProject(TEMPLATE_SLUG);
+              await page.goto(watch.uiUrl + '/projects/new', { waitUntil: 'domcontentloaded' });
+              await page.waitForSelector('[data-section="project-create"]', { timeout: 15000 }).catch(() => {});
+              const createPresent = await page.evaluate(() => document.querySelector('[data-section="project-create"]') !== null);
+              check(createPresent, 'R4-03: /projects/new offers a greenfield create-from-template form ([data-section="project-create"])');
+              // Wait for the async app-types fetch to land before reading the count
+              // / selecting — otherwise the assertions race the fetch.
+              await page.waitForFunction(
+                () => parseInt(document.querySelector('[data-section="project-create"]')?.getAttribute('data-app-type-count') ?? '0', 10) >= 2,
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const appTypeCount = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-section="project-create"]')?.getAttribute('data-app-type-count') ?? '0', 10));
+              check(appTypeCount >= 2, `R4-03: the create form offers ≥2 curated app-type templates (got ${appTypeCount})`);
+              await page.locator('[data-field="create-name"]').fill(TEMPLATE_NAME).catch(() => {});
+              await page.locator('[data-field="create-north-star"]').fill(TEMPLATE_NORTH_STAR).catch(() => {});
+              await page.locator('[data-field="create-app-type"]').selectOption('typescript-cli').catch(() => {});
+              await frame(page, 'r4-03-0-create-form', 'R4-03 — create a greenfield project: name, north star, framework template');
+              await page.locator('[data-action="create-project"]').click().catch(() => {});
+              await page.waitForURL(new RegExp(`/projects/${TEMPLATE_SLUG}`), { timeout: 20000 }).catch(() => {});
+              check(/\/projects\/[^/]*journey-template-project/.test(page.url()),
+                `R4-03: creating from a template lands on the new project page (url=${page.url()})`);
+              const projectJson = join(FORGE_ROOT, 'projects', TEMPLATE_SLUG, '.forge', 'project.json');
+              check(await waitForFile(projectJson, 12000), `R4-03: the template scaffold wrote projects/${TEMPLATE_SLUG}/.forge/project.json`);
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              await page.waitForSelector('[data-ready-count]', { timeout: 15000 }).catch(() => {});
+              const readyCount = await page.evaluate(() => {
+                const el = document.querySelector('[data-ready-count]');
+                return el ? parseInt(el.getAttribute('data-ready-count') ?? '0', 10) : -1;
+              });
+              check(readyCount >= 3, `R4-03: the greenfield project is contract-ready (got ${readyCount} passing readiness checks)`);
+              await frame(page, 'r4-03-1-project-ready', 'R4-03 — the greenfield project scaffolded from a template, contract-green on its own page');
+              cleanOnboardedProject(TEMPLATE_SLUG);
         },
       },
       {

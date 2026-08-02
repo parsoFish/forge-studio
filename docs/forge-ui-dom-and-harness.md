@@ -162,6 +162,12 @@ inventory rather than one shared page-level contract:
   `[data-section="onboard-advanced"][data-advanced-open]`, and a preflight
   check against the forge project contract —
   `[data-section="onboard-preflight"]` / `[data-section="failing-clauses"]`.
+  Alongside it, the R4-03 greenfield **create-from-template** form:
+  `[data-section="project-create"][data-app-type-count]` with
+  `[data-field="create-name"]` / `[data-field="create-north-star"]` /
+  `[data-field="create-app-type"]` (a `<select>` of curated app types) and a
+  `[data-action="create-project"]` button — scaffolds a contract-green project
+  from a framework template and navigates to its page.
   An existing project's editor aside carries the R4-02-F1 second onboarding
   entry point: `[data-section="onboard-with-agent"]` with a
   `[data-action="run-onboarding-agent"]` button that dispatches the

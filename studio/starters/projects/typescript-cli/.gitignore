@@ -1,0 +1,13 @@
+node_modules/
+# build output (ARTIFACTS clause)
+dist/
+build/
+out/
+lib/
+coverage/
+.tsbuildinfo
+# forge scratch (C2 hygiene)
+.forge/work-items/
+AGENT.md
+PROMPT.md
+fix_plan.md

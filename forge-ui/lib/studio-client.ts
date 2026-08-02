@@ -867,6 +867,38 @@ export async function createProject(
   };
 }
 
+/** The curated greenfield app-type templates (R4-03). */
+export async function fetchProjectStarters(): Promise<string[]> {
+  const base = await resolveBridgeUrl();
+  if (!base) return [];
+  try {
+    const res = await fetch(`${base}/api/studio/projects/starters`);
+    const data = (await res.json()) as { appTypes?: string[] };
+    return Array.isArray(data.appTypes) ? data.appTypes : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Create a greenfield project from a framework template (R4-03). */
+export async function createGreenfieldProject(input: {
+  name: string;
+  appType: string;
+  language?: string;
+  northStar: string;
+  architecture?: string;
+}): Promise<{ ok: boolean; error?: string; id?: string; ready?: boolean; failingClauses?: FailingClause[] }> {
+  const r = await studioPost('/api/studio/projects/create', input);
+  const data = r.data;
+  return {
+    ok: r.ok,
+    error: r.error,
+    id: typeof data?.id === 'string' ? data.id : undefined,
+    ready: data?.ready === true,
+    failingClauses: Array.isArray(data?.failingClauses) ? (data.failingClauses as FailingClause[]) : undefined,
+  };
+}
+
 /** Fetch a single flow definition by id. */
 export async function fetchFlow(id: string): Promise<Flow | null> {
   const body = await studioGet<{ flow?: Flow } | null>(

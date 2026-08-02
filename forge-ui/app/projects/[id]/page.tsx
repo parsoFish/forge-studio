@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight, dispatchAgentRun, getAgentRunStatus,
+  fetchProjectStarters, createGreenfieldProject,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause, type AgentRunStatus,
 } from '@/lib/studio-client';
@@ -250,8 +251,16 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 
   const skillItems = (catalog.skills ?? []) as Array<{ id: string; name: string; desc?: string }>;
 
-  // New-project onboarding: a minimal required-only form (UX spec §6).
-  if (isNew) return <ProjectOnboardForm />;
+  // New-project surface: onboard an existing repo (R4-B8) OR create a greenfield
+  // one from a framework template (R4-03).
+  if (isNew) {
+    return (
+      <>
+        <ProjectOnboardForm />
+        <CreateFromTemplate />
+      </>
+    );
+  }
 
   return (
     <main
@@ -512,6 +521,72 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
         </div>
       )}
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CreateFromTemplate (R4-03) — the greenfield creation interview: name, north
+// star, and a curated app-type template → scaffolds a contract-green project
+// ready for the first architect run (POST /api/studio/projects/create).
+// ---------------------------------------------------------------------------
+
+function CreateFromTemplate() {
+  const router = useRouter();
+  const [name, setName] = useState('');
+  const [northStar, setNorthStar] = useState('');
+  const [appType, setAppType] = useState('');
+  const [appTypes, setAppTypes] = useState<string[]>([]);
+  const [creating, setCreating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    void fetchProjectStarters().then((types) => {
+      setAppTypes(types);
+      if (types[0]) setAppType(types[0]);
+    });
+  }, []);
+
+  const canSubmit = name.trim().length > 0 && northStar.trim().length > 0 && appType.length > 0;
+
+  const onCreate = async () => {
+    setCreating(true);
+    setError(null);
+    try {
+      const r = await createGreenfieldProject({ name: name.trim(), appType, northStar: northStar.trim() });
+      if (r.ok && r.id) router.push(`/projects/${encodeURIComponent(r.id)}`);
+      else setError(r.error ?? 'create failed');
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  const labelStyle = { display: 'block', fontSize: 12, fontWeight: 600, color: 'var(--dim)', margin: '10px 0 4px' } as const;
+  const inputStyle = { width: '100%', padding: '8px 10px', fontSize: 13, borderRadius: 'var(--radius)', border: '1px solid var(--line)', background: 'var(--bg)', color: 'var(--fg)' } as const;
+
+  return (
+    <div data-section="project-create" data-app-type-count={appTypes.length} style={{ maxWidth: 640, margin: '0 auto 64px', padding: '0 28px', width: '100%' }}>
+      <div style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '20px 22px' }}>
+        <h2 style={{ margin: '0 0 4px', fontSize: 16 }}>Or create a new project</h2>
+        <p className="muted" style={{ fontSize: 13, margin: '0 0 8px' }}>
+          Scaffold a greenfield repo from a framework template — contract-green and ready for the first architect run.
+        </p>
+        <label style={labelStyle} htmlFor="create-name">Project name</label>
+        <input id="create-name" data-field="create-name" style={inputStyle} value={name} placeholder="My new tool" onChange={(e) => setName(e.target.value)} />
+        <label style={labelStyle} htmlFor="create-northstar">North star</label>
+        <input id="create-northstar" data-field="create-north-star" style={inputStyle} value={northStar} placeholder="One sentence: what it's for" onChange={(e) => setNorthStar(e.target.value)} />
+        <label style={labelStyle} htmlFor="create-apptype">App type</label>
+        <select id="create-apptype" data-field="create-app-type" style={inputStyle} value={appType} onChange={(e) => setAppType(e.target.value)}>
+          {appTypes.length === 0 && <option value="">(no templates found)</option>}
+          {appTypes.map((t) => <option key={t} value={t}>{t}</option>)}
+        </select>
+        <div style={{ marginTop: 14 }}>
+          <button className="btn btn-primary" data-action="create-project" disabled={!canSubmit || creating} onClick={() => void onCreate()}>
+            {creating ? 'Creating…' : 'Create project'}
+          </button>
+        </div>
+        {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 8 }}>{error}</p>}
+      </div>
+    </div>
   );
 }
 

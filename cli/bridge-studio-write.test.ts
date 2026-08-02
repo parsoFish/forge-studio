@@ -19,6 +19,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  cpSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
@@ -263,6 +264,39 @@ test('POST /api/studio/projects (R4-02-F3): fresh onboard binds project.json.kb 
   // The seeded central KB exists and its binding ref matches the bound id.
   const kbYaml = readFileSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml'), 'utf8');
   assert.match(kbYaml, new RegExp(`ref:\\s*${id}`), 'seeded kb.yaml binds to the same id');
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/projects/create — R4-03: greenfield scaffold from a template
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/projects/create: missing fields → 400', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, { name: 'x' });
+  assert.equal(res.status, 400);
+});
+
+test('POST /api/studio/projects/create: unknown appType → 400', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, { name: 'x', appType: 'cobol', northStar: 'y' });
+  assert.equal(res.status, 400);
+  assert.match((await res.json() as { error: string }).error, /unknown appType/);
+});
+
+test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a template → ready', async () => {
+  // Give the test forge root the real curated templates.
+  cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
+  const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
+    name: 'Greenfield Demo',
+    appType: 'typescript-cli',
+    northStar: 'ship the greenfield thing',
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; id: string; ready: boolean; failingClauses: unknown[] };
+  assert.equal(body.ok, true);
+  assert.equal(body.id, 'greenfield-demo');
+  assert.equal(body.ready, true, `expected contract-green; failing: ${JSON.stringify(body.failingClauses)}`);
+  // The scaffolded project is real + tokens substituted.
+  const pkg = readFileSync(join(forgeRoot, 'projects', 'greenfield-demo', 'package.json'), 'utf8');
+  assert.match(pkg, /"name": "greenfield-demo"/);
 });
 
 // ---------------------------------------------------------------------------

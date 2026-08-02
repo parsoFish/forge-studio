@@ -41,6 +41,7 @@ import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/val
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
+import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
@@ -436,6 +437,56 @@ export async function handleStudioWriteRoutes(
 
       const flagFindings = findings.filter((f) => f.level === 'flag');
       sendJson(res, 200, { ok: true, slug, findings: flagFindings }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/projects/create (greenfield, R4-03) ----------------
+  // Scaffold a NEW project from a framework template (studio/starters/projects/
+  // <app-type>/) + seed the central brain, then preflight. Local file ops only
+  // (no spawn, no git-remote) — exempt-local under dry-bridge, like onboard.
+  if (url === '/api/studio/projects/create' && method === 'POST') {
+    try {
+      let body: unknown;
+      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
+      if (body === null || typeof body !== 'object' || Array.isArray(body)) {
+        sendJson(res, 400, { error: 'body must be a JSON object' }, origin); return true;
+      }
+      const b = body as Record<string, unknown>;
+      const str = (k: string): string => (typeof b[k] === 'string' ? (b[k] as string).trim() : '');
+      const name = str('name');
+      const appType = str('appType');
+      const northStar = str('northStar');
+      if (!name || !appType || !northStar) {
+        sendJson(res, 400, { error: 'name, appType and northStar are required' }, origin); return true;
+      }
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      let out;
+      try {
+        out = scaffoldGreenfieldProject({
+          manifest: { name, appType, language: str('language') || 'typescript', northStar, ...(str('architecture') ? { architecture: str('architecture') } : {}) },
+          forgeRoot: ctx.forgeRoot,
+          projectsRoot: projectsDir,
+        });
+      } catch (err) {
+        // Validation / unknown-app-type / duplicate-id are operator errors → 400.
+        sendJson(res, 400, { error: sanitizeError(err) }, origin); return true;
+      }
+      sendJson(
+        res,
+        200,
+        {
+          ok: true,
+          id: out.id,
+          appType: out.appType,
+          ready: out.hardGreen,
+          filesWritten: out.filesWritten.length,
+          failingClauses: out.failingClauses.map((c) => ({ id: c.clause, title: c.title, detail: c.detail })),
+        },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

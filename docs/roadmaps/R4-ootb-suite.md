@@ -368,7 +368,32 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-03 Project creation agent
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** **implemented** (F1–F3, 2026-08-02, wave-4 tail, branch
+  `feat/r4-03-creation-agent`)  ·  **Wave:** 4
+- **Implemented-notes (F1–F3, 2026-08-02):**
+  - **F1 — built.** `orchestrator/project-create.ts` `CreationManifest` +
+    `validateCreationManifest` — the typed creation manifest `{name, appType,
+    language, northStar, architecture?}`, produced by the CLI flags
+    (`forge create --name … --app-type … --north-star …`) and the UI create
+    form. Validates + fails fast on any missing field.
+  - **F2 — built (research-first, ≥2 app types).** Curated templates under
+    `studio/starters/projects/{typescript-cli,typescript-api}/` — each a
+    dependency-light skeleton (package.json with a single-command `npm test`
+    gate + tsc build, a `sentinel-…` unit test, `.gitignore` covering scratch
+    (C2) + build output (ARTIFACTS), an AGENTS.md that **names the gate** (C8),
+    roadmap.md (C4), `.forge/project.json`, a CI skeleton). Grounded in the
+    gitpulse/mdtoc reference shape + the R3-05 `cli-project-shape` seed rather
+    than a live subagent spike. AC proven: **each template scaffolds to
+    preflight HARD-green unmodified** (`project-create.test.ts`).
+  - **F3 — built.** `scaffoldGreenfieldProject` copies the template (substituting
+    `{{NAME}}` slug / `{{TITLE}}` human / `{{NORTH_STAR}}`) + `seedProjectBrain`
+    (the only forge-owned piece not in a template — central Brain-3 + KB) → the
+    authoritative `hardGreen` from `runPreflight`. Operable three ways: `forge
+    create`, `POST /api/studio/projects/create` (exempt-local), and the
+    `/projects/new` **create-from-template** form (`data-section="project-create"`).
+    AC met: **create → contract-green → first architect run possible with no
+    manual repo surgery**. `stand-up-create` journey drives it end-to-end.
+- **Original planned spec:** ~2-3 sessions.
 - **Depends on:** R3-05 (instructions seeds), R1-03/R1-04 (processes to
   scaffold), R4-02 (hands off to the onboarding loop post-scaffold)
 - **Context:** Operator diagram: like onboarding *"but without the existing
