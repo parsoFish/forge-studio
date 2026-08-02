@@ -64,6 +64,7 @@ export const RUN_ORDER = [
   ['stand-up-onboard', 'su-onboard-preflight'],
 
   ['stand-up-create', 'su-create-project'],
+  ['stand-up-create', 'su-create-from-template'],
   ['stand-up-create', 'su-create-library'],
   ['stand-up-create', 'su-create-orientation'],
   ['stand-up-create', 'su-create-instructions'],
