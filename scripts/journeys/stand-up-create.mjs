@@ -175,6 +175,12 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-section="project-create"]', { timeout: 15000 }).catch(() => {});
               const createPresent = await page.evaluate(() => document.querySelector('[data-section="project-create"]') !== null);
               check(createPresent, 'R4-03: /projects/new offers a greenfield create-from-template form ([data-section="project-create"])');
+              // Wait for the async app-types fetch to land before reading the count
+              // / selecting — otherwise the assertions race the fetch.
+              await page.waitForFunction(
+                () => parseInt(document.querySelector('[data-section="project-create"]')?.getAttribute('data-app-type-count') ?? '0', 10) >= 2,
+                null, { timeout: 15000 },
+              ).catch(() => {});
               const appTypeCount = await page.evaluate(() =>
                 parseInt(document.querySelector('[data-section="project-create"]')?.getAttribute('data-app-type-count') ?? '0', 10));
               check(appTypeCount >= 2, `R4-03: the create form offers ≥2 curated app-type templates (got ${appTypeCount})`);

@@ -77,6 +77,43 @@ for (const appType of ['typescript-cli', 'typescript-api']) {
   });
 }
 
+test('F2/F3: a north star with a quote/backslash produces VALID JSON + stays hard-green', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    const out = scaffoldGreenfieldProject({
+      manifest: manifest({ name: 'TOC Tool', northStar: 'A "smart" TOC \\ injector' }),
+      forgeRoot,
+    });
+    assert.equal(out.hardGreen, true, `quotes must not break the scaffold; failing: ${out.failingClauses.map((c) => c.clause).join(',')}`);
+    // The scaffolded JSON files parse (would throw here otherwise).
+    for (const rel of ['package.json', '.forge/project.json']) {
+      const parsed = JSON.parse(readFileSync(join(out.projectDir, rel), 'utf8'));
+      assert.ok(parsed, `${rel} is valid JSON`);
+    }
+    const cfg = JSON.parse(readFileSync(join(out.projectDir, '.forge', 'project.json'), 'utf8')) as { northStar: string };
+    assert.equal(cfg.northStar, 'A "smart" TOC \\ injector', 'the value round-trips exactly through JSON');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('F2: a value containing a $-replacement pattern is inserted literally (no leftover token)', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    const out = scaffoldGreenfieldProject({ manifest: manifest({ northStar: 'before $& and $$ after' }), forgeRoot });
+    for (const rel of out.filesWritten) {
+      assert.equal(hasUnsubstitutedTokens(readFileSync(join(out.projectDir, rel), 'utf8')), false, `${rel} fully substituted`);
+    }
+    assert.match(readFileSync(join(out.projectDir, 'README.md'), 'utf8'), /before \$& and \$\$ after/);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('F1: a manifest field with a newline/control char is rejected', () => {
+  assert.throws(() => validateCreationManifest({ name: 'x\ny', appType: 'typescript-cli', language: 'ts', northStar: 'z' }), /single line/);
+});
+
 test('F3: an unknown appType throws with the available list', () => {
   const forgeRoot = isolatedForgeRoot();
   try {

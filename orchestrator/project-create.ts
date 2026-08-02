@@ -14,7 +14,7 @@
  * with no manual repo surgery.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { seedProjectBrain } from './project-brain-seed.ts';
@@ -77,6 +77,9 @@ export function validateCreationManifest(raw: unknown): CreationManifest {
   const str = (k: string): string => {
     const v = m[k];
     if (typeof v !== 'string' || v.trim() === '') throw new Error(`creation manifest: "${k}" is required (non-empty string)`);
+    // Single-line fields — a newline/control char would break scaffolded markdown
+    // structure (quotes/backslashes are fine; they're JSON-escaped when written).
+    if (/[\u0000-\u001f]/.test(v)) throw new Error(`creation manifest: "${k}" must be a single line (no control characters)`);
     return v.trim();
   };
   const manifest: CreationManifest = {
@@ -95,8 +98,19 @@ export function slugifyProjectName(name: string): string {
   return name.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '').replace(/^-+|-+$/g, '');
 }
 
-/** Recursively copy a template dir into dest, substituting the {{NAME}} /
- *  {{NORTH_STAR}} tokens in every file's text. Returns the dest-relative paths. */
+/** JSON-escape a value for insertion into a JSON string position — the inner of
+ *  its quoted form (so `A "smart" tool` → `A \"smart\" tool`). */
+function jsonInner(s: string): string {
+  return JSON.stringify(s).slice(1, -1);
+}
+
+/** Recursively copy a template dir into dest, substituting the tokens in every
+ *  file. Two hardening rules the raw approach missed: (1) FUNCTION replacers so
+ *  a `$&`/`$$` in a value is inserted literally, not as a regex replacement
+ *  pattern; (2) for `.json` files, JSON-escape the human-authored values so a
+ *  quote/backslash/newline can't produce invalid JSON — a corrupt scaffold that
+ *  would fail preflight (C1) and break `npm test`/`build`. Each written `.json`
+ *  is JSON.parse-validated so a scaffold can only ship well-formed config. */
 function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title: string; northStar: string }, written: string[], relBase = ''): void {
   mkdirSync(destDir, { recursive: true });
   for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
@@ -105,14 +119,22 @@ function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title
     const rel = relBase ? `${relBase}/${entry.name}` : entry.name;
     if (entry.isDirectory()) {
       copyTemplate(src, dest, subs, written, rel);
-    } else {
-      const text = readFileSync(src, 'utf8')
-        .replace(NAME_TOKEN, subs.id)
-        .replace(TITLE_TOKEN, subs.title)
-        .replace(NORTH_STAR_TOKEN, subs.northStar);
-      writeFileSync(dest, text, 'utf8');
-      written.push(rel);
+      continue;
     }
+    const isJson = entry.name.endsWith('.json');
+    // id is slug-safe (SLUG_RE) either way; title/northStar are human text.
+    const title = isJson ? jsonInner(subs.title) : subs.title;
+    const northStar = isJson ? jsonInner(subs.northStar) : subs.northStar;
+    const text = readFileSync(src, 'utf8')
+      .replace(NAME_TOKEN, () => subs.id)
+      .replace(TITLE_TOKEN, () => title)
+      .replace(NORTH_STAR_TOKEN, () => northStar);
+    if (isJson) {
+      try { JSON.parse(text); }
+      catch (err) { throw new Error(`create: scaffold produced invalid JSON at ${rel} — ${(err as Error).message}`); }
+    }
+    writeFileSync(dest, text, 'utf8');
+    written.push(rel);
   }
 }
 
@@ -132,10 +154,13 @@ export function scaffoldGreenfieldProject(input: {
   const id = slugifyProjectName(manifest.name);
   if (!SLUG_RE.test(id)) throw new Error(`could not derive a valid slug id from name "${manifest.name}"`);
 
-  const templateDir = join(projectStartersDir(input.forgeRoot), manifest.appType);
-  if (!existsSync(templateDir) || !statSync(templateDir).isDirectory()) {
-    throw new Error(`unknown appType "${manifest.appType}" — available: ${listProjectStarters(input.forgeRoot).join(', ') || '(none)'}`);
+  // Whitelist appType against the actual template dirs — NOT an existsSync on a
+  // joined path, which a traversal value like '../agents' would satisfy.
+  const available = listProjectStarters(input.forgeRoot);
+  if (!available.includes(manifest.appType)) {
+    throw new Error(`unknown appType "${manifest.appType}" — available: ${available.join(', ') || '(none)'}`);
   }
+  const templateDir = join(projectStartersDir(input.forgeRoot), manifest.appType);
 
   const projectsRoot = input.projectsRoot ?? join(input.forgeRoot, 'projects');
   const projectDir = resolve(projectsRoot, id);
