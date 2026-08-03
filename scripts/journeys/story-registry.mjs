@@ -24,6 +24,12 @@
  * reference>' }`. A beat is either ported or explicitly excluded; it is
  * never silently skipped.
  *
+ * Optional `note` field: free prose recording WHY an entry is dispositioned
+ * the way it is when that is not self-evident from the batch plan — e.g. a
+ * story absent from README §4's closure column, or a surface already
+ * verified aligned so the port carries no product work. It is carried into
+ * the derived report for the reader and is never an input to status.
+ *
  * Baseline honesty note: as of 2026-08-03 no story is `ported`. The nine
  * existing journeys in `scripts/journeys/` overlap conceptually with
  * several mockup stories, but none was authored as a beat-for-beat port,
