@@ -12,6 +12,22 @@
  * a permissive default — an unrecognised token is a malformed response, not a
  * value to guess at, so it throws and the caller's `ok: false` error state
  * surfaces it (skill-client.ts's `parseSkillTrust` is the precedent).
+ *
+ * The same refusal applies to every REQUIRED structural field — `id`, `name`,
+ * `category`, `provenance`, `definitionRef`, `usedBy`, `usedByDerivation`.
+ * The server (orchestrator/studio/template-library.ts) always populates all
+ * seven, even on a per-entry parse failure (surfaced via the sibling `error`
+ * field) — so a missing or wrong-typed one here can only mean the bridge
+ * response itself is malformed. `usedByDerivation` exists so an empty
+ * `usedBy` reads as "scanned N sources, found none" rather than "unknown"
+ * (D3 in the server module); inventing `{source:'',scanned:0}` for a MISSING
+ * derivation, or coercing a non-array `usedBy` to `[]`, would silently
+ * manufacture exactly the "unknown" reading the derivation exists to rule
+ * out — so both throw instead. Every throw is caught by the fetch
+ * functions' own parse-stage try/catch and reported as `ok: false` with a
+ * `"malformed bridge response: ..."`-prefixed error, kept distinct from a
+ * `"bridge unreachable: ..."`-prefixed error for an actual transport failure
+ * (the `fetch()` call itself throwing) — a page can tell the two apart.
  */
 
 import { resolveBridgeUrl } from './bridge-client';
@@ -81,25 +97,67 @@ function parseTemplatePreviewKind(raw: unknown): TemplatePreviewKind | undefined
   throw new Error(`unrecognised template previewKind: ${JSON.stringify(raw)}`);
 }
 
+/** True for a non-null, non-array object — the shape every parser below
+ *  requires before it will even look at a field. Rejects `null`, arrays,
+ *  strings, numbers, and `undefined` alike; none of those is a record. */
+function isPlainObject(raw: unknown): raw is Record<string, unknown> {
+  return typeof raw === 'object' && raw !== null && !Array.isArray(raw);
+}
+
+/** A required string field: present and a string, or throw. No caller of
+ *  this may substitute `''` for a missing/wrong-typed value — that would be
+ *  exactly the silent-default this module refuses to do. */
+function requireString(r: Record<string, unknown>, field: string): string {
+  const v = r[field];
+  if (typeof v !== 'string') {
+    throw new Error(`missing or invalid "${field}": expected a string, got ${JSON.stringify(v)}`);
+  }
+  return v;
+}
+
+/** `usedBy` absent, or present but not an array, is a malformed response —
+ *  never coerced to `[]` (see the module header: that would fabricate the
+ *  exact "unknown" reading `usedByDerivation` exists to rule out). */
+function parseUsedBy(raw: unknown): string[] {
+  if (!Array.isArray(raw)) {
+    throw new Error(`missing or invalid "usedBy": expected an array, got ${JSON.stringify(raw)}`);
+  }
+  return raw as string[];
+}
+
+/** `usedByDerivation` absent, not an object, or with a non-string `source` /
+ *  non-number `scanned`, is a malformed response — never defaulted to
+ *  `{source:'',scanned:0}` (an invented "scanned 0" derivation is worse than
+ *  no derivation: it looks like a real, honest answer). */
 function parseUsedByDerivation(raw: unknown): TemplateUsedByDerivation {
-  const r = (raw ?? {}) as Record<string, unknown>;
-  return {
-    source: typeof r['source'] === 'string' ? r['source'] : '',
-    scanned: typeof r['scanned'] === 'number' ? r['scanned'] : 0,
-  };
+  if (!isPlainObject(raw)) {
+    throw new Error(`missing or invalid "usedByDerivation": expected an object, got ${JSON.stringify(raw)}`);
+  }
+  const source = raw['source'];
+  const scanned = raw['scanned'];
+  if (typeof source !== 'string') {
+    throw new Error(`missing or invalid "usedByDerivation.source": expected a string, got ${JSON.stringify(source)}`);
+  }
+  if (typeof scanned !== 'number') {
+    throw new Error(`missing or invalid "usedByDerivation.scanned": expected a number, got ${JSON.stringify(scanned)}`);
+  }
+  return { source, scanned };
 }
 
 function parseTemplateLibraryEntry(raw: unknown): TemplateLibraryEntry {
-  const r = (raw ?? {}) as Record<string, unknown>;
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed template entry: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  const r = raw;
   return {
-    id: typeof r['id'] === 'string' ? r['id'] : '',
-    name: typeof r['name'] === 'string' ? r['name'] : '',
+    id: requireString(r, 'id'),
+    name: requireString(r, 'name'),
     category: parseTemplateCategory(r['category']),
     format: typeof r['format'] === 'string' ? r['format'] : undefined,
-    provenance: typeof r['provenance'] === 'string' ? r['provenance'] : '',
-    definitionRef: typeof r['definitionRef'] === 'string' ? r['definitionRef'] : '',
+    provenance: requireString(r, 'provenance'),
+    definitionRef: requireString(r, 'definitionRef'),
     previewKind: parseTemplatePreviewKind(r['previewKind']),
-    usedBy: Array.isArray(r['usedBy']) ? (r['usedBy'] as string[]) : [],
+    usedBy: parseUsedBy(r['usedBy']),
     usedByDerivation: parseUsedByDerivation(r['usedByDerivation']),
     endpointsVerified: typeof r['endpointsVerified'] === 'boolean' ? r['endpointsVerified'] : undefined,
     declaredProducer: typeof r['declaredProducer'] === 'string' ? r['declaredProducer'] : undefined,
@@ -114,19 +172,47 @@ function parseTemplateLibraryEntry(raw: unknown): TemplateLibraryEntry {
  *  bridge (`ok: false`) — the caller must never render the two the same way
  *  (house rule: no silent fallback to an empty list that looks like "no
  *  templates"). A response carrying an entry with an unrecognised
- *  `category`/`previewKind` token is treated the same way — `ok: false` —
- *  rather than silently coercing it. */
+ *  `category`/`previewKind` token, or missing/malformed structural fields
+ *  (`id`/`name`/`provenance`/`definitionRef`/`usedBy`/`usedByDerivation`), or
+ *  a top-level `templates` that is absent or not an array, is treated the
+ *  same way — `ok: false` — rather than silently coercing it. A genuinely
+ *  empty library (`{templates: []}`) is the one legitimate empty and still
+ *  returns `ok: true, templates: []`. */
 export async function fetchTemplateLibrary(): Promise<{ ok: boolean; templates: TemplateLibraryEntry[]; error?: string }> {
   const base = await resolveBridgeUrl();
   if (!base) return { ok: false, templates: [], error: 'no bridge configured' };
+
+  let res: Response;
   try {
-    const res = await fetch(`${base}/api/studio/templates`);
-    const data = (await res.json().catch(() => ({}))) as { templates?: unknown[]; error?: string };
-    if (!res.ok) return { ok: false, templates: [], error: data.error ?? `HTTP ${res.status}` };
-    const templates = Array.isArray(data.templates) ? data.templates.map(parseTemplateLibraryEntry) : [];
+    res = await fetch(`${base}/api/studio/templates`);
+  } catch (err) {
+    return { ok: false, templates: [], error: `bridge unreachable: ${String(err)}` };
+  }
+
+  try {
+    const data = await res.json().catch(() => undefined);
+    if (!res.ok) {
+      const errMsg = isPlainObject(data) && typeof data['error'] === 'string' ? data['error'] : undefined;
+      return { ok: false, templates: [], error: errMsg ?? `HTTP ${res.status}` };
+    }
+    if (!isPlainObject(data)) {
+      return {
+        ok: false,
+        templates: [],
+        error: `malformed bridge response: expected a JSON object, got ${JSON.stringify(data)}`,
+      };
+    }
+    if (!Array.isArray(data['templates'])) {
+      return {
+        ok: false,
+        templates: [],
+        error: `malformed bridge response: "templates" ${'templates' in data ? 'is not an array' : 'is missing'}`,
+      };
+    }
+    const templates = (data['templates'] as unknown[]).map(parseTemplateLibraryEntry);
     return { ok: true, templates };
   } catch (err) {
-    return { ok: false, templates: [], error: String(err) };
+    return { ok: false, templates: [], error: `malformed bridge response: ${String(err)}` };
   }
 }
 
@@ -161,15 +247,22 @@ export async function fetchTemplate(
 ): Promise<{ ok: boolean; status?: number; detail?: TemplateDetail; error?: string }> {
   const base = await resolveBridgeUrl();
   if (!base) return { ok: false, error: 'no bridge configured' };
+
+  let res: Response;
   try {
-    const res = await fetch(`${base}/api/studio/templates/${encodeURIComponent(id)}`);
-    const data = await res.json().catch(() => ({}));
+    res = await fetch(`${base}/api/studio/templates/${encodeURIComponent(id)}`);
+  } catch (err) {
+    return { ok: false, error: `bridge unreachable: ${String(err)}` };
+  }
+
+  try {
+    const data = await res.json().catch(() => undefined);
     if (!res.ok) {
-      const err = (data as { error?: string })?.error;
-      return { ok: false, status: res.status, error: err ?? `HTTP ${res.status}` };
+      const errMsg = isPlainObject(data) && typeof data['error'] === 'string' ? data['error'] : undefined;
+      return { ok: false, status: res.status, error: errMsg ?? `HTTP ${res.status}` };
     }
     return { ok: true, status: res.status, detail: parseTemplateDetail(data) };
   } catch (err) {
-    return { ok: false, error: String(err) };
+    return { ok: false, status: res.status, error: `malformed bridge response: ${String(err)}` };
   }
 }

@@ -27,13 +27,15 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { listTemplateLibrary, templateDetail } from '../orchestrator/studio/template-library.ts';
+import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 
-/** Hard cap on a template id's length — mirrors `MAX_SKILL_ID_LENGTH`
- *  (orchestrator/skill-path.ts): without it, a charset-valid but absurdly long
- *  id sails past SLUG_RE and only dies later as an opaque fs error instead of
- *  an actionable 400. No real template-library entry is remotely close to
- *  this length. */
-const MAX_TEMPLATE_ID_LENGTH = 100;
+/** Hard cap on a template id's length — the same value and rationale as
+ *  `MAX_SKILL_ID_LENGTH` (orchestrator/skill-path.ts), imported rather than
+ *  re-declared: without it, a charset-valid but absurdly long id sails past
+ *  SLUG_RE and only dies later as an opaque fs error instead of an
+ *  actionable 400. No real template-library entry is remotely close to this
+ *  length. */
+const MAX_TEMPLATE_ID_LENGTH = MAX_SKILL_ID_LENGTH;
 
 /** Decode a URL path segment; throws (never silently passes through a raw,
  *  still-encoded id) on malformed percent-encoding — mirrors
