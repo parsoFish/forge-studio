@@ -117,3 +117,12 @@ docs/investigations/*
 # End-state mockup v2 journey videos (large; regenerated via the capture script noted in
 # mockups/studio-endstate-v2/README.md — sources are tracked, renders are not)
 mockups/studio-endstate-v2/journeys/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
+
+# Beads/Dolt local state (bd init additions)
+.dolt/
+.beads-credential-key
