@@ -1484,3 +1484,131 @@ describe('SLUG_RE relocation regression guard', () => {
     assert.equal(fromSkillPath!.source, fromValidate.source, 'both re-exports must be the identical regex, not a divergent copy');
   });
 });
+
+// ===========================================================================
+// scanSkillPackage must report keys quarantined AT INSTALL, not only ones
+// still sitting at top level (ui:journey-found defect, R3-01-F4).
+//
+// `quarantinedKeys` was computed from the package's CURRENT top-level
+// frontmatter only. The one production caller — GET /api/studio/skills/<id>
+// for a draft, feeding the operator's approval gate — hands it the
+// ALREADY-INSTALLED package, where `runtime`/`allowed-tools` have already
+// been moved under the nested `quarantined:` block by installSkillPackage
+// (D4). So those two keys could never appear in the scan report; only
+// `library` (always present, always top-level on a fresh draft) ever showed,
+// and the count was always exactly 1 — silently under-reporting on the exact
+// axis the scan exists to surface (did this untrusted package try to declare
+// a runtime / grab its own tools?).
+//
+// Fix (binding, T2): quarantinedKeys is the union of the quarantine-able keys
+// (`runtime`, `allowed-tools`, `library`) present at TOP LEVEL of the supplied
+// SKILL.md and the keys present under its nested `quarantined:` block — deduped,
+// ordered by QUARANTINED_FRONTMATTER_KEYS's own declared order
+// (runtime, allowed-tools, library), which is what the tests below assert
+// rather than a sorted array (so the order assertion is itself load-bearing,
+// not incidental).  (AT 90-94)
+// ===========================================================================
+
+describe('scanSkillPackage — quarantined keys are reported from BOTH top-level and nested quarantined: (defect fix)', () => {
+  it("AT-90: a nested quarantined: block (runtime + allowed-tools) is reported — the defect's direct regression test", () => {
+    const files = [
+      {
+        path: 'SKILL.md',
+        body: matter.stringify('\nBody.\n', {
+          name: 'x',
+          description: 'd',
+          status: 'draft',
+          library: false,
+          quarantined: {
+            runtime: { sdk: 'claude', strategy: 'fixed' },
+            'allowed-tools': ['Read'],
+          },
+        }),
+      },
+    ];
+    const report = scanSkillPackage(files);
+    assert.ok(report.quarantinedKeys.includes('runtime'), 'runtime moved under quarantined: must still be reported');
+    assert.ok(report.quarantinedKeys.includes('allowed-tools'), 'allowed-tools moved under quarantined: must still be reported');
+  });
+
+  it('AT-91: THE REAL PIPELINE, end to end — install → readSkillPackage the draft → scan reports runtime+allowed-tools+library (count 3, not 1)', () => {
+    const root = makeForgeRoot();
+    const packageDir = makeTmpDir('skill-pkg-scan-e2e-');
+    writeFileSync(
+      join(packageDir, 'SKILL.md'),
+      matter.stringify('\nBody.\n', {
+        name: 'Vendored Agent-Shaped Skill',
+        description: 'declares runtime + allowed-tools + library at the source',
+        runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
+        'allowed-tools': ['Read'],
+        library: true,
+      }),
+      'utf8',
+    );
+
+    installSkillPackage({ forgeRoot: root, id: 'scan-e2e-skill', packageDir, upstream: { source: 'https://x' } });
+
+    // The REAL functions, not a hand-built fixture: read the INSTALLED draft
+    // back off disk exactly as the GET /api/studio/skills/<id> route does,
+    // then scan THAT.
+    const installedFiles = readSkillPackage(root, 'scan-e2e-skill');
+    const report = scanSkillPackage(installedFiles);
+
+    assert.deepEqual(
+      report.quarantinedKeys,
+      ['runtime', 'allowed-tools', 'library'],
+      'must report all three quarantined keys, not just the one (library) that happens to still sit at top level',
+    );
+    assert.equal(report.quarantinedKeys.length, 3);
+  });
+
+  it('AT-92: dedupe/order — library present BOTH at top level and inside quarantined: yields library exactly once, in QUARANTINED_FRONTMATTER_KEYS declared order', () => {
+    const files = [
+      {
+        path: 'SKILL.md',
+        body: matter.stringify('\nBody.\n', {
+          name: 'x',
+          description: 'd',
+          library: true, // top-level
+          quarantined: { runtime: { sdk: 'claude', strategy: 'fixed' }, library: false }, // library ALSO nested
+        }),
+      },
+    ];
+    const report = scanSkillPackage(files);
+    // Asserted order: QUARANTINED_FRONTMATTER_KEYS's own declaration order
+    // (runtime, allowed-tools, library) — NOT alphabetical, NOT insertion
+    // order of top-level-then-nested. A key present in both locations must
+    // still appear exactly once.
+    assert.deepEqual(report.quarantinedKeys, ['runtime', 'library']);
+  });
+
+  it('AT-93: a package with NO quarantine-able keys anywhere (top-level or nested) → quarantinedKeys is [] (guards over-reporting)', () => {
+    const noKeys = [{ path: 'SKILL.md', body: matter.stringify('\nBody.\n', { name: 'x', description: 'd' }) }];
+    assert.deepEqual(scanSkillPackage(noKeys).quarantinedKeys, []);
+
+    // An empty (present-but-empty) quarantined: block must not itself count
+    // as anything — its KEY NAME is not one of the three tracked keys.
+    const emptyQuarantinedBlock = [
+      { path: 'SKILL.md', body: matter.stringify('\nBody.\n', { name: 'x', description: 'd', quarantined: {} }) },
+    ];
+    assert.deepEqual(scanSkillPackage(emptyQuarantinedBlock).quarantinedKeys, []);
+  });
+
+  it('AT-94: AT-42\'s rule still holds — key set is exactly {quarantinedKeys, executableFiles, fileCount, totalBytes, body}, still no verdict field (D5)', () => {
+    const files = [
+      {
+        path: 'SKILL.md',
+        body: matter.stringify('\nBody.\n', {
+          name: 'x',
+          description: 'd',
+          quarantined: { runtime: { sdk: 'claude', strategy: 'fixed' } },
+        }),
+      },
+    ];
+    const report = scanSkillPackage(files);
+    assert.deepEqual(
+      Object.keys(report).sort(),
+      ['body', 'executableFiles', 'fileCount', 'quarantinedKeys', 'totalBytes'].sort(),
+    );
+  });
+});
