@@ -64,7 +64,11 @@ export function parseMockupStories(source) {
   vm.createContext(context);
   const script = `${source}\nwindow.__STORY_PARITY_CAPTURE__ = JOURNEYS;\n`;
   try {
-    vm.runInContext(script, context, { filename: 'journeys-data.jsx' });
+    // timeout: a synchronous infinite loop (or any pathological source) must
+    // fail fast, not wedge the process forever — vm.runInContext has no
+    // timeout by default. V8 force-terminates the script past this many ms
+    // and throws, which the catch below wraps into a normal Error.
+    vm.runInContext(script, context, { filename: 'journeys-data.jsx', timeout: 5000 });
   } catch (err) {
     throw new Error(`parseMockupStories: source failed to evaluate: ${err.message}`);
   }
@@ -148,10 +152,14 @@ export function indexJourneyBeats(journeys, runOrder) {
 
 /**
  * Validate a single registry entry against a mockup story + the journey
- * index, per the 12 enforcement rules. Returns `{ errors, portedBeatCount,
- * excludedBeatCount }` — never throws for content problems (only the
- * caller's inputs — bad mockupStories/journeys/runOrder shape — throw,
- * upstream in parseMockupStories/indexJourneyBeats).
+ * index, per the 14 enforcement rules (12 original + rule 13 duplicate-beat-
+ * ref + rule 14 non-array port.beats). Returns `{ errors, portedBeatCount,
+ * excludedBeatCount }` — never throws for content problems: every branch
+ * below reports via `errors.push(...)` instead, including the non-array
+ * `port.beats` guard (rule 14) that makes this promise actually hold for a
+ * plain object / string / number, none of which are safe to `for...of`
+ * blindly. Only the caller's inputs — bad mockupStories/journeys/runOrder
+ * shape — throw, upstream in parseMockupStories/indexJourneyBeats.
  *
  * @param {RegistryEntry} entry
  * @param {MockupStory} story
@@ -199,16 +207,30 @@ function validateEntry(entry, story, journeyIndex) {
     // Rule 8: port.journey must exist.
     if (!journeyEntry) {
       errors.push(`story "${storyId}": port.journey "${port.journey}" does not exist`);
+    } else if (!Array.isArray(port.beats)) {
+      // Rule 14: port.beats must be an array. A plain object/string/number
+      // is not nullish, so a naive `for...of` on it either throws (object)
+      // or silently floods errors one-per-character (string) — guard first,
+      // push EXACTLY ONE error, and skip validation entirely (no ported/
+      // excluded counts, no rule-9 length check — there is no length to
+      // trust on a non-array).
+      errors.push(`story "${storyId}": port.beats is not an array (got ${typeof port.beats})`);
     } else {
       const mockupBeatCount = story.beats.length;
       // Rule 9: one BeatRef per mockup beat.
-      if (!Array.isArray(port.beats) || port.beats.length !== mockupBeatCount) {
+      if (port.beats.length !== mockupBeatCount) {
         errors.push(
-          `story "${storyId}": port.beats has ${Array.isArray(port.beats) ? port.beats.length : 'non-array'} ` +
-            `entries, expected ${mockupBeatCount} (one per mockup beat)`,
+          `story "${storyId}": port.beats has ${port.beats.length} entries, ` +
+            `expected ${mockupBeatCount} (one per mockup beat)`,
         );
       }
-      for (const ref of port.beats ?? []) {
+      // Rule 13: string BeatRefs (real beat references) must be unique
+      // within this entry — a repeated ref is a copy-paste typo that would
+      // otherwise silently manufacture a fake `ported` beat while leaving
+      // the actually-intended beat unreferenced. Object (excluded) BeatRefs
+      // are exempt: two independent decisions to exclude are legitimate.
+      const seenBeatRefs = new Set();
+      for (const ref of port.beats) {
         if (typeof ref === 'string') {
           // Rule 10: string BeatRef must be a real beat of that journey.
           if (!journeyEntry.beatIds.has(ref)) {
@@ -222,6 +244,12 @@ function validateEntry(entry, story, journeyIndex) {
             );
             continue;
           }
+          // Rule 13: reject a repeated real beat ref.
+          if (seenBeatRefs.has(ref)) {
+            errors.push(`story "${storyId}": beat "${ref}" is referenced more than once in port.beats`);
+            continue;
+          }
+          seenBeatRefs.add(ref);
           portedBeatCount += 1;
         } else if (ref && typeof ref === 'object') {
           // Rule 12: object BeatRef must carry non-empty excluded + decision.

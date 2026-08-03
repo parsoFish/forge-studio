@@ -18,6 +18,9 @@
  * Usage:
  *   node scripts/story-parity.mjs           # human-readable report (stdout)
  *   node scripts/story-parity.mjs --json    # JSON parity object (stdout)
+ *
+ * Exit codes: 0 clean, 1 parity errors (or a real source failed to load —
+ * that must never look like success), 2 bad CLI usage (unrecognised flag).
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -31,6 +34,7 @@ const REPO_ROOT = join(SCRIPTS_DIR, '..');
 const REGISTRY_PATH = join(SCRIPTS_DIR, 'journeys', 'story-registry.mjs');
 const JOURNEYS_INDEX_PATH = join(SCRIPTS_DIR, 'journeys', 'index.mjs');
 const MOCKUP_SOURCE_PATH = join(REPO_ROOT, 'mockups', 'studio-endstate-v2', 'journeys-data.jsx');
+const USAGE = 'usage: story-parity.mjs [--json]';
 
 /**
  * Dynamically import a module by absolute filesystem path. Converts to a
@@ -43,8 +47,36 @@ async function importByPath(absolutePath) {
   return import(pathToFileURL(absolutePath).href);
 }
 
+/**
+ * Parse CLI argv explicitly. The only recognised flag is `--json`; anything
+ * else (a typo like `--jsonnn`, a different case, `--help`, a stray
+ * positional) is rejected rather than silently ignored — an unrecognised
+ * argument must never fall through to the default report with exit 0.
+ * @param {string[]} argv full `process.argv`
+ * @returns {{ jsonMode: boolean }}
+ */
+function parseArgs(argv) {
+  const args = argv.slice(2);
+  let jsonMode = false;
+  for (const arg of args) {
+    if (arg === '--json') {
+      jsonMode = true;
+    } else {
+      throw new Error(`story-parity: unrecognised argument "${arg}"\n${USAGE}`);
+    }
+  }
+  return { jsonMode };
+}
+
 async function main() {
-  const jsonMode = process.argv.includes('--json');
+  let jsonMode;
+  try {
+    ({ jsonMode } = parseArgs(process.argv));
+  } catch (err) {
+    console.error(err.message);
+    process.exit(2);
+    return;
+  }
 
   let STORY_REGISTRY;
   try {
@@ -69,6 +101,16 @@ async function main() {
     ({ JOURNEYS, RUN_ORDER } = await importByPath(JOURNEYS_INDEX_PATH));
   } catch (err) {
     console.error(`story-parity: could not load the journey harness at ${JOURNEYS_INDEX_PATH}: ${err.message}`);
+    process.exit(1);
+    return;
+  }
+  if (!Array.isArray(JOURNEYS)) {
+    console.error(`story-parity: ${JOURNEYS_INDEX_PATH} does not export an array JOURNEYS`);
+    process.exit(1);
+    return;
+  }
+  if (!Array.isArray(RUN_ORDER)) {
+    console.error(`story-parity: ${JOURNEYS_INDEX_PATH} does not export an array RUN_ORDER`);
     process.exit(1);
     return;
   }
