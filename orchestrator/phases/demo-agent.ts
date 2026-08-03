@@ -533,6 +533,60 @@ export function normalizeCriterion(c: string): string {
   return c.replace(/^\(WI-[^)]*\)\s*/i, '').replace(/\s+/g, ' ').trim();
 }
 
+/** Lowercased word-token set of a normalized criterion, for tolerant coverage. */
+function criterionTokens(c: string): Set<string> {
+  return new Set(normalizeCriterion(c).toLowerCase().split(' ').filter(Boolean));
+}
+
+/** Jaccard overlap of two token sets (1 when both empty). */
+function tokenJaccard(a: Set<string>, b: Set<string>): number {
+  if (a.size === 0 && b.size === 0) return 1;
+  let inter = 0;
+  for (const t of a) if (b.has(t)) inter += 1;
+  return inter / (a.size + b.size - inter);
+}
+
+/**
+ * AC-coverage minimum similarity. The coverage check exists to catch an agent
+ * that SKIPS a criterion (dodging fix-proposal work), NOT to police verbatim
+ * transcription. Requiring byte-exact reproduction is brittle plumbing: the demo
+ * agent reliably authors the CONTENT of each criterion but, on a long data-dense
+ * criterion (300–700+ chars of embedded expected-output), makes an incidental
+ * transcription slip — e.g. one wrong filename deep in the string (verify:cycle
+ * gitpulse-coupling run3, 2026-08-03: 20/21 exact, the 1 miss was `beta.ts` where
+ * the criterion said `gamma.ts` at char 711 of ~720). A high token-overlap
+ * threshold covers a transcription slip while a genuinely-skipped criterion (no
+ * corresponding authored entry) still falls below it. Matching is bijective (one
+ * authored entry covers at most one injected criterion) so the guarantee holds.
+ */
+export const AC_COVERAGE_MIN_SIMILARITY = 0.8;
+
+/**
+ * Which injected criteria are NOT covered by the authored acEvaluations, under a
+ * tolerant + bijective token-similarity match. Empty ⇒ full coverage.
+ */
+export function uncoveredCriteria(injectedCriteria: string[], authoredCriteria: string[]): string[] {
+  const authored = authoredCriteria.map((a) => criterionTokens(a));
+  const used = new Array(authored.length).fill(false);
+  const uncovered: string[] = [];
+  for (const c of injectedCriteria) {
+    const ct = criterionTokens(c);
+    let bestIdx = -1;
+    let bestSim = 0;
+    for (let i = 0; i < authored.length; i += 1) {
+      if (used[i]) continue;
+      const sim = tokenJaccard(ct, authored[i]);
+      if (sim > bestSim) {
+        bestSim = sim;
+        bestIdx = i;
+      }
+    }
+    if (bestIdx >= 0 && bestSim >= AC_COVERAGE_MIN_SIMILARITY) used[bestIdx] = true;
+    else uncovered.push(c);
+  }
+  return uncovered;
+}
+
 function validateAuthoredDemo(
   demoJsonAbs: string,
   demoDirRel: string,
@@ -560,18 +614,20 @@ function validateAuthoredDemo(
       ],
     };
   }
-  // AC-coverage enforcement: an agent that omits acEvaluations (or covers only
-  // a subset of the injected criteria) would otherwise sail to a vacuous
-  // 'complete' — the cheapest way to avoid writing fix proposals. Every
-  // injected criterion needs a verbatim entry.
+  // AC-coverage enforcement: an agent that omits acEvaluations (or covers only a
+  // subset of the injected criteria) would otherwise sail to a vacuous 'complete'
+  // — the cheapest way to avoid writing fix proposals. Every injected criterion
+  // must be addressed, but matching is TOLERANT (bijective token-similarity, not
+  // byte-exact): the gate catches a SKIPPED criterion, it does not police
+  // verbatim transcription of a long data-dense criterion (see
+  // AC_COVERAGE_MIN_SIMILARITY).
   if (injectedCriteria.length > 0) {
-    const authored = new Set((model.acEvaluations ?? []).map((e) => normalizeCriterion(e.criterion)));
-    const uncovered = injectedCriteria.filter((c) => !authored.has(normalizeCriterion(c)));
+    const uncovered = uncoveredCriteria(injectedCriteria, (model.acEvaluations ?? []).map((e) => e.criterion));
     if (uncovered.length > 0) {
       return {
         ok: false,
         errors: uncovered.map(
-          (c) => `acEvaluations is missing an entry for this criterion (author it verbatim, judge met|partial|missed): "${c}"`,
+          (c) => `acEvaluations has no entry addressing this criterion (author one, judge met|partial|missed): "${c}"`,
         ),
       };
     }

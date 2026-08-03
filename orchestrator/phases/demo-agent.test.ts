@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { runDemoAgentPipeline, assertDemoAgentDeclaration, normalizeCriterion, type DemoAgentPipelineResult } from './demo-agent.ts';
+import { runDemoAgentPipeline, assertDemoAgentDeclaration, normalizeCriterion, uncoveredCriteria, type DemoAgentPipelineResult } from './demo-agent.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import { serializeWorkItem, type WorkItem } from '../work-item.ts';
 import { validateDemoFixSpec, demoFixSpecJsonPath } from '../flow-artifacts.ts';
@@ -107,7 +107,7 @@ function diffStatFromPrompt(prompt: string): string {
   return m![1]!;
 }
 
-/** The exact criterion string the pipeline injects (WI-prefixed GWT — AC coverage matches verbatim). */
+/** The exact criterion string the pipeline injects (WI-prefixed GWT — AC coverage matches it via tolerant token-similarity). */
 const INJECTED_CRITERION = '(WI-1) GIVEN the CLI is built WHEN it runs bare THEN usage prints';
 
 function validDemoJson(diffStat: string, opts: { command?: string; verdict?: 'met' | 'partial' | 'missed' } = {}): Record<string, unknown> {
@@ -737,4 +737,30 @@ test('normalizeCriterion: injected (WI-N)-prefixed criterion matches the agent-a
   assert.equal(normalizeCriterion(injected), normalizeCriterion(authoredReflowed), 'internal whitespace differences must not block a match');
   // But genuinely different content must NOT collapse to equal.
   assert.notEqual(normalizeCriterion(injected), normalizeCriterion('(WI-2) GIVEN something else WHEN x THEN y'));
+});
+
+test('uncoveredCriteria: tolerant + bijective — transcription slips covered, skips still caught', () => {
+  // Regression (verify:cycle gitpulse-coupling run3, 2026-08-03): the demo agent
+  // authored every criterion's content but made a one-word transcription slip
+  // deep in a ~720-char data-dense criterion (`beta.ts` where the criterion said
+  // `gamma.ts`). A byte-exact gate failed the whole cycle over valid work.
+  const long = (file: string) =>
+    `GIVEN src/coupling.ts exports computeCoupling(commits: Commit[]) with pair keys canonicalised as min(a,b)+'|'+max(a,b) WHEN called THEN returns [{fileA:'alpha.ts',fileB:'${file}',coChanges:2,couplingPct:40}] sorted coChanges desc then fileA asc then fileB asc`;
+  const injected = ['(WI-1) ' + long('gamma.ts'), '(WI-2) GIVEN an empty commits array WHEN computeCoupling([]) is called THEN returns []'];
+  const authored = [
+    long('beta.ts'), // one wrong filename deep in a long criterion (the run3 slip) + dropped (WI-N) label
+    'GIVEN an empty commits array WHEN computeCoupling([]) is called THEN returns []',
+  ];
+  assert.deepEqual(uncoveredCriteria(injected, authored), [], 'a transcription slip + dropped label must not fail coverage');
+
+  // A genuinely SKIPPED criterion is still caught (no false coverage).
+  const skipped = uncoveredCriteria(
+    [...injected, '(WI-3) GIVEN a totally unrelated widget WHEN the frobnicator spins THEN it emits purple sparks'],
+    authored,
+  );
+  assert.equal(skipped.length, 1, 'a skipped criterion with no authored counterpart must stay uncovered');
+
+  // Bijection: one authored entry cannot cover two distinct injected criteria.
+  const twoInjectedOneAuthored = uncoveredCriteria([injected[1], injected[1]], [authored[1]]);
+  assert.equal(twoInjectedOneAuthored.length, 1, 'one authored entry covers at most one injected criterion');
 });
