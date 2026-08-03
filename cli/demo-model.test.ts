@@ -25,6 +25,7 @@ import {
   stampCaptureNonce,
   type DemoModel,
 } from './demo-model.ts';
+import type { HarnessMetricRow } from './demo-types.ts';
 
 function validModel(): DemoModel {
   return {
@@ -247,6 +248,23 @@ test('renderDemoMarkdown: renders a harness metric table when present', () => {
   const md = renderDemoMarkdown(m);
   assert.match(md, /\| metric \| before \| after \| Δ \| parity \|/);
   assert.match(md, /\| fps \| 30 \| 60 \| \+100\.0% \| diverged \|/);
+});
+
+test('renderDemoMarkdown: a metric with an omitted (undefined) or null deltaPct renders "—" and does not crash', () => {
+  // Regression (verify:cycle gitpulse-coupling, 2026-08-03): only `parity` is
+  // validated on an authored metric row, so an omitted delta reaches the
+  // renderer as `undefined` (not `null`) — a `=== null` guard fell through to
+  // `undefined.toFixed()` and crashed the whole post-dev demo render.
+  const m = validModel();
+  m.checkpoints[0].kind = 'harness';
+  m.checkpoints[0].metrics = [
+    // deltaPct omitted entirely → undefined at runtime (external agent JSON).
+    { label: 'pairs', unit: '', before: '0', after: '3', parity: 'incomplete' } as unknown as HarnessMetricRow,
+    { label: 'ratio', unit: '%', before: '—', after: '66.7', deltaPct: null, parity: 'incomplete' },
+  ];
+  const md = renderDemoMarkdown(m);
+  assert.match(md, /\| pairs \| 0 \| 3 \| — \| new \|/);
+  assert.match(md, /\| ratio \| — \| 66\.7 \| — \| new \|/);
 });
 
 // ── renderDemoBundle ──────────────────────────────────────────────────────
