@@ -1,6 +1,15 @@
 # ADR 026 — Review feedback as unifier work-items (one cycle, no send-back to dev)
 
-- **Status:** superseded by [ADR 040](./040-review-send-back-develop-loop.md) (2026-07-25 — review send-back now compiles fix work-items onto the initiative's own WI queue and re-dispatches the develop agent; was: accepted, operator-confirmed model + the typed-UWI decision 2026-06-07)
+> **Retired in R4-01-F4 (2026-08-03).** The typed-UWI machinery this ADR
+> introduced — `orchestrator/unifier-items.ts`, the `WorkItem.kind` dispatch
+> selector, the composed unifier gate, and the whole `developer-unifier`
+> executor — was physically removed. Its successor (already the live mechanism
+> since [ADR 040](./040-review-send-back-develop-loop.md)) is the review→develop
+> fix-loop: `adversarial-review` compiles fix work-items onto the initiative's
+> own WI queue and re-dispatches the develop agent (drain = `drain-fix-loop.ts`,
+> R4-10). This ADR is kept as the historical record of the intermediate design.
+
+- **Status:** superseded by [ADR 040](./040-review-send-back-develop-loop.md) (2026-07-25 — review send-back now compiles fix work-items onto the initiative's own WI queue and re-dispatches the develop agent; was: accepted, operator-confirmed model + the typed-UWI decision 2026-06-07); **machinery physically retired R4-01-F4 (2026-08-03)**
 - **Date:** 2026-06-07
 - **Supersedes / amends:** **amends [ADR 019](./019-cycle-resume-from-unifier.md)** — retires `resume_from` as the *review send-back* mechanism (the crash-recovery resume + its rebase-onto-main step survive, repurposed). Builds on [ADR 021](./021-local-review-and-unified-demo.md) (in-UI review) and the sole-operator-surface principle (now [ADR 031](./031-studio-consolidation.md) — UI is the sole operator surface).
 - **Relates to:** the 2026-06-07 release-folder-data-source assessment, whose three forge defects share one root cause this ADR removes (see Context).

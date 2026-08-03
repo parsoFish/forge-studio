@@ -192,13 +192,12 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
 
 ### R4-01 Platform→artifact migration
 
-- **Status:** **implemented (F1–F3)** — built 2026-07-24 (wave-4 session 1, as-built baseline **R4-B12**),
-  **MERGED PR #39** (main `0211972`, 2026-07-24). The F2 AC's real-run half (frozen-SHA `verify:cycle`)
-  rides the **single tail-of-wave verify run** (operator decision 2026-07-24, superseding the earlier
-  hold-PR disposition), which also serves R4-10-F5's harness-migration proof. **F4 stays planned**
-  (end of wave 4, after R4-10-F2 — the gate-relocation verdict is APPROVED + recorded in ADR-036,
-  so F2's precondition is met).  ·  **Wave:** 4 — first item of wave 4, before the agent
-  initiatives; **F4 alone runs last**, after R4-10-F2 (not contiguous with F1–F3)
+- **Status:** **implemented (F1–F4)** — F1–F3 built 2026-07-24 (wave-4 session 1, as-built baseline
+  **R4-B12**), **MERGED PR #39** (main `0211972`). **F4 (unifier retirement) built 2026-08-03** (end of
+  wave 4, after R4-10 live + the tail-of-wave verify run judged the successor flow valid). The F2 AC's
+  real-run half rode the tail-of-wave `verify:cycle` (operator decision 2026-07-24), which also serves
+  R4-10-F5's harness-migration proof.  ·  **Wave:** 4 — first item of wave 4, before the agent
+  initiatives; **F4 alone ran last**, after R4-10 (not contiguous with F1–F3)
 - **Implemented-notes (2026-07-24, F1–F3):** the seam landed as **declared
   dispatch** (ADR-039): `runtime.loopStrategy` (`one-shot` = a direct pinned
   SDK stream inside `runAgent`; `ralph` = execAgent routes to the dev-loop
@@ -272,6 +271,20 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
     amendment in the same PR; send-back demonstrably works on both sides of
     the cutover (journey + verify evidence); a pre-cutover check proves no
     stranded UWIs.
+    **— built (2026-08-03, PR #69):** drain check clean (0 pending UWIs in
+    `_queue/ready-for-review/`). Deleted `orchestrator/unifier-invocation.ts` +
+    `orchestrator/unifier-items.ts` + `skills/developer-unifier/`; excised
+    `runUnifierPhase`/`runUnifier`/`unifierItemClassify`/`composedUnifierGate` +
+    the whole UWI machinery (~1400 lines) from `developer-loop.ts`; removed
+    `execUnifier` + the `runUnifier` dep + the `'unifier'` NodeKind from
+    `flow-runner.ts`; emptied `PHASE_EXECUTOR_KINDS` (no phase executors remain —
+    `validate.ts` now rejects any `executor:` field); removed the UWI-only
+    `WorkItem.kind`; reassigned the catalog `composedBy` refs off `developer-unifier`
+    to the successor agents (`adversarial-review`/`demo-agent`). ADR-026 +
+    ADR-028 amended. suite 2591/2591, `forge studio lint`/`brain lint` 0 errors.
+    (`drain-unifier-items.ts`/`appendReviewUnifierItems` from the original scope
+    did not exist as separate artifacts — the drain successor is
+    `drain-fix-loop.ts`, R4-10.)
 - **Session sizing:** ~3 sessions (ADR + one phase; remaining phases) **plus a
   separate end-of-wave-4 retirement session for F4** (waits on R4-10-F2).
 - **Out of scope:** the runnable primitive itself (R2-01); new agent behaviour

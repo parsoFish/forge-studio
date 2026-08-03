@@ -12,10 +12,11 @@
  * place (`MODEL_BY_TIER`) maps tier → concrete model id, so a tier re-point is a
  * single edit.
  *
- * This module is the first concrete instance of the seam (the unifier — see
- * `unifierAgentSpec` in `unifier-invocation.ts`). Other phases adopt the same
- * spec incrementally (ADR 024: documented now, migrated incrementally). Pure
- * data + a resolver — no SDK / IO.
+ * The seam is consumed by every phase agent's binding (e.g. the demo agent's
+ * `deriveAgentSpec(skillPath('demo-agent'))`); each phase sources its intent
+ * from its `SKILL.md` via `PhaseAgentSpec` (ADR 024, migration complete —
+ * R4-01-F4 retired the last legacy phase, the unifier). Pure data + a resolver
+ * — no SDK / IO.
  */
 
 export type ModelTier = 'haiku' | 'sonnet' | 'opus';

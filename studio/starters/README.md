@@ -18,7 +18,7 @@ Project-onboarding templates (copied into a *managed project*, not instantiated 
 ## Why a separate `studio/starters/` directory
 
 The starters are deliberately **clean-room**. They carry none of the weight of forge's production
-phase agents (`architect`, `project-manager`, `developer-ralph`, `developer-unifier`, `reflector`):
+phase agents (`architect`, `project-manager`, `developer-ralph`, `demo-agent`, `adversarial-review`, `reflector`):
 no brain access, no phase coupling, no composed forge skills — just a tiny self-contained process
 body, a sensible default model, and the minimum tools each role needs.
 

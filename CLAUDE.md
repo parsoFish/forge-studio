@@ -138,7 +138,7 @@ real project.
 Where to look for as-built detail:
 
 - Code structure: [`ARCHITECTURE.md`](./ARCHITECTURE.md), [`PRINCIPLES.md`](./PRINCIPLES.md), [ADRs](./docs/decisions/).
-- Per-phase invocation contracts: `orchestrator/phases/{pm,dev,reflector}-binding.ts` (+ `orchestrator/unifier-invocation.ts`, the one un-migrated phase until R4-01-F4).
+- Per-phase invocation contracts: `orchestrator/phases/{pm,dev,reflector}-binding.ts` + the develop flow's successor band agents `demo-agent`/`adversarial-review` (R4-01-F4 retired the last legacy phase, the unifier).
 - Cycle archives: [`brain/_raw/cycles/`](./brain/_raw/cycles/).
 - Forge-level patterns: [`brain/cycles/themes/`](./brain/cycles/themes/).
 - Per-project patterns: [`brain/projects/<project>/themes/`](./brain/projects/).

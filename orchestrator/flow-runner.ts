@@ -63,7 +63,6 @@ import { CostTracker, WedgeDetector, WedgeKillError, RateLimitGate } from './flo
 import { runProjectManager as realRunProjectManager } from './phases/project-manager.ts';
 import {
   runDeveloperLoop as realRunDeveloperLoop,
-  runUnifierPhase as realRunUnifierPhase,
   emitDeliverySummary,
 } from './phases/developer-loop.ts';
 import { runDemoAgentPipeline, type DemoAgentPipelineResult } from './phases/demo-agent.ts';
@@ -112,18 +111,6 @@ export type FlowRunnerDeps = {
     logger: EventLogger,
     signal?: AbortSignal,
   ) => Promise<void>;
-
-  runUnifier: (
-    input: CycleInput,
-    logger: EventLogger,
-    signal?: AbortSignal,
-  ) => Promise<{
-    unifierSucceeded: boolean;
-    unifierFailureClass: string | null;
-    commitsAhead: number;
-    filesChanged: number;
-    insertions: number;
-  }>;
 
   /**
    * R4-10-F1 demo node: the R4-07 demo pipeline (author demo.json + the
@@ -284,7 +271,6 @@ function topoSort(flow: FlowDefinition): string[] {
 
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
-  | 'unifier'     // agent def declares executor:'unifier' (developer-unifier) — runUnifierPhase + close-contract gates; the LAST declared executor row, held until R4-01-F4
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
   | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); ADR-039 declared dispatch: a band hook (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
   | 'unknown';    // defensive fallback — no def, or an invalid declared executor
@@ -399,8 +385,6 @@ const DEFAULT_DEPS: FlowRunnerDeps = {
     realRunProjectManager(input, logger, { signal }),
   runDeveloperLoop: (input, logger, signal?) =>
     realRunDeveloperLoop(input, logger, signal),
-  runUnifier: (input, logger, signal?) =>
-    realRunUnifierPhase(input, logger, signal),
   runDemoAgent: (input, logger, signal?) =>
     runDemoAgentPipeline(
       {
@@ -770,33 +754,6 @@ const execDev: NodeExecutor = async (ctx) => {
 };
 
 /**
- * unifier: the unifier sub-phase (runUnifierPhase), then items 4-8 of the close
- * contract. A real executor (M8-0) — no longer a marker. Gets its own wedge
- * detector. The delivery gate (6-8) lives here so it runs against the unified
- * branch, in the same order as the former in-dev-loop sequence.
- */
-const execUnifier: NodeExecutor = async (ctx) => {
-  const { input, nodeLogger, deps } = ctx;
-  const unifierOutcome = await runWithWedge(ctx, (sig) => deps.runUnifier(input, nodeLogger, sig));
-
-  // Item 4: commit any uncommitted work before the reviewer starts.
-  deps.commitDevLoopBoundary(input.worktreePath, nodeLogger, input.initiativeId);
-  // Item 5: push once more + assert local↔remote invariant.
-  deps.enforceDevLoopCloseInvariant(input.worktreePath, nodeLogger, input.initiativeId);
-  // Item 6: delivery gate — unifier must have passed.
-  if (!unifierOutcome.unifierSucceeded) {
-    throw new Error(
-      `delivery gate: unifier did not pass (${unifierOutcome.unifierFailureClass ?? 'dev-loop-unifier-gate-failed'}) — ` +
-        `the branch is not review-ready, so no PR is opened. Triage the unifier failure before re-running.`,
-    );
-  }
-  // Item 7: empty-branch guard.
-  deps.assertNonEmptyDelivery(unifierOutcome, input.initiativeId, input.worktreePath, nodeLogger);
-  // Item 8: final CI delivery gate (before openPrInline in the review node).
-  deps.enforceFinalCiGate(input, nodeLogger);
-};
-
-/**
  * demo (the `demo-band`, ADR-039): the R4-07 demo pipeline + the relocated
  * dev-loop close contract (items 4,5,7,8) — the develop flow's successor to the
  * unifier node (R4-10-F1). The demo agent authors demo.json AND the relocated
@@ -1099,8 +1056,8 @@ export function triggeredRunContextLine(input: CycleInput): string | null {
 /**
  * agent: the generic F1 runAgent path (R2-01-F2, AC #1). Resolves ONLY when
  * `resolveNodeKind` picked 'agent' — a real roster def with no declared
- * `executor` (i.e. not the sole remaining legacy phase executor, 'unifier' —
- * R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect' onto declared dispatch). No gate, no
+ * `executor` (R4-01-F2/ADR-039 retired 'pm'/'dev'/'reflect' onto declared dispatch;
+ * R4-01-F4 retired the last one, 'unifier' — no phase executors remain). No gate, no
  * runWithWedge (runAgent takes no AbortSignal — abort-chaining is R2-03-F4's
  * job; wedge budgets are inert in production regardless, ADR-036 forbids the
  * primitive running its own gate).
@@ -1183,7 +1140,6 @@ const execAgent: NodeExecutor = async (ctx) => {
  */
 const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
   architect: execArchitect,
-  unifier: execUnifier,
   review: execReview,
   agent: execAgent,
   unknown: execUnknown,

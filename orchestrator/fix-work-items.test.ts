@@ -46,7 +46,6 @@ function seedWorkItem(
     quality_gate_cmd: overrides.quality_gate_cmd ?? PROJECT_GATE,
     body: overrides.body ?? `# ${id}`,
     ...(overrides.origin !== undefined ? { origin: overrides.origin } : {}),
-    ...(overrides.kind !== undefined ? { kind: overrides.kind } : {}),
     ...(overrides.behavior_preserving !== undefined
       ? { behavior_preserving: overrides.behavior_preserving }
       : {}),

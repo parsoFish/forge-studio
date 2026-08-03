@@ -31,7 +31,9 @@ import {
 } from '../orchestrator/fix-work-items.ts';
 import { loadConfig, resolveReviewLoopCaps } from '../orchestrator/config.ts';
 import { notify } from '../orchestrator/notify.ts';
-import { UNIFIER_DEFAULT_ITERATION_CAP } from '../orchestrator/unifier-invocation.ts';
+/** Default per-WI iteration budget for compiled review-fix work items (was the
+ *  unifier's default cap before R4-01-F4 retired that module). */
+const REVIEW_FIX_DEFAULT_ITERATIONS = 15;
 import { writeVerdictJson } from '../orchestrator/flow-artifacts.ts';
 import { createLogger, type EventLogger } from '../orchestrator/logging.ts';
 import type { ArchitectStatus } from '../orchestrator/architect-runner.ts';
@@ -380,7 +382,7 @@ export async function applyReviewVerdict(
       initiativeId,
       source: { origin: 'review-fix', rationale, acceptanceCriteria: acs, concernKind, qualityGateCmd: concernGateCmd },
       projectGateCmd,
-      estimatedIterations: UNIFIER_DEFAULT_ITERATION_CAP,
+      estimatedIterations: REVIEW_FIX_DEFAULT_ITERATIONS,
       caps,
       currentRound,
     });

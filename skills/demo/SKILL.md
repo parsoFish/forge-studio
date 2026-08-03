@@ -1,6 +1,6 @@
 ---
 name: demo
-description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The demo phase agent (skills/demo-agent, R4-07) composes this skill to author the structured demo.json and derive DEMO.md; until R4-01-F4 retires it, the developer-unifier (ADR 024) also composes it on the legacy path. The unifier reads the project's generated demo skill (from skills/demo-design) to know what evidence to produce; this skill defines the contract that evidence must satisfy. Scale demo effort to the size of the change.
+description: The canonical forge demo capability — how forge runs a demo, what every demo must contain, and how the demo maps to the forge UI review page. A demo makes ONE behavioural delta (prior → new) visible, grounded in the initiative's acceptance criteria. The demo phase agent (skills/demo-agent, R4-07) composes this skill to author the structured demo.json and derive DEMO.md. The demo agent reads the project's generated demo skill (from skills/demo-design) to know what evidence to produce; this skill defines the contract that evidence must satisfy. Scale demo effort to the size of the change.
 library: true
 phase: developer-loop
 surface: unattended
@@ -344,8 +344,7 @@ The typed `demoProcess` descriptor (`.forge/project.json`) is the single shared
 declaration of what a demo must capture/verify/present — but it has two married
 faces, not two competing contracts (`docs/forge-project-contract.md` §DEMO).
 **Face A** is the executed demo this skill defines: `demo.json`, composed at
-cycle time by the demo agent (`skills/demo-agent`, R4-07) or, on the legacy
-path, the developer-unifier. **Face B** is the demo-builder's per-initiative
+cycle time by the demo agent (`skills/demo-agent`, R4-07). **Face B** is the demo-builder's per-initiative
 HTML skill (`skills/demo-builder`, R1-03-F2): save-time authoring/preview of
 what a demo *could* look like, not a cycle-time artefact. The descriptor is
 shared; the deliverables intentionally differ.
