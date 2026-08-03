@@ -17,7 +17,7 @@ import {
   templateBadges,
   previewClassFor,
 } from './template-library-view.ts';
-import type { TemplateLibraryEntry } from './studio-client.ts';
+import type { TemplateLibraryEntry } from './template-client.ts';
 
 function entry(overrides: Partial<TemplateLibraryEntry> & { id: string; category: TemplateLibraryEntry['category'] }): TemplateLibraryEntry {
   return {
