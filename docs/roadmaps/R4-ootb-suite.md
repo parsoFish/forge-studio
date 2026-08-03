@@ -188,6 +188,39 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
   (`orchestrator/studio/validate.ts`); journey evidence in the `agents` journey
   (builder-save preserves declared dispatch).
 
+### R4-B13 Wave-5 mockup alignment register (2026-08-03)
+
+The studio-endstate-v2 mockup (`mockups/studio-endstate-v2/`; 27 scripted
+journeys) was diffed against the wave-4 as-built suite
+(`as-built-inventory.md`). **Verified ALIGNED — baseline material, not
+initiatives** — with each agent/flow's mockup run journey adopted as its
+standing acceptance reference for future refinements:
+
+- **developer** (`run-agent-developer`) — ralph loop, per-WI fanout,
+  write-first continuity, brain-read policy (project-advisory only): all
+  as-built (R2-03/R4-06).
+- **adversarial-review** (`run-agent-adversarial-review`) — refute-first
+  findings, feeds the verdict gate: as-built (R4-08, R4-10).
+- **demo-runner** (`run-agent-demo-runner`) — project-demo-skill execution,
+  actual-resource evidence: as-built (R4-07); the *showcase page* delta is
+  R4-14, the *project-hook trigger* delta is R2-08.
+- **reflector** (`run-agent-reflector`) — outside-the-cycle reflection into
+  the brains, merged-trigger: as-built (R4-09); the *brain-tune flow*
+  packaging delta is R4-20.
+- **forge-develop flow** (`run-flow`) — dev→demo→adversarial-review→verdict
+  topology, hex nodes, typed hand-off artifacts: as-built (R4-10); the
+  mockup's extra "Initiative intake" queue node is presentation of the
+  existing queue claim, not a new flow node.
+- Also aligned per the cut prompt: hex canvas + ArtifactPicker edges, 4-kind
+  triggers, KB force-graph, skills builder, architect interview → unified
+  gate.
+
+**Vision items deliberately NOT cut** (recorded so absence ≠ oversight): the
+`demo-rest-api` / `demo-web-ui` OOTB demo projects (`provenance: 'vision'`)
+ride R3-06-F3 scaffolds + R4-03 creation when those land; the
+`demo-design`/`research` parallel-intake agents are parked with **R2-D2**
+(operator decision 2).
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -1202,6 +1235,286 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
   notification *transport* beyond the in-Studio blade (no email/push — YAGNI
   until asked; tracked as **R6-D1**).
 
+### R4-12 Project detail alignment
+
+- **Status:** planned  ·  **Wave:** 5 (module: projects-list/detail)
+- **Depends on:** R6-01-F4 (soft — completed-run dig-in links land on its
+  detail pages). **Depended on by:** R4-13, R4-14 (tab/showcase hang off this
+  page's IA).
+- **Context:** Wave-5 cut. The mockup's project page (`views-projects.jsx`,
+  `PROJECT_CONTRACTS` in `data.jsx`) permanently shows the **contract
+  panel** — north star (verbatim), conventions, gates, secrets (**names
+  only**, never values) — plus the cycle ledger with **completed-run
+  dig-in** (every row → its run detail) and the demo-artifact gallery.
+  As-built (`as-built-inventory.md` §1/§8): the project page has NorthStar +
+  Instructions + contract-readiness + cycles + demo timeline, but contract
+  facts are not one permanent panel, and completed cycles have no dig-in.
+  Round-5 rule: what a session stages "lands on the project page" — this is
+  the landing surface for R2-10-F2's staged artifacts.
+- **Features:**
+  - **R4-12-F1 Permanent contract panel.** North star / conventions / gates /
+    secrets-names rendered from the project's real contract artifacts
+    (AGENTS.md + secrets contract + gate config — parsed, not duplicated;
+    the panel is a VIEW of the artifacts, so it cannot drift). ACs: panels
+    render for a contract-green project and degrade honestly (explicit
+    "missing" states) for a partial one; secrets show names only; `data-*`
+    contract; journey beat.
+  - **R4-12-F2 Cycle ledger dig-in.** Project cycle rows adopt the shared
+    ledger vocabulary (R6-05) and link to run detail (R6-01-F4), completed
+    included. ACs: archived real cycle → detail navigation; vocabulary
+    shared, not re-implemented.
+- **Session sizing:** ~2 sessions.
+- **Acceptance references:** mockup journeys `onboard-project`,
+  `create-project` (landing beats); surface `views-projects.jsx`.
+- **Out of scope:** roadmap tab (R4-13); showcase (R4-14); onboarding session
+  content (R4-17).
+
+### R4-13 Project roadmap tab (dependency DAG)
+
+- **Status:** planned  ·  **Wave:** 5 (module: project-roadmap-tab)
+- **Depends on:** R4-12 (the Overview | Roadmap tab split lives on its page).
+- **Context:** Wave-5 cut, **operator decision 4 (2026-08-03): the dependency
+  DAG replaces the serpentine.** Mockup round-7: the roadmap moves to its own
+  full-page tab (`Overview | Roadmap`) — big dependency-DAG columns + the
+  initiative table; Overview keeps a compact table. Every initiative with a
+  run digs straight into its node-by-node breakdown, completed included
+  (round-6). As-built: `SerpentineTimeline.tsx` (SVG boustrophedon, dotted
+  dependency arcs) inline on the project page (`as-built-inventory.md` §8).
+- **Features:**
+  - **R4-13-F1 Full-page Roadmap tab with DAG viz.** Dependency-DAG column
+    layout (mockup `ROADMAPS` shape: status-coloured nodes, `dep:` edges,
+    shared `status-colors.ts` vocabulary incl. `merged` /
+    `blocked-until-planned` states from R4-11) + the initiative table;
+    Overview keeps the compact table. **`SerpentineTimeline` retires in this
+    feature** — component deleted, its click-to-pop detail affordance
+    re-homed on the DAG nodes (R4-11-F2/F3's plan-trigger + recovery
+    affordances move with it, unchanged in behaviour). ACs: DAG renders a
+    real multi-initiative roadmap with correct edges; serpentine gone,
+    `ui:deadpaths` green; the R4-11 roadmap-node affordances (Plan action,
+    lock badge, recovery) all reachable on the DAG; journey rewritten
+    against the tab.
+  - **R4-13-F2 Per-initiative run dig-in.** An initiative node/row with runs
+    links to its run detail (R6-01-F4), completed included. ACs: navigation
+    proven on an archived cycle.
+- **Session sizing:** ~2 sessions.
+- **Acceptance references:** mockup journeys `run-flow` + roadmap beats of
+  `create-project`/`onboard-project`; surface `views-projects.jsx`
+  (`ROADMAPS`).
+- **Out of scope:** roadmap *content*/plan quality (R4-05); attention strip
+  (R4-11-F4, done); forge-dev's own `docs/roadmaps/` (not a product surface).
+
+### R4-14 Demo showcase page
+
+- **Status:** planned  ·  **Wave:** 5 (module: demo-showcase)
+- **Depends on:** R4-12 (entry from the project page), R1-03 (demo-process
+  clause — the artifacts it renders).
+- **Context:** Wave-5 cut. Mockup `#/projects/showcase/<id>`
+  (`views-showcase.jsx`, `SHOWCASE` in `data.jsx`): a per-project standing
+  demo page — latest cycle's stats strip, the live API/CLI transcript, and
+  the evidence gallery (screenshot pairs, clips, HTML summaries) — the
+  "show someone the project" surface, distinct from per-run evidence.
+  As-built: demo artifacts render per-run in `/artifact` + the project demo
+  timeline; there is no standing showcase (`as-built-inventory.md` §1).
+  Standing feedback: demos must show the ACTUAL resource — the showcase is
+  that rule as a page.
+- **Features:**
+  - **R4-14-F1 Showcase surface.** Route + page rendering the project's
+    most recent demo-artifact set (derived from the real demo dir/manifest;
+    corpus-grounded fixtures for journeys per the demo-seeds rule), stats
+    from the run model, evidence gallery with typed items. Refresh is
+    data-driven — a new merged cycle's artifacts appear without page
+    changes; the *auto-refresh trigger* (demo-runner on PR-merged project
+    hook) is R2-08-F3's row, consumed here. ACs: showcase renders a real
+    archived demo set; empty state honest for a project with no demos;
+    `data-*` contract; journey beat (`run-agent-demo-runner` ends on the
+    refreshed showcase).
+- **Session sizing:** ~1 session.
+- **Acceptance references:** mockup journey `run-agent-demo-runner`; surface
+  `views-showcase.jsx`.
+- **Out of scope:** demo generation (R4-07 demo agent, done); demo-capability
+  authoring (R4-16); trigger machinery (R2-08).
+
+### R4-15 Architect/Planning session alignment
+
+- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent —
+  architect/planning)
+- **Depends on:** R2-10 (session shell + artifact renderers).
+- **Context:** Wave-5 cut. The mockup's `architect-planning` agent runs
+  interactive **planning sessions**: chat + a living roadmap-draft artifact
+  (visual aids, initiative splits folded into the DAG in-session), entered
+  from a project page (`SESSIONS['architect-planning']`). The mockup roster
+  merges today's architect and PM into this one agent — **that merger is
+  R4-D1 territory and stays deferred** (⚑ its re-entry remains an explicit
+  operator judgment; this initiative does NOT retire the architect flow).
+  As-built: the architect interview is turn-based Q&A with an activity log;
+  the plan agent (R4-05) is a separate non-interactive phase; roadmap drafts
+  are not a live session artifact.
+- **Features:**
+  - **R4-15-F1 Planning session through the shared shell.** The architect
+    session renders via R2-10: roadmap-draft artifact pane updating per turn
+    (mockup: split INIT-14 → 14a/14b with edges kept), interview turns on
+    the left, entry from the project page. Behaviour (checkpointed turns,
+    council, gate hand-off) unchanged. ACs: `run-agent-architect` journey
+    shape reproduced against the real session; roadmap-draft renderer
+    shared with R4-13's DAG components; existing architect journeys green.
+  - **R4-15-F2 ⚑ Merger decision brief.** A short operator brief (in-session
+    artifact of the FIRST implementation session, not a doc initiative):
+    what the mockup's merged architect-planning implies vs R4-05's plan
+    agent + R4-D1's re-entry condition, with a recommendation. No code. ACs:
+    brief exists; R4-D1 note updated with its date + outcome.
+- **Session sizing:** ~2 sessions.
+- **Acceptance references:** mockup journey `run-agent-architect`; surface
+  `views-session.jsx`.
+- **Out of scope:** architect-flow retirement (R4-D1); plan-agent internals
+  (R4-05, done).
+
+### R4-16 Demo-builder generation gallery
+
+- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent — demo-builder)
+- **Depends on:** R2-10 (session shell; the gallery is an R2-10-F3 renderer).
+- **Context:** Wave-5 cut. Mockup `SESSIONS['demo-builder']`: the
+  demo-capability session iterates **generations 1→3** (clip → +stats
+  overlay → +HTML summary) in a gallery artifact pane; the operator picks
+  one and the chosen demo skill is written into the project. As-built: the
+  demo-builder runner + project demo timeline/builder exist (R4-B6/R2-B2);
+  no generation-gallery iteration surface.
+- **Features:**
+  - **R4-16-F1 Generation gallery session.** The demo-builder session
+    renders candidate generations side-by-side (accumulating, numbered),
+    operator feedback drives the next generation, and "finalize" writes the
+    chosen demo skill to the project (existing write path). ACs:
+    `run-agent-demo-builder` journey shape against a real session; gallery
+    renderer registered in R2-10-F3; finalize round-trips to a project demo
+    skill the demo-runner can execute.
+- **Session sizing:** ~1 session.
+- **Acceptance references:** mockup journey `run-agent-demo-builder`;
+  surface `views-session.jsx`.
+- **Out of scope:** demo execution (R4-07); showcase (R4-14).
+
+### R4-17 Onboarding session staging
+
+- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent —
+  project-onboarding)
+- **Depends on:** R2-10 (staged-artifact contract — onboarding is its
+  flagship consumer), R4-02 (the onboarding agent, done). **Depended on
+  by:** R4-18.
+- **Context:** Wave-5 cut. Mockup `SESSIONS['project-onboarding']` +
+  `SESSIONS['create-project']`: the onboarding/creation interview progresses
+  through declared stages — `contract → instructions → secrets → demo →
+  roadmap` — with the artifact pane building the contract out per stage
+  (AGENTS.md north-star verbatim, secrets **names only**, demo shape,
+  starter roadmap) and everything landing on the project page (R4-12).
+  As-built: R4-02 runs through the generic run surface with no staged
+  interview UX (`as-built-inventory.md` §3).
+- **Features:**
+  - **R4-17-F1 Staged onboarding session.** The onboarding agent's session
+    declares the stage vocabulary (R2-10-F2), tags its turns, and stages the
+    contract artifacts; completion hands off per the existing R4-02 flow.
+    Creation (R4-03) reuses the same stages + the scaffold picker (R3-06-F3).
+    ACs: `onboard-project` + `create-project` journey shapes against real
+    sessions; staged artifacts land on the project page (R4-12-F1 renders
+    them); no-regression on the R4-02/R4-03 hand-offs.
+- **Session sizing:** ~1-2 sessions.
+- **Acceptance references:** mockup journeys `onboard-project`,
+  `create-project`, `run-agent-onboarding`; surface `views-session.jsx`
+  (`CONTRACT_STAGES`).
+- **Out of scope:** contract clause typing (R1-03/R1-04, done); the
+  onboard-project FLOW packaging (R4-18).
+
+### R4-18 Onboard-project OOTB flow
+
+- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-flow —
+  onboard-project)
+- **Depends on:** R4-17 (the session it wraps), R4-02 (agent, done).
+- **Context:** Wave-5 cut. The mockup ships `onboard-project` as an OOTB
+  FLOW (interview → contract author → **contract-check gate** on preflight
+  green), peer of forge-develop on the flows surface with its own ledger
+  (`FLOWS` in `data.jsx`). As-built: onboarding is a standalone agent path
+  only — no flow packaging (`as-built-inventory.md` §2: 3 seed flows).
+- **Features:**
+  - **R4-18-F1 Flow definition + gate.** A `studio/flows/onboard-project/`
+    seed chaining the onboarding session and contract authoring with a gate
+    node executing the REAL preflight (orchestrator-owned gate execution,
+    ADR-036 pattern — the agent judges readiness, the orchestrator runs
+    preflight); interactive-node placement respects the R2-01-F2 lint
+    (verify the interactive-session-in-flow model at session start — if the
+    lint forbids it, the flow starts at the post-interview hand-off and the
+    session stays the entry point, mirroring how forge-architect chains
+    today). ACs: `forge studio lint` green; flow visible with ledger on the
+    flows surface; a real onboarding run reaches the gate with real
+    preflight output; `run-flow-onboard` journey shape reproduced.
+- **Session sizing:** ~1-2 sessions.
+- **Acceptance references:** mockup journey `run-flow-onboard`; surfaces
+  `views-flows.jsx`, `FLOWS` in `data.jsx`.
+- **Out of scope:** onboarding content (R4-02/R4-17); contract machinery
+  (R1).
+
+### R4-19 Brain creation & maintenance agents
+
+- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent —
+  brain-creation/maintenance)
+- **Depends on:** R2-10 (session shell), R1's wave-5 KB entry (band-scoped
+  binding — the cycle-scope creation needs the binding kind to exist).
+- **Context:** Wave-5 cut. Mockup: **brain-creation** seeds a KB for a
+  scope — project (`SESSIONS['brain-creation']`: themes + index hub + links
+  from real history, lint 9/9 on creation) or **cycle band**
+  (`SESSIONS['brain-creation-cycle']`: `review-insights` seeded from 41
+  runs of adversarial-review findings, bound to forge-develop's review
+  band) — and **brain-maintenance** runs cleanup sessions
+  (`SESSIONS['kb-cleanup']`: duplicate-merge, edge relink,
+  needs-multi-project-evidence tagging, re-lint). As-built: the
+  project-brain-builder covers project-scope creation
+  (`as-built-inventory.md` §1); no cycle/band-scope creation, no
+  maintenance agent (guided lint-resolution exists as a UI, not an agent
+  session).
+- **Features:**
+  - **R4-19-F1 Creation agent alignment.** Project-scope creation renders
+    through the R2-10 shell (seeded-structure artifact); cycle/band-scope
+    creation added once the binding kind exists — seeded from REAL run
+    evidence (finding clusters, cycle archives), never speculation (the
+    agent instruction in the mockup is explicit). ACs: `create-kb-project` +
+    `create-kb-cycle` journey shapes against real sessions; created KB
+    passes `forge brain lint` 9/9 on creation; band-scoped KB binding
+    validates.
+  - **R4-19-F2 Maintenance agent.** A brain-maintenance session (cleanup
+    plan artifact → operator-approved actions → re-lint) wrapping the real
+    lint findings; complements — does not replace — the guided
+    lint-resolution UI. Ingest stays reflection-only (operator decision 3):
+    maintenance edits structure/links, it does not ingest new content. ACs:
+    `kb-maintain` journey shape; a seeded lint-warning KB round-trips to
+    green through a session; no ingest capability in the agent's tools.
+- **Session sizing:** ~2 sessions.
+- **Acceptance references:** mockup journeys `create-kb-project`,
+  `create-kb-cycle`, `kb-maintain`, `run-agent-brain-creation`; surface
+  `views-session.jsx`.
+- **Out of scope:** binding contract (R1); KB explore surface (R6-08);
+  reflection/ingest content (R4-09, done).
+
+### R4-20 Brain-tune OOTB flow
+
+- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-flow — brain-tune)
+- **Depends on:** R4-09 (reflect agent, done), R2-08-F2 (soft —
+  `agent-complete`/on-completion chaining it's triggered by).
+- **Context:** Wave-5 cut. Mockup `brain-tune` flow (`provenance: 'vision'`):
+  reflector → brain-ingest → **brain-lint gate** as a visible OOTB flow with
+  its own ledger, auto-triggered when a forge-develop run completes.
+  As-built: `forge-reflect` exists as a seed flow triggered `on: merged`;
+  ingest/lint run inside the reflect pipeline, not as visible flow nodes
+  with a gate (`as-built-inventory.md` §2).
+- **Features:**
+  - **R4-20-F1 Flow alignment decision + packaging.** Diff `forge-reflect`
+    against the mockup topology and either evolve it (rename/re-badge +
+    expose ingest + a lint gate node executing the real `forge brain lint`,
+    ADR-036 orchestrator-owned) or record a reasoned keep-as-is with the
+    mockup corrected — one decision, dated here. Whichever lands, the flow's
+    ledger shows ingest outcomes (themes/edges/lint per run — the mockup's
+    `FLOW_HISTORY['brain-tune']` rows). ACs: decision recorded; lint green;
+    `run-flow-brain-tune` journey shape or its recorded correction.
+- **Session sizing:** ~1 session.
+- **Acceptance references:** mockup journey `run-flow-brain-tune`; `FLOWS`
+  in `data.jsx`.
+- **Out of scope:** reflect content (R4-09); trigger machinery (R2-08).
+
 ## Deferred
 
 ### R4-D1 Architect-flow retirement
@@ -1318,3 +1631,17 @@ free R4 ID's features.
   whole-branch review (4 lenses → dedup → 2-skeptic verify) run over the combined
   R4-08-F2+R2-04 branch; findings fixed in-branch (see the R2-04 change log for the
   banked lessons — the review + fixes spanned both stacked initiatives).
+- 2026-08-03 — **Wave-5 cut (studio-endstate-v2 mockup → modular backlog).**
+  Baseline **R4-B13** added: the mockup-vs-as-built alignment register —
+  developer / adversarial-review / demo-runner / reflector / forge-develop
+  verified aligned, their `run-agent-*`/`run-flow` journeys adopted as
+  standing acceptance references; vision non-cuts recorded (demo projects
+  ride R3-06/R4-03; demo-design/research parked with R2-D2). **Minted:**
+  R4-12 project detail alignment (permanent contract panel, cycle-ledger
+  dig-in), R4-13 project roadmap tab (operator decision 4 — dependency DAG
+  replaces SerpentineTimeline), R4-14 demo showcase page, R4-15
+  architect/planning session alignment (⚑ merger brief; R4-D1 untouched),
+  R4-16 demo-builder generation gallery, R4-17 onboarding session staging,
+  R4-18 onboard-project OOTB flow, R4-19 brain creation & maintenance
+  agents, R4-20 brain-tune OOTB flow. Every entry cites mockup journey ids +
+  `as-built-inventory.md` baselines; one module per initiative.

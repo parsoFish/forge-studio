@@ -259,11 +259,64 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 - **Session sizing:** ~2 sessions — (1) F1 ADR-027 amendment + F2 derive/enforce/migrate, (2) F3 builder + journey-sync.
 - **Out of scope:** the R2-02-F1 descriptor itself (lands wave 1); fanout/artifact capability facts (R2-03/R2-05).
 
+### R2-08 Triggers runtime (per-project scoping + agent-complete + project events)
+
+- **Status:** planned  ·  **Wave:** 5 (module: triggers-runtime) — operator decision 5, 2026-08-03: ONE successor initiative to R2-04, not per-kind slices
+- **Depends on:** R2-04 (the 7-kind registry + HMAC webhook machinery this extends). **Depended on by:** — (R6's kickoff/monitor surfaces render trigger provenance but only consume).
+- **Context:** Wave-5 cut. The mockup makes triggers first-class **and per-project** (`TRIGGERS` in `data.jsx`): the same flow/agent triggers differently per project (`demo-runner`: "PR merged → refresh demo artifacts, per-project: betterado, gitpulse"; `issue-triage`: "issue raised → triage sweep, per-project: gitpulse"), agents chain on completion (`adversarial-review`: "auto — when the Developer node completes"; `brain-tune`: "auto — when a forge-develop run completes"), and every builder/kickoff/live-run surface shows what starts a run and what started THIS run. As-built (R2-B4 as amended by ADR-041): `TRIGGER_KINDS` ships `merged | manual | cron | webhook | flow-complete` live; **`agent-complete` is schema-reserved with a dispatch seam that throws** (R2-04-F2 left it "until R4-09" — verify at session start what the wave-4 R4-09 landing actually wired; the seam note may be stale); trigger declarations are flow-level with no per-project scoping. **Acceptance references:** mockup journeys `run-agent-demo-runner` (project-hook trigger), `run-agent-reflector` + `run-flow-brain-tune` (on-complete chain), `run-flow` (manual kickoff) — the 27-journey set deliberately covers all three trigger framings. **As-built baseline:** `as-built-inventory.md` §6.
+- **Features:**
+  - **R2-08-F1 Per-project trigger scoping.** A trigger declaration gains an optional `projects:` scope (list of project ids); dispatch honors it end-to-end — a scoped trigger fires only for events whose resolved project matches, and origination mints manifests only for in-scope projects. **Enforced at the dispatch point, mirrored by lint** (the standing declared-data-fails-open + defense-in-depth rules: the lint must read the same evidence the dispatcher does). ACs: a two-project fixture proves in-scope fires / out-of-scope doesn't; `forge studio lint` errors a `projects:` ref to an unknown project; the sweep never silently drops an out-of-scope request (typed skip event).
+  - **R2-08-F2 `agent-complete` lit up.** The reserved kind becomes live: `runAgent`/`dispatchAgentRun` completion emits the trigger event; the registry routes it through the same claimable-queue + dry-bridge guard contract as every other kind (R2-04-F3 invariants extend, not fork). ACs: an `on: agent-complete` declaration targeting a flow demonstrably starts it under `forge serve`; harness-mode proves no real spawn; the R2-04 "seam throws" note is retired or corrected in R2-B4.
+  - **R2-08-F3 Project-event kinds ("project hooks").** `pr-merged` / `issue-raised` (extensible provider-event rows) as typed rows over the existing webhook receiver — provider payload → typed event + resolved project, feeding F1's scoping. Corpus-ground the provider fixtures (the R2-04 lesson: invented GitLab shapes hid a 400-every-delivery bug). ACs: a signed PR-merged delivery for an in-scope project stages a run request; the injection fixture extends to the new payload fields; unshipped provider events stay schema-reserved, zero stubs.
+  - **R2-08-F4 Trigger provenance on surfaces.** Builders already author triggers (R2-04-F4); this feature adds the read side everywhere the mockup shows it: kickoff screens list the target's standing triggers; a live/archived run records **what started it** (`trigger: {kind, source, scope}` in the run model — derived from the staged request, never free text) and the monitors/run detail render it (the mockup's "STANDALONE run (project hook)" ledger rows). ACs: run model exposes trigger provenance; `data-*` contract added; journey-sync (flows-author + the run journeys).
+- **Session sizing:** ~2-3 sessions — (1) F1+F2 scoping + agent-complete; (2) F3 project events; (3) F4 provenance surfaces + journey-sync.
+- **Out of scope:** new notification transports (R6-D1); the kickoff/run-consolidation surface itself (R6 wave-5 initiative — it renders what this initiative records); retiring the architect flow (R4-D1).
+
+### R2-09 Agent-builder definition parity (instructions + materials)
+
+- **Status:** planned  ·  **Wave:** 5 (module: agent-builder)
+- **Depends on:** R2-02 (capability descriptor — materials ride it to kickoff surfaces). **Depended on by:** R6's kickoff initiative (consumes `materials` for upload validation).
+- **Context:** Wave-5 cut. In the mockup **every agent carries operator-visible instructions** (`AGENT_INSTRUCTIONS` in `data.jsx` — the full behavioural charter, e.g. the developer's "never read the forge brain; the planner already encoded it") and an **allowed-input-materials declaration** (`AGENT_MATERIALS`: images | documents | audio | data files) consumed by kickoff upload surfaces. As-built: an agent's instructions live as SKILL.md prose the builder does not surface or edit (the builder authors frontmatter/composition; `as-built-inventory.md` §1), and no materials concept exists anywhere. Round-4/5 mockup rounds also assert instructions *generation* in the builder (draft-from-description assist).
+- **Features:**
+  - **R2-09-F1 `materials:` as a definition field.** SKILL.md frontmatter gains an optional `materials:` list (closed vocabulary, validated enum); parsed by `registry.ts` into `AgentDefinition`, folded into the R2-02-F1 capability descriptor (wire-visible), lint-validated. **The declaration must be enforced where materials enter** (kickoff upload accepts only declared kinds — the enforcement AC lands with the R6 kickoff surface, but the seam contract is defined HERE so it cannot fail open). ACs: roster agents declare honest materials (or none); lint rejects unknown kinds; descriptor exposes it; a documented enforcement contract names the upload seam as the enforcement point.
+  - **R2-09-F2 Instructions surfaced + editable in the builder.** `/agents/[id]` renders the definition's instruction body (the SKILL.md prose) as a first-class editable field with a generation assist (draft instructions from the description + composition — assist output is a draft the operator confirms, never auto-saved). Save round-trips through the existing SKILL.md write path; `forge studio lint` unchanged (prose stays prose). ACs: edit → save → re-open round-trips byte-faithfully outside the edited region; generation produces a draft flagged as such; journey-sync (`create-agent`, `edit-agent` — the mockup journeys author instructions in-builder).
+  - **R2-09-F3 Builder statefulness parity sweep.** Diff the as-built builder against the mockup's round-4/5 interaction assertions (click/drag-add, selector dropdowns, hooks zone binding per the R3-03 re-scope) and close what's real — a bounded parity checklist authored at session start from the `create-agent`/`edit-agent` journey scripts, each item either closed or explicitly rejected with a note. ACs: checklist in the PR description; journeys re-captured green.
+- **Session sizing:** ~2 sessions — (1) F1+F2; (2) F3 sweep + journey-sync.
+- **Out of scope:** kickoff upload UI (R6 wave-5 initiative); composition-single-source (R2-07); hook definition model (R3-03).
+
+### R2-10 Interactive sessions surface (progressive staged-artifact host)
+
+- **Status:** planned  ·  **Wave:** 5 (module: sessions-surface)
+- **Depends on:** R2-01-F3 (the generic `forge agent run` CLI path + `spawnAgentTurn`, landed; the DEEP per-runner convergence stays deferred — this initiative re-opens only the **UI half**). **Depended on by:** R4's per-agent session initiatives (their sessions render through this surface).
+- **Context:** Wave-5 cut. The mockup's sessions (`SESSIONS` in `data.jsx`; `views-session.jsx`) are ONE shared surface for every interactive agent: **chat left, living artifact right**, progressive turn-by-turn rendering, and **staged artifacts** — turns carry stage markers (`contract → instructions → secrets → demo → roadmap` in the onboarding/create-project sessions) and the artifact pane switches/accumulates per stage (roadmap draft, generation gallery 1→3, contract build-out, seeded brain structure, hook/skill package tabs). As-built: the architect interview is the canonical interactive UX; instructions/demo-builder/project-brain each render bespoke session pages (`as-built-inventory.md` §1/§9); there is no stage vocabulary and no shared artifact pane. This is the UI-side convergence R2-01-F3 deliberately did not attempt server-side — the four phase-machines stay bespoke; the PAGES converge.
+- **Features:**
+  - **R2-10-F1 Shared session shell.** One session route/component set (chat pane, artifact pane, page-shell header) that all interactive agents render through, driven by the existing per-runner checkpoint files — no phase-machine rewrites; the shell adapts via a per-agent session descriptor (which artifact renderers, which stages). ACs: architect + instructions + demo-builder + project-brain sessions all render through the shell with no behaviour change (journeys green); bespoke session pages deleted; `data-*` contract for turns/stages/artifact pane.
+  - **R2-10-F2 Staged-artifact contract.** A typed stage vocabulary per session kind (declared in the session descriptor, e.g. onboarding: `contract | instructions | secrets | demo | roadmap`); turns tag their stage; artifacts accumulate per stage and remain navigable after the session (the mockup's "everything you saw here lands on the project page" — the landing itself is owned by the consuming surface). ACs: stage markers render on turns; artifact pane switches with stage; an unknown stage tag is a lint/save error, not a silent default.
+  - **R2-10-F3 Artifact renderers.** The artifact pane renders the mockup's artifact kinds: markdown/roadmap draft, contract build-out checklist, file-package tabs (skill/hook packages — shared with R3's detail pages), demo generation gallery, seeded brain structure. Reuse `/artifact` viewer machinery where it fits (ADR-031: one viewer family, not a parallel stack). ACs: each shipped session kind renders its artifact kind; package-tab renderer shared with R3-01-F3 (one component, two surfaces).
+- **Session sizing:** ~3 sessions — (1) F1 shell + migration of one session kind; (2) remaining kinds + F2 stages; (3) F3 renderers + journey-sync.
+- **Acceptance references:** mockup journeys `onboard-project`, `create-project`, `build-hook`, `build-skill` (session beats); surface `views-session.jsx`, `SESSIONS` + `CONTRACT_STAGES` in `data.jsx`.
+- **Out of scope:** the deep phase-machine convergence (stays deferred per R2-01-F3's documented scope decision); session ENTRY consolidation (the one-Run-button initiative in R6); per-agent session content (R4).
+
 ## Deferred
 
 ### R2-D1 Parallel-work merge-resolution
 
 **Deferred placeholder (Q3-B locked).** No merge-resolution capability is designed until fanout evidence exists. **Re-entry condition:** the R2-03-F1 research-spike report is published in `docs/investigations/` **and** real fanout runs (post R2-03-F4) produce merge conflicts that the current scheduler merge-gate ordering (dependent initiative waits for prerequisite in `done/`, branches fresh from post-merge main — memory: dev-loop continuity scope) demonstrably cannot absorb, **and** the spike's recommendation is "build". If the spike recommends conflict-avoidance-by-decomposition instead, this ID closes as rejected with the report as rationale. Note: the retired unifier's dual-boundary full-suite gate is NOT this item — that strength relocates to orchestrator-owned gate execution (ADR-036 pattern; **for operator review**, see R2-01 context).
+
+### R2-D2 Plan-band read-only parallelism (branch/join canvas semantics)
+
+**Parked by operator decision 2 (2026-08-03 wave-5 cut).** The
+studio-endstate-v2 mockup renders plan-band parallelism — a ⑂ branch after a
+node, parallel read-only intake agents (Demo Design ∥ Research), typed
+hand-offs, a join node waiting for all inputs, band rule enforced
+(plan/develop = any lines, review/reflect = one line). This is explicitly NOT
+R2-D1 (no code merge is involved — the parallel outputs are documents joined
+as developer inputs), but the operator parked it: the forge-develop flow stays
+linear, the mockup's branching beats and the two example agents (`demo-design`,
+`research` — `provenance: 'vision'` in the mockup) stay vision-badged.
+**Re-entry condition:** the operator re-opens it explicitly; natural evidence
+would be a real initiative where pre-developer intake work (demo scripting,
+prior-art research) demonstrably bottlenecks the linear flow.
 
 ## Change log
 
@@ -303,3 +356,16 @@ The flow/agent builders read a server-computed capability descriptor instead of 
   (4) declared-data-fails-open struck again (cron `concurrency` enforced nowhere);
   (5) corpus-ground provider fixtures (invented GitLab shapes hid a 400-every-delivery
   bug); (6) a pre-auth 0.0.0.0 route must be structurally never-throw.
+- 2026-08-03 — **Wave-5 cut (studio-endstate-v2 mockup → modular backlog).**
+  **R2-08 minted** (triggers-runtime, operator decision 5: one successor
+  initiative — per-project scoping, `agent-complete` lit, project-event kinds
+  pr-merged/issue-raised, trigger provenance on run surfaces). **R2-09 minted**
+  (agent-builder definition parity: `materials:` frontmatter + descriptor
+  threading, instructions surfaced/editable/generatable in the builder,
+  round-4/5 statefulness parity sweep). **R2-10 minted** (shared interactive
+  sessions surface: one chat+artifact shell, staged-artifact contract,
+  artifact renderers — the UI half of the R2-01-F3 convergence, phase-machines
+  untouched). **R2-D2 added** (operator decision 2: plan-band read-only
+  parallelism + the demo-design/research example agents PARKED, vision-badged;
+  distinct from the rejected R2-D1). All wave-5 entries cite mockup journey
+  ids + `as-built-inventory.md` baselines.

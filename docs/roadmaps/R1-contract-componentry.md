@@ -174,6 +174,67 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
 - **Session sizing:** ~3 sessions — (1) F3+F5 (fast structural, standard path); (2) F1+F2 (deep-preflight execution checks); (3) F4+F6 + enforcement-table sweep.
 - **Out of scope:** any forensic/evidence-freshness check (banned by ADR-036 §4); gate-fit authoring clauses (planner-side, ADR-036 "does not cover" — R4-05's territory); relocating the dual-boundary gate itself (R1-03-F4 spec, R4-10 execution).
 
+### R1-06 KB create & maintain (band-scoped binding + agent-seeded creation)
+
+- **Status:** planned  ·  **Wave:** 5 (module: kb-create/maintain)
+- **Depends on:** R1-01 (the binding contract this extends, done). **Depended
+  on by:** R4-19 (the brain-creation/maintenance agents create against this
+  contract), R6-08 (soft — the explore surface links into maintenance).
+- **Context:** Wave-5 cut. The studio-endstate-v2 mockup's KB journeys
+  (`create-kb-project`, `create-kb-cycle`, `kb-maintain`) assert three
+  contract-side gaps against R1-B9: (1) a **cycle/band-scoped KB** — the
+  mockup's `review-insights` KB binds to *the review band of forge-develop*,
+  not to a whole flow, and its readers are the band's agents; (2) KB
+  **creation is agent-seeded** — `/knowledge/new` currently writes a bare
+  descriptor, while the mockup's creation hands to the brain-creation
+  session which seeds structure lint-green from real history; (3)
+  **maintenance as a first-class op** — a cleanup session (duplicate-merge,
+  relink, tagging) beside the existing guided lint-resolution. **Operator
+  decision 3 (2026-08-03) bounds this: ingest stays reflection-only** —
+  neither creation nor maintenance grows an ingest affordance.
+- **Features:**
+  - **R1-06-F1 Band-scoped binding kind ⚑.** Extend the binding contract
+    with a band scope (shape decided in-session with an ADR-027 amendment:
+    a `band?:` qualifier on `{kind: flow}` vs a fourth kind — prefer the
+    qualifier; ref validates against the flow's real band vocabulary).
+    Usage defaults derive from the band (readers = that band's agents).
+    **⚑ Read-policy gate:** a review-band KB makes reviewers KB-readers,
+    which touches the ADR-010 asymmetric read policy (dev/review read Brain-3
+    advisory ONLY today) — the derivation must route through an explicit
+    ADR-010 amendment + `brain-read-policy.md` note BEFORE any reviewer read
+    ships; the R1-01-F4 policy guard extends to cover it, and Q5-B's
+    "scoping, not who-reads-what" boundary is thereby consciously crossed,
+    not drifted across. ACs: lint validates band refs; conformance suite
+    (R1-01-F5) covers the band shape; the read-policy guard fails if a band
+    KB grants a read no ADR amendment recorded.
+  - **R1-06-F2 Agent-seeded creation hand-off.** `/knowledge/new` (binding
+    picker, as-built) gains the band option and, on create, hands off to the
+    brain-creation session (R4-19) to seed structure — descriptor via
+    `serializeKbDescriptor`, seed via the agent, `forge brain lint` green on
+    completion (the mockup's "lint 9/9 from day one"). Descriptor-only
+    creation remains valid (an empty KB is legal; seeding is the default
+    path, not a gate). ACs: `create-kb-project`/`create-kb-cycle` journey
+    shapes against the real path; a created+seeded KB passes both lints;
+    binding recorded correctly for both scopes.
+  - **R1-06-F3 Maintenance ops contract.** The `consolidate` process
+    obligation (R1-01-F1) gets its interactive face: a maintenance-session
+    entry (from the R6-08 Health tab and the KB page) running the R4-19-F2
+    agent against real lint findings; guided lint-resolution stays for
+    single-finding fixes. **Explicit negative AC (decision 3): no ingest
+    affordance anywhere in creation or maintenance** — ingest remains the
+    reflection path's output. ACs: `kb-maintain` journey shape; a
+    lint-warning KB reaches green through the session; grep-level assert no
+    UI route/action triggers ingest.
+- **Session sizing:** ~2 sessions — (1) F1 binding + ADR amendments; (2)
+  F2+F3 creation/maintenance wiring + journey-sync (agent internals live in
+  R4-19).
+- **Acceptance references:** mockup journeys `create-kb-project`,
+  `create-kb-cycle`, `kb-maintain`; surfaces `views-knowledge.jsx`,
+  `SESSIONS['brain-creation-cycle']`/`['kb-cleanup']` in `data.jsx`.
+- **Out of scope:** the agents themselves (R4-19); the explore surface
+  (R6-08); manual ingest (rejected — operator decision 3); planning-read
+  reroot (R1-02-F1).
+
 ---
 
 ## Deferred
@@ -190,3 +251,12 @@ The C7-holistic-metrics clause (measurement command + locked baselines + regress
 - 2026-07-17 — Adversarial-review amendment pass. R1-01-F1 gained the per-process invocation contract, `usage` as a typed policy object, and the one-shot `scope:`→`binding:` migration posture incl. the `agent-integration` enum death (B5/E8); R1-01-F3 picked `kind: unique` and defined owning-vs-read-grant binding semantics against the three-seed-flows reality (C7); R1-03-F4 gained the recorded-operator-verdict precondition and the unattended-remediation answer (B2/E3); demo-design vs demo-builder naming disambiguated in R1-B6/R1-03-F2 with sole surgery ownership (A4); R4-10-F4 edge recorded. Field label normalised to "Depended on by" set-wide.
 - 2026-07-24 — **R1-03 F1/F2/F3 implemented** (wave-4 session 2, branch `feat/r1-03-contract-processes`): typed `testProcess` object with fail-closed flat-key rejection + derived flat accessors + re-rooted sidecar + wired declared timeouts + real preflight C1b/C7 checks (F1); demo-builder folded into `/projects/[id]` with a redirect stub + rewritten journey (F2); DEMO-ALIGN advisory token-heuristic clause, flags-not-blocks on betterado's live-evidence demo (F3). F4's relocation spec landed in `docs/forge-project-contract.md` + the ADR-036 amendment, but the operator verdict is still **pending** — R4-10-F2 stays blocked. Status flipped to in-progress (not yet "implemented" pending F4's verdict).
 - 2026-07-19 — **R1-01 implemented** (PR-A, branch `feat/r1-01-kb-contract`, 9 commits `b11c157..0a97659`; baseline **R1-B9**). KB descriptor → contract type: `binding` replaces `scope` (enum killed, no back-compat), optional four-obligation `processes` block, `serializeKbDescriptor` as the one `kb.yaml` writer, `kb-descriptor.ts`/`yaml-fields.ts` extraction (registry under the 800-cap), 6-descriptor migration, ADR-027 §4 amendment, studio-lint binding/dangling-ref/unique checks, F4 read-policy guard + F5 conformance suite, forge-ui `scope`→`binding` sweep + create picker + `knowledge` journey. Opus whole-branch review + security review both clean. Deferred (known-gaps §): `listProjectIds` dedup; the one-level KB lint scan (project KBs covered by POST route + F5); an inline second-`unique` POST guard; the `brain-read-policy.md` soft-cap. R1-02 (KB seam completion) is the natural next R1 pickup, not in this PR.
+- 2026-08-03 — **Wave-5 cut (studio-endstate-v2 mockup → modular backlog).**
+  **R1-06 minted** (module kb-create/maintain): band-scoped KB binding (⚑
+  read-policy gate — a review-band KB's reviewer read requires an explicit
+  ADR-010 amendment, extending the R1-01-F4 guard), agent-seeded creation
+  hand-off (`/knowledge/new` → brain-creation session, lint-green on
+  creation), and the maintenance-session face of the `consolidate` process.
+  Ingest stays reflection-only per operator decision 3 (explicit negative
+  AC). Cites mockup journeys `create-kb-project`/`create-kb-cycle`/
+  `kb-maintain` + `as-built-inventory.md` §5.

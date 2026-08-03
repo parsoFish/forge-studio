@@ -44,14 +44,14 @@ R5-05 and R5-07 exist specifically to keep the two documents reconciled.
 
 ## 2. Roadmap register
 
-| ID | File | Mission | Initiatives | Status mix (2026-07-17) |
+| ID | File | Mission | Initiatives | Status mix (2026-08-03, post-wave-5 cut) |
 |----|------|---------|-------------|--------------------------|
-| **R1** | [R1-contract-componentry.md](./R1-contract-componentry.md) | Make every forge boundary a typed, machine-checkable contract — KB contract type, KB seam completion, the project-contract process clauses (demo/test/instructions/release/build), and automated contract checks. | 5 + 1 deferred | 5 planned, 1 deferred (R1-D1) |
-| **R2** | [R2-runnable-componentry.md](./R2-runnable-componentry.md) | Make "a runnable" a first-class primitive — agent-as-runnable, def-driven builder, fanout (research spike first), trigger expansion, dynamic artifact surfaces, runtime-adapter realization. | 6 + 1 deferred | 6 planned, 1 deferred (R2-D1) |
-| **R3** | [R3-library-componentry.md](./R3-library-componentry.md) | First-class managed libraries of reusable capability: skills, skill-generator flow, hooks, tools/MCPs/CLIs, instructions. | 5 | 5 planned |
-| **R4** | [R4-ootb-suite.md](./R4-ootb-suite.md) | The shipped out-of-the-box agent/flow suite: migrate platform surfaces to artifacts, the agent roster (onboarding, creation, architect, plan, develop, demo, adversarial review, reflect), the develop-cycle OOTB flow, and the roadmap & attention surface. | 11 + 1 deferred | 11 planned, 1 deferred (R4-D1) |
+| **R1** | [R1-contract-componentry.md](./R1-contract-componentry.md) | Make every forge boundary a typed, machine-checkable contract — KB contract type, KB seam completion, the project-contract process clauses (demo/test/instructions/release/build), automated contract checks, and (wave 5) KB create/maintain. | 6 + 1 deferred | 2 implemented, 1 in-progress (R1-03 ⚑F4 verdict), 3 planned, 1 deferred (R1-D1) |
+| **R2** | [R2-runnable-componentry.md](./R2-runnable-componentry.md) | Make "a runnable" a first-class primitive — agent-as-runnable, def-driven builder, fanout (research spike first), trigger expansion, dynamic artifact surfaces, runtime-adapter realization; wave 5 adds triggers-runtime, builder parity, the sessions surface. | 10 + 2 deferred | 4 implemented, 6 planned, 2 deferred (R2-D1 closed-rejected, R2-D2 parked) |
+| **R3** | [R3-library-componentry.md](./R3-library-componentry.md) | First-class managed libraries of reusable capability: skills, skill-generator flow, hooks (lifecycle customisations), connections, instructions, templates + the community browser. | 7 | 2 implemented (F-residues re-planned), 5 planned |
+| **R4** | [R4-ootb-suite.md](./R4-ootb-suite.md) | The shipped out-of-the-box agent/flow suite: migrate platform surfaces to artifacts, the agent roster (onboarding, creation, architect, plan, develop, demo, adversarial review, reflect), the develop-cycle OOTB flow, the roadmap & attention surface; wave 5 adds the project surfaces + per-OOTB session/flow alignment. | 20 + 1 deferred | 11 implemented, 9 planned, 1 deferred (R4-D1) |
 | **R5** | [R5-hardening-operability.md](./R5-hardening-operability.md) | Safety, integrity and doc hygiene: dry-bridge seam, G8 env-pin at the spawn seam, cost integrity, edit-lock fix, known-gaps residue cross-references, demo/harness backlog, SSOT reconciliation. | 7 | 7 planned |
-| **R6** | [R6-operator-experience.md](./R6-operator-experience.md) | The Studio operator surface as a platform: run observability depth, human-readable operations, IA & DOM-convention stewardship. *(Minted by the 2026-07-17 coverage review; unwaved.)* | 3 + 1 deferred | 3 planned, 1 deferred (R6-D1) |
+| **R6** | [R6-operator-experience.md](./R6-operator-experience.md) | The Studio operator surface as a platform: run observability depth, human-readable operations, IA & DOM-convention stewardship — the biggest wave-5 home (kickoff/monitors/home/KB-explore). | 8 + 1 deferred | 8 planned, 1 deferred (R6-D1) |
 | **R7** | [R7-verification-infrastructure.md](./R7-verification-infrastructure.md) | The standing verification platform: corpus-anchored bench rebuild, journey-platform evolution (incl. the LLM-driven UI-test tier), verify-ground stewardship, CI/drift-guard growth. *(Minted 2026-07-17; unwaved.)* | 4 | 4 planned |
 | **R8** | [R8-distribution-release.md](./R8-distribution-release.md) | Forge itself as a shippable product: packaging (the deferred S10), version/release policy, public docs & positioning upkeep. *(Minted 2026-07-17; deliberately thin, operator-paced.)* | 3 + 1 deferred | 3 planned, 1 deferred (R8-D1) |
 
@@ -62,12 +62,12 @@ set.
 
 Canonical initiative skeleton (IDs are fixed and never reused):
 
-- **R1**: R1-01 KB contract type · R1-02 KB seam completion · R1-03 Project contract: demo + test processes · R1-04 Project contract: instructions + release + build processes · R1-05 Contract machine-checks · R1-D1 *(deferred)* Holistic-metrics clause + exploration-initiative support
-- **R2**: R2-01 Agent-as-runnable primitive · R2-02 Agent-def-driven builder · R2-03 Fanout capability (research spike first) · R2-04 Trigger expansion · R2-05 Dynamic artifact surfaces · R2-06 Runtime-adapter realization · R2-D1 *(deferred)* Parallel-work merge-resolution (gated on R2-03 evidence)
-- **R3**: R3-01 Skills first-class management · R3-02 Skill-generator flow · R3-03 Hooks library · R3-04 Tools/MCPs/CLIs library · R3-05 Instructions library
-- **R4**: R4-01 Platform→artifact migration · R4-02 Project onboarding agent · R4-03 Project creation agent · R4-04 Architect agent refinement · R4-05 Plan agent · R4-06 Develop agent refinement · R4-07 Demo agent · R4-08 Adversarial review agent · R4-09 Reflect agent · R4-10 Develop-cycle OOTB flow · R4-11 Roadmap & attention surface · R4-D1 *(deferred)* Architect-flow retirement
+- **R1**: R1-01 KB contract type · R1-02 KB seam completion · R1-03 Project contract: demo + test processes · R1-04 Project contract: instructions + release + build processes · R1-05 Contract machine-checks · R1-06 KB create & maintain *(wave 5)* · R1-D1 *(deferred)* Holistic-metrics clause + exploration-initiative support
+- **R2**: R2-01 Agent-as-runnable primitive · R2-02 Agent-def-driven builder · R2-03 Fanout capability (research spike first) · R2-04 Trigger expansion · R2-05 Dynamic artifact surfaces · R2-06 Runtime-adapter realization · R2-07 Composition single-source · R2-08 Triggers runtime *(wave 5)* · R2-09 Agent-builder definition parity *(wave 5)* · R2-10 Interactive sessions surface *(wave 5)* · R2-D1 *(deferred, closed-rejected)* Parallel-work merge-resolution · R2-D2 *(deferred/parked)* Plan-band read-only parallelism
+- **R3**: R3-01 Skills first-class management · R3-02 Skill-generator flow · R3-03 Hooks library (lifecycle re-scope) · R3-04 Connections (tools/MCPs/CLIs) library · R3-05 Instructions library · R3-06 Templates library *(wave 5)* · R3-07 Community browser *(wave 5)*
+- **R4**: R4-01 Platform→artifact migration · R4-02 Project onboarding agent · R4-03 Project creation agent · R4-04 Architect agent refinement · R4-05 Plan agent · R4-06 Develop agent refinement · R4-07 Demo agent · R4-08 Adversarial review agent · R4-09 Reflect agent · R4-10 Develop-cycle OOTB flow · R4-11 Roadmap & attention surface · R4-12 Project detail alignment *(wave 5)* · R4-13 Project roadmap tab *(wave 5)* · R4-14 Demo showcase page *(wave 5)* · R4-15 Architect/planning session ⚑ *(wave 5)* · R4-16 Demo-builder generation gallery *(wave 5)* · R4-17 Onboarding session staging *(wave 5)* · R4-18 Onboard-project OOTB flow *(wave 5)* · R4-19 Brain creation & maintenance agents *(wave 5)* · R4-20 Brain-tune OOTB flow *(wave 5)* · R4-D1 *(deferred)* Architect-flow retirement
 - **R5**: R5-01 Dry-bridge seam · R5-02 G8 env-pin at spawn seam · R5-03 Cost integrity · R5-04 Flow edit-lock verification · R5-05 Known-gaps residue · R5-06 Demo/harness backlog · R5-07 SSOT reconciliation
-- **R6**: R6-01 Run-observability depth · R6-02 Human-readable operations · R6-03 IA & convention stewardship · R6-D1 *(deferred)* Notification transport beyond the blade
+- **R6**: R6-01 Run-observability depth · R6-02 Human-readable operations · R6-03 IA & convention stewardship · R6-04 Run kickoff & consolidation *(wave 5)* · R6-05 Flow monitor ledger *(wave 5)* · R6-06 Agent monitor linkage *(wave 5)* · R6-07 Home dashboard *(wave 5)* · R6-08 KB explore *(wave 5)* · R6-D1 *(deferred)* Notification transport beyond the blade
 - **R7**: R7-01 Bench rebuild (corpus-anchored) · R7-02 Journey platform evolution · R7-03 verify-ground & corpus stewardship · R7-04 CI & drift-guard growth
 - **R8**: R8-01 Packaging · R8-02 Version & release cadence · R8-03 Public docs & positioning upkeep · R8-D1 *(deferred)* Community & ecosystem enablement
 
@@ -130,6 +130,30 @@ previously several file-recorded edges were missing here.)
 | R1-04 / R1-05 | R1-03 | Reuse the typed-process pattern; machine-checks verify the typed processes. |
 | R4-10 / R3-02 | R5-04 *(soft)* | Both ship second live flows; the edit-lock verification precedes them. |
 | R2-D1 Merge-resolution *(deferred)* | R2-03 evidence | Design gated on the fanout research spike (Q3-B). |
+
+**Wave-5 edges (2026-08-03 cut — recorded on both sides in the files; soft
+edges in italics):**
+
+| Depender | Depends on | Reason |
+|----------|-----------|--------|
+| R3-07 Community browser | R3-01-F4, R3-03-F2, R3-04, *R3-06* | Install routes through the owning kind pipelines; browser owns zero trust decisions. |
+| R3-06 Templates library | *R3-01*, *R2-05* | Library pattern; R2-05-F1's canonical artifact set is the managed substance (do the audit once). |
+| R2-08 Triggers runtime | R2-04 | Extends the 7-kind registry + webhook machinery. |
+| R2-09 Builder parity | R2-02 | `materials:` rides the capability descriptor. |
+| R2-10 Sessions surface | R2-01-F3 | UI half of the runner convergence (deep half stays deferred). |
+| R6-01-F4/F5 (amend) | *R2-05* | Typed-output rendering contract, pulled at need. |
+| R6-04 Kickoff & consolidation | R2-01-F3, R2-02, R2-09-F1, *R2-08-F4* | Dispatch host; descriptor routing; materials enforcement point; trigger provenance read side. |
+| R6-05 Flow monitor ledger | R6-01-F4 | Rows link into run detail. |
+| R6-06 Agent monitor linkage | R6-05, R6-04-F3, R2-10 | Shared ledger; the three real link targets. |
+| R6-07 Home dashboard | R6-03-F3, R4-11-F4 | Home pillar in nav; attention strip feed. |
+| R1-06 KB create & maintain ⚑ | R1-01 | Extends the binding contract (band scope; ⚑ ADR-010 read-policy gate). |
+| R4-12 Project detail | *R6-01-F4* | Cycle-ledger dig-in links. |
+| R4-13 Roadmap tab | R4-12 | Lives on its page (DAG replaces serpentine — decision 4). |
+| R4-14 Demo showcase | R4-12, R1-03 | Entry + demo-process artifacts. |
+| R4-15/16/17 Session alignments | R2-10 (+R4-02 for R4-17) | Render through the shared session shell. |
+| R4-18 Onboard-project flow | R4-17 | Wraps the staged session. |
+| R4-19 Brain agents | R2-10, R1-06 | Session shell; band-scoped binding must exist. |
+| R4-20 Brain-tune flow | R4-09, *R2-08-F2* | Reflect agent; on-completion chaining. |
 
 ```mermaid
 graph LR
@@ -213,27 +237,69 @@ end-state mockup: `mockups/studio-endstate-v2/` (20 surfaces, 27 scripted
 journey videos as acceptance references, `as-built-inventory.md` as the
 2026-08-03 baseline it is diffed against).
 
-- **5A — the cut (planning session, ⚑ operator decisions).** Run
-  `mockups/studio-endstate-v2/BACKLOG-CUT-PROMPT.md` verbatim in a fresh
-  session. It amends R2/R3/R6 (and R7 for journey coverage) with
-  module-scoped initiatives — one module each, journey-id as acceptance
-  evidence — after a single AskUserQuestion round on its five recorded
-  decision points (hooks vocabulary, plan-band parallelism vs the R2-D1
-  NO-GO, KB manual-ingest vs reflection-only policy, serpentine-vs-DAG
-  roadmap viz, per-project trigger scoping).
-- **5B — execution order (default).** Start with the modularity-proving
-  library slices — **R3-03 hooks · R3-04 tools/MCPs/CLIs · R3-02
-  skill-generator** (+ the R3-01 F3/F4 `/skills`-view + marketplace residue,
-  which the mockup's community browser now gives concrete shape) — then
-  **R6-01 run-observability** (kickoff limits/materials, node-level logs,
-  typed outputs) and **R6-03 IA stewardship** (Home dashboard, roadmap tab,
-  one page-shell). **R2-05 dynamic artifact surfaces** is pulled in at the
-  point R6-01 needs typed run outputs; **R1-02/R1-05 and R2-06/R2-07**
-  remain platform continuity, pulled at dependency points as before.
-- **R7 rises post-wave-4:** R7-01 bench rebuild is now unblocked (the R4
-  suite is stable), and R7-03 inherits stewardship of the new gitpulse
-  `coupling` verify ground from the wave-4 tail. R5-03/05/06 stay
-  continuous; R8 stays operator-paced.
+**5A — the cut: DONE 2026-08-03** (this session; operator decisions 1–6
+recorded in §8). Every initiative below is scoped to exactly one module,
+cites its mockup evidence (journey id + surface file) as the acceptance
+reference and its as-built baseline from `as-built-inventory.md`; verified
+already-aligned surfaces are baseline material (R4-B13), not initiatives.
+
+#### Wave-5 cut summary
+
+| Initiative | Module | Home | Size | Depends (hard) |
+|---|---|---|---|---|
+| R3-01-F3/F4 skills library view + marketplace (re-entered) | library-skills | R3 | M | — |
+| R3-03 hooks library (lifecycle re-scope) | library-hooks | R3 | L | — |
+| R3-04 connections library | library-connections | R3 | M | — |
+| R3-06 templates library | library-templates | R3 | M | — |
+| R3-07 community browser | community-browser | R3 | M | R3-01-F4 · R3-03-F2 · R3-04 |
+| R2-08 triggers runtime | triggers-runtime | R2 | M | R2-04 |
+| R2-09 agent-builder definition parity | agent-builder | R2 | M | R2-02 |
+| R2-10 interactive sessions surface | sessions-surface | R2 | L | R2-01-F3 |
+| R6-01-F4/F5 run-detail depth (amend) | flow-run-detail | R6 | M | R2-05 (soft, typed outputs) |
+| R6-03-F3 six-pillar nav + page shell (amend) | IA stewardship | R6 | M | late — after wave-5 surfaces |
+| R6-04 run kickoff & consolidation | agent-kickoff+run | R6 | M | R2-09-F1 · R2-02 |
+| R6-05 flow monitor ledger | flows-home/monitor | R6 | S | R6-01-F4 |
+| R6-06 agent monitor linkage | agents-home/monitor | R6 | S | R6-05 · R6-04-F3 · R2-10 |
+| R6-07 home dashboard | home-dashboard | R6 | M | R6-03-F3 · R4-11-F4 |
+| R6-08 KB explore (graph+reader) | kb-explore | R6 | M | — |
+| R1-06 KB create & maintain ⚑ | kb-create/maintain | R1 | M | R1-01 |
+| R4-12 project detail alignment | projects-list/detail | R4 | M | — |
+| R4-13 project roadmap tab (DAG replaces serpentine) | project-roadmap-tab | R4 | M | R4-12 |
+| R4-14 demo showcase page | demo-showcase | R4 | S | R4-12 · R1-03 |
+| R4-15 architect/planning session ⚑ | per-OOTB-agent | R4 | M | R2-10 |
+| R4-16 demo-builder generation gallery | per-OOTB-agent | R4 | S | R2-10 |
+| R4-17 onboarding session staging | per-OOTB-agent | R4 | M | R2-10 · R4-02 |
+| R4-18 onboard-project OOTB flow | per-OOTB-flow | R4 | M | R4-17 |
+| R4-19 brain creation & maintenance agents | per-OOTB-agent | R4 | M | R2-10 · R1-06 |
+| R4-20 brain-tune OOTB flow | per-OOTB-flow | R4 | S | R4-09 |
+
+Parked/rejected in the same cut: plan-band branching + demo-design/research
+agents → **R2-D2** (decision 2); manual KB ingest → rejected, reflection-only
+policy stands (decision 3, negative ACs on R6-08/R1-06); the mockup's
+architect+PM merger stays behind **R4-D1** (R4-15-F2 ⚑ produces the decision
+brief).
+
+#### 5B — recommended execution order
+
+1. **Prove the module loop on the library** — R3-01-F3/F4 (smallest
+   modularity-proving slice) → R3-06 templates → R3-03 hooks → R3-04
+   connections → R3-07 community browser → R3-02 skill-generator (pre-cut
+   plan, lands on the finished library).
+2. **Runnable seams** — R2-08 triggers → R2-09 builder parity → R2-10
+   sessions surface (unblocks the R4 session set).
+3. **Run/monitor depth** — R6-01-F4/F5 (+pull **R2-05** when typed outputs
+   need it) → R6-05 → R6-04 → R6-06.
+4. **Project surfaces** — R4-12 → R4-13 → R4-14.
+5. **Per-OOTB set** — R4-15 · R4-16 · R4-17→R4-18 · R1-06→R4-19 · R4-20
+   (order free within deps).
+6. **IA closeout** — R6-08 → R6-03-F3 (nav/shell after the surfaces it
+   rehomes exist) → R6-07 home dashboard last.
+
+**R7 rises post-wave-4:** R7-01 bench rebuild is now unblocked (the R4
+suite is stable), and R7-03 inherits stewardship of the new gitpulse
+`coupling` verify ground from the wave-4 tail. R5-03/05/06 stay
+continuous; R8 stays operator-paced. **R1-02/R1-05 and R2-06/R2-07** remain
+platform continuity, pulled at dependency points as before.
 
 ---
 
@@ -416,6 +482,33 @@ pass across all five roadmaps plus four operator decisions:
 
 ---
 
+### Wave-5A cut decisions (2026-08-03)
+
+Locked operator answers from the BACKLOG-CUT-PROMPT AskUserQuestion round
+(one round, six decisions), governing the wave-5 cut:
+
+1. **Hooks vocabulary — mockup adopted.** Library hooks = agent-lifecycle
+   customisations (event + matcher + guard, host-agnostic, Agent-Builder-only
+   binding); forge-infra catalog entries reclassify as locked orchestrator
+   "guards". (R3-03 re-scope.)
+2. **Plan-band parallelism — PARKED.** No branching initiative; forge-develop
+   stays linear; demo-design/research example agents stay vision-badged.
+   Recorded as **R2-D2** with a re-entry condition; R2-D1 stays
+   closed-rejected and is unrelated.
+3. **KB ingest — reflection-only stands.** No manual ingest button; the
+   mockup is corrected (README §6 rule: roadmap wins). Negative ACs pinned on
+   R6-08 + R1-06.
+4. **Roadmap viz — dependency DAG replaces SerpentineTimeline** on a
+   full-page project Roadmap tab; Overview keeps the compact table; the
+   serpentine component retires in R4-13-F1.
+5. **Triggers — one runtime initiative.** Per-project scoping +
+   `agent-complete` + project-event kinds land together as **R2-08**, not
+   per-kind slices.
+6. **Logistics — one combined PR** from `docs/studio-endstate-mockups-v2`
+   (mockup prototype + wave-5 README section + this cut), operator-merged.
+
+---
+
 ## Change log
 
 - 2026-07-17 — Index created (initial forge-dev roadmap planning session).
@@ -524,3 +617,14 @@ pass across all five roadmaps plus four operator decisions:
   develop topology, hex canvas + typed artifact edges, 4-kind triggers, KB
   force-graph, skills builder + community catalog, architect interview →
   unified gate.
+- 2026-08-03 — **5A backlog cut EXECUTED** (same day, follow-on session; six
+  operator decisions in §8). 16 new initiatives minted + 5 amended across
+  R1/R2/R3/R4/R6, every one scoped to a single module with mockup journey ids
+  as acceptance references and `as-built-inventory.md` baselines: R3 (R3-01
+  F3/F4 re-entry, R3-03 lifecycle re-scope, R3-04 connections, R3-06
+  templates, R3-07 community browser), R2 (R2-08 triggers runtime, R2-09
+  builder parity, R2-10 sessions surface, R2-D2 park), R6 (R6-01/R6-03
+  amendments, R6-04..R6-08), R1 (R1-06 ⚑), R4 (R4-B13 alignment register,
+  R4-12..R4-20). §2 register + skeleton updated; §3 gains the wave-5 edge
+  table; §4's wave-5 subsection now carries the cut-summary table + the 5B
+  execution order (smallest modularity-proving slice first: R3-01-F3/F4).

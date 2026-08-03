@@ -1,7 +1,8 @@
 # R3 — Library componentry
 
 > Make every reusable capability forge composes into agents — skills, hooks,
-> tools/MCPs/CLIs, instructions — a first-class **managed library**: viewable,
+> tools/MCPs/CLIs (**connections**), instructions, and (added wave 5)
+> **templates** — a first-class **managed library**: viewable,
 > installable, editable (where safe), generatable (where sensible), with
 > provenance and a security posture proportional to what the component can do.
 > Scope boundary ([docs/repo-map.md](../repo-map.md)): the library *machinery*
@@ -113,7 +114,7 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
 
 ### R3-01 Skills first-class management
 
-- **Status:** implemented (F1+F2, 2026-07-19, PR-B — see baseline R3-B7; **F3+F4 deferred** to the operator's §4b.1 session)  ·  **Wave:** 3
+- **Status:** implemented (F1+F2, 2026-07-19, PR-B — see baseline R3-B7); **F3+F4 re-entered `planned` 2026-08-03 (wave 5)** — the studio-endstate-v2 mockup IS the reserved §4b.1 design (see the wave-5 re-entry note below)  ·  **Wave:** 3 (F1+F2) / 5 (F3+F4)
 - **Depends on:** — . **Depended on by:** R3-02 (landing-place), R3-03 (soft —
   hooks reuse the unified-registry + library-view pattern), R3-04 (soft — same
   surface pattern), R5-05 (skills-palette residue cross-references here, not
@@ -192,6 +193,26 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
     palette-visible and not runnable; provenance + hash render in the library
     view (F3); reinstalling shows the already-installed state rather than
     duplicating; a changed upstream hash forces re-review.
+  - **Wave-5 re-entry (2026-08-03, module: library-skills).** The operator's
+    reserved §4b.1 design session happened as the studio-endstate-v2 mockup
+    campaign — F3/F4's UI shape is no longer provisional. F3 concretized by
+    the mockup: a Library › Skills pillar view (local + community sections,
+    provenance badges, used-by derived from agent specs) with **detail pages
+    per skill** (`#/library/skills/<id>` in the mockup) rendering the skill as
+    a **file package** — SKILL.md + scripts + templates in tabs (mockup
+    `SKILL_FILES.release-notes`: `SKILL.md`, `scripts/collect-diffs.sh`,
+    `templates/notes-template.md`) — plus used-by, versions, and
+    hub/backing-repo links for community entries. Definitions are generic and
+    land **unbound**; binding to an agent happens only from the Agent Builder
+    (round-4 rule — "carried by" derives from agent specs). F4's
+    install entry point is the cross-kind community browser (R3-07), which
+    routes skill installs through THIS feature's draft→scan→operator-approve
+    pipeline unchanged. **Acceptance references:** mockup journeys
+    `build-skill` (create → package tabs → filed unbound → bind from Agent
+    Builder) and `install-skills-hooks` (community → install → draft →
+    approve); surfaces `views-library.jsx` / `views-library-detail.jsx`.
+    **As-built baseline:** R3-B7 (unified palette registry, no `/skills` view,
+    no install flow — `as-built-inventory.md` §7).
 - **Session sizing:** ~3 operator-run agent sessions — (1) F1 resolver sweep +
   full-gate; (2) F2 registry union + API registration + lint check; (3) F3+F4
   surfaces + journey-sync (F3 gated on the operator's §4b.1 design session).
@@ -258,7 +279,8 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
 
 ### R3-03 Hooks library
 
-- **Status:** planned  ·  **Wave:** 4
+- **Status:** planned (re-scoped 2026-08-03, wave-5 cut — see the re-scope
+  block below)  ·  **Wave:** 5 (module: library-hooks)
 - **Depends on:** R5-01 (soft — the dry-bridge safety seam and R5-02 env-pin
   should land before forge ships *installable, in-harness-executing*
   components; sequencing preference per Q6-A wave 0, not a hard blocker).
@@ -273,6 +295,41 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
   implementations (R3-B5); there is no install/create path at all today, which
   is why the security model must be designed *with* the library, not
   retrofitted.
+- **Wave-5 re-scope (2026-08-03 — operator decision 1, mockup vocabulary
+  adopted):** a library "hook" is an **agent-lifecycle customisation**, not
+  forge-infra machinery. The definition model F1 builds is: `{id, name,
+  description, lifecycle event (PreToolUse | PostToolUse | SessionStart |
+  SessionEnd | Notification | …), matcher (e.g. Bash(gh pr create)),
+  guard/payload script, permission manifest (F3)}` — **generic and
+  host-agnostic**; a definition names the event and the guard, never a
+  binding. Binding is explicit and happens **only in the Agent Builder**
+  (`composition.hooks`); "carried by" derives from agent specs (round-4
+  mockup rule). Ripples onto the existing features:
+  - **F1:** the model above replaces F1's looser "trigger point" phrasing;
+    the catalog's forge-infra entries (event-log, cost-guard, stall-watchdog,
+    merge-gate, scratch-strip + the band/contract guards) are **reclassified
+    out of the hooks library** — renamed in `studio/catalog.yaml` as locked
+    orchestrator **guards** (read-only listing, F1's "locked entries" AC now
+    lives under that rename; they are not lifecycle hooks and never appear in
+    the hooks library). OOTB lifecycle-hook seeds ship instead (mockup
+    examples: `pre-pr-security-review` on `PreToolUse · Bash(gh pr create)`,
+    `post-merge-brain-ingest` on `SessionEnd`).
+  - **F2/F3:** unchanged in substance (scan + deny-by-default manifest —
+    they map 1:1 onto the lifecycle model; the mockup's hook detail page
+    carries a visible **SECURITY SCAN** panel, which is F2's verdict
+    rendering).
+  - **F4:** the library/detail surface follows the R3-01-F3 wave-5 shape
+    (detail page per hook: definition, `on:` event line, guard script,
+    scan verdict, carried-by, versions); the marketplace entry point is the
+    cross-kind community browser (**R3-07**), whose hook installs route
+    through F2's scan + approval unchanged.
+  - **Acceptance references:** mockup journeys `build-hook` (creation
+    session → generic definition → filed unbound → bound later in Agent
+    Builder) and `install-skills-hooks` (community hook install → scan →
+    approve); surfaces `views-library.jsx` / `views-library-detail.jsx`,
+    hook data + build-hook session in `data.jsx`. **As-built baseline:**
+    R3-B5 + `as-built-inventory.md` §7 (catalog reference list only, no
+    standalone hooks page/CRUD).
 - **Features:**
   - **R3-03-F1 — Hook library model.** Managed hooks as first-class library
     items: a definition format (id, name, description, trigger point, payload
@@ -323,9 +380,10 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
   components (R3-01); hook *generation* via the R3-02 flow (a later extension
   once both exist — not specced here).
 
-### R3-04 Tools/MCPs/CLIs library
+### R3-04 Tools/MCPs/CLIs library ("Connections")
 
-- **Status:** planned  ·  **Wave:** 4 (opportunistic — no R4 dependent)
+- **Status:** planned (amended 2026-08-03, wave-5 cut — see the wave-5 note
+  below)  ·  **Wave:** 5 (module: library-connections)
 - **Depends on:** R3-01 (soft — reuses the unified-registry + library-view
   patterns).
 - **Context:** Operator diagram (verbatim intent): *"Tools/MCPs/CLIs =
@@ -372,6 +430,22 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
     decision is at curation time, which is why authoring is excluded).
     Acceptance: installs are reproducible from the pinned version; an
     unpinned entry fails `forge studio lint`.
+- **Wave-5 amendment (2026-08-03, module: library-connections).** The mockup
+  names this pillar **Connections** (Library › Connections: MCPs · CLIs ·
+  tools) — adopt the name on the surface (registry/category ids in
+  `catalog.yaml` need not rename; the pillar label does). Concretized by the
+  mockup: **detail pages per connection** (`#/library/connections/<id>`) with
+  kind-appropriate content — for an MCP the **capability list of the server**
+  (the tools it exposes), not its repo README; hub + backing-repo links;
+  install state + probe status; used-by agents. Community installs enter via
+  the cross-kind browser (**R3-07**) honoring F4's version-pin/provenance
+  posture (trust at curation time, no authoring — the negative AC stands).
+  **Acceptance references:** mockup journey `install-connections`
+  (browse hub → capability list → install → probe → available; the mockup's
+  connection rows carry per-hub signals); surfaces `views-library.jsx` /
+  `views-library-detail.jsx` (`CONNECTIONS` in `data.jsx`). **As-built
+  baseline:** R3-B2 + `as-built-inventory.md` §7 (reference-only metadata,
+  no install/probe, no detail pages).
 - **Session sizing:** ~2 operator-run agent sessions — (1) F1+F4 registry
   metadata + lint; (2) F2+F3 surfaces + readiness wiring + journey-sync.
 - **Out of scope:** create-your-own for this category (operator-excluded,
@@ -476,6 +550,111 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
   — seeds reference clauses, they don't define them); marketplace install for
   seeds (revisit condition noted in F4).
 
+### R3-06 Templates library
+
+- **Status:** planned  ·  **Wave:** 5 (module: library-templates)
+- **Depends on:** R3-01 (soft — library-view/detail-page pattern), R2-05
+  (soft — R2-05-F1's canonical artifact set is the substance this library
+  manages; sequence R2-05-F1 first or fold its audit into F1 here — decide at
+  session start, don't do it twice). **Depended on by:** R3-07 (templates are
+  a browsable kind), R4-03 (project-type scaffolds feed project creation).
+- **Context:** Wave-5 cut (2026-08-03). The mockup promotes templates to a
+  4th library pillar — the in/out artifact shapes agents produce and consume —
+  where as-built has filesystem-only `studio/artifact-templates/*.md` +
+  `studio/starters/` + `studio/demo-elements/` with no management UI
+  (`as-built-inventory.md` §7, baseline R2-B7). Mockup registry
+  (`TEMPLATES` in `data.jsx`), three categories: **demo outputs** (HTML
+  summary, video demo, screenshot set, interactive mockup), **planning
+  artifacts** (roadmap, initiative spec), **project-type scaffolds** (REST
+  API, web UI, CLI/library — `provenance: 'vision'`, the scaffold kind does
+  not exist as-built at all).
+- **Features:**
+  - **R3-06-F1 Template registry model.** One library model unifying the
+    three as-built sources (`artifact-templates/`, `demo-elements/`,
+    `starters/`) as typed library items: `{id, name, category (demo-output |
+    planning | project-scaffold), format note, provenance, definition ref}`,
+    discovered the R3-01-F2 way, `used-by` **derived** from agent/flow defs
+    (which agents emit/consume the template — never hand-maintained; the
+    declared-data-fails-open lesson: a hand-written used-by list is a lie
+    waiting to happen). ACs: every existing template/starter/demo-element
+    surfaces as a registry item; `forge studio lint` validates category +
+    dangling definition refs; zero new template content invented.
+  - **R3-06-F2 Library view + detail pages.** Library › Templates pillar:
+    card grid with **CSS-rendered preview thumbnails** (mockup `preview:`
+    kinds — html/video/shots/mock/doc/scaffold; cheap CSS approximations, not
+    live renders) and a detail page per template (definition, format, used-by,
+    version history from git). DOM contract `[data-page="template-library"]`
+    + per-item `[data-template-id][data-template-category]`; journey-sync in
+    the same PR. ACs: all registry items render; detail round-trips; journey
+    beat covers browse→detail.
+  - **R3-06-F3 Project-type scaffolds.** The new kind: a scaffold =
+    contract-conforming repo template (project shape, tests, demo skill,
+    gates pre-wired) consumed by project creation (R4-03) — the mockup's
+    create-project journey picks the web-UI scaffold and lands a
+    contract-green project. Ship the three mockup shapes as OOTB seeds
+    grounded in the real contract (`docs/forge-project-contract.md`, ADR-034)
+    and the real demo grounds (CLI shape ≈ mdtoc/gitpulse). ⚑ Operator-gate:
+    scaffold content review before shipping (a scaffold is executable
+    opinion). ACs: creating from a scaffold yields a preflight-green project;
+    scaffold detail page lists what the contract pre-wires; R4-03's picker
+    consumes the registry (no hardcoded scaffold list).
+- **Session sizing:** ~2 sessions — (1) F1 registry + lint (+ the R2-05-F1
+  boundary decision); (2) F2 surfaces + journey-sync. F3 rides the R4-03
+  session where sensible.
+- **Out of scope:** dynamic artifact *rendering* contracts (R2-05-F2/F3);
+  demo-element content quality (R5-06); the creation agent consuming
+  scaffolds (R4-03).
+
+### R3-07 Community browser
+
+- **Status:** planned  ·  **Wave:** 5 (module: community-browser)
+- **Depends on:** R3-01-F4 (skill install pipeline — the browser is an entry
+  point, never a second pipeline), R3-03-F2 (hook scan + approval), R3-04
+  (connections registry + probe), R3-06 (soft — templates browsable later).
+- **Context:** Wave-5 cut (2026-08-03). One cross-kind community
+  browse/install surface (`#/library/community` in the mockup) instead of
+  per-kind marketplace tabs. As-built: community-skills render as
+  reference-only catalog cards, no install flow anywhere
+  (`as-built-inventory.md` §7). Mockup shape (`COMMUNITY`/`COMMUNITY_HUBS`
+  in `data.jsx`): a **source-hub strip** (MCP Registry, smithery.ai,
+  skills.sh, anthropics/skills, obra/superpowers, claude-code-templates) and
+  rows carrying **per-hub signals** (stars, downloads/week, hub-usage note)
+  — signals attributed to their hub, never presented as forge's own ranking.
+- **Features:**
+  - **R3-07-F1 Browse surface.** Kind-filterable list (skill | hook | mcp |
+    cli | tool) with hub strip, per-row hub signals + provenance, and
+    install-state per object (`not-installed | draft-pending-approval |
+    installed`; reinstall shows installed state — R3-01-F4's AC generalized
+    to every kind). Curation stays forge-dev-owned: the browsable index is
+    data (`catalog.yaml`-adjacent), not a live hub crawl — a hub API
+    integration is a separate future decision, not implied here. ACs:
+    every kind filters correctly; install-state derives from the real
+    registries; hub signals render with their hub attribution.
+  - **R3-07-F2 Pre-install detail pages.** Community items get the same
+    kind-appropriate detail page as installed items (R3-01-F3 / R3-03-F4 /
+    R3-04 shapes: package file tabs for skills/hooks, capability lists for
+    MCPs, hub + backing-repo links, and the hook SECURITY SCAN panel) —
+    rendered BEFORE install so the operator reads what they're approving.
+    ACs: detail reachable pre-install for each kind; hook detail shows scan
+    verdict pre-approval.
+  - **R3-07-F3 Install routing.** Install actions dispatch to the owning
+    kind pipeline — skills → R3-01-F4 draft→scan→approve, hooks → R3-03-F2
+    scan + approval gate, connections → R3-04-F2 pinned install + probe.
+    The browser owns zero trust decisions itself. ACs: one journey per kind
+    routes through its real pipeline; a pre-approval draft is never
+    palette-visible (conformance with R3-01-F4/R3-03-F2 ACs, asserted from
+    this surface).
+- **Session sizing:** ~2 sessions — (1) F1+F2 surface; (2) F3 routing +
+  journey-sync. Requires at least one owning pipeline (R3-01-F4 or R3-03)
+  landed first.
+- **Out of scope:** the per-kind trust pipelines themselves (owned by
+  R3-01/R3-03/R3-04); live hub API crawling (future decision); publishing
+  forge content *to* hubs (R8 territory).
+
+- **Acceptance references (both):** mockup journeys `install-skills-hooks`,
+  `install-connections`; surfaces `views-community.jsx`,
+  `views-library-detail.jsx`.
+
 ## Deferred
 
 No R3 deferred initiatives as of 2026-07-17 (the canonical skeleton mints
@@ -511,3 +690,19 @@ rather than deferred within it:
   (marketplace) deferred** to the operator's §4b.1 design session. Mid-wave chore (PR #37) also slimmed the
   always-injected `CLAUDE.md` ~56% (DOM/harness reference → `docs/forge-ui-dom-and-harness.md`) to restore
   subagent fanout.
+- 2026-08-03 — **Wave-5 cut (studio-endstate-v2 mockup → modular backlog).**
+  Mission line gains connections + templates. **R3-01 F3/F4 re-enter
+  `planned`** — the mockup campaign IS the reserved §4b.1 design (skill detail
+  pages as file packages, unbound-until-Agent-Builder binding). **R3-03
+  re-scoped per operator decision 1:** library hooks = agent-lifecycle
+  customisations (PreToolUse/PostToolUse/SessionStart/SessionEnd/Notification
+  + matcher + guard, host-agnostic, Agent-Builder-only binding); the
+  forge-infra catalog entries reclassify as locked orchestrator "guards"
+  outside the hooks library. **R3-04 amended:** pillar surfaces as
+  "Connections" with per-connection detail pages (MCP capability lists, hub
+  links, install state). **R3-06 minted:** templates library (demo outputs /
+  planning artifacts / project-type scaffolds over the unified
+  artifact-templates + demo-elements + starters registry). **R3-07 minted:**
+  cross-kind community browser (hub strip, per-hub signals, pre-install
+  detail, install routing through the owning kind pipelines). Every wave-5
+  entry cites its mockup journey ids + `as-built-inventory.md` baseline.

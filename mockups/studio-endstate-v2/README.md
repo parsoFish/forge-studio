@@ -142,3 +142,24 @@ README history — it just loops `?journey=<id>` and waits for
 - `as-built-inventory.md` — the 2026-08-03 as-built surface recon this
   mockup diffs against. `BACKLOG-CUT-PROMPT.md` — the ready-to-run prompt
   for the backlog-cutting session.
+
+## Post-cut corrections (2026-08-03 — 5A backlog cut, roadmap wins)
+
+The 5A cut session ran (docs/roadmaps/ README §8 "Wave-5A cut decisions").
+Two operator decisions override this mockup; per the roadmap-vs-mockup rule
+(docs/roadmaps/README.md §6) the mockup stands corrected here rather than
+re-rendered (no jsx/journey edits — a beat change would force a full
+27-video regen):
+
+- **KB manual ingest REJECTED (decision 3).** The "Kick off ingestion"
+  operation on KB surfaces is not product direction — ingest stays
+  reflection-only. Read the mockup's KB ops toolbar minus that button;
+  R6-08/R1-06 carry explicit negative ACs.
+- **Plan-band branching PARKED (decision 2).** The round-6 branch/⑂/join
+  topology and the Demo Design + Research example agents stay
+  `vision`-badged with no owning initiative — parked as R2-D2 (re-entry =
+  operator re-opens). forge-develop remains linear.
+- Everything else in rounds 2–7 is either cut into wave-5 initiatives
+  (R1-06 · R2-08..10 · R3-01-F3/F4 · R3-03/04/06/07 · R4-12..20 ·
+  R6-01/03 amendments · R6-04..08) or registered as already-aligned
+  baseline (R4-B13).
