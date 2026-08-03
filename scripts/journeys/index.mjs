@@ -31,6 +31,13 @@
  * the top/end of their own drive(). skills' created slugs never collide with
  * agents' starter slugs, and skills-create's api-contract-review skill is the
  * throughline artifact: it stays on disk until the runner's finally sweeps it.
+ * (R3-01-F3/F4) skills-library and skills-detail-package are read-only browse
+ * beats (no seed/cleanup of their own); skills-install-approve installs into
+ * its own scratch id (SK_INSTALL_ID, journey-fixtures.mjs) in a temp dir
+ * outside the repo and removes both the installed skill and its
+ * studio/installed-skills.yaml ledger entry itself, on every path (a
+ * try/finally, not just the happy path) — cleanSkillArtifacts (the runner's
+ * crash-safe sweep) covers it too.
  */
 import { journey as skills } from './skills.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
@@ -55,9 +62,12 @@ export const JOURNEYS = [
 ];
 
 export const RUN_ORDER = [
+  ['skills', 'skills-library'],
+  ['skills', 'skills-detail-package'],
   ['skills', 'skills-ootb-library'],
   ['skills', 'skills-edit'],
   ['skills', 'skills-create'],
+  ['skills', 'skills-install-approve'],
   ['skills', 'skills-agentic-author'],
 
   ['stand-up-onboard', 'su-onboard-project'],

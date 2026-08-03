@@ -1,5 +1,6 @@
-import { readFileSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
@@ -8,8 +9,61 @@ import {
   SK_NEW_SLUG, SK_NEW_NAME, SK_CLIP_SLUG, SK_CLIP_NAME, waitForFile,
   DEMO_DESIGN_SKILL_DIR, writeDemoDesignSkill,
   demoEvent, demoBurst, cleanDemoBuilderSession,
+  SK_INSTALL_ID, SK_INSTALL_DIR,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
+
+// ── R3-01-F3/F4 helpers: real, disk-derived cross-checks ────────────────────
+// These mirror orchestrator/studio/skill-library.ts's own derivations (read
+// directly off disk, no TS import from this .mjs harness) so the beats below
+// assert a genuine cross-check against reality, not a re-read of whatever the
+// product's own response already claims.
+
+/** Extract + parse a SKILL.md's YAML frontmatter block (the same shape
+ *  gray-matter parses server-side); null if there is no frontmatter or it
+ *  fails to parse. */
+function parseSkillFrontmatter(raw) {
+  const m = /^---\n([\s\S]*?)\n---/.exec(raw);
+  if (!m) return null;
+  try { return yaml.load(m[1]); } catch { return null; }
+}
+
+/** Mirror of deriveSkillUsage (orchestrator/studio/skill-library.ts): which
+ *  STUDIO AGENTS (SKILL.md carrying a `runtime:` block) compose `skillId` in
+ *  their `composition.skills`, sorted. The point of every beat that calls
+ *  this is that `usedBy` is DERIVED from real agent specs, never a declared
+ *  field — this recomputes that same fact independently off disk. */
+function realSkillUsage(skillId) {
+  const skillsRoot = join(FORGE_ROOT, 'skills');
+  const slugs = [];
+  for (const entry of readdirSync(skillsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory()) continue;
+    const mdPath = join(skillsRoot, entry.name, 'SKILL.md');
+    if (!existsSync(mdPath)) continue;
+    let raw;
+    try { raw = readFileSync(mdPath, 'utf8'); } catch { continue; }
+    const data = parseSkillFrontmatter(raw);
+    if (!data || typeof data !== 'object' || !('runtime' in data)) continue; // studio agents only
+    const skills = Array.isArray(data.composition?.skills) ? data.composition.skills : [];
+    if (skills.includes(skillId)) slugs.push(entry.name);
+  }
+  return slugs.sort((a, b) => a.localeCompare(b));
+}
+
+/** Real file count under a skill's package directory — mirrors
+ *  readSkillPackage's walk (files only, recursive). */
+function countPackageFiles(dir) {
+  let count = 0;
+  const walk = (d) => {
+    for (const entry of readdirSync(d, { withFileTypes: true })) {
+      const p = join(d, entry.name);
+      if (entry.isDirectory()) walk(p);
+      else if (entry.isFile()) count += 1;
+    }
+  };
+  walk(dir);
+  return count;
+}
 
 // The one-line marker the edit beat appends to the REAL skill's instructions —
 // distinctive enough to poll the file for, and honest about being restored.
@@ -42,8 +96,103 @@ const AGENTIC_BRIEF = 'Author the demo-design skill: capture the built CLI\'s TO
 export const journey = defineJourney({
     id: 'skills',
     title: 'Compose a skill',
-    story: 'As an operator, I browse forge\'s OOTB skill library — highly rated skills sourced from existing community libraries, provenance and stars shown — then edit one of forge\'s real shipped skills in place, author a brand-new skill from scratch, and have a forge agent author one for me by resolving a real contract gap.',
+    story: 'As an operator, I browse the /skills library — local and community, with a used-by count DERIVED from real agent composition — open a real skill\'s file package, browse forge\'s OOTB skill library — highly rated skills sourced from existing community libraries, provenance and stars shown — then edit one of forge\'s real shipped skills in place, author a brand-new skill from scratch through the library\'s one entry point, install a community package through the full draft→approve→re-review trust arc, and have a forge agent author one for me by resolving a real contract gap.',
     beats: [
+      {
+        id: 'skills-library',
+        title: 'The /skills library — local + community, derived used-by',
+        narration: 'The library lists every plain composable skill in two sections — hand-authored (or already-installed) skills on disk, and community catalog entries not yet installed — with per-section counts that always equal the rendered card count, and a used-by count on every card that is DERIVED from real agent `composition.skills`, never a declared field.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── SK-0: the /skills library (local + community, derived used-by) ────────
+              console.log('\n[SK-0] The /skills library');
+              await page.goto(watch.uiUrl + '/skills', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 }).catch(() => {});
+              check(await page.locator('main[data-page="skill-library"]').count() > 0, 'SK-0: /skills renders [data-page="skill-library"]');
+              await caption(page, 'The skill library — local + community, every used-by count derived straight from real agent composition.skills.');
+
+              const counts = await page.evaluate(() => {
+                const root = document.querySelector('[data-page="skill-library"]');
+                return {
+                  total: parseInt(root?.getAttribute('data-skill-count') ?? '-1', 10),
+                  local: parseInt(root?.getAttribute('data-local-count') ?? '-1', 10),
+                  community: parseInt(root?.getAttribute('data-community-count') ?? '-1', 10),
+                  localCards: document.querySelectorAll('[data-skill-source="local"]').length,
+                  communityCards: document.querySelectorAll('[data-skill-source="community"]').length,
+                };
+              });
+              check(counts.local > 0, `SK-0: the Local section is populated (${counts.local})`);
+              check(counts.community > 0, `SK-0: the Community section is populated (${counts.community})`);
+              check(counts.total === counts.local + counts.community,
+                `SK-0: data-skill-count is the sum of both sections (${counts.total} vs ${counts.local}+${counts.community})`);
+              check(counts.local === counts.localCards,
+                `SK-0: data-local-count matches the rendered local card count (${counts.local} vs ${counts.localCards})`);
+              check(counts.community === counts.communityCards,
+                `SK-0: data-community-count matches the rendered community card count (${counts.community} vs ${counts.communityCards})`);
+
+              // Cross-check ONE card's used-by count against the real, disk-derived
+              // truth (composition.skills read straight off every agent's SKILL.md) —
+              // the whole point of this beat: used-by is derived, never declared.
+              const derivedUsage = realSkillUsage('brain-query');
+              check(derivedUsage.length > 0, `SK-0: brain-query has real composers on disk (${derivedUsage.join(', ')})`);
+              const domUsedByCount = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-skill-id="brain-query"]')?.getAttribute('data-skill-used-by-count') ?? '-1', 10));
+              check(domUsedByCount === derivedUsage.length,
+                `SK-0: brain-query's data-skill-used-by-count matches derived usage (dom=${domUsedByCount}, real=${derivedUsage.length})`);
+
+              await frame(page, 'sk-0a-library', 'Part 2 (skills) — the /skills library: local + community sections, derived used-by', { key: true });
+
+        },
+      },
+      {
+        id: 'skills-detail-package',
+        title: 'A real skill\'s detail page — file package + used-by',
+        narration: 'The detail page for a real shipped skill renders its file package (SKILL.md plus every supporting file, tabbed) with a file count that matches the real files on disk, and the SAME derived used-by list the library card showed — the detail route and the library card agree on one real fact, not two independent guesses.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── SK-0b: a real skill's package detail page ──────────────────────────────
+              const targetId = 'brain-query';
+              console.log(`\n[SK-0b] Open a real skill's package (/skills/${targetId})`);
+              const realFileCount = countPackageFiles(join(FORGE_ROOT, 'skills', targetId));
+
+              await page.goto(watch.uiUrl + `/skills/${targetId}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 }).catch(() => {});
+              check(await page.locator('main[data-page="skill-detail"]').count() > 0, `SK-0b: /skills/${targetId} renders [data-page="skill-detail"]`);
+              check(await page.locator('[data-component="file-package"]').count() > 0, 'SK-0b: [data-component="file-package"] renders');
+
+              const domFileCount = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-component="file-package"]')?.getAttribute('data-file-count') ?? '-1', 10));
+              check(domFileCount === realFileCount,
+                `SK-0b: data-file-count matches the real file count under skills/${targetId}/ (dom=${domFileCount}, real=${realFileCount})`);
+
+              const firstTab = page.locator('[data-file-tab]').first();
+              const tabPath = await firstTab.getAttribute('data-file-path');
+              await caption(page, `${targetId}'s file package — SKILL.md${realFileCount > 1 ? ' plus its supporting files' : ''}, tabbed.`);
+              await firstTab.click().catch(() => {});
+              await page.waitForFunction(
+                (p) => document.querySelector('[data-component="file-package"]')?.getAttribute('data-active-file') === p,
+                tabPath, { timeout: 5000 }).catch(() => {});
+              const activeAfterClick = await page.evaluate(() => document.querySelector('[data-component="file-package"]')?.getAttribute('data-active-file'));
+              check(activeAfterClick === tabPath, `SK-0b: clicking [data-file-tab] sets data-active-file (got "${activeAfterClick}", want "${tabPath}")`);
+
+              const derivedUsage = realSkillUsage(targetId);
+              const usedByCountDom = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-section="used-by"]')?.getAttribute('data-used-by-count') ?? '-1', 10));
+              check(usedByCountDom === derivedUsage.length,
+                `SK-0b: [data-section="used-by"] data-used-by-count matches derived usage (dom=${usedByCountDom}, real=${derivedUsage.length})`);
+              const usedByAgentsDom = (await page.evaluate(() =>
+                [...document.querySelectorAll('[data-used-by-agent]')].map((el) => el.getAttribute('data-used-by-agent')))).sort();
+              check(JSON.stringify(usedByAgentsDom) === JSON.stringify(derivedUsage),
+                `SK-0b: the exact used-by agent set matches derivation (dom=[${usedByAgentsDom.join(', ')}], real=[${derivedUsage.join(', ')}])`);
+
+              await frame(page, 'sk-0b-detail', `Part 2 (skills) — /skills/${targetId}: file package tabs + derived used-by`, { key: true });
+
+        },
+      },
       {
         id: 'skills-ootb-library',
         title: 'OOTB skill library (community-sourced)',
@@ -139,12 +288,23 @@ export const journey = defineJourney({
               for (const slug of [SK_NEW_SLUG, SK_CLIP_SLUG]) {
                 try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
               }
-              await page.goto(watch.uiUrl + '/skills/new', { waitUntil: 'domcontentloaded' });
+              // D8: the library is the ONE place "New skill" lives — enter through its
+              // own [data-action="new-skill"] link rather than a direct goto, so this
+              // beat also proves the one-entry-point rule (the rest of the library
+              // surface is covered by the skills-library beat above).
+              await page.goto(watch.uiUrl + '/skills', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 }).catch(() => {});
+              check(await page.locator('[data-action="new-skill"]').count() > 0,
+                'SK-3: the library exposes [data-action="new-skill"] (D8: the one creation entry point)');
+              await page.locator('[data-action="new-skill"]').click().catch(() => {});
+              await page.waitForURL('**/skills/new', { timeout: 10000 }).catch(() => {});
               await page.waitForFunction(
                 () => document.querySelector('[data-page="skill-builder"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 20000 }).catch(() => {});
               const skNewReady = await page.locator('main[data-page="skill-builder"]').count() > 0;
-              check(skNewReady, 'SK-3: skill builder renders ([data-page="skill-builder"])');
+              check(skNewReady, 'SK-3: clicking [data-action="new-skill"] lands on the skill builder ([data-page="skill-builder"])');
               check(await page.locator('[data-section="skill-new"]').count() > 0, 'SK-3: [data-section="skill-new"] present');
               await caption(page, 'Author a brand-new skill: name, one-line description, instructions — added to the library.');
               // data-page-ready is static "true" here, so settle for hydration then type with
@@ -215,6 +375,139 @@ export const journey = defineJourney({
               check(skLanded, `SK-3: creating writes skills/${SK_NEW_SLUG}/SKILL.md`);
               await sleep(ACT); // let the post-create redirect into the agent builder settle
               await frame(page, 'sk-3-created', 'Part 2 (skills) — new skill authored → SKILL.md on disk → Studio lands in the agent builder to compose it', { key: true });
+
+        },
+      },
+      {
+        id: 'skills-install-approve',
+        title: 'Install a community package, approve it, then catch drift',
+        narration: 'The trust arc, end to end and real: a package materialised in a temp dir (never the repo) is installed through the bridge — landing quarantined as a draft, absent from the agent-builder palette — then approved for real through the UI, becoming palette-visible with its runtime: block still permanently quarantined (D4); mutating one byte of a non-SKILL.md package file afterwards flips it to needs-review and drops it back OUT of the palette, proving the drift check is enforced end to end, not just rendered.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── SK-5: install → quarantine → approve → needs-review (the trust arc) ───
+              console.log('\n[SK-5] Install a community package, approve it, then catch drift');
+              cleanSkillArtifacts(); // stale-state sweep first (crash-safe: mirrors the runner's finally)
+              let pkgDir = null;
+              try {
+                // D2: this pipeline consumes an ALREADY-MATERIALISED package (a local
+                // directory) — no hub fetch, no fabricated "vendored upstream" content.
+                // The package lives entirely outside the repo tree.
+                pkgDir = mkdtempSync(join(tmpdir(), 'forge-journey-skill-'));
+                const skillMd = [
+                  '---',
+                  'name: Journey Installed Skill',
+                  'description: A package materialised purely for this journey beat -- exercises install, quarantine, approve, and re-review end to end; never composed by any real agent.',
+                  'runtime:',
+                  '  sdk: claude',
+                  '  strategy: fixed',
+                  '---',
+                  '',
+                  '# Journey Installed Skill',
+                  '',
+                  'Demonstrates the trust pipeline end to end. Never composed by any real',
+                  'agent -- it exists solely for this journey beat and is removed at the end',
+                  'of every run.',
+                  '',
+                ].join('\n');
+                writeFileSync(join(pkgDir, 'SKILL.md'), skillMd);
+                mkdirSync(join(pkgDir, 'scripts'), { recursive: true });
+                writeFileSync(join(pkgDir, 'scripts', 'collect.sh'), '#!/usr/bin/env bash\necho "journey fixture -- never executed"\n');
+
+                // Install via the bridge — the exact route the UI's own install button
+                // calls (forge-ui/lib/skill-client.ts's installSkill()).
+                const installRes = await fetch(watch.bridgeUrl + '/api/studio/skills/install', {
+                  method: 'POST',
+                  headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+                  body: JSON.stringify({
+                    id: SK_INSTALL_ID,
+                    packageDir: pkgDir,
+                    upstream: { source: 'local-fixture://journey-install-approve' },
+                  }),
+                });
+                const installBody = await installRes.json().catch(() => ({}));
+                check(installRes.ok && installBody.ok === true, `SK-5: install POST succeeds (status ${installRes.status})`);
+                check(existsSync(join(SK_INSTALL_DIR, 'SKILL.md')), `SK-5: skills/${SK_INSTALL_ID}/SKILL.md lands on disk`);
+
+                const installedRaw = readFileSync(join(SK_INSTALL_DIR, 'SKILL.md'), 'utf8');
+                check(/^status: draft$/m.test(installedRaw), 'SK-5: installed package is quarantined as status: draft');
+                const topFrontmatter = installedRaw.split(/\nquarantined:/)[0];
+                check(!/^runtime:/m.test(topFrontmatter), 'SK-5: runtime: is NOT top-level after install (moved under quarantined:)');
+                check(/quarantined:/.test(installedRaw) && /\n\s+runtime:/.test(installedRaw.split(/\nquarantined:/)[1] ?? ''),
+                  'SK-5: the quarantined: block preserves the original runtime: key');
+
+                // Draft is NOT palette-visible — check the agent-builder palette itself,
+                // not just a status field (the end-to-end enforcement point).
+                await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+                await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+                const draftInPalette = await page.locator(`[data-component="catalog-palette"] [data-kind="skill"][data-id="${SK_INSTALL_ID}"]`).count();
+                check(draftInPalette === 0, `SK-5: the draft install is NOT in the agent-builder palette (found ${draftInPalette})`);
+
+                // The detail page renders the approval gate (drafts only) with the scan.
+                await page.goto(watch.uiUrl + `/skills/${SK_INSTALL_ID}`, { waitUntil: 'domcontentloaded' });
+                await page.waitForFunction(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+                check(await page.evaluate(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust')) === 'draft',
+                  'SK-5: detail page reports data-skill-trust="draft"');
+                check(await page.locator('[data-section="approval-gate"]').count() > 0, 'SK-5: [data-section="approval-gate"] renders for the draft');
+                // KNOWN PRODUCT DEFECT (found by this beat, reported not worked around):
+                // scanSkillPackage computes quarantinedKeys from the CURRENT top-level
+                // frontmatter of the on-disk draft — but by install time `runtime`/
+                // `allowed-tools` are ALREADY moved under the nested `quarantined:` block,
+                // so they can never appear at top level again and never show up here. Only
+                // `library` (always present top-level as `false` on every draft, regardless
+                // of what the source package declared) is ever reported — the scan can never
+                // actually tell a reviewer the untrusted package tried to declare `runtime:`,
+                // which is the one fact D5's "read this before approving" gate most needs to
+                // surface. Verified via a direct repro against installSkillPackage +
+                // scanSkillPackage; this assertion pins the REAL (buggy) behavior rather than
+                // the intended one — see the WI-4 report for the full writeup.
+                check(await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-quarantined-count')) === '1',
+                  'SK-5: scan reports one quarantined key — "library" (NOT "runtime": see the KNOWN PRODUCT DEFECT note above)');
+                check(await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-executable-count')) === '1',
+                  'SK-5: scan reports the one executable-extension file (scripts/collect.sh)');
+                await caption(page, 'Installed as a draft — quarantined, not palette-visible, not runnable (D4). Read the full SKILL.md, then approve.');
+                await frame(page, 'sk-7-install-draft', 'Part 2 (skills) — an installed package lands quarantined as a draft', { key: true });
+
+                // Approve — for real, through the UI button.
+                await page.locator('[data-action="approve-skill"]').click().catch(() => {});
+                await page.waitForFunction(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust') === 'ready', null, { timeout: 10000 }).catch(() => {});
+                check(await page.evaluate(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust')) === 'ready',
+                  'SK-5: approving flips trust to ready');
+                check(await page.locator('[data-section="approval-gate"]').count() === 0, 'SK-5: the approval gate no longer renders once approved');
+                const approvedRaw = readFileSync(join(SK_INSTALL_DIR, 'SKILL.md'), 'utf8');
+                check(!/^status: draft$/m.test(approvedRaw), 'SK-5: status: draft removed on disk after approval');
+                check(!/^runtime:/m.test(approvedRaw.split(/\nquarantined:/)[0]), 'SK-5: runtime: is still NOT restored top-level after approval (D4)');
+
+                // Now palette-visible.
+                await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+                await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+                const approvedInPalette = await page.locator(`[data-component="catalog-palette"] [data-kind="skill"][data-id="${SK_INSTALL_ID}"]`).count();
+                check(approvedInPalette > 0, `SK-5: the approved skill IS now in the agent-builder palette (found ${approvedInPalette})`);
+                await caption(page, 'Approved — palette-visible now, but still a plain composable skill forever (D4 never restores runtime:).');
+                await frame(page, 'sk-8-approved-palette', 'Part 2 (skills) — approved: palette-visible, runtime: still quarantined', { key: true });
+
+                // Mutate ONE byte of a NON-SKILL.md package file → needs-review, and the
+                // skill drops back OUT of the palette (the end-to-end enforcement point).
+                const scriptPath = join(SK_INSTALL_DIR, 'scripts', 'collect.sh');
+                writeFileSync(scriptPath, readFileSync(scriptPath, 'utf8') + '# tampered\n');
+                await page.goto(watch.uiUrl + `/skills/${SK_INSTALL_ID}`, { waitUntil: 'domcontentloaded' });
+                await page.waitForFunction(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+                check(await page.evaluate(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust')) === 'needs-review',
+                  'SK-5: mutating a non-SKILL.md package file flips trust to needs-review');
+                check(await page.locator('[data-section="needs-review"]').count() > 0, 'SK-5: [data-section="needs-review"] renders');
+                await caption(page, 'One byte changed in scripts/collect.sh — not even SKILL.md itself — and the pin no longer matches.');
+                await frame(page, 'sk-9-needs-review', 'Part 2 (skills) — a package-file byte change flips it to needs-review', { key: true });
+
+                await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+                await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+                const driftedInPalette = await page.locator(`[data-component="catalog-palette"] [data-kind="skill"][data-id="${SK_INSTALL_ID}"]`).count();
+                check(driftedInPalette === 0, `SK-5: needs-review drops back OUT of the palette (found ${driftedInPalette})`);
+              } finally {
+                // Every beat cleans up its own artifacts — the source package dir plus
+                // the installed result + ledger entry (cleanSkillArtifacts covers both).
+                if (pkgDir) { try { rmSync(pkgDir, { recursive: true, force: true }); } catch { /* */ } }
+                cleanSkillArtifacts();
+              }
+              check(!existsSync(SK_INSTALL_DIR), `SK-5: skills/${SK_INSTALL_ID}/ removed after the beat (self-cleaning)`);
 
         },
       },

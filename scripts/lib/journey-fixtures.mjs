@@ -1165,12 +1165,39 @@ export function writeDemoDesignSkill() {
   ].join('\n'));
 }
 
+// R3-01-F3/F4 — the skills-install-approve beat's own scratch id. The SOURCE
+// package lives outside the repo (an mkdtempSync'd dir the beat owns and
+// removes itself), but installSkillPackage lands the RESULT under
+// skills/<id>/ exactly like a real install, plus a ledger entry in
+// studio/installed-skills.yaml (skill-install-ledger.ts) — both swept here so
+// a crash mid-beat never leaves a stray draft/approved skill or a false
+// "installed" ledger record behind.
+export const SK_INSTALL_ID = 'journey-installed-skill';
+export const SK_INSTALL_DIR = join(FORGE_ROOT, 'skills', SK_INSTALL_ID);
+const SK_INSTALL_LEDGER_PATH = join(FORGE_ROOT, 'studio', 'installed-skills.yaml');
+
+/** Remove the install-approve beat's ledger entry without disturbing any
+ *  other entry — best-effort (a malformed ledger is not this sweep's job to
+ *  fix; the ledger's own integrity is skill-install-ledger.ts's concern). */
+function cleanInstalledSkillLedgerEntry(id) {
+  if (!existsSync(SK_INSTALL_LEDGER_PATH)) return;
+  try {
+    const doc = yaml.load(readFileSync(SK_INSTALL_LEDGER_PATH, 'utf8'));
+    const installed = Array.isArray(doc?.installed) ? doc.installed : [];
+    const filtered = installed.filter((e) => e?.id !== id);
+    if (filtered.length === installed.length) return; // nothing to remove
+    writeFileSync(SK_INSTALL_LEDGER_PATH, yaml.dump({ installed: filtered }), 'utf8');
+  } catch { /* best-effort */ }
+}
+
 export function cleanSkillArtifacts() {
   restoreRealSkill(); // crash-safe: the runner's finally routes through here
   for (const slug of [SK_NEW_SLUG, SK_CLIP_SLUG]) {
     try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
   }
   try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(SK_INSTALL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  cleanInstalledSkillLedgerEntry(SK_INSTALL_ID);
 }
 
 // ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────
