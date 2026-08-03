@@ -140,3 +140,36 @@ test('the shipped templates carry no stray files that would break substitution',
     assert.ok(entries.includes('package.json') && entries.includes('AGENTS.md') && entries.includes('roadmap.md'));
   }
 });
+
+// ---------------------------------------------------------------------------
+// R3-06-F3 — a third scaffold, typescript-web, joins the curated library.
+// RED until the F3 WI adds studio/starters/projects/typescript-web/ — the
+// starter doesn't exist yet, so listProjectStarters won't include it and
+// scaffoldGreenfieldProject will throw "unknown appType" in the meantime.
+// ---------------------------------------------------------------------------
+
+test('AT-46: F3 — listProjectStarters(FORGE_ROOT) includes "typescript-web" alongside "typescript-cli"/"typescript-api"', () => {
+  const types = listProjectStarters(REAL_ROOT);
+  assert.ok(
+    types.includes('typescript-web') && types.includes('typescript-cli') && types.includes('typescript-api'),
+    `expected typescript-web + typescript-cli + typescript-api, got: ${types.join(', ')}`,
+  );
+});
+
+test('AT-47: F3 — scaffolding "typescript-web" reaches preflight HARD-green, with every template token substituted', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    const out = scaffoldGreenfieldProject({ manifest: manifest({ appType: 'typescript-web' }), forgeRoot });
+    assert.equal(
+      out.hardGreen,
+      true,
+      `expected hard-green; failing: ${out.failingClauses.map((c) => `${c.clause}:${c.detail}`).join(' | ')}`,
+    );
+    assert.deepEqual(out.failingClauses, []);
+    for (const rel of out.filesWritten) {
+      assert.equal(hasUnsubstitutedTokens(readFileSync(join(out.projectDir, rel), 'utf8')), false, `${rel} has unsubstituted tokens`);
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

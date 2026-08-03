@@ -292,6 +292,55 @@ inventory rather than one shared page-level contract:
   community skill is a plain composable skill forever, quarantined
   permanently; making it a runnable agent is a separate, explicit act in the
   Agent Builder.
+- **`/templates` + `/templates/[id]` — the templates library (R3-06).** One
+  registry unifying three previously-siloed on-disk sources into a single
+  browsable library: `studio/artifact-templates/*.md` (category `planning`,
+  7 templates — `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
+  `demo-fix-spec`, `review-findings`), `studio/demo-elements/*.md` (category
+  `demo-output`, 6 templates — `screenshot`, `cli-capture`, `code-diff`,
+  `api-verify`, `test-evidence`, `narrative`), and
+  `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
+  — `typescript-api`, `typescript-cli`, `typescript-web`); 16 entries total
+  (`orchestrator/studio/template-library.ts`). `usedBy` is DERIVED, never a
+  declared field: planning usage scans the real flow graph
+  (`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's
+  `.forge/project.json` `demoProcess[].element`; project-scaffold usage is
+  honestly empty — `appType` is validated against the starter list at
+  project-create time but never persisted, so no on-disk source records
+  which scaffold produced a project (a file-shape heuristic would be
+  fabrication, not derivation). `/templates` root:
+  `main[data-page="template-library"][data-page-ready][data-template-count][data-planning-count][data-demo-output-count][data-project-scaffold-count]`.
+  Per card: `[data-card-type="template"][data-template-id][data-template-category="demo-output"|"planning"|"project-scaffold"]`,
+  `[data-template-preview="html"|"video"|"shots"|"mock"|"doc"|"scaffold"]`
+  (a CSS-approximation preview kind, class `tpl-preview-<kind>`; omitted only
+  when the definition failed to parse), `[data-template-used-by-count]`. The
+  search box is `[data-field="template-search"]` (case-insensitive match on
+  name + description); a bridge-unreachable state renders
+  `[data-component="fetch-error"]`, never conflated with a genuinely empty
+  library. `/templates/[id]` root:
+  `main[data-page="template-detail"][data-template-id][data-page-ready]`,
+  plus `[data-template-category]` and `[data-endpoints-verified="true"|"false"]`
+  once the fetch resolves — the latter present ONLY when the template
+  declares a producer and/or consumer (planning-only; absent, not `false`,
+  when nothing is declared). Non-ready states: `[data-component="fetch-error"]`
+  (bridge unreachable) and `[data-component="not-found"]` (unknown id — the
+  bridge 404s for it by design). The ready state renders
+  `[data-section="definition"]` (format/provenance/definition-ref); for a
+  malformed definition, `[data-section="parse-error"]` instead; planning-only,
+  when a producer/consumer is declared, `[data-section="endpoints"]`
+  (`data-endpoints-verified="true"` means the declaration was cross-checked
+  against a real flow edge and agreed; `"false"` means either it contradicts
+  the edge — a lint error — or the template carries zero flow edges so the
+  claim is unverifiable, not wrong: `verdict`, `work-items`, and
+  `demo-fix-spec` travel by orchestrator-band re-entry today, not a DAG edge,
+  so they fall in the latter case); and `[data-section="used-by"][data-used-by-count]`
+  with per-entry `[data-used-by-entry="<label>"]` (an empty result renders
+  "scanned N, none found", never a bare zero). `[data-template-preview]`
+  repeats on the detail page's own preview block. A `project-scaffold`
+  template's package renders through the SAME `FilePackage` component
+  `/skills/[id]` uses — `[data-component="file-package"][data-file-count][data-active-file]`,
+  per-tab `[data-file-tab][data-file-path]` — the whole scaffold's file tree,
+  tabbed, kind-agnostic reuse (shared with R2-10-F3).
 
 The shared status vocabularies:
 

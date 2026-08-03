@@ -47,7 +47,8 @@ import ReactFlow, {
 import 'reactflow/dist/style.css';
 
 import type { Agent, FlowNode, FlowEdge } from '@/lib/studio-client';
-import { ArtifactPicker, ARTIFACTS } from './ArtifactPicker';
+import { ArtifactPicker } from './ArtifactPicker';
+import { ARTIFACTS } from '@/lib/flow-artifact-catalog';
 import { NodeMiniPanel } from './NodeMiniPanel';
 import { decodeDragPayload } from './AgentPalette';
 

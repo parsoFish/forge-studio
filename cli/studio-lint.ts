@@ -37,6 +37,7 @@ import {
   loadKbDescriptor,
   discoverProjects,
 } from '../orchestrator/studio/registry.ts';
+import { lintTemplateLibrary } from '../orchestrator/studio/template-library.ts';
 import {
   validateAgent,
   validateArtifactRef,
@@ -473,6 +474,24 @@ export function runStudioLint(root: string): StudioLintResult {
 
   findings.push(...lintSkillTrust(root));
   findings.push(...lintSkillRefs(root));
+
+  // ------------------------------------------------------------------
+  // 7. Template library (R3-06) — union registry over artifact-templates/,
+  //    demo-elements/, and starters/projects/. Mirrors the load-error idiom
+  //    used throughout this file: a throw is caught and surfaced as a loud,
+  //    attributed `load` error finding, never silently swallowed.
+  // ------------------------------------------------------------------
+
+  try {
+    findings.push(...lintTemplateLibrary(root));
+  } catch (err) {
+    findings.push({
+      level: 'error',
+      object: 'studio:template-library',
+      check: 'load',
+      message: `Cannot lint template library — ${(err as Error).message}`,
+    });
+  }
 
   // ------------------------------------------------------------------
   // Tally

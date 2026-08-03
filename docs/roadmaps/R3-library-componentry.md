@@ -164,6 +164,71 @@ against a package materialised in a temp dir, never the repo).
 reusing a builder shell for this, but the shipped detail page does not do
 so).
 
+### R3-B9 Templates library — registry + library/detail view + project-type scaffolds (R3-06 F1+F2+F3)
+
+Landed 2026-08-04 (branch `feat/r3-06-templates-library`). **F1:** a single
+registry (`orchestrator/studio/template-library.ts`) unions three previously-
+siloed on-disk sources into typed library items — `studio/artifact-templates/`
+(category `planning`, 7 templates), `studio/demo-elements/` (category
+`demo-output`, 6 templates), and `studio/starters/projects/<id>/` (category
+`project-scaffold`, 3 scaffolds) — 16 entries total. `usedBy` is DERIVED, never
+hand-maintained: planning usage scans the real flow graph
+(`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's
+`.forge/project.json` `demoProcess[].element`; project-scaffold usage is
+honestly empty (no on-disk source records which scaffold produced a project —
+a file-shape heuristic would be fabrication). A declared `producer`/`consumer`
+on a planning template is cross-validated against the resolved flow-edge
+endpoints (`verifyTemplateEndpoints`): agreeing ⇒ `endpointsVerified: true`;
+contradicting ⇒ a lint error; zero-edge (today: `verdict`, `work-items`,
+`demo-fix-spec` travel by orchestrator-band re-entry, not a DAG edge) ⇒
+`endpointsVerified: false` plus a lint flag (unverifiable, not wrong). A
+malformed definition surfaces with `error` set, never dropped (D7, the
+skill-library.ts precedent). `forge studio lint` gains the `starters-gap` /
+`duplicate-id` / `endpoint-mismatch` / `unverifiable-endpoints` checks. **This
+initiative also folds in R2-05-F1's canonical-artifact-set audit** (the two
+roadmaps shared the same substance, decided at session start per R3-06's own
+dependency note): `validateArtifactRef` is promoted from advisory to a hard
+**error**, and the flow builder's hardcoded `ARTIFACTS` catalog
+(`forge-ui/lib/flow-artifact-catalog.ts`) drops its two orphan entries
+(`reflection`, `demo` — no on-disk template) and is pinned to the on-disk
+`studio/artifact-templates/` id set by a CI-enforced parity test in both
+directions. **F2:** a real `/templates` library route
+(`forge-ui/app/templates/page.tsx`) mirrors `/skills`'s shape — grouped by
+category, searchable, per-card preview thumbnail (`previewKind`:
+html/video/shots/mock/doc/scaffold, CSS-approximation classes) — and
+`/templates/[id]` (`forge-ui/app/templates/[id]/page.tsx`) is the real
+detail page: definition, producer/consumer verification, derived used-by, and
+— for a `project-scaffold` entry — the whole scaffold file tree through the
+SAME `FilePackage` component `/skills/[id]` uses. The detail page renders that
+tree **raw** — it does not enumerate which contract clauses a scaffold
+pre-wires, so F3's "detail page lists what the contract pre-wires" AC is met
+only inferentially (see the change-log entry). `GET /api/studio/templates`
++ `GET /api/studio/templates/:id` (`cli/bridge-studio-templates.ts`) are the
+only routes (read-only; the template library has no write path). Demoed by
+four new `templates` journey beats (`scripts/journeys/templates.mjs`, wired
+into `RUN_ORDER`): `templates-library` (counts + category cross-check),
+`templates-search`, `templates-detail-planning` (definition + derived
+used-by, cross-checked against an independent recompute off
+`studio/flows/*/flow.yaml`), and `templates-detail-scaffold` (the real file
+tree, tabbed). Canonical inventory documented in
+`studio/artifact-templates/README.md`.
+
+**F3 (landed same day, same branch):** the third mockup scaffold shape —
+`typescript-web` (web UI) — joins the two F1+F2 starters (`typescript-api` =
+REST API, `typescript-cli` = CLI/library) under `studio/starters/projects/`,
+completing the three canonical kinds the mockup's `provenance: 'vision'`
+promotion named. No new wiring was needed for its consumption: `orchestrator/
+project-create.ts`'s `listProjectStarters` already scanned the directory with
+no hardcoded list, so `forge create`, `POST /api/studio/projects/create`, and
+the `/projects/new` create-from-template form all pick it up automatically —
+confirmed by `project-create.test.ts`'s AT-46 (discoverable alongside the
+other two) and AT-47 (scaffolds to preflight HARD-green with every template
+token substituted). The templates library's own registry/detail page (F1+F2)
+surfaces it through the same generic `project-scaffold` category path as the
+other two scaffolds — no `template-library.ts` change was needed either. The
+templates library's own journey stays deliberately browse→detail only (no
+create-project action added from `/templates` itself).
+
 ## Planned initiatives
 
 ### R3-01 Skills first-class management
@@ -628,7 +693,9 @@ so).
 
 ### R3-06 Templates library
 
-- **Status:** planned  ·  **Wave:** 5 (module: library-templates)
+- **Status:** implemented (F1+F2+F3, 2026-08-04, branch
+  `feat/r3-06-templates-library` — see baseline **R3-B9**)  ·  **Wave:** 5
+  (module: library-templates)
 - **Depends on:** R3-01 (soft — library-view/detail-page pattern), R2-05
   (soft — R2-05-F1's canonical artifact set is the substance this library
   manages; sequence R2-05-F1 first or fold its audit into F1 here — decide at
@@ -812,3 +879,62 @@ rather than deferred within it:
   now unions the keys found at the SKILL.md's top level with those already
   moved under its nested `quarantined:` block, deduped and ordered by
   `QUARANTINED_FRONTMATTER_KEYS`'s own declared order.
+- 2026-08-04 — **R3-06 F1+F2 implemented** (branch
+  `feat/r3-06-templates-library`; baseline **R3-B9**). One registry
+  (`orchestrator/studio/template-library.ts`) unions `studio/artifact-templates/`
+  (planning, 7), `studio/demo-elements/` (demo-output, 6), and
+  `studio/starters/projects/` (project-scaffold, 2) into 15 library entries
+  with DERIVED `usedBy` (real flow-graph edges for planning, real project
+  `demoProcess` config for demo-output, honestly empty for project-scaffold)
+  and producer/consumer endpoint verification against the flow graph. Real
+  `/templates` + `/templates/[id]` routes (mirroring `/skills`'s shape) plus
+  `GET /api/studio/templates(/:id)` (`cli/bridge-studio-templates.ts`). **Also
+  folds in R2-05-F1's canonical-artifact-set audit** (shared substance,
+  decided at session start per R3-06's own dependency note):
+  `validateArtifactRef` promoted advisory → error; the flow builder's
+  `ARTIFACTS` catalog drops its two orphan entries (`reflection`, `demo`) and
+  is now pinned to the on-disk template set by a CI-enforced parity test (see
+  R2-runnable-componentry.md's own change log for the R2-05-F1 residue this
+  does NOT close). Four new `templates` journey beats
+  (`templates-library`, `templates-search`, `templates-detail-planning`,
+  `templates-detail-scaffold`). New `studio/artifact-templates/README.md`
+  documents the canonical 7-template inventory. ADR-027 amended to record the
+  promotion. **F3 (new scaffold kind + R4-03 consumption) stays planned** —
+  this initiative surfaced the 2 pre-existing starters only; it minted no new
+  scaffold content and built no create-project picker (the mockup's
+  scaffold-picker beat is explicitly out of scope for this initiative's own
+  browse→detail journey).
+- 2026-08-04 — **R3-06 F3 implemented** (same branch
+  `feat/r3-06-templates-library`; baseline **R3-B9** updated in place). The
+  third mockup scaffold shape — `typescript-web` (web UI) — joins
+  `typescript-api` (REST API) and `typescript-cli` (CLI/library) under
+  `studio/starters/projects/`, completing the three canonical kinds; the
+  registry now unions 7 planning + 6 demo-output + 3 project-scaffold = 16
+  library entries (was 15). No new wiring was needed: `listProjectStarters`
+  (`orchestrator/project-create.ts`) already scanned the directory with no
+  hardcoded list, so `forge create`, `POST /api/studio/projects/create`, the
+  `/projects/new` create-from-template form, and the templates library's own
+  registry/detail page (F1+F2) all pick up the third scaffold automatically —
+  confirmed by `project-create.test.ts`'s AT-46/AT-47 (discoverable; scaffolds
+  to preflight HARD-green with every template token substituted). Reconciled
+  in the same pass: `scripts/journeys/templates.mjs` now derives all four
+  `/templates` counts from disk instead of pinning literals (a real registry
+  change is caught by a changed derived number, never masked by a stale
+  constant); `orchestrator/studio/registry.ts`'s `listArtifactTemplates` and
+  `template-library.ts`'s `listPlanningEntries` exclude `README.md`
+  case-insensitively (`/^readme\.md$/i`), closing a reviewer-found gap where a
+  future `readme.md`/`Readme.md` variant carrying valid frontmatter would have
+  become a phantom template; ADR-027 and `docs/forge-ui-dom-and-harness.md`'s
+  registry-count claims corrected from 15 to 16, and ADR-027's stale
+  "five seed templates" line corrected to the real seven
+  (`review-findings`/`demo-fix-spec` were missing from that list). The
+  templates library's own journey stays deliberately browse→detail only (no
+  create-project action added from `/templates` itself). **Pre-wire
+  enumeration deferred: the detail page shows the raw file tree, it does not
+  enumerate contract pre-wiring.** Three of F3's four ACs are met outright
+  (three canonical shapes ship; creating from a scaffold yields a
+  preflight-green project; the picker consumes the registry with no hardcoded
+  list); the fourth — "scaffold detail page lists what the contract pre-wires"
+  — is met only inferentially, since a reader can see `.forge/project.json`,
+  the gate and the CI workflow in the file tree but the page names no clause.
+  Recorded as claimed-with-caveat rather than silently counted as complete.

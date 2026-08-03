@@ -7,28 +7,7 @@
  */
 
 import { useEffect, useRef } from 'react';
-
-export type ArtifactDef = {
-  id: string;
-  name: string;
-  desc: string;
-};
-
-// Fixed artifact list matching the forge flow artifacts catalog
-const ARTIFACTS: ArtifactDef[] = [
-  { id: 'plan',        name: 'PLAN.md',           desc: 'Approved plan: scope, ACs, decomposition.' },
-  { id: 'work-items',  name: 'work-items/*.md',    desc: 'Self-contained work item specs.' },
-  { id: 'wi-branches', name: 'wi-branches',        desc: 'One reviewed branch per completed WI.' },
-  { id: 'pr',          name: 'PR',                 desc: 'Unified PR with demo evidence attached.' },
-  { id: 'verdict',     name: 'verdict.json',       desc: 'Approve / send-back decision with reasons.' },
-  { id: 'reflection',  name: 'reflection.md',      desc: 'Honest as-built retro; feeds knowledge ingestion.' },
-  { id: 'demo',        name: 'demo-evidence/',     desc: 'Video + screenshots + live resource captures.' },
-  // R4-07/R4-08: the wave-4 successor-agent artifacts (registered templates).
-  { id: 'demo-fix-spec',   name: 'demo-fix-spec.json',   desc: 'Demo AC-miss judgment: scoped fix proposals for the develop agent.' },
-  { id: 'review-findings', name: 'review-findings.json', desc: 'Adversarial critique: severity-ranked findings with file:line evidence.' },
-];
-
-export { ARTIFACTS };
+import { ARTIFACTS } from '@/lib/flow-artifact-catalog';
 
 type Props = {
   /** Screen position to anchor the popover near */

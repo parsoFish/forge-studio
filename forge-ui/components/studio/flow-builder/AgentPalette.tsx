@@ -14,7 +14,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { fetchStudioAgents } from '@/lib/studio-client';
 import type { Agent } from '@/lib/studio-client';
-import { ARTIFACTS } from './ArtifactPicker';
+import { ARTIFACTS } from '@/lib/flow-artifact-catalog';
 
 // Tooltip shown on a non-placeable (interactive) agent chip (R2-02-F3).
 const INTERACTIVE_NOT_PLACEABLE_TITLE =

@@ -769,3 +769,38 @@ Internal only.
 
   cleanup(root);
 });
+
+// ---------------------------------------------------------------------------
+// Section 7 — template library (R3-06): lintTemplateLibrary wired into
+// runStudioLint's aggregate output, not just callable standalone.
+// ---------------------------------------------------------------------------
+
+test('AT-39: an unmapped studio/starters/ subdir surfaces as an ERROR via runStudioLint (lintTemplateLibrary is wired in)', () => {
+  const root = buildValidRoot({ agentSlug: 'template-lint-agent' });
+  mkdirSync(join(root, 'studio', 'starters', 'agents'), { recursive: true });
+  mkdirSync(join(root, 'studio', 'starters', 'flows'), { recursive: true });
+  mkdirSync(join(root, 'studio', 'starters', 'projects'), { recursive: true });
+  mkdirSync(join(root, 'studio', 'starters', 'mystery-dir'), { recursive: true });
+
+  const result = runStudioLint(root);
+
+  const finding = result.findings.find(
+    (f) => f.check === 'template-library/starters-gap' && f.level === 'error' && f.message.includes('mystery-dir'),
+  );
+  assert.ok(
+    finding !== undefined,
+    `Expected a template-library/starters-gap error naming "mystery-dir", got: ${JSON.stringify(result.findings.map((f) => ({ check: f.check, message: f.message })))}`,
+  );
+
+  cleanup(root);
+});
+
+test('AT-40: runStudioLint(process.cwd()) surfaces the 3 real unverifiable-endpoint flags from lintTemplateLibrary (flagCount reflects them)', () => {
+  const result = runStudioLint(process.cwd());
+  const flags = result.findings.filter((f) => f.check === 'template-library/unverifiable-endpoints');
+  assert.equal(flags.length, 3, `expected 3 unverifiable-endpoints flags (verdict/work-items/demo-fix-spec), got: ${JSON.stringify(flags)}`);
+  assert.ok(flags.every((f) => f.level === 'flag'));
+  for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
+    assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
+  }
+});

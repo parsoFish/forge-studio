@@ -226,6 +226,26 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 - **Context:** Operator diagram (verbatim intent): flows *"must allow creation of various elements for different flows — HTML pages for plans/demos whose layout AND content are defined as agent output and presented by the flow UI (dynamic content support)."* As-built: fixed template set (R2-B7); `validateArtifactRef` still advisory (promotion pending, ADR-027 amendment); flow artifact-set is "messy — reduce the possibilities and solidify what gets presented" (known-gaps §4b.5); `studio/demo-elements/` already proves element-composed agent output.
 - **Features:**
   - **R2-05-F1 Artifact-set cleanup (known-gaps §4b.5).** Audit every artifact a flow run can produce; collapse to a canonical set with one owner each; promote `validateArtifactRef` (`orchestrator/studio/validate.ts:355`) from advisory to **error**; delete orphaned template/artifact paths. ACs: `forge studio lint` errors on an unresolvable artifact ref; canonical set documented in `studio/artifact-templates/` README; no flow node emits an artifact outside the set.
+    **Enforceable slice landed 2026-08-04 (R3-06, branch `feat/r3-06-templates-library`
+    — the two roadmaps share this substance, decided at session start per R3-06's
+    own dependency note):** `validateArtifactRef` is now a hard error; the flow
+    builder's hardcoded `ARTIFACTS` catalog (`forge-ui/lib/flow-artifact-catalog.ts`)
+    had its two orphan entries (`reflection`, `demo` — no on-disk template) deleted
+    and its id set is now pinned to the on-disk `studio/artifact-templates/` set by
+    a CI-enforced parity test (`forge-ui/lib/flow-artifact-catalog.test.ts`,
+    both directions); the canonical 7-template set is documented in
+    `studio/artifact-templates/README.md`. **Deliberately NOT landed, stays with
+    R2-05:** the broader audit of every artifact a flow RUN can actually produce
+    (`_logs/<cycleId>/artifacts/*`, demo dirs) and owner assignment across that
+    full surface — R3-06 only audited the DECLARATIVE template set
+    (`studio/artifact-templates/`), not run-output artifacts. Also NOT landed: the
+    flow builder's `ARTIFACTS` catalog is still hand-kept, not fetched from the
+    registry — `AgentPalette`/`FlowBuilderCanvas`/`ArtifactPicker` (three
+    flows-pillar components) consume it SYNCHRONOUSLY while rendering, and an
+    async registry fetch would rewrite the `flows-author` journey; this is
+    tracked as batch-C / R2-05 follow-on work. The CI-enforced parity test is
+    what keeps the duplication non-silent in the meantime. **R2-05 (and F1)
+    stays `planned`** — only this enforceable slice of F1 landed.
   - **R2-05-F2 Agent-authored surface contract.** An agent definition may declare an output surface: `{artifact: <template-id>}` (layout fixed, content agent-authored — today's model) or `{surface: composed, elements: [...]}` (layout AND content agent-authored from a typed element vocabulary, generalizing `studio/demo-elements/`). Rendering is sandboxed inside the `/artifact` viewer — agent-authored HTML never executes script outside the sandbox. ACs: schema in `orchestrator/studio/types.ts` + validation; one seed agent (demo path) migrated as proof; sandbox test (script injection attempt is inert).
   - **R2-05-F3 Flow-UI presentation of composed surfaces.** `/artifact` renders composed surfaces with a stable `data-*` contract (per-element `data-artifact-element` + kind), so journeys can assert structure not pixels. ACs: viewer handles both contract shapes; `journey-sync` run (flows-run journey).
 - **Session sizing:** ~2 sessions — (1) F1 cleanup + promotion, (2) F2+F3 contract + viewer.
@@ -383,3 +403,18 @@ prior-art research) demonstrably bottlenecks the linear flow.
   R6-01/04/05/06); R2-10 as-built corrected (3 bespoke session pages; the
   demo-builder is the R1-03-F2 inline panel, not re-detached); R2-D1 marked
   closed-rejected; both-sides reverse edges added on R2-01/02/04/05/08/10.
+- 2026-08-04 — **R2-05-F1 enforceable slice landed (R3-06, branch
+  `feat/r3-06-templates-library`)** — the two roadmaps share this substance
+  per R2-05's own soft-dependency note, decided at session start rather than
+  auditing twice. `validateArtifactRef` promoted advisory → error; the flow
+  builder's `ARTIFACTS` catalog lost its two orphan entries (`reflection`,
+  `demo`) and is now pinned to the on-disk `studio/artifact-templates/` id
+  set by a CI-enforced two-way parity test; the canonical 7-template set is
+  documented in `studio/artifact-templates/README.md`. **Deliberately NOT
+  landed, stays with R2-05:** the broader audit of run-output artifacts
+  (`_logs/<cycleId>/artifacts/*`, demo dirs) and their owner assignment; the
+  flow builder still hand-keeps `ARTIFACTS` rather than fetching it from the
+  registry (`AgentPalette`/`FlowBuilderCanvas`/`ArtifactPicker` consume it
+  synchronously — an async fetch would rewrite the `flows-author` journey —
+  tracked as batch-C / R2-05 follow-on). **R2-05 and R2-05-F1 both stay
+  `planned`** — only part of F1 landed, not the whole feature.

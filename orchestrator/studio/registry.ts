@@ -576,7 +576,14 @@ export function listArtifactTemplates(studioRoot: string): ArtifactTemplate[] {
   const dir = join(studioRoot, 'studio', 'artifact-templates');
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    // README.md documents the directory (R3-06) — it is not a template
+    // definition and carries no gray-matter frontmatter, so it is excluded
+    // by name rather than treated as a malformed entry. Matched
+    // case-insensitively (a readme.md/Readme.md variant would otherwise slip
+    // this check and, if it ever carried valid frontmatter, become a
+    // phantom template) — mirrors the identical exclusion in
+    // template-library.ts's listPlanningEntries; the two must stay identical.
+    files = readdirSync(dir).filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f));
   } catch {
     return []; // absent dir → no templates (tolerated)
   }
