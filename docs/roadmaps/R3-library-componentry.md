@@ -398,8 +398,9 @@ create-project action added from `/templates` itself).
 
 ### R3-03 Hooks library
 
-- **Status:** planned (re-scoped 2026-08-03, wave-5 cut — see the re-scope
-  block below)  ·  **Wave:** 5 (module: library-hooks)
+- **Status:** in-progress (re-scoped 2026-08-03, wave-5 cut — see the re-scope
+  block below; the F1 migration clause landed 2026-08-04, the library itself is
+  the follow-on PR)  ·  **Wave:** 5 (module: library-hooks)
 - **Depends on:** R5-01 (soft — the dry-bridge safety seam and R5-02 env-pin
   should land before forge ships *installable, in-harness-executing*
   components; sequencing preference per Q6-A wave 0, not a hard blocker).
@@ -938,3 +939,32 @@ rather than deferred within it:
   — is met only inferentially, since a reader can see `.forge/project.json`,
   the gate and the CI workflow in the file tree but the page names no clause.
   Recorded as claimed-with-caveat rather than silently counted as complete.
+
+- **2026-08-04 (R3-03, migration PR).** The re-scope's **migration clause**
+  landed: `composition.hooks` is renamed to **`composition.guards`** and
+  `composition.hooks` is deleted outright — no back-compat, no shim. Recorded
+  as an amendment to [ADR 027](../decisions/027-studio-object-model.md)
+  (approved before the sweep, per the ADR-first rule), with ADR 039's
+  references corrected as a bounded factual cross-reference update. Landed in
+  one no-back-compat sweep: a `guards:` catalog section replacing `hooks:`
+  (same 9 ids — they are dispatch keys); the 16 roster SKILL.mds **plus the 3
+  starter agents** under `studio/starters/agents/`, which the first pass
+  missed and which would have broken new-agent-from-starter outright;
+  `loadAgentDefinition` failing loud on a stale key (the `parseFlowTrigger`
+  precedent) and `forge studio lint` surfacing it as a `load` error; a new
+  `composition/guard-unknown` lint error threaded through the **real** lint
+  entry point so the rule is not inert; and the agent builder's drop zone,
+  palette, YAML preview and `readiness/guard` check. band-vs-toggle is
+  **DERIVED** from `BAND_HOOK_IDS` — a `kind:` declared in the catalog file is
+  ignored, pinned by a test that declares a wrong one. **Dispatch is
+  byte-identical**, proven by an extended golden spawn-capture suite (2 of 4
+  band pipelines before, now all four plus the generic one-shot option shape
+  plus a dispatch decision table over all 16 on-disk definitions): the
+  decision table and the generic option shape are unmoved to the byte. The
+  four prompt captures shift by exactly one token, because the phase bindings
+  embed the agent's own frontmatter verbatim into its prompt — measured
+  character by character, one changed region per file, and re-pinned against
+  that proof rather than regenerated on trust. F2/F3/F4 (the hooks library,
+  its security scan and permission manifest) remain **planned** and are the
+  follow-on PR; `composition.hooks` is re-introduced there with the
+  lifecycle-hook meaning.
