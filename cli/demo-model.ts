@@ -647,7 +647,12 @@ export function renderDemoMarkdown(model: DemoModel): string {
       lines.push('| metric | before | after | Δ | parity |');
       lines.push('|---|---|---|---|---|');
       for (const r of c.metrics) {
-        const d = r.deltaPct === null ? '—' : `${r.deltaPct > 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%`;
+        // deltaPct is agent-authored (demo.json) and only `parity` is validated,
+        // so an omitted delta arrives as `undefined`, not `null` — a `=== null`
+        // guard would fall through to `undefined.toFixed()` and crash the whole
+        // post-dev demo render. Gate on "is a real number" so null / undefined /
+        // any non-numeric all render as `—`.
+        const d = typeof r.deltaPct === 'number' ? `${r.deltaPct > 0 ? '+' : ''}${r.deltaPct.toFixed(1)}%` : '—';
         // `incomplete` → `new`: the metric is net-new (no prior baseline); the
         // `after` column is the result. The literal word read as "unfinished".
         const parity = r.parity === 'incomplete' ? 'new' : r.parity;
