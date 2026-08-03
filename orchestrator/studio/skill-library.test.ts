@@ -30,6 +30,7 @@ import yaml from 'js-yaml';
 import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
 import { isStudioAgent, listPlainSkills, listAgentDefinitions } from './registry.ts';
 import type { AgentDefinition } from './types.ts';
+import { readInstallLedger } from './skill-install-ledger.ts';
 
 import {
   MAX_PACKAGE_FILES,
@@ -1293,5 +1294,193 @@ describe('install ledger — the second source of truth (studio/installed-skills
     assert.ok(ledgerAfter, 'the ledger entry must still exist after repin');
     assert.equal(ledgerAfter!['contentHash'], newHash, 'the ledger entry itself must be updated by repin, not just the on-disk file');
     assert.equal(skillTrustState(root, 'repin-with-ledger'), 'ready');
+  });
+});
+
+// ===========================================================================
+// Third adversarial-review round (MAJOR 1, MINOR 1, MINOR 2, MAJOR 2):
+//
+// MAJOR 1 — a hand-written ledger with two entries sharing an `id` (different
+// contentHash) parses to a Map of size 1, last-one-wins, no throw. The
+// ledger's whole job is to be an independently self-consistent second source
+// of truth; it must enforce its own 1:1 shape.
+//
+// MINOR 1 — ledger entry ids are never slug-validated (`../../etc/passwd`,
+// `NOT-a-slug!!` both parse in inert). Not currently exploitable (callers
+// resolve through the now-guarded skillPath), but it is a second-source-of-
+// truth file with no shape enforcement.
+//
+// MINOR 2 — assertSkillSlug has no length cap; an over-long charset-valid id
+// dies as a raw ENAMETOOLONG instead of an actionable validation message.
+//
+// MAJOR 2 (promoted from "out of scope" by T2) — isStudioAgent() is purely
+// structural (checks only for `runtime:` + `library !== false`). Hand-editing
+// an installed community skill to move `quarantined.runtime` back to
+// top-level `runtime:` makes it load as a legitimate studio agent via
+// listAgentDefinitions, which never consults trust. Enforced at the palette,
+// not at the agent roster — this repo's #1 recurring defect class, and a
+// direct contradiction of D4 ("an installed+approved skill can never be
+// loaded as a studio agent").
+//
+// AT-89 also regression-guards the planned SLUG_RE relocation
+// (validate.ts → skill-path.ts, to break the skill-path → validate →
+// registry → skill-path import cycle the guard introduced). AT-84 and AT-89
+// probe not-yet-existing named exports via DYNAMIC import deliberately — a
+// static top-level import of a name that doesn't exist yet would fail the
+// whole module at link time (ERR: "does not provide an export named ..."),
+// taking down every other test in this file, not just the new one.
+//   (AT 82-89)
+// ===========================================================================
+
+describe('ledger integrity — duplicate/non-slug entry ids must fail loud', () => {
+  it('AT-82: a ledger with two entries sharing an id (different contentHash) → readInstallLedger THROWS, naming the duplicated id', () => {
+    const root = makeForgeRoot();
+    writeInstalledSkillsLedger(root, [
+      { id: 'dup-skill', source: 'https://a', contentHash: `sha256:${'1'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'dup-skill', source: 'https://b', contentHash: `sha256:${'2'.repeat(64)}`, installedAt: '2026-01-02T00:00:00.000Z' },
+    ]);
+
+    assert.throws(
+      () => readInstallLedger(root),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(err.message.includes('dup-skill'), `expected the duplicated id in the message: ${err.message}`);
+        return true;
+      },
+    );
+  });
+
+  it('AT-83: a ledger entry with a non-slug id throws, naming the bad id', () => {
+    for (const badId of ['../../etc/passwd', 'NOT-a-slug!!']) {
+      const root = makeForgeRoot();
+      writeInstalledSkillsLedger(root, [
+        { id: badId, source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
+      ]);
+
+      assert.throws(
+        () => readInstallLedger(root),
+        (err: unknown) => {
+          assert.ok(err instanceof Error);
+          assert.ok(err.message.includes(badId), `expected "${badId}" in the message: ${err.message}`);
+          return true;
+        },
+        `expected a throw for ledger entry id ${JSON.stringify(badId)}`,
+      );
+    }
+  });
+});
+
+describe('assertSkillSlug — length cap', () => {
+  it('AT-84: an over-long but charset-valid id → installSkillPackage throws an actionable (non-ENAMETOOLONG) message naming the length limit; nothing written; the cap is an exported named constant', async () => {
+    const skillPathModule = (await import('../skill-path.ts')) as Record<string, unknown>;
+    const cap = skillPathModule['MAX_SKILL_ID_LENGTH'];
+    assert.equal(typeof cap, 'number', 'expected an exported named constant MAX_SKILL_ID_LENGTH in orchestrator/skill-path.ts for the id length cap');
+
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+    const before = snapshotSkillsTree(root);
+
+    const overLongId = 'a'.repeat((cap as number) + 50);
+    const packageDir = makeTmpDir('skill-pkg-overlong-');
+    writeFileSync(join(packageDir, 'SKILL.md'), matter.stringify('\nBody.\n', { name: 'x', description: 'd' }), 'utf8');
+
+    assert.throws(
+      () => installSkillPackage({ forgeRoot: root, id: overLongId, packageDir, upstream: { source: 'https://x' } }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.ok(!/ENAMETOOLONG/.test(err.message), `must not leak the raw OS error: ${err.message}`);
+        assert.ok(/length|too long|characters|exceeds/i.test(err.message), `must name the length limit: ${err.message}`);
+        return true;
+      },
+    );
+    assert.deepEqual(snapshotSkillsTree(root), before, 'nothing must be written for a rejected id');
+  });
+});
+
+describe('isStudioAgent / listAgentDefinitions — an installed package is never an agent (D4)', () => {
+  const FULL_AGENT_FRONTMATTER = {
+    name: 'tester',
+    description: 'A test agent.',
+    phase: 'tester',
+    purpose: 'Test things.',
+    composition: { skills: [], tools: [], mcps: [], hooks: [] },
+    runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
+    brainAccess: 'none',
+    interactivity: 'Fully autonomous.',
+    'allowed-tools': [],
+    'disallowed-tools': [],
+    budgets: {},
+  };
+
+  it('AT-85: a SKILL.md with BOTH a top-level runtime: AND a provenance: block → isStudioAgent is false AND listAgentDefinitions excludes it', () => {
+    const root = makeForgeRoot();
+    writeSkillMd(root, 'fake-installed-agent-provenance', {
+      ...FULL_AGENT_FRONTMATTER,
+      provenance: { source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
+    });
+
+    assert.equal(isStudioAgent(skillPath('fake-installed-agent-provenance', root)), false);
+    const defs = listAgentDefinitions(skillsDir(root));
+    assert.ok(
+      !defs.some((d) => d.slug === 'fake-installed-agent-provenance'),
+      'must be excluded from the roster ENUMERATION, not merely fail the predicate in isolation',
+    );
+  });
+
+  it('AT-86: a SKILL.md with a quarantined: block PLUS a top-level runtime: → excluded from listAgentDefinitions', () => {
+    const root = makeForgeRoot();
+    writeSkillMd(root, 'fake-installed-agent-quarantined', {
+      ...FULL_AGENT_FRONTMATTER,
+      quarantined: { runtime: { sdk: 'claude', strategy: 'fixed' }, library: true },
+    });
+
+    assert.equal(isStudioAgent(skillPath('fake-installed-agent-quarantined', root)), false);
+    const defs = listAgentDefinitions(skillsDir(root));
+    assert.ok(!defs.some((d) => d.slug === 'fake-installed-agent-quarantined'));
+  });
+
+  it('AT-87: lintSkillTrust reports skill-trust/installed-agent-shape for that skill, naming it', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    writeSkillMd(root, 'fake-installed-agent-lint', {
+      ...FULL_AGENT_FRONTMATTER,
+      provenance: { source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
+    });
+
+    const findings = lintSkillTrust(root);
+    const f = findings.find((x) => x.check === 'skill-trust/installed-agent-shape');
+    assert.ok(f, `expected a skill-trust/installed-agent-shape finding, got: ${JSON.stringify(findings)}`);
+    assert.ok(f!.message.includes('fake-installed-agent-lint'), 'message must name the offending skill');
+  });
+
+  it('AT-88: REGRESSION GUARD — a normal shipped agent (no provenance, no quarantined) stays isStudioAgent + in listAgentDefinitions; the real repo roster count is pinned', () => {
+    const root = makeForgeRoot();
+    writeSkillMd(root, 'normal-agent', FULL_AGENT_FRONTMATTER);
+
+    assert.equal(isStudioAgent(skillPath('normal-agent', root)), true);
+    assert.ok(listAgentDefinitions(skillsDir(root)).some((d) => d.slug === 'normal-agent'));
+
+    // Pinned against the REAL repo (captured 2026-08-04 against commit
+    // 23f414fe: `listAgentDefinitions(skillsDir())` → 10 agents) so the fix
+    // cannot quietly delete agents from the roster while closing the hole.
+    const REAL_AGENT_COUNT = 10;
+    assert.equal(
+      listAgentDefinitions(skillsDir(REPO_ROOT)).length,
+      REAL_AGENT_COUNT,
+      'the real shipped agent roster count must not change from closing this hole',
+    );
+  });
+});
+
+describe('SLUG_RE relocation regression guard', () => {
+  it('AT-89: SLUG_RE re-exported identically from orchestrator/skill-path.ts and orchestrator/studio/validate.ts', async () => {
+    const skillPathModule = (await import('../skill-path.ts')) as Record<string, unknown>;
+    const validateModule = (await import('./validate.ts')) as Record<string, unknown>;
+
+    const fromSkillPath = skillPathModule['SLUG_RE'] as RegExp | undefined;
+    const fromValidate = validateModule['SLUG_RE'] as RegExp;
+
+    assert.ok(fromSkillPath, 'orchestrator/skill-path.ts must export SLUG_RE once the definition moves there (breaking the import cycle)');
+    assert.equal(fromSkillPath!.source, fromValidate.source, 'both re-exports must be the identical regex, not a divergent copy');
   });
 });
