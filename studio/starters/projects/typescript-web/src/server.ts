@@ -11,13 +11,13 @@ import { createServer, type IncomingMessage, type ServerResponse } from 'node:ht
 export type PageResult = { status: number; body: string };
 
 /** The one small piece of real behaviour this starter ships — replace it. */
-export function page(path: string): PageResult {
-  if (path === '/') return { status: 200, body: '<!doctype html><html><body><h1>It works</h1></body></html>' };
+export function page(method: string, path: string): PageResult {
+  if (method === 'GET' && path === '/') return { status: 200, body: '<!doctype html><html><body><h1>It works</h1></body></html>' };
   return { status: 404, body: '<!doctype html><html><body><h1>Not found</h1></body></html>' };
 }
 
 function handler(req: IncomingMessage, res: ServerResponse): void {
-  const { status, body } = page(req.url ?? '/');
+  const { status, body } = page(req.method ?? 'GET', req.url ?? '/');
   res.writeHead(status, { 'content-type': 'text/html' });
   res.end(body);
 }
