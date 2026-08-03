@@ -30,8 +30,14 @@ const REPO_ROOT = join(HERE, '..', '..');
 const TEMPLATES_DIR = join(REPO_ROOT, 'studio', 'artifact-templates');
 
 function onDiskTemplateIds(): string[] {
+  // README.md documents the directory (R3-06) — it is not a template
+  // definition, so it is excluded by name, mirroring the identical exclusion
+  // in the two production loaders that scan this same directory
+  // (orchestrator/studio/registry.ts's listArtifactTemplates and
+  // orchestrator/studio/template-library.ts's listPlanningEntries). If either
+  // of those loaders ever stops excluding it, this test must be revisited.
   return readdirSync(TEMPLATES_DIR)
-    .filter((f) => f.endsWith('.md'))
+    .filter((f) => f.endsWith('.md') && f !== 'README.md')
     .map((f) => f.replace(/\.md$/, ''))
     .sort();
 }
