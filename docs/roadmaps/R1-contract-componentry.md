@@ -54,7 +54,7 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
 
 - **Status:** implemented (2026-07-19, PR-A — see baseline R1-B9)  ·  **Wave:** 3
 - **Depends on:** — (first R1 mover)
-- **Depended on by:** R1-02 (seam completion builds on the contract type) · R4-09 (reflect agent consumes the ingest/consolidate processes) · R4-02/R4-03 (onboarding/creation agents bind KBs via this contract) · R4-10-F4 (flow succession must rebind the cycles KB `binding.ref` or F1's dangling-ref lint goes red) · R3-02 (soft — skill-generator flow may bind a flow-scoped KB) · R5-05 (KB loose ends cross-reference here, not duplicated)
+- **Depended on by:** R1-02 (seam completion builds on the contract type) · R4-09 (reflect agent consumes the ingest/consolidate processes) · R4-02/R4-03 (onboarding/creation agents bind KBs via this contract) · R4-10-F4 (flow succession must rebind the cycles KB `binding.ref` or F1's dangling-ref lint goes red) · R3-02 (soft — skill-generator flow may bind a flow-scoped KB) · R5-05 (KB loose ends cross-reference here, not duplicated) · R1-06 *(wave 5 — band scope extends this binding contract)*
 - **Context:** The operator diagram makes the KB a **contract type** so brain processes can be swapped out akin to projects — different kinds of brains behind one obligation set: **lint process, ingest process, review/consolidate process, usage process**. Today the descriptor is a label + backend pointer (R1-B1/B2) and the four processes exist only as scattered mechanisms (R1-B4). Sources: operator diagram (verbatim above); known-gaps §4b.2 (create-KB must mandate a scope) and §4b.3 (scoping model rework); Q5-B (locked scoping decision); ADR-027 §4 + M8-0 amendment; ADR-018/035 (brain layout).
 - **Features:**
   - **R1-01-F1 — KB contract schema + deliberate serializer amendment.** Extend `kb.yaml` from descriptor to contract: keep `id/name/desc/backend`; add a **mandatory `binding`** (`{ kind: flow | project, ref: <flow-id | project-id> }`) for every NEW KB, replacing the loose `scope` enum; add a `processes` block declaring the four obligations — `lint` (health command; default = the built-in `forge brain lint` check set), `ingest` (how raw material becomes themes; default = reflector/brain-ingest path), `consolidate` (review/merge/dedupe of themes; default = brain-fix/maintenance path), `usage` (how agents/projects/flows integrate the brain: read surface — navigation index vs search — and who reads it). `lint`/`ingest`/`consolidate` entries are `builtin: <name>` or `cmd: <string>` — swap-point parity with the project contract's `demoProcess`/`quality_gate_cmd` shape — **with a per-process invocation contract specified in the schema** (adversarial review B5): what the orchestrator passes a `cmd` (KB root, run id, raw-material dir), expected outputs/exit semantics, and when each runs (lint = standing gate + post-reflect; ingest/consolidate = triggered post-cycle by R4-09-F5). `usage` is NOT builtin-or-cmd — it is a **typed policy object** (read-surface enum: navigation-index | search; reader roles), with defaults derived from the binding kind (F2). **Migration posture (no-legacy-path rule):** the four existing `brain/projects/*/kb.yaml` descriptors migrate `scope:` → `binding:` one-shot in the same PR (`scope: project` → `{kind: project}`; `brain/cycles` `scope: flow` → F3's rebind; `forge-dev`'s `scope: agent-integration` → `kind: unique`, and the `agent-integration` enum member dies with it). **This deliberately amends ADR-027 §5's no-serializer rule for `kb.yaml`:** the create flow (F2) and rebind (F3) now write the file, so `registry.ts` gains `serializeKbDescriptor` under the one-canonical-writer rule (`serializeManifest` generalised), and the `registry.ts:463` comment + ADR-027 get an amendment note. Acceptance:
@@ -95,7 +95,7 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
   operator verdict recorded in the ADR-036 amendment (R4-10-F2 blocked until
   then)  ·  **Wave:** 3–4 (must land before R4-07 demo agent)
 - **Depends on:** — (parallel-safe with R1-01)
-- **Depended on by:** R1-04 (reuses the typed-process pattern) · R1-05 (machine-checks promote its clauses) · R4-07 (demo agent executes the demo process this initiative types) · R4-08 (adversarial review consumes test-process results) · R4-10 (develop-cycle OOTB flow composes both)
+- **Depended on by:** R1-04 (reuses the typed-process pattern) · R1-05 (machine-checks promote its clauses) · R4-07 (demo agent executes the demo process this initiative types) · R4-08 (adversarial review consumes test-process results) · R4-10 (develop-cycle OOTB flow composes both) · R4-14 *(wave 5 — the showcase renders demo-process artifacts)*
 - **Context:** The operator diagram tightens two clauses: **demo process** ("demo builder likely improved/simplified and tied directly into the UI") and **test process** ("can differ from demo but alignment recommended — demo should largely build off testing"). Today `demoProcess` exists (R1-B6) but the demo builder is a standalone session surface, and the "test process" is an untyped scatter of `quality_gate_cmd` / `ci_gate` / `acceptance_gate` fields. Q3-B retires the unifier: post-develop becomes demo agent + adversarial review agent, so the contract must say what those agents *execute* — under ADR-036's rule (agents judge, orchestrator executes). Sources: operator diagram; ADR-021/026/036; ADR-034 §2/§4; known-gaps "Strengths worth preserving" bullet 1 (dual-boundary gate); feedback memory "demos must be visual evidence".
 - **Features:**
   - **R1-03-F1 — Typed test process object.** `.forge/project.json` gains `testProcess` gathering the existing gate fields into one declared object: `local` (today's `quality_gate_cmd`, C1), `ci` (today's `ci_gate` + `ci_fix_cmd`, C1b), `acceptance` (today's `acceptance_gate` + `requires_env` + `ci_gate_unset_env`, C7 external-resource), each with timeout inheriting ADR-036's `FORGE_GATE_TIMEOUT_MS` semantics. Loader/validator in `orchestrator/project-config.ts`; existing flat fields remain readable (derivation, not a breaking rename — but per the never-do rule, no permanent back-compat shim: a one-shot migration of the shipped `project.json`s rides the same PR). Acceptance:
@@ -174,6 +174,69 @@ The KB descriptor is a **contract type** (landed 2026-07-19, branch `feat/r1-01-
 - **Session sizing:** ~3 sessions — (1) F3+F5 (fast structural, standard path); (2) F1+F2 (deep-preflight execution checks); (3) F4+F6 + enforcement-table sweep.
 - **Out of scope:** any forensic/evidence-freshness check (banned by ADR-036 §4); gate-fit authoring clauses (planner-side, ADR-036 "does not cover" — R4-05's territory); relocating the dual-boundary gate itself (R1-03-F4 spec, R4-10 execution).
 
+### R1-06 KB create & maintain (band-scoped binding + agent-seeded creation)
+
+- **Status:** planned  ·  **Wave:** 5 (module: kb-create/maintain)
+- **Depends on:** R1-01 (the binding contract this extends, done). **Depended
+  on by:** R4-19 (the brain-creation/maintenance agents create against this
+  contract), R6-08 (soft — the explore surface links into maintenance).
+- **Context:** Wave-5 cut. The studio-endstate-v2 mockup's KB journeys
+  (`create-kb-project`, `create-kb-cycle`, `kb-maintain`) assert three
+  contract-side gaps against R1-B9: (1) a **cycle/band-scoped KB** — the
+  mockup's `review-insights` KB binds to *the review band of forge-develop*,
+  not to a whole flow, and its readers are the band's agents; (2) KB
+  **creation is agent-seeded** — `/knowledge/new` currently writes a bare
+  descriptor, while the mockup's creation hands to the brain-creation
+  session which seeds structure lint-green from real history; (3)
+  **maintenance as a first-class op** — a cleanup session (duplicate-merge,
+  relink, tagging) beside the existing guided lint-resolution. **Operator
+  decision 3 (2026-08-03) bounds this: ingest stays reflection-only** —
+  neither creation nor maintenance grows an ingest affordance.
+- **Features:**
+  - **R1-06-F1 Band-scoped binding kind ⚑.** Extend the binding contract
+    with a band scope (shape decided in-session with an ADR-027 amendment:
+    a `band?:` qualifier on `{kind: flow}` vs a fourth kind — prefer the
+    qualifier; ref validates against the flow's real band vocabulary).
+    Usage defaults derive from the band (readers = that band's agents).
+    **⚑ Read-policy gate:** a review-band KB makes reviewers KB-readers,
+    which touches the ADR-010 asymmetric read policy (dev/review read Brain-3
+    advisory ONLY today) — the derivation must route through an explicit
+    ADR-010 amendment + `brain-read-policy.md` note BEFORE any reviewer read
+    ships; the R1-01-F4 policy guard extends to cover it, and Q5-B's
+    "scoping, not who-reads-what" boundary is thereby consciously crossed,
+    not drifted across. ACs: lint validates band refs; conformance suite
+    (R1-01-F5) covers the band shape; the read-policy guard fails if a band
+    KB grants a read no ADR amendment recorded.
+  - **R1-06-F2 Agent-seeded creation hand-off.** `/knowledge/new` (binding
+    picker, as-built) gains the band option and, on create, hands off to the
+    brain-creation session (R4-19) to seed structure — descriptor via
+    `serializeKbDescriptor`, seed via the agent, `forge brain lint` green on
+    completion (the mockup's "lint 9/9 from day one"). Descriptor-only
+    creation remains valid (an empty KB is legal; seeding is the default
+    path, not a gate). ACs: `create-kb-project`/`create-kb-cycle` journey
+    shapes against the real path; a created+seeded KB passes both lints;
+    binding recorded correctly for both scopes.
+  - **R1-06-F3 Maintenance ops contract.** The `consolidate` process
+    obligation (R1-01-F1) gets its interactive face: a maintenance-session
+    entry (from the KB page; also from the R6-08 Health tab *once R6-08
+    lands* — 5B sequences R1-06 first, so the KB-page entry is the build-time
+    AC and the Health-tab link rides R6-08) running the R4-19-F2
+    agent against real lint findings; guided lint-resolution stays for
+    single-finding fixes. **Explicit negative AC (decision 3): no ingest
+    affordance anywhere in creation or maintenance** — ingest remains the
+    reflection path's output. ACs: `kb-maintain` journey shape; a
+    lint-warning KB reaches green through the session; grep-level assert no
+    UI route/action triggers ingest.
+- **Session sizing:** ~2 sessions — (1) F1 binding + ADR amendments; (2)
+  F2+F3 creation/maintenance wiring + journey-sync (agent internals live in
+  R4-19).
+- **Acceptance references:** mockup journeys `create-kb-project`,
+  `create-kb-cycle`, `kb-maintain`; surfaces `views-knowledge.jsx`,
+  `SESSIONS['brain-creation-cycle']`/`['kb-cleanup']` in `data.jsx`.
+- **Out of scope:** the agents themselves (R4-19); the explore surface
+  (R6-08); manual ingest (rejected — operator decision 3); planning-read
+  reroot (R1-02-F1).
+
 ---
 
 ## Deferred
@@ -190,3 +253,16 @@ The C7-holistic-metrics clause (measurement command + locked baselines + regress
 - 2026-07-17 — Adversarial-review amendment pass. R1-01-F1 gained the per-process invocation contract, `usage` as a typed policy object, and the one-shot `scope:`→`binding:` migration posture incl. the `agent-integration` enum death (B5/E8); R1-01-F3 picked `kind: unique` and defined owning-vs-read-grant binding semantics against the three-seed-flows reality (C7); R1-03-F4 gained the recorded-operator-verdict precondition and the unattended-remediation answer (B2/E3); demo-design vs demo-builder naming disambiguated in R1-B6/R1-03-F2 with sole surgery ownership (A4); R4-10-F4 edge recorded. Field label normalised to "Depended on by" set-wide.
 - 2026-07-24 — **R1-03 F1/F2/F3 implemented** (wave-4 session 2, branch `feat/r1-03-contract-processes`): typed `testProcess` object with fail-closed flat-key rejection + derived flat accessors + re-rooted sidecar + wired declared timeouts + real preflight C1b/C7 checks (F1); demo-builder folded into `/projects/[id]` with a redirect stub + rewritten journey (F2); DEMO-ALIGN advisory token-heuristic clause, flags-not-blocks on betterado's live-evidence demo (F3). F4's relocation spec landed in `docs/forge-project-contract.md` + the ADR-036 amendment, but the operator verdict is still **pending** — R4-10-F2 stays blocked. Status flipped to in-progress (not yet "implemented" pending F4's verdict).
 - 2026-07-19 — **R1-01 implemented** (PR-A, branch `feat/r1-01-kb-contract`, 9 commits `b11c157..0a97659`; baseline **R1-B9**). KB descriptor → contract type: `binding` replaces `scope` (enum killed, no back-compat), optional four-obligation `processes` block, `serializeKbDescriptor` as the one `kb.yaml` writer, `kb-descriptor.ts`/`yaml-fields.ts` extraction (registry under the 800-cap), 6-descriptor migration, ADR-027 §4 amendment, studio-lint binding/dangling-ref/unique checks, F4 read-policy guard + F5 conformance suite, forge-ui `scope`→`binding` sweep + create picker + `knowledge` journey. Opus whole-branch review + security review both clean. Deferred (known-gaps §): `listProjectIds` dedup; the one-level KB lint scan (project KBs covered by POST route + F5); an inline second-`unique` POST guard; the `brain-read-policy.md` soft-cap. R1-02 (KB seam completion) is the natural next R1 pickup, not in this PR.
+- 2026-08-03 — **Wave-5 cut (studio-endstate-v2 mockup → modular backlog).**
+  **R1-06 minted** (module kb-create/maintain): band-scoped KB binding (⚑
+  read-policy gate — a review-band KB's reviewer read requires an explicit
+  ADR-010 amendment, extending the R1-01-F4 guard), agent-seeded creation
+  hand-off (`/knowledge/new` → brain-creation session, lint-green on
+  creation), and the maintenance-session face of the `consolidate` process.
+  Ingest stays reflection-only per operator decision 3 (explicit negative
+  AC). Cites mockup journeys `create-kb-project`/`create-kb-cycle`/
+  `kb-maintain` + `as-built-inventory.md` §5.
+- 2026-08-03 — **Adversarial-review corrections (PR #71 review pass).**
+  R1-01/R1-03 depended-on-by gain the wave-5 reverse edges (R1-06, R4-14);
+  R1-06-F3's Health-tab maintenance entry explicitly timed on R6-08 landing
+  (KB-page entry is the build-time AC).

@@ -425,6 +425,83 @@ was needed.
 - **Out of scope:** any code change (pure docs); roadmap-set upkeep itself
   (index §5 maintenance contract governs that).
 
+### R5-08 Dead-code & component minimisation pass
+
+- **Status:** planned  ·  **Wave:** 5, batch F (terminal sweep; F1 rule is
+  continuous from batch A)
+- **Depends on:** — (terminal-sweep half sequenced after the wave-5 surface
+  batches so it sweeps their leavings too).
+- **Context:** Operator directive (2026-08-03, wave-5 restructure): after
+  four refinement waves + the wave-4 OOTB campaign, sweep dead code and
+  minimise components. Known candidates already on record:
+  `SerpentineTimeline` (retires in R4-13-F1), the legacy redirect routes
+  (`architect/[sid]`, `demo/[sid]`, `recovery`, `reflect/[cid]`,
+  `review/[cid]` — `as-built-inventory.md` §1), any unifier-era stragglers
+  R4-01-F4's −4486-line excision missed, unused catalog/template entries.
+  Tooling exists: knip/depcheck/ts-prune (refactor-cleaner pattern),
+  `npm run ui:deadpaths`, the drift guards.
+- **Features:**
+  - **R5-08-F1 Delete-as-you-go rule (continuous).** Every wave-5 batch PR
+    deletes what it obsoletes in the same PR — no zombie surfaces, no
+    "cleanup later" residue. Recorded as a batch exit criterion in the index
+    §4 batch plan. ACs: each batch PR's description names its deletions (or
+    states none); `ui:deadpaths` green per batch.
+  - **R5-08-F2 Terminal automated sweep.** Run knip + ts-prune + depcheck
+    over `orchestrator/ cli/ forge-ui/ loops/ scripts/`; triage every hit
+    (delete, or keep with a one-line reason); drop unused deps; remove
+    orphaned exports/components/routes. ACs: analysis output committed as
+    the PR description evidence; every removal cites zero-reference proof;
+    full gate quartet + `ui:journey` green (no behaviour change).
+  - **R5-08-F3 Component minimisation.** Verify the wave-5
+    one-implementation-two-surfaces claims actually held (shared ledger
+    vocabulary R6-05/R6-06/R4-12-F2; shared log-line renderer
+    R6-01-F5/R6-04-F3; shared package-tab renderer R3-01-F3/R2-10-F3) and
+    fold any near-duplicates that crept in. ACs: one implementation per
+    named shared component, grep-proven; LOC delta reported.
+- **Session sizing:** ~1-2 sessions (terminal) + the continuous rule.
+- **Out of scope:** doc restructure (R5-09); feature deletions that change
+  behaviour (those are initiative decisions, not sweep material).
+
+### R5-09 Docs ground-truth restructure (three scopes)
+
+- **Status:** planned  ·  **Wave:** 5, batch F
+- **Depends on:** R5-08 (soft — sweep first so docs describe the minimised
+  state); the wave-5 surface batches (docs describe what ships).
+- **Context:** Operator directive (2026-08-03, wave-5 restructure): refine
+  documentation down to a clean, **non-historical, current-state ground
+  truth** in three scopes — **(1) operating forge** (install, studio, running
+  cycles, triggers, projects, KBs — the operator manual), **(2) developing
+  forge** (architecture, seams, conventions, testing/harnesses), **(3)
+  roadmap/design/planning** (the roadmaps set, mockups, decision records).
+  Today `docs/` mixes ground-truth narrative with historical campaign notes
+  and dated arcs. Boundary: **ADRs stay as the decision log** (history is
+  their job — referenced, not narrated) and `known-gaps.md` stays the defect
+  log; the brain holds session/campaign history. Ground-truth pages describe
+  the CURRENT state only.
+- **Features:**
+  - **R5-09-F1 Inventory + scope map.** Classify every `docs/` file plus the
+    root orientation set (README, ARCHITECTURE, PRINCIPLES, CLAUDE.md
+    pointers) into operate / develop / plan / archive; produce the target
+    tree with one owner per page and no page serving two scopes. ACs: the
+    map is committed; every current file has exactly one disposition.
+  - **R5-09-F2 Rewrite to current state.** Ground-truth pages rewritten as
+    present-tense state descriptions: historical narration stripped (dated
+    arcs → a git/ADR/brain link, not prose); `docs/README.md` becomes the
+    three-scope index; `check-docs-claims` updated to the new tree; CLAUDE.md
+    stays lean (pointers, not content — the PR #37 lesson). ACs: a read of
+    any ground-truth page requires no knowledge of forge's history to
+    parse; markdownlint + check-docs-claims + check-adr-index green.
+  - **R5-09-F3 Historical quarantine.** Pure-history documents (campaign
+    notes, superseded plans) move to one archive location or the brain raw
+    layer — decided once, applied uniformly; redirect/pointer stubs only
+    where an external reference is known. ACs: no ground-truth scope
+    contains a document whose primary frame is "what happened on <date>";
+    ADR set untouched.
+- **Session sizing:** ~2 sessions (F1 map ⚑ operator reviews dispositions;
+  F2+F3 execution).
+- **Out of scope:** public/positioning docs (R8-03); roadmap-file mechanics
+  (the index §5 contract governs those); brain content.
+
 ## Deferred
 
 *None.* R5 is the residue absorber — new findings append as features under
@@ -472,3 +549,11 @@ maintenance contract; nothing currently carries a deferral condition.
   missing" framing was an oversight. No new test was authored (a duplicate
   would be a review defect); status planned → implemented, as-built in R5-B10.
   known-gaps §1 was already struck (R5-07-F1).
+- 2026-08-03 — **Wave-5 restructure (operator directive, post-cut).**
+  **R5-08 minted** (dead-code & component minimisation: continuous
+  delete-as-you-go batch rule + terminal knip/ts-prune/depcheck sweep +
+  shared-component verification). **R5-09 minted** (docs ground-truth
+  restructure into three scopes — operate / develop / plan — non-historical
+  current-state pages; ADRs stay the decision log, known-gaps stays the
+  defect log; ⚑ operator reviews the F1 disposition map). Both live in
+  wave-5 batch F of the index §4 batch plan.

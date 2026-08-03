@@ -114,6 +114,6 @@ docs/investigations/*
 # local code-graph tool cache (tokensave MCP)
 .tokensave/
 
-# Untracked WIP design mockups (regenerated out-of-band; not part of forge state — keep the
-# verify:cycle post-run boundary check clean). Tracked mockups/studio-endstate/ (v1) is unaffected.
-mockups/studio-endstate-v2/
+# End-state mockup v2 journey videos (large; regenerated via the capture script noted in
+# mockups/studio-endstate-v2/README.md — sources are tracked, renders are not)
+mockups/studio-endstate-v2/journeys/

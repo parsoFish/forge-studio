@@ -60,7 +60,9 @@ iteration-refinement target 1).
 
 ### R6-01 Run-observability depth
 
-- **Status:** planned  ·  **Wave:** unsequenced (operator to prioritize)
+- **Status:** planned  ·  **Wave:** unsequenced pre-wave-5; **F1+F4+F5 = wave
+  5, batch C (module: flow-run-detail)** — F1 pulled in as F5's hard
+  precursor (same emission substrate); F2/F3 stay unsequenced
 - **Depends on:** —
 - **Context:** The three recorded observability gaps in R6-B3: silent hex
   drawers, the unresolved activity-view rework, and no durable health
@@ -89,10 +91,39 @@ iteration-refinement target 1).
     presentation against the 2026-05-30 complaints; fix or formally retire
     the surface (one decision, recorded — no zombie tab). ACs: dated
     disposition in this file's change log + the surface matches it.
-- **Session sizing:** ~2 sessions (F1; F2+F3).
+- **Wave-5 amendment (2026-08-03, module: flow-run-detail).** The
+  studio-endstate-v2 mockup concretizes what "observability depth" means for a
+  flow run and adds two features:
+  - **R6-01-F4 Run-detail page per history row.** Every flow run (live AND
+    completed) gets a full detail surface (`#/flows/run/<id>` in the mockup;
+    `RUN_DETAILS` in `data.jsx`): node-by-node timeline with per-node status /
+    cost / note / artifact list, review findings with severity + state, and
+    evidence links. As-built: the monitor shows the live hex topology only;
+    completed runs have no dig-in (`as-built-inventory.md` §1/§4). ACs:
+    detail reachable from monitor ledger rows for live + archived runs;
+    per-node `data-*` contract; derived from the event log (run model derived
+    never stored — ADR-008 posture unchanged).
+  - **R6-01-F5 Line-level node logs + typed outputs.** A run-detail node
+    click-through opens the agent's actual log lines typed `think | tool |
+    out` (mockup `NODE_LOGS`), and node outputs render through their
+    artifact type (typed outputs — needs R2-05-F2's surface contract where
+    the type is `composed`; plain template artifacts render today's way).
+    Shares its log-line renderer with the standalone run view (R6-04-F3 —
+    one component, two surfaces). **F1 is a hard precursor** (2026-08-03
+    review pass: F5 extends F1's drawer streaming — F1 rides wave-5 batch C
+    with F4/F5, per the header note). ACs: real captured lines render
+    mid-cycle (same emission substrate as F1); no new emission path without
+    consulting ADR-025's deferred notes (F-context rule above stands).
+  - **Acceptance references:** mockup journeys `run-flow`, `edit-flow` (run
+    beats) + the per-OOTB-agent run journeys; surface `views-run.jsx`.
+    **Depends (added):** R2-05 (soft — typed-output rendering contract;
+    pulled in when F5 reaches typed outputs, per the wave-5 5B order note).
+    **Depended on by (added, both-sides):** R6-05 (ledger rows → F4 detail),
+    R4-12/R4-13 *(soft — completed-run dig-in links)*.
+- **Session sizing:** ~2 sessions (F1; F2+F3) **+ ~2 wave-5 sessions (F4; F5)**.
 - **Out of scope:** cost *integrity* (R5-03); harness clip content (R5-06);
   event emission architecture changes (ADR-025's deferred items get their own
-  revisit if F1/F2 need them).
+  revisit if F1/F2 need them); standalone agent-run kickoff/view (R6-04).
 
 ### R6-02 Human-readable operations
 
@@ -116,8 +147,10 @@ iteration-refinement target 1).
 
 ### R6-03 IA & convention stewardship
 
-- **Status:** planned  ·  **Wave:** unsequenced
-- **Depends on:** — (grows as R3/R4 add surfaces)
+- **Status:** planned  ·  **Wave:** unsequenced pre-wave-5; **F3 = wave 5,
+  batch E** (sequenced late — after the surfaces it rehomes exist)
+- **Depends on:** — (grows as R3/R4 add surfaces). **Depended on by:** R6-07
+  (F3's Home pillar precedes the dashboard).
 - **Context:** The set adds routes and pillars (skills library R3-01-F3, KB
   scope chips R1-01, merged states R4-11) — the conventions that keep Studio
   coherent need an owner: the DOM-as-metrics contract, the status-vocabulary
@@ -132,8 +165,202 @@ iteration-refinement target 1).
     pillar ordering, cross-linking (roadmap ↔ artifact ↔ KB), and a
     dead-path sweep gate in CI cadence. ACs: deadpaths green in CI; IA
     decisions recorded here.
-- **Session sizing:** ~1 session + ongoing stewardship.
+- **Wave-5 amendment (2026-08-03).** The mockup fixes the target IA this
+  stewardship converges on, adding:
+  - **R6-03-F3 Six-pillar navigation + one page shell.** Nav becomes
+    **Home / Flows / Agents / Projects / Library / Knowledge Bases** (as-built:
+    5 entries, Library squatting `/`, no Home — `as-built-inventory.md` §1);
+    every surface adopts the one page-shell pattern (eyebrow / title / actions
+    / sub-nav) and builder+monitor section pairs; OOTB-provenance badges render
+    on every shipped object (mockup deliberate-evolution items 2-4). Redirects
+    preserved for every moved route; dead-path sweep green. Rider: self-host
+    the UI font (the mockup's Google-Fonts load is mock-only). ACs: nav
+    matches the six pillars; a shared shell component (not per-page copies);
+    `ui:deadpaths` green; journey nav beats re-captured.
+  - **Acceptance references:** every mockup journey's nav/landing beats;
+    surfaces `app.jsx` / `components.jsx` (shell + nav vocabulary).
+- **Session sizing:** ~1 session + ongoing stewardship **+ ~1-2 wave-5
+  sessions (F3 — after, not before, the wave-5 surfaces it rehomes exist;
+  sequence late in 5B)**.
 - **Out of scope:** feature UI (owned by feature initiatives + journey-sync).
+
+### R6-04 Run kickoff & consolidation (one Run button)
+
+- **Status:** planned  ·  **Wave:** 5 (module: agent-kickoff+run)
+- **Depends on:** R2-01-F3 (dispatch host, landed), R2-02 (capability
+  descriptor drives session-vs-kickoff), R2-09-F1 (`materials:` declaration —
+  this surface is its named enforcement point), R2-08-F4 (soft — trigger
+  provenance rendered on kickoff/run). **Depended on by:** R6-06 (monitor rows
+  link into the standalone run view).
+- **Context:** Wave-5 cut. Mockup round-6: **"one Run button everywhere —
+  sessions for interactive agents, kickoff for workers."** As-built: four
+  interactive agents launch via bespoke pages; non-interactive agents run via
+  the `/agents/[id]` RunPanel with `key: value` inputs and aggregate
+  status/cost/event-count only — **no line-level log viewer, no typed-output
+  viewer, no cost-ceiling field, no materials** (`as-built-inventory.md` §3).
+  Round-7 adds: cost ceiling editable on both kickoff screens (per-kickoff
+  limit).
+- **Features:**
+  - **R6-04-F1 One Run entry.** Every agent surface (agent page, library
+    cards, project page bindings) exposes exactly one Run affordance; the
+    capability descriptor's `interactive` fact routes it — session (R2-10
+    shell) or worker kickoff (dispatch). Flows keep their kickoff; the
+    affordance vocabulary unifies. ACs: no surface offers two run paths; an
+    interactive agent can't reach the worker kickoff (server-refused already —
+    R2-B8; the UI now never offers it); `data-*` contract for the Run control.
+  - **R6-04-F2 Kickoff screen.** Worker kickoff gains: project select, typed
+    inputs (existing), **input-materials upload validated against the
+    definition's `materials:` declaration** (undeclared kind refused at the
+    boundary — the R2-09-F1 enforcement AC lands here, fail-closed), an
+    **editable per-kickoff cost ceiling** (defaults from config; enforced by
+    the existing cost-guard path — wire, don't duplicate), and the target's
+    standing triggers listed read-only (R2-08-F4). Flow kickoff gains the
+    same ceiling + materials treatment (mockup `LIVE_RUN`: ceiling $8.00,
+    fanout shown). ACs: an out-of-contract upload is refused with the
+    declared kinds named; the ceiling demonstrably stops a seeded runaway
+    fixture; ceiling + materials recorded on the run.
+  - **R6-04-F3 Standalone run view.** The dispatched-run surface grows from
+    aggregate polling to: live log lines (`SessionStart …` through
+    `SessionEnd`, the mockup `AGENT_RUN.log` shape), cost, and **typed
+    outputs** — output candidates render as cards expanding to their full
+    artifact shape (mockup: issue-triage candidates expand to the
+    initiative-spec form, `CAND_DETAIL`). Shares the log-line renderer with
+    R6-01-F5. ACs: a real dispatch streams lines; outputs render through
+    their declared artifact type; run view linkable (monitor rows, R6-06).
+- **Session sizing:** ~3 sessions — (1) F1 routing; (2) F2 kickoff; (3) F3
+  run view + journey-sync.
+- **Acceptance references:** mockup journeys `run-agent` (kickoff → materials
+  → live log → typed output), `run-flow` (ceiling), per-OOTB run journeys;
+  surfaces `views-run.jsx`, `AGENT_RUN`/`LIVE_RUN`/`CAND_DETAIL` in `data.jsx`.
+- **Out of scope:** session INTERNALS (R2-10); trigger authoring (R2-04/R2-08);
+  flow run-detail (R6-01-F4/F5).
+
+### R6-05 Flow monitor ledger
+
+- **Status:** planned  ·  **Wave:** 5 (module: flows-home/monitor)
+- **Depends on:** R6-01-F4 (run-detail pages to link into). **Depended on
+  by:** R6-06 (shared ledger components), R4-12-F2 (vocabulary reuse).
+- **Context:** Wave-5 cut. Mockup: the flows home/monitor carries a
+  per-flow **history ledger** in one shared vocabulary — `when · what ·
+  outcome-narrative · status · cost` (`FLOW_HISTORY` in `data.jsx`; the
+  outcome narrative is the run's real arc, e.g. "review found demo gap →
+  demo-fix loop ×1 → verdict approved → merged") — with every row linking to
+  its run detail, plus the live-run strip. As-built: the flow page's monitor
+  tab shows the live topology; history is not a first-class ledger
+  (`as-built-inventory.md` §1).
+- **Features:**
+  - **R6-05-F1 History ledger.** Per-flow run history derived from archived
+    run models (derived, never stored), rendered in the shared ledger
+    vocabulary; rows link to R6-01-F4 detail. The outcome narrative derives
+    from real run events (gate outcomes, findings counts, merge state) —
+    never free-typed. ACs: ledger rows for archived real runs; row →
+    detail navigation; `data-*` per row (status/cost machine-readable);
+    journey beat asserts a row's narrative matches its run's event log.
+- **Session sizing:** ~1 session (+ shares vocabulary components with R6-06 —
+  build once).
+- **Acceptance references:** mockup journeys `run-flow`, `edit-flow`;
+  surface `views-flows.jsx`.
+- **Out of scope:** the run detail itself (R6-01); agent-side ledger (R6-06).
+
+### R6-06 Agent monitor linkage
+
+- **Status:** planned  ·  **Wave:** 5 (module: agents-home/monitor)
+- **Depends on:** R6-05 (shared ledger components), R6-04-F3 (standalone run
+  view to link to), R2-10 (session surface to link to).
+- **Context:** Wave-5 cut. Mockup round-7: agent monitor history rows link
+  **where each run actually happened** — a flow run, a standalone agent run,
+  or an interactive session — with standalone runs explicitly marked
+  `STANDALONE` (`AGENT_HISTORY` in `data.jsx`: each row carries a typed
+  `link` target). As-built: agent pages have no run-history ledger at all;
+  RunPanel polls only the current dispatch (`as-built-inventory.md` §3).
+- **Features:**
+  - **R6-06-F1 Per-agent history ledger with real link targets.** Derive an
+    agent's run history across all three execution paths (flow-node
+    attribution via the R2-B8 `agent_slug` event mapping; standalone
+    dispatches via `_logs/<runId>`; sessions via session records); each row
+    links to its actual surface and standalone rows carry the STANDALONE
+    mark. **Per-target status must be REAL** (standing lesson) — a row's
+    status derives from that run's own events, never attributed from a scan
+    of something else. ACs: one agent with runs on all three paths shows
+    three correctly-linked rows; ledger vocabulary identical to R6-05;
+    `data-*` contract; journey beat covers the three link kinds.
+- **Session sizing:** ~1 session.
+- **Acceptance references:** mockup per-OOTB run journeys (`run-agent-*`);
+  surface `views-agents.jsx` (`AGENT_HISTORY`).
+- **Out of scope:** the linked surfaces themselves (R6-01/R6-04/R2-10).
+
+### R6-07 Home dashboard
+
+- **Status:** planned  ·  **Wave:** 5 (module: home-dashboard)
+- **Depends on:** R6-03-F3 (the Home pillar exists in nav), R4-11-F4 (the
+  attention strip this surfaces feeds on).
+- **Context:** Wave-5 cut. Mockup deliberate-evolution item 1: a **new Home
+  surface** — hex-constellation live status (every active object as its hex,
+  live statuses), the attention list (`ATTENTION` in `data.jsx`: gate
+  approaching, KB skew warning — each targeting its owning surface), and
+  recent-activity ledger. As-built: no Home dashboard; attention signalling
+  is the R4-11-F4 strip on the library surface (`as-built-inventory.md`
+  cross-cutting gaps).
+- **Features:**
+  - **R6-07-F1 Home surface.** The `/` route becomes Home (Library moves to
+    its pillar — R6-03-F3 owns the move): hex-constellation of active
+    flows/agents/projects/KBs with live status derived from the same
+    run-model/bridge reads the monitors use (no new polling paths), the
+    attention strip relocated/mirrored here as the primary aggregate, and a
+    cross-object recent-activity ledger (R6-05 vocabulary). ACs: with ≥2
+    projects active one glance answers "what needs me" from Home (the
+    R4-11-F4 AC, re-anchored); every hex/attention item links through to its
+    owning surface; `data-*` contract; journey landing beats re-captured.
+- **Session sizing:** ~1-2 sessions.
+- **Acceptance references:** landing beats across the mockup journey set;
+  surface `views-home.jsx`.
+- **Out of scope:** notification transport (R6-D1); per-surface monitors
+  (R6-05/R6-06).
+
+### R6-08 KB explore (combined graph + reader)
+
+- **Status:** planned  ·  **Wave:** 5 (module: kb-explore)
+- **Depends on:** R1-06 *(soft — the Health tab's maintenance-session entry
+  links into R1-06-F3; both-sides fix, 2026-08-03 review pass)*.
+  KbGraph/NodeArticle as-built are the substrate.
+- **Context:** Wave-5 cut. Mockup round-3 (operator request): KB graph and
+  reader are **one surface** — graph left, theme list + article right,
+  clicking a node opens it in the reader; tabs `Explore | Health |
+  Ingest activity`. Round-5: force-directed clusters via hub anchors + edge
+  tension, draggable nodes with reactive neighbours, tension presets. Health
+  = the **named** lint checks (mockup `LINT_CHECKS`: 9 named checks incl.
+  "theme distribution balance"); Ingest activity = a read-only feed of
+  reflection-driven ingests. **Operator decision 3 (2026-08-03): NO manual
+  ingest button** — ingest stays reflection-only; the mockup's "Kick off
+  ingestion" op is rejected and the mockup corrected. As-built: KbGraph +
+  NodeArticle + KbHealth + LintResolutionPanel exist as separate panels
+  (`as-built-inventory.md` §5) — this is a recomposition, largely not new
+  machinery.
+- **Features:**
+  - **R6-08-F1 Combined explore surface.** One route per KB: graph pane
+    (existing KbGraph, + hub-anchored clustering/tension presets where the
+    d3-force config allows cheaply) beside the reader pane (theme list +
+    NodeArticle); node click → article; deep-linkable
+    (`?theme=<slug>`). ACs: graph→reader round-trip; existing graph
+    journeys re-anchored not duplicated; `data-*` contract.
+  - **R6-08-F2 Health + Ingest-activity tabs.** Health renders the lint
+    checks BY NAME with pass/warn/fail (today's aggregate becomes itemized —
+    same `forge brain lint` evidence, no new checks) + the existing guided
+    lint-resolution; Ingest activity lists reflection-driven ingest events
+    from the event log, read-only, with **no ingest affordance** (explicit
+    negative AC — decision 3). **Mockup check names are illustrative, the
+    real `cli/brain-lint.ts` check list wins** (2026-08-03 review pass: the
+    mockup's "theme distribution balance" / "raw evidence archived" names
+    don't exist as checks, and the real set is ~10 functions, not 9 — do NOT
+    build the invented checks). ACs: named checks match `forge brain lint`
+    output 1:1; a seeded ingest event renders; no button/route triggers
+    ingest from the UI.
+- **Session sizing:** ~2 sessions.
+- **Acceptance references:** mockup journeys `create-kb-project`,
+  `create-kb-cycle`, `kb-maintain` (explore/health beats); surface
+  `views-knowledge.jsx`.
+- **Out of scope:** KB creation/binding + maintenance sessions (R1's wave-5
+  entry); brain-creation agent content (R4); lint check *content* changes.
 
 ## Deferred
 
@@ -152,3 +379,21 @@ R4-11-F4 attention strip during real multi-project operation.
   activity-view + architect-observability + durable-monitor memory notes,
   iteration-refinement targets 1–2 (relocated from R5-06-F5 with cross-ref).
   Unwaved pending operator prioritization.
+- 2026-08-03 — **Wave-5 cut (studio-endstate-v2 mockup → modular backlog).**
+  R6 becomes the biggest wave-5 home. **R6-01 amended** (+F4 run-detail page
+  per history row, +F5 line-level `think|tool|out` node logs + typed outputs;
+  module flow-run-detail). **R6-03 amended** (+F3 six-pillar nav + one
+  page-shell + provenance badges + font self-host rider; sequenced late in
+  5B). **Minted:** R6-04 run kickoff & consolidation (one Run button, kickoff
+  ceiling/materials — the R2-09-F1 enforcement point, standalone run view
+  with typed outputs), R6-05 flow monitor ledger, R6-06 agent monitor linkage
+  (real per-target links: flow run / standalone / session, STANDALONE mark),
+  R6-07 home dashboard (hex constellation + attention), R6-08 KB explore
+  (combined graph+reader, named-check Health, ingest-activity read-only — NO
+  manual ingest per operator decision 3). All entries cite mockup journey ids
+  + `as-built-inventory.md` baselines.
+- 2026-08-03 — **Adversarial-review corrections (PR #71 review pass).**
+  R6-01-F1 pulled into wave-5 batch C as F5's hard precursor; R6-01/R6-03
+  headers annotated with their wave-5 features; R6-08 gains the soft R1-06
+  edge + the mockup-lint-names-are-illustrative rule (real `brain-lint.ts`
+  list wins, ~10 checks not 9); both-sides edges added on R6-01/03/05.

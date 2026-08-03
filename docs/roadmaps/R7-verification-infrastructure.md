@@ -105,9 +105,29 @@ That promise had no roadmap home until R7-01.
     safer worktree/port behaviour (fail loudly when 4123/4124 busy or tree
     dirty rather than resetting). ACs: §4b.10's artifact class gone from
     fresh captures; dirty-tree run refuses instead of resetting.
-- **Session sizing:** ~2 sessions.
+  - **R7-02-F3 Mockup story-beat registry + parity tracking (wave 5,
+    operator directive 2026-08-03).** The studio-endstate-v2 mockup's 27
+    scripted journeys (`mockups/studio-endstate-v2/journeys-data.jsx` +
+    captured videos) become the **target story inventory** forge-ui's test
+    validation converges on. This feature ships the platform half: (a) an
+    **evaluation pass** over the mockup beats/videos producing a story
+    registry — per story: beat list, owning wave-5 batch, ported-real
+    journey id (or `pending`), and `excluded` with the decision reference
+    for beats the cut invalidated (plan-band branching ⑂ / KB ingest
+    button / demo-design/research — decisions 2+3); (b) a parity view the
+    batch-close checks read (which stories are real vs pending — derived
+    from `scripts/journeys/` module ids vs the registry, never
+    hand-maintained counts). The per-batch beat PORTING itself is each
+    batch's journey-sync duty (index §4 story-beat parity rule), not this
+    feature. ACs: registry committed (docs/ or `scripts/journeys/`
+    adjacent — one home); every one of the 27 stories has a disposition;
+    parity derivable by script; the wave-5 exit gate's "full gallery green"
+    reads this registry as its definition of full.
+- **Session sizing:** ~2 sessions (+ ~1 for F3, natural batch-A rider so
+  parity tracking exists before the first batch closes).
 - **Out of scope:** clip/gallery content (R5-06); journey *authoring* for
-  feature work (journey-sync contract, owned by each feature PR).
+  feature work (journey-sync contract, owned by each feature PR — including
+  the per-batch mockup-beat ports).
 
 ### R7-03 verify:cycle ground & corpus stewardship
 
@@ -166,3 +186,10 @@ maintenance contract.
   bench-removal note + rebuild promise, the CLAUDE.md LLM-driven-UI-tests
   intent, ui:journey port/reset constraints, the idea-corpus feature-burn
   trap, ADR-022's tier design. Unwaved pending operator prioritization.
+- 2026-08-03 — **R7-02-F3 added (wave-5 restructure, operator directive):**
+  the studio-endstate-v2 mockup's 27 scripted journeys become the target
+  story inventory for forge-ui test validation — F3 ships the story-beat
+  registry (per-story disposition: ported / pending / excluded-by-decision)
+  + script-derived parity tracking; per-batch beat porting stays each
+  batch's journey-sync duty (index §4 story-beat parity rule). The wave-5
+  exit gate's "full gallery green" is defined by this registry.
