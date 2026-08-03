@@ -11,6 +11,7 @@ import { DEMO_STEP_KINDS } from './types.ts';
 import { FANOUT_ISOLATION_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
+import { SLUG_RE } from '../skill-path.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
 import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
@@ -36,7 +37,10 @@ export type Finding = {
   message: string;
 };
 
-export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+// Definition moved to skill-path.ts (a leaf module) to break the
+// skill-path→validate→registry→skill-path cycle; re-exported so this file's
+// 20+ existing call sites stay untouched.
+export { SLUG_RE };
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -726,7 +730,7 @@ export function validateCatalog(c: Catalog): Finding[] {
   }
 
   // community-skills: curated OOTB showcase entries. Unique slug ids; recommended
-  // tier (if present) must be a real model tier; composedBy entries are slugs.
+  // tier (if present) must be a real model tier.
   const TIERS = new Set(['haiku', 'sonnet', 'opus']);
   const communitySkills = c.communitySkills ?? [];
   for (const dup of findDuplicates(communitySkills.map((s) => s.id))) {
@@ -740,13 +744,6 @@ export function validateCatalog(c: Catalog): Finding[] {
       findings.push(
         err(obj, 'community-skill/tier', `Community skill "${s.id}" tier "${s.tier}" must be one of haiku|sonnet|opus`),
       );
-    }
-    for (const slug of s.composedBy ?? []) {
-      if (!SLUG_RE.test(slug)) {
-        findings.push(
-          err(obj, 'community-skill/composed-by', `Community skill "${s.id}" composedBy "${slug}" does not match ${SLUG_RE}`),
-        );
-      }
     }
   }
 

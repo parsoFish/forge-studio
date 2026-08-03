@@ -31,7 +31,9 @@ const ROUTES = [
   { path: '/flows/new', name: 'flow builder (new)' },
   { path: '/knowledge', name: 'knowledge' },
   { path: '/knowledge/new', name: 'knowledge base (new)' },
+  { path: '/skills', name: 'skill library' },
   { path: '/skills/new', name: 'skill builder (new)' },
+  { path: '/skills/brain-query', name: 'skill detail (real shipped skill)' },
   { path: '/architect/new', name: 'architect launcher' },
   { path: '/recovery', name: 'recovery (DEC-6 operator surface)' },
 ];

@@ -299,23 +299,8 @@ test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a templ
   assert.match(pkg, /"name": "greenfield-demo"/);
 });
 
-// ---------------------------------------------------------------------------
-// POST /api/studio/skills — a plain skill is stamped library: true (R3-01-F2),
-// so it is palette-visible via the union AND passes the library lint immediately.
-// ---------------------------------------------------------------------------
-
-test('POST /api/studio/skills writes library: true (palette-visible + lint-valid)', async () => {
-  const res = await postJson(`${bridgeUrl}/api/studio/skills`, {
-    name: 'r3 f2 authored skill',
-    description: 'a plain composable skill authored in-test',
-  });
-  assert.equal(res.status, 200);
-  const body = (await res.json()) as { ok: boolean; id: string };
-  assert.equal(body.ok, true);
-  const skillMd = readFileSync(join(forgeRoot, 'skills', body.id, 'SKILL.md'), 'utf8');
-  assert.ok(/^library: true$/m.test(skillMd), 'authored skill carries an explicit library: true');
-  assert.ok(!/^runtime:/m.test(skillMd), 'authored skill is a plain skill (no runtime block)');
-});
+// POST /api/studio/skills test coverage MOVED to cli/bridge-studio-skills.test.ts
+// (R3-01-F3/F4, AT-55) — the route itself relocates there in WI-2.
 
 test('PUT /api/studio/agents/write-agent with invalid runtime (fixed, no model) → 400, file UNCHANGED', async () => {
   writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());

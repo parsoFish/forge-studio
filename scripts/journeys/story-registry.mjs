@@ -121,6 +121,22 @@ export const STORY_REGISTRY = [
     batch: 'A',
     port: null,
     excluded: null,
+    note:
+      'R3-01-F3/F4 (this initiative) made mockup beat 1 real — ' +
+      "goto '#/library/skills' now lands on the real /skills library " +
+      '(local + community sections, derived used-by, install/approve). ' +
+      'Beats 2-8 (click build-skill-btn through the accept click) are an ' +
+      "AGENTIC AUTHORING SESSION — mockups/studio-endstate-v2/views-library.jsx:108 " +
+      "routes build-skill-btn to go('agents','session','build-skill'), i.e. " +
+      'the R2-10 interactive session shell (batch B), which does not exist; ' +
+      'the real product authors a plain skill through the /skills/new form ' +
+      'instead, not an agentic session. Beat 9 ("on the shelf, marked ' +
+      'unbound") is that same session\'s own confirmation state, so it also ' +
+      'awaits R2-10 — not ported here. Beats 10-13 (open the Reflector\'s ' +
+      'builder, click release-notes into the catalog, save the binding) ' +
+      'exercise ordinary agent-builder skill composition, which already ' +
+      'shipped before this wave (R3-01-F1/F2\'s unified palette) — real, but ' +
+      'not new work this initiative owns or ported as a beat.',
   },
   {
     story: 'install-connections',
@@ -151,6 +167,26 @@ export const STORY_REGISTRY = [
     batch: 'A',
     port: null,
     excluded: null,
+    note:
+      'R3-01-F3/F4 (this initiative) made beat 1 (goto \'#/library/skills\') ' +
+      'and beats 11-13 (back on the local shelf; "installed with provenance ' +
+      'kept"; ready for the agent-builder catalog) real — the /skills ' +
+      'library + detail page show source/provenance/content-hash for an ' +
+      'installed skill, and an approved install is palette-visible in the ' +
+      'agent-builder catalog (verified end to end by the ' +
+      "skills-install-approve journey beat). Beat 2 (hover a community " +
+      "card's hub+signals) is only PARTLY real: the library card shows " +
+      'source/category/tier/stars for a catalog entry via the F2 catalog ' +
+      'union, but there is no dedicated hub badge/signals treatment — that ' +
+      "richer surface also belongs to R3-07. Beats 3-7 (browse-community-btn, " +
+      'hub-strip, commkind-skill, crow-*, citem-* detail-preview) walk ' +
+      "R3-07's cross-kind community browser (a unified skills+hooks " +
+      'browse/filter/detail surface) — not built by this initiative. Beat 8 ' +
+      "(click citem-install for the skill) lives on that not-yet-built " +
+      'R3-07 detail page, but per D2 would route into THIS initiative\'s ' +
+      'real draft→scan→approve pipeline unchanged once R3-07 builds it — ' +
+      'the pipeline itself is not the gap, the browse/detail surface is. ' +
+      'Beats 9-10 (the hook security-scan + install) are R3-03\'s job.',
   },
   {
     story: 'run-agent-developer',

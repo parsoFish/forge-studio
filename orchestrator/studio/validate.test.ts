@@ -1453,17 +1453,6 @@ describe('validateCatalog — community-skills', () => {
     assert.equal(f.level, 'error');
   });
 
-  it('composedBy with bad slug → error community-skill/composed-by', () => {
-    const findings = validateCatalog(
-      makeCatalog({
-        communitySkills: [
-          { id: 'handoff', name: 'Handoff', provenance: 'a', source: 'u', category: 'memory', composedBy: ['Bad Slug'] },
-        ],
-      }),
-    );
-    assert.ok(findings.some((f) => f.check === 'community-skill/composed-by'));
-  });
-
   it('valid community skills → no community-skill findings', () => {
     const findings = validateCatalog(
       makeCatalog({
@@ -1475,7 +1464,6 @@ describe('validateCatalog — community-skills', () => {
             source: 'https://example',
             category: 'memory',
             tier: 'haiku',
-            composedBy: ['developer-ralph'],
           },
         ],
       }),

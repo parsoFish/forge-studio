@@ -1165,12 +1165,57 @@ export function writeDemoDesignSkill() {
   ].join('\n'));
 }
 
+// R3-01-F3/F4 — the skills-install-approve beat's own scratch id. The SOURCE
+// package lives outside the repo (an mkdtempSync'd dir the beat owns and
+// removes itself), but installSkillPackage lands the RESULT under
+// skills/<id>/ exactly like a real install, plus a ledger entry in
+// studio/installed-skills.yaml (skill-install-ledger.ts) — both swept here so
+// a crash mid-beat never leaves a stray draft/approved skill or a false
+// "installed" ledger record behind.
+export const SK_INSTALL_ID = 'journey-installed-skill';
+export const SK_INSTALL_DIR = join(FORGE_ROOT, 'skills', SK_INSTALL_ID);
+const SK_INSTALL_LEDGER_PATH = join(FORGE_ROOT, 'studio', 'installed-skills.yaml');
+
+// The ledger's EXACT prior state, captured once per process on the FIRST
+// sweep call — `undefined` = not yet captured, `null` = no ledger file
+// existed before this run, a string = its exact original bytes. Restoring to
+// this (rather than merely filtering out this beat's own entry) is what
+// fixes the "installed: []` dirt left behind when no ledger file existed
+// before the run" defect (R3-01-F4, ui:journey-found): a plain entry-filter
+// still WRITES the file (with an empty `installed: []`) even when it never
+// existed pre-run.
+let skInstallLedgerStash;
+
+/** Narrow sweep for the skills-install-approve beat's OWN artifacts only —
+ *  its installed skill dir (SK_INSTALL_DIR) and its studio/installed-skills.yaml
+ *  ledger entry, restored to the exact state captured before this run ever
+ *  touched either. Deliberately does NOT touch SK_NEW_SLUG/SK_CLIP_SLUG (the
+ *  skills-create beat's throughline artifact a LATER agents-journey beat
+ *  composes into an agent build) or the edit-beat's stash — that broad reach
+ *  belongs to cleanSkillArtifacts() only, never to this beat's own sweep
+ *  (ui:journey-found defect: the broad sweep, called at this beat's own
+ *  start/end, deleted the throughline skill mid-run). Idempotent + best-effort:
+ *  safe to call at both the beat's start (stale-state sweep) and its end (real
+ *  cleanup), any number of times. */
+export function cleanSkillInstallArtifacts() {
+  if (skInstallLedgerStash === undefined) {
+    skInstallLedgerStash = existsSync(SK_INSTALL_LEDGER_PATH) ? readFileSync(SK_INSTALL_LEDGER_PATH, 'utf8') : null;
+  }
+  try { rmSync(SK_INSTALL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  if (skInstallLedgerStash === null) {
+    try { rmSync(SK_INSTALL_LEDGER_PATH, { force: true }); } catch { /* */ }
+  } else {
+    try { writeFileSync(SK_INSTALL_LEDGER_PATH, skInstallLedgerStash, 'utf8'); } catch { /* */ }
+  }
+}
+
 export function cleanSkillArtifacts() {
   restoreRealSkill(); // crash-safe: the runner's finally routes through here
   for (const slug of [SK_NEW_SLUG, SK_CLIP_SLUG]) {
     try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
   }
   try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  cleanSkillInstallArtifacts(); // crash-safe backstop for the install-approve beat too
 }
 
 // ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────
