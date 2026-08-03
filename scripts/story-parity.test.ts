@@ -531,6 +531,84 @@ test('deriveParity rule 12: an object BeatRef with a missing/empty excluded or d
   assert.ok(emptyDecision.errors.some((e) => e.includes('story-a')));
 });
 
+test('deriveParity rule 13 (BLOCKER): a repeated real beat id in port.beats is not ported cleanly', () => {
+  // Copy-paste typo repro: 2 mockup beats, but the same real beat id twice —
+  // mockup beat index 1 has no real counterpart, and jx-2 is never referenced.
+  const registry = [
+    { ...validEntryA(), port: { journey: 'journey-x', beats: ['jx-1', 'jx-1'] } },
+    validEntryB(),
+  ];
+  const parity = deriveEnforcement(registry);
+  assert.ok(parity.errors.length > 0, 'a repeated beat ref must produce at least one error');
+  assert.ok(parity.errors.some((e) => e.includes('story-a') && e.includes('jx-1')));
+  const entryA = parity.entries.find((e) => e.story === 'story-a');
+  assert.ok(entryA);
+  assert.notEqual(entryA!.status, 'ported');
+});
+
+test('deriveParity rule 13 guard: distinct string BeatRefs still pass cleanly (no over-correction)', () => {
+  const registry = [validEntryA(), validEntryB()]; // beats: ['jx-1', 'jx-2'] — all distinct
+  const parity = deriveEnforcement(registry);
+  assert.deepEqual(parity.errors, []);
+  const entryA = parity.entries.find((e) => e.story === 'story-a');
+  assert.equal(entryA!.status, 'ported');
+});
+
+test('deriveParity rule 13 guard: excluded object BeatRefs are exempt from the uniqueness rule', () => {
+  const registry = [
+    {
+      ...validEntryA(),
+      port: {
+        journey: 'journey-x',
+        beats: [
+          { excluded: 'cut in trim', decision: 'ADR-1' },
+          { excluded: 'cut in trim', decision: 'ADR-1' }, // identical content, twice — legitimate
+        ],
+      },
+    },
+    validEntryB(),
+  ];
+  const parity = deriveEnforcement(registry);
+  assert.deepEqual(parity.errors, []);
+  const entryA = parity.entries.find((e) => e.story === 'story-a');
+  assert.equal(entryA!.status, 'ported');
+  assert.equal(entryA!.excludedBeatCount, 2);
+  assert.equal(entryA!.portedBeatCount, 0);
+});
+
+// ── deriveParity rule 14: port.beats that is not an array ───────────────────
+//
+// One shared checker: must not throw, must contribute EXACTLY one error
+// naming the story id and "not an array", and the entry must read as pending
+// with zero ported/excluded beats.
+
+function assertNonArrayBeatsIsOneCleanError(beats: unknown, label: string) {
+  const registry = [{ ...validEntryA(), port: { journey: 'journey-x', beats } }, validEntryB()];
+  let parity: ReturnType<typeof deriveEnforcement> | undefined;
+  assert.doesNotThrow(() => {
+    parity = deriveEnforcement(registry);
+  }, `port.beats as ${label} must not throw`);
+  assert.equal(parity!.errors.length, 1, `port.beats as ${label} must yield exactly one error`);
+  assert.ok(parity!.errors[0].includes('story-a'));
+  assert.match(parity!.errors[0], /not an array/i);
+  const entryA = parity!.entries.find((e) => e.story === 'story-a');
+  assert.equal(entryA!.status, 'pending');
+  assert.equal(entryA!.portedBeatCount, 0);
+  assert.equal(entryA!.excludedBeatCount, 0);
+}
+
+test('deriveParity rule 14: port.beats as a plain object', () => {
+  assertNonArrayBeatsIsOneCleanError({ 0: 'jx-1', 1: 'jx-2' }, 'a plain object');
+});
+
+test('deriveParity rule 14: port.beats as a string', () => {
+  assertNonArrayBeatsIsOneCleanError('jx-1jx-2', 'a string');
+});
+
+test('deriveParity rule 14: port.beats as a number', () => {
+  assertNonArrayBeatsIsOneCleanError(5, 'a number');
+});
+
 // ── formatParityReport ───────────────────────────────────────────────────
 
 test('formatParityReport: contains every story id, its status, and the derived counts', () => {
@@ -684,4 +762,17 @@ test('real counts are derived: ported + pending + excluded === total', () => {
   });
   const { total, ported, pending, excluded } = parity.counts;
   assert.equal(ported + pending + excluded, total);
+});
+
+// ── parseMockupStories: must fail fast, not hang ────────────────────────────
+//
+// Placed LAST and deliberately isolated: against the current implementation
+// (vm.runInContext called with no `timeout`), an infinite loop in the source
+// hangs the process forever — there is no way for this test itself to time
+// out a synchronous, non-yielding V8 loop from JS. Once the implementation
+// passes a short `timeout` to vm.runInContext, V8 force-terminates the
+// script and this throws promptly; today it hangs, which is the defect.
+
+test('parseMockupStories: an infinite loop in the source throws promptly, it does not hang', () => {
+  assert.throws(() => parseMockupStories('while (true) {}'), Error);
 });
