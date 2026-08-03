@@ -34,10 +34,13 @@ function onDiskTemplateIds(): string[] {
   // definition, so it is excluded by name, mirroring the identical exclusion
   // in the two production loaders that scan this same directory
   // (orchestrator/studio/registry.ts's listArtifactTemplates and
-  // orchestrator/studio/template-library.ts's listPlanningEntries). If either
-  // of those loaders ever stops excluding it, this test must be revisited.
+  // orchestrator/studio/template-library.ts's listPlanningEntries). Matched
+  // case-insensitively (a readme.md/Readme.md variant would otherwise slip
+  // the exact-name check and, if it ever carried valid frontmatter, become a
+  // phantom template) — all three sites must stay identical. If any of them
+  // ever stops excluding it, this test must be revisited.
   return readdirSync(TEMPLATES_DIR)
-    .filter((f) => f.endsWith('.md') && f !== 'README.md')
+    .filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f))
     .map((f) => f.replace(/\.md$/, ''))
     .sort();
 }

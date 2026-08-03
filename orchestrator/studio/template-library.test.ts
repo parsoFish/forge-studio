@@ -117,12 +117,12 @@ function byId(entries: readonly TemplateLibraryEntry[], id: string): TemplateLib
 // ===========================================================================
 
 describe('listTemplateLibrary — real repo union + categories', () => {
-  it('AT-1: the real repo surfaces exactly 15 templates: 7 planning + 6 demo-output + 2 project-scaffold', () => {
+  it('AT-1: the real repo surfaces exactly 16 templates: 7 planning + 6 demo-output + 3 project-scaffold', () => {
     const entries = listTemplateLibrary(REPO_ROOT);
-    assert.equal(entries.length, 15, `got ids: ${entries.map((e) => e.id).join(', ')}`);
+    assert.equal(entries.length, 16, `got ids: ${entries.map((e) => e.id).join(', ')}`);
     assert.equal(entries.filter((e) => e.category === 'planning').length, 7);
     assert.equal(entries.filter((e) => e.category === 'demo-output').length, 6);
-    assert.equal(entries.filter((e) => e.category === 'project-scaffold').length, 2);
+    assert.equal(entries.filter((e) => e.category === 'project-scaffold').length, 3);
   });
 
   it('AT-2: entries are sorted by id (deterministic output)', () => {
@@ -148,7 +148,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
     const scaffold = entries.filter((e) => e.category === 'project-scaffold').map((e) => e.id).sort();
     assert.deepEqual(planning, ['demo-fix-spec', 'plan', 'pr', 'review-findings', 'verdict', 'wi-branches', 'work-items']);
     assert.deepEqual(demoOutput, ['api-verify', 'cli-capture', 'code-diff', 'narrative', 'screenshot', 'test-evidence']);
-    assert.deepEqual(scaffold, ['typescript-api', 'typescript-cli']);
+    assert.deepEqual(scaffold, ['typescript-api', 'typescript-cli', 'typescript-web']);
   });
 });
 
@@ -323,7 +323,7 @@ describe('D3 — demo-output usedBy derivation (project demoProcess)', () => {
 describe('D3 — project-scaffold usedBy is honestly empty (appType is not persisted)', () => {
   it('AT-22: the real repo\'s scaffold entries carry usedBy: [] and a non-empty usedByDerivation.source naming what was checked', () => {
     const entries = listTemplateLibrary(REPO_ROOT).filter((e) => e.category === 'project-scaffold');
-    assert.equal(entries.length, 2);
+    assert.equal(entries.length, 3);
     for (const e of entries) {
       assert.deepEqual(e.usedBy, []);
       assert.ok(typeof e.usedByDerivation.source === 'string' && e.usedByDerivation.source.trim().length > 0, `"${e.id}" usedByDerivation.source must be a non-empty string`);
