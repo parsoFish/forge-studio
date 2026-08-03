@@ -203,6 +203,38 @@ initiatives inside a wave can run in parallel where dependencies allow.
 | **continuous** | R5-03 cost integrity · R5-05 known-gaps residue · R5-06 demo/harness backlog | Opportunistic — pick up alongside whatever wave is active when a session touches the relevant seam. |
 | **unwaved** | All R6 / R7 / R8 initiatives | Minted by the coverage review without sequencing; the operator prioritizes them against this order (natural affinities noted in each file — e.g. R7-01 after the R4 suite stabilizes, R8-01 after wave 0's seams). |
 
+### Wave 5 — Studio end-state alignment (opened 2026-08-03; waves 0–4 are history)
+
+Waves 0–4 delivered the platform + the OOTB suite. Wave 5 changes the unit of
+work: **one module per initiative**, so a session can iterate on the skills
+library, or the agent builder, or a single agent/flow, without holistic
+cross-cutting changes. The north star for the module set is the operator's
+end-state mockup: `mockups/studio-endstate-v2/` (20 surfaces, 27 scripted
+journey videos as acceptance references, `as-built-inventory.md` as the
+2026-08-03 baseline it is diffed against).
+
+- **5A — the cut (planning session, ⚑ operator decisions).** Run
+  `mockups/studio-endstate-v2/BACKLOG-CUT-PROMPT.md` verbatim in a fresh
+  session. It amends R2/R3/R6 (and R7 for journey coverage) with
+  module-scoped initiatives — one module each, journey-id as acceptance
+  evidence — after a single AskUserQuestion round on its five recorded
+  decision points (hooks vocabulary, plan-band parallelism vs the R2-D1
+  NO-GO, KB manual-ingest vs reflection-only policy, serpentine-vs-DAG
+  roadmap viz, per-project trigger scoping).
+- **5B — execution order (default).** Start with the modularity-proving
+  library slices — **R3-03 hooks · R3-04 tools/MCPs/CLIs · R3-02
+  skill-generator** (+ the R3-01 F3/F4 `/skills`-view + marketplace residue,
+  which the mockup's community browser now gives concrete shape) — then
+  **R6-01 run-observability** (kickoff limits/materials, node-level logs,
+  typed outputs) and **R6-03 IA stewardship** (Home dashboard, roadmap tab,
+  one page-shell). **R2-05 dynamic artifact surfaces** is pulled in at the
+  point R6-01 needs typed run outputs; **R1-02/R1-05 and R2-06/R2-07**
+  remain platform continuity, pulled at dependency points as before.
+- **R7 rises post-wave-4:** R7-01 bench rebuild is now unblocked (the R4
+  suite is stable), and R7-03 inherits stewardship of the new gitpulse
+  `coupling` verify ground from the wave-4 tail. R5-03/05/06 stay
+  continuous; R8 stays operator-paced.
+
 ---
 
 ## 5. Maintenance contract (living-roadmap mechanics)
@@ -480,3 +512,15 @@ pass across all five roadmaps plus four operator decisions:
     (#68), proven on the run's real captured output (dev-loop ran 4/4 green all
     three runs). A concurrent-mockups boundary noise fix (#66) rounded it out.
   - Every wave-4 roadmap Status is now `implemented`. **Waves 0–4 all complete.**
+- 2026-08-03 — **Wave 5 opened: Studio end-state alignment.** The operator-led
+  mockup campaign (7 review rounds, this branch) produced the end-state
+  prototype `mockups/studio-endstate-v2/` — 20 surfaces, 27 scripted journey
+  videos, `as-built-inventory.md` (the as-built diff baseline) and
+  `BACKLOG-CUT-PROMPT.md` (the ready-to-run 5A planning-session prompt).
+  §4 gains the Wave-5 subsection: module-scoped initiatives only, mockup
+  journeys as acceptance references; default 5B order starts at the R3
+  library slices, then R6-01/R6-03, with R2-05 pulled at need. Already
+  verified as ALIGNED with as-built (baseline material, not initiatives):
+  develop topology, hex canvas + typed artifact edges, 4-kind triggers, KB
+  force-graph, skills builder + community catalog, architect interview →
+  unified gate.
