@@ -51,6 +51,7 @@ import {
 } from '../orchestrator/studio/validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
+import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
 
 // ---------------------------------------------------------------------------
@@ -461,6 +462,17 @@ export function runStudioLint(root: string): StudioLintResult {
       }
     }
   }
+
+  // ------------------------------------------------------------------
+  // 6. Skill-library trust pipeline (R3-01-F3/F4) — a draft/needs-review skill
+  //    still composed by an agent, or a needs-review skill sitting in the
+  //    library at all, is a lint error; so is an agent composing a skill id
+  //    that resolves to neither a local skill dir nor a catalog community
+  //    entry. See orchestrator/studio/skill-library.ts (single source).
+  // ------------------------------------------------------------------
+
+  findings.push(...lintSkillTrust(root));
+  findings.push(...lintSkillRefs(root));
 
   // ------------------------------------------------------------------
   // Tally

@@ -345,9 +345,13 @@ export type CatalogEntry = { id: string; name: string; desc?: string };
 
 /**
  * A curated, proven community skill forge showcases in its OOTB library (like the
- * community skill-directory sites). Reference metadata only — `source` points at the
- * upstream; `composedBy` names the forge agent slugs that compose it; `tier` is the
- * recommended model tier. Hand-edited in studio/catalog.yaml (ADR-027 §5).
+ * community skill-directory sites). Reference metadata only — `source` points at
+ * the upstream; `tier` is the recommended model tier. Hand-edited in
+ * studio/catalog.yaml (ADR-027 §5). Which forge agents actually compose a skill is
+ * DERIVED from real agent `composition.skills` (`deriveSkillUsage`,
+ * orchestrator/studio/skill-library.ts, R3-01-F3/F4) — never hand-declared here;
+ * a `composedBy` field was deleted because all 8 shipped claims were false
+ * (declared data enforced nowhere is this codebase's recurring top defect).
  */
 export type CommunitySkill = {
   id: string; // slug
@@ -356,7 +360,6 @@ export type CommunitySkill = {
   source: string; // upstream URL
   category: string; // coding | review | testing | research | planning | memory | docs | git
   tier?: string; // recommended model tier (haiku | sonnet | opus)
-  composedBy?: string[]; // forge agent slugs that compose this skill
   stars?: string; // adoption signal, free-form (e.g. "228k")
   desc?: string;
 };

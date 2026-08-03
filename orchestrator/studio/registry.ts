@@ -10,6 +10,7 @@ import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
 import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
+import { skillTrustState } from './skill-library.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
 import type {
   AgentBudgets,
@@ -287,7 +288,10 @@ export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
 /** Plain composable skills (skills/<slug>/SKILL.md with NO runtime block AND not
  *  library:false) — the filesystem half of the unified skill library (R3-01-F2).
  *  Studio agents (runtime-bearing) are the agent roster, not palette skill chips;
- *  a plain skill opting out with library:false is hidden from the palette too. */
+ *  a plain skill opting out with library:false is hidden from the palette too.
+ *  R3-01-F3/F4: a `draft` or `needs-review` skill is ALSO excluded — this is the
+ *  palette enforcement point for the trust pipeline (skillTrustState); do not
+ *  add a second, divergent copy of this rule anywhere else. */
 export function listPlainSkills(forgeRoot: string): { id: string; name: string; desc?: string }[] {
   const out: { id: string; name: string; desc?: string }[] = [];
   for (const dir of listSkillDirs(forgeRoot)) {
@@ -298,6 +302,7 @@ export function listPlainSkills(forgeRoot: string): { id: string; name: string; 
       if ('runtime' in d) continue;                     // runtime block ⇒ a studio agent, not a plain skill
       if (d['library'] === false) continue;             // library:false ⇒ plain skill opted out of the palette (R3-01-F2)
       const id = basename(dir);
+      if (skillTrustState(forgeRoot, id) !== 'ready') continue; // draft/needs-review ⇒ not palette-visible (R3-01-F3/F4)
       const name = typeof d['name'] === 'string' && d['name'] ? d['name'] as string : id;
       const desc = typeof d['description'] === 'string' ? d['description'] as string : undefined;
       out.push({ id, name, desc });
@@ -725,7 +730,6 @@ function parseCommunitySkills(raw: unknown, file: string): CommunitySkill[] {
       source: reqString(e, 'source', file),
       category: reqString(e, 'category', file),
       tier: optString(e, 'tier'),
-      composedBy: stringArray(e, 'composedBy', file),
       stars: optString(e, 'stars'),
       desc: optString(e, 'desc'),
     };
