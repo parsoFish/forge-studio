@@ -262,6 +262,19 @@ export async function handleStudioSkillsRoutes(
       const { data } = matter(readFileSync(mdPath, 'utf8'), {});
       const d = (data ?? {}) as Record<string, unknown>;
 
+      // WI-3: the forge-ui detail page needs source/usedBy/provenance, which
+      // this route did not carry until now. No cli/bridge-studio-skills.test.ts
+      // assertion pins an exhaustive key set on this response (checked before
+      // making this change), so these are additive fields, not a shape change
+      // any existing AT depends on. Reusing listSkillLibrary's own union +
+      // derivation here (rather than re-deriving usedBy/provenance a second,
+      // divergent way) — house rule: one enforcement point, not two.
+      // This route only reaches here when the id resolved to a real on-disk
+      // SKILL.md (existsSync(mdPath) above), so `source` is always 'local' —
+      // a certain fact, never a guess, even if no listSkillLibrary entry is
+      // found (e.g. a studio-agent id, which the library union excludes).
+      const libraryEntry = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === id);
+
       const detail: Record<string, unknown> = {
         id,
         name: typeof d['name'] === 'string' && d['name'] ? d['name'] : id,
@@ -269,6 +282,9 @@ export async function handleStudioSkillsRoutes(
         trust,
         paletteVisible: trust === 'ready',
         files,
+        source: 'local',
+        usedBy: libraryEntry?.usedBy ?? [],
+        provenance: libraryEntry?.provenance ?? null,
       };
       if (reason) detail['reason'] = reason;
       // D5: the scan is drafts-only (approval-gate UI) — it reports facts a
