@@ -1,0 +1,268 @@
+{
+  "roster": [
+    {
+      "slug": "adversarial-review",
+      "band": "review-band",
+      "canonicalSlug": "adversarial-review",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:review-band"
+    },
+    {
+      "slug": "architect",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic"
+    },
+    {
+      "slug": "brain-ingest",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic"
+    },
+    {
+      "slug": "demo-agent",
+      "band": "demo-band",
+      "canonicalSlug": "demo-agent",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:demo-band"
+    },
+    {
+      "slug": "developer-ralph",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": "ralph",
+      "dispatchPath": "ralph"
+    },
+    {
+      "slug": "onboarding-agent",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic"
+    },
+    {
+      "slug": "project-manager",
+      "band": "wi-contract",
+      "canonicalSlug": "project-manager",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:wi-contract"
+    },
+    {
+      "slug": "project-scoped-review",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic"
+    },
+    {
+      "slug": "reflector",
+      "band": "reflection-close",
+      "canonicalSlug": "reflector",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:reflection-close"
+    },
+    {
+      "slug": "release-finalizer",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic"
+    }
+  ],
+  "allDefinitions": [
+    {
+      "slug": "adversarial-review",
+      "band": "review-band",
+      "canonicalSlug": "adversarial-review",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:review-band",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "architect",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "architect-completeness-critic",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
+      "slug": "brain-fix",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
+      "slug": "brain-ingest",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "demo-agent",
+      "band": "demo-band",
+      "canonicalSlug": "demo-agent",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:demo-band",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "demo-builder",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
+      "slug": "developer-ralph",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": "ralph",
+      "dispatchPath": "ralph",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "instructions-creator",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
+      "slug": "onboarding-agent",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "preflight-fix",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
+      "slug": "project-brain-builder",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
+      "slug": "project-manager",
+      "band": "wi-contract",
+      "canonicalSlug": "project-manager",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:wi-contract",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "project-scoped-review",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "reflector",
+      "band": "reflection-close",
+      "canonicalSlug": "reflector",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:reflection-close",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "release-finalizer",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": true
+    }
+  ],
+  "bandHookIds": [
+    "wi-contract",
+    "reflection-close",
+    "demo-band",
+    "review-band"
+  ],
+  "bandCanonicalSlug": {
+    "wi-contract": "project-manager",
+    "reflection-close": "reflector",
+    "demo-band": "demo-agent",
+    "review-band": "adversarial-review"
+  },
+  "flows": [
+    {
+      "id": "forge-architect",
+      "nodes": [
+        {
+          "id": "architect",
+          "agent": "architect",
+          "resolvedKind": "architect"
+        },
+        {
+          "id": "pm",
+          "agent": "project-manager",
+          "resolvedKind": "agent"
+        }
+      ]
+    },
+    {
+      "id": "forge-develop",
+      "nodes": [
+        {
+          "id": "dev",
+          "agent": "developer-ralph",
+          "resolvedKind": "agent"
+        },
+        {
+          "id": "demo",
+          "agent": "demo-agent",
+          "resolvedKind": "agent"
+        },
+        {
+          "id": "adversarial-review",
+          "agent": "adversarial-review",
+          "resolvedKind": "agent"
+        },
+        {
+          "id": "review",
+          "agent": null,
+          "resolvedKind": "review"
+        }
+      ]
+    },
+    {
+      "id": "forge-reflect",
+      "nodes": [
+        {
+          "id": "reflect",
+          "agent": "reflector",
+          "resolvedKind": "agent"
+        }
+      ]
+    }
+  ]
+}
