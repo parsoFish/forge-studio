@@ -10,7 +10,7 @@
  * execDemo (the `demo-band`) wraps the R4-07 demo pipeline + the RELOCATED
  * close-contract gates (items 4-8) and the demo-fix loop; execAdversarialReview
  * (the `review-band`) wraps the R4-08 critique pipeline. Both are selected by a
- * declared `composition.hooks` band, not a privileged executor enum. The former
+ * declared `composition.guards` band, not a privileged executor enum. The former
  * unifier node — execUnifier / the `developer-unifier` slug — STAYS in the
  * registry (retired at R4-01-F4) but is off the live flow; it still executes for
  * the retained forge-cycle-shaped DAG fixtures.
@@ -940,7 +940,7 @@ const execReview: NodeExecutor = async (ctx) => {
 /**
  * The `reflection-close` band (R4-01-F2, ADR-039) — formerly the dedicated
  * `reflect` NodeKind's executor, now selected by the reflector def's declared
- * `composition.hooks` entry instead of a privileged executor enum. Semantics
+ * `composition.guards` entry instead of a privileged executor enum. Semantics
  * unchanged: runs only when the closure confirmed a merge (G10), records a
  * reflection loss on a caller-side crash, and ALWAYS promotes `merged → done`
  * in the finally (R4-11-F1 — reflection-lost still reaches done).
@@ -1147,7 +1147,7 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
 
 /**
  * Band-hook id → executor (ADR-039). The KEY is declared data (a
- * `composition.hooks` entry on the agent's SKILL.md); the executors are the
+ * `composition.guards` entry on the agent's SKILL.md); the executors are the
  * same orchestrator-band implementations the retired phase-executor rows
  * carried. `wi-contract` is registered ahead of the PM's own migration in
  * this same change-set so the table is total over BAND_HOOK_IDS.

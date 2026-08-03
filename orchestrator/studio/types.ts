@@ -7,7 +7,17 @@ export type AgentComposition = {
   skills: string[];
   tools: string[];
   mcps: string[];
-  hooks: string[];
+  /**
+   * Platform dispatch-key vocabulary (ADR-027 R3-03 amendment): the 5 toggle
+   * ids (event-log, cost-guard, stall-watchdog, merge-gate, scratch-strip)
+   * and the 4 band ids (wi-contract, reflection-close, demo-band,
+   * review-band). Guard ids are DISPATCH KEYS — `resolveBandHook` scans them
+   * to route a flow node to another agent's canonical pipeline — so this
+   * field is platform-owned, never user-authorable. Split from the
+   * user-authorable library `hooks` vocabulary specifically to make an
+   * id-collision hijack of flow dispatch structurally impossible.
+   */
+  guards: string[];
 };
 
 export type AgentRuntime = {
@@ -99,7 +109,7 @@ export type AgentDefinition = {
    * Declared flow-engine executor kind (R2-01-F2) — the DECLARED replacement
    * for flow-runner's old hardcoded AGENT_KIND table. R4-01-F2 (ADR-039)
    * retired the 'pm' | 'dev' | 'reflect' rows onto declared dispatch
-   * (composition.hooks band hooks / loopStrategy:'ralph'); 'unifier' is the
+   * (composition.guards band ids / loopStrategy:'ralph'); 'unifier' is the
    * LAST remaining legacy phase-executor slug, held until R4-01-F4. Absent ⇒
    * a generic library agent, resolved through the F1 execAgent path instead
    * of a phase-specific executor.
@@ -344,6 +354,17 @@ export type CatalogModel = { id: string; name: string; sdk: string; tier: string
 export type CatalogEntry = { id: string; name: string; desc?: string };
 
 /**
+ * A catalog `guards:` entry (ADR-027 R3-03 amendment). `kind` is DERIVED from
+ * `BAND_HOOK_IDS` (`orchestrator/agent-bands.ts`) at load time — never
+ * declared in `studio/catalog.yaml` — so a `kind:` value present in the YAML
+ * is parsed and then overridden, not merged or trusted (the
+ * declared-data-fails-open failure class this repo already guards against
+ * elsewhere).
+ */
+export type CatalogGuardKind = 'band' | 'toggle';
+export type CatalogGuardEntry = CatalogEntry & { kind: CatalogGuardKind };
+
+/**
  * A curated, proven community skill forge showcases in its OOTB library (like the
  * community skill-directory sites). Reference metadata only — `source` points at
  * the upstream; `tier` is the recommended model tier. Hand-edited in
@@ -462,7 +483,7 @@ export type Catalog = {
   models: CatalogModel[];
   tools: CatalogEntry[];
   mcps: CatalogEntry[];
-  hooks: CatalogEntry[];
+  guards: CatalogGuardEntry[];
   communitySkills?: CommunitySkill[];
   path: string;
 };

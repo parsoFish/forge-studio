@@ -7,8 +7,8 @@
  * 3-column workbench: CatalogPalette | Agent definition | Preview+Readiness+Flows
  *
  * Load/save translation (schema reconciliation):
- *   Server AgentDefinition: composition.{skills,tools,mcps,hooks} + body
- *   UI flat state: skills/tools/mcps/hooks arrays + process (= body)
+ *   Server AgentDefinition: composition.{skills,tools,mcps,guards} + body
+ *   UI flat state: skills/tools/mcps/guards arrays + process (= body)
  *   On load: server composition.* → flat arrays; body → process
  *   On save: flat → PUT {composition:{...}, process, name, purpose, interactivity, brainAccess, runtime}
  */
@@ -45,7 +45,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type Kind = 'skill' | 'tool' | 'mcp' | 'hook';
+type Kind = 'skill' | 'tool' | 'mcp' | 'guard';
 
 type AgentState = {
   slug: string;
@@ -54,7 +54,7 @@ type AgentState = {
   skills: string[];
   tools: string[];
   mcps: string[];
-  hooks: string[];
+  guards: string[];
   process: string;
   interactivity: string;
   runtime: AgentRuntime;
@@ -85,7 +85,7 @@ const EMPTY_STATE: AgentState = {
   skills: [],
   tools: [],
   mcps: [],
-  hooks: [],
+  guards: [],
   process: '',
   interactivity: '',
   runtime: { ...DEFAULT_RUNTIME },
@@ -97,10 +97,10 @@ const EMPTY_STATE: AgentState = {
 
 // A "Blank" agent still ships sensible defaults so it is creatable with near-zero
 // input (UX spec §2 — defaults over choices): a default model + the event-log
-// hook means a blank agent passes validation without opening Advanced.
+// guard means a blank agent passes validation without opening Advanced.
 const BLANK_STATE: AgentState = {
   ...EMPTY_STATE,
-  hooks: ['event-log'],
+  guards: ['event-log'],
   runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', range: [] },
   brainAccess: 'none',
   // A2: a sensible, editable starting point for interactivity — not a blank box.
@@ -122,7 +122,7 @@ function parseAgent(raw: Agent): AgentState {
     skills:         (raw.skills ?? []).slice(),
     tools:          (raw.tools ?? []).slice(),
     mcps:           (raw.mcps ?? []).slice(),
-    hooks:          (raw.hooks ?? []).slice(),
+    guards:         (raw.guards ?? []).slice(),
     process:        raw.process ?? '',
     interactivity:  raw.interactivity ?? '',
     runtime: {
@@ -154,7 +154,7 @@ function buildPutBody(state: AgentState): Record<string, unknown> {
       skills: state.skills,
       tools:  state.tools,
       mcps:   state.mcps,
-      hooks:  state.hooks,
+      guards: state.guards,
     },
     runtime: {
       sdk:          state.runtime.sdk,
@@ -337,7 +337,7 @@ export default function AgentBuilderPage() {
   }
 
   // ---- used ids (for palette dimming) ----
-  const usedIds = [...state.skills, ...state.tools, ...state.mcps, ...state.hooks];
+  const usedIds = [...state.skills, ...state.tools, ...state.mcps, ...state.guards];
 
   // ---- readiness check inputs ----
   // R2-02-F4: `capability` (the runtime-SDK + interactive facts) is the
@@ -347,7 +347,7 @@ export default function AgentBuilderPage() {
   const readinessState = {
     purpose:       state.purpose,
     skills:        state.skills,
-    hooks:         state.hooks,
+    guards:        state.guards,
     process:       state.process,
     interactivity: state.interactivity,
     capability:    state.capability,
@@ -487,7 +487,7 @@ export default function AgentBuilderPage() {
                     Capabilities &amp; Constraints
                   </label>
                   <div className="zones-grid">
-                    {(['skill', 'tool', 'mcp', 'hook'] as Kind[]).map((kind) => (
+                    {(['skill', 'tool', 'mcp', 'guard'] as Kind[]).map((kind) => (
                       <ZoneWrap key={kind} kind={kind}>
                         <DropZone
                           kind={kind}
@@ -557,7 +557,7 @@ export default function AgentBuilderPage() {
             skills={state.skills}
             tools={state.tools}
             mcps={state.mcps}
-            hooks={state.hooks}
+            guards={state.guards}
             process={state.process}
             interactivity={state.interactivity}
             runtime={state.runtime}
@@ -797,7 +797,7 @@ const ZONE_META: Record<string, { dotKind: string; label: string; hint: string }
   skill: { dotKind: 'skill', label: 'Skills',       hint: 'what it knows how to do' },
   tool:  { dotKind: 'tool',  label: 'Tools & CLIs', hint: 'external processes it can invoke' },
   mcp:   { dotKind: 'mcp',   label: 'MCP Servers',  hint: 'structured data + action access' },
-  hook:  { dotKind: 'hook',  label: 'Hooks',         hint: 'guards, gates & observability' },
+  guard: { dotKind: 'guard', label: 'Guards',        hint: 'dispatch keys, gates & observability' },
 };
 
 function ZoneWrap({ kind, children }: { kind: string; children: React.ReactNode }) {

@@ -21,28 +21,28 @@ const ZONE_LABELS: Record<Kind, string> = {
   skill: 'Skills',
   tool:  'Tools & CLIs',
   mcp:   'MCP Servers',
-  hook:  'Hooks',
+  guard: 'Guards',
 };
 
 const ZONE_HINTS: Record<Kind, string> = {
   skill: 'drag skills here — what this agent knows how to do',
   tool:  'drag tools here — CLIs and runtimes it can invoke',
   mcp:   'drag MCP servers here — structured data & action channels',
-  hook:  'drag hooks here — at minimum attach event-log for observability',
+  guard: 'drag guards here — at minimum attach event-log for observability',
 };
 
 const ZONE_IDS: Record<Kind, string> = {
   skill: 'zone-skills',
   tool:  'zone-tools',
   mcp:   'zone-mcps',
-  hook:  'zone-hooks',
+  guard: 'zone-guards',
 };
 
 function kindOf(id: string): Kind | null {
   if (id.startsWith('sk-') || id.startsWith('skill-')) return 'skill';
   if (id.startsWith('tl-') || id.startsWith('tool-')) return 'tool';
   if (id.startsWith('mcp-')) return 'mcp';
-  if (id.startsWith('hk-') || id.startsWith('hook-')) return 'hook';
+  if (id.startsWith('gd-') || id.startsWith('guard-')) return 'guard';
   return null;
 }
 
@@ -51,7 +51,7 @@ function catalogName(catalog: Catalog, id: string): string {
     ...(catalog.skills ?? []),
     ...(catalog.tools ?? []),
     ...(catalog.mcps ?? []),
-    ...(catalog.hooks ?? []),
+    ...(catalog.guards ?? []),
   ];
   return all.find((i) => i.id === id)?.name as string ?? id;
 }

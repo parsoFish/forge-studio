@@ -98,6 +98,7 @@ export function findFanOutViolations(flow: FlowDefinition): FanOutViolation[] {
 export function validateAgent(
   def: AgentDefinition,
   validModelIds?: ReadonlySet<string>,
+  validGuardIds?: ReadonlySet<string>,
 ): Finding[] {
   const findings: Finding[] = [];
   const obj = `agent:${def.slug}`;
@@ -117,9 +118,9 @@ export function validateAgent(
     findings.push(flag(obj, 'readiness/skill', 'No composed skills — at least one skill is recommended'));
   }
 
-  // readiness/hook — flag (same reasoning; mock renders this progressively, not a hard blocker)
-  if (def.composition.hooks.length === 0) {
-    findings.push(flag(obj, 'readiness/hook', 'No observability hooks — at least event-log is recommended'));
+  // readiness/guard — flag (same reasoning; mock renders this progressively, not a hard blocker)
+  if (def.composition.guards.length === 0) {
+    findings.push(flag(obj, 'readiness/guard', 'No observability guards — at least event-log is recommended'));
   }
 
   // readiness/process — error
@@ -215,7 +216,7 @@ export function validateAgent(
   // Single source shared with execAgent's runtime backstop (agent-bands.ts) —
   // the "lint must mirror the dispatch it backstops" rule made structural.
   const CANONICAL_BAND_SLUGS: Record<string, string> = BAND_CANONICAL_SLUG;
-  const declaredBands = def.composition.hooks.filter((h) => h in CANONICAL_BAND_SLUGS);
+  const declaredBands = def.composition.guards.filter((h) => h in CANONICAL_BAND_SLUGS);
   for (const band of declaredBands) {
     if (CANONICAL_BAND_SLUGS[band] !== def.slug) {
       findings.push(
@@ -274,7 +275,7 @@ export function validateAgent(
     }
   }
   const owedBand = Object.entries(CANONICAL_BAND_SLUGS).find(([, slug]) => slug === def.slug)?.[0];
-  if (owedBand !== undefined && !def.composition.hooks.includes(owedBand)) {
+  if (owedBand !== undefined && !def.composition.guards.includes(owedBand)) {
     findings.push(
       err(
         obj,
@@ -326,12 +327,25 @@ export function validateAgent(
     ['composition/skills', def.composition.skills],
     ['composition/tools', def.composition.tools],
     ['composition/mcps', def.composition.mcps],
-    ['composition/hooks', def.composition.hooks],
+    ['composition/guards', def.composition.guards],
   ];
   for (const [field, entries] of compArrays) {
     for (const entry of entries) {
       if (typeof entry !== 'string' || !COMP_ENTRY_RE.test(entry)) {
         findings.push(err(obj, field, `Entry "${entry}" in ${field} must match ${COMP_ENTRY_RE}`));
+      }
+    }
+  }
+
+  // composition/guard-unknown — error (ADR-027 R3-03 amendment). Only fires
+  // when the caller supplies the catalog guard-id set (mirrors the
+  // runtime/model-catalog check's validModelIds convention above) — a typo'd
+  // guard id would otherwise silently resolve to no dispatch/observability
+  // effect with lint green.
+  if (validGuardIds) {
+    for (const guardId of def.composition.guards) {
+      if (!validGuardIds.has(guardId)) {
+        findings.push(err(obj, 'composition/guard-unknown', `Guard "${guardId}" is not in catalog.guards`));
       }
     }
   }
@@ -708,7 +722,7 @@ export function validateCatalog(c: Catalog): Finding[] {
     ['models', c.models],
     ['tools', c.tools],
     ['mcps', c.mcps],
-    ['hooks', c.hooks],
+    ['guards', c.guards],
   ];
 
   for (const [section, entries] of sections) {

@@ -20,7 +20,7 @@ mcps:
   - { id: fetch, name: Fetch, desc: "Fetch + extract content from a URL as clean markdown." }
   - { id: memory, name: Memory, desc: "A persistent knowledge graph the agent can read + write across turns." }
   - { id: sqlite, name: SQLite, desc: "Query + mutate a local SQLite database." }
-hooks:
+guards:
   - { id: event-log, name: JSONL event log, desc: Structured events on every invocation. }
   - { id: cost-guard, name: Cost guard, desc: Per-cycle USD budget enforcement. }
   - { id: stall-watchdog, name: Stall watchdog, desc: Heartbeat liveness monitoring. }

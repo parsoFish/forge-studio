@@ -52,11 +52,11 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
 export function AgentCard({ agent, index }: { agent: Agent; index: number }) {
   const skillCount = (agent.skills ?? []).length;
   const toolCount = (agent.tools ?? []).length;
-  const hookCount = (agent.hooks ?? []).length;
+  const guardCount = (agent.guards ?? []).length;
   const parts: string[] = [];
   if (skillCount) parts.push(plural(skillCount, 'skill'));
   if (toolCount) parts.push(plural(toolCount, 'tool'));
-  if (hookCount) parts.push(plural(hookCount, 'hook'));
+  if (guardCount) parts.push(plural(guardCount, 'guard'));
   const compositionSummary = parts.join(' · ') || 'no composition';
 
   const interactivityHint = (agent.interactivity ?? '').split('.')[0];

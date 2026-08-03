@@ -9,7 +9,7 @@ composition:
   skills: [changelog-semver, doc-updater]
   tools: []
   mcps: []
-  hooks: [event-log]
+  guards: [event-log]
 runtime:
   sdk: claude
   strategy: fixed

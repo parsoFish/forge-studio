@@ -5,7 +5,7 @@
  * agent-node spawn — the phase pipelines' judgment machinery (work-item
  * validation, decompose checkpointing, retention/lint/recap, queue-state
  * promotion) that ADR-036 keeps OUT of the agent primitive. The band an
- * agent gets is selected by DECLARED DATA: a `composition.hooks` entry on
+ * agent gets is selected by DECLARED DATA: a `composition.guards` entry on
  * its SKILL.md, not a privileged executor enum. The band implementations
  * remain platform code (flow-runner registers them against these ids) —
  * deliberately, per ADR-039's "the platform bakes only execution machinery"
@@ -18,8 +18,8 @@
 import type { AgentDefinition } from './studio/types.ts';
 
 /**
- * The band-selecting hook ids. Every id here also has a display row in
- * `studio/catalog.yaml`'s `hooks:` section (the palette surface) and an
+ * The band-selecting guard ids. Every id here also has a display row in
+ * `studio/catalog.yaml`'s `guards:` section (the palette surface) and an
  * executor registered in flow-runner's band table.
  */
 export const BAND_HOOK_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] as const;
@@ -49,8 +49,8 @@ export const BAND_CANONICAL_SLUG: Readonly<Record<BandHookId, string>> = {
  * declarer regardless.
  */
 export function resolveBandHook(def: AgentDefinition): BandHookId | undefined {
-  for (const hook of def.composition.hooks) {
-    if ((BAND_HOOK_IDS as readonly string[]).includes(hook)) return hook as BandHookId;
+  for (const guard of def.composition.guards) {
+    if ((BAND_HOOK_IDS as readonly string[]).includes(guard)) return guard as BandHookId;
   }
   return undefined;
 }

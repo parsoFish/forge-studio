@@ -9,7 +9,7 @@ composition:
   skills: [demo]
   tools: []
   mcps: []
-  hooks: [event-log, demo-band]
+  guards: [event-log, demo-band]
 runtime:
   sdk: claude
   strategy: fixed

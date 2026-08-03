@@ -85,6 +85,20 @@ export function runStudioLint(root: string): StudioLintResult {
     }
   }
 
+  // Pre-load catalog guard ids for the agent composition/guard-unknown check
+  // below (ADR-027 R3-03 amendment) — mirrors the validModelIds block above.
+  let validGuardIds: ReadonlySet<string> | undefined;
+  {
+    const catalogPathEarly = join(root, 'studio', 'catalog.yaml');
+    if (existsSync(catalogPathEarly)) {
+      try {
+        validGuardIds = new Set(loadCatalog(catalogPathEarly).guards.map((g) => g.id));
+      } catch {
+        validGuardIds = undefined; // section 3 surfaces the load error
+      }
+    }
+  }
+
   // Pre-load artifact templates (advisory typed contracts for inter-node edges).
   const artifactTemplateIds = new Set<string>();
   try {
@@ -217,7 +231,7 @@ export function runStudioLint(root: string): StudioLintResult {
       try {
         const def = loadAgentDefinition(skillMdPath);
         agentMap.set(def.slug, def);
-        findings.push(...validateAgent(def, validModelIds));
+        findings.push(...validateAgent(def, validModelIds, validGuardIds));
       } catch (err) {
         findings.push({
           level: 'error',

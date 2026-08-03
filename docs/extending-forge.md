@@ -285,7 +285,7 @@ composition:
   skills: [brain-query]      # sub-skills this agent loads
   tools: [git, node]         # tool ids from catalog.yaml tools:
   mcps: []                   # MCP server ids from catalog.yaml mcps:
-  hooks: [event-log]         # hook ids from catalog.yaml hooks:
+  guards: [event-log]        # guard ids from catalog.yaml guards:
 runtime:
   sdk: claude                # sdk id from catalog.yaml sdks:
   strategy: fixed            # 'fixed' (one model) or 'range' (escalation ladder)

@@ -9,7 +9,7 @@ composition:
   skills: []
   tools: [git, node]
   mcps: []
-  hooks: [event-log, cost-guard, stall-watchdog, scratch-strip]
+  guards: [event-log, cost-guard, stall-watchdog, scratch-strip]
 runtime:
   sdk: claude
   strategy: fixed

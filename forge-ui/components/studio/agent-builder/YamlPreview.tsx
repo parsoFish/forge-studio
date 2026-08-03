@@ -13,7 +13,7 @@ type Props = {
   skills: string[];
   tools: string[];
   mcps: string[];
-  hooks: string[];
+  guards: string[];
   process: string;
   interactivity: string;
   runtime: AgentRuntime;
@@ -26,7 +26,7 @@ function catalogName(catalog: Catalog, id: string): string {
     ...(catalog.skills ?? []),
     ...(catalog.tools ?? []),
     ...(catalog.mcps ?? []),
-    ...(catalog.hooks ?? []),
+    ...(catalog.guards ?? []),
   ];
   return (all.find((i) => i.id === id)?.name as string) ?? id;
 }
@@ -53,7 +53,7 @@ function esc(s: string): string {
 }
 
 function buildYaml(props: Props): string {
-  const { slug, name, purpose, skills, tools, mcps, hooks, process, interactivity, runtime, brainAccess, catalog } = props;
+  const { slug, name, purpose, skills, tools, mcps, guards, process, interactivity, runtime, brainAccess, catalog } = props;
 
   const lines: string[] = [];
 
@@ -80,7 +80,7 @@ function buildYaml(props: Props): string {
   lines.push(`  ${kv('skills', '')}`); listIds(skills);
   lines.push(`  ${kv('tools', '')}`); listIds(tools);
   lines.push(`  ${kv('mcps', '')}`); listIds(mcps);
-  lines.push(`  ${kv('hooks', '')}`); listIds(hooks);
+  lines.push(`  ${kv('guards', '')}`); listIds(guards);
   lines.push('');
   lines.push(sect('process'));
   (process || '—').split('\n').forEach((l) =>

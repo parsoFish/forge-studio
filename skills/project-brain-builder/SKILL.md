@@ -12,7 +12,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: [event-log]
+  guards: [event-log]
 runtime:
   sdk: claude
   strategy: fixed

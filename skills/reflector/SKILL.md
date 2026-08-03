@@ -9,7 +9,7 @@ composition:
   skills: [brain-query, brain-ingest]
   tools: []
   mcps: []
-  hooks: [event-log, reflection-close]
+  guards: [event-log, reflection-close]
 runtime:
   sdk: claude
   strategy: fixed
