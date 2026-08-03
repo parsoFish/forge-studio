@@ -194,10 +194,14 @@ function SkillSection({
       </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         {entries.map((entry) => (
+          // The persistent half of install state comes from the ONE derivation
+          // (installStateOf, the vitest-pinned helper); `installing` is a transient
+          // client-only overlay with no on-disk counterpart, so it is layered on top
+          // rather than being a fourth value the helper has to know about.
           <SkillCard
             key={entry.id}
             entry={entry}
-            installState={installState[entry.id] ?? (entry.installed ? 'installed' : 'none')}
+            installState={installState[entry.id] ?? (installStateOf(entry) === 'installed' ? 'installed' : 'none')}
             installDir={installDirs[entry.id] ?? ''}
             installErr={installError[entry.id]}
             onInstallDirChange={(v) => onInstallDirChange(entry.id, v)}
