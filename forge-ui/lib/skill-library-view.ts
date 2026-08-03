@@ -7,7 +7,7 @@
  * function here returns NEW arrays/objects, never mutates its input.
  */
 
-import type { SkillLibraryEntry } from './studio-client';
+import type { SkillLibraryEntry } from './skill-client';
 
 // ---------------------------------------------------------------------------
 // Grouping + counts

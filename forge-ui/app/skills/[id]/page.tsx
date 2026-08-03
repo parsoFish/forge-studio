@@ -11,7 +11,7 @@ import {
   approveSkill,
   type SkillDetail,
   type SkillLibraryEntry,
-} from '@/lib/studio-client';
+} from '@/lib/skill-client';
 
 // ---------------------------------------------------------------------------
 // Skill detail — /skills/[id] (R3-01-F3/F4, WI-3)

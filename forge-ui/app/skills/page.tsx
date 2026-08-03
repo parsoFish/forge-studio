@@ -7,7 +7,7 @@ import {
   fetchSkillLibrary,
   installSkill,
   type SkillLibraryEntry,
-} from '@/lib/studio-client';
+} from '@/lib/skill-client';
 import {
   groupSkillLibrary,
   skillBadges,

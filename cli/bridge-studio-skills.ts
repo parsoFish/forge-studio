@@ -38,6 +38,7 @@ import {
 } from './bridge-studio.ts';
 import { skillDir, skillPath, skillsDir } from '../orchestrator/skill-path.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { isStudioAgent } from '../orchestrator/studio/registry.ts';
 import {
   listSkillLibrary,
   readSkillPackage,
@@ -254,6 +255,15 @@ export async function handleStudioSkillsRoutes(
         return true;
       }
 
+      // MAJOR 1 fix: listSkillLibrary deliberately EXCLUDES studio agents
+      // (SKILL.md with a `runtime:` block, AT-5) — mirror that exclusion here
+      // so this route cannot confidently report a fabricated `usedBy: []` for
+      // an id the library union never carries a real answer for.
+      if (isStudioAgent(mdPath)) {
+        sendJson(res, 404, { error: `"${id}" is a studio agent, not a library skill` }, origin);
+        return true;
+      }
+
       // skillTrustDetail reads the SKILL.md itself — a directory masquerading
       // as SKILL.md (or any other unreadable-file condition) throws here and
       // falls through to the sanitized 500 below, never a raw stack trace.
@@ -270,10 +280,14 @@ export async function handleStudioSkillsRoutes(
       // derivation here (rather than re-deriving usedBy/provenance a second,
       // divergent way) — house rule: one enforcement point, not two.
       // This route only reaches here when the id resolved to a real on-disk
-      // SKILL.md (existsSync(mdPath) above), so `source` is always 'local' —
-      // a certain fact, never a guess, even if no listSkillLibrary entry is
-      // found (e.g. a studio-agent id, which the library union excludes).
+      // SKILL.md (existsSync(mdPath) above) that is NOT a studio agent (the
+      // gate above), so `source` is always 'local' and a matching library
+      // entry MUST exist — if it doesn't, that is an internal inconsistency
+      // between this route and listSkillLibrary, not a value to guess at.
       const libraryEntry = listSkillLibrary(ctx.forgeRoot).find((e) => e.id === id);
+      if (!libraryEntry) {
+        throw new Error(`skill "${id}" resolved on disk but is absent from listSkillLibrary — internal inconsistency`);
+      }
 
       const detail: Record<string, unknown> = {
         id,
@@ -283,8 +297,8 @@ export async function handleStudioSkillsRoutes(
         paletteVisible: trust === 'ready',
         files,
         source: 'local',
-        usedBy: libraryEntry?.usedBy ?? [],
-        provenance: libraryEntry?.provenance ?? null,
+        usedBy: libraryEntry.usedBy,
+        provenance: libraryEntry.provenance,
       };
       if (reason) detail['reason'] = reason;
       // D5: the scan is drafts-only (approval-gate UI) — it reports facts a
