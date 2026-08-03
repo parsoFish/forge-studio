@@ -321,6 +321,17 @@ Plus [`scripts/e2e-deadpaths.mjs`](./scripts/e2e-deadpaths.mjs)
 (`npm run ui:deadpaths`), the dead-route/no-op sweep, sharing the same
 assertion module.
 
+**Story-beat parity** — the studio end-state mockup's 27 scripted stories
+([`mockups/studio-endstate-v2/journeys-data.jsx`](./mockups/studio-endstate-v2/journeys-data.jsx))
+are the target inventory the real journey gallery converges on.
+[`scripts/journeys/story-registry.mjs`](./scripts/journeys/story-registry.mjs)
+holds one disposition per story (owning wave-5 batch, ported journey +
+per-beat map, or excluded with a decision reference). `npm run
+parity:stories` ([`scripts/story-parity.mjs`](./scripts/story-parity.mjs))
+derives the parity view from the mockup source plus the real
+`scripts/journeys/` ids and exits non-zero on a dangling ref or a missing
+disposition; porting a batch's stories is that batch's journey-sync duty.
+
 **Real-capability harness** — [`scripts/verify-cycle.mjs`](./scripts/verify-cycle.mjs)
 (`npm run verify:cycle`) runs a **real** cycle end-to-end against a managed
 project (auto-approve + closure + reflection capture). This is the standing

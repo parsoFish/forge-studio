@@ -53,6 +53,19 @@ synthetic rubrics that taught phases toward the bench shape.
 actual past successful cycle artifacts rather than hand-curated fixtures."*
 That promise had no roadmap home until R7-01.
 
+### R7-B5 Mockup story-beat registry + parity derivation
+
+`scripts/journeys/story-registry.mjs` holds the 27 dispositions (one per
+studio-endstate-v2 mockup story: owning wave-5 batch, ported journey +
+per-beat map, or excluded with a decision reference).
+`scripts/lib/story-parity.mjs` parses the mockup source, indexes the real
+`scripts/journeys/` journey/beat ids, and derives status + counts +
+enforcement errors — never stored. `scripts/story-parity.mjs`
+(`npm run parity:stories`, `--json`) runs the derivation as a CLI, exit 1
+on any error; `scripts/story-parity.test.ts` enforces it under `npm test`
+(CI-gated). This registry is the wave-5 exit gate's definition of "full
+gallery green".
+
 ## Planned initiatives
 
 ### R7-01 Bench rebuild, corpus-anchored
@@ -84,7 +97,8 @@ That promise had no roadmap home until R7-01.
 
 ### R7-02 Journey platform evolution
 
-- **Status:** planned  ·  **Wave:** unsequenced
+- **Status:** planned (F3 implemented 2026-08-03 — see R7-B5)  ·
+  **Wave:** unsequenced (F3 rode wave 5, batch A)
 - **Depends on:** —
 - **Context:** The DOM-as-metrics convention was built so "any automation
   (playwright today, LLM-driven UI tests tomorrow) can drive the page"
@@ -122,7 +136,10 @@ That promise had no roadmap home until R7-01.
     feature. ACs: registry committed (docs/ or `scripts/journeys/`
     adjacent — one home); every one of the 27 stories has a disposition;
     parity derivable by script; the wave-5 exit gate's "full gallery green"
-    reads this registry as its definition of full.
+    reads this registry as its definition of full. **Implemented
+    2026-08-03:** the registry lives at `scripts/journeys/story-registry.mjs`
+    (the code-home decision), derivation is
+    `scripts/lib/story-parity.mjs` — see baseline R7-B5.
 - **Session sizing:** ~2 sessions (+ ~1 for F3, natural batch-A rider so
   parity tracking exists before the first batch closes).
 - **Out of scope:** clip/gallery content (R5-06); journey *authoring* for
@@ -193,3 +210,13 @@ maintenance contract.
   + script-derived parity tracking; per-batch beat porting stays each
   batch's journey-sync duty (index §4 story-beat parity rule). The wave-5
   exit gate's "full gallery green" is defined by this registry.
+- 2026-08-03 — **R7-02-F3 implemented** (wave-5 batch-A rider): the story
+  registry lives at `scripts/journeys/story-registry.mjs` (a code home,
+  not `docs/`, so the dangling-ref check is a plain import); status and
+  counts are derived, never stored, by `scripts/lib/story-parity.mjs`
+  against the mockup source and the real `scripts/journeys/` ids, enforced
+  by twelve rules (`scripts/story-parity.test.ts`, `npm run parity:stories`)
+  including one-`BeatRef`-per-mockup-beat so cut-invalidated beats are
+  explicitly excluded rather than silently skipped. Three stories
+  (`edit-flow`, `run-agent-demo-design`, `run-agent-research`) are
+  excluded under wave-5A cut decision 2 (R2-D2). Baseline **R7-B5** added.
