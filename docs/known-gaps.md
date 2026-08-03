@@ -211,12 +211,20 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
 
 **Platform / product features (need design, future sessions):**
 
-1. **Skills need first-class management.** The skill-create surface exposed that
-   there is no clear way to view the skill library, no consistent entry point for
-   creating skills, and skills should break out into their own library item.
-   (Operator will detail their view in a future session; item 11 above — UI-created
-   skills invisible to the catalog palette — is resolved as of R3-01-F2; the
-   standalone library VIEW + marketplace remain open, tracked as R3-01-F3/F4.)
+1. **Skills need first-class management — CLOSED 2026-08-04 (R3-01-F3/F4).** The
+   skill-create surface exposed that there was no clear way to view the skill
+   library, no consistent entry point for creating skills, and skills should break
+   out into their own library item. All three are real now: a standalone `/skills`
+   library route (local + community sections, per-item `usedBy` DERIVED from real
+   agent `composition.skills`), the ONE creation entry point
+   (`[data-action="new-skill"]`, D8), and a marketplace draft→scan→approve→
+   re-review install pipeline (`orchestrator/studio/skill-library.ts`,
+   `cli/bridge-studio-skills.ts` — see `docs/roadmaps/R3-library-componentry.md`
+   baseline R3-B8). (Item 11 above — UI-created skills invisible to the catalog
+   palette — was already resolved as of R3-01-F2.) **NOT closed by this:** a
+   surface to EDIT an existing local skill's SKILL.md body — `/skills/[id]` is
+   read-only (a file-package viewer + the drafts-only approval gate, no edit
+   form); see item 8 below, which stays open.
 2. **Create-KB must mandate a scope at creation** — without one the KB can't know
    what information to seed on or how it should generate new information over time.
 3. **KB scoping model rework.** The "cycles" (forge-cycle) brain is likely a scope
@@ -235,8 +243,15 @@ Non-blocking items left open when refinement Phases 3–5 closed to main at 0.5.
 6. **Mouse visibility**: show a cursor or highlight click events in clips; ensure
    all typing appears progressively (no instant fills) across every clip.
 7. **Advanced options must always be showcased** in clips wherever a surface has them.
-8. **skill-edit clip doesn't show a skill being edited** — it shows the
-   build-an-agent page (a symptom of feature 1: no skill-editing surface exists).
+8. **skill-edit clip doesn't show a skill being edited — STILL OPEN after
+   R3-01-F3/F4 (checked 2026-08-04).** The clip shows the build-an-agent page
+   because that genuinely IS the real edit path for a STUDIO AGENT's SKILL.md (a
+   shipped skill carrying a `runtime:` block, e.g. `project-scoped-review`) —
+   R3-01-F3/F4 did not touch that path. What it did NOT add is any edit surface for
+   a PLAIN composable skill: `/skills/[id]` is read-only (a file-package viewer
+   plus the drafts-only approval gate), with no form to modify an existing local
+   skill's body. The clip's behaviour is accurate to the real product, not a demo
+   bug — the underlying gap (no plain-skill editing surface) remains unclosed.
 9. **pbrain-generate clip goes static** once it reaches the build-project-brain
    screen and never shows a seeded brain (the static frames do show it).
 10. **Sticky-header artifacts in full-page screenshots** — header bars/UI elements
@@ -445,10 +460,10 @@ can pick them up:
 
 R3-01 F1+F2 landed clean (opus whole-branch + security reviews clean). Deferred / to-watch:
 
-- **F3 (`/skills` library view) + F4 (marketplace install) are deferred** — gated on the operator's §4b.1
-  skill-management-view design session. F3's `/skills` route + edit surface and F4's draft→scan→approve
-  marketplace pipeline are unbuilt; their DOM/surface shape must be confirmed against that session before
-  implementation. *Re-entry:* the operator's design session.
+- **F3 (`/skills` library view) + F4 (marketplace install) — CLOSED 2026-08-04**, per the operator's §4b.1
+  design session (the studio-endstate-v2 mockup). See `docs/roadmaps/R3-library-componentry.md` baseline
+  **R3-B8** for the as-built detail. Carried forward, NOT closed: no edit surface for an existing local
+  skill's body (§4b.8 stays open — `/skills/[id]` is read-only).
 - **The physical `skills/` role-subfolder move (§6) precondition is now met** — the shared
   `orchestrator/skill-path.ts` resolver + `listSkillDirs`/`listSkillMdDirs` centralise lookup AND
   enumeration, so the move is a one-place change. The move itself stays an untaken §6 decision.

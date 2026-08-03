@@ -244,12 +244,54 @@ inventory rather than one shared page-level contract:
   per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The
   route is now a permanent client-side redirect stub into `/` (bookmarks
   keep working) — `[data-page="recovery-redirect"][data-page-ready="true"]`.
-- **`/skills`** — no standalone catalog route; the OOTB
-  community-sourced skill library (`studio/catalog.yaml`, with provenance +
-  stars) surfaces inside the agent builder's palette (`/agents/new`,
-  `/agents/[id]`), editing an existing skill happens through that same
-  `/agents/[id]` builder, and authoring a brand-new one is `/skills/new` —
-  `[data-page="skill-builder"][data-page-ready="true"][data-section="skill-new"]`.
+- **`/skills` + `/skills/new` + `/skills/[id]` — the skills library (R3-01-F3/F4).**
+  The OOTB community-sourced skills (`studio/catalog.yaml`, with provenance +
+  stars) still surface as draggable chips inside the agent builder's palette
+  (`/agents/new`, `/agents/[id]`) — that union is unchanged — but `/skills` is
+  now a real standalone library route, not just a palette. Root:
+  `main[data-page="skill-library"][data-page-ready][data-skill-count][data-local-count][data-community-count]`
+  over two sections (Local — hand-authored or already-installed skills on
+  disk; Community — catalog entries with no on-disk package yet), whose
+  counts always equal the rendered card count in each section. Per card:
+  `[data-card-type="skill"][data-skill-id][data-skill-source="local"|"community"][data-skill-trust="ready"|"draft"|"needs-review"][data-skill-installed="true"|"false"][data-skill-used-by-count]`
+  — `data-skill-used-by-count` is DERIVED from every real agent's
+  `composition.skills`, never a declared/catalog field (the `composedBy`
+  catalog field this replaced was deleted — all 8 of its claims were false).
+  `[data-action="new-skill"]` is the ONE place "New skill" lives (D8) —
+  it links to the unchanged builder at `/skills/new`
+  (`[data-page="skill-builder"][data-page-ready="true"][data-section="skill-new"]`,
+  fields `[data-field="skill-name"|"skill-description"|"skill-body"]`,
+  `[data-action="create-skill"]`). A not-yet-installed community card carries
+  a manual local-directory install affordance:
+  `[data-action="install-skill"][data-install-skill-id][data-install-state="none"|"installing"|"installed"]`
+  (D2: this pipeline consumes an already-materialised local directory only —
+  no hub fetch; a real hub browse/fetch is R3-07's job, unbuilt).
+  `/skills/[id]` is the real per-skill detail page —
+  `main[data-page="skill-detail"][data-skill-id][data-page-ready]` — with
+  `data-skill-trust`/`data-skill-source` present ONLY once a real value is
+  known (deliberately ABSENT while loading, on a bridge-fetch error, and for
+  an unknown id — no fabricated trust value is ever rendered). Three other
+  non-`ready` page states: `[data-component="fetch-error"]` (bridge
+  unreachable), a plain not-found message (neither on disk nor in the
+  catalog), and `[data-component="not-installed"]` (a community catalog entry
+  with no on-disk package yet — the bridge 404s for it by design, D2). The
+  `ready` state renders `[data-component="file-package"][data-file-count][data-active-file]`
+  (SKILL.md plus every supporting file, tabbed; shared with R2-10-F3 —
+  `forge-ui/components/studio/FilePackage.tsx` is kind-agnostic) with per-tab
+  `[data-file-tab][data-file-path]`; `[data-section="used-by"][data-used-by-count]`
+  with per-agent `[data-used-by-agent]` (an empty list renders an explicit
+  "Unbound" message, never a blank panel); `[data-section="provenance"][data-content-hash][data-upstream-source]`
+  (`data-upstream-ref` only when the install supplied one — D6, never
+  inferred) when the skill has a provenance block; for a `draft` install,
+  `[data-section="approval-gate"]` holding the full SKILL.md body plus
+  `[data-section="scan-report"][data-quarantined-count][data-executable-count]`
+  (D5: facts only, no clean/pass/severity field) and
+  `[data-action="approve-skill"]`; for `needs-review`,
+  `[data-section="needs-review"]` stating the hash drift in plain language.
+  Approval never restores `runtime`/`allowed-tools` (D4) — an installed
+  community skill is a plain composable skill forever, quarantined
+  permanently; making it a runnable agent is a separate, explicit act in the
+  Agent Builder.
 
 The shared status vocabularies:
 

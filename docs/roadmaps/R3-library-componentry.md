@@ -110,11 +110,71 @@ are unchanged. The `skills`/`agents` journeys demo the real create→compose thr
 (no `handoff` substitution). **F3** (`/skills` library view) + **F4** (marketplace
 install) are deferred pending the operator's §4b.1 skill-management-view design session.
 
+### R3-B8 Skills library view, package detail, and trust-gated install (R3-01 F3+F4)
+
+Landed 2026-08-04 (branch `feat/r3-01-skills-library`). **F3:** a real
+`/skills` library route (`forge-ui/app/skills/page.tsx`) unions local plain
+skills with `studio/catalog.yaml` community entries into two sections (Local,
+Community) with per-section counts and a `usedBy` count DERIVED from every
+real agent's `composition.skills` — `composedBy` (catalog.yaml, the
+`CommunitySkill` type, the registry parse, the `community-skill/composed-by`
+validate rule) is deleted (D3): all 8 of its shipped claims were false. The
+builder moved verbatim to `forge-ui/app/skills/new/page.tsx`;
+`forge-ui/app/skills/[id]/page.tsx` is the real read-only detail page — a
+file-package viewer (`forge-ui/components/studio/FilePackage.tsx` +
+`forge-ui/lib/file-package.ts`, kind-agnostic, shared with R2-10-F3), the
+derived used-by list, and a provenance panel. `[data-action="new-skill"]` on
+the library is the ONE creation entry point (D8); the `skills-create` journey
+beat now enters through it instead of a direct `/skills/new` goto. **F4:** a
+trust pipeline in `orchestrator/studio/skill-library.ts` (<800 lines: trust
+vocabulary `ready | draft | needs-review`, `listSkillLibrary`,
+`installSkillPackage`, `approveSkillDraft`, `repinSkillPackage`,
+`scanSkillPackage`, `lintSkillTrust`, `lintSkillRefs`) plus a second,
+git-tracked source of truth in `orchestrator/studio/skill-install-ledger.ts`
+(`studio/installed-skills.yaml` — written on first real install; the ledger
+file itself is absent from a fresh checkout until then). Every
+`/api/studio/skills*` route lives in one new module,
+`cli/bridge-studio-skills.ts` (GET the library, GET/detail, POST create
+— moved verbatim from `cli/bridge-studio-writes.ts` — POST install, POST
+approve). Install (D2) consumes an already-materialised local package
+directory only — no hub fetch, no fabricated vendored content; a real hub
+browse/fetch is R3-07's job, which routes installs through this pipeline
+unchanged. On install, `runtime`/`allowed-tools`/`library` are moved under a
+`quarantined:` block (D4) and **never restored on approval** — an installed
+community skill is a plain composable skill forever; making it a runnable
+agent is a separate, explicit act in the Agent Builder. Any later byte change
+to any package file (or a mismatch between the on-disk pin and the ledger)
+flips the skill to `needs-review` and drops it out of the palette
+(`listPlainSkills`, `orchestrator/studio/registry.ts`) — the enforcement
+point is the palette enumeration, not just a rendered status field. Lint
+gained six finding ids: `skill-trust/draft-unapproved`,
+`skill-trust/hash-drift`, `skill-trust/provenance-tampered`,
+`skill-trust/unregistered-install`, and `skill-trust/installed-agent-shape`
+(the ledger cross-check + D4 roster-escalation guard), plus `agent/skill-ref`
+— wired into `orchestrator/studio/validate.ts` / `cli/studio-lint.ts`.
+Demoed end to end by three new `skills` journey beats
+(`scripts/journeys/skills.mjs`, wired into `RUN_ORDER` in
+`scripts/journeys/index.mjs`): `skills-library` (counts + derived used-by
+cross-check), `skills-detail-package` (file-package tabs + derived used-by),
+and `skills-install-approve` (a full install→draft→approve→needs-review arc
+against a package materialised in a temp dir, never the repo).
+**KNOWN GAP carried forward, not closed by F3:** `/skills/[id]` is read-only
+— there is still no surface to EDIT an existing local skill's SKILL.md body
+(known-gaps §4b.8 stays open for that; F3's own text originally proposed
+reusing a builder shell for this, but the shipped detail page does not do
+so). **Known defect found by the journey, not fixed here (out of this
+session's scope):** `scanSkillPackage`'s `quarantinedKeys` is computed from
+the on-disk draft's CURRENT top-level frontmatter, but by install time
+`runtime`/`allowed-tools` are already moved under the nested `quarantined:`
+block — so those two keys can never appear in the scan report; only
+`library` (always present, always `false` on a fresh draft) is ever reported,
+regardless of what the untrusted source package declared.
+
 ## Planned initiatives
 
 ### R3-01 Skills first-class management
 
-- **Status:** implemented (F1+F2, 2026-07-19, PR-B — see baseline R3-B7); **F3+F4 re-entered `planned` 2026-08-03 (wave 5)** — the studio-endstate-v2 mockup IS the reserved §4b.1 design (see the wave-5 re-entry note below)  ·  **Wave:** 3 (F1+F2) / 5 (F3+F4)
+- **Status:** implemented (F1+F2, 2026-07-19, PR-B — see baseline R3-B7); F3+F4 re-entered `planned` 2026-08-03 (wave 5) — the studio-endstate-v2 mockup IS the reserved §4b.1 design (see the wave-5 re-entry note below); **F3+F4 implemented 2026-08-04 (branch `feat/r3-01-skills-library` — see baseline R3-B8)**  ·  **Wave:** 3 (F1+F2) / 5 (F3+F4)
 - **Depends on:** — . **Depended on by:** R3-02 (landing-place), R3-03 (soft —
   hooks reuse the unified-registry + library-view pattern), R3-04 (soft — same
   surface pattern), R5-05 (skills-palette residue cross-references here, not
@@ -742,3 +802,18 @@ rather than deferred within it:
   scaffold vision-promotion recorded as deliberate (create-project flow is
   unwalkable without it). Dangling "(both)" acceptance-refs bullet folded
   into R3-06/R3-07 per-initiative.
+- 2026-08-04 — **R3-01 F3+F4 implemented** (branch `feat/r3-01-skills-library`;
+  baseline **R3-B8**). Real `/skills` library (local + community, derived
+  `usedBy`, `composedBy` deleted per D3) + `/skills/[id]` package-detail page
+  (read-only) + the draft→scan→approve→re-review trust pipeline
+  (`orchestrator/studio/skill-library.ts` + `skill-install-ledger.ts` +
+  `cli/bridge-studio-skills.ts`), D8's one creation entry point, and three new
+  `skills` journey beats (`skills-library`, `skills-detail-package`,
+  `skills-install-approve`) demoing the arc end to end against a package
+  materialised outside the repo. Known gap carried forward (NOT closed by
+  F3): `/skills/[id]` has no edit surface for an existing local skill's body
+  (known-gaps §4b.8 stays open). Known defect found by the journey, reported
+  not fixed: `scanSkillPackage`'s `quarantinedKeys` can never report `runtime`/
+  `allowed-tools` for a real installed draft (see R3-B8's own note for the
+  mechanism) — filed for a later session, out of this WI's journey-sync/docs
+  scope.
