@@ -452,3 +452,31 @@ pass across all five roadmaps plus four operator decisions:
   operator's §4b.1 design session (known-gaps §11). Opus whole-branch + security reviews clean. A mid-wave chore
   (PR #37) also slimmed the always-injected `CLAUDE.md` ~56% (DOM/harness reference → `docs/forge-ui-dom-and-harness.md`)
   to restore subagent fanout. **Wave 3 (R1-01 + R3-01) complete.**
+- 2026-07-24 → 2026-08-03 — **Wave 4 (the OOTB suite) COMPLETE.** The six-phase
+  ideas-machine cycle now ships out of the box on the generic runnable primitive.
+  Built bottom-up across the wave-4 campaign (PRs #39–#69):
+  - **R4-01 platform→artifact migration** F1–F3 (#39) then **F4 unifier retirement**
+    (#69, main `cb8fff91`): declared dispatch (ADR-039) retired `pm`/`dev`/`reflect`
+    onto loopStrategy + band hooks; F4 removed the last legacy phase executor, the
+    `unifier` (−4486 lines: `unifier-invocation.ts`/`unifier-items.ts`/
+    `developer-unifier`, `execUnifier`, `runUnifierPhase`, the UWI machinery,
+    `WorkItem.kind`). `PHASE_EXECUTOR_KINDS` is now empty — every phase is a generic
+    agent or a band hook.
+  - **The agent initiatives** — R4-04 architect refinement (#41), R4-07 demo agent
+    (#44), R4-08 adversarial-review F1–F3 (#45/#47), R4-09 reflect agent, R4-06
+    develop refinement (#54), plus the contract/library deps R1-03, R2-04, R2-03,
+    R3-05 (#55), R1-04 (#56), R2-01-F3 generic run host (#57), R4-02 onboarding
+    agent (#58/#59), R4-03 creation agent (#60).
+  - **R4-10 develop-cycle assembly** — the in-place topology cutover
+    `dev→unifier→review` ⇒ `dev→demo→adversarial-review→verdict`: F1 (#61), F2
+    merge-boundary gate (#62), F3 standalone band-agent isolation + F4 succession
+    (#63), F5 verify-harness migration + F6 resume re-home `resume_from:'unifier'`→
+    `'demo'` (#64).
+  - **Tail-of-wave `verify:cycle`** (operator-approved real run, gitpulse `coupling`
+    ground): 3 runs surfaced three real defects in the new demo-agent path — the
+    `undefined.toFixed()` demo-render crash (#65), the `(WI-N)`-label AC-coverage
+    mismatch (#67), and — per the operator steer *don't gate on brittle plumbing* —
+    the AC-coverage gate now matches on tolerant token-similarity, not verbatim
+    (#68), proven on the run's real captured output (dev-loop ran 4/4 green all
+    three runs). A concurrent-mockups boundary noise fix (#66) rounded it out.
+  - Every wave-4 roadmap Status is now `implemented`. **Waves 0–4 all complete.**
