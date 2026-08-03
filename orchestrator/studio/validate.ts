@@ -644,15 +644,19 @@ export function validateInstructionSeed(s: InstructionSeed): Finding[] {
 }
 
 /**
- * Every FlowEdge.artifact label SHOULD resolve to a registered artifact template.
- * Advisory (flag) — promotable to error once all seed flows ship templates.
+ * Every FlowEdge.artifact label MUST resolve to a registered artifact template.
+ * Promoted from advisory (flag) to error (R3-06/R2-05-F1): ADR-027's own
+ * amendment text pre-authorised this once all seed flows ship templates — that
+ * condition is now met (all real flow edges resolve to on-disk templates;
+ * `forge studio lint` on the pre-promotion base reported 0 `artifact/no-template`
+ * findings), so an edge naming an unregistered artifact is now a hard error.
  */
 export function validateArtifactRef(flow: FlowDefinition, templateIds: ReadonlySet<string>): Finding[] {
   const findings: Finding[] = [];
   for (const edge of flow.edges) {
     if (!templateIds.has(edge.artifact)) {
       findings.push(
-        flag(
+        err(
           `flow:${flow.id}`,
           'artifact/no-template',
           `Edge ${edge.from}→${edge.to} artifact "${edge.artifact}" has no registered template in studio/artifact-templates/`,
