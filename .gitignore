@@ -123,6 +123,6 @@ mockups/studio-endstate-v2/journeys/
 .beads-credential-key
 .beads/proxieddb/
 
-# Beads/Dolt local state (bd init additions)
-.dolt/
-.beads-credential-key
+# wave-5 tiered-orchestration state (session-local)
+_wave5/
+.beads/

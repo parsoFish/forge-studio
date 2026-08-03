@@ -33,6 +33,9 @@ jobs:
           # even if a test forgets to inject its own mock.
           FORGE_ARCHITECT_NO_SPAWN: "1"
 
+      - name: UI tests
+        run: npm run test:ui
+
       - name: Studio lint
         run: node --experimental-strip-types orchestrator/cli.ts studio lint
 
