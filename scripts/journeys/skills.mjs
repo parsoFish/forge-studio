@@ -9,7 +9,7 @@ import {
   SK_NEW_SLUG, SK_NEW_NAME, SK_CLIP_SLUG, SK_CLIP_NAME, waitForFile,
   DEMO_DESIGN_SKILL_DIR, writeDemoDesignSkill,
   demoEvent, demoBurst, cleanDemoBuilderSession,
-  SK_INSTALL_ID, SK_INSTALL_DIR,
+  SK_INSTALL_ID, SK_INSTALL_DIR, cleanSkillInstallArtifacts,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -386,7 +386,12 @@ export const journey = defineJourney({
               const { page, watch, frame, check } = ctx;
               // ── SK-5: install → quarantine → approve → needs-review (the trust arc) ───
               console.log('\n[SK-5] Install a community package, approve it, then catch drift');
-              cleanSkillArtifacts(); // stale-state sweep first (crash-safe: mirrors the runner's finally)
+              // Narrow sweep ONLY (own install dir + ledger) — NOT the broad
+              // cleanSkillArtifacts(), which would also delete SK_NEW_SLUG
+              // (api-contract-review), the skills-create beat's throughline
+              // artifact a later agents-journey beat still needs (ui:journey-found
+              // defect, R3-01-F4: this beat ran AFTER skills-create and wiped it).
+              cleanSkillInstallArtifacts(); // stale-state sweep first (crash-safe, own artifacts only)
               let pkgDir = null;
               try {
                 // D2: this pipeline consumes an ALREADY-MATERIALISED package (a local
@@ -400,6 +405,9 @@ export const journey = defineJourney({
                   'runtime:',
                   '  sdk: claude',
                   '  strategy: fixed',
+                  'allowed-tools:',
+                  '  - Read',
+                  'library: true',
                   '---',
                   '',
                   '# Journey Installed Skill',
@@ -448,20 +456,21 @@ export const journey = defineJourney({
                 check(await page.evaluate(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust')) === 'draft',
                   'SK-5: detail page reports data-skill-trust="draft"');
                 check(await page.locator('[data-section="approval-gate"]').count() > 0, 'SK-5: [data-section="approval-gate"] renders for the draft');
-                // KNOWN PRODUCT DEFECT (found by this beat, reported not worked around):
-                // scanSkillPackage computes quarantinedKeys from the CURRENT top-level
-                // frontmatter of the on-disk draft — but by install time `runtime`/
-                // `allowed-tools` are ALREADY moved under the nested `quarantined:` block,
-                // so they can never appear at top level again and never show up here. Only
-                // `library` (always present top-level as `false` on every draft, regardless
-                // of what the source package declared) is ever reported — the scan can never
-                // actually tell a reviewer the untrusted package tried to declare `runtime:`,
-                // which is the one fact D5's "read this before approving" gate most needs to
-                // surface. Verified via a direct repro against installSkillPackage +
-                // scanSkillPackage; this assertion pins the REAL (buggy) behavior rather than
-                // the intended one — see the WI-4 report for the full writeup.
-                check(await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-quarantined-count')) === '1',
-                  'SK-5: scan reports one quarantined key — "library" (NOT "runtime": see the KNOWN PRODUCT DEFECT note above)');
+                // scanSkillPackage reports the keys the source package actually declared —
+                // whether they still sit at top level or have already been moved under the
+                // nested `quarantined:` block by installSkillPackage (D4). The fixture above
+                // declares all three quarantine-able keys (runtime, allowed-tools, library),
+                // so the draft's scan must report all three, not just the one (`library`)
+                // that always happens to sit top-level on every fresh draft regardless of
+                // what the source declared.
+                check(await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-quarantined-count')) === '3',
+                  'SK-5: scan reports all three quarantined keys the source package declared (runtime, allowed-tools, library)');
+                const quarantinedKeysText = await page.evaluate(() => {
+                  const dts = [...document.querySelectorAll('[data-section="scan-report"] dt')];
+                  const dt = dts.find((el) => el.textContent?.trim() === 'quarantined keys');
+                  return dt?.nextElementSibling?.textContent ?? '';
+                });
+                check(quarantinedKeysText.includes('runtime'), `SK-5: the scan-report's reported keys include "runtime" (got "${quarantinedKeysText}")`);
                 check(await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-executable-count')) === '1',
                   'SK-5: scan reports the one executable-extension file (scripts/collect.sh)');
                 await caption(page, 'Installed as a draft — quarantined, not palette-visible, not runnable (D4). Read the full SKILL.md, then approve.');
@@ -503,9 +512,11 @@ export const journey = defineJourney({
                 check(driftedInPalette === 0, `SK-5: needs-review drops back OUT of the palette (found ${driftedInPalette})`);
               } finally {
                 // Every beat cleans up its own artifacts — the source package dir plus
-                // the installed result + ledger entry (cleanSkillArtifacts covers both).
+                // the installed result + ledger, restored to their exact prior state
+                // (cleanSkillInstallArtifacts — the NARROW sweep; see the start-of-beat
+                // comment for why this must not be the broad cleanSkillArtifacts()).
                 if (pkgDir) { try { rmSync(pkgDir, { recursive: true, force: true }); } catch { /* */ } }
-                cleanSkillArtifacts();
+                cleanSkillInstallArtifacts();
               }
               check(!existsSync(SK_INSTALL_DIR), `SK-5: skills/${SK_INSTALL_ID}/ removed after the beat (self-cleaning)`);
 

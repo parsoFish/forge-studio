@@ -1176,18 +1176,37 @@ export const SK_INSTALL_ID = 'journey-installed-skill';
 export const SK_INSTALL_DIR = join(FORGE_ROOT, 'skills', SK_INSTALL_ID);
 const SK_INSTALL_LEDGER_PATH = join(FORGE_ROOT, 'studio', 'installed-skills.yaml');
 
-/** Remove the install-approve beat's ledger entry without disturbing any
- *  other entry — best-effort (a malformed ledger is not this sweep's job to
- *  fix; the ledger's own integrity is skill-install-ledger.ts's concern). */
-function cleanInstalledSkillLedgerEntry(id) {
-  if (!existsSync(SK_INSTALL_LEDGER_PATH)) return;
-  try {
-    const doc = yaml.load(readFileSync(SK_INSTALL_LEDGER_PATH, 'utf8'));
-    const installed = Array.isArray(doc?.installed) ? doc.installed : [];
-    const filtered = installed.filter((e) => e?.id !== id);
-    if (filtered.length === installed.length) return; // nothing to remove
-    writeFileSync(SK_INSTALL_LEDGER_PATH, yaml.dump({ installed: filtered }), 'utf8');
-  } catch { /* best-effort */ }
+// The ledger's EXACT prior state, captured once per process on the FIRST
+// sweep call — `undefined` = not yet captured, `null` = no ledger file
+// existed before this run, a string = its exact original bytes. Restoring to
+// this (rather than merely filtering out this beat's own entry) is what
+// fixes the "installed: []` dirt left behind when no ledger file existed
+// before the run" defect (R3-01-F4, ui:journey-found): a plain entry-filter
+// still WRITES the file (with an empty `installed: []`) even when it never
+// existed pre-run.
+let skInstallLedgerStash;
+
+/** Narrow sweep for the skills-install-approve beat's OWN artifacts only —
+ *  its installed skill dir (SK_INSTALL_DIR) and its studio/installed-skills.yaml
+ *  ledger entry, restored to the exact state captured before this run ever
+ *  touched either. Deliberately does NOT touch SK_NEW_SLUG/SK_CLIP_SLUG (the
+ *  skills-create beat's throughline artifact a LATER agents-journey beat
+ *  composes into an agent build) or the edit-beat's stash — that broad reach
+ *  belongs to cleanSkillArtifacts() only, never to this beat's own sweep
+ *  (ui:journey-found defect: the broad sweep, called at this beat's own
+ *  start/end, deleted the throughline skill mid-run). Idempotent + best-effort:
+ *  safe to call at both the beat's start (stale-state sweep) and its end (real
+ *  cleanup), any number of times. */
+export function cleanSkillInstallArtifacts() {
+  if (skInstallLedgerStash === undefined) {
+    skInstallLedgerStash = existsSync(SK_INSTALL_LEDGER_PATH) ? readFileSync(SK_INSTALL_LEDGER_PATH, 'utf8') : null;
+  }
+  try { rmSync(SK_INSTALL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  if (skInstallLedgerStash === null) {
+    try { rmSync(SK_INSTALL_LEDGER_PATH, { force: true }); } catch { /* */ }
+  } else {
+    try { writeFileSync(SK_INSTALL_LEDGER_PATH, skInstallLedgerStash, 'utf8'); } catch { /* */ }
+  }
 }
 
 export function cleanSkillArtifacts() {
@@ -1196,8 +1215,7 @@ export function cleanSkillArtifacts() {
     try { rmSync(join(FORGE_ROOT, 'skills', slug), { recursive: true, force: true }); } catch { /* */ }
   }
   try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
-  try { rmSync(SK_INSTALL_DIR, { recursive: true, force: true }); } catch { /* */ }
-  cleanInstalledSkillLedgerEntry(SK_INSTALL_ID);
+  cleanSkillInstallArtifacts(); // crash-safe backstop for the install-approve beat too
 }
 
 // ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────

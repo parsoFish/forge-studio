@@ -34,10 +34,16 @@
  * (R3-01-F3/F4) skills-library and skills-detail-package are read-only browse
  * beats (no seed/cleanup of their own); skills-install-approve installs into
  * its own scratch id (SK_INSTALL_ID, journey-fixtures.mjs) in a temp dir
- * outside the repo and removes both the installed skill and its
- * studio/installed-skills.yaml ledger entry itself, on every path (a
- * try/finally, not just the happy path) — cleanSkillArtifacts (the runner's
- * crash-safe sweep) covers it too.
+ * outside the repo and restores both the installed skill dir and its
+ * studio/installed-skills.yaml ledger entry to their exact prior state
+ * itself, on every path (a try/finally, not just the happy path), via the
+ * NARROW cleanSkillInstallArtifacts() sweep — deliberately NOT the broad
+ * cleanSkillArtifacts() (which also owns SK_NEW_SLUG/SK_CLIP_SLUG and the
+ * edit-beat's stash and would delete skills-create's throughline artifact
+ * out from under agents-scratch-build, since this beat runs AFTER
+ * skills-create in RUN_ORDER, above). cleanSkillArtifacts (the runner's
+ * crash-safe sweep) still covers the install artifacts too, via the same
+ * narrow function, for the case where a crash skips this beat's own finally.
  */
 import { journey as skills } from './skills.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
