@@ -162,13 +162,7 @@ against a package materialised in a temp dir, never the repo).
 — there is still no surface to EDIT an existing local skill's SKILL.md body
 (known-gaps §4b.8 stays open for that; F3's own text originally proposed
 reusing a builder shell for this, but the shipped detail page does not do
-so). **Known defect found by the journey, not fixed here (out of this
-session's scope):** `scanSkillPackage`'s `quarantinedKeys` is computed from
-the on-disk draft's CURRENT top-level frontmatter, but by install time
-`runtime`/`allowed-tools` are already moved under the nested `quarantined:`
-block — so those two keys can never appear in the scan report; only
-`library` (always present, always `false` on a fresh draft) is ever reported,
-regardless of what the untrusted source package declared.
+so).
 
 ## Planned initiatives
 
@@ -812,8 +806,9 @@ rather than deferred within it:
   `skills-install-approve`) demoing the arc end to end against a package
   materialised outside the repo. Known gap carried forward (NOT closed by
   F3): `/skills/[id]` has no edit surface for an existing local skill's body
-  (known-gaps §4b.8 stays open). Known defect found by the journey, reported
-  not fixed: `scanSkillPackage`'s `quarantinedKeys` can never report `runtime`/
-  `allowed-tools` for a real installed draft (see R3-B8's own note for the
-  mechanism) — filed for a later session, out of this WI's journey-sync/docs
-  scope.
+  (known-gaps §4b.8 stays open). A journey-found defect — `scanSkillPackage`'s
+  `quarantinedKeys` could never report `runtime`/`allowed-tools` for a real
+  installed draft, only ever `library` — was fixed in this same session: it
+  now unions the keys found at the SKILL.md's top level with those already
+  moved under its nested `quarantined:` block, deduped and ordered by
+  `QUARANTINED_FRONTMATTER_KEYS`'s own declared order.

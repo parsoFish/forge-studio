@@ -451,7 +451,18 @@ export function scanSkillPackage(files: readonly PackageFile[]): SkillScanReport
   }
   const { data, content } = matter(skillMd.body, {});
   const d = (data ?? {}) as Record<string, unknown>;
-  const quarantinedKeys = QUARANTINED_FRONTMATTER_KEYS.filter((k) => k in d);
+  // A key is reported whether it still sits at TOP LEVEL (a fresh/never-quarantined
+  // package) or has already been moved under the nested `quarantined:` block by
+  // installSkillPackage (D4) — the only production caller (GET /api/studio/skills/<id>
+  // for a draft) always hands this the ALREADY-INSTALLED package, so without the
+  // nested check `runtime`/`allowed-tools` could never appear in the report (the
+  // ui:journey-found defect, R3-01-F4). Deduped + ordered by
+  // QUARANTINED_FRONTMATTER_KEYS's own declared order, never a sorted array (AT-92).
+  const nestedQuarantine =
+    d['quarantined'] != null && typeof d['quarantined'] === 'object' && !Array.isArray(d['quarantined'])
+      ? (d['quarantined'] as Record<string, unknown>)
+      : {};
+  const quarantinedKeys = QUARANTINED_FRONTMATTER_KEYS.filter((k) => k in d || k in nestedQuarantine);
   const executableFiles = files
     .filter((f) => f.path !== 'SKILL.md' && (EXECUTABLE_EXTENSIONS as readonly string[]).some((ext) => f.path.endsWith(ext)))
     .map((f) => f.path);
