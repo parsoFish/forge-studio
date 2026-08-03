@@ -12,9 +12,29 @@
  * verbatim into `PhaseAgentSpec.skill`, which is root-relative BY CONTRACT
  * (see `orchestrator/phase-agent.ts`) — an absolute path there would leak a
  * worktree-specific filesystem path into the portable, greppable event log.
+ *
+ * `name` is ALWAYS slug-validated before it touches a path (R3-01-F4,
+ * adversarial re-review, Blocker 1): a naive `join(skillsDir(root), name)`
+ * lets an unvalidated `name` collapse the join (`'.'` resolves to `skillsDir`
+ * itself), escape it (`'..'`, an absolute path), or open an orphan directory
+ * `listSkillDirs` never discovers (`'sub/evil'`). Every current and future
+ * caller of `skillDir`/`skillPath`/`skillPathRelative` inherits the guard —
+ * this module is the one resolution point, so it is the one place the check
+ * belongs.
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { SLUG_RE } from './studio/validate.ts';
+
+/** Reject any `name` that is not a bare slug component — no `/`, `\`, `.`,
+ *  `..`, or empty string can ever reach a path join past this point. */
+function assertSkillSlug(name: string): void {
+  if (!SLUG_RE.test(name)) {
+    throw new Error(
+      `invalid skill id "${name}" — must match ${SLUG_RE} (a single lowercase-kebab path segment; no "/", "\\", ".", or "..")`,
+    );
+  }
+}
 
 /** The forge repo root — the parent of `orchestrator/`. */
 export const FORGE_ROOT = resolve(import.meta.dirname, '..');
@@ -27,11 +47,13 @@ export function skillsDir(root: string = FORGE_ROOT): string {
 
 /** Absolute path to a named skill's directory: `<root>/skills/<name>`. */
 export function skillDir(name: string, root: string = FORGE_ROOT): string {
+  assertSkillSlug(name);
   return join(skillsDir(root), name);
 }
 
 /** Absolute path to a named skill's `SKILL.md`: `<root>/skills/<name>/SKILL.md`. */
 export function skillPath(name: string, root: string = FORGE_ROOT): string {
+  assertSkillSlug(name);
   return join(skillsDir(root), name, 'SKILL.md');
 }
 
@@ -46,6 +68,7 @@ export function skillPath(name: string, root: string = FORGE_ROOT): string {
  * reads instead.
  */
 export function skillPathRelative(name: string): string {
+  assertSkillSlug(name);
   return join('skills', name, 'SKILL.md');
 }
 

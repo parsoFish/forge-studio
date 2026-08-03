@@ -26,6 +26,18 @@
  *
  * D5 (scan reports facts, not verdicts): `scanSkillPackage` never judges — no
  * clean/pass/severity field, ever.
+ *
+ * Every id-taking export below is slug-validated before it touches a path —
+ * see `orchestrator/skill-path.ts` (the guard lives there so it covers every
+ * current and future caller of `skillPath`/`skillDir`, not just this module).
+ *
+ * The install ledger (`studio/installed-skills.yaml`, see
+ * `./skill-install-ledger.ts`) is a SECOND source of truth `skillTrustState`
+ * cross-checks the on-disk `provenance` block against, closing the blind spot
+ * where the pin lived only inside the file it protected. HONESTY CONSTRAINT:
+ * this is NOT tamper-proof — an attacker who edits both the SKILL.md and the
+ * ledger in the same change defeats it exactly as before. It only detects a
+ * mismatch between the two; it never guarantees the content is genuine.
  */
 
 import { createHash } from 'node:crypto';
@@ -51,6 +63,7 @@ import matter from 'gray-matter';
 
 import { skillDir, skillPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
 import { isStudioAgent, loadAgentDefinition, loadCatalog } from './registry.ts';
+import { readInstallLedger, writeInstallLedgerEntry, type InstalledSkillLedgerEntry } from './skill-install-ledger.ts';
 import type { AgentDefinition, CommunitySkill } from './types.ts';
 import type { Finding } from './validate.ts';
 
@@ -215,17 +228,65 @@ export function deriveSkillUsage(agents: readonly AgentDefinition[]): Map<string
 // ---------------------------------------------------------------------------
 // skillTrustState — the single trust computation, reused by listSkillLibrary,
 // registry.ts's listPlainSkills palette filter, and the lint checks below.
+//
+// Cross-checks on-disk provenance against the install ledger
+// (skill-install-ledger.ts, Blocker 2 fix):
+//   - ledger entry exists, on-disk provenance missing OR its contentHash
+//     disagrees with the LEDGER's contentHash  → needs-review, tampered
+//   - ledger entry exists, hashes agree with the ledger, but the actual
+//     recomputed package hash differs         → needs-review, hash-drift
+//   - on-disk provenance exists, NO ledger entry                → needs-review, unregistered
+//     (whether or not its contentHash matches the actual package: a
+//     self-consistent-but-unregistered pin is exactly as suspect as a
+//     drifted one, since nothing vouches for either)
+//   - neither provenance nor ledger entry                       → ready (hand-authored, AT-37)
 // ---------------------------------------------------------------------------
 
-export function skillTrustState(forgeRoot: string, id: string): SkillTrust {
+export type SkillTrustReason = 'provenance-tampered' | 'unregistered-install' | 'hash-drift';
+
+export interface SkillTrustDetail {
+  trust: SkillTrust;
+  reason?: SkillTrustReason;
+}
+
+/** The full trust computation, including WHY a needs-review verdict was
+ *  reached — `skillTrustState` below is the thin `.trust`-only wrapper most
+ *  callers use; `lintSkillTrust` needs the reason to pick the right finding. */
+export function skillTrustDetail(forgeRoot: string, id: string): SkillTrustDetail {
   const mdPath = skillPath(id, forgeRoot);
   const { data } = matter(readFileSync(mdPath, 'utf8'), {});
   const d = (data ?? {}) as Record<string, unknown>;
-  if (d['status'] === 'draft') return 'draft';
+  if (d['status'] === 'draft') return { trust: 'draft' };
+
   const provenance = extractProvenance(d);
-  if (!provenance) return 'ready'; // no provenance ⇒ never needs-review (AT-37)
+  const ledgerEntry = readInstallLedger(forgeRoot).get(id);
+
+  if (ledgerEntry) {
+    if (!provenance || provenance.contentHash !== ledgerEntry.contentHash) {
+      return { trust: 'needs-review', reason: 'provenance-tampered' };
+    }
+    const actualHash = hashSkillPackage(readSkillPackage(forgeRoot, id));
+    return actualHash === provenance.contentHash
+      ? { trust: 'ready' }
+      : { trust: 'needs-review', reason: 'hash-drift' };
+  }
+
+  if (!provenance) return { trust: 'ready' }; // no provenance, no ledger ⇒ hand-authored (AT-37)
+
+  // Provenance present but nothing in the ledger vouches for it. A plain
+  // byte-level mismatch is still reported as hash-drift (the original,
+  // ledger-agnostic check this codebase already asserted before the ledger
+  // existed); a provenance block that IS internally self-consistent with the
+  // real package bytes is reported as unregistered — the only way to still
+  // catch it, since a hash comparison alone finds nothing wrong.
   const actualHash = hashSkillPackage(readSkillPackage(forgeRoot, id));
-  return actualHash === provenance.contentHash ? 'ready' : 'needs-review';
+  return actualHash === provenance.contentHash
+    ? { trust: 'needs-review', reason: 'unregistered-install' }
+    : { trust: 'needs-review', reason: 'hash-drift' };
+}
+
+export function skillTrustState(forgeRoot: string, id: string): SkillTrust {
+  return skillTrustDetail(forgeRoot, id).trust;
 }
 
 // ---------------------------------------------------------------------------
@@ -547,6 +608,15 @@ export function installSkillPackage(input: InstallInput): InstallResult {
     }
   }
 
+  // Blocker 2 fix — register the install in the central ledger, the second
+  // source of truth skillTrustState cross-checks the on-disk pin against.
+  // Written LAST, after every file is on disk, so a throw anywhere above
+  // (traversal, caps, binary, bad id) never leaves a ledger entry for a
+  // package that was never actually written.
+  const ledgerEntry: InstalledSkillLedgerEntry = { id, source: upstream.source, contentHash, installedAt: provenance.installedAt };
+  if (provenance.upstreamRef) ledgerEntry.upstreamRef = provenance.upstreamRef;
+  writeInstallLedgerEntry(forgeRoot, ledgerEntry);
+
   return { alreadyInstalled: false };
 }
 
@@ -586,6 +656,15 @@ export function repinSkillPackage(input: { forgeRoot: string; id: string }): str
     provenance: { ...(rawProvenance as Record<string, unknown>), contentHash: newHash },
   };
   writeFileSync(mdPath, matter.stringify('\n' + content.replace(/^\n+/, ''), newData), 'utf8');
+
+  // Keep the ledger's pin in step with an intentional re-pin (AT-81). A skill
+  // with no ledger entry (never went through installSkillPackage) has
+  // nothing to update — repin does not retroactively register it.
+  const ledgerEntry = readInstallLedger(forgeRoot).get(id);
+  if (ledgerEntry) {
+    writeInstallLedgerEntry(forgeRoot, { ...ledgerEntry, contentHash: newHash });
+  }
+
   return newHash;
 }
 
@@ -597,15 +676,37 @@ function lintFinding(object: string, check: string, message: string): Finding {
   return { level: 'error', object, check, message };
 }
 
-/** `skill-trust/hash-drift` (needs-review present) + `skill-trust/draft-unapproved`
- *  (an agent composes a still-draft skill). See the trust vocabulary table. */
+/** `skill-trust/hash-drift` | `skill-trust/provenance-tampered` |
+ *  `skill-trust/unregistered-install` (needs-review present, distinguished by
+ *  `skillTrustDetail`'s reason) + `skill-trust/draft-unapproved` (an agent
+ *  composes a still-draft skill). See the trust vocabulary table. */
 export function lintSkillTrust(forgeRoot: string): Finding[] {
   const findings: Finding[] = [];
   const entries = listSkillLibrary(forgeRoot);
   const draftIds = new Set(entries.filter((e) => e.trust === 'draft').map((e) => e.id));
 
   for (const entry of entries) {
-    if (entry.trust === 'needs-review') {
+    if (entry.trust !== 'needs-review') continue;
+    // entries with a parse `error` are hardcoded trust:'draft' above, never
+    // 'needs-review', so this never re-reads a malformed SKILL.md.
+    const { reason } = skillTrustDetail(forgeRoot, entry.id);
+    if (reason === 'provenance-tampered') {
+      findings.push(
+        lintFinding(
+          `skill:${entry.id}`,
+          'skill-trust/provenance-tampered',
+          `Skill "${entry.id}" on-disk provenance no longer agrees with its studio/installed-skills.yaml ledger entry — the pin may have been tampered with; investigate before it can be palette-visible again`,
+        ),
+      );
+    } else if (reason === 'unregistered-install') {
+      findings.push(
+        lintFinding(
+          `skill:${entry.id}`,
+          'skill-trust/unregistered-install',
+          `Skill "${entry.id}" carries a provenance block but has no matching entry in studio/installed-skills.yaml — it did not come through installSkillPackage (or its ledger entry was removed); investigate before it can be palette-visible again`,
+        ),
+      );
+    } else {
       findings.push(
         lintFinding(
           `skill:${entry.id}`,
