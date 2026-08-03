@@ -17,6 +17,7 @@ import {
   mkdirSync,
   writeFileSync,
   readFileSync,
+  readdirSync,
   rmSync,
   existsSync,
   symlinkSync,
@@ -24,6 +25,7 @@ import {
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
+import yaml from 'js-yaml';
 
 import { skillDir, skillPath, skillsDir } from '../skill-path.ts';
 import { isStudioAgent, listPlainSkills, listAgentDefinitions } from './registry.ts';
@@ -133,6 +135,49 @@ function readFrontmatter(root: string, id: string): Record<string, unknown> {
 }
 
 const ISO_8601_RE = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
+
+/**
+ * The central, git-tracked install ledger — `studio/installed-skills.yaml`
+ * (Blocker 2 fix design, T2-binding). A top-level `installed:` list of
+ * `{ id, source, upstreamRef?, contentHash, installedAt }` records, mirroring
+ * the existing `community-skills:` list-of-records convention in
+ * `studio/catalog.yaml`. Read/write helpers for test fixtures only — the
+ * production module owns its own internal read of this same file.
+ */
+function readInstalledSkillsLedger(root: string): Array<Record<string, unknown>> {
+  const p = join(root, 'studio', 'installed-skills.yaml');
+  if (!existsSync(p)) return [];
+  const doc = yaml.load(readFileSync(p, 'utf8')) as { installed?: unknown[] } | null;
+  return Array.isArray(doc?.installed) ? (doc!.installed as Array<Record<string, unknown>>) : [];
+}
+
+function writeInstalledSkillsLedger(root: string, entries: Array<Record<string, unknown>>): void {
+  mkdirSync(join(root, 'studio'), { recursive: true });
+  writeFileSync(join(root, 'studio', 'installed-skills.yaml'), yaml.dump({ installed: entries }), 'utf8');
+}
+
+function removeLedgerEntry(root: string, id: string): void {
+  writeInstalledSkillsLedger(root, readInstalledSkillsLedger(root).filter((e) => e['id'] !== id));
+}
+
+/** A full recursive listing of `skills/` (relative, sorted, POSIX-separated) —
+ *  used to prove "nothing written" / "byte-identical" across an entire
+ *  subtree, not just a single file or a single top-level entry. */
+function snapshotSkillsTree(root: string): string[] {
+  const base = skillsDir(root);
+  if (!existsSync(base)) return [];
+  const out: string[] = [];
+  const walk = (absDir: string, relDir: string): void => {
+    for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+      const abs = join(absDir, entry.name);
+      const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(abs, rel);
+      else out.push(rel);
+    }
+  };
+  walk(base, '');
+  return out.sort();
+}
 
 // ===========================================================================
 // Union + source discrimination — listSkillLibrary(forgeRoot)  (AT 1-7)
@@ -903,5 +948,350 @@ describe('lintSkillTrust / lintSkillRefs', () => {
     const refFindings = lintSkillRefs(REPO_ROOT).filter((f) => f.level === 'error');
     assert.deepEqual(trustFindings, [], `lintSkillTrust must be clean on the real repo: ${JSON.stringify(trustFindings)}`);
     assert.deepEqual(refFindings, [], `lintSkillRefs must be clean on the real repo: ${JSON.stringify(refFindings)}`);
+  });
+});
+
+// ===========================================================================
+// BLOCKER 1 — id is never slug-validated, so a path can escape via the id
+// itself (adversarial re-review, R3-01-F4). Every id-taking export must
+// reject a non-slug id (SLUG_RE from orchestrator/studio/validate.ts) by
+// THROWING with an actionable message naming the bad id, before any fs
+// mutation.  (AT 66-71)
+// ===========================================================================
+
+describe('id validation — every id-taking export rejects a non-slug id', () => {
+  function makeEvilPackageDir(extraFiles: Record<string, string> = {}): string {
+    const dir = makeTmpDir('skill-pkg-idval-');
+    writeFileSync(join(dir, 'SKILL.md'), matter.stringify('\nBody.\n', { name: 'Evil', description: 'd' }), 'utf8');
+    for (const [rel, content] of Object.entries(extraFiles)) {
+      const p = join(dir, rel);
+      mkdirSync(join(p, '..'), { recursive: true });
+      writeFileSync(p, content, 'utf8');
+    }
+    return dir;
+  }
+
+  it('AT-66: id: "." throws, and skills/ gains no new file (whole-tree snapshot before/after)', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+    const before = snapshotSkillsTree(root);
+
+    assert.throws(() => installSkillPackage({ forgeRoot: root, id: '.', packageDir: makeEvilPackageDir(), upstream: { source: 'https://x' } }));
+
+    assert.deepEqual(snapshotSkillsTree(root), before, 'the skills/ subtree must be untouched');
+  });
+
+  it('AT-67: id: "" throws, nothing written', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+    const before = snapshotSkillsTree(root);
+
+    assert.throws(() => installSkillPackage({ forgeRoot: root, id: '', packageDir: makeEvilPackageDir(), upstream: { source: 'https://x' } }));
+
+    assert.deepEqual(snapshotSkillsTree(root), before);
+  });
+
+  it('AT-68: id: "sub/evil" (and a backslash variant) throws, nothing written', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+    const before = snapshotSkillsTree(root);
+
+    assert.throws(() => installSkillPackage({ forgeRoot: root, id: 'sub/evil', packageDir: makeEvilPackageDir(), upstream: { source: 'https://x' } }));
+    assert.throws(() => installSkillPackage({ forgeRoot: root, id: 'sub\\evil', packageDir: makeEvilPackageDir(), upstream: { source: 'https://x' } }));
+
+    assert.deepEqual(snapshotSkillsTree(root), before, 'neither variant may create an orphan directory under skills/');
+  });
+
+  it('AT-69: id: ".." throws, nothing written', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+    const before = snapshotSkillsTree(root);
+
+    assert.throws(() => installSkillPackage({ forgeRoot: root, id: '..', packageDir: makeEvilPackageDir(), upstream: { source: 'https://x' } }));
+
+    assert.deepEqual(snapshotSkillsTree(root), before);
+  });
+
+  it("AT-70: the reviewer's exact escape is closed — a package file at <sibling>/evil.sh plus id: '.' throws, sibling untouched", () => {
+    const root = makeForgeRoot();
+    writeSkillMd(root, 'brain-query', { name: 'Brain Query', description: 'a real, unrelated sibling skill' });
+    const siblingBefore = readdirSync(skillDir('brain-query', root)).sort();
+    const siblingContentBefore = readFileSync(skillPath('brain-query', root), 'utf8');
+
+    const evilPackage = makeEvilPackageDir({ 'brain-query/evil.sh': '#!/bin/sh\necho pwned\n' });
+    assert.throws(() => installSkillPackage({ forgeRoot: root, id: '.', packageDir: evilPackage, upstream: { source: 'https://x' } }));
+
+    assert.deepEqual(readdirSync(skillDir('brain-query', root)).sort(), siblingBefore, "the sibling skill's directory listing must be byte-identical");
+    assert.equal(readFileSync(skillPath('brain-query', root), 'utf8'), siblingContentBefore);
+  });
+
+  it('AT-71: skillTrustState / readSkillPackage / approveSkillDraft / repinSkillPackage each throw on a non-slug id', () => {
+    const root = makeForgeRoot();
+    // A REAL file sits exactly where the non-slug id "." collapses to
+    // (skills/SKILL.md, since skillDir('.', root) === skillsDir(root)) — so a
+    // throw here can only come from id validation itself, never an
+    // incidental "file not found".
+    mkdirSync(skillsDir(root), { recursive: true });
+    writeFileSync(
+      join(skillsDir(root), 'SKILL.md'),
+      matter.stringify('\nBody.\n', {
+        name: 'x',
+        description: 'd',
+        status: 'draft',
+        provenance: { source: 'https://x', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
+      }),
+      'utf8',
+    );
+    const badId = '.';
+
+    assert.throws(() => skillTrustState(root, badId), 'skillTrustState must reject a non-slug id');
+    assert.throws(() => readSkillPackage(root, badId), 'readSkillPackage must reject a non-slug id');
+    assert.throws(() => approveSkillDraft({ forgeRoot: root, id: badId }), 'approveSkillDraft must reject a non-slug id');
+    assert.throws(() => repinSkillPackage({ forgeRoot: root, id: badId }), 'repinSkillPackage must reject a non-slug id');
+  });
+});
+
+// ===========================================================================
+// BLOCKER 2 — the hash pin lives only inside the file it protects, so
+// deleting it downgrades a tampered skill to trusted. Fix: a central,
+// git-tracked install ledger (`studio/installed-skills.yaml`) is the second
+// source of truth skillTrustState cross-checks on-disk provenance against.
+//
+// HONESTY CONSTRAINT (per the binding design): this is NOT tamper-proof — an
+// attacker who edits both files defeats it. The tests below assert only that
+// tampering with ONE of the two files (on-disk provenance OR the ledger) is
+// caught, never that the scheme is unbeatable.  (AT 72-81)
+// ===========================================================================
+
+describe('install ledger — the second source of truth (studio/installed-skills.yaml)', () => {
+  function installAndApprove(root: string, id: string): void {
+    const packageDir = makeTmpDir('skill-pkg-ledger-');
+    writeFileSync(join(packageDir, 'SKILL.md'), matter.stringify('\nOriginal body.\n', { name: id, description: 'installable' }), 'utf8');
+    installSkillPackage({ forgeRoot: root, id, packageDir, upstream: { source: 'https://x' } });
+    approveSkillDraft({ forgeRoot: root, id });
+  }
+
+  /** A skill authored directly on disk (bypassing installSkillPackage — no
+   *  ledger entry is ever written for it) whose provenance.contentHash is
+   *  nonetheless internally self-consistent: hashSkillPackage excludes the
+   *  `provenance` key itself from the hash input, so any value placed there
+   *  survives a "compute the real hash of THIS exact file" round-trip. This
+   *  simulates "content is not tampered" while still being unregistered. */
+  function writeUnregisteredButConsistentSkill(root: string, id: string): void {
+    writeSkillMd(root, id, {
+      name: id,
+      description: 'never went through installSkillPackage',
+      provenance: { source: 'https://unregistered.example', contentHash: `sha256:${'0'.repeat(64)}`, installedAt: '2026-01-01T00:00:00.000Z' },
+    });
+    const realHash = hashSkillPackage(readSkillPackage(root, id));
+    const data = readFrontmatter(root, id);
+    (data['provenance'] as Record<string, unknown>)['contentHash'] = realHash;
+    const raw = readFileSync(skillPath(id, root), 'utf8');
+    const { content } = matter(raw, {});
+    writeFileSync(skillPath(id, root), matter.stringify('\n' + content.replace(/^\n+/, ''), data), 'utf8');
+  }
+
+  it('AT-72: install writes a studio/installed-skills.yaml entry (id, source, contentHash, installedAt); upstreamRef only when supplied', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+
+    installAndApprove(root, 'ledger-with-ref');
+    installSkillPackage({
+      forgeRoot: root,
+      id: 'ledger-without-ref',
+      packageDir: (() => {
+        const dir = makeTmpDir('skill-pkg-ledger-noref-');
+        writeFileSync(join(dir, 'SKILL.md'), matter.stringify('\nBody.\n', { name: 'x', description: 'd' }), 'utf8');
+        return dir;
+      })(),
+      upstream: { source: 'https://x', ref: undefined },
+    });
+    // Re-install ledger-with-ref's underlying id WITH a ref via a fresh id to
+    // exercise the upstreamRef-present path distinctly from the absent path.
+    installSkillPackage({
+      forgeRoot: root,
+      id: 'ledger-with-ref-2',
+      packageDir: (() => {
+        const dir = makeTmpDir('skill-pkg-ledger-ref2-');
+        writeFileSync(join(dir, 'SKILL.md'), matter.stringify('\nBody.\n', { name: 'x', description: 'd' }), 'utf8');
+        return dir;
+      })(),
+      upstream: { source: 'https://x', ref: 'v2.0.0' },
+    });
+
+    const ledger = readInstalledSkillsLedger(root);
+    const withRef = ledger.find((e) => e['id'] === 'ledger-with-ref-2');
+    const withoutRef = ledger.find((e) => e['id'] === 'ledger-without-ref');
+
+    assert.ok(withRef, 'a ledger entry must be written on install');
+    assert.equal(withRef!['source'], 'https://x');
+    assert.match(String(withRef!['contentHash']), /^sha256:[0-9a-f]{64}$/);
+    assert.match(String(withRef!['installedAt']), ISO_8601_RE);
+    assert.equal(withRef!['upstreamRef'], 'v2.0.0');
+
+    assert.ok(withoutRef, 'a ledger entry must be written even without a ref');
+    assert.ok(!('upstreamRef' in withoutRef!), 'upstreamRef must be ABSENT (no placeholder) when not supplied');
+  });
+
+  it('AT-73: TAMPER — provenance key deleted: needs-review, paletteVisible:false, excluded from the palette, lintSkillTrust reports provenance-tampered', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    installAndApprove(root, 'victim-provenance-deleted');
+
+    const mdPath = skillPath('victim-provenance-deleted', root);
+    const data = readFrontmatter(root, 'victim-provenance-deleted');
+    delete data['provenance'];
+    writeFileSync(mdPath, matter.stringify('\nMALICIOUS INJECTED BODY\n', data), 'utf8');
+
+    assert.equal(skillTrustState(root, 'victim-provenance-deleted'), 'needs-review');
+    const entry = listSkillLibrary(root).find((e) => e.id === 'victim-provenance-deleted');
+    assert.ok(entry);
+    assert.equal(entry!.paletteVisible, false);
+    assert.ok(
+      !listPlainSkills(root).map((s) => s.id).includes('victim-provenance-deleted'),
+      'must be excluded via the palette enumeration, not just a status field',
+    );
+    const findings = lintSkillTrust(root);
+    assert.ok(findings.some((f) => f.check === 'skill-trust/provenance-tampered'));
+  });
+
+  it('AT-74: TAMPER — contentHash sub-field deleted only (body untouched): same outcome as AT-73', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    installAndApprove(root, 'victim-hash-field-deleted');
+
+    const mdPath = skillPath('victim-hash-field-deleted', root);
+    const data = readFrontmatter(root, 'victim-hash-field-deleted');
+    delete (data['provenance'] as Record<string, unknown>)['contentHash'];
+    const raw = readFileSync(mdPath, 'utf8');
+    const { content } = matter(raw, {});
+    writeFileSync(mdPath, matter.stringify('\n' + content.replace(/^\n+/, ''), data), 'utf8');
+
+    assert.equal(skillTrustState(root, 'victim-hash-field-deleted'), 'needs-review');
+    const entry = listSkillLibrary(root).find((e) => e.id === 'victim-hash-field-deleted');
+    assert.ok(entry);
+    assert.equal(entry!.paletteVisible, false);
+    assert.ok(!listPlainSkills(root).map((s) => s.id).includes('victim-hash-field-deleted'));
+    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/provenance-tampered'));
+  });
+
+  it('AT-75: TAMPER — contentHash present but altered to a different valid-looking sha: needs-review + provenance-tampered', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    installAndApprove(root, 'victim-hash-altered');
+
+    const mdPath = skillPath('victim-hash-altered', root);
+    const data = readFrontmatter(root, 'victim-hash-altered');
+    (data['provenance'] as Record<string, unknown>)['contentHash'] = `sha256:${'a'.repeat(64)}`;
+    const raw = readFileSync(mdPath, 'utf8');
+    const { content } = matter(raw, {});
+    writeFileSync(mdPath, matter.stringify('\n' + content.replace(/^\n+/, ''), data), 'utf8');
+
+    assert.equal(skillTrustState(root, 'victim-hash-altered'), 'needs-review');
+    // NOTE: a plain byte-drift check alone would already call this needs-review
+    // (the fabricated hash no longer matches the real recomputed hash either),
+    // so the specific, load-bearing assertion here is the FINDING CHECK ID —
+    // the ledger cross-check must recognise this as tampering against its own
+    // recorded pin, not merely as generic drift.
+    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/provenance-tampered'));
+  });
+
+  it('AT-76: UNREGISTERED — full, internally-consistent provenance block with NO matching ledger entry → needs-review + unregistered-install', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    writeUnregisteredButConsistentSkill(root, 'unregistered-skill');
+
+    assert.equal(skillTrustState(root, 'unregistered-skill'), 'needs-review');
+    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/unregistered-install'));
+  });
+
+  it('AT-77: deleting the ledger ENTRY while on-disk provenance survives → needs-review (case 76, arrived at from the other direction)', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    installAndApprove(root, 'orphaned-ledger-entry');
+    assert.equal(skillTrustState(root, 'orphaned-ledger-entry'), 'ready', 'sanity: consistent + registered starts ready');
+
+    removeLedgerEntry(root, 'orphaned-ledger-entry');
+
+    assert.equal(skillTrustState(root, 'orphaned-ledger-entry'), 'needs-review');
+    assert.ok(lintSkillTrust(root).some((f) => f.check === 'skill-trust/unregistered-install'));
+  });
+
+  it('AT-78: a hand-authored skill (no provenance, no ledger entry) stays ready + palette-visible after arbitrary edits (AT-37 survives the ledger)', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    writeSkillMd(root, 'hand-authored-with-ledger', { name: 'Hand Authored', description: 'no provenance ever' });
+    writeSkillFile(root, 'hand-authored-with-ledger', 'notes.md', 'v1');
+
+    assert.equal(skillTrustState(root, 'hand-authored-with-ledger'), 'ready');
+
+    writeSkillFile(root, 'hand-authored-with-ledger', 'notes.md', 'v2 — an arbitrary edit');
+
+    assert.equal(skillTrustState(root, 'hand-authored-with-ledger'), 'ready');
+    const entry = listSkillLibrary(root).find((e) => e.id === 'hand-authored-with-ledger');
+    assert.ok(entry);
+    assert.equal(entry!.paletteVisible, true);
+    assert.ok(listPlainSkills(root).map((s) => s.id).includes('hand-authored-with-ledger'));
+  });
+
+  it('AT-79: an absent studio/installed-skills.yaml (fresh checkout, nothing ever installed) is NOT an error', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    writeSkillMd(root, 'fresh-checkout-skill-a', { name: 'A', description: 'hand-authored' });
+    writeSkillMd(root, 'fresh-checkout-skill-b', { name: 'B', description: 'hand-authored' });
+    assert.equal(existsSync(join(root, 'studio', 'installed-skills.yaml')), false, 'sanity: no ledger file exists at all');
+
+    assert.doesNotThrow(() => listSkillLibrary(root));
+    assert.doesNotThrow(() => lintSkillTrust(root));
+
+    const entries = listSkillLibrary(root);
+    assert.equal(entries.find((e) => e.id === 'fresh-checkout-skill-a')!.trust, 'ready');
+    assert.equal(entries.find((e) => e.id === 'fresh-checkout-skill-b')!.trust, 'ready');
+    assert.deepEqual(lintSkillTrust(root), []);
+  });
+
+  it('AT-80: a malformed/unparseable studio/installed-skills.yaml FAILS LOUD — never silently treated as empty', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    // A skill whose on-disk provenance WOULD be wrongly resolved to 'ready' if
+    // the malformed ledger were silently treated as "no ledger" (re-opening
+    // Blocker 2 by a different door).
+    writeUnregisteredButConsistentSkill(root, 'ledger-malformed-skill');
+    mkdirSync(join(root, 'studio'), { recursive: true });
+    writeFileSync(join(root, 'studio', 'installed-skills.yaml'), 'installed: [ { id: broken, source: \n', 'utf8');
+
+    let threw = false;
+    let observedTrust: string | undefined;
+    try {
+      observedTrust = skillTrustState(root, 'ledger-malformed-skill');
+    } catch {
+      threw = true;
+    }
+    if (!threw) {
+      // If it didn't throw, it must not have silently resolved as if the
+      // ledger were empty — that would be exactly the class of failure this
+      // whole ledger mechanism exists to close.
+      assert.notEqual(observedTrust, 'ready', 'a malformed ledger must never be silently treated as empty');
+    }
+  });
+
+  it('AT-81: repinSkillPackage after an intentional edit updates BOTH the on-disk hash and the ledger entry, returning trust to ready', () => {
+    const root = makeForgeRoot();
+    writeCatalogYaml(root);
+    installAndApprove(root, 'repin-with-ledger');
+    const hashBefore = (readFrontmatter(root, 'repin-with-ledger')['provenance'] as Record<string, unknown>)['contentHash'];
+    const ledgerHashBefore = readInstalledSkillsLedger(root).find((e) => e['id'] === 'repin-with-ledger')!['contentHash'];
+    assert.equal(ledgerHashBefore, hashBefore, 'sanity: ledger and on-disk pin start in agreement');
+
+    writeSkillFile(root, 'repin-with-ledger', 'extra.md', 'an intentional local edit');
+    assert.equal(skillTrustState(root, 'repin-with-ledger'), 'needs-review');
+
+    const newHash = repinSkillPackage({ forgeRoot: root, id: 'repin-with-ledger' });
+
+    assert.notEqual(newHash, hashBefore);
+    const ledgerAfter = readInstalledSkillsLedger(root).find((e) => e['id'] === 'repin-with-ledger');
+    assert.ok(ledgerAfter, 'the ledger entry must still exist after repin');
+    assert.equal(ledgerAfter!['contentHash'], newHash, 'the ledger entry itself must be updated by repin, not just the on-disk file');
+    assert.equal(skillTrustState(root, 'repin-with-ledger'), 'ready');
   });
 });
