@@ -13,7 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps } from './flow-runner.ts';
+import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
 import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { parseManifest } from './manifest.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
@@ -150,6 +150,35 @@ function makeForgeCycleFlow(): FlowDefinition {
     path: '/fake/flow.yaml',
   };
 }
+
+// ---------------------------------------------------------------------------
+// FlowRunArgs.nodeExecutors — a flow can register custom node behaviour for a
+// NodeKind without editing flow-runner's dispatch loop. (R4-01-F4 retired the
+// last phase-executor kind, 'unifier', which formerly carried this seam proof;
+// the seam itself is unchanged, so it is re-proven here on the 'review' kind.)
+// ---------------------------------------------------------------------------
+
+describe('flow-runner nodeExecutors override', () => {
+  it('injects a custom executor for a NodeKind, bypassing the default (no orchestrator edit)', async () => {
+    const tracker = makeCallTracker();
+    const deps = makeMockDeps(tracker);
+    const input = makeInput();
+    const logger = makeLogger();
+    const flow = makeForgeCycleFlow();
+
+    const customCalls: string[] = [];
+    const customReview: NodeExecutor = async () => { customCalls.push('custom-review'); };
+
+    await runFlow({ flow, input, logger, deps, nodeExecutors: { review: customReview } });
+
+    assert.deepEqual(customCalls, ['custom-review'], 'the injected review executor must run');
+    assert.ok(!tracker.calls.includes('openPrInline'), 'the default review executor (openPrInline) must be bypassed');
+    assert.ok(!tracker.calls.includes('runClosure'), 'the default review executor (runClosure) must be bypassed');
+    // Upstream nodes still run through their defaults (the override is scoped to 'review').
+    assert.ok(tracker.calls.includes('runProjectManager'), 'the pm node still runs through its default');
+    assert.ok(tracker.calls.includes('runDeveloperLoop'), 'the dev node still runs through its default');
+  });
+});
 
 // ---------------------------------------------------------------------------
 // Test 1: Full run — correct call order with the same CycleInput
