@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 
-import { runDemoAgentPipeline, assertDemoAgentDeclaration, type DemoAgentPipelineResult } from './demo-agent.ts';
+import { runDemoAgentPipeline, assertDemoAgentDeclaration, normalizeCriterion, type DemoAgentPipelineResult } from './demo-agent.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import { serializeWorkItem, type WorkItem } from '../work-item.ts';
 import { validateDemoFixSpec, demoFixSpecJsonPath } from '../flow-artifacts.ts';
@@ -723,4 +723,18 @@ test('pr-description relocation: a STALE pr-description is deleted at pipeline s
     fx.cleanup();
     restore();
   }
+});
+
+test('normalizeCriterion: injected (WI-N)-prefixed criterion matches the agent-authored prefix-less one', () => {
+  // Regression (verify:cycle gitpulse-coupling, 2026-08-03): the pipeline injects
+  // criteria as `(WI-1) GIVEN … WHEN … THEN …` but the demo agent authors them
+  // WITHOUT the `(WI-N)` label (and with incidental whitespace), so a raw
+  // exact-string coverage check rejected a demo whose content was fully correct.
+  const injected = '(WI-1) GIVEN a hand-built Commit[] fixture WHEN computeCoupling(commits) is called THEN returns CouplingPair[]';
+  const authoredPrefixless = 'GIVEN a hand-built Commit[] fixture WHEN computeCoupling(commits) is called THEN returns CouplingPair[]';
+  const authoredReflowed = 'GIVEN a hand-built Commit[] fixture   WHEN  computeCoupling(commits) is called\nTHEN returns CouplingPair[]';
+  assert.equal(normalizeCriterion(injected), normalizeCriterion(authoredPrefixless), 'the (WI-N) label must not block a coverage match');
+  assert.equal(normalizeCriterion(injected), normalizeCriterion(authoredReflowed), 'internal whitespace differences must not block a match');
+  // But genuinely different content must NOT collapse to equal.
+  assert.notEqual(normalizeCriterion(injected), normalizeCriterion('(WI-2) GIVEN something else WHEN x THEN y'));
 });

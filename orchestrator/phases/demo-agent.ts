@@ -517,6 +517,22 @@ export async function runDemoAgentPipeline(
   return { status: 'failed', reason: 'author-invalid', detail: lastErrors.join('; ') };
 }
 
+/**
+ * Normalize an acceptance-criterion string for MATCHING ONLY (never for storage
+ * or display). The pipeline compiles injected criteria with a `(WI-N)` label
+ * prefix (the `acceptanceCriteria` build above), but the demo agent systematically
+ * authors the criterion text WITHOUT that label — and long, bracket-dense criteria
+ * also pick up incidental whitespace differences. A raw exact-string coverage
+ * check then rejects a demo whose content is fully correct (verify:cycle
+ * gitpulse-coupling, 2026-08-03: 33/33 criteria authored, 0 matched by exact
+ * string — every miss was only the dropped `(WI-N)` label). Strip a leading
+ * `(WI-…)` label and collapse internal whitespace so matching keys on CONTENT.
+ * The agent still cannot fake coverage: it must reproduce each criterion's text.
+ */
+export function normalizeCriterion(c: string): string {
+  return c.replace(/^\(WI-[^)]*\)\s*/i, '').replace(/\s+/g, ' ').trim();
+}
+
 function validateAuthoredDemo(
   demoJsonAbs: string,
   demoDirRel: string,
@@ -549,8 +565,8 @@ function validateAuthoredDemo(
   // 'complete' — the cheapest way to avoid writing fix proposals. Every
   // injected criterion needs a verbatim entry.
   if (injectedCriteria.length > 0) {
-    const authored = new Set((model.acEvaluations ?? []).map((e) => e.criterion));
-    const uncovered = injectedCriteria.filter((c) => !authored.has(c));
+    const authored = new Set((model.acEvaluations ?? []).map((e) => normalizeCriterion(e.criterion)));
+    const uncovered = injectedCriteria.filter((c) => !authored.has(normalizeCriterion(c)));
     if (uncovered.length > 0) {
       return {
         ok: false,
@@ -647,15 +663,17 @@ function harvestFixProposals(
     proposals: proposals as DemoFixProposal[],
   };
   const errors = validateDemoFixSpec(record);
-  const missCriteria = new Set(misses.map((m) => m.criterion));
+  const missCriteria = new Set(misses.map((m) => normalizeCriterion(m.criterion)));
   for (const [i, p] of (proposals as DemoFixProposal[]).entries()) {
-    if (p && typeof p === 'object' && typeof p.criterion === 'string' && !missCriteria.has(p.criterion)) {
-      errors.push(`proposals[${i}].criterion does not match any non-met acEvaluations entry (verbatim match required): "${p.criterion}"`);
+    if (p && typeof p === 'object' && typeof p.criterion === 'string' && !missCriteria.has(normalizeCriterion(p.criterion))) {
+      errors.push(`proposals[${i}].criterion does not match any non-met acEvaluations entry (content match required): "${p.criterion}"`);
     }
   }
-  const proposedCriteria = new Set((proposals as DemoFixProposal[]).map((p) => p?.criterion).filter((c): c is string => typeof c === 'string'));
+  const proposedCriteria = new Set(
+    (proposals as DemoFixProposal[]).map((p) => p?.criterion).filter((c): c is string => typeof c === 'string').map(normalizeCriterion),
+  );
   for (const m of misses) {
-    if (!proposedCriteria.has(m.criterion)) {
+    if (!proposedCriteria.has(normalizeCriterion(m.criterion))) {
       errors.push(`non-met criterion has no fix proposal: "${m.criterion}"`);
     }
   }
