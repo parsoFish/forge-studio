@@ -314,6 +314,28 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
     the hooks library). OOTB lifecycle-hook seeds ship instead (mockup
     examples: `pre-pr-security-review` on `PreToolUse · Bash(gh pr create)`,
     `post-merge-brain-ingest` on `SessionEnd`).
+    **Migration clause (added 2026-08-03 review pass — the rename is
+    dispatch-load-bearing, not cosmetic):** the 9 catalog "hook" ids are
+    referenced by `composition.hooks` across 15+ roster SKILL.mds (e.g.
+    `developer-ralph`: `[event-log, cost-guard, stall-watchdog,
+    scratch-strip]`), parsed by `orchestrator/studio/registry.ts`, and the
+    band ids (`wi-contract`, `reflection-close`, `demo-band`, `review-band`)
+    **drive declared dispatch** (`AGENT_BAND_EXECUTORS`,
+    `CANONICAL_BAND_SLUGS` lint) — the forge-develop reflector resolves via
+    its `reflection-close` band hook. The re-scope therefore includes, in one
+    no-back-compat sweep: (a) a `guards:` catalog section (hooks section
+    keeps only lifecycle hooks); (b) an authoring-field decision —
+    `composition.guards` vs guards-stay-in-`composition.hooks` — recorded as
+    an ADR-027 amendment (two disjoint vocabularies must not silently share
+    one field: the standing double-booking lesson); (c) the roster SKILL.md
+    sweep; (d) registry/validate/band-dispatch vocabulary updates with the
+    golden spawn-capture suite proving byte-identical dispatch. **Scope
+    note:** this migration deliberately exceeds the library-hooks module (it
+    touches agent defs + orchestrator vocabulary) — it is the module's
+    boundary being *moved*, done once, here; the alternative (a hooks
+    library whose word means two things) violates decision 1. ACs: grep-zero
+    guard ids in the hooks library; dispatch byte-identical (spawn-capture);
+    `forge studio lint` green across the swept roster.
   - **F2/F3:** unchanged in substance (scan + deny-by-default manifest —
     they map 1:1 onto the lifecycle model; the mockup's hook detail page
     carries a visible **SECURITY SCAN** panel, which is F2's verdict
@@ -591,7 +613,11 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
     contract-conforming repo template (project shape, tests, demo skill,
     gates pre-wired) consumed by project creation (R4-03) — the mockup's
     create-project journey picks the web-UI scaffold and lands a
-    contract-green project. Ship the three mockup shapes as OOTB seeds
+    contract-green project. **Deliberate vision-promotion (recorded):** the
+    scaffolds carry `provenance: 'vision'` in the mockup, and this is the one
+    vision item the cut promotes to planned — the create-project mockup flow
+    is unwalkable without it (unlike the R4-B13 non-cuts, which no journey
+    requires). Ship the three mockup shapes as OOTB seeds
     grounded in the real contract (`docs/forge-project-contract.md`, ADR-034)
     and the real demo grounds (CLI shape ≈ mdtoc/gitpulse). ⚑ Operator-gate:
     scaffold content review before shipping (a scaffold is executable
@@ -601,6 +627,9 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
 - **Session sizing:** ~2 sessions — (1) F1 registry + lint (+ the R2-05-F1
   boundary decision); (2) F2 surfaces + journey-sync. F3 rides the R4-03
   session where sensible.
+- **Acceptance references:** mockup journey `create-project` (scaffold-picker
+  beat) + `build-skill` (templates inside the package); surfaces
+  `views-library.jsx` (`TEMPLATES` in `data.jsx`).
 - **Out of scope:** dynamic artifact *rendering* contracts (R2-05-F2/F3);
   demo-element content quality (R5-06); the creation agent consuming
   scaffolds (R4-03).
@@ -647,13 +676,12 @@ install) are deferred pending the operator's §4b.1 skill-management-view design
 - **Session sizing:** ~2 sessions — (1) F1+F2 surface; (2) F3 routing +
   journey-sync. Requires at least one owning pipeline (R3-01-F4 or R3-03)
   landed first.
+- **Acceptance references:** mockup journeys `install-skills-hooks`,
+  `install-connections`; surfaces `views-community.jsx`,
+  `views-library-detail.jsx` (`COMMUNITY`/`COMMUNITY_HUBS` in `data.jsx`).
 - **Out of scope:** the per-kind trust pipelines themselves (owned by
   R3-01/R3-03/R3-04); live hub API crawling (future decision); publishing
   forge content *to* hubs (R8 territory).
-
-- **Acceptance references (both):** mockup journeys `install-skills-hooks`,
-  `install-connections`; surfaces `views-community.jsx`,
-  `views-library-detail.jsx`.
 
 ## Deferred
 
@@ -706,3 +734,11 @@ rather than deferred within it:
   cross-kind community browser (hub strip, per-hub signals, pre-install
   detail, install routing through the owning kind pipelines). Every wave-5
   entry cites its mockup journey ids + `as-built-inventory.md` baseline.
+- 2026-08-03 — **Adversarial-review corrections (PR #71 review pass).**
+  R3-03 re-scope gains the guards-migration clause: the 9 catalog hook ids
+  are dispatch-load-bearing (`composition.hooks` roster sweep, ADR-027
+  authoring-field amendment, band-dispatch vocabulary update, spawn-capture
+  parity ACs) — the module boundary move is recorded, not hidden. R3-06-F3
+  scaffold vision-promotion recorded as deliberate (create-project flow is
+  unwalkable without it). Dangling "(both)" acceptance-refs bullet folded
+  into R3-06/R3-07 per-initiative.

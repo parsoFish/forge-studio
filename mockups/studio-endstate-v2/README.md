@@ -159,6 +159,10 @@ re-rendered (no jsx/journey edits — a beat change would force a full
   topology and the Demo Design + Research example agents stay
   `vision`-badged with no owning initiative — parked as R2-D2 (re-entry =
   operator re-opens). forge-develop remains linear.
+- **KB Health check names are illustrative.** The mock's 9 named lint checks
+  (incl. "theme distribution balance", "raw evidence archived") do not match
+  the real `cli/brain-lint.ts` check set (~10 functions) — the real list
+  wins; R6-08-F2 builds no invented checks.
 - Everything else in rounds 2–7 is either cut into wave-5 initiatives
   (R1-06 · R2-08..10 · R3-01-F3/F4 · R3-03/04/06/07 · R4-12..20 ·
   R6-01/03 amendments · R6-04..08) or registered as already-aligned

@@ -60,7 +60,9 @@ iteration-refinement target 1).
 
 ### R6-01 Run-observability depth
 
-- **Status:** planned  ·  **Wave:** unsequenced (operator to prioritize)
+- **Status:** planned  ·  **Wave:** unsequenced pre-wave-5; **F1+F4+F5 = wave
+  5, batch C (module: flow-run-detail)** — F1 pulled in as F5's hard
+  precursor (same emission substrate); F2/F3 stay unsequenced
 - **Depends on:** —
 - **Context:** The three recorded observability gaps in R6-B3: silent hex
   drawers, the unresolved activity-view rework, and no durable health
@@ -107,14 +109,17 @@ iteration-refinement target 1).
     artifact type (typed outputs — needs R2-05-F2's surface contract where
     the type is `composed`; plain template artifacts render today's way).
     Shares its log-line renderer with the standalone run view (R6-04-F3 —
-    one component, two surfaces). ACs: real captured lines render mid-cycle
-    (extends F1's drawer streaming, same emission substrate); no new
-    emission path without consulting ADR-025's deferred notes (F-context
-    rule above stands).
+    one component, two surfaces). **F1 is a hard precursor** (2026-08-03
+    review pass: F5 extends F1's drawer streaming — F1 rides wave-5 batch C
+    with F4/F5, per the header note). ACs: real captured lines render
+    mid-cycle (same emission substrate as F1); no new emission path without
+    consulting ADR-025's deferred notes (F-context rule above stands).
   - **Acceptance references:** mockup journeys `run-flow`, `edit-flow` (run
     beats) + the per-OOTB-agent run journeys; surface `views-run.jsx`.
     **Depends (added):** R2-05 (soft — typed-output rendering contract;
     pulled in when F5 reaches typed outputs, per the wave-5 5B order note).
+    **Depended on by (added, both-sides):** R6-05 (ledger rows → F4 detail),
+    R4-12/R4-13 *(soft — completed-run dig-in links)*.
 - **Session sizing:** ~2 sessions (F1; F2+F3) **+ ~2 wave-5 sessions (F4; F5)**.
 - **Out of scope:** cost *integrity* (R5-03); harness clip content (R5-06);
   event emission architecture changes (ADR-025's deferred items get their own
@@ -142,8 +147,10 @@ iteration-refinement target 1).
 
 ### R6-03 IA & convention stewardship
 
-- **Status:** planned  ·  **Wave:** unsequenced
-- **Depends on:** — (grows as R3/R4 add surfaces)
+- **Status:** planned  ·  **Wave:** unsequenced pre-wave-5; **F3 = wave 5,
+  batch E** (sequenced late — after the surfaces it rehomes exist)
+- **Depends on:** — (grows as R3/R4 add surfaces). **Depended on by:** R6-07
+  (F3's Home pillar precedes the dashboard).
 - **Context:** The set adds routes and pillars (skills library R3-01-F3, KB
   scope chips R1-01, merged states R4-11) — the conventions that keep Studio
   coherent need an owner: the DOM-as-metrics contract, the status-vocabulary
@@ -231,7 +238,8 @@ iteration-refinement target 1).
 ### R6-05 Flow monitor ledger
 
 - **Status:** planned  ·  **Wave:** 5 (module: flows-home/monitor)
-- **Depends on:** R6-01-F4 (run-detail pages to link into).
+- **Depends on:** R6-01-F4 (run-detail pages to link into). **Depended on
+  by:** R6-06 (shared ledger components), R4-12-F2 (vocabulary reuse).
 - **Context:** Wave-5 cut. Mockup: the flows home/monitor carries a
   per-flow **history ledger** in one shared vocabulary — `when · what ·
   outcome-narrative · status · cost` (`FLOW_HISTORY` in `data.jsx`; the
@@ -312,7 +320,9 @@ iteration-refinement target 1).
 ### R6-08 KB explore (combined graph + reader)
 
 - **Status:** planned  ·  **Wave:** 5 (module: kb-explore)
-- **Depends on:** — (KbGraph/NodeArticle as-built are the substrate).
+- **Depends on:** R1-06 *(soft — the Health tab's maintenance-session entry
+  links into R1-06-F3; both-sides fix, 2026-08-03 review pass)*.
+  KbGraph/NodeArticle as-built are the substrate.
 - **Context:** Wave-5 cut. Mockup round-3 (operator request): KB graph and
   reader are **one surface** — graph left, theme list + article right,
   clicking a node opens it in the reader; tabs `Explore | Health |
@@ -333,12 +343,16 @@ iteration-refinement target 1).
     NodeArticle); node click → article; deep-linkable
     (`?theme=<slug>`). ACs: graph→reader round-trip; existing graph
     journeys re-anchored not duplicated; `data-*` contract.
-  - **R6-08-F2 Health + Ingest-activity tabs.** Health renders the 9 lint
+  - **R6-08-F2 Health + Ingest-activity tabs.** Health renders the lint
     checks BY NAME with pass/warn/fail (today's aggregate becomes itemized —
     same `forge brain lint` evidence, no new checks) + the existing guided
     lint-resolution; Ingest activity lists reflection-driven ingest events
     from the event log, read-only, with **no ingest affordance** (explicit
-    negative AC — decision 3). ACs: named checks match `forge brain lint`
+    negative AC — decision 3). **Mockup check names are illustrative, the
+    real `cli/brain-lint.ts` check list wins** (2026-08-03 review pass: the
+    mockup's "theme distribution balance" / "raw evidence archived" names
+    don't exist as checks, and the real set is ~10 functions, not 9 — do NOT
+    build the invented checks). ACs: named checks match `forge brain lint`
     output 1:1; a seeded ingest event renders; no button/route triggers
     ingest from the UI.
 - **Session sizing:** ~2 sessions.
@@ -378,3 +392,8 @@ R4-11-F4 attention strip during real multi-project operation.
   (combined graph+reader, named-check Health, ingest-activity read-only — NO
   manual ingest per operator decision 3). All entries cite mockup journey ids
   + `as-built-inventory.md` baselines.
+- 2026-08-03 — **Adversarial-review corrections (PR #71 review pass).**
+  R6-01-F1 pulled into wave-5 batch C as F5's hard precursor; R6-01/R6-03
+  headers annotated with their wave-5 features; R6-08 gains the soft R1-06
+  edge + the mockup-lint-names-are-illustrative rule (real `brain-lint.ts`
+  list wins, ~10 checks not 9); both-sides edges added on R6-01/03/05.

@@ -50,7 +50,7 @@ R5-05 and R5-07 exist specifically to keep the two documents reconciled.
 | **R2** | [R2-runnable-componentry.md](./R2-runnable-componentry.md) | Make "a runnable" a first-class primitive — agent-as-runnable, def-driven builder, fanout (research spike first), trigger expansion, dynamic artifact surfaces, runtime-adapter realization; wave 5 adds triggers-runtime, builder parity, the sessions surface. | 10 + 2 deferred | 4 implemented, 6 planned, 2 deferred (R2-D1 closed-rejected, R2-D2 parked) |
 | **R3** | [R3-library-componentry.md](./R3-library-componentry.md) | First-class managed libraries of reusable capability: skills, skill-generator flow, hooks (lifecycle customisations), connections, instructions, templates + the community browser. | 7 | 2 implemented (F-residues re-planned), 5 planned |
 | **R4** | [R4-ootb-suite.md](./R4-ootb-suite.md) | The shipped out-of-the-box agent/flow suite: migrate platform surfaces to artifacts, the agent roster (onboarding, creation, architect, plan, develop, demo, adversarial review, reflect), the develop-cycle OOTB flow, the roadmap & attention surface; wave 5 adds the project surfaces + per-OOTB session/flow alignment. | 20 + 1 deferred | 11 implemented, 9 planned, 1 deferred (R4-D1) |
-| **R5** | [R5-hardening-operability.md](./R5-hardening-operability.md) | Safety, integrity and doc hygiene: dry-bridge seam, G8 env-pin at the spawn seam, cost integrity, edit-lock fix, known-gaps residue cross-references, demo/harness backlog, SSOT reconciliation. | 7 | 7 planned |
+| **R5** | [R5-hardening-operability.md](./R5-hardening-operability.md) | Safety, integrity and doc hygiene: dry-bridge seam, G8 env-pin at the spawn seam, cost integrity, edit-lock fix, known-gaps residue cross-references, demo/harness backlog, SSOT reconciliation; wave 5 adds the dead-code sweep + the three-scope docs ground-truth restructure. | 9 | 4 implemented (R5-01/02/04/07), 5 planned |
 | **R6** | [R6-operator-experience.md](./R6-operator-experience.md) | The Studio operator surface as a platform: run observability depth, human-readable operations, IA & DOM-convention stewardship — the biggest wave-5 home (kickoff/monitors/home/KB-explore). | 8 + 1 deferred | 8 planned, 1 deferred (R6-D1) |
 | **R7** | [R7-verification-infrastructure.md](./R7-verification-infrastructure.md) | The standing verification platform: corpus-anchored bench rebuild, journey-platform evolution (incl. the LLM-driven UI-test tier), verify-ground stewardship, CI/drift-guard growth. *(Minted 2026-07-17; unwaved.)* | 4 | 4 planned |
 | **R8** | [R8-distribution-release.md](./R8-distribution-release.md) | Forge itself as a shippable product: packaging (the deferred S10), version/release policy, public docs & positioning upkeep. *(Minted 2026-07-17; deliberately thin, operator-paced.)* | 3 + 1 deferred | 3 planned, 1 deferred (R8-D1) |
@@ -66,7 +66,7 @@ Canonical initiative skeleton (IDs are fixed and never reused):
 - **R2**: R2-01 Agent-as-runnable primitive · R2-02 Agent-def-driven builder · R2-03 Fanout capability (research spike first) · R2-04 Trigger expansion · R2-05 Dynamic artifact surfaces · R2-06 Runtime-adapter realization · R2-07 Composition single-source · R2-08 Triggers runtime *(wave 5)* · R2-09 Agent-builder definition parity *(wave 5)* · R2-10 Interactive sessions surface *(wave 5)* · R2-D1 *(deferred, closed-rejected)* Parallel-work merge-resolution · R2-D2 *(deferred/parked)* Plan-band read-only parallelism
 - **R3**: R3-01 Skills first-class management · R3-02 Skill-generator flow · R3-03 Hooks library (lifecycle re-scope) · R3-04 Connections (tools/MCPs/CLIs) library · R3-05 Instructions library · R3-06 Templates library *(wave 5)* · R3-07 Community browser *(wave 5)*
 - **R4**: R4-01 Platform→artifact migration · R4-02 Project onboarding agent · R4-03 Project creation agent · R4-04 Architect agent refinement · R4-05 Plan agent · R4-06 Develop agent refinement · R4-07 Demo agent · R4-08 Adversarial review agent · R4-09 Reflect agent · R4-10 Develop-cycle OOTB flow · R4-11 Roadmap & attention surface · R4-12 Project detail alignment *(wave 5)* · R4-13 Project roadmap tab *(wave 5)* · R4-14 Demo showcase page *(wave 5)* · R4-15 Architect/planning session ⚑ *(wave 5)* · R4-16 Demo-builder generation gallery *(wave 5)* · R4-17 Onboarding session staging *(wave 5)* · R4-18 Onboard-project OOTB flow *(wave 5)* · R4-19 Brain creation & maintenance agents *(wave 5)* · R4-20 Brain-tune OOTB flow *(wave 5)* · R4-D1 *(deferred)* Architect-flow retirement
-- **R5**: R5-01 Dry-bridge seam · R5-02 G8 env-pin at spawn seam · R5-03 Cost integrity · R5-04 Flow edit-lock verification · R5-05 Known-gaps residue · R5-06 Demo/harness backlog · R5-07 SSOT reconciliation
+- **R5**: R5-01 Dry-bridge seam · R5-02 G8 env-pin at spawn seam · R5-03 Cost integrity · R5-04 Flow edit-lock verification · R5-05 Known-gaps residue · R5-06 Demo/harness backlog · R5-07 SSOT reconciliation · R5-08 Dead-code & component minimisation *(wave 5)* · R5-09 Docs ground-truth restructure *(wave 5)*
 - **R6**: R6-01 Run-observability depth · R6-02 Human-readable operations · R6-03 IA & convention stewardship · R6-04 Run kickoff & consolidation *(wave 5)* · R6-05 Flow monitor ledger *(wave 5)* · R6-06 Agent monitor linkage *(wave 5)* · R6-07 Home dashboard *(wave 5)* · R6-08 KB explore *(wave 5)* · R6-D1 *(deferred)* Notification transport beyond the blade
 - **R7**: R7-01 Bench rebuild (corpus-anchored) · R7-02 Journey platform evolution · R7-03 verify-ground & corpus stewardship · R7-04 CI & drift-guard growth
 - **R8**: R8-01 Packaging · R8-02 Version & release cadence · R8-03 Public docs & positioning upkeep · R8-D1 *(deferred)* Community & ecosystem enablement
@@ -245,7 +245,7 @@ already-aligned surfaces are baseline material (R4-B13), not initiatives.
 
 #### Wave-5 cut summary
 
-| Initiative | Module | Home | Size | Depends (hard) |
+| Initiative | Module | Home | Size | Depends (hard; *italic = soft*) |
 |---|---|---|---|---|
 | R3-01-F3/F4 skills library view + marketplace (re-entered) | library-skills | R3 | M | — |
 | R3-03 hooks library (lifecycle re-scope) | library-hooks | R3 | L | — |
@@ -255,9 +255,9 @@ already-aligned surfaces are baseline material (R4-B13), not initiatives.
 | R2-08 triggers runtime | triggers-runtime | R2 | M | R2-04 |
 | R2-09 agent-builder definition parity | agent-builder | R2 | M | R2-02 |
 | R2-10 interactive sessions surface | sessions-surface | R2 | L | R2-01-F3 |
-| R6-01-F4/F5 run-detail depth (amend) | flow-run-detail | R6 | M | R2-05 (soft, typed outputs) |
-| R6-03-F3 six-pillar nav + page shell (amend) | IA stewardship | R6 | M | late — after wave-5 surfaces |
-| R6-04 run kickoff & consolidation | agent-kickoff+run | R6 | M | R2-09-F1 · R2-02 |
+| R6-01-F1/F4/F5 run-detail depth (amend; F1 = F5's hard precursor) | flow-run-detail | R6 | M | *R2-05 (typed outputs, at need)* |
+| R6-03-F3 six-pillar nav + page shell (amend) | IA stewardship | R6 | M | — (batch-E sequencing) |
+| R6-04 run kickoff & consolidation | agent-kickoff+run | R6 | M | R2-01-F3 · R2-02 · R2-09-F1 |
 | R6-05 flow monitor ledger | flows-home/monitor | R6 | S | R6-01-F4 |
 | R6-06 agent monitor linkage | agents-home/monitor | R6 | S | R6-05 · R6-04-F3 · R2-10 |
 | R6-07 home dashboard | home-dashboard | R6 | M | R6-03-F3 · R4-11-F4 |
@@ -279,27 +279,55 @@ policy stands (decision 3, negative ACs on R6-08/R1-06); the mockup's
 architect+PM merger stays behind **R4-D1** (R4-15-F2 ⚑ produces the decision
 brief).
 
-#### 5B — recommended execution order
+#### 5B — the batch plan: current state → mockup state (restructured 2026-08-03)
 
-1. **Prove the module loop on the library** — R3-01-F3/F4 (smallest
-   modularity-proving slice) → R3-06 templates → R3-03 hooks → R3-04
-   connections → R3-07 community browser → R3-02 skill-generator (pre-cut
-   plan, lands on the finished library).
-2. **Runnable seams** — R2-08 triggers → R2-09 builder parity → R2-10
-   sessions surface (unblocks the R4 session set).
-3. **Run/monitor depth** — R6-01-F4/F5 (+pull **R2-05** when typed outputs
-   need it) → R6-05 → R6-04 → R6-06.
-4. **Project surfaces** — R4-12 → R4-13 → R4-14.
-5. **Per-OOTB set** — R4-15 · R4-16 · R4-17→R4-18 · R1-06→R4-19 · R4-20
-   (order free within deps).
-6. **IA closeout** — R6-08 → R6-03-F3 (nav/shell after the surfaces it
-   rehomes exist) → R6-07 home dashboard last.
+Operator directive (same day, post-cut): drive wave 5 as a **small number of
+batches**, each a clean module-separated arc from as-built to mockup state.
+Two ground truths only — the as-built assessment (`as-built-inventory.md` +
+the roadmap baselines) and the mockup's flows/intent; prior wave structure is
+history, not a constraint. The per-initiative specs in the R-files stay the
+execution detail; THIS table is the driving view.
 
-**R7 rises post-wave-4:** R7-01 bench rebuild is now unblocked (the R4
-suite is stable), and R7-03 inherits stewardship of the new gitpulse
-`coupling` verify ground from the wave-4 tail. R5-03/05/06 stay
-continuous; R8 stays operator-paced. **R1-02/R1-05 and R2-06/R2-07** remain
-platform continuity, pulled at dependency points as before.
+| Batch | Modules | Initiatives | Functional closure (journeys run against the REAL product) |
+|---|---|---|---|
+| **A — Library** | library-skills · library-hooks · library-connections · library-templates · community-browser | R3-01-F3/F4 · R3-06 · R3-03 · R3-04 · R3-07 | build-skill · build-hook · install-skills-hooks · install-connections |
+| **B — Sessions & builder** | sessions-surface · agent-builder · per-OOTB sessions | R2-10 · R2-09 · R4-15 · R4-16 · R4-17 | create-agent · edit-agent · onboard-project · create-project · run-agent-{architect, demo-builder, onboarding} |
+| **C — Runs, triggers & monitors** | triggers-runtime · agent-kickoff+run · flow-run-detail · flows-home/monitor · agents-home/monitor | R2-08 · R6-04 · R6-01-F1/F4/F5 (+the R2-05 slice typed outputs need) · R6-05 · R6-06 | run-agent · run-flow · run-agent-{developer, adversarial-review, demo-runner, reflector} — all three trigger framings |
+| **D — Projects & knowledge** | projects-list/detail · project-roadmap-tab · demo-showcase · kb-create/maintain · kb-explore · per-OOTB flows | R4-12 · R4-13 · R4-14 · R1-06 · R6-08 · R4-19 · R4-18 · R4-20 | create-kb-project · create-kb-cycle · kb-maintain · run-agent-brain-creation · run-flow-onboard · run-flow-brain-tune |
+| **E — IA & Home** | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav + Home live; nav/landing beats across the gallery |
+| **F — Refinement & ground truth** | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep clean; three-scope docs (operate / develop / plan) |
+
+Batch rules: order **A→F**, dependencies flow forward only; one batch = one
+merged arc (sessions inside it can parallelize where deps allow); **every
+batch PR deletes what it obsoletes** (R5-08-F1 — no zombie surfaces); a batch
+closes when its journeys run against the real product via journey-sync, not
+the mockup player.
+
+**Story-beat parity (operator directive, 2026-08-03):** the mockup's 27
+scripted journeys (`journeys-data.jsx` beats + captured videos) are the
+**target inventory for forge-ui's test validation** — closing a batch means
+porting its mockup stories' beats into real `scripts/journeys/` modules
+(same story, same beat sequence, asserted via the `data-*` DOM contract), so
+the real `ui:journey` gallery converges on the mockup story set. R7-02-F3
+owns the story registry + parity tracking; each batch's port is its own
+journey-sync duty. Beats invalidated by the cut decisions (branching ⑂,
+ingest button, demo-design/research) are marked excluded in the registry,
+never silently skipped.
+
+**Real work does not wait for closure.** The platform is whole post-wave-4 —
+`verify:cycle` and a real Scope-3 chunk (betterado roadmap continuation or a
+gitpulse initiative) can and should run after ANY batch to capitalise on and
+validate the refinement waves. The **wave-5 exit gate** is when EVERY mockup
+flow is functionally possible with real functionality behind it: full journey
+gallery green (the 27 minus parked branching + demo-design/research and
+vision-only beats), one verify:cycle run, and one real Scope-3 chunk driven
+through forge end-to-end.
+
+**Explicitly outside wave-5 closure** (platform continuity, pulled only at a
+dependency point): R3-02 · R2-05 (beyond C's slice) · R2-06 · R2-07 · R1-02 ·
+R1-05 · R7-01..04 (journeys serve as the gate; the bench rebuild remains
+post-closure) · R8. Deferred items stay deferred (R1-D1 · R2-D1/D2 · R4-D1 ·
+R6-D1 · R8-D1). R5-03/05/06 stay continuous as before.
 
 ---
 
@@ -507,6 +535,22 @@ Locked operator answers from the BACKLOG-CUT-PROMPT AskUserQuestion round
 6. **Logistics — one combined PR** from `docs/studio-endstate-mockups-v2`
    (mockup prototype + wave-5 README section + this cut), operator-merged.
 
+**Restructure directive (2026-08-03, same day — post-cut):** simplify the
+driving view: batch the wave-5 work along clean module-separation lines as a
+plain **current-state → mockup-state** diff (the two ground truths: the
+as-built assessment + the mockup's flows/intent — prior wave structure is
+history, not a constraint). **Closure** = every mockup flow functionally
+possible with real functionality behind it. **Real Scope-3 work through forge
+is the priority** — verify:cycle + a real chunk run after any batch, not only
+at the end; the exit gate includes one real chunk end-to-end. Plus a
+refinement pass (dead code, component minimisation — R5-08) and a docs
+ground-truth restructure into three scopes: operate / develop / plan
+(R5-09). Lands as the §4 batch plan A–F. **Addendum (same day): story-beat
+alignment** — the mockup's 27 journey stories/videos are the target
+inventory for forge-ui UI-test validation; batches close by porting their
+stories' beats into real `scripts/journeys/` modules (R7-02-F3 owns the
+registry + parity view; §4 story-beat parity rule).
+
 ---
 
 ## Change log
@@ -618,7 +662,8 @@ Locked operator answers from the BACKLOG-CUT-PROMPT AskUserQuestion round
   force-graph, skills builder + community catalog, architect interview →
   unified gate.
 - 2026-08-03 — **5A backlog cut EXECUTED** (same day, follow-on session; six
-  operator decisions in §8). 16 new initiatives minted + 5 amended across
+  operator decisions in §8). 20 new initiatives minted *(count corrected from
+  16 by the same-day adversarial review)* + 5 amended across
   R1/R2/R3/R4/R6, every one scoped to a single module with mockup journey ids
   as acceptance references and `as-built-inventory.md` baselines: R3 (R3-01
   F3/F4 re-entry, R3-03 lifecycle re-scope, R3-04 connections, R3-06
@@ -628,3 +673,41 @@ Locked operator answers from the BACKLOG-CUT-PROMPT AskUserQuestion round
   R4-12..R4-20). §2 register + skeleton updated; §3 gains the wave-5 edge
   table; §4's wave-5 subsection now carries the cut-summary table + the 5B
   execution order (smallest modularity-proving slice first: R3-01-F3/F4).
+- 2026-08-03 — **Wave-5 restructure (operator directive, post-cut).** §4's 5B
+  becomes the **batch plan A–F** — current-state → mockup-state arcs along
+  clean module lines (A library · B sessions/builder · C runs/triggers/
+  monitors · D projects/knowledge · E IA/home · F refinement/ground-truth),
+  delete-as-you-go rule, closure = every mockup flow functionally backed,
+  real Scope-3 work through forge after any batch + one real chunk in the
+  exit gate. **R5-08 + R5-09 minted** (dead-code/component sweep; three-scope
+  docs ground-truth restructure). §8 gains the restructure directive; R5
+  register/skeleton rows updated. **Story-beat alignment addendum:** the
+  mockup's 27 journey stories become the target inventory for forge-ui
+  UI-test validation — §4 gains the story-beat parity rule; **R7-02-F3
+  added** (story registry + script-derived parity; exit gate's "full
+  gallery" defined by it). *(This also closes the cut's open R7 disposition:
+  the 5A cut deliberately left R7 unamended — per-initiative journey-sync
+  owns feature journeys — and the restructure landed the platform half as
+  R7-02-F3.)*
+- 2026-08-03 — **Adversarial-review pass over the 5A cut** (fresh-context
+  reviewer on PR #71; 5 majors + 6 minors + 5 notes, all accepted after
+  verification). Corrections: **R2-08's as-built baseline rewritten** (4
+  trigger kinds live, `manual`/`agent-complete`/`feed` reserved;
+  agent-TARGET dispatch already live via `startAgentRun` — only the stale
+  code comment retires; phantom "R2-B4 as amended" citation dropped) and
+  **F4 shrunk to provenance recording only** (render sites stay with
+  R6-01/04/05/06 — one-module rule). **R2-10/R4-16 demo-builder premise
+  corrected**: three bespoke session pages, not four — the demo-builder is
+  the inline R1-03-F2 panel and is NOT re-detached (no silent reversal).
+  **R3-03 gains the guards-migration clause** (the 9 catalog hook ids are
+  dispatch-load-bearing: `composition.hooks` sweep, ADR-027 authoring-field
+  amendment, band-dispatch vocabulary, spawn-capture parity — boundary move
+  recorded). **Both-sides edge sweep** (R1-01, R1-03, R2-01/02/04/05/08/10,
+  R4-02/09/11, R6-01/03/05/08 depended-on-by fields now carry the wave-5
+  reverse edges). Minors: initiative count 16→20; R6-08 mockup lint-check
+  names marked illustrative (real `brain-lint.ts` list wins); R4-13
+  status-colors claim + retirement collateral corrected; R6-01-F1 pulled
+  into batch C as F5's hard precursor; R6-01/R6-03 headers annotated;
+  R2-D1 marked closed-rejected; R1-06-F3 Health-tab entry timed on R6-08;
+  R3-06-F3 scaffold vision-promotion recorded; R3 acceptance-refs folded
+  per-initiative; cut-table dep column normalized.

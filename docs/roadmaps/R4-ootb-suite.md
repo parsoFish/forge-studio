@@ -377,7 +377,9 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
     no-op, profile still compiles (ADR-037 default). The onboarding SKILL.md runs
     both after declaring the gate. Feeds R4-05-F3. Tested in `constraint-author.test.ts`.
 - **Depends on:** R3-05 (instructions sourcing), R1-03/R1-04 (contract process
-  clauses to tick), R1-01 (KB binding at onboarding), R2-01 (standalone runnable)
+  clauses to tick), R1-01 (KB binding at onboarding), R2-01 (standalone runnable).
+  **Depended on by:** R4-03 (hand-off pattern), R4-17/R4-18 *(wave 5 — session
+  staging + flow packaging wrap this agent)*
 - **Context:** Operator diagram (verbatim intent): tailored to onboarding an
   existing project; *"with the added ability to run agents this can utilise
   that function to be standalone without needing to run through a flow"*;
@@ -967,7 +969,9 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
     Journey: `flows-run-reflect-automated`. **Deferred within F3:** authoring
     the mode via the Studio FlowHeader UI (blocked on agent-target trigger
     authoring, ADR-041) — mode is authored in flow.yaml data for now.
-- **Depends on:** R1-01 (writes into contract-typed, Q5-B-scoped KBs)
+- **Depends on:** R1-01 (writes into contract-typed, Q5-B-scoped KBs).
+  **Depended on by:** R4-20 *(wave 5 — the brain-tune flow packages this
+  agent)*
 - **Context:** Operator diagram (verbatim intent): the current reflection agent
   *"except runnable as a standalone agent rather than needing a flow with a
   single agent in it; takes an initiative with a current state of **merged**
@@ -1169,7 +1173,7 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
 ### R4-11 Roadmap & attention surface
 
 - **Status:** **implemented** (2026-07-19, wave 2 — as-built baseline R4-B11)  ·  **Wave:** 2 (with R4-05)
-- **Depends on:** — · **Depended on by:** R4-05 *(soft)*, R4-09 (merged-state trigger)
+- **Depends on:** — · **Depended on by:** R4-05 *(soft)*, R4-09 (merged-state trigger), R6-07 *(wave 5 — the home dashboard feeds on F4's attention strip)*
 - **Context:** The operator surface work the suite needs: Q2-B's `merged`
   lifecycle state, the standalone plan trigger, blocked-until-planned, folding
   recovery into the roadmap (known-gaps §4b.4), and Q4's slim cross-project
@@ -1282,17 +1286,23 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
   dependency arcs) inline on the project page (`as-built-inventory.md` §8).
 - **Features:**
   - **R4-13-F1 Full-page Roadmap tab with DAG viz.** Dependency-DAG column
-    layout (mockup `ROADMAPS` shape: status-coloured nodes, `dep:` edges,
-    shared `status-colors.ts` vocabulary incl. `merged` /
-    `blocked-until-planned` states from R4-11) + the initiative table;
-    Overview keeps the compact table. **`SerpentineTimeline` retires in this
-    feature** — component deleted, its click-to-pop detail affordance
-    re-homed on the DAG nodes (R4-11-F2/F3's plan-trigger + recovery
-    affordances move with it, unchanged in behaviour). ACs: DAG renders a
-    real multi-initiative roadmap with correct edges; serpentine gone,
+    layout (mockup `ROADMAPS` shape: nodes coloured via the shared
+    `STATUS_COLOR` tones in `forge-ui/lib/status-colors.ts`, `dep:` edges,
+    plus the R4-11-F2 lock affordance — corrected 2026-08-03 review pass:
+    `merged`/`blocked-until-planned` are queue/page states, not palette
+    entries) + the initiative table; Overview keeps the compact table.
+    **`SerpentineTimeline` retires in this feature** — component deleted,
+    its click-to-pop detail affordance re-homed on the DAG nodes
+    (R4-11-F2/F3's plan-trigger + recovery affordances move with it,
+    unchanged in behaviour). Retirement collateral (named so it isn't
+    under-scoped): the `roadmap` journey's serpentine-anchored
+    narration/frames rewrite, the SerpentineTimeline `data-*` rows in
+    `docs/forge-ui-dom-and-harness.md`, and the full `ui:journey` gallery
+    regen a beat rename forces (standing lesson). ACs: DAG renders a real
+    multi-initiative roadmap with correct edges; serpentine gone,
     `ui:deadpaths` green; the R4-11 roadmap-node affordances (Plan action,
-    lock badge, recovery) all reachable on the DAG; journey rewritten
-    against the tab.
+    lock badge, recovery) all reachable on the DAG; journey + DOM-reference
+    doc updated in the same PR; gallery regenerated.
   - **R4-13-F2 Per-initiative run dig-in.** An initiative node/row with runs
     links to its run detail (R6-01-F4), completed included. ACs: navigation
     proven on an archived cycle.
@@ -1375,9 +1385,15 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
 - **Context:** Wave-5 cut. Mockup `SESSIONS['demo-builder']`: the
   demo-capability session iterates **generations 1→3** (clip → +stats
   overlay → +HTML summary) in a gallery artifact pane; the operator picks
-  one and the chosen demo skill is written into the project. As-built: the
-  demo-builder runner + project demo timeline/builder exist (R4-B6/R2-B2);
-  no generation-gallery iteration surface.
+  one and the chosen demo skill is written into the project. As-built
+  (corrected 2026-08-03 review pass): the demo-builder runs as the inline
+  `DemoBuilderPanel` on `/projects/[id]` — R1-03-F2 (2026-07-24,
+  operator-approved) folded the old standalone route into the project page;
+  `demo/[sid]` is a redirect stub. **This initiative does not re-detach it:**
+  entry stays the project page, and the gallery renders through the R2-10
+  shell *in place* (or records a reasoned exception with an operator nod —
+  never a silent reversal of R1-03-F2). No generation-gallery iteration
+  surface exists today.
 - **Features:**
   - **R4-16-F1 Generation gallery session.** The demo-builder session
     renders candidate generations side-by-side (accumulating, numbered),
@@ -1645,3 +1661,9 @@ free R4 ID's features.
   R4-18 onboard-project OOTB flow, R4-19 brain creation & maintenance
   agents, R4-20 brain-tune OOTB flow. Every entry cites mockup journey ids +
   `as-built-inventory.md` baselines; one module per initiative.
+- 2026-08-03 — **Adversarial-review corrections (PR #71 review pass).**
+  R4-16 as-built corrected (demo-builder = R1-03-F2 inline panel; gallery
+  renders through the R2-10 shell in place — no silent re-detach); R4-13-F1
+  status-colors claim fixed (STATUS_COLOR tones + R4-11-F2 lock affordance)
+  + retirement collateral named (roadmap journey rewrite, DOM-reference doc
+  rows, full gallery regen); reverse edges added on R4-02/R4-09/R4-11.
