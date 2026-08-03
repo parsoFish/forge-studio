@@ -1331,7 +1331,12 @@ describe('validateArtifactTemplate', () => {
 });
 
 describe('validateArtifactRef', () => {
-  it('edge artifact with no template → advisory artifact/no-template', () => {
+  // AT-38 (R3-06/R2-05-F1): promoted from advisory `flag` to `error`
+  // (ADR-027 pre-authorised the promotion once all seed flows ship templates;
+  // verified 2026-08 — `forge studio lint` reports 0 artifact/no-template
+  // findings on the real repo). This is an intentional, recorded behaviour
+  // change, not a regression — see docs/decisions/027 + R2-05-F1.
+  it('AT-38: edge artifact with no template → ERROR artifact/no-template (promoted from flag)', () => {
     const flow = makeFlow({
       nodes: [
         { id: 'a', agent: 'x' },
@@ -1341,7 +1346,7 @@ describe('validateArtifactRef', () => {
     });
     const f = validateArtifactRef(flow, new Set(['plan'])).find((x) => x.check === 'artifact/no-template');
     assert.ok(f, 'expected artifact/no-template finding');
-    assert.equal(f.level, 'flag');
+    assert.equal(f.level, 'error', 'artifact/no-template must now be an error, not an advisory flag');
   });
 
   it('edge artifact with a registered template → no findings', () => {
