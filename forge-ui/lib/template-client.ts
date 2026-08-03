@@ -220,13 +220,25 @@ export type TemplatePackageFile = { path: string; body: string };
 
 export type TemplateDetail = TemplateLibraryEntry & { files: TemplatePackageFile[] };
 
+/** `files` absent, or present but not an array, is a malformed response —
+ *  never coerced to `[]` (the bridge always sends it for a valid detail
+ *  response, so a missing/wrong-typed "files" can only mean the response
+ *  itself is malformed — same rule as `usedBy` above). Each element must be
+ *  a plain object with string `path`/`body` fields; never defaulted to `''`,
+ *  which would fabricate a file path/body the bridge never sent. A
+ *  genuinely empty package (`files: []`) is the one legitimate empty and
+ *  passes through unchanged. */
 function parseTemplatePackageFiles(raw: unknown): TemplatePackageFile[] {
-  if (!Array.isArray(raw)) return [];
+  if (!Array.isArray(raw)) {
+    throw new Error(`missing or invalid "files": expected an array, got ${JSON.stringify(raw)}`);
+  }
   return raw.map((f) => {
-    const ff = (f ?? {}) as Record<string, unknown>;
+    if (!isPlainObject(f)) {
+      throw new Error(`malformed template package file: expected an object, got ${JSON.stringify(f)}`);
+    }
     return {
-      path: typeof ff['path'] === 'string' ? ff['path'] : '',
-      body: typeof ff['body'] === 'string' ? ff['body'] : '',
+      path: requireString(f, 'path'),
+      body: requireString(f, 'body'),
     };
   });
 }
