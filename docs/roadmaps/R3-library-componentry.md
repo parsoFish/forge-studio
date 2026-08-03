@@ -199,7 +199,10 @@ html/video/shots/mock/doc/scaffold, CSS-approximation classes) — and
 `/templates/[id]` (`forge-ui/app/templates/[id]/page.tsx`) is the real
 detail page: definition, producer/consumer verification, derived used-by, and
 — for a `project-scaffold` entry — the whole scaffold file tree through the
-SAME `FilePackage` component `/skills/[id]` uses. `GET /api/studio/templates`
+SAME `FilePackage` component `/skills/[id]` uses. The detail page renders that
+tree **raw** — it does not enumerate which contract clauses a scaffold
+pre-wires, so F3's "detail page lists what the contract pre-wires" AC is met
+only inferentially (see the change-log entry). `GET /api/studio/templates`
 + `GET /api/studio/templates/:id` (`cli/bridge-studio-templates.ts`) are the
 only routes (read-only; the template library has no write path). Demoed by
 four new `templates` journey beats (`scripts/journeys/templates.mjs`, wired
@@ -926,4 +929,12 @@ rather than deferred within it:
   "five seed templates" line corrected to the real seven
   (`review-findings`/`demo-fix-spec` were missing from that list). The
   templates library's own journey stays deliberately browse→detail only (no
-  create-project action added from `/templates` itself).
+  create-project action added from `/templates` itself). **Pre-wire
+  enumeration deferred: the detail page shows the raw file tree, it does not
+  enumerate contract pre-wiring.** Three of F3's four ACs are met outright
+  (three canonical shapes ship; creating from a scaffold yields a
+  preflight-green project; the picker consumes the registry with no hardcoded
+  list); the fourth — "scaffold detail page lists what the contract pre-wires"
+  — is met only inferentially, since a reader can see `.forge/project.json`,
+  the gate and the CI workflow in the file tree but the page names no clause.
+  Recorded as claimed-with-caveat rather than silently counted as complete.
