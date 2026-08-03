@@ -676,12 +676,46 @@ function lintFinding(object: string, check: string, message: string): Finding {
   return { level: 'error', object, check, message };
 }
 
+/**
+ * D4's roster-level enforcement point (MAJOR 2, third adversarial-review
+ * round): `isStudioAgent` now refuses this exact shape structurally, which is
+ * precisely what makes it invisible to `listAgentDefinitionsResilient` (and
+ * therefore to every check built on top of it, including the rest of this
+ * function). Without a dedicated scan, a hand-edited installed skill that
+ * restores a top-level `runtime:` alongside its `provenance:`/`quarantined:`
+ * block would simply vanish from lint output instead of being flagged — it
+ * is excluded from the roster, not reported as the escalation attempt it is.
+ */
+function findInstalledAgentShapeViolations(forgeRoot: string): Finding[] {
+  const findings: Finding[] = [];
+  for (const dir of listSkillDirs(forgeRoot)) {
+    const id = basename(dir);
+    let data: Record<string, unknown>;
+    try {
+      data = (matter(readFileSync(skillPath(id, forgeRoot), 'utf8'), {}).data ?? {}) as Record<string, unknown>;
+    } catch {
+      continue; // malformed — already surfaced elsewhere (listSkillLibrary's AT-7 error field)
+    }
+    if ('runtime' in data && ('provenance' in data || 'quarantined' in data)) {
+      findings.push(
+        lintFinding(
+          `skill:${id}`,
+          'skill-trust/installed-agent-shape',
+          `Skill "${id}" carries a top-level "runtime:" block together with a "provenance:"/"quarantined:" block — an installed package can never be loaded as a studio agent (D4); remove "runtime:" or resolve the provenance/quarantine mismatch`,
+        ),
+      );
+    }
+  }
+  return findings;
+}
+
 /** `skill-trust/hash-drift` | `skill-trust/provenance-tampered` |
  *  `skill-trust/unregistered-install` (needs-review present, distinguished by
  *  `skillTrustDetail`'s reason) + `skill-trust/draft-unapproved` (an agent
- *  composes a still-draft skill). See the trust vocabulary table. */
+ *  composes a still-draft skill) + `skill-trust/installed-agent-shape` (D4
+ *  roster-level escalation attempt). See the trust vocabulary table. */
 export function lintSkillTrust(forgeRoot: string): Finding[] {
-  const findings: Finding[] = [];
+  const findings: Finding[] = [...findInstalledAgentShapeViolations(forgeRoot)];
   const entries = listSkillLibrary(forgeRoot);
   const draftIds = new Set(entries.filter((e) => e.trust === 'draft').map((e) => e.id));
 

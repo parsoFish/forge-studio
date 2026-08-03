@@ -11,6 +11,7 @@ import { DEMO_STEP_KINDS } from './types.ts';
 import { FANOUT_ISOLATION_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
+import { SLUG_RE } from '../skill-path.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
 import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
@@ -36,7 +37,10 @@ export type Finding = {
   message: string;
 };
 
-export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+// Definition moved to skill-path.ts (a leaf module) to break the
+// skill-path→validate→registry→skill-path cycle; re-exported so this file's
+// 20+ existing call sites stay untouched.
+export { SLUG_RE };
 
 // ---------------------------------------------------------------------------
 // Internal helpers

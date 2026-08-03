@@ -101,17 +101,17 @@ export const PHASE_EXECUTOR_KINDS = [] as const;
 export function isStudioAgent(skillMdPath: string): boolean {
   try {
     const raw = readFileSync(skillMdPath, 'utf8');
-    const { data } = matter(raw);
+    const { data } = matter(raw, {}); // {} opts out of gray-matter's parse cache — see skill-library.ts header
+    if (data == null || typeof data !== 'object') return false;
+    const d = data as Record<string, unknown>;
+    // D4: a `provenance:`/`quarantined:` block ⇒ this went through the install
+    // pipeline and can never be a studio agent again, whatever its `runtime:` looks like.
+    if ('provenance' in d || 'quarantined' in d) return false;
     // A studio (library) agent has a `runtime` block — UNLESS it opts out with
     // `library: false`. Internal/system agents (e.g. brain-fix, dispatched by
     // the bridge, never composed into a flow) set that flag so they keep a
     // runtime spec for deriveAgentSpec but stay out of the composable roster.
-    return (
-      data != null &&
-      typeof data === 'object' &&
-      'runtime' in data &&
-      (data as Record<string, unknown>).library !== false
-    );
+    return 'runtime' in d && d.library !== false;
   } catch {
     return false;
   }

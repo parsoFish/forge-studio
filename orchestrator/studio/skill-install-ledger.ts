@@ -28,6 +28,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { reqString, optString } from './yaml-fields.ts';
+import { assertSkillSlug } from '../skill-path.ts';
 
 export interface InstalledSkillLedgerEntry {
   id: string;
@@ -41,18 +42,43 @@ function ledgerPath(forgeRoot: string): string {
   return join(forgeRoot, 'studio', 'installed-skills.yaml');
 }
 
+/**
+ * Parse the ledger's `installed:` array, enforcing its own 1:1 shape — the
+ * ledger's whole job is to be an independently self-consistent second source
+ * of truth, so it must not silently tolerate a malformed shape of its own:
+ *
+ *   - each entry's `id` must be a valid skill slug (never a traversal
+ *     segment or an otherwise non-slug string) — validated on parse, not
+ *     deferred to whatever later reads the ledger back;
+ *   - two entries sharing an `id` (however their other fields differ) must
+ *     throw naming the duplicate, never silently collapse last-one-wins when
+ *     read back into a Map.
+ */
 function parseLedgerEntries(raw: unknown, file: string): InstalledSkillLedgerEntry[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
     throw new Error(`${file}: "installed" must be an array`);
   }
+  const seenIds = new Set<string>();
   return raw.map((item, i) => {
     if (item === null || typeof item !== 'object' || Array.isArray(item)) {
       throw new Error(`${file}: installed[${i}] must be a mapping`);
     }
     const e = item as Record<string, unknown>;
+    const id = reqString(e, 'id', file);
+    try {
+      assertSkillSlug(id);
+    } catch (err) {
+      throw new Error(`${file}: installed[${i}] has an invalid id — ${(err as Error).message}`);
+    }
+    if (seenIds.has(id)) {
+      throw new Error(
+        `${file}: duplicate installed-skill id "${id}" — the ledger must have exactly one entry per id`,
+      );
+    }
+    seenIds.add(id);
     return {
-      id: reqString(e, 'id', file),
+      id,
       source: reqString(e, 'source', file),
       upstreamRef: optString(e, 'upstreamRef'),
       contentHash: reqString(e, 'contentHash', file),

@@ -24,11 +24,39 @@
  */
 import { existsSync, readdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
-import { SLUG_RE } from './studio/validate.ts';
+
+/**
+ * The slug shape shared across every studio object id (agents, flows,
+ * artifacts, KBs, skills, ...). Defined HERE — this module is a true leaf
+ * (only `node:fs`/`node:path`) — and re-exported from
+ * `orchestrator/studio/validate.ts` for its 20+ existing call sites.
+ *
+ * This definition used to live in `validate.ts` and be imported back into
+ * this file, closing a `skill-path → validate → registry → skill-path`
+ * cycle (registry.ts imports this module; validate.ts imports registry.ts).
+ * It worked only because every cyclic import was consumed inside function
+ * bodies, never at module top level — one future eager top-level call would
+ * have reintroduced a TDZ crash for whichever module became the process
+ * entry. Moving the definition to this leaf module removes the cycle
+ * entirely rather than relying on that fragile invariant.
+ */
+export const SLUG_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
+
+/** Hard cap on a skill id's length. Without this, a charset-valid but
+ *  absurdly long id sails past the regex guard and dies later as a raw
+ *  `ENAMETOOLONG` from `mkdir`/`writeFileSync` — an opaque OS error instead
+ *  of an actionable validation message naming the actual limit. */
+export const MAX_SKILL_ID_LENGTH = 100;
 
 /** Reject any `name` that is not a bare slug component — no `/`, `\`, `.`,
- *  `..`, or empty string can ever reach a path join past this point. */
-function assertSkillSlug(name: string): void {
+ *  `..`, or empty string can ever reach a path join past this point — and no
+ *  id longer than `MAX_SKILL_ID_LENGTH` characters. */
+export function assertSkillSlug(name: string): void {
+  if (name.length > MAX_SKILL_ID_LENGTH) {
+    throw new Error(
+      `invalid skill id "${name.slice(0, 40)}…" — ${name.length} characters exceeds the ${MAX_SKILL_ID_LENGTH}-character length limit for a skill id`,
+    );
+  }
   if (!SLUG_RE.test(name)) {
     throw new Error(
       `invalid skill id "${name}" — must match ${SLUG_RE} (a single lowercase-kebab path segment; no "/", "\\", ".", or "..")`,
