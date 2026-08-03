@@ -181,6 +181,8 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'PUT', route: '/api/studio/agents/:slug', classification: 'exempt-local', reason: 'writes a local SKILL.md' },
   { method: 'PUT', route: '/api/studio/flows/:id', classification: 'exempt-local', reason: 'writes a local flow.yaml' },
   { method: 'POST', route: '/api/studio/skills', classification: 'exempt-local', reason: 'writes a local skill definition' },
+  { method: 'POST', route: '/api/studio/skills/install', classification: 'exempt-local', reason: 'installs an already-materialised local skill package (D2: no network call in this initiative)' },
+  { method: 'POST', route: '/api/studio/skills/:id/approve', classification: 'exempt-local', reason: 'flips a draft skill\'s frontmatter status locally — no spawn/remote' },
   { method: 'POST', route: '/api/studio/kbs', classification: 'exempt-local', reason: 'creates a local KB directory' },
   { method: 'POST', route: '/api/studio/kbs/:id (delete)', classification: 'exempt-local', reason: 'removes a local KB directory' },
   { method: 'POST', route: '/api/studio/kbs/:id/guidance', classification: 'exempt-local', reason: 'writes a local guidance markdown file' },

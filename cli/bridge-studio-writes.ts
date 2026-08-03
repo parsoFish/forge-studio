@@ -19,7 +19,6 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
-import matter from 'gray-matter';
 
 import { classifyClause } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
@@ -886,44 +885,6 @@ export async function handleStudioWriteRoutes(
 
       const flagFindings = findings.filter((f) => f.level === 'flag');
       sendJson(res, 200, { ok: true, id, version, findings: flagFindings }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- POST /api/studio/skills (P2) — author a plain composable skill ---------
-  // A "skill" here is a plain SKILL.md (name + description + body, no runtime
-  // block) — composable into agents. Distinct from a studio agent (which has a
-  // runtime block). Stamped `library: true` so it is palette-visible (R3-01-F2
-  // union) and passes the `library`-must-be-explicit lint on the very next run.
-  if (url === '/api/studio/skills' && method === 'POST') {
-    try {
-      let body: unknown;
-      try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
-      const b = (body ?? {}) as Record<string, unknown>;
-      const name = typeof b['name'] === 'string' ? b['name'].trim() : '';
-      const description = typeof b['description'] === 'string' ? b['description'].trim() : '';
-      const skillBody = typeof b['body'] === 'string' ? b['body'] : '';
-      if (!name) { sendJson(res, 400, { error: 'name is required' }, origin); return true; }
-      if (!description) { sendJson(res, 400, { error: 'description is required' }, origin); return true; }
-
-      const slug = (typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name)
-        .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
-      if (!SLUG_RE.test(slug)) { sendJson(res, 400, { error: 'could not derive a valid slug from the name' }, origin); return true; }
-
-      const skillDirPath = skillDir(slug, ctx.forgeRoot);
-      if (!skillDirPath.startsWith(toSkillsDir(ctx.forgeRoot) + sep)) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
-      const skillMdPath = skillPath(slug, ctx.forgeRoot);
-      if (existsSync(skillMdPath)) { sendJson(res, 409, { error: `skill "${slug}" already exists` }, origin); return true; }
-
-      const md = matter.stringify(
-        '\n' + (skillBody.trim() || `# ${name}\n\n${description}\n`) + '\n',
-        { name, description, library: true },
-      );
-      if (!existsSync(skillDirPath)) mkdirSync(skillDirPath, { recursive: true });
-      writeFileSync(skillMdPath, md, 'utf8');
-      sendJson(res, 200, { ok: true, id: slug }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
