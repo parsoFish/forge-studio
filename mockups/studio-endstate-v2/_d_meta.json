@@ -1,0 +1,18 @@
+{
+  "type": "design",
+  "designSystems": [],
+  "primaryDesignSystem": null,
+  "assets": {
+    "Studio end-state prototype v2": {
+      "versions": [
+        {
+          "path": "index.html",
+          "createdAt": "2026-08-03T00:32:48.218Z",
+          "status": "needs-review"
+        }
+      ]
+    }
+  },
+  "createdAt": "2026-08-03T00:32:48.218Z",
+  "updatedAt": "2026-08-03T03:26:08.741Z"
+}
