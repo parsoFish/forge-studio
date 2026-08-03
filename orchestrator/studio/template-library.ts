@@ -258,9 +258,19 @@ type EndpointVerification = { endpointsVerified: boolean; findings: Finding[] };
 
 /** Returns `undefined` when nothing is declared (nothing to verify). Zero
  *  edges + a declaration ⇒ unverifiable (flag, not error) — the relationship
- *  travels by orchestrator-band re-entry, not a DAG edge. One or more edges ⇒
- *  every declared side must match every edge's resolved endpoint, or it's a
- *  contradiction (error). */
+ *  travels by orchestrator-band re-entry, not a DAG edge.
+ *
+ *  One or more edges ⇒ the declaration must be grounded in AT LEAST ONE real
+ *  edge. Deliberately `some`, not `every`: flows are user-authorable data, and
+ *  a template's `producer:`/`consumer:` documents its CANONICAL contract in the
+ *  OOTB flow — not a claim that no other flow may ever carry that artifact.
+ *  An operator wiring `plan` between two agents of their own in a hand-authored
+ *  flow is legitimate and must not fail lint. (Found by the `flows-author`
+ *  ui:journey gate, which authors exactly such flows: `every` made
+ *  `forge studio lint` error on every UI-authored flow that reused a stock
+ *  artifact label.) The real defect this still catches is a declaration
+ *  grounded in NO real edge at all — a producer/consumer naming something the
+ *  flow graph never does. */
 function verifyTemplateEndpoints(
   templateId: string,
   declaredProducer: string | undefined,
@@ -282,19 +292,19 @@ function verifyTemplateEndpoints(
     };
   }
 
-  const allMatch = edges.every(
+  const groundedInSomeEdge = edges.some(
     (e) =>
       (declaredProducer === undefined || nodeMatchesDeclared(e.fromNode, declaredProducer)) &&
       (declaredConsumer === undefined || nodeMatchesDeclared(e.toNode, declaredConsumer)),
   );
-  if (allMatch) return { endpointsVerified: true, findings: [] };
+  if (groundedInSomeEdge) return { endpointsVerified: true, findings: [] };
   return {
     endpointsVerified: false,
     findings: [
       err(
         `template:${templateId}`,
         CHECK_ENDPOINT_MISMATCH,
-        `Template "${templateId}" declares a producer/consumer that contradicts its resolved flow-edge endpoint(s) — fix the frontmatter or the flow; never invent an agent that does not exist`,
+        `Template "${templateId}" declares a producer/consumer that no flow edge carrying it actually matches — every edge for this artifact contradicts the declaration; fix the frontmatter or the flow, and never invent an agent that does not exist`,
       ),
     ],
   };
