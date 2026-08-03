@@ -62,6 +62,7 @@ import {
 } from './bridge-studio.ts';
 import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
+import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleRecoveryRoutes } from './bridge-recovery.ts';
 import { handleHookRoutes } from './bridge-hooks.ts';
 import {
@@ -937,6 +938,7 @@ async function handleHttp(
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioSkillsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleStudioTemplatesRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
   const studioPostCtx: StudioPostContext = {
     forgeRoot: ctx.forgeRoot,
