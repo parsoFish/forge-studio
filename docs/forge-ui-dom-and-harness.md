@@ -299,8 +299,8 @@ inventory rather than one shared page-level contract:
   `demo-fix-spec`, `review-findings`), `studio/demo-elements/*.md` (category
   `demo-output`, 6 templates — `screenshot`, `cli-capture`, `code-diff`,
   `api-verify`, `test-evidence`, `narrative`), and
-  `studio/starters/projects/<id>/` (category `project-scaffold`, 2 scaffolds
-  — `typescript-api`, `typescript-cli`); 15 entries total
+  `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
+  — `typescript-api`, `typescript-cli`, `typescript-web`); 16 entries total
   (`orchestrator/studio/template-library.ts`). `usedBy` is DERIVED, never a
   declared field: planning usage scans the real flow graph
   (`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's

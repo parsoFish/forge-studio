@@ -366,7 +366,11 @@ function listPlanningEntries(root: string, flowIndex: { scanned: number; byArtif
   try {
     // README.md documents the directory (R3-06) — not a template definition,
     // excluded by name so it never surfaces as a phantom malformed entry.
-    files = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md');
+    // Matched case-insensitively (a readme.md/Readme.md variant would
+    // otherwise slip this check and, if it ever carried valid frontmatter,
+    // become a phantom template) — mirrors the identical exclusion in
+    // registry.ts's listArtifactTemplates; the two must stay identical.
+    files = readdirSync(dir).filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f));
   } catch {
     return [];
   }

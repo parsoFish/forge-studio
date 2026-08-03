@@ -135,9 +135,9 @@ same as every other Studio object):
   bridge `applyReviewVerdict` on an operator approve/send-back, and `finalize-merged` on a
   silent GitHub merge — so the reflector has a durable record.
 
-The five seed templates (`plan`, `work-items`, `wi-branches`, `pr`, `verdict`) document the
-contracts the current cycle already relies on. `wi-branches` is `kind: git-state` (the
-artifact is commits on a branch, not a file).
+The seven seed templates (`plan`, `work-items`, `wi-branches`, `pr`, `review-findings`,
+`verdict`, `demo-fix-spec`) document the contracts the current cycle already relies on.
+`wi-branches` is `kind: git-state` (the artifact is commits on a branch, not a file).
 
 ## Amendment (Stage C, 2026-06-27): per-flow `kickoff`
 
@@ -247,7 +247,7 @@ Alongside the promotion, Studio's **template library** (R3-06) now indexes these
 templates as one browsable pillar (`/templates`, `/templates/[id]`) together with demo
 elements and project scaffolds — `orchestrator/studio/template-library.ts` unifies
 `studio/artifact-templates/` (`planning`), `studio/demo-elements/` (`demo-output`), and
-`studio/starters/projects/` (`project-scaffold`) into one 15-entry registry, with each
+`studio/starters/projects/` (`project-scaffold`) into one 16-entry registry, with each
 entry's `used-by` **derived** from the real flow graph (planning) or real project configs
 (demo-output) rather than hand-maintained. See `studio/artifact-templates/README.md` for
 the canonical 7-template inventory and which are edge-backed vs. travel by

@@ -60,6 +60,24 @@ function countScaffoldFiles(dir) {
   return count;
 }
 
+/** Independently recomputes the four /templates library counts straight off
+ *  disk — the same three directories template-library.ts's listTemplateLibrary
+ *  unions (listPlanningEntries/listDemoOutputEntries/listScaffoldEntries) —
+ *  so a real registry regression (a template added/removed) is caught by a
+ *  changed derived number, never masked by a literal that must be hand-bumped
+ *  every time content lands. README.md is excluded case-insensitively,
+ *  mirroring the identical exclusion in registry.ts's listArtifactTemplates
+ *  and template-library.ts's listPlanningEntries. */
+function realTemplateCounts() {
+  const planning = readdirSync(join(FORGE_ROOT, 'studio', 'artifact-templates'))
+    .filter((f) => f.endsWith('.md') && !/^readme\.md$/i.test(f)).length;
+  const demoOutput = readdirSync(join(FORGE_ROOT, 'studio', 'demo-elements'))
+    .filter((f) => f.endsWith('.md')).length;
+  const projectScaffold = readdirSync(join(FORGE_ROOT, 'studio', 'starters', 'projects'), { withFileTypes: true })
+    .filter((e) => e.isDirectory()).length;
+  return { total: planning + demoOutput + projectScaffold, planning, demoOutput, projectScaffold };
+}
+
 export const journey = defineJourney({
   id: 'templates',
   title: 'Browse the templates library',
@@ -90,9 +108,10 @@ export const journey = defineJourney({
         check(await page.locator('main[data-page="template-library"]').count() > 0, 'TPL-0: /templates renders [data-page="template-library"]');
         await caption(page, 'The templates library — planning artifacts, demo-output elements, and project scaffolds, one registry.');
 
-        // Real counts verified against the repo before pinning (2026-08-04):
-        // 7 studio/artifact-templates/*.md + 6 studio/demo-elements/*.md +
-        // 2 studio/starters/projects/<id>/ dirs = 15 total.
+        // Counts are derived from disk, never pinned literals (a hardcoded
+        // number rots the moment a template/scaffold lands or leaves) — see
+        // realTemplateCounts' doc comment for the exact directories/filters.
+        const real = realTemplateCounts();
         const counts = await page.evaluate(() => {
           const root = document.querySelector('[data-page="template-library"]');
           return {
@@ -102,10 +121,10 @@ export const journey = defineJourney({
             projectScaffold: parseInt(root?.getAttribute('data-project-scaffold-count') ?? '-1', 10),
           };
         });
-        check(counts.total === 15, `TPL-0: data-template-count is the real registry total (${counts.total}, want 15)`);
-        check(counts.planning === 7, `TPL-0: data-planning-count matches studio/artifact-templates/*.md (${counts.planning}, want 7)`);
-        check(counts.demoOutput === 6, `TPL-0: data-demo-output-count matches studio/demo-elements/*.md (${counts.demoOutput}, want 6)`);
-        check(counts.projectScaffold === 2, `TPL-0: data-project-scaffold-count matches studio/starters/projects/<id>/ (${counts.projectScaffold}, want 2)`);
+        check(counts.total === real.total, `TPL-0: data-template-count is the real registry total (${counts.total}, want ${real.total})`);
+        check(counts.planning === real.planning, `TPL-0: data-planning-count matches studio/artifact-templates/*.md excl. README (${counts.planning}, want ${real.planning})`);
+        check(counts.demoOutput === real.demoOutput, `TPL-0: data-demo-output-count matches studio/demo-elements/*.md (${counts.demoOutput}, want ${real.demoOutput})`);
+        check(counts.projectScaffold === real.projectScaffold, `TPL-0: data-project-scaffold-count matches studio/starters/projects/<id>/ (${counts.projectScaffold}, want ${real.projectScaffold})`);
 
         const cardCounts = await page.evaluate(() => ({
           planning: document.querySelectorAll('[data-template-category="planning"]').length,
