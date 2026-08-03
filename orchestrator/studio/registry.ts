@@ -576,7 +576,10 @@ export function listArtifactTemplates(studioRoot: string): ArtifactTemplate[] {
   const dir = join(studioRoot, 'studio', 'artifact-templates');
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    // README.md documents the directory (R3-06) — it is not a template
+    // definition and carries no gray-matter frontmatter, so it is excluded
+    // by name rather than treated as a malformed entry.
+    files = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md');
   } catch {
     return []; // absent dir → no templates (tolerated)
   }

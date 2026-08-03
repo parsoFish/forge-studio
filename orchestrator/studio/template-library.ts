@@ -364,7 +364,9 @@ function listPlanningEntries(root: string, flowIndex: { scanned: number; byArtif
   const dir = join(root, 'studio', 'artifact-templates');
   let files: string[];
   try {
-    files = readdirSync(dir).filter((f) => f.endsWith('.md'));
+    // README.md documents the directory (R3-06) — not a template definition,
+    // excluded by name so it never surfaces as a phantom malformed entry.
+    files = readdirSync(dir).filter((f) => f.endsWith('.md') && f !== 'README.md');
   } catch {
     return [];
   }

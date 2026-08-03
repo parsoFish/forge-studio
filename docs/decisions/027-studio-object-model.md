@@ -124,6 +124,7 @@ same as every other Studio object):
 - **`validateArtifactRef(flow, templateIds)`** — every `FlowEdge.artifact` SHOULD resolve
   to a registered template. Advisory (flag) for now so existing flows are not broken;
   promotable to an error once all seed flows ship templates. Joins `forge studio lint`.
+  **Promoted to an error 2026-08-04** (R3-06/R2-05-F1) — see the amendment below.
 - **Runtime guard (implemented 2026-06-16, `orchestrator/flow-artifacts.ts`):**
   `assertInboundArtifacts` runs before each node in `flow-runner.runFlow` and turns a
   missing/empty inbound artifact into a clean `flow-runner.artifact-missing` error at the
@@ -232,3 +233,22 @@ declaration ([ADR 041](./041-trigger-kind-registry.md) owns the semantics):
 
 One-shot migration: the seed files moved to the new shape in the same change;
 `parseFlowTrigger` fails loud on a stale `flow:` key (no back-compat parsing).
+
+## Amendment (R3-06 / R2-05-F1, 2026-08-04): `validateArtifactRef` promoted to error
+
+The 2026-06-15 amendment above left `validateArtifactRef` advisory "promotable to an
+error once all seed flows ship templates." That condition is now met: all four real flow
+edges resolve to on-disk templates — `forge-architect`'s `plan`; `forge-develop`'s
+`wi-branches`, `pr`, and `review-findings` — and `forge studio lint` reported zero
+`artifact/no-template` findings on the pre-promotion base. `validateArtifactRef` is now a
+hard **error**, not a flag: an edge naming an unregistered artifact fails lint outright.
+
+Alongside the promotion, Studio's **template library** (R3-06) now indexes these artifact
+templates as one browsable pillar (`/templates`, `/templates/[id]`) together with demo
+elements and project scaffolds — `orchestrator/studio/template-library.ts` unifies
+`studio/artifact-templates/` (`planning`), `studio/demo-elements/` (`demo-output`), and
+`studio/starters/projects/` (`project-scaffold`) into one 15-entry registry, with each
+entry's `used-by` **derived** from the real flow graph (planning) or real project configs
+(demo-output) rather than hand-maintained. See `studio/artifact-templates/README.md` for
+the canonical 7-template inventory and which are edge-backed vs. travel by
+orchestrator-band re-entry.

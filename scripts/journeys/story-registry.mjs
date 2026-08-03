@@ -56,6 +56,16 @@ export const STORY_REGISTRY = [
     batch: 'B',
     port: null,
     excluded: null,
+    note:
+      'R3-06 (templates library) built the on-disk substrate this story\'s ' +
+      "scaffold-picker beat (click 'scaffold-scaffold-web-ui') will eventually " +
+      'draw from — a real project-scaffold category in the template registry ' +
+      '(/templates, /templates/[id]) covering the 2 real starters ' +
+      '(typescript-api, typescript-cli) — but NOT the beat itself: the ' +
+      "create-project wizard (create-project-btn → scaffold picker → name → " +
+      'start-creation) is unbuilt. R3-06\'s journey is browse→detail only, ' +
+      "explicitly out of scope for this story's beats per its own spec. Port " +
+      'stays null; owned by R4-03/batch B.',
   },
   {
     story: 'create-agent',

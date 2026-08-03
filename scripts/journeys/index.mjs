@@ -5,8 +5,8 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving): skills → stand-up-onboard → stand-up-create → knowledge →
- * agents → flows-author → flows-run → roadmap → demo-builder.
+ * interleaving): skills → templates → stand-up-onboard → stand-up-create →
+ * knowledge → agents → flows-author → flows-run → roadmap → demo-builder.
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -20,8 +20,11 @@
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
  *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
  *     flows-run journey itself) has completed.
- * Every other journey (skills, agents, knowledge, demo-builder) is
- * self-contained: skills-edit restores the real shipped skill it edits,
+ * Every other journey (skills, templates, agents, knowledge, demo-builder) is
+ * self-contained: templates is pure read-only browsing (no seed, no
+ * cleanup — it creates and destroys nothing, mirroring skills-library /
+ * skills-detail-package's own read-only precedent (R3-01-F3/F4)); skills-edit
+ * restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, agents-scratch-build/agents-builder each clean up their own
  * skill-dir/stashed-SKILL.md, flows-author-scratch-build cleans its own
@@ -46,6 +49,7 @@
  * narrow function, for the case where a crash skips this beat's own finally.
  */
 import { journey as skills } from './skills.mjs';
+import { journey as templates } from './templates.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
 import { journey as standUpCreate } from './stand-up-create.mjs';
 import { journey as knowledge } from './knowledge.mjs';
@@ -57,6 +61,7 @@ import { journey as demoBuilder } from './demo-builder.mjs';
 
 export const JOURNEYS = [
   skills,
+  templates,
   standUpOnboard,
   standUpCreate,
   knowledge,
@@ -75,6 +80,11 @@ export const RUN_ORDER = [
   ['skills', 'skills-create'],
   ['skills', 'skills-install-approve'],
   ['skills', 'skills-agentic-author'],
+
+  ['templates', 'templates-library'],
+  ['templates', 'templates-search'],
+  ['templates', 'templates-detail-planning'],
+  ['templates', 'templates-detail-scaffold'],
 
   ['stand-up-onboard', 'su-onboard-project'],
   ['stand-up-onboard', 'su-onboard-preflight'],
