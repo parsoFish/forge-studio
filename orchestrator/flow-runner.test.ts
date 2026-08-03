@@ -13,7 +13,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps } from './flow-runner.ts';
 import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { parseManifest } from './manifest.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
@@ -74,10 +74,6 @@ function makeMockDeps(tracker: { calls: string[] }): FlowRunnerDeps {
     },
     runDeveloperLoop: async (_input, _logger) => {
       tracker.calls.push('runDeveloperLoop');
-    },
-    runUnifier: async (_input, _logger) => {
-      tracker.calls.push('runUnifier');
-      return { unifierSucceeded: true, unifierFailureClass: null, commitsAhead: 1, filesChanged: 1, insertions: 10 };
     },
     runDemoAgent: async (_input, _logger) => {
       tracker.calls.push('runDemoAgent');
@@ -141,15 +137,13 @@ function makeForgeCycleFlow(): FlowDefinition {
       { id: 'architect', agent: 'architect', gate: 'plan' },
       { id: 'pm', agent: 'project-manager' },
       { id: 'dev', agent: 'developer-ralph', fanOut: 'work-items' },
-      { id: 'unifier', agent: 'developer-unifier', resumable: true },
       { id: 'review', gate: 'verdict' },
       { id: 'reflect', agent: 'reflector' },
     ],
     edges: [
       { from: 'architect', to: 'pm', artifact: 'plan' },
       { from: 'pm', to: 'dev', artifact: 'work-items' },
-      { from: 'dev', to: 'unifier', artifact: 'wi-branches' },
-      { from: 'unifier', to: 'review', artifact: 'pr' },
+      { from: 'dev', to: 'review', artifact: 'wi-branches' },
       { from: 'review', to: 'reflect', artifact: 'verdict' },
     ],
     triggers: [],
@@ -186,11 +180,11 @@ describe('flow-runner full run', () => {
     await runFlow({ flow, input, logger, deps });
 
     // Correct sequence: architect node is a silent marker — no dep call.
-    // Unifier is now a real node (M8-0): runUnifier appears between dev and review.
+    // The unifier node was retired from this fixture (R4-01-F4) — review runs
+    // directly after dev.
     assert.deepEqual(tracker.calls, [
       'runProjectManager',
       'runDeveloperLoop',
-      'runUnifier',
       'openPrInline',
       'runClosure',
       'runReflector',
@@ -221,7 +215,7 @@ describe('flow-runner full run', () => {
 
 // ---------------------------------------------------------------------------
 // Test 2: resumeFrom='demo' — pm NOT called; dev IS called. Uses a legacy-shaped
-// fixture flow (dev→unifier→review) to prove the generic resume-skip mechanics:
+// fixture flow (dev→review) to prove the generic resume-skip mechanics:
 // pm skips, dev self-no-ops, the walk resumes at the post-dev node.
 // ---------------------------------------------------------------------------
 
@@ -237,7 +231,7 @@ describe('flow-runner resumeFrom=demo', () => {
 
     assert.ok(!tracker.calls.includes('runProjectManager'), 'runProjectManager must NOT be called on a demo resume');
     assert.ok(tracker.calls.includes('runDeveloperLoop'), 'the dev node still runs on resume (self-no-ops per-WI, emits start/end{resumed:true})');
-    assert.ok(tracker.calls.includes('runUnifier'), 'this legacy-shaped fixture resumes at its post-dev node (runUnifier)');
+    assert.ok(tracker.calls.includes('openPrInline'), 'this legacy-shaped fixture resumes at its post-dev node (review)');
 
     // Highest-risk resume step: rebase must have been called AND must precede the dev node.
     assert.ok(tracker.calls.includes('rebaseForResume'), 'rebaseForResume must be called on a demo resume');
@@ -263,7 +257,6 @@ describe('flow-runner resumeFrom=demo', () => {
 
     await runFlow({ flow, input, logger, deps });
 
-    assert.ok(tracker.calls.includes('runUnifier'));
     assert.ok(tracker.calls.includes('openPrInline'));
     assert.ok(tracker.calls.includes('runClosure'));
     assert.ok(tracker.calls.includes('runReflector'));
@@ -1125,7 +1118,11 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
       'agent',
       "dev (declared loopStrategy:'ralph', no executor) ⇒ the generic agent kind; execAgent routes the loop",
     );
-    assert.equal(resolveNodeKind({ id: 'u', agent: 'developer-unifier' }, agents), 'unifier');
+    assert.equal(
+      resolveNodeKind({ id: 'u', agent: 'developer-unifier' }, agents),
+      'unknown',
+      "the retired executor:'unifier' row is no longer a valid declared executor (R4-01-F4)",
+    );
     assert.equal(
       resolveNodeKind({ id: 'rf', agent: 'reflector' }, agents),
       'agent',
@@ -1151,34 +1148,6 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
       'unknown',
       'a declared executor outside PHASE_EXECUTOR_KINDS ⇒ unknown (also caught by lint)',
     );
-  });
-
-  it('FlowRunArgs.nodeExecutors overrides the default executor for a kind (no orchestrator edit)', async () => {
-    const tracker = makeCallTracker();
-    const deps = makeMockDeps(tracker);
-    const input = makeInput();
-    const logger = makeLogger();
-    const flow = makeForgeCycleFlow();
-
-    // Override the unifier executor with a custom spy — the default
-    // deps.runUnifier must NOT be called; the injected executor runs instead.
-    // This proves a flow can register custom node behaviour without touching
-    // flow-runner's dispatch loop. (Was the pm kind pre-R4-01-F2; pm/reflect
-    // now dispatch as 'agent' band hooks, so the unifier — the last declared
-    // phase-executor kind until R4-01-F4 — carries the seam proof.)
-    const customCalls: string[] = [];
-    const customUnifier: NodeExecutor = async () => { customCalls.push('custom-unifier'); };
-
-    const result = await runFlow({ flow, input, logger, deps, nodeExecutors: { unifier: customUnifier } });
-
-    assert.deepEqual(customCalls, ['custom-unifier'], 'injected unifier executor must run');
-    assert.ok(!tracker.calls.includes('runUnifier'), 'default unifier executor must be bypassed by the override');
-    // The rest of the pipeline still runs through the defaults.
-    assert.ok(tracker.calls.includes('runProjectManager'), 'pm band still runs through its default (wi-contract hook)');
-    assert.ok(tracker.calls.includes('runDeveloperLoop'));
-    assert.ok(tracker.calls.includes('runReflector'));
-    assert.ok(tracker.calls.includes('promoteMergedToDone'));
-    assert.strictEqual(result.cycleOutcome, 'merged');
   });
 });
 

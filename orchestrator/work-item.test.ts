@@ -392,26 +392,6 @@ test('creates: entry not in files_in_scope is rejected', () => {
   assert.ok(errors.some((e) => e.includes('creates')), `got ${JSON.stringify(errors)}`);
 });
 
-test('kind (ADR 026): packaging | code-fix round-trips; absent stays omitted', () => {
-  // Absent → not serialised (dev WIs stay byte-identical).
-  const plain = serializeWorkItem(fixture());
-  assert.doesNotMatch(plain, /^kind:/m);
-  assert.equal(parseWorkItem(plain).kind, undefined);
-
-  for (const k of ['packaging', 'code-fix'] as const) {
-    const md = serializeWorkItem(fixture({ kind: k }));
-    assert.match(md, new RegExp(`kind: ${k}`));
-    const parsed = parseWorkItem(md);
-    assert.equal(parsed.kind, k);
-    assert.deepEqual(validateWorkItem(parsed), []);
-  }
-});
-
-test('kind (ADR 026): an unknown kind is rejected by validateWorkItem', () => {
-  const errors = validateWorkItem(fixture({ kind: 'whatever' as unknown as 'packaging' }));
-  assert.ok(errors.some((e) => e.includes('kind')), `got ${JSON.stringify(errors)}`);
-});
-
 test('origin (ADR 040): review-fix | demo-fix | gate-fix round-trips; absent stays omitted', () => {
   // Absent → not serialised (PM-authored WIs stay byte-identical).
   const plain = serializeWorkItem(fixture());

@@ -87,9 +87,11 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // R4-01-F2 (ADR-039) retired the enum row by row as each phase moved to
 // declared dispatch (loopStrategy + band hooks): 'reflect' with the reflector
 // migration, 'pm' with the plan agent, 'dev' with the ralph loopStrategy
-// routing. 'unifier' is the LAST row, held until R4-01-F4 retirement
-// (post R4-10-F2).
-export const PHASE_EXECUTOR_KINDS = ['unifier'] as const;
+// routing. 'unifier' was the LAST row — retired in R4-01-F4 (the develop flow's
+// successor demo + adversarial-review nodes replace it). No phase executors
+// remain: every phase is now a generic agent or a band hook, so any `executor:`
+// declaration on an agent def is invalid (validate.ts rejects it).
+export const PHASE_EXECUTOR_KINDS = [] as const;
 
 // ---------------------------------------------------------------------------
 // Agent / SKILL.md

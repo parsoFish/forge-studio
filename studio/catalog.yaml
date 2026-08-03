@@ -39,7 +39,7 @@ community-skills:
     source: https://github.com/obra/superpowers
     category: memory
     tier: haiku
-    composedBy: [developer-ralph, developer-unifier]
+    composedBy: [developer-ralph]
     stars: "228k"
     desc: Compress the current session into a markdown transfer doc (open threads, decisions) for delegation.
   - id: pre-impl-interview
@@ -75,7 +75,7 @@ community-skills:
     source: https://github.com/anthropics/skills
     category: testing
     tier: sonnet
-    composedBy: [developer-ralph, developer-unifier]
+    composedBy: [developer-ralph]
     stars: "151k"
     desc: Playwright-based browser testing of a local app — spec to test to run to report.
   - id: security-review
@@ -84,7 +84,7 @@ community-skills:
     source: https://github.com/travisvn/awesome-claude-skills
     category: review
     tier: sonnet
-    composedBy: [developer-unifier]
+    composedBy: [adversarial-review]
     desc: Static-analysis security audit (CodeQL/Semgrep patterns).
   - id: skill-creator
     name: Skill Creator
@@ -101,7 +101,7 @@ community-skills:
     source: https://github.com/vercel-labs/agent-browser
     category: browser
     tier: sonnet
-    composedBy: [developer-unifier]
+    composedBy: [demo-agent]
     stars: "14k"
     desc: Headless browser CLI with ref-based element targeting and parallel sessions.
   - id: output-compress

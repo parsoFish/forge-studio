@@ -66,12 +66,6 @@ test('stock developer-ralph SKILL.md carries sdk:claude and resolves to claude',
   assert.equal(resolveSdkId(spec.sdk), 'claude', 'resolves to the live claude adapter');
 });
 
-test('stock developer-unifier SKILL.md carries sdk:claude and resolves to claude', () => {
-  const spec = deriveAgentSpec('skills/developer-unifier/SKILL.md', FORGE_ROOT);
-  assert.equal(spec.sdk, 'claude', 'derived spec carries runtime.sdk');
-  assert.equal(resolveSdkId(spec.sdk), 'claude', 'resolves to the live claude adapter');
-});
-
 // ---------------------------------------------------------------------------
 // 2. An unavailable runtime.sdk (gemini in CI) logs the fallback, resolves to
 //    claude, and NEVER throws.

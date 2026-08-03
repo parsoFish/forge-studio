@@ -10,9 +10,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { drainPendingFixWorkItems, type FixLoopDrainStatus } from './drain-fix-loop.ts';
-import { seedStaticUnifierItem, readUnifierItems } from './unifier-items.ts';
 import { writeReviewCapExhaustedMarker } from './fix-work-items.ts';
-import { writeWorkItem, writeWorkItemStatus, type WorkItem } from './work-item.ts';
+import { writeWorkItem, type WorkItem } from './work-item.ts';
 import type { CycleInput } from './cycle-context.ts';
 
 const GATE = ['go', 'test', './...'];
@@ -69,34 +68,25 @@ function baseWi(overrides: Partial<WorkItem> & Pick<WorkItem, 'work_item_id'>): 
   };
 }
 
-/** Seed a post-first-cycle queue: a complete PM WI, one pending review-fix WI,
- *  and a COMPLETE static UWI-1 (the pre-send-back state). */
+/** Seed a post-first-cycle queue: a complete PM WI and one pending review-fix WI. */
 function seedDrainableQueue(wt: string): void {
   writeWorkItem(baseWi({ work_item_id: 'WI-1', status: 'complete' }), wt);
   writeWorkItem(baseWi({ work_item_id: 'WI-2', status: 'pending', origin: 'review-fix' }), wt);
-  const uwi1 = seedStaticUnifierItem(wt, { initiativeId: ID, estimatedIterations: 6, qualityGateCmd: GATE });
-  writeWorkItemStatus(uwi1, 'complete');
 }
 
-test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFrom; leaves UWI-1 untouched (the demo node re-authors, R4-10-F1); sendback.loop-completed event recorded', async () => {
+test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFrom; sendback.loop-completed event recorded', async () => {
   const { root, queueRoot, wt } = setup();
   try {
     seedDrainableQueue(wt);
     writeManifest(queueRoot, 'ready-for-review', wt, { cycleId: 'CYCLE-XYZ', reviewRounds: 1 });
     const logsRoot = join(root, '_logs');
     const calls: CycleInput[] = [];
-    const uwiStatusAtCallTime: (string | undefined)[] = [];
     const results = await drainPendingFixWorkItems({
       queueRoot,
       logsRoot,
       confirmMerge: () => false,
       runDrainCycle: async (input) => {
         calls.push(input);
-        // Capture UWI-1's on-disk status INSIDE the stub — R4-10-F1 removed the
-        // drain's UWI re-arm (the develop flow's demo node re-authors demo.json
-        // + the PR body on re-entry), so the drain must leave UWI-1 UNTOUCHED.
-        const { items } = readUnifierItems(wt);
-        uwiStatusAtCallTime.push(items.find((w) => w.work_item_id === 'UWI-1')?.status);
         return { status: 'pr-open' };
       },
     });
@@ -105,7 +95,6 @@ test('drain: pending fix WIs + unmerged PR → drained; threads cycleId+resumeFr
     assert.equal(calls.length, 1, 'runDrainCycle was called once');
     assert.equal(calls[0]!.cycleId, 'CYCLE-XYZ', 'threads the persisted cycle_id');
     assert.equal(calls[0]!.resumeFrom, 'develop');
-    assert.equal(uwiStatusAtCallTime[0], 'complete', 'the drain leaves UWI-1 untouched — the demo node owns the re-demo now (R4-10-F1)');
 
     // The stub did not run closure, so the drain returns the stranded manifest
     // from in-flight back to ready-for-review.
@@ -130,8 +119,6 @@ test('drain: no pending fix WIs → no-pending (a pending PM WI without origin d
   const { root, queueRoot, wt } = setup();
   try {
     writeWorkItem(baseWi({ work_item_id: 'WI-1', status: 'pending' }), wt); // no origin
-    const uwi1 = seedStaticUnifierItem(wt, { initiativeId: ID, estimatedIterations: 6, qualityGateCmd: GATE });
-    writeWorkItemStatus(uwi1, 'complete');
     writeManifest(queueRoot, 'ready-for-review', wt, { cycleId: 'CYCLE-XYZ' });
     let called = false;
     const results = await drainPendingFixWorkItems({
@@ -170,8 +157,6 @@ test('drain: a failed fix work-item → needs-operator (never auto-retry), runDr
   try {
     writeWorkItem(baseWi({ work_item_id: 'WI-1', status: 'complete' }), wt);
     writeWorkItem(baseWi({ work_item_id: 'WI-2', status: 'failed', origin: 'review-fix' }), wt);
-    const uwi1 = seedStaticUnifierItem(wt, { initiativeId: ID, estimatedIterations: 6, qualityGateCmd: GATE });
-    writeWorkItemStatus(uwi1, 'complete');
     writeManifest(queueRoot, 'ready-for-review', wt, { cycleId: 'CYCLE-XYZ' });
     let called = false;
     const results = await drainPendingFixWorkItems({

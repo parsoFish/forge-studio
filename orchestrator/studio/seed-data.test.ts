@@ -125,7 +125,6 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       // develop output + the demo skill to author demo.json and judge ACs.
       'demo-agent',
       'developer-ralph',
-      'developer-unifier',
       // R4-02: the onboarding agent — brings an existing project up to the
       // forge↔project contract (declare the gate, converge preflight to
       // contract-green, bind the KB); non-interactive, dispatched via the

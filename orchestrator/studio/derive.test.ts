@@ -42,17 +42,6 @@ test('deriveAgentSpec: developer-loop spec matches known-good literal', () => {
   });
 });
 
-test('deriveAgentSpec: unifier spec matches known-good literal', () => {
-  assert.deepEqual(deriveAgentSpec('skills/developer-unifier/SKILL.md'), {
-    phase: 'unifier',
-    skill: 'skills/developer-unifier/SKILL.md',
-    tier: 'sonnet',
-    allowedTools: ['Read', 'Write', 'Edit', 'MultiEdit', 'Bash', 'Grep', 'Glob'],
-    disallowedTools: ['NotebookEdit', 'WebFetch', 'WebSearch'],
-    sdk: 'claude',
-  });
-});
-
 test('deriveAgentSpec: reflector spec matches known-good literal', () => {
   assert.deepEqual(deriveAgentSpec('skills/reflector/SKILL.md'), {
     phase: 'reflector',

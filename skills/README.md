@@ -37,10 +37,10 @@ system skills carry `library: false`.
 | [`demo`](./demo/SKILL.md) | unattended | The demo contract every change must satisfy |
 | [`handoff`](./handoff/SKILL.md) | both | Compress a session into a transfer document |
 
-### Unifier
+### Demo authoring
 | Skill | Surface | Purpose |
 |---|---|---|
-| [`developer-unifier`](./developer-unifier/SKILL.md) | unattended | Treat the initiative as one PR; prove ACs; author demo + PR body |
+| [`demo-agent`](./demo-agent/SKILL.md) | unattended | Author the structured demo.json + PR body; prove ACs (R4-07; the develop flow's successor to the retired unifier) |
 | [`demo-builder`](./demo-builder/SKILL.md) | interactive | Author a project's reusable demo-generation skill |
 
 ### Review & audit

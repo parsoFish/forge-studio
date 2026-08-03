@@ -22,7 +22,7 @@ test('R1-01-F4: planners (PM, reflector) still read the brain navigation surface
   assert.match(src('phases/reflector-binding.ts'), READS_BRAIN_NAV, 'reflector must still load the brain navigation');
 });
 
-test('R1-01-F4: dev-loop and reviewer/unifier do NOT read the forge brain (policy unchanged by the rebind)', () => {
+test('R1-01-F4: dev-loop and the reviewer do NOT read the forge brain (policy unchanged by the rebind)', () => {
   assert.doesNotMatch(src('phases/dev-binding.ts'), READS_BRAIN_NAV, 'dev-loop must not read the forge brain');
-  assert.doesNotMatch(src('unifier-invocation.ts'), READS_BRAIN_NAV, 'reviewer/unifier must not read the forge brain');
+  assert.doesNotMatch(src('phases/adversarial-review.ts'), READS_BRAIN_NAV, 'the reviewer must not read the forge brain');
 });

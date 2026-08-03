@@ -66,31 +66,15 @@ export type WorkItem = {
    */
   behavior_preserving?: boolean;
   /**
-   * ADR 026 — UWI dispatch type (unifier-items only; dev WIs leave it unset, so
-   * their frontmatter stays byte-identical). `packaging` runs the
-   * developer-unifier skill against the 5-gate composed unifier gate (UWI-1,
-   * the terminal re-prep, demo/doc tweaks). `code-fix` runs a dev-style role
-   * against the write-a-failing-test-first gate (`failOnHollowIter0Gate=true`)
-   * so review-originated code is held to the same rigor as PM-originated code.
-   * Absent ⇒ treated as `packaging` (the legacy single-mission behaviour).
-   * ADR 040: `kind` remains a UNIFIER-ITEM-ONLY dispatch selector — it never
-   * appears on dev WIs. The analogous marker for dev-side fix WIs is `origin`
-   * (below), not a repurposing of this field.
-   */
-  kind?: 'packaging' | 'code-fix';
-  /**
    * ADR 040 — set only on fix work-items compiled by the send-back/fix loops
    * (review-loop send-back, demo-fix, gate-fix); PM-authored WIs leave it
    * unset, so their frontmatter stays byte-identical. Distinguishes
-   * review/demo/gate-originated dev WIs from PM-authored ones without
-   * repurposing `kind` (which stays the unifier-item-only dispatch selector —
-   * see its doc comment above).
+   * review/demo/gate-originated dev WIs from PM-authored ones. (The retired
+   * unifier's `kind` dispatch selector was removed in R4-01-F4.)
    */
   origin?: 'review-fix' | 'demo-fix' | 'gate-fix';
   body: string;
 };
-
-export const UNIFIER_ITEM_KINDS: readonly NonNullable<WorkItem['kind']>[] = ['packaging', 'code-fix'];
 
 /**
  * ADR 040 — valid values for `WorkItem.origin` (fix work-items compiled by
@@ -157,9 +141,6 @@ export function parseWorkItem(content: string): WorkItem {
     const c = (data.creates as unknown[]).filter((s): s is string => typeof s === 'string');
     if (c.length > 0) w.creates = c;
   }
-  if (data.kind === 'packaging' || data.kind === 'code-fix') {
-    w.kind = data.kind;
-  }
   if (typeof data.origin === 'string' && (FIX_WI_ORIGINS as readonly string[]).includes(data.origin)) {
     w.origin = data.origin as WorkItem['origin'];
   }
@@ -201,9 +182,6 @@ export function serializeWorkItem(w: WorkItem): string {
   }
   if (w.creates !== undefined && w.creates.length > 0) {
     data.creates = w.creates;
-  }
-  if (w.kind !== undefined) {
-    data.kind = w.kind;
   }
   if (w.origin !== undefined) {
     data.origin = w.origin;
@@ -384,9 +362,6 @@ export function validateWorkItem(w: WorkItem, opts: ValidateOptions = {}): strin
         }
       }
     }
-  }
-  if (w.kind !== undefined && !UNIFIER_ITEM_KINDS.includes(w.kind)) {
-    errors.push(`kind must be one of ${UNIFIER_ITEM_KINDS.join(' | ')} when set: got ${String(w.kind)}`);
   }
   if (w.origin !== undefined && !FIX_WI_ORIGINS.includes(w.origin)) {
     errors.push(`origin must be one of ${FIX_WI_ORIGINS.join(' | ')} when set: got ${String(w.origin)}`);

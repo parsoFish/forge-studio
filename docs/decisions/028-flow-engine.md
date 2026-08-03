@@ -1,5 +1,14 @@
 # ADR 028 — Definition-driven flow engine
 
+> **Amended R4-01-F4 (2026-08-03).** The `PHASE_EXECUTOR_KINDS` enum — the set of
+> node kinds that resolve to a hardcoded phase executor rather than the generic
+> agent/band path — is now **empty**. R4-01-F2 (ADR-039) retired `pm`/`dev`/`reflect`
+> onto declared dispatch (loopStrategy + band hooks); R4-01-F4 retired the last one,
+> `unifier`, when the develop flow's successor `demo`/`adversarial-review` nodes
+> replaced it. Every phase is now a generic agent or a band hook; `validate.ts`
+> rejects any `executor:` field on an agent def. The engine + run model are
+> otherwise unchanged.
+
 **Status:** Accepted — 2026-06-13. Implementation staged across the M1 run
 model and the M3 engine + cutover (milestone plans now in git history).
 Amends ADR 011 (queue serves flow runs), ADR 019

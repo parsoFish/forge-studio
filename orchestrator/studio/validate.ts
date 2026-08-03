@@ -149,9 +149,10 @@ export function validateAgent(
     def.executor.trim() !== '' &&
     !(PHASE_EXECUTOR_KINDS as readonly string[]).includes(def.executor)
   ) {
-    findings.push(
-      err(obj, 'executor/enum', `unknown executor "${def.executor}" — must be one of ${PHASE_EXECUTOR_KINDS.join('|')}`),
-    );
+    const valid = (PHASE_EXECUTOR_KINDS as readonly string[]).length > 0
+      ? `must be one of ${PHASE_EXECUTOR_KINDS.join('|')}`
+      : 'no phase executors remain (R4-01-F4) — every phase is a generic agent or a band hook, so drop the `executor` field';
+    findings.push(err(obj, 'executor/enum', `unknown executor "${def.executor}" — ${valid}`));
   }
 
   // runtime/loop-strategy — error (R4-01-F2 review finding). Mirrors the
