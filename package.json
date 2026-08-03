@@ -27,6 +27,7 @@
     "ui:journey": "node scripts/e2e-journey.mjs",
     "ui:deadpaths": "node scripts/e2e-deadpaths.mjs",
     "verify:cycle": "node scripts/verify-cycle.mjs",
+    "parity:stories": "node scripts/story-parity.mjs",
     "test:ui": "npm run test --workspace=forge-ui"
   },
   "dependencies": {
