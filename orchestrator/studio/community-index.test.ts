@@ -45,13 +45,13 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
-import { skillDir, skillPath } from '../skill-path.ts';
+import { skillPath } from '../skill-path.ts';
 import { listConnections } from './connection-library.ts';
 import { installSkillPackage, approveSkillDraft } from './skill-library.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';

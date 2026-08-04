@@ -63,7 +63,7 @@ import { startBridge } from './ui-bridge.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
 import { skillPath } from '../orchestrator/skill-path.ts';
 import { listSkillLibrary, skillTrustState } from '../orchestrator/studio/skill-library.ts';
-import { hookDir, hookYamlPath } from '../orchestrator/studio/hook-library.ts';
+import { hookYamlPath } from '../orchestrator/studio/hook-library.ts';
 import { isHookRunnable, hookRunState, readHookApprovalLedger, scanHookPackage } from '../orchestrator/studio/hook-scan.ts';
 
 // ---------------------------------------------------------------------------

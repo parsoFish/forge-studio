@@ -63,7 +63,28 @@ after(() => {
   for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
 });
 
-function writeCatalog(root: string, opts: { tools?: Array<Record<string, unknown>>; mcps?: Array<Record<string, unknown>> } = {}): void {
+/** community-skills shape mirrors community-index.test.ts's own
+ *  `communitySkillDoc` exactly (T2 round 3: "make them consistent") — every
+ *  field `registry.ts`'s `parseCommunitySkills` (reqString: id/name/
+ *  provenance/source/category) actually requires, with sensible defaults so
+ *  a caller can pass just `{ id }`. */
+function communitySkillDoc(s: Record<string, unknown>): Record<string, unknown> {
+  return {
+    id: s['id'],
+    name: s['name'] ?? s['id'],
+    provenance: s['provenance'] ?? 'Test Author',
+    source: s['source'] ?? `https://example.com/${s['id']}`,
+    category: s['category'] ?? 'testing',
+    desc: s['desc'] ?? `${s['id']} description`,
+    ...(s['tier'] !== undefined ? { tier: s['tier'] } : {}),
+    ...(s['stars'] !== undefined ? { stars: s['stars'] } : {}),
+  };
+}
+
+function writeCatalog(
+  root: string,
+  opts: { tools?: Array<Record<string, unknown>>; mcps?: Array<Record<string, unknown>>; communitySkills?: Array<Record<string, unknown>> } = {},
+): void {
   const doc = {
     sdks: [{ id: 'claude', name: 'Claude', available: true }],
     models: [{ id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', sdk: 'claude', tier: 'sonnet' }],
@@ -76,7 +97,7 @@ function writeCatalog(root: string, opts: { tools?: Array<Record<string, unknown
       probe: { kind: 'npm-package' }, provenance: 'https://example.com', config: [],
     })),
     guards: [],
-    'community-skills': [],
+    'community-skills': (opts.communitySkills ?? []).map(communitySkillDoc),
   };
   mkdirSync(join(root, 'studio'), { recursive: true });
   writeFileSync(join(root, 'studio', 'catalog.yaml'), yaml.dump(doc), 'utf8');
@@ -117,7 +138,11 @@ describe('routeCommunityInstall — skill', () => {
 
   it('a catalog-only skill (no matching vendored package) → {pipeline:"none", reason} — D5: the install control is structurally absent', () => {
     const root = makeForgeRoot();
-    writeCatalog(root, {});
+    // T2 round 3 fix: the id under test must be a REAL catalog community-skills
+    // entry — "catalog-only" means "known to the catalog, but no vendored
+    // bytes", not "unknown everywhere" (that is the separate, distinctly-
+    // reasoned case covered by the "unknown item" describe block below).
+    writeCatalog(root, { communitySkills: [{ id: 'catalog-only-with-no-bytes' }] });
     // Note: no vendorSkillPackage call — id exists nowhere on disk under studio/community/skills/.
     const route = routeCommunityInstall(root, 'skill', 'catalog-only-with-no-bytes');
     assert.equal(route.pipeline, 'none');
