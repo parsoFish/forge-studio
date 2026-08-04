@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T13:40:33.863Z",
+  "generatedAt": "2026-08-04T21:04:17.635Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -14,7 +14,8 @@
     "flows-author",
     "flows-run",
     "roadmap",
-    "demo-builder"
+    "demo-builder",
+    "community"
   ],
   "executedJourneys": [
     "skills",
@@ -28,7 +29,8 @@
     "flows-author",
     "flows-run",
     "roadmap",
-    "demo-builder"
+    "demo-builder",
+    "community"
   ],
   "journeys": {
     "skills": {
@@ -185,7 +187,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 5M (got 1823079)",
+              "msg": "clip skill-edit.webm under 5M (got 1768271)",
               "pass": true
             },
             {
@@ -204,7 +206,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 1823079
+              "sizeBytes": 1768271
             }
           ],
           "pass": true
@@ -230,7 +232,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 5M (got 795448)",
+              "msg": "clip sk-create.webm under 5M (got 774499)",
               "pass": true
             },
             {
@@ -253,7 +255,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 795448
+              "sizeBytes": 774499
             },
             {
               "kind": "frame",
@@ -388,7 +390,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-04T13-27-45)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-04T20-50-17)",
               "pass": true
             },
             {
@@ -404,7 +406,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 5M (got 1731743)",
+              "msg": "clip skill-agentic.webm under 5M (got 1689429)",
               "pass": true
             },
             {
@@ -434,7 +436,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 1731743
+              "sizeBytes": 1689429
             }
           ],
           "pass": true
@@ -704,7 +706,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-blocked.webm under 5M (got 527655)",
+              "msg": "clip hook-blocked.webm under 5M (got 700180)",
               "pass": true
             },
             {
@@ -745,7 +747,7 @@
               "kind": "clip",
               "file": "clips/hook-blocked.webm",
               "caption": "Declaring the exfiltration doesn't excuse it: still blocked, approval refused, then an explicit, recorded override — the verdict never clears",
-              "sizeBytes": 527655
+              "sizeBytes": 700180
             }
           ],
           "pass": true
@@ -811,7 +813,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-bind.webm under 5M (got 875724)",
+              "msg": "clip hook-bind.webm under 5M (got 515185)",
               "pass": true
             },
             {
@@ -846,7 +848,7 @@
               "kind": "clip",
               "file": "clips/hook-bind.webm",
               "caption": "Binding a hook lives only in the Agent Builder — drag it into the dedicated hook zone and save",
-              "sizeBytes": 875724
+              "sizeBytes": 515185
             }
           ],
           "pass": true
@@ -1204,7 +1206,7 @@
               "pass": true
             },
             {
-              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge-gate-R3-04/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge-gate-R3-04/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -1383,15 +1385,15 @@
               "pass": true
             },
             {
-              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-04T13-28-41-726-7u3g\") — same runner as the agent page",
+              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-04T20-51-16-504-dbwn\") — same runner as the agent page",
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 5M (got 1594246)",
+              "msg": "clip onboard-form.webm under 5M (got 1886354)",
               "pass": true
             },
             {
-              "msg": "J4: onboarding adds exactly one project to the library (1→2, journey-demo-project listed=true)",
+              "msg": "J4: onboarding adds exactly one project to the library (5→6, journey-demo-project listed=true)",
               "pass": true
             },
             {
@@ -1419,7 +1421,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1594246
+              "sizeBytes": 1886354
             }
           ],
           "pass": true
@@ -1441,7 +1443,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 5M (got 1189036)",
+              "msg": "clip onboard-resolve.webm under 5M (got 1439692)",
               "pass": true
             },
             {
@@ -1475,7 +1477,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1189036
+              "sizeBytes": 1439692
             },
             {
               "kind": "frame",
@@ -1528,7 +1530,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 5M (got 840212)",
+              "msg": "clip project-create.webm under 5M (got 882073)",
               "pass": true
             },
             {
@@ -1551,7 +1553,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 840212
+              "sizeBytes": 882073
             },
             {
               "kind": "frame",
@@ -1637,7 +1639,7 @@
               "pass": true
             },
             {
-              "msg": "library: ≥1 project card in projects section (found 3, want ≥1)",
+              "msg": "library: ≥1 project card in projects section (found 7, want ≥1)",
               "pass": true
             },
             {
@@ -1653,7 +1655,7 @@
               "pass": true
             },
             {
-              "msg": "library: projects section data-count ≥1 (got 3)",
+              "msg": "library: projects section data-count ≥1 (got 7)",
               "pass": true
             },
             {
@@ -1669,11 +1671,11 @@
               "pass": true
             },
             {
-              "msg": "library: ≥1 [data-attention-item] in the attention strip (found 3, want ≥1)",
+              "msg": "library: ≥1 [data-attention-item] in the attention strip (found 7, want ≥1)",
               "pass": true
             },
             {
-              "msg": "library: attention item links through to its owning project surface (got \"/projects/journey-demo-project\")",
+              "msg": "library: attention item links through to its owning project surface (got \"/projects/demo-project\")",
               "pass": true
             }
           ],
@@ -1735,7 +1737,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 5M (got 1286859)",
+              "msg": "clip instr-generate.webm under 5M (got 1093722)",
               "pass": true
             },
             {
@@ -1758,7 +1760,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1286859
+              "sizeBytes": 1093722
             },
             {
               "kind": "frame",
@@ -1785,7 +1787,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 5M (got 1088539)",
+              "msg": "clip pbrain-generate.webm under 5M (got 820556)",
               "pass": true
             },
             {
@@ -1808,7 +1810,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 1088539
+              "sizeBytes": 820556
             },
             {
               "kind": "frame",
@@ -2037,7 +2039,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 5M (got 800122)",
+              "msg": "clip kb-ingest.webm under 5M (got 949392)",
               "pass": true
             },
             {
@@ -2071,7 +2073,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 800122
+              "sizeBytes": 949392
             },
             {
               "kind": "frame",
@@ -2108,7 +2110,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 5M (got 1660084)",
+              "msg": "clip kb-lint.webm under 5M (got 1618029)",
               "pass": true
             }
           ],
@@ -2127,7 +2129,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1660084
+              "sizeBytes": 1618029
             }
           ],
           "pass": true
@@ -2266,7 +2268,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 5M (got 1143775)",
+              "msg": "clip agent-scratch-build.webm under 5M (got 1193700)",
               "pass": true
             }
           ],
@@ -2305,7 +2307,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 1143775
+              "sizeBytes": 1193700
             }
           ],
           "pass": true
@@ -2371,7 +2373,7 @@
               "pass": true
             },
             {
-              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-04T13-32-38-936-5lu2\")",
+              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-04T20-55-10-004-dj3e\")",
               "pass": true
             },
             {
@@ -2419,7 +2421,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 5M (got 908931)",
+              "msg": "clip agent-build.webm under 5M (got 892967)",
               "pass": true
             }
           ],
@@ -2443,7 +2445,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 908931
+              "sizeBytes": 892967
             }
           ],
           "pass": true
@@ -2562,7 +2564,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msep7h7u, fn-msep7h83, fn-msep7h8c, fn-msep7h8j)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msf50t0l, fn-msf50t0w, fn-msf50t15, fn-msf50t1g)",
               "pass": true
             },
             {
@@ -2654,7 +2656,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 5M (got 3793443)",
+              "msg": "clip flow-scratch-build.webm under 5M (got 3836504)",
               "pass": true
             }
           ],
@@ -2708,7 +2710,7 @@
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate",
-              "sizeBytes": 3793443
+              "sizeBytes": 3836504
             }
           ],
           "pass": true
@@ -2852,7 +2854,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 5M (got 1495119)",
+              "msg": "clip run-idea-interview.webm under 5M (got 1455975)",
               "pass": true
             },
             {
@@ -2871,7 +2873,7 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1495119
+              "sizeBytes": 1455975
             },
             {
               "kind": "frame",
@@ -2939,7 +2941,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 5M (got 1287613)",
+              "msg": "clip run-plan-gate.webm under 5M (got 1537329)",
               "pass": true
             }
           ],
@@ -2954,7 +2956,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1287613
+              "sizeBytes": 1537329
             }
           ],
           "pass": true
@@ -3138,7 +3140,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 5M (got 1652943)",
+              "msg": "clip run-build-monitor.webm under 5M (got 1728392)",
               "pass": true
             }
           ],
@@ -3153,7 +3155,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing",
-              "sizeBytes": 1652943
+              "sizeBytes": 1728392
             }
           ],
           "pass": true
@@ -3319,7 +3321,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 5M (got 1311698)",
+              "msg": "clip run-verdict-gate.webm under 5M (got 1484258)",
               "pass": true
             }
           ],
@@ -3334,7 +3336,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1311698
+              "sizeBytes": 1484258
             }
           ],
           "pass": true
@@ -3426,7 +3428,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 5M (got 1742911)",
+              "msg": "clip run-reflect-complete.webm under 5M (got 1776991)",
               "pass": true
             }
           ],
@@ -3452,7 +3454,7 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1742911
+              "sizeBytes": 1776991
             }
           ],
           "pass": true
@@ -3501,7 +3503,7 @@
               "pass": true
             },
             {
-              "msg": "monitor: run rail shows ≥1 [data-run-id] (found 2, want ≥1)",
+              "msg": "monitor: run rail shows ≥1 [data-run-id] (found 35, want ≥1)",
               "pass": true
             },
             {
@@ -3529,7 +3531,7 @@
               "pass": true
             },
             {
-              "msg": "monitor: [data-tail-count] attribute present (got 42)",
+              "msg": "monitor: [data-tail-count] attribute present (got 0)",
               "pass": true
             }
           ],
@@ -3703,7 +3705,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 5M (got 735758)",
+              "msg": "clip roadmap-drive.webm under 5M (got 671381)",
               "pass": true
             },
             {
@@ -3728,7 +3730,7 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the roadmap, pops a finished initiative’s card, then eyes the \"Start development\" trigger on the one queued up next",
-              "sizeBytes": 735758
+              "sizeBytes": 671381
             },
             {
               "kind": "frame",
@@ -3857,7 +3859,7 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 5M (got 1770018)",
+              "msg": "clip demo-generate.webm under 5M (got 1659844)",
               "pass": true
             }
           ],
@@ -3877,7 +3879,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1770018
+              "sizeBytes": 1659844
             }
           ],
           "pass": true
@@ -3908,15 +3910,755 @@
       "pass": true,
       "checksTotal": 12,
       "checksFailed": 0
+    },
+    "community": {
+      "title": "Browse the cross-kind community index and install through the owning pipelines",
+      "story": "As an operator, I discover community objects from inside the /skills and /connections shelves themselves, land on the ONE cross-kind /community browser (skills, hooks, MCPs, tools — real per-hub item counts, honest zeros included), open a vendored skill's pre-install detail page (SKILL.md preview, hub + backing-repo links) next to a catalog-sourced card's real hub signals, install the skill and watch it land quarantined and absent from the agent-builder palette, open a vendored hook's pre-install SECURITY SCAN, install it and watch it stay unrunnable with no approval-ledger entry, return to /skills and read the install's real provenance, approve it on R3-01's own surface and watch it turn palette-visible, then browse an MCP's curated capability list and click Install under this harness's no-spawn bridge — suppressed, byte-exact argv shown, the connection's real state genuinely unchanged.",
+      "beats": {
+        "community-skills-entry": {
+          "title": "The /skills shelf — the community entry point starts here",
+          "narration": "Skills and hooks ride on the existing communities: the /skills library itself is where the browse-community entry point lives, not a separate marketplace tab.",
+          "checks": [
+            {
+              "msg": "CM-1: /skills renders [data-page=\"skill-library\"]",
+              "pass": true
+            },
+            {
+              "msg": "CM-1: the Community section is populated (7)",
+              "pass": true
+            },
+            {
+              "msg": "CM-1: /skills exposes [data-action=\"browse-community\"] — the entry point into the cross-kind browser",
+              "pass": true
+            }
+          ],
+          "captures": [],
+          "pass": true
+        },
+        "community-skills-card-signals": {
+          "title": "A community card already shows its derived hub + signals",
+          "narration": "A CATALOG-sourced card (systematic-debugging) on the /skills shelf carries a real, derived hub id and hub-attributed signals — cross-checked against the catalog's own stars/provenance fields, never a fabricated number.",
+          "checks": [
+            {
+              "msg": "CM-2: the community join settled to \"ready\" (got \"ready\") — a run where it stays unavailable must fail loudly here, not silently skip the checks below",
+              "pass": true
+            },
+            {
+              "msg": "CM-2: the systematic-debugging community card is listed",
+              "pass": true
+            },
+            {
+              "msg": "CM-2: systematic-debugging reads data-skill-source=\"community\" (got \"community\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-2: data-skill-hub matches the catalog source's real resolved hub (dom=\"superpowers\", real=\"superpowers\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-2: data-skill-has-signals=\"true\" — systematic-debugging carries real stars (228k) (got \"true\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "150-cm-1-skills-card-signals.png",
+              "caption": "Part 2 (community) — a community card already carries its derived hub + signals on the /skills shelf",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-browse-entry": {
+          "title": "Browse the full catalogue — the cross-kind /community shelf",
+          "narration": "Clicking browse-community lands on the ONE cross-kind index over skills, hooks, MCPs and tools — the total item count is independently recomputed off studio/catalog.yaml + the vendored package trees, never a re-read of the shelf's own claim.",
+          "checks": [
+            {
+              "msg": "CM-3: /community renders [data-page=\"community-browser\"]",
+              "pass": true
+            },
+            {
+              "msg": "CM-3: data-item-count matches the independently-recomputed cross-kind total (dom=20, real=20)",
+              "pass": true
+            },
+            {
+              "msg": "CM-3: one rendered card per real item (20 vs 20)",
+              "pass": true
+            }
+          ],
+          "captures": [],
+          "pass": true
+        },
+        "community-hub-strip": {
+          "title": "The hub strip — real per-hub item counts, an honest zero included",
+          "narration": "Every source hub renders with a DERIVED item count — forge's own seed hub (the two vendored packages), the superpowers hub (three catalog skills), and skills.sh, which forge indexes NOTHING from yet: it still renders \"0 items\", never dropped from the strip.",
+          "checks": [
+            {
+              "msg": "CM-4: [data-component=\"hub-strip\"] renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-4: data-hub-count matches studio/community/hubs.yaml's real hub count (dom=9, real=9)",
+              "pass": true
+            },
+            {
+              "msg": "CM-4: hub \"forge-seed\"'s data-hub-item-count is derived, not declared (dom=2, real=2)",
+              "pass": true
+            },
+            {
+              "msg": "CM-4: hub \"superpowers\"'s data-hub-item-count is derived, not declared (dom=3, real=3)",
+              "pass": true
+            },
+            {
+              "msg": "CM-4: (sanity) skills.sh genuinely has zero real items in this checkout — the honest-zero case this beat proves",
+              "pass": true
+            },
+            {
+              "msg": "CM-4: the skills.sh hub is listed even though it has zero items — never dropped for being empty",
+              "pass": true
+            },
+            {
+              "msg": "CM-4: skills.sh reads a genuine \"0\", not a fabricated or missing count (got \"0\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "151-cm-2-hub-strip.png",
+              "caption": "Part 2 (community) — the hub strip: real per-hub counts, an honest zero for skills.sh",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-filter-skill": {
+          "title": "Filter to skills",
+          "narration": "Filtering to skill narrows to the catalog's community-skills union the vendored-only package — independently recomputed off disk, never a re-read of the filtered count the page itself renders.",
+          "checks": [
+            {
+              "msg": "CM-5: filtering to skill narrows to the real catalog∪vendored union (dom=10, real=10)",
+              "pass": true
+            },
+            {
+              "msg": "CM-5: every rendered card is kind=\"skill\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-5: the vendored dependency-diff-review is present under the skill filter",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "152-cm-3-filter-skill.png",
+              "caption": "Part 2 (community) — kind filtering: skill",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-skill-detail-open": {
+          "title": "The vendored dependency-diff-review's pre-install detail page",
+          "narration": "A vendored community skill (dependency-diff-review) opens its own real pre-install detail page: hub resolved to forge's own seed, and — honestly — no signals (the vendored seed publishes none, unlike the catalog-sourced systematic-debugging the previous beat checked).",
+          "checks": [
+            {
+              "msg": "CM-6: /community/skill/dependency-diff-review renders [data-page=\"community-detail\"]",
+              "pass": true
+            },
+            {
+              "msg": "CM-6: data-item-kind=\"skill\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-6: data-install-state=\"not-installed\" — pre-install",
+              "pass": true
+            },
+            {
+              "msg": "(sanity) the vendored upstream URL resolves to the real forge-seed hub",
+              "pass": true
+            },
+            {
+              "msg": "CM-6: [data-section=\"hub-signals\"] resolves the vendored skill to the real forge-seed hub",
+              "pass": true
+            },
+            {
+              "msg": "CM-6: data-signal-source is ABSENT — the vendored seed honestly publishes no signals (D5)",
+              "pass": true
+            },
+            {
+              "msg": "CM-6: the page states \"no signals published\" rather than a fabricated zero",
+              "pass": true
+            },
+            {
+              "msg": "CM-6: the real forge-seed upstream link renders",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "153-cm-4-skill-detail.png",
+              "caption": "Part 2 (community) — the vendored skill's pre-install detail page: hub resolved, no fabricated signals",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-skill-detail-signals": {
+          "title": "SKILL.md preview via the file package — enough to judge it",
+          "narration": "The SKILL.md preview is the REAL vendored bytes, tabbed through the shared file-package component, rendered BEFORE install so the operator reads what they would be approving — plus an independent cross-check that systematic-debugging (catalog-sourced) genuinely carries real signals in the same index, the honest contrast this skill's own signals:null makes visible.",
+          "checks": [
+            {
+              "msg": "CM-7: [data-component=\"file-package\"] renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-7: the vendored package is exactly one file (SKILL.md) (dom=1)",
+              "pass": true
+            },
+            {
+              "msg": "CM-7: the real SKILL.md body renders — its own title, not a stub",
+              "pass": true
+            },
+            {
+              "msg": "(sanity) the vendored SKILL.md itself documents the quarantine contract",
+              "pass": true
+            },
+            {
+              "msg": "CM-7: the quarantine-contract paragraph is visible in the preview — the operator reads it before installing",
+              "pass": true
+            },
+            {
+              "msg": "CM-7: the bridge's own list confirms systematic-debugging carries real signals ({\"stars\":\"228k\",\"attributedTo\":\"obra/superpowers\"})",
+              "pass": true
+            },
+            {
+              "msg": "CM-7: the SAME list confirms dependency-diff-review carries signals:null — the vendored seed honestly publishes none",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "154-cm-5-skill-preview.png",
+              "caption": "Part 2 (community) — SKILL.md preview (real bytes) + the catalog-signals cross-check",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-skill-install": {
+          "title": "Install the skill — lands quarantined, absent from the palette",
+          "narration": "Install routes to R3-01-F4's real draft→scan→approve pipeline — a draft on disk, runtime/allowed-tools/library quarantined, and structurally absent from the agent-builder palette until an operator approves it.",
+          "checks": [
+            {
+              "msg": "CM-8: [data-action=\"install-community-item\"] renders (vendored ⇒ routable)",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: the button declares its own routing target — data-install-routed-to=\"skill-draft\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: the outcome reads \"Installed as a draft.\" (got \"Installed as a draft. Its approval gate lives at /skills/dependency-diff-review.\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: skills/dependency-diff-review/SKILL.md lands on disk",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: the installed package is quarantined as status: draft",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: runtime: is NOT top-level after install (moved under quarantined:, D4 R3-01)",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: the community page's own state flips to draft-pending-approval on refetch (got \"draft-pending-approval\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-8: the draft is NOT in the agent-builder palette (found 0)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "155-cm-6-skill-draft.png",
+              "caption": "Part 2 (community) — install routes to R3-01-F4: a draft, not palette-visible",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-hook-detail": {
+          "title": "The vendored hook's pre-install SECURITY SCAN",
+          "narration": "The hook filter narrows to the one vendored hook; its detail page renders the REAL pre-install security scan — run on the vendored bytes before any install, the same scanner the owning pipeline runs.",
+          "checks": [
+            {
+              "msg": "CM-9: kind filtering: hook narrows to the real vendored-only count (dom=1, real=1)",
+              "pass": true
+            },
+            {
+              "msg": "CM-9: /community/hook/block-protected-branch-push renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-9: [data-component=\"file-package\"] renders (hook.yaml + its script)",
+              "pass": true
+            },
+            {
+              "msg": "CM-9: the vendored hook package is exactly 2 files (hook.yaml + scripts/run.sh) (dom=2)",
+              "pass": true
+            },
+            {
+              "msg": "CM-9: [data-section=\"security-scan\"] renders — the pre-install panel",
+              "pass": true
+            },
+            {
+              "msg": "CM-9: the real vendored script has nothing to flag — verdict \"clean\" (got \"clean\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-9: zero findings (got 0)",
+              "pass": true
+            },
+            {
+              "msg": "(sanity) the real vendored script genuinely makes no network call — the clean verdict means something",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "156-cm-7-hook-scan.png",
+              "caption": "Part 2 (community) — the vendored hook's pre-install SECURITY SCAN: clean, zero findings",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-hook-install": {
+          "title": "Install the hook — materialised, but not runnable",
+          "narration": "Install routes to R3-03-F2's hook pipeline: the vendored bytes land on disk, but the install NEVER writes an approval-ledger entry — so even a cleanly-scanned hook stays unrunnable on its own owning page until an operator explicitly approves it there.",
+          "checks": [
+            {
+              "msg": "CM-10: data-install-routed-to=\"hook-needs-approval\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: the outcome reads \"Installed as a draft.\" (got \"Installed as a draft. Its approval gate lives at /hooks/block-protected-branch-p\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: studio/hooks/block-protected-branch-push/hook.yaml lands on disk",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: studio/hooks/block-protected-branch-push/scripts/run.sh lands on disk",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: studio/hook-approvals.yaml carries NO entry for block-protected-branch-push — install never writes one (D2)",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: /hooks/block-protected-branch-push (the OWNING surface) renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: the real scan verdict is \"clean\" (got \"clean\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: trust reads \"needs-review\" — a clean scan is not the same as an operator's approval (got \"needs-review\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: data-hook-runnable=\"false\" — not runnable with no approval-ledger entry, even though the scan is clean (got \"false\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-10: the real approval control DOES exist on the owning page — this journey deliberately stops short of clicking it (the browser owns zero trust decisions)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "157-cm-8-hook-installed.png",
+              "caption": "Part 2 (community) — installed, still not runnable: clean scan, no approval-ledger entry",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-skills-shelf-return": {
+          "title": "Back on the local shelf — the install with its real provenance",
+          "narration": "Back on /skills, dependency-diff-review now lives in the LOCAL section — filesystem wins on existence (D5): once installed, a vendored community package is a plain local skill on disk, not a permanent \"community\" badge.",
+          "checks": [
+            {
+              "msg": "CM-11: dependency-diff-review is listed on the real /skills shelf",
+              "pass": true
+            },
+            {
+              "msg": "CM-11: data-skill-source=\"local\" — once installed, filesystem wins on existence (D5), never stuck reading \"community\" forever (got \"local\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-11: data-skill-installed=\"true\" (got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-11: data-skill-trust=\"draft\" — quarantined, not yet approved (got \"draft\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "158-cm-9-skills-shelf-return.png",
+              "caption": "Part 2 (community) — back on the local shelf: installed, provenance kept, still a draft",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-skills-detail-provenance": {
+          "title": "The skill's own detail page — real provenance, R3-01's approval gate",
+          "narration": "R3-01's own /skills/<id> surface is where the install's real provenance renders and where the approval gate lives — the browser never duplicates either.",
+          "checks": [
+            {
+              "msg": "CM-12: detail page reports data-skill-trust=\"draft\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-12: [data-section=\"approval-gate\"] renders for the draft",
+              "pass": true
+            },
+            {
+              "msg": "CM-12: the real forge-seed provenance URL renders on the skill's own detail page",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "159-cm-10-skills-provenance.png",
+              "caption": "Part 2 (community) — the skill's own detail page: real provenance, R3-01's approval gate",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-skills-approve-palette": {
+          "title": "Approve at /skills/<id> — then palette-visible in the builder catalog",
+          "narration": "The operator approves on R3-01's own surface — never the browser's — and only THEN does the skill become a real, draggable chip in the agent-builder catalog: the honest completion of the arc, the trust decision kept outside the browsing surface.",
+          "checks": [
+            {
+              "msg": "CM-13: approving at /skills/<id> flips trust to ready",
+              "pass": true
+            },
+            {
+              "msg": "CM-13: the approval gate no longer renders once approved",
+              "pass": true
+            },
+            {
+              "msg": "CM-13: dependency-diff-review IS now a real, draggable chip in the agent-builder catalog",
+              "pass": true
+            },
+            {
+              "msg": "CM-13: skills/dependency-diff-review/SKILL.md genuinely existed before cleanup",
+              "pass": true
+            },
+            {
+              "msg": "CM-13: studio/hooks/block-protected-branch-push/ genuinely existed before cleanup",
+              "pass": true
+            },
+            {
+              "msg": "CM-13: skills/dependency-diff-review/ removed after the beat (self-cleaning)",
+              "pass": true
+            },
+            {
+              "msg": "CM-13: studio/hooks/block-protected-branch-push/ removed after the beat (self-cleaning)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "160-cm-11-approved-palette.png",
+              "caption": "Part 2 (community) — approved on R3-01's own surface: now palette-visible",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-connections-entry": {
+          "title": "The /connections shelf — the second browse-community entry point",
+          "narration": "The connections pillar carries its own real browse-community entry point, the same [data-action=\"browse-community\"] link /skills exposes.",
+          "checks": [
+            {
+              "msg": "CM-14: /connections renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-14: /connections ALSO exposes [data-action=\"browse-community\"] — the same entry point, a second pillar",
+              "pass": true
+            }
+          ],
+          "captures": [],
+          "pass": true
+        },
+        "community-connections-browse-entry": {
+          "title": "Adding a connection means browsing the community hubs",
+          "narration": "Clicking browse-community from /connections lands on the SAME /community shelf the skills arc used — one browser, every kind.",
+          "checks": [
+            {
+              "msg": "CM-15: lands on the same /community shelf",
+              "pass": true
+            },
+            {
+              "msg": "CM-15: the SAME cross-kind total, unfiltered (dom=20, real=20)",
+              "pass": true
+            }
+          ],
+          "captures": [],
+          "pass": true
+        },
+        "community-filter-mcp": {
+          "title": "Filter to MCP servers (and, in passing, to tools)",
+          "narration": "Filtering to mcp narrows to the catalog's 6 curated MCP entries; filtering to tool narrows to its 3 — both independently recomputed off studio/catalog.yaml, satisfying kind filtering for every real kind this browser offers.",
+          "checks": [
+            {
+              "msg": "CM-16: filtering to mcp narrows to the real catalog count (dom=6, real=6)",
+              "pass": true
+            },
+            {
+              "msg": "CM-16: every rendered card is kind=\"mcp\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-16: filtering to tool narrows to the real catalog count (dom=3, real=3)",
+              "pass": true
+            },
+            {
+              "msg": "CM-16: every rendered card is kind=\"tool\" — kind filtering covers all four real kinds (skill, hook, mcp, tool)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "161-cm-12-filter-mcp.png",
+              "caption": "Part 2 (community) — kind filtering: mcp",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-mcp-detail-open": {
+          "title": "An MCP's pre-install detail page",
+          "narration": "memory's community detail page opens with its real install method + exact pin, hub resolution, and provenance — kind-appropriate depth, not the server's whole repo.",
+          "checks": [
+            {
+              "msg": "CM-17: /community/mcp/memory renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-17: data-item-kind=\"mcp\"",
+              "pass": true
+            },
+            {
+              "msg": "CM-17: data-install-state=\"not-installed\" — pre-install",
+              "pass": true
+            },
+            {
+              "msg": "CM-17: [data-section=\"install\"] carries data-install-method=\"npm\" — the same vocabulary /connections/[id] uses",
+              "pass": true
+            },
+            {
+              "msg": "CM-17: data-install-version is the real pinned version, rendered BEFORE install (dom=\"2026.7.4\", real=\"2026.7.4\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-17: the real pinned version (2026.7.4) renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-17: the real upstream provenance link renders",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "162-cm-13-mcp-detail.png",
+              "caption": "Part 2 (community) — an MCP's pre-install detail page: real pin, real provenance",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-mcp-detail-capabilities": {
+          "title": "The MCP's curated capability list",
+          "narration": "The capability list is curation-time data, labelled as such — never presented as a verified live capability list of a running server.",
+          "checks": [
+            {
+              "msg": "CM-18: [data-section=\"capabilities\"] carries data-capabilities-source=\"curated\" — labelled, never a verified live list",
+              "pass": true
+            },
+            {
+              "msg": "CM-18: data-capability-count matches the catalog's own curated list (dom=9, real=9)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "163-cm-14-mcp-capabilities.png",
+              "caption": "Part 2 (community) — the MCP's curated capability list",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-mcp-install-suppressed": {
+          "title": "Install from here — SUPPRESSED, byte-exact argv, state unchanged",
+          "narration": "Clicking Install routes to R3-04's real connection pipeline; under this harness's no-spawn bridge the install is SUPPRESSED — the byte-exact argv is shown, nothing is executed, and the connection's REAL state stays genuinely unchanged (D7 stands here too).",
+          "checks": [
+            {
+              "msg": "CM-19: (sanity) _connections/ genuinely has no memory package on disk before this beat",
+              "pass": true
+            },
+            {
+              "msg": "CM-19: data-install-routed-to=\"connection-install\" — routes to R3-04's real pipeline",
+              "pass": true
+            },
+            {
+              "msg": "CM-19: the outcome reads \"Suppressed — no network call was made.\" (got \"Suppressed — no network call was made.npm install --prefix /home/parso/forge/_co\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "pass": true
+            },
+            {
+              "msg": "CM-19: after the suppressed install the community page STILL reads data-install-state=\"not-installed\" (got \"not-installed\") — never rendered as success",
+              "pass": true
+            },
+            {
+              "msg": "CM-19: the Install control is STILL rendered — the \"already installed\" branch never fires, because nothing was ever installed",
+              "pass": true
+            },
+            {
+              "msg": "CM-19: (cross-check) the connections root genuinely still has nothing installed",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "164-cm-15-mcp-suppressed.png",
+              "caption": "Part 2 (community) — a SUPPRESSED install: byte-exact argv shown, nothing executed",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-return-to-browser": {
+          "title": "Back to the browser",
+          "narration": "Returning to the unfiltered /community shelf — the same real total, unchanged by the suppressed install attempt.",
+          "checks": [
+            {
+              "msg": "CM-20: back on /community",
+              "pass": true
+            },
+            {
+              "msg": "CM-20: the total is unchanged by the suppressed install attempt (dom=20, real=20)",
+              "pass": true
+            }
+          ],
+          "captures": [],
+          "pass": true
+        },
+        "community-connections-local-shelf": {
+          "title": "The local connections shelf — the real state, still true",
+          "narration": "Back on the OWNING /connections shelf, memory still reads not-installed — the suppressed install attempt left the real local shelf genuinely untouched, health-checked against a real re-probe.",
+          "checks": [
+            {
+              "msg": "CM-21: memory is listed on the real /connections shelf",
+              "pass": true
+            },
+            {
+              "msg": "CM-21: data-connection-state=\"not-installed\" — the community browser's suppressed install left this genuinely unchanged (got \"not-installed\")",
+              "pass": true
+            },
+            {
+              "msg": "(cross-check) still absent on disk — health-checked, not just re-read from a cache",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "165-cm-16-connections-local-shelf.png",
+              "caption": "Part 2 (community) — the local connections shelf: the real state, still true",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "community-connections-used-by": {
+          "title": "Used-by — agents reference connections by name, nothing else to wire",
+          "narration": "memory's own detail page still carries the SAME derived used-by section R3-04 shipped — agents that reference a connection do so by composition.mcps, never a declared list, and the community browser adds nothing new to wire.",
+          "checks": [
+            {
+              "msg": "CM-22: /connections/memory renders",
+              "pass": true
+            },
+            {
+              "msg": "CM-22: [data-section=\"used-by\"] renders — DERIVED, never declared",
+              "pass": true
+            },
+            {
+              "msg": "CM-22: data-used-by-count is a real, non-negative derived scan (got 0)",
+              "pass": true
+            },
+            {
+              "msg": "CM-22: on its own owning page, memory STILL reads not-installed — the browser never wired a fact the pipeline didn't (got \"not-installed\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "166-cm-17-connections-used-by.png",
+              "caption": "Part 2 (community) — used-by is derived; nothing else to wire",
+              "key": true
+            }
+          ],
+          "pass": true
+        }
+      },
+      "pass": true,
+      "checksTotal": 109,
+      "checksFailed": 0
     }
   },
   "epilogue": {
     "captures": []
   },
   "totals": {
-    "checksTotal": 549,
+    "checksTotal": 658,
     "checksFailed": 0,
-    "framesTotal": 149,
+    "framesTotal": 166,
     "clipsTotal": 22
   },
   "exitCode": 0
