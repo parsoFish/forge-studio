@@ -177,7 +177,7 @@ function allKnownSkillIds(forgeRoot: string): Set<string> {
   return new Set([...localIds, ...catalog.communitySkills.map((c) => c.id)]);
 }
 
-function extractProvenance(data: Record<string, unknown>): SkillProvenance | null {
+export function extractProvenance(data: Record<string, unknown>): SkillProvenance | null {
   const raw = data['provenance'];
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const p = raw as Record<string, unknown>;

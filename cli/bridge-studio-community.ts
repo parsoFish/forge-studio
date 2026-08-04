@@ -68,9 +68,11 @@ import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } 
 import { isDryBridge } from './dry-bridge.ts';
 import { assertSkillSlug } from '../orchestrator/skill-path.ts';
 import {
-  hubsWithCounts,
+  hubCountsFrom,
+  listCommunityHubs,
   listCommunityIndex,
   communityItem,
+  buildConnectionItem,
   readVendoredPackage,
   type CommunityKind,
   type CommunityItem,
@@ -130,10 +132,21 @@ type WireCtx = {
   connections: readonly ConnectionDefinition[];
 };
 
+/** T2 round 6, AT GROUP 5: mirrors listCommunityIndex's own deliberate
+ *  missing-vs-malformed split (orchestrator/studio/community-index.ts, MAJOR
+ *  2) at the ROUTE level. `listConnections` calls `loadCatalog` unguarded —
+ *  correct for ITS callers, which never expect a catalog-less root — so this
+ *  function must not call it at all when studio/catalog.yaml is genuinely
+ *  absent (the fresh/half-onboarded shape: degrade to no connections, never
+ *  a 500). A catalog.yaml that EXISTS but fails to parse must still throw
+ *  loud (via the same unguarded `loadCatalog` call below, for communitySkills)
+ *  — a corrupt registry must never render identically to an honest empty one. */
 function buildWireCtx(forgeRoot: string): WireCtx {
   const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
-  const communitySkills = existsSync(catalogPath) ? (loadCatalog(catalogPath).communitySkills ?? []) : [];
-  return { communitySkills, connections: listConnections(forgeRoot) };
+  const catalogExists = existsSync(catalogPath);
+  const communitySkills = catalogExists ? (loadCatalog(catalogPath).communitySkills ?? []) : [];
+  const connections = catalogExists ? listConnections(forgeRoot) : [];
+  return { communitySkills, connections };
 }
 
 function originFor(item: CommunityItem): string {
@@ -166,20 +179,24 @@ function upstreamFor(item: CommunityItem, ctx: WireCtx): string {
 }
 
 /** The REAL live probe state for a tool/mcp item; null for skill/hook (no
- *  probe concept exists for either). Broader than WI-1's own `probeState?`
- *  field (which only ever surfaces "misconfigured") — this surface renders
- *  the full real state, never a narrower attributed one. */
-function probeStateFor(forgeRoot: string, item: CommunityItem, ctx: WireCtx): ProbeState | null {
+ *  probe concept exists for either). Read directly off the item's own
+ *  `probeState` — `listCommunityIndex`/`communityItem`/`buildConnectionItem`
+ *  populate it from the ONE real probe execution they already ran (T2 round
+ *  5/6 probe-budget fix); this function never spawns a second one to get it.
+ *  The throw below is defensive only — an invariant violation, not a
+ *  reachable production path. */
+function probeStateFor(item: CommunityItem): ProbeState | null {
   if (item.kind !== 'tool' && item.kind !== 'mcp') return null;
-  const conn = ctx.connections.find((c) => c.kind === item.kind && c.id === item.id);
-  if (!conn) throw new Error(`community item "${item.id}" (${item.kind}) has no matching listConnections entry`);
-  return probeConnection(forgeRoot, conn).state;
+  if (item.probeState === undefined) {
+    throw new Error(`community item "${item.id}" (${item.kind}) carries no probeState — expected it to be populated for every connection-kind item`);
+  }
+  return item.probeState;
 }
 
 /** One item's wire projection. THROWS on a genuine derivation failure — the
  *  caller (`toWireItemSafe`) is the one place that degrades, so this
  *  function itself stays honest about failing loud. */
-function toWireItem(forgeRoot: string, item: CommunityItem, ctx: WireCtx): CommunityItemWire {
+function toWireItem(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
   return {
     id: item.id,
     kind: item.kind,
@@ -190,7 +207,7 @@ function toWireItem(forgeRoot: string, item: CommunityItem, ctx: WireCtx): Commu
     signals: item.signals,
     vendored: item.vendored,
     installState: item.installState,
-    probeState: probeStateFor(forgeRoot, item, ctx),
+    probeState: probeStateFor(item),
     origin: originFor(item),
     ...(item.error !== undefined ? { error: item.error } : {}),
   };
@@ -199,9 +216,9 @@ function toWireItem(forgeRoot: string, item: CommunityItem, ctx: WireCtx): Commu
 /** Anti-pattern #3: one item's wire-projection failure degrades to an honest
  *  `error` field on THAT item — never a 500 for the other N-1 rows in the
  *  list route. */
-function toWireItemSafe(forgeRoot: string, item: CommunityItem, ctx: WireCtx): CommunityItemWire {
+function toWireItemSafe(item: CommunityItem, ctx: WireCtx): CommunityItemWire {
   try {
-    return toWireItem(forgeRoot, item, ctx);
+    return toWireItem(item, ctx);
   } catch (err) {
     return {
       id: item.id,
@@ -291,15 +308,42 @@ function handleDetail(ctx: StudioContext, res: ServerResponse, origin: string, r
     // (communityItem/routeCommunityInstall both degrade to "not found" for
     // an unrecognised discriminant) — no separate validation branch needed.
     const kind = rawKind as CommunityKind;
+    const wctx = buildWireCtx(ctx.forgeRoot);
+
+    // mcp | tool — resolved AND probed directly here, exactly ONCE (T2 round
+    // 5/6 probe-budget fix): the SAME ProbeResult feeds both the wire item's
+    // `probeState` (via buildConnectionItem) and this route's own full
+    // `probe` field below — never communityItem() followed by a second,
+    // independent probeConnection() call for the same connection.
+    if (kind === 'mcp' || kind === 'tool') {
+      const conn = wctx.connections.find((c) => c.kind === kind && c.id === id);
+      if (!conn) {
+        sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
+        return true;
+      }
+      const probe = probeConnection(ctx.forgeRoot, conn);
+      const item = buildConnectionItem(listCommunityHubs(ctx.forgeRoot), conn, probe);
+      const base = toWireItemSafe(item, wctx);
+      // Mirrors bridge-studio-connections.ts's toWireConnection shape exactly
+      // (D8: capabilities present iff the catalog entry declares them, never
+      // a fabricated empty array).
+      sendJson(res, 200, {
+        ...base,
+        install: conn.install,
+        config: conn.config,
+        probe,
+        ...(conn.capabilities !== undefined ? { capabilities: conn.capabilities } : {}),
+        ...(conn.capabilitiesSource !== undefined ? { capabilitiesSource: conn.capabilitiesSource } : {}),
+      }, origin);
+      return true;
+    }
 
     const item = communityItem(ctx.forgeRoot, kind, id);
     if (!item) {
       sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
       return true;
     }
-
-    const wctx = buildWireCtx(ctx.forgeRoot);
-    const base = toWireItemSafe(ctx.forgeRoot, item, wctx);
+    const base = toWireItemSafe(item, wctx);
 
     if (kind === 'skill') {
       sendJson(res, 200, { ...base, files: readVendoredPackage(ctx.forgeRoot, 'skill', id) }, origin);
@@ -313,22 +357,10 @@ function handleDetail(ctx: StudioContext, res: ServerResponse, origin: string, r
       return true;
     }
 
-    // mcp | tool — mirrors bridge-studio-connections.ts's toWireConnection
-    // shape exactly (D8: capabilities present iff the catalog entry declares
-    // them, never a fabricated empty array).
-    const conn = wctx.connections.find((c) => c.kind === kind && c.id === id);
-    if (!conn) {
-      sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
-      return true;
-    }
-    sendJson(res, 200, {
-      ...base,
-      install: conn.install,
-      config: conn.config,
-      probe: probeConnection(ctx.forgeRoot, conn),
-      ...(conn.capabilities !== undefined ? { capabilities: conn.capabilities } : {}),
-      ...(conn.capabilitiesSource !== undefined ? { capabilitiesSource: conn.capabilitiesSource } : {}),
-    }, origin);
+    // kind is narrowed to `never` here (mcp/tool handled above; skill/hook
+    // handled just above) — unreachable in practice, kept only so this
+    // function has an explicit terminating statement, never a fabricated 200.
+    sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
     return true;
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -385,7 +417,7 @@ function handleConnectionInstall(ctx: StudioContext, res: ServerResponse, origin
       return { exitCode: spawned.status };
     },
   });
-  sendJson(res, 200, { ok: true, routedTo: 'connection-install', installed: result.ok, argv: result.argv, probe: result.probeAfter }, origin);
+  sendJson(res, 200, { ok: result.ok, routedTo: 'connection-install', installed: result.ok, argv: result.argv, probe: result.probeAfter }, origin);
   return true;
 }
 
@@ -456,9 +488,16 @@ export async function handleStudioCommunityRoutes(
   // ---- GET /api/studio/community — hubs + cross-kind items (D1) -----------
   if (method === 'GET' && url === '/api/studio/community') {
     try {
+      // Computed ONCE (T2 round 5/6 probe-budget fix): every connection item
+      // in `rawItems` was already probed exactly once inside this single
+      // listCommunityIndex call. Hub counts and wire items are BOTH derived
+      // from this SAME computation — never a second, independent
+      // hubsWithCounts()/listCommunityIndex() call re-entering the same
+      // probes a second (and third) time.
+      const rawItems = listCommunityIndex(ctx.forgeRoot);
+      const hubs = hubCountsFrom(rawItems, listCommunityHubs(ctx.forgeRoot));
       const wctx = buildWireCtx(ctx.forgeRoot);
-      const hubs = hubsWithCounts(ctx.forgeRoot);
-      const items = listCommunityIndex(ctx.forgeRoot).map((item) => toWireItemSafe(ctx.forgeRoot, item, wctx));
+      const items = rawItems.map((item) => toWireItemSafe(item, wctx));
       sendJson(res, 200, { hubs, items }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

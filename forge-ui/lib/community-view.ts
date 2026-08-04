@@ -75,3 +75,21 @@ export function hubLabel(hub: CommunityHub | null): string {
   if (hub === null) return 'unaffiliated';
   return hub.name;
 }
+
+// ---------------------------------------------------------------------------
+// communityBadgeForSkill — the /skills page join, gated on the skill's OWN
+// source, never on id alone. A catalog community-skills entry and a
+// genuinely local, hand-authored skill can legitimately share an id
+// (listSkillLibrary documents the collision as expected: "filesystem wins on
+// existence/trust; catalog wins on display metadata") — joining by id alone
+// would cross-attribute the catalog entry's hub/signals/provenance onto the
+// operator's own file. `entry` takes a minimal structural shape ({id,
+// source}) rather than importing forge-ui/lib/skill-client.ts's full
+// SkillLibraryEntry type, keeping this module decoupled from that client.
+// ---------------------------------------------------------------------------
+
+export function communityBadgeForSkill(entry: { id: string; source: string }, items: readonly CommunityItem[]): CommunityItem | null {
+  if (entry.source !== 'community') return null;
+  const match = items.find((item) => item.kind === 'skill' && item.id === entry.id);
+  return match ? match : null;
+}

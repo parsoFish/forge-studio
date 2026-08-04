@@ -6,7 +6,7 @@ import { StudioNav } from '@/components/StudioNav';
 import { fetchSkillLibrary, type SkillLibraryEntry } from '@/lib/skill-client';
 import { groupSkillLibrary, skillBadges, filterSkills } from '@/lib/skill-library-view';
 import { fetchCommunityIndex, type CommunityItem } from '@/lib/community-client';
-import { hubLabel, signalsLabel } from '@/lib/community-view';
+import { hubLabel, signalsLabel, communityBadgeForSkill } from '@/lib/community-view';
 
 // ---------------------------------------------------------------------------
 // Skills library — /skills (R3-01-F3/F4, WI-3, D8: the ONE place "New skill"
@@ -22,11 +22,16 @@ import { hubLabel, signalsLabel } from '@/lib/community-view';
 // the same install pipeline this page's cards still read from. What THIS
 // page adds instead is honesty about provenance: a community-sourced card
 // (badge `community`) shows its derived hub and hub-attributed signals,
-// fetched independently from `/api/studio/community` and joined by
-// (kind === 'skill', id) — never a re-derivation of a fact the community
-// index didn't send, and never rendered at all when that fetch fails
-// (absence is honest; a dead second fetch must never blank the primary
-// skill list, which is why it is a wholly separate effect / failure mode).
+// fetched independently from `/api/studio/community` and joined via
+// `communityBadgeForSkill` (forge-ui/lib/community-view.ts) — gated on the
+// skill entry's OWN `source === 'community'` AND (kind === 'skill', id), not
+// id alone (a local skill sharing an id with a catalog community-skills
+// entry must never inherit that entry's hub/signals/provenance — the round-6
+// adversarial-review finding this join now closes). Never a re-derivation of
+// a fact the community index didn't send, and never rendered at all when
+// that fetch fails (absence is honest; a dead second fetch must never blank
+// the primary skill list, which is why it is a wholly separate effect /
+// failure mode).
 // ---------------------------------------------------------------------------
 
 const BADGE_STYLE: Record<string, React.CSSProperties> = {
@@ -44,8 +49,10 @@ export default function SkillLibraryPage() {
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
   // null = not yet resolved (loading OR the community fetch failed) — either
-  // way, cards render with no hub/signals rather than a guessed value.
-  const [communityById, setCommunityById] = useState<Map<string, CommunityItem> | null>(null);
+  // way, cards render with no hub/signals rather than a guessed value. Kept
+  // as the raw item list (not pre-keyed by id) — communityBadgeForSkill does
+  // the actual (source, kind, id) join per card, never id alone.
+  const [communityItems, setCommunityItems] = useState<readonly CommunityItem[] | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -73,7 +80,7 @@ export default function SkillLibraryPage() {
       const r = await fetchCommunityIndex();
       if (cancelled) return;
       if (!r.ok) return; // absence, not a fabricated join — the skill list itself is unaffected
-      setCommunityById(new Map(r.items.filter((i) => i.kind === 'skill').map((i) => [i.id, i])));
+      setCommunityItems(r.items);
     }
     void loadCommunity();
     return () => {
@@ -150,11 +157,11 @@ export default function SkillLibraryPage() {
         )}
 
         {status === 'ready' && grouped.local.length > 0 && (
-          <SkillSection title="Local" entries={grouped.local} communityById={communityById} />
+          <SkillSection title="Local" entries={grouped.local} communityItems={communityItems} />
         )}
 
         {status === 'ready' && grouped.community.length > 0 && (
-          <SkillSection title="Community" entries={grouped.community} communityById={communityById} />
+          <SkillSection title="Community" entries={grouped.community} communityItems={communityItems} />
         )}
       </div>
     </main>
@@ -168,11 +175,11 @@ export default function SkillLibraryPage() {
 function SkillSection({
   title,
   entries,
-  communityById,
+  communityItems,
 }: {
   title: string;
   entries: SkillLibraryEntry[];
-  communityById: Map<string, CommunityItem> | null;
+  communityItems: readonly CommunityItem[] | null;
 }) {
   return (
     <section style={{ marginBottom: 28 }}>
@@ -181,7 +188,7 @@ function SkillSection({
       </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         {entries.map((entry) => (
-          <SkillCard key={entry.id} entry={entry} community={communityById?.get(entry.id) ?? null} />
+          <SkillCard key={entry.id} entry={entry} community={communityItems === null ? null : communityBadgeForSkill(entry, communityItems)} />
         ))}
       </div>
     </section>

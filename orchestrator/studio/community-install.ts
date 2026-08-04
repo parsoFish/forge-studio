@@ -30,11 +30,11 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
-import { assertSkillSlug } from '../skill-path.ts';
+import { assertSkillSlug, skillPath } from '../skill-path.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
 import { listConnections } from './connection-library.ts';
 import { loadCatalog } from './registry.ts';
-import { vendoredPackageDir, readVendoredPackage } from './community-index.ts';
+import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
 import type { CommunityKind } from './community-index.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
 
@@ -61,6 +61,19 @@ function notVendoredReason(id: string): string {
   return `Community skill "${id}" is a curated catalog reference with no vendored package on disk — install cannot be driven by this surface`;
 }
 
+/** T2 ruling (round 6): the real install destination (skills/<id>/) can be
+ *  occupied by a hand-authored local skill that merely shares the id with a
+ *  vendored community package — installSkillPackage itself already refuses
+ *  to overwrite it (idempotent-reinstall guard), but silently dispatching to
+ *  that pipeline anyway would report `alreadyInstalled:true`, i.e. "success",
+ *  for a package that was never actually installed. Refusing HERE, before
+ *  dispatch, is what makes the refusal visible to the operator instead of
+ *  laundered into a false success. Textually distinct from BOTH existing "no
+ *  route" reasons above (no "vendor", no "unknown"/"no such"/"not found"). */
+function collisionReason(id: string): string {
+  return `Local skill "${id}" already exists at this id (occupied) but carries no community-install provenance — refusing to touch a file that merely happens to share this id`;
+}
+
 function skillKnownInCatalog(forgeRoot: string, id: string): boolean {
   const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
   if (!existsSync(catalogPath)) return false;
@@ -73,6 +86,12 @@ export function routeCommunityInstall(forgeRoot: string, kind: CommunityKind, id
   if (kind === 'skill') {
     const dir = vendoredPackageDir(forgeRoot, 'skill', id);
     if (existsSync(join(dir, 'SKILL.md'))) {
+      // T2 ruling: a real install destination occupied by something that
+      // ISN'T this community package (no provenance block) must refuse
+      // BEFORE dispatch — see collisionReason's own header comment.
+      if (existsSync(skillPath(id, forgeRoot)) && communityInstallState(forgeRoot, 'skill', id) === 'not-installed') {
+        return { pipeline: 'none', reason: collisionReason(id) };
+      }
       return { pipeline: 'skill', packageDir: dir, upstream: { source: VENDORED_UPSTREAM_SOURCE } };
     }
     if (skillKnownInCatalog(forgeRoot, id)) {

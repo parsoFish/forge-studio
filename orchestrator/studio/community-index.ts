@@ -41,13 +41,14 @@ import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
 import { assertSkillSlug, skillPath } from '../skill-path.ts';
-import { skillTrustState } from './skill-library.ts';
+import { skillTrustState, extractProvenance } from './skill-library.ts';
 import type { PackageFile, SkillTrust } from './skill-library.ts';
 import { hookYamlPath } from './hook-library.ts';
 import { hookRunState } from './hook-scan.ts';
 import { listConnections } from './connection-library.ts';
+import type { ConnectionDefinition } from './connection-library.ts';
 import { probeConnection } from './connection-probe.ts';
-import type { ProbeState } from './connection-probe.ts';
+import type { ProbeState, ProbeResult } from './connection-probe.ts';
 import { loadCatalog } from './registry.ts';
 import { reqString, loadYaml } from './yaml-fields.ts';
 import type { CommunitySkill } from './types.ts';
@@ -90,8 +91,12 @@ export interface CommunityItem {
   description?: string;
   vendored: boolean;
   installState: CommunityInstallState;
-  /** connection kinds only — carries 'misconfigured' SEPARATELY from
-   *  installState:'installed' (D3); absent otherwise. */
+  /** connection kinds only — the REAL raw probe state behind installState
+   *  (which only distinguishes not-installed/installed). Always populated
+   *  for kind mcp/tool (never re-probed a second time to obtain it — this
+   *  IS the one real execution `installState` itself was derived from, T2
+   *  round 5/6 probe-budget fix); absent for skill/hook (no probe concept
+   *  exists for either). */
   probeState?: ProbeState;
   signals: CommunitySignals | null;
   hub: CommunityHub | null;
@@ -255,9 +260,23 @@ function installStateFromProbe(state: ProbeState): CommunityInstallState {
   }
 }
 
+/** T2 ruling (round 6): install-state describes THIS community package, not
+ *  path occupancy. `skills/<id>` can be occupied by a hand-authored local
+ *  skill that merely happens to share the id — reporting that as "installed"
+ *  would attribute a status from a fact about the path rather than an
+ *  execution against the thing it describes. A `provenance` block is the one
+ *  fact that distinguishes "this id went through the community pipeline" from
+ *  "this id is merely occupied" — its absence means not-installed, regardless
+ *  of what trust the (unrelated) file on disk would otherwise compute to. */
+function skillHasProvenanceBlock(forgeRoot: string, id: string): boolean {
+  const { data } = matter(readFileSync(skillPath(id, forgeRoot), 'utf8'), {});
+  return extractProvenance((data ?? {}) as Record<string, unknown>) !== null;
+}
+
 export function communityInstallState(forgeRoot: string, kind: CommunityKind, id: string): CommunityInstallState {
   if (kind === 'skill') {
     if (!existsSync(skillPath(id, forgeRoot))) return 'not-installed';
+    if (!skillHasProvenanceBlock(forgeRoot, id)) return 'not-installed';
     return installStateFromSkillTrust(skillTrustState(forgeRoot, id));
   }
   if (kind === 'hook') {
@@ -303,22 +322,122 @@ function readVendoredHookMeta(forgeRoot: string, id: string): { name: string; de
   return { name: reqString(d, 'name', yamlPath), description: reqString(d, 'description', yamlPath) };
 }
 
+// ---------------------------------------------------------------------------
+// Per-item builders — pure (or single-I/O) projections shared by
+// listCommunityIndex (loops every id) and communityItem (resolves exactly
+// one). Splitting these out is what lets communityItem resolve a SINGLE item
+// without enumerating — let alone probing — every other one (T2 round 5/6
+// probe-budget fix: "communityItem() builds the WHOLE index and filters" was
+// the detail-route scope leak).
+// ---------------------------------------------------------------------------
+
+function buildCatalogSkillItem(forgeRoot: string, hubs: readonly CommunityHub[], cs: CommunitySkill, vendored: boolean): CommunityItem {
+  return {
+    kind: 'skill',
+    id: cs.id,
+    name: cs.name,
+    description: cs.desc,
+    vendored,
+    installState: communityInstallState(forgeRoot, 'skill', cs.id),
+    signals: communitySkillSignals(cs),
+    hub: resolveHub(cs.source, hubs),
+  };
+}
+
+function buildVendoredOnlySkillItem(forgeRoot: string, hubs: readonly CommunityHub[], id: string): CommunityItem {
+  try {
+    const meta = readVendoredSkillMeta(forgeRoot, id);
+    return {
+      kind: 'skill',
+      id,
+      name: meta.name,
+      description: meta.description,
+      vendored: true,
+      installState: communityInstallState(forgeRoot, 'skill', id),
+      signals: null,
+      hub: resolveHub(VENDORED_UPSTREAM_SOURCE, hubs),
+    };
+  } catch (e) {
+    return {
+      kind: 'skill',
+      id,
+      name: id,
+      vendored: true,
+      installState: 'not-installed',
+      signals: null,
+      hub: null,
+      error: `cannot build community index entry for vendored skill "${id}" — ${(e as Error).message}`,
+    };
+  }
+}
+
+function buildHookItem(forgeRoot: string, hubs: readonly CommunityHub[], id: string): CommunityItem {
+  try {
+    const meta = readVendoredHookMeta(forgeRoot, id);
+    return {
+      kind: 'hook',
+      id,
+      name: meta.name,
+      description: meta.description,
+      vendored: true,
+      installState: communityInstallState(forgeRoot, 'hook', id),
+      signals: null,
+      hub: resolveHub(VENDORED_UPSTREAM_SOURCE, hubs),
+    };
+  } catch (e) {
+    return {
+      kind: 'hook',
+      id,
+      name: id,
+      vendored: true,
+      installState: 'not-installed',
+      signals: null,
+      hub: null,
+      error: `cannot build community index entry for vendored hook "${id}" — ${(e as Error).message}`,
+    };
+  }
+}
+
+/** Pure — takes the connection's OWN already-executed probe result rather
+ *  than running one itself, so every caller (listCommunityIndex's loop,
+ *  communityItem's single-connection resolution) controls exactly when the
+ *  one real spawn happens and never repeats it (T2 round 5/6). `probeState`
+ *  is always populated here — the real raw state behind `installState`. */
+export function buildConnectionItem(hubs: readonly CommunityHub[], conn: ConnectionDefinition, probe: ProbeResult): CommunityItem {
+  return {
+    kind: conn.kind,
+    id: conn.id,
+    name: conn.name,
+    description: conn.desc,
+    vendored: false,
+    installState: installStateFromProbe(probe.state),
+    probeState: probe.state,
+    signals: null,
+    hub: resolveHub(conn.provenance, hubs),
+  };
+}
+
+/** Tolerant catalog read shared by listCommunityIndex and communityItem
+ *  (skill branch) — MAJOR 2's missing-vs-malformed split applies identically
+ *  to both: a missing catalog.yaml degrades to `[]`; a malformed one throws
+ *  loud via loadCatalog's own unguarded call. */
+function communitySkillsSource(forgeRoot: string): { exists: boolean; communitySkills: CommunitySkill[] } {
+  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
+  const exists = existsSync(catalogPath);
+  return { exists, communitySkills: exists ? (loadCatalog(catalogPath).communitySkills ?? []) : [] };
+}
+
 export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   const hubs = listCommunityHubs(forgeRoot);
-  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
   // MAJOR 2 (T2 round 4 adversarial review): a MISSING catalog.yaml is the
   // fresh/half-onboarded shape — mirrors listCommunityHubs's own documented
   // fresh-root precedent above — and degrades to the sources that don't need
   // it (vendored skills + vendored hooks), never a throw. A catalog.yaml that
   // EXISTS but fails to parse is a genuinely broken registry: loadCatalog is
-  // called unguarded below and its real parse error propagates uncaught, on
-  // purpose — a corrupt registry must never render identically to an honest
-  // empty one. Catalog.communitySkills is typed optional (Catalog may be
-  // hand-constructed elsewhere without it) even though loadCatalog's own
-  // parser always populates it as an array when the file DOES parse —
-  // normalized once, here (mirrors skill-library.ts's loadCatalogSafely).
-  const catalogExists = existsSync(catalogPath);
-  const communitySkills = catalogExists ? (loadCatalog(catalogPath).communitySkills ?? []) : [];
+  // called unguarded (inside communitySkillsSource) and its real parse error
+  // propagates uncaught, on purpose — a corrupt registry must never render
+  // identically to an honest empty one.
+  const { exists: catalogExists, communitySkills } = communitySkillsSource(forgeRoot);
   const items: CommunityItem[] = [];
 
   // --- skill: catalog community-skills ∪ vendored-with-no-catalog-id (E-1) ---
@@ -326,110 +445,80 @@ export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   const vendoredSkillIdSet = new Set(listVendoredIds(forgeRoot, 'skill'));
 
   for (const cs of communitySkills) {
-    items.push({
-      kind: 'skill',
-      id: cs.id,
-      name: cs.name,
-      description: cs.desc,
-      vendored: vendoredSkillIdSet.has(cs.id),
-      installState: communityInstallState(forgeRoot, 'skill', cs.id),
-      signals: communitySkillSignals(cs),
-      hub: resolveHub(cs.source, hubs),
-    });
+    items.push(buildCatalogSkillItem(forgeRoot, hubs, cs, vendoredSkillIdSet.has(cs.id)));
   }
 
   for (const id of vendoredSkillIdSet) {
     if (catalogSkillIds.has(id)) continue; // collision — lintCommunityIndex reports it; represented once, above
-    try {
-      const meta = readVendoredSkillMeta(forgeRoot, id);
-      items.push({
-        kind: 'skill',
-        id,
-        name: meta.name,
-        description: meta.description,
-        vendored: true,
-        installState: communityInstallState(forgeRoot, 'skill', id),
-        signals: null,
-        hub: resolveHub(VENDORED_UPSTREAM_SOURCE, hubs),
-      });
-    } catch (e) {
-      items.push({
-        kind: 'skill',
-        id,
-        name: id,
-        vendored: true,
-        installState: 'not-installed',
-        signals: null,
-        hub: null,
-        error: `cannot build community index entry for vendored skill "${id}" — ${(e as Error).message}`,
-      });
-    }
+    items.push(buildVendoredOnlySkillItem(forgeRoot, hubs, id));
   }
 
   // --- hook: vendored packages only (D1) ---
   for (const id of listVendoredIds(forgeRoot, 'hook')) {
-    try {
-      const meta = readVendoredHookMeta(forgeRoot, id);
-      items.push({
-        kind: 'hook',
-        id,
-        name: meta.name,
-        description: meta.description,
-        vendored: true,
-        installState: communityInstallState(forgeRoot, 'hook', id),
-        signals: null,
-        hub: resolveHub(VENDORED_UPSTREAM_SOURCE, hubs),
-      });
-    } catch (e) {
-      items.push({
-        kind: 'hook',
-        id,
-        name: id,
-        vendored: true,
-        installState: 'not-installed',
-        signals: null,
-        hub: null,
-        error: `cannot build community index entry for vendored hook "${id}" — ${(e as Error).message}`,
-      });
-    }
+    items.push(buildHookItem(forgeRoot, hubs, id));
   }
 
   // --- mcp / tool: listConnections(forgeRoot), 1:1, never re-parsed (D1) ---
   // Skipped entirely when the catalog is absent (MAJOR 2) — there is nothing
-  // to source a connection from without it; never fabricated.
+  // to source a connection from without it; never fabricated. Each
+  // connection is probed EXACTLY ONCE here (T2 round 5/6 probe-budget fix —
+  // this loop used to be re-entered independently by hubsWithCounts and by
+  // the bridge's own second listCommunityIndex call; both now derive from
+  // ONE computation, see hubCountsFrom below and cli/bridge-studio-community.ts).
   if (catalogExists) {
     for (const conn of listConnections(forgeRoot)) {
-      const probe = probeConnection(forgeRoot, conn);
-      const item: CommunityItem = {
-        kind: conn.kind,
-        id: conn.id,
-        name: conn.name,
-        description: conn.desc,
-        vendored: false,
-        installState: installStateFromProbe(probe.state),
-        signals: null,
-        hub: resolveHub(conn.provenance, hubs),
-      };
-      if (probe.state === 'misconfigured') item.probeState = 'misconfigured';
-      items.push(item);
+      items.push(buildConnectionItem(hubs, conn, probeConnection(forgeRoot, conn)));
     }
   }
 
   return items;
 }
 
+/** Resolves the ONE requested (kind, id) pair directly — never by building
+ *  the whole index and filtering (T2 round 5/6: that scope-leak probed every
+ *  OTHER connection just to answer a single-item detail request). A
+ *  connection kind is probed exactly once, for the requested connection
+ *  only; skill/hook kinds never probe at all. */
 export function communityItem(forgeRoot: string, kind: CommunityKind, id: string): CommunityItem | undefined {
-  return listCommunityIndex(forgeRoot).find((i) => i.kind === kind && i.id === id);
+  const hubs = listCommunityHubs(forgeRoot);
+
+  if (kind === 'skill') {
+    const { communitySkills } = communitySkillsSource(forgeRoot);
+    const cs = communitySkills.find((c) => c.id === id);
+    const isVendored = existsSync(join(vendoredPackageDir(forgeRoot, 'skill', id), 'SKILL.md'));
+    if (cs) return buildCatalogSkillItem(forgeRoot, hubs, cs, isVendored);
+    if (isVendored) return buildVendoredOnlySkillItem(forgeRoot, hubs, id);
+    return undefined;
+  }
+
+  if (kind === 'hook') {
+    if (!existsSync(join(vendoredPackageDir(forgeRoot, 'hook', id), 'hook.yaml'))) return undefined;
+    return buildHookItem(forgeRoot, hubs, id);
+  }
+
+  // kind === 'mcp' | 'tool'
+  const conn = listConnections(forgeRoot).find((c) => c.kind === kind && c.id === id);
+  if (!conn) return undefined;
+  return buildConnectionItem(hubs, conn, probeConnection(forgeRoot, conn));
 }
 
 // ---------------------------------------------------------------------------
 // hubsWithCounts — D10: derived per-hub counts, honest zero
 // ---------------------------------------------------------------------------
 
-export function hubsWithCounts(forgeRoot: string): CommunityHubCount[] {
-  const hubs = listCommunityHubs(forgeRoot);
-  const items = listCommunityIndex(forgeRoot);
+/** Pure derivation — no I/O, no probing. A caller that has ALREADY computed
+ *  `items` (e.g. the bridge's list route) derives hub counts from that SAME
+ *  computation instead of re-entering listCommunityIndex a second time (T2
+ *  round 5/6 probe-budget fix: hubsWithCounts used to be exactly that second
+ *  entry point, each connection re-probed). `hubsWithCounts` below is the
+ *  thin convenience wrapper for a caller that has not already computed
+ *  either input. */
+export function hubCountsFrom(items: readonly CommunityItem[], hubs: readonly CommunityHub[]): CommunityHubCount[] {
   return hubs.map((hub) => ({ ...hub, itemCount: items.filter((i) => i.hub?.id === hub.id).length }));
+}
+
+export function hubsWithCounts(forgeRoot: string): CommunityHubCount[] {
+  return hubCountsFrom(listCommunityIndex(forgeRoot), listCommunityHubs(forgeRoot));
 }
 
 // ---------------------------------------------------------------------------
