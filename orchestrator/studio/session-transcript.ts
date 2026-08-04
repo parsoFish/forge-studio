@@ -37,6 +37,18 @@
  * CLOSED — {ok:false}, naming the offending value and the allowed set  —
  * never defaults, never drops the turn, never returns ok:true.
  *
+ * questions.json pending-detection (AT-amendment-2, T2-ratified — supersedes
+ * an earlier exact-text set-difference design): a `questions.json` entry
+ * contributes a PENDING agent turn iff the caller's real `phase` is exactly
+ * `AWAITING_ANSWERS_PHASE` — the interview-handoff contract both
+ * architect-runner.ts and instructions-runner.ts write to `status.json`
+ * while blocked on the operator (see the questions.json ↔ answers.json
+ * handoff documented at orchestrator/interactive-session.ts's "Interview
+ * handoff" section). Any other phase means questions.json (if present) is
+ * stale leftover from a prior round and contributes NO turn, regardless of
+ * its text — text-based re-ask detection silently dropped a legitimately
+ * re-asked verbatim question, which is the defect this supersedes.
+ *
  * Malformed answers.json (not an array / a round missing "answers" /
  * "answers" not an array / a non-string question or answer) fails CLOSED —
  * {ok:false}. Never a partial parse, never a skip-and-continue turn.
@@ -45,7 +57,18 @@
  * read outside sessionDir. A lexical `startsWith(dir + sep)` check on a
  * symlink's OWN path is NOT sufficient (the symlink itself always lives
  * inside sessionDir) — `realpathSync` at the single choke point every file
- * read goes through (`safeReadFileInSession`) is the fix.
+ * read goes through (`safeReadFileInSession`) blocks every SYMLINK escape.
+ *
+ * Honest limit: realpath containment does NOT stop a HARDLINKED file — a
+ * hardlink has no separate target to resolve away from (it IS the same inode
+ * as the file it "points at"), so realpathSync on it returns its own
+ * in-session path and the check passes. This is accepted, not fixed:
+ * creating a hardlink inside a session dir requires the same local write
+ * access to that dir as writing the outside content into the file directly,
+ * so the vector adds essentially nothing over an attacker who can already
+ * write into the session dir — an nlink check would be theatre with a real
+ * false-positive surface (nlink > 1 is not inherently malicious) for
+ * negligible added protection.
  */
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -75,19 +98,29 @@ const AGENTS_DRAFT_FILENAME = 'AGENTS.draft.md';
 const MANIFESTS_DIRNAME = 'manifests';
 const THEMES_DIRNAME = 'themes';
 
+/** The phase token the questions/answers interview handoff uses while
+ *  blocked on the operator — written to status.json by both
+ *  architect-runner.ts and instructions-runner.ts (see
+ *  orchestrator/interactive-session.ts's "Interview handoff" section). A
+ *  questions.json entry is a pending agent turn iff the caller's real phase
+ *  equals this constant; any other phase means questions.json is stale. */
+const AWAITING_ANSWERS_PHASE = 'awaiting-answers';
+
 /** The fixed candidate list every derivation scans, regardless of
  *  descriptor — file-presence-driven, never descriptor.id-driven. */
 const CANDIDATE_SOURCE_FILES = [IDEA_FILENAME, PROMPT_FILENAME, ANSWERS_FILENAME, QUESTIONS_FILENAME, FEEDBACK_FILENAME] as const;
 
 // ---------------------------------------------------------------------------
 // Traversal choke point — every file read in this module goes through this
-// one function. realpathSync resolves symlinks; a target that resolves
+// one function. realpathSync resolves SYMLINKS; a target that resolves
 // outside sessionDir is treated as absent (never surfaced), which is
 // indistinguishable from "missing" to every caller — exactly what the
-// file-presence-driven contract wants.
+// file-presence-driven contract wants. Honest limit: this does NOT block a
+// HARDLINKED file (no separate target to resolve away from) — accepted, not
+// fixed; see the module header for why.
 // ---------------------------------------------------------------------------
 
-function safeReadFileInSession(sessionDir: string, relPath: string): string | null {
+export function safeReadFileInSession(sessionDir: string, relPath: string): string | null {
   const abs = join(sessionDir, relPath);
   let realSessionDir: string;
   try {
@@ -226,8 +259,8 @@ function parseQuestionsJson(raw: string): ParseOutcome<ParsedQuestion[]> {
  * Derives the transcript for a real session dir. See module header for the
  * ordering contract, stage-carrying rule, and fail-closed shapes.
  */
-export function deriveSessionTranscript(input: { descriptor: SessionKindDescriptor; sessionDir: string }): DeriveTranscriptResult {
-  const { descriptor, sessionDir } = input;
+export function deriveSessionTranscript(input: { descriptor: SessionKindDescriptor; sessionDir: string; phase: string }): DeriveTranscriptResult {
+  const { descriptor, sessionDir, phase } = input;
   const turns: SessionTurn[] = [];
   let index = 0;
 
@@ -272,28 +305,22 @@ export function deriveSessionTranscript(input: { descriptor: SessionKindDescript
     }
   }
 
-  // questions.json — a PENDING agent turn only when unanswered. "Unanswered"
-  // is derived by content (a question text not already present among
-  // answers.json's answered question texts): the real runners never delete
-  // questions.json once answered (architect-runner.ts only re-writes it when
-  // `!decision.done`, i.e. when a NEW round is pending), so file presence
-  // alone cannot distinguish a stale last-round file from a genuinely
-  // pending one — this is a T3 design call beyond what the ATs pin verbatim;
-  // flagged for T2 in the report.
+  // questions.json — a PENDING agent turn IFF phase === AWAITING_ANSWERS_PHASE
+  // (AT-amendment-2, T2-ratified). Any other phase ⇒ questions.json (if
+  // present) is stale leftover from a prior round and contributes no turn,
+  // regardless of its text — see the module header for the full contract.
   const questionsRaw = safeReadFileInSession(sessionDir, QUESTIONS_FILENAME);
   if (questionsRaw !== null) {
     const parsedQ = parseQuestionsJson(questionsRaw);
     if (!parsedQ.ok) return { ok: false, error: { message: parsedQ.message } };
-    const answeredQuestionTexts = new Set(rounds.flatMap((r) => r.answers.map((a) => a.question)));
-    const pending = parsedQ.value.filter((q) => !answeredQuestionTexts.has(q.question));
-    if (pending.length > 0) {
+    if (phase === AWAITING_ANSWERS_PHASE && parsedQ.value.length > 0) {
       const staged = resolveStage(undefined);
       if (!staged.ok) return { ok: false, error: { message: staged.message } };
       turns.push({
         index: index++,
         role: 'agent',
         stage: staged.value,
-        text: pending.map((q) => q.question).join('\n\n'),
+        text: parsedQ.value.map((q) => q.question).join('\n\n'),
         source: QUESTIONS_FILENAME,
       });
     }

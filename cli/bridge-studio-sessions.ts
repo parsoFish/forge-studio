@@ -41,10 +41,24 @@
  *     projectsRoot" would miss this (the target is still under projectsRoot,
  *     just under a different project); the check must be scoped to the
  *     specific `<project>/_<kind>/` parent, not the whole projectsRoot tree.
- *   - `phase` is read from the session's real `status.json`
- *     (`readSessionStatus`, orchestrator/interactive-session.ts:240) — never
- *     fabricated. A resolved session dir with no (or malformed) `status.json`
- *     is a 404, not a 200 with a guessed phase.
+ *   - `phase` is read from the session's real `status.json` through the SAME
+ *     realpath-guarded choke point (`safeReadFileInSession`,
+ *     orchestrator/studio/session-transcript.ts) every other session file in
+ *     this route goes through — never `readSessionStatus`
+ *     (orchestrator/interactive-session.ts:240), a plain
+ *     existsSync/readFileSync with no realpath containment that would leak a
+ *     symlinked status.json's outside content. `phase` is never fabricated.
+ *     A resolved session dir with no readable, parseable, or string-`phase`
+ *     `status.json` — including an escaping symlink, which is treated as
+ *     unreadable — is a 404, not a 200 with a guessed or leaked phase.
+ *
+ *   - Traversal (session dirs AND status.json) is blocked for SYMLINK
+ *     escapes via realpathSync. It is NOT blocked for HARDLINK escapes — a
+ *     hardlink has no separate target to resolve away from — which is
+ *     accepted, not fixed: creating a hardlink inside a session dir needs
+ *     the same local write access as writing the outside content in
+ *     directly, so the residual risk is negligible (see
+ *     session-transcript.ts's module header for the full rationale).
  *   - `deriveSessionTranscript`'s `{ok:false}` (an unknown stage in a
  *     checkpoint) surfaces as a 409 naming the offending value + the allowed
  *     set — never smoothed into a 200. A `deriveSessionArtifact` throw
@@ -61,8 +75,17 @@ import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
-import { deriveSessionTranscript, deriveSessionArtifact } from '../orchestrator/studio/session-transcript.ts';
-import { readSessionStatus } from '../orchestrator/interactive-session.ts';
+import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
+
+/** `status.json`'s filename, relative to a session dir — read via
+ *  `safeReadFileInSession` (the SAME realpath-guarded choke point
+ *  session-transcript.ts uses for every other session file), never via
+ *  `readSessionStatus` (orchestrator/interactive-session.ts): that helper
+ *  does a plain existsSync/readFileSync with no realpath containment, which
+ *  is a second, unguarded read path — a symlinked status.json pointing
+ *  outside the session dir would leak its content into this route. One
+ *  choke point for every file this route reads out of a session dir. */
+const STATUS_FILENAME = 'status.json';
 
 /** Hard length caps on the two path-derived inputs — the same value and
  *  rationale as `MAX_SKILL_ID_LENGTH` (orchestrator/skill-path.ts), imported
@@ -219,16 +242,35 @@ export async function handleStudioSessionsRoutes(
       return true;
     }
 
-    // `phase` is read from the session's real status.json — never fabricated.
-    // No (or malformed) status.json is a 404, not a 200 with a guessed phase.
-    const status = readSessionStatus<Record<string, unknown>>(sessionDir);
-    if (!status || typeof status.phase !== 'string') {
-      sendJson(res, 404, { error: 'session not found (no readable status.json)', kind, sessionId, project }, origin);
+    // `phase` is read from the session's real status.json through the SAME
+    // realpath-guarded choke point every other session file in this route
+    // goes through — never readSessionStatus's unguarded existsSync/
+    // readFileSync (see header). An escaping symlink is indistinguishable
+    // from "missing" here (safeReadFileInSession returns null for both) —
+    // never fabricated, never leaked.
+    const statusRaw = safeReadFileInSession(sessionDir, STATUS_FILENAME);
+    let statusParsed: Record<string, unknown> | null = null;
+    if (statusRaw !== null) {
+      try {
+        const parsed: unknown = JSON.parse(statusRaw);
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          statusParsed = parsed as Record<string, unknown>;
+        }
+      } catch {
+        statusParsed = null; // malformed JSON — treated as unreadable, never surfaced
+      }
+    }
+    if (statusParsed === null) {
+      sendJson(res, 404, { error: 'session not found (status.json is missing, unreadable, or not valid JSON)', kind, sessionId, project }, origin);
       return true;
     }
-    const phase = status.phase;
+    if (typeof statusParsed.phase !== 'string') {
+      sendJson(res, 404, { error: 'session not found (status.json has no string "phase" field)', kind, sessionId, project }, origin);
+      return true;
+    }
+    const phase = statusParsed.phase;
 
-    const transcriptResult = deriveSessionTranscript({ descriptor, sessionDir });
+    const transcriptResult = deriveSessionTranscript({ descriptor, sessionDir, phase });
     if (!transcriptResult.ok) {
       // Fail-closed pass-through: never smoothed into a 200 with defaulted
       // stages — surfaces the offending value + allowed set verbatim.

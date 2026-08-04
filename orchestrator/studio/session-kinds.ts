@@ -37,7 +37,7 @@
  * the `library` flag.
  */
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
@@ -70,13 +70,19 @@ export type SessionStage = (typeof SESSION_STAGES)[number];
  *  never a silent stub. */
 export type SessionArtifactKindRow = { readonly id: string; readonly status: 'live' | 'reserved' };
 
+// Object.freeze is SHALLOW — freezing the outer array alone leaves each row
+// object mutable (`SESSION_ARTIFACT_KINDS[0].status = 'HACKED'` would
+// silently succeed), and sessionArtifactKindState reads straight off these
+// rows, so an in-process mutation could flip a `reserved` row to `live` for
+// the rest of the process. Each row is frozen individually before the outer
+// array is frozen, so the whole structure is deep-frozen.
 export const SESSION_ARTIFACT_KINDS: readonly SessionArtifactKindRow[] = Object.freeze([
-  { id: 'roadmap-draft', status: 'live' },
-  { id: 'markdown-draft', status: 'live' },
-  { id: 'brain-structure', status: 'live' },
-  { id: 'file-package', status: 'reserved' },
-  { id: 'contract-buildout', status: 'reserved' },
-  { id: 'generation-gallery', status: 'reserved' },
+  Object.freeze({ id: 'roadmap-draft', status: 'live' }),
+  Object.freeze({ id: 'markdown-draft', status: 'live' }),
+  Object.freeze({ id: 'brain-structure', status: 'live' }),
+  Object.freeze({ id: 'file-package', status: 'reserved' }),
+  Object.freeze({ id: 'contract-buildout', status: 'reserved' }),
+  Object.freeze({ id: 'generation-gallery', status: 'reserved' }),
 ] as const);
 export type SessionArtifactKind = (typeof SESSION_ARTIFACT_KINDS)[number]['id'];
 
@@ -214,6 +220,20 @@ const CHECK_UNKNOWN_STAGE = 'session-kinds/unknown-stage';
 const CHECK_DEFAULT_STAGE_NOT_IN_STAGES = 'session-kinds/default-stage-not-in-stages';
 const CHECK_UNKNOWN_ARTIFACT_KIND = 'session-kinds/unknown-artifact-kind';
 const CHECK_RESERVED_ARTIFACT_KIND = 'session-kinds/reserved-artifact-kind';
+const CHECK_LEGACY_ROUTE_NOT_FOUND = 'session-kinds/legacy-route-not-found';
+
+const FORGE_UI_APP_DIRNAME = join('forge-ui', 'app');
+
+/** A `legacyRoutes` entry ("/architect/[sessionId]/interview") maps 1:1 onto a
+ *  Next.js App Router directory ("forge-ui/app/architect/[sessionId]/interview")
+ *  — route path segments ARE the directory names, including literal
+ *  `[sessionId]` dynamic-segment folders. An entry with no non-empty segments
+ *  (blank or "/") never resolves. */
+function legacyRouteResolves(forgeRoot: string, route: string): boolean {
+  const segments = route.trim().replace(/^\//, '').split('/').filter((s) => s.length > 0);
+  if (segments.length === 0) return false;
+  return existsSync(join(forgeRoot, FORGE_UI_APP_DIRNAME, ...segments));
+}
 
 /**
  * All semantic rules over `studio/session-kinds.yaml`: closed-vocabulary
@@ -251,17 +271,34 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
     }
 
     if (!knownAgentIds.has(d.agent)) {
+      const allowedAgents = [...knownAgentIds].sort().join(', ');
       findings.push(
         err(
           obj,
           CHECK_UNKNOWN_AGENT,
-          `Session kind "${d.id}" references unknown agent "${d.agent}" — no skills/*/SKILL.md with a runtime: block resolves to this id`,
+          `Session kind "${d.id}" references unknown agent "${d.agent}" — no skills/*/SKILL.md with a runtime: block resolves to this id; known agents: ${allowedAgents}`,
         ),
       );
     }
 
     if (d.stages.length === 0) {
       findings.push(err(obj, CHECK_EMPTY_STAGES, `Session kind "${d.id}" declares an empty stages list — at least one stage is required`));
+    }
+
+    // legacyRoutes: an empty LIST is legal (a future kind may have no
+    // predecessor route) — but every entry PRESENT must be non-blank and
+    // resolve to a real forge-ui/app/ route directory (previously parsed,
+    // typed, and echoed by tests but never actually checked here).
+    for (const route of d.legacyRoutes) {
+      if (!legacyRouteResolves(forgeRoot, route)) {
+        findings.push(
+          err(
+            obj,
+            CHECK_LEGACY_ROUTE_NOT_FOUND,
+            `Session kind "${d.id}" declares legacyRoutes entry "${route}" which does not resolve to a real forge-ui/app/ route directory`,
+          ),
+        );
+      }
     }
 
     for (const stage of d.stages) {
