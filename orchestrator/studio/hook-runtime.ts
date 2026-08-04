@@ -133,10 +133,21 @@ const HOOK_SPAWN_TIMEOUT_MS = 30_000;
 export function runHookScript(input: RunHookScriptInput): HookRunResult {
   const { forgeRoot, id, logger, initiativeId, parentEnv = process.env } = input;
 
+  // BLOCKER 1 (2026-08-04, third adversarial review, FIX-FIRST): the gate
+  // used to be `verdict === 'blocked' && !runnable`, which only ever
+  // consulted `runnable`/`needsReview` for a blocked verdict — a clean or
+  // findings-verdict hook with NO approval ledger entry at all still spawned,
+  // because the condition was false for any other verdict. Deny-by-default
+  // approval must hold for every verdict, not only the one that already had
+  // a separate hard stop: refuse unless the hook is genuinely runnable
+  // (approved, hash-current, and — for a blocked verdict specifically —
+  // explicitly overridden). `hookRunState`'s own `runnable` computation
+  // already encodes exactly that; consult it directly rather than
+  // re-deriving a narrower rule here.
   const state = hookRunState(forgeRoot, id);
-  if (state.verdict === 'blocked' && !state.runnable) {
+  if (!state.runnable) {
     throw new Error(
-      `runHookScript: hook "${id}" scan verdict is "blocked" and no override has been recorded — refusing to spawn (see overrideHookBlock)`,
+      `runHookScript: hook "${id}" is not runnable (verdict "${state.verdict}", needsReview: ${state.needsReview}) — refusing to spawn until it is approved (see approveHook/overrideHookBlock)`,
     );
   }
 

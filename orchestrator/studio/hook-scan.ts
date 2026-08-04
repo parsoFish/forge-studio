@@ -17,12 +17,19 @@
  * never runnable until an operator explicitly approves it (`approveHook`) —
  * even a `clean` verdict does not auto-activate.
  *
- * Declared access DOWNGRADES a finding's severity, it never removes it — the
- * manifest declaring "this is fine" is written by the same untrusted party as
- * the script, so a scanner that goes quiet on declared access would make the
- * most dangerous hooks produce the quietest reports. `~/.ssh` /
- * `secrets.env`-shaped file reads are the one deliberate exception: NEVER
- * suppressible or downgradeable by declaration.
+ * Declared access NEVER removes a finding — the manifest declaring "this is
+ * fine" is written by the same untrusted party as the script, so a scanner
+ * that goes quiet on declared access would make the most dangerous hooks
+ * produce the quietest reports. For NETWORK egress, declared access still
+ * DOWNGRADES severity (the pre-existing, unchanged rule). For ENV reads and
+ * FILE reads, declared access does NOT downgrade severity — a declared
+ * secret-shaped env grant and a declared `~/.ssh`/`secrets.env`-shaped file
+ * read both stay `critical` (2026-08-04, BLOCKER 2: severity now keys off the
+ * CAPABILITY GRANT, not scanner detection or declaration — declaring a
+ * secret-shaped name used to downgrade it to `info`, which made "declare the
+ * exfiltration" both the way to obtain the real value at spawn time AND the
+ * way to evade the blocked-combo override bar; see computeVerdict's own doc
+ * comment for the verdict-side half of this fix).
  *
  * The trust/approval ledger (`studio/hook-approvals.yaml`) mirrors R3-01's
  * skill install ledger (`skill-install-ledger.ts`) — a hash pinned only
@@ -100,11 +107,20 @@ export interface HookScanReport {
  * separate named hashes — never one concatenated blob, never a whole-package
  * hash covering `name`/`description`/`matcher`/`on` too — so a mismatch
  * unambiguously tells an operator/log WHICH half changed.
+ *
+ * MINOR (2026-08-04, third adversarial review, D-M): `on`/`matcher` were
+ * never part of the approval hash either — an approved hook could be moved
+ * from `SessionEnd` (fires once) to `PreToolUse` (fires on every tool call)
+ * with the script and permissions untouched, granting no new CAPABILITY but
+ * materially changing EXPOSURE, and `needsReview` stayed false. THIRD named
+ * hash, `triggerHash` — same "which half changed" legibility argument as
+ * `scriptHash`/`permissionsHash`, not folded into either.
  */
 export interface HookApprovalLedgerEntry {
   id: string;
   scriptHash: string;
   permissionsHash: string;
+  triggerHash: string;
   overridden: boolean;
   reason?: string;
   approvedAt: string;
@@ -158,10 +174,13 @@ const OBFUSCATION_PATTERNS: readonly { re: RegExp; label: string }[] = [
  * distinct names, not once per rule).
  *
  * This prefix rule is orthogonal to — and does not defeat — the
- * fragmented-obfuscation fix below: a bare fragment like "GH_TO" (half of a
- * concatenation-built "GH_TOKEN") is not itself a var-name REFERENCE
- * (`extractEnvVarNames` only captures whole `$VAR`/`${VAR}` names), so it is
- * never a candidate for either rule in the first place.
+ * fragmented-obfuscation gap the module header documents: a bare fragment
+ * like "GH_TO" (half of a concatenation-built "GH_TOKEN") is not itself a
+ * whole var-name token — `extractUppercaseWordTokens` (the MAJOR-fix,
+ * bare-literal-inclusive candidate pool `scanEnvReads` filters through this
+ * predicate) only ever sees "GH_TO" and the separate "KEN" as distinct
+ * tokens, neither of which is secret-shaped on its own — so it is never a
+ * candidate for either rule in the first place.
  */
 const SECRET_SHAPED_ENV_SUFFIX_RE = /_(?:TOKEN|KEY|SECRET|PASSWORD|CREDENTIALS?|PAT)$/;
 const SECRET_SHAPED_ENV_PREFIX_RE = /^(?:AZDO_|GH_)/;
@@ -172,8 +191,13 @@ function isSecretShapedEnvName(name: string): boolean {
 
 /** `$VAR` / `${VAR}` (default-value syntax `${VAR:-x}` / `${VAR:=x}`
  *  tolerated — only the name is captured) — uppercase-shaped names only, the
- *  standard env-var convention. Shared by this module's secret-shape filter
- *  and hook-runtime.ts's declared-vs-referenced mismatch check. */
+ *  standard env-var convention. Used by hook-runtime.ts's
+ *  declared-vs-referenced mismatch check (`detectUndeclaredEnvRefs`), which
+ *  is genuinely about shell variable SUBSTITUTION — deliberately narrower
+ *  than `extractSecretShapedNameCandidates` below (NOT shared with it): a
+ *  bare-literal broadening here would make that check flag a script as
+ *  "referencing an undeclared var" for a plain-text mention (e.g. a
+ *  comment), which is not what that check means. */
 const ENV_VAR_REF_SOURCE = String.raw`\$\{([A-Z_][A-Z0-9_]*)(?:[:][-=][^}]*)?\}|\$([A-Z_][A-Z0-9_]*)`;
 
 /** Every distinct uppercase-shaped env-var reference in a script body. */
@@ -185,6 +209,31 @@ export function extractEnvVarNames(body: string): string[] {
     const name = m[1] ?? m[2];
     if (name) names.add(name);
   }
+  return [...names].sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * MAJOR fix (2026-08-04, third adversarial review, D-L): `extractEnvVarNames`
+ * above only matches `$VAR`/`${VAR}` shell-substitution syntax — a script
+ * reading a secret via `printenv ANTHROPIC_API_KEY`, `env | grep GH_TOKEN`,
+ * or Python's `os.environ['ANTHROPIC_API_KEY']` produced ZERO env-read
+ * findings, structurally invisible rather than merely downgraded. This
+ * extracts every distinct uppercase-shaped WHOLE-WORD token anywhere in the
+ * body — after `$`/`${`, inside quotes/brackets, after `printenv`/`env|grep`,
+ * or in a comment — deliberately a SUPERSET of `extractEnvVarNames` (any
+ * `$VAR` reference is also a bare uppercase token), used ONLY as the
+ * candidate pool `scanEnvReads` then filters down to secret-shaped names.
+ * ACCEPTED TRADEOFF (D-L, documented not hidden): a secret-shaped name
+ * mentioned in a comment or descriptive string is also caught — a false
+ * positive there costs one manifest declaration; a false negative on a real
+ * bare-literal credential read is the exact failure this feature exists to
+ * prevent.
+ */
+function extractUppercaseWordTokens(body: string): string[] {
+  const re = /\b[A-Z_][A-Z0-9_]*\b/g;
+  const names = new Set<string>();
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) names.add(m[0]);
   return [...names].sort((a, b) => a.localeCompare(b));
 }
 
@@ -210,18 +259,39 @@ function scanNetworkEgress(body: string, permissions: HookPermissionManifest): H
   ];
 }
 
+/**
+ * BLOCKER 2 fix (2026-08-04, third adversarial review, D-K): severity now
+ * keys off the CAPABILITY GRANT, not scanner detection, and NEVER downgrades
+ * for a declared secret-shaped name — declaring `ANTHROPIC_API_KEY` in
+ * `permissions.env` used to downgrade the finding to `info`, which made
+ * "declare the exfiltration" both necessary to obtain the real value (only a
+ * manifest-granted var reaches the child, see hook-runtime.ts) and sufficient
+ * to evade the blocked-combo override bar — an attacker who declared the
+ * grant faced LESS friction than one who didn't. Now: a secret-shaped name is
+ * a critical finding whether it comes from the MANIFEST (`permissions.env`,
+ * scanned directly — fires even with zero body references) or the SCRIPT
+ * BODY (via `extractUppercaseWordTokens`, catching both `$VAR` substitution
+ * and MAJOR-fix bare literals), unioned and deduplicated by name. `declared`
+ * is still recorded as a fact for the operator's report — it just no longer
+ * buys a lower severity, mirroring file-read's existing never-downgraded
+ * treatment.
+ */
 function scanEnvReads(body: string, permissions: HookPermissionManifest): HookScanFinding[] {
-  const secretNames = extractEnvVarNames(body).filter(isSecretShapedEnvName);
-  return secretNames.map((name) => {
-    const declared = permissions.env.includes(name);
-    return {
-      category: 'env-read' as const,
-      severity: (declared ? 'info' : 'critical') as HookFindingSeverity,
-      declared,
-      match: name,
-      message: `Script reads secret-shaped env var "${name}"${declared ? ' — declared in permissions.env' : ' — UNDECLARED'}`,
-    };
-  });
+  const namesFromBody = extractUppercaseWordTokens(body).filter(isSecretShapedEnvName);
+  const namesFromManifest = permissions.env.filter(isSecretShapedEnvName);
+  const names = new Set([...namesFromBody, ...namesFromManifest]);
+  return [...names]
+    .sort((a, b) => a.localeCompare(b))
+    .map((name) => {
+      const declared = permissions.env.includes(name);
+      return {
+        category: 'env-read' as const,
+        severity: 'critical' as HookFindingSeverity,
+        declared,
+        match: name,
+        message: `Script grants and/or reads secret-shaped env var "${name}"${declared ? ' — DECLARED in permissions.env (a declared secret-shaped grant is never downgraded, BLOCKER 2)' : ' — UNDECLARED'}`,
+      };
+    });
 }
 
 function scanFileReads(body: string, permissions: HookPermissionManifest): HookScanFinding[] {
@@ -255,12 +325,24 @@ function scanObfuscation(body: string): HookScanFinding[] {
   ];
 }
 
+/**
+ * BLOCKER 2 fix (D-K): the combo condition is now PRESENCE-based — an
+ * env-read finding together with a network-egress finding, REGARDLESS of
+ * either one's `severity`/`declared` — not severity-based as before (which
+ * required BOTH to be undeclared-critical, so a fully-declared exfiltration
+ * shape scored `findings`, one tier short of the override bar it should have
+ * hit). Declaring everything no longer launders the exfiltration shape past
+ * `blocked`. A lone network-egress finding with no accompanying env-read
+ * finding still stays `findings` — declaring network access ALONE, with no
+ * secret-shaped grant/reference anywhere, still reduces friction for a
+ * genuinely benign hook; this fix does not become "everything is blocked".
+ */
 function computeVerdict(findings: readonly HookScanFinding[]): HookScanVerdict {
   if (findings.some((f) => f.category === 'obfuscation')) return 'blocked';
   if (findings.some((f) => f.category === 'file-read')) return 'blocked';
-  const criticalEnv = findings.some((f) => f.category === 'env-read' && f.severity === 'critical');
-  const criticalNetwork = findings.some((f) => f.category === 'network-egress' && f.severity === 'critical');
-  if (criticalEnv && criticalNetwork) return 'blocked';
+  const hasEnvRead = findings.some((f) => f.category === 'env-read');
+  const hasNetworkEgress = findings.some((f) => f.category === 'network-egress');
+  if (hasEnvRead && hasNetworkEgress) return 'blocked';
   return findings.length > 0 ? 'findings' : 'clean';
 }
 
@@ -291,10 +373,10 @@ export function scanHookPackage(forgeRoot: string, id: string): HookScanReport {
 }
 
 // ---------------------------------------------------------------------------
-// hashHookScript / hashHookPermissions — deterministic content pins for the
-// approval ledger, deliberately SEPARATE (see HookApprovalLedgerEntry's own
-// doc comment / JOB B): a mismatch on one must never be mistaken for the
-// other.
+// hashHookScript / hashHookPermissions / hashHookTrigger — deterministic
+// content pins for the approval ledger, deliberately SEPARATE (see
+// HookApprovalLedgerEntry's own doc comment / JOB B, D-M): a mismatch on one
+// must never be mistaken for another.
 // ---------------------------------------------------------------------------
 
 export function hashHookScript(body: string): string {
@@ -316,6 +398,19 @@ export function hashHookPermissions(permissions: HookPermissionManifest): string
     read: [...permissions.read].sort((a, b) => a.localeCompare(b)),
     network: permissions.network,
   };
+  return `sha256:${createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex')}`;
+}
+
+/**
+ * Pure, content-addressed hash over a hook's TRIGGER CONDITION (`on` +
+ * `matcher`) — the approval ledger's third pin (D-M). A hook moved from
+ * `SessionEnd` to `PreToolUse` grants no new capability but fires far more
+ * often; an operator's approval was for a specific exposure, not just a
+ * specific script+grant, so a trigger-condition edit must re-enter review
+ * exactly like a script or permissions edit does.
+ */
+export function hashHookTrigger(on: string, matcher: string | undefined): string {
+  const canonical = { on, matcher: matcher ?? null };
   return `sha256:${createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex')}`;
 }
 
@@ -357,6 +452,7 @@ function parseHookApprovalLedgerEntries(raw: unknown, file: string): HookApprova
       id,
       scriptHash: reqString(e, 'scriptHash', file),
       permissionsHash: reqString(e, 'permissionsHash', file),
+      triggerHash: reqString(e, 'triggerHash', file),
       overridden: e['overridden'] === true,
       reason: optString(e, 'reason'),
       approvedAt: reqString(e, 'approvedAt', file),
@@ -401,11 +497,12 @@ export function writeHookApprovalLedgerEntry(forgeRoot: string, entry: HookAppro
 
 // ---------------------------------------------------------------------------
 // Trust state — hookRunState re-scans CURRENT bytes every call (never trusts
-// a cached verdict), and cross-checks BOTH of the ledger's pinned hashes
-// (script AND permissions — JOB B) against freshly-recomputed ones so an
-// edit to EITHER the script or the manifest after approval falls back to
-// needing review (mirrors R3-01's changed-hash-forces-re-review rule, now
-// covering the pair rather than the script alone).
+// a cached verdict), and cross-checks ALL THREE of the ledger's pinned
+// hashes (script, permissions — JOB B — AND trigger — D-M) against
+// freshly-recomputed ones so an edit to ANY of the script, the manifest, or
+// the trigger condition after approval falls back to needing review (mirrors
+// R3-01's changed-hash-forces-re-review rule, now covering the triple rather
+// than the script alone).
 // ---------------------------------------------------------------------------
 
 export function hookRunState(forgeRoot: string, id: string): HookRunState {
@@ -413,11 +510,13 @@ export function hookRunState(forgeRoot: string, id: string): HookRunState {
   const def = loadHookDefinition(id, forgeRoot);
   const currentScriptHash = hashHookScript(readHookScriptBody(forgeRoot, id));
   const currentPermissionsHash = hashHookPermissions(def.permissions);
+  const currentTriggerHash = hashHookTrigger(def.on, def.matcher);
   const ledgerEntry = readHookApprovalLedger(forgeRoot).get(id);
   const needsReview =
     !ledgerEntry ||
     ledgerEntry.scriptHash !== currentScriptHash ||
-    ledgerEntry.permissionsHash !== currentPermissionsHash;
+    ledgerEntry.permissionsHash !== currentPermissionsHash ||
+    ledgerEntry.triggerHash !== currentTriggerHash;
   const runnable = !needsReview && (report.verdict !== 'blocked' || Boolean(ledgerEntry?.overridden));
   return { verdict: report.verdict, runnable, needsReview };
 }
@@ -442,6 +541,7 @@ export function approveHook(input: { forgeRoot: string; id: string }): void {
     id,
     scriptHash: hashHookScript(readHookScriptBody(forgeRoot, id)),
     permissionsHash: hashHookPermissions(def.permissions),
+    triggerHash: hashHookTrigger(def.on, def.matcher),
     overridden: false,
     approvedAt: new Date().toISOString(),
   });
@@ -460,6 +560,7 @@ export function overrideHookBlock(input: { forgeRoot: string; id: string; reason
     id,
     scriptHash: hashHookScript(readHookScriptBody(forgeRoot, id)),
     permissionsHash: hashHookPermissions(def.permissions),
+    triggerHash: hashHookTrigger(def.on, def.matcher),
     overridden: true,
     reason,
     approvedAt: new Date().toISOString(),
