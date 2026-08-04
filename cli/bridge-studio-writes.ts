@@ -378,6 +378,19 @@ export async function handleStudioWriteRoutes(
         tools: Array.isArray(compIn['tools']) ? (compIn['tools'] as string[]) : (existing?.composition.tools ?? []),
         mcps: Array.isArray(compIn['mcps']) ? (compIn['mcps'] as string[]) : (existing?.composition.mcps ?? []),
         guards: Array.isArray(compIn['guards']) ? (compIn['guards'] as string[]) : (existing?.composition.guards ?? []),
+        // Deliberately NOT falling back to existing?.composition.hooks like
+        // the other four fields (2026-08-04, see bridge-studio-writes-
+        // guards-migration.test.ts's E1b): a stale on-disk SKILL.md can
+        // carry the OLD `hooks:` vocabulary (guard ids, pre-rename) under
+        // the field that now means library-hook ids — falling back to it
+        // would silently round-trip that colliding value through every save
+        // of that agent, forever, with no validation catching it (this
+        // route does not yet run lintHookComposition — see the T3 report's
+        // JOB 2 finding). Reading ONLY the request body means a save either
+        // explicitly re-declares composition.hooks (the F4 Agent-Builder
+        // binding path) or it's empty — never a silently-inherited legacy
+        // value.
+        hooks: Array.isArray(compIn['hooks']) ? (compIn['hooks'] as string[]) : [],
       };
 
       // Runtime: merge from body, fall back to existing

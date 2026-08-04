@@ -6,7 +6,12 @@
  * *** intercept a hook's actual env reads at runtime. Safety comes from
  * *** PREVENTION (stripping the child env down to exactly the
  * *** manifest-granted set before the process ever starts, composing
- * *** `orchestrator/spawn-env.ts`'s R5-02 allowlist seam). The
+ * *** `orchestrator/spawn-env.ts`'s R5-02 allowlist seam over the NARROWER
+ * *** `HOOK_ENV_BASE_ALLOWLIST` — a hook is untrusted third-party code, not
+ * *** one of forge's own trusted agent children, so it never inherits
+ * *** `AGENT_ENV_ALLOWLIST`'s `ANTHROPIC_API_KEY` by base allowlist alone;
+ * *** see spawn-env.ts's own header for the confirmed-then-fixed
+ * *** exfiltration defect this closes). The
  * *** declared-vs-referenced mismatch check (`detectUndeclaredEnvRefs`) is a
  * *** STATIC, pre-spawn text scan for `$VAR`/`${VAR}` references against the
  * *** manifest — it flags an under-declared manifest (the hook will likely
@@ -27,35 +32,50 @@ import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { AGENT_ENV_ALLOWLIST, buildChildEnv } from '../spawn-env.ts';
+import { HOOK_ENV_BASE_ALLOWLIST, buildChildEnv } from '../spawn-env.ts';
 import type { EventLogger } from '../logging.ts';
 import { hookDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
 import { extractEnvVarNames, hookRunState, scanHookPackage, type HookScanReport } from './hook-scan.ts';
 
 // ---------------------------------------------------------------------------
-// buildHookChildEnv — composes spawn-env.ts's buildChildEnv; never a second
-// hand-rolled env filter (the repo's standing env-leak lesson).
+// buildHookChildEnv — composes spawn-env.ts's buildChildEnv over the
+// NARROWER HOOK_ENV_BASE_ALLOWLIST (never the full, credential-bearing
+// AGENT_ENV_ALLOWLIST — see spawn-env.ts's header and the module header
+// above). Never a second hand-rolled env filter (the repo's standing
+// env-leak lesson): the base is pre-filtered down to HOOK_ENV_BASE_ALLOWLIST
+// before ever reaching buildChildEnv, so buildChildEnv's own internal
+// AGENT_ENV_ALLOWLIST re-filter is a no-op copy of an already-narrow set,
+// not a second, divergent filter.
 // ---------------------------------------------------------------------------
 
 export function buildHookChildEnv(parentEnv: NodeJS.ProcessEnv, permissions: HookPermissionManifest): NodeJS.ProcessEnv {
+  const hookBaseEnv: NodeJS.ProcessEnv = {};
+  for (const name of HOOK_ENV_BASE_ALLOWLIST) {
+    const value = parentEnv[name];
+    if (value !== undefined) hookBaseEnv[name] = value;
+  }
   const overrides: NodeJS.ProcessEnv = {};
   for (const name of permissions.env) {
     const value = parentEnv[name];
     if (value !== undefined) overrides[name] = value;
   }
-  return buildChildEnv(parentEnv, overrides);
+  return buildChildEnv(hookBaseEnv, overrides);
 }
 
 // ---------------------------------------------------------------------------
 // detectUndeclaredEnvRefs — static, pre-spawn scan. Base-allowlisted names
 // (PATH/HOME/...) are excluded: those reach the child unconditionally
 // regardless of the manifest, so flagging them as "undeclared" would be a
-// fabricated mismatch, not a real one.
+// fabricated mismatch, not a real one. Excludes HOOK_ENV_BASE_ALLOWLIST, NOT
+// AGENT_ENV_ALLOWLIST — the latter's ANTHROPIC_API_KEY is unconditionally
+// present for a trusted agent child but NOT for a hook, so excluding it here
+// would silently report "no mismatch" for a script that references it
+// without declaring it, while the real child actually gets an empty value.
 // ---------------------------------------------------------------------------
 
 export function detectUndeclaredEnvRefs(scriptBody: string, permissions: HookPermissionManifest): string[] {
   const declared = new Set(permissions.env);
-  const alwaysPresent = new Set<string>(AGENT_ENV_ALLOWLIST);
+  const alwaysPresent = new Set<string>(HOOK_ENV_BASE_ALLOWLIST);
   return extractEnvVarNames(scriptBody).filter((name) => !declared.has(name) && !alwaysPresent.has(name));
 }
 

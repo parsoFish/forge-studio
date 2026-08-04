@@ -3,10 +3,11 @@
  *
  * Every hook entering the library passes a STATIC scan across four
  * categories before it is runnable: network egress (curl/wget/fetch/nc/raw
- * sockets), env reads (secret-shaped names — `*_TOKEN`, `*_KEY`, ... —
- * matched by SUFFIX, see the comment on SECRET_SHAPED_ENV_SUFFIX_RE below for
- * why a prefix-wildcard reading of "AZDO_*, GH_*" is deliberately NOT what
- * this implements), file reads outside a curated dangerous-path list
+ * sockets), env reads (secret-shaped names — matched by SUFFIX, `*_TOKEN`,
+ * `*_KEY`, ..., AND by PREFIX, `AZDO_*`/`GH_*` — see the comment on
+ * SECRET_SHAPED_ENV_SUFFIX_RE / SECRET_SHAPED_ENV_PREFIX_RE below for the
+ * over-flag-not-under-flag decision), file reads outside a curated
+ * dangerous-path list
  * (`~/.ssh`, `secrets.env`, `id_rsa`, `.aws/credentials`), and obfuscation
  * (base64 decode pipelines, `eval`).
  *
@@ -111,17 +112,32 @@ const OBFUSCATION_PATTERNS: readonly { re: RegExp; label: string }[] = [
 
 /**
  * Env vars are flagged as secret-shaped by SUFFIX (ends with `_TOKEN`,
- * `_KEY`, ...), never by the "AZDO_*"/"GH_*" PREFIX reading the roadmap text
- * also lists — a prefix-wildcard match would flag a bare fragment like
- * "GH_TO" (half of a concatenation-obfuscated "GH_TOKEN") as a real secret
- * read, which is exactly backwards: hook-scan.test.ts's own documented-gap
- * fixture pins that such a fragment must NOT be flagged (it isn't a real
- * reference to any actual secret name). "AZDO_*, GH_*" in the roadmap text
- * are read here as illustrative real var-name examples (AZDO_TOKEN,
- * GH_TOKEN, ...) that already end in a flagged suffix, not a separate
- * prefix rule.
+ * `_KEY`, ...) OR by PREFIX (starts with `AZDO_`/`GH_` — the roadmap names
+ * these prefixes explicitly). 2026-08-04 peer-review decision: ANY var name
+ * prefixed with `AZDO_` or `GH_` is flagged regardless of whether it also
+ * carries a recognised suffix — e.g. `GH_REPO` (no `_TOKEN`/`_KEY`/...
+ * suffix) is still flagged. This deliberately OVER-flags a var like
+ * `GH_REPO` that isn't actually secret-shaped: a false positive on a
+ * non-secret prefix match is a strictly safer failure mode for a security
+ * scanner than a false negative on a real credential, and an over-broad
+ * manifest declaration (adding `GH_REPO` to `permissions.env`) is cheap for
+ * an operator to make — see hook-scan.test.ts's "PREFIX rule" describe
+ * block. A var matching BOTH rules (e.g. `GH_TOKEN`) is still reported
+ * exactly once (scanEnvReads below filters on the COMBINED predicate over
+ * distinct names, not once per rule).
+ *
+ * This prefix rule is orthogonal to — and does not defeat — the
+ * fragmented-obfuscation fix below: a bare fragment like "GH_TO" (half of a
+ * concatenation-built "GH_TOKEN") is not itself a var-name REFERENCE
+ * (`extractEnvVarNames` only captures whole `$VAR`/`${VAR}` names), so it is
+ * never a candidate for either rule in the first place.
  */
 const SECRET_SHAPED_ENV_SUFFIX_RE = /_(?:TOKEN|KEY|SECRET|PASSWORD|CREDENTIALS?|PAT)$/;
+const SECRET_SHAPED_ENV_PREFIX_RE = /^(?:AZDO_|GH_)/;
+
+function isSecretShapedEnvName(name: string): boolean {
+  return SECRET_SHAPED_ENV_SUFFIX_RE.test(name) || SECRET_SHAPED_ENV_PREFIX_RE.test(name);
+}
 
 /** `$VAR` / `${VAR}` (default-value syntax `${VAR:-x}` / `${VAR:=x}`
  *  tolerated — only the name is captured) — uppercase-shaped names only, the
@@ -164,7 +180,7 @@ function scanNetworkEgress(body: string, permissions: HookPermissionManifest): H
 }
 
 function scanEnvReads(body: string, permissions: HookPermissionManifest): HookScanFinding[] {
-  const secretNames = extractEnvVarNames(body).filter((name) => SECRET_SHAPED_ENV_SUFFIX_RE.test(name));
+  const secretNames = extractEnvVarNames(body).filter(isSecretShapedEnvName);
   return secretNames.map((name) => {
     const declared = permissions.env.includes(name);
     return {

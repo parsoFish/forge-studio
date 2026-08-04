@@ -92,12 +92,28 @@ export interface HookUsedByDerivation {
   readonly scanned: number;
 }
 
+/**
+ * `ok` discriminates a successfully-loaded hook from a malformed one
+ * (2026-08-04 peer-review finding) — a malformed entry must carry NO
+ * fabricated field values. `HookDefinition`'s fields stay REQUIRED on this
+ * type (not split into a narrower `ok:true`-only interface) because the
+ * common case every real caller indexes — a well-formed library entry — must
+ * read them without a narrowing dance; `listHookLibrary`'s own OOTB-seed
+ * tests do exactly that (`entries.find(...).on`, no `if (entry.ok)` guard).
+ * The fabrication guarantee is instead a RUNTIME one, enforced in
+ * `listHookLibrary`'s malformed branch below: that object literal genuinely
+ * has no `on`/`script`/`permissions`/`name`/`description` key at all — never
+ * a placeholder value alongside `error` (the exact shape an earlier round's
+ * `on: 'PreToolUse'` placeholder took, which adversarial review caught) — a
+ * consumer must check `ok` before trusting those fields present, exactly as
+ * this module's own tests verify via `'on' in entry` etc.
+ */
 export interface HookLibraryEntry extends HookDefinition {
+  ok: boolean;
   /** DERIVED from real agent specs' composition.hooks — never declared (D3 precedent). */
   carriedBy: string[];
   carriedByDerivation: HookUsedByDerivation;
-  /** A malformed on-disk package surfaces here — never silently dropped from
-   *  the listing (mirrors SkillLibraryEntry.error, AT-7). */
+  /** Set only on the `ok:false` branch — a well-formed entry carries no `error` key at all. */
   error?: string;
 }
 
@@ -246,7 +262,7 @@ function computeHookUsage(forgeRoot: string): { byHook: Map<string, string[]>; d
   const agents = listAgentDefinitionsResilient(forgeRoot);
   const byHook = new Map<string, Set<string>>();
   for (const agent of agents) {
-    for (const hookId of new Set(agent.composition.hooks ?? [])) {
+    for (const hookId of new Set(agent.composition.hooks)) {
       if (!byHook.has(hookId)) byHook.set(hookId, new Set());
       byHook.get(hookId)!.add(agent.slug);
     }
@@ -267,19 +283,22 @@ export function listHookLibrary(forgeRoot: string): HookLibraryEntry[] {
     const carriedBy = byHook.get(id) ?? [];
     try {
       const def = loadHookDefinition(id, forgeRoot);
-      entries.push({ ...def, carriedBy, carriedByDerivation: derivation });
+      entries.push({ ...def, ok: true, carriedBy, carriedByDerivation: derivation });
     } catch (e) {
-      entries.push({
+      // Genuinely NO on/script/permissions/name/description key at runtime —
+      // never a placeholder alongside `error`. HookLibraryEntry declares
+      // those fields required (so the well-formed common case needs no
+      // narrowing to read them — see the type's own doc comment); this is
+      // the one place that gap is deliberately spanned, for a value that
+      // structurally omits them, not one that invents them.
+      const malformed: Pick<HookLibraryEntry, 'ok' | 'id' | 'carriedBy' | 'carriedByDerivation' | 'error'> = {
+        ok: false,
         id,
-        name: id,
-        description: '',
-        on: 'PreToolUse',
-        script: '',
-        permissions: { env: [], read: [], network: false },
         carriedBy,
         carriedByDerivation: derivation,
         error: (e as Error).message,
-      });
+      };
+      entries.push(malformed as HookLibraryEntry);
     }
   }
   return entries;
@@ -323,7 +342,7 @@ export function lintHookComposition(forgeRoot: string): Finding[] {
   for (const agent of agents) {
     const obj = `agent:${agent.slug}`;
 
-    for (const hookRef of agent.composition.hooks ?? []) {
+    for (const hookRef of agent.composition.hooks) {
       if (guardIds.has(hookRef)) {
         findings.push({
           level: 'error',

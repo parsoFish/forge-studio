@@ -25,14 +25,15 @@ export type AgentComposition = {
    * `orchestrator/studio/hook-library.ts`), never a `composition.guards`
    * platform id. A library hook definition never names an agent; binding is
    * declared here, in the Agent Builder, only — "carried by" is DERIVED from
-   * real agent specs (`deriveHookUsage`), never the reverse. Optional: a
-   * loaded `AgentDefinition` (via `loadAgentDefinition`) always normalizes
-   * this to `[]` when absent from the source SKILL.md, so a real loaded def's
-   * `hooks` is never `undefined` — the field stays optional on the TYPE only
-   * because it predates this round's own test fixtures across the repo that
-   * hand-build an `AgentComposition` literal without it.
+   * real agent specs (`deriveHookUsage`), never the reverse. REQUIRED
+   * (2026-08-04 peer-review finding): a loaded `AgentDefinition` (via
+   * `loadAgentDefinition`) always normalizes this to `[]` when absent from
+   * the source SKILL.md, so every real consumer already had a real array —
+   * leaving the field optional only forced every consumer into a fail-open
+   * `?? []`, inventing data a payload never sent. All hand-built
+   * `AgentComposition` fixtures across the repo were swept to carry it.
    */
-  hooks?: string[];
+  hooks: string[];
 };
 
 export type AgentRuntime = {
