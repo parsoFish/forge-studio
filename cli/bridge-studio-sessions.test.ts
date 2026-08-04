@@ -13,7 +13,23 @@
  * AT numbers continue the flat R2-10 sequence started in
  * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18) and continued in
  * orchestrator/studio/session-transcript.test.ts (AT-19..AT-37). This file
- * covers AT-38..AT-48.
+ * covers AT-38..AT-48, plus AT-59..AT-60 added in the AT-amendment-2 round
+ * (session-kinds.test.ts gained AT-49..56, session-transcript.test.ts gained
+ * AT-57..58 in the same round — see those files' headers).
+ *
+ * AT-amendment-2 additions in THIS file:
+ *   AT-59 (A1, the review-flagged BLOCKER) — `phase` is read via
+ *     `readSessionStatus` (orchestrator/interactive-session.ts), a plain
+ *     `existsSync`/`readFileSync` on `status.json` with NO realpath
+ *     containment check — a completely different (unguarded) read path from
+ *     session-transcript.ts's `safeReadFileInSession`. A symlinked
+ *     `status.json` pointing outside the session dir currently leaks its
+ *     content into a 200 response. AT-59 plants exactly that symlink and
+ *     pins the fixed behaviour: 404, marker never in the response.
+ *   AT-60 (A2 route-level) — the `phase` the route already reads from
+ *     status.json must be THREADED into `deriveSessionTranscript` so the
+ *     phase-driven pending-turn contract (session-transcript.test.ts
+ *     AT-57/58) actually reaches the wire, not just the unit level.
  *
  * Design decisions this file pins:
  *
@@ -65,6 +81,9 @@ const REAL_PROJECT_BRAIN_SESSION = '2026-08-03T12-00-00';
 const BADSTAGE_SESSION = '2026-08-04T13-00-00';
 const VICTIM_SESSION = '2026-08-05T14-00-00';
 const SECRET_MARKER = 'TOP-SECRET-BRIDGE-ESCAPE-MARKER-4471';
+const STATUS_ESCAPE_SESSION = '2026-08-06T15-00-00';
+const STATUS_SECRET_MARKER = 'LEAKED-STATUS-PHASE-MARKER-6602';
+const REASK_SESSION = '2026-08-07T16-00-00';
 
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
@@ -194,6 +213,39 @@ before(async () => {
   mkdirSync(attackerArchitectDir, { recursive: true });
   symlinkSync(victimDir, join(attackerArchitectDir, 'evil-session'));
 
+  // AT-59 fixture (A1, the reviewer-flagged BLOCKER): a REAL, otherwise
+  // legitimate session dir whose `status.json` is REPLACED by a symlink
+  // pointing OUTSIDE the session dir at a file carrying a fabricated
+  // "phase". The session dir itself is genuine (this is not the AT-47
+  // whole-directory-symlink shape) — only the single `status.json` FILE
+  // escapes, via `readSessionStatus`'s unguarded read path.
+  const statusEscapeDir = join(projectsRoot, 'statusescapeproj', '_architect', STATUS_ESCAPE_SESSION);
+  mkdirSync(statusEscapeDir, { recursive: true });
+  writeFileSync(join(statusEscapeDir, 'idea.md'), 'A legitimate idea.\n', 'utf8');
+  const statusOutsideDir = join(forgeRoot, '_status-escape-outside');
+  mkdirSync(statusOutsideDir, { recursive: true });
+  const outsideStatusPath = join(statusOutsideDir, 'fake-status.json');
+  writeFileSync(outsideStatusPath, JSON.stringify({ session_id: STATUS_ESCAPE_SESSION, project: 'statusescapeproj', phase: STATUS_SECRET_MARKER }), 'utf8');
+  symlinkSync(outsideStatusPath, join(statusEscapeDir, 'status.json'));
+
+  // AT-60 fixture (A2 route-level): a session genuinely `awaiting-answers`
+  // whose questions.json re-asks round 1's question VERBATIM — the phase
+  // must reach deriveSessionTranscript for the pending turn to appear.
+  const reaskDir = join(projectsRoot, 'reaskproj', '_architect', REASK_SESSION);
+  mkdirSync(reaskDir, { recursive: true });
+  writeFileSync(join(reaskDir, 'idea.md'), 'Build a re-ask fixture.\n', 'utf8');
+  writeFileSync(
+    join(reaskDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'What is the project name?', answer: 'Foo.' }] }]),
+    'utf8',
+  );
+  writeFileSync(
+    join(reaskDir, 'questions.json'),
+    JSON.stringify([{ question: 'What is the project name?', header: 'Name', options: [] }]),
+    'utf8',
+  );
+  writeFileSync(join(reaskDir, 'status.json'), JSON.stringify({ session_id: REASK_SESSION, project: 'reaskproj', phase: 'awaiting-answers' }), 'utf8');
+
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -322,18 +374,25 @@ test('AT-42: GET /api/studio/sessions/no-such-kind/<id>?project=<p> returns 404 
   }
 });
 
-test('AT-43: GET /api/studio/sessions/architect/<unknown-id>?project=<p> returns 404', async () => {
-  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/2099-01-01T00-00-00?project=demoproj`);
+test('AT-43: GET /api/studio/sessions/architect/<unknown-id>?project=<p> returns 404 naming its ACTUAL cause (strengthened — must not be a generic catch-all)', async () => {
+  const unknownId = '2099-01-01T00-00-00';
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${unknownId}?project=demoproj`);
   assert.equal(res.status, 404);
-  const body = (await res.json()) as { error: string };
-  assert.ok(typeof body.error === 'string' && body.error.length > 0);
+  const body = (await res.json()) as { error: string; kind?: string; sessionId?: string; project?: string };
+  // Exact-match the "session dir not found" message (distinct from the
+  // "session found but status.json unreadable" 404 flavour) — this proves
+  // the RIGHT branch fired, not any 404-shaped fallback.
+  assert.equal(body.error, 'session not found', `expected the exact "session dir not found" message, got: ${JSON.stringify(body)}`);
+  assert.equal(body.kind, 'architect', 'the 404 must echo back the requested kind, proving it reached the session-lookup branch');
+  assert.equal(body.sessionId, unknownId, 'the 404 must echo back the requested sessionId');
+  assert.equal(body.project, 'demoproj');
 });
 
-test('AT-44: GET /api/studio/sessions/architect/<id> with NO project query param returns 400', async () => {
+test('AT-44: GET /api/studio/sessions/architect/<id> with NO project query param returns 400 naming its ACTUAL cause (strengthened)', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}`);
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
-  assert.ok(typeof body.error === 'string' && body.error.length > 0);
+  assert.equal(body.error, 'project query parameter is required', `expected the exact missing-project message, got: ${JSON.stringify(body)}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -372,6 +431,26 @@ const BAD_PATH_SEGMENT_VARIANTS: string[] = [
 // unlike a path segment — so '' is meaningful here and only here.
 const BAD_QUERY_VALUE_VARIANTS: string[] = ['', ...BAD_PATH_SEGMENT_VARIANTS];
 
+const OVERLONG_ID = 'a'.repeat(300);
+const DOUBLE_ENCODED_TRAVERSAL = '%252e%252e%252f';
+
+/** Strengthened per-variant message checks (reviewer finding: breadth alone
+ *  doesn't prove the message is ACTIONABLE) — applied to the two variants
+ *  T2 called out specifically. Asserts the message is a real length/charset
+ *  explanation, never a leaked low-level OS error, and never empty/generic. */
+function assertActionableMessage(variant: string, message: string): void {
+  if (variant === OVERLONG_ID) {
+    assert.ok(/exceed|too long|length/i.test(message), `300-char variant must carry an actionable LENGTH message, got: ${message}`);
+    assert.ok(!/ENAMETOOLONG/i.test(message), `300-char variant must NEVER leak a raw OS error like ENAMETOOLONG, got: ${message}`);
+  }
+  if (variant === DOUBLE_ENCODED_TRAVERSAL) {
+    // A single decode of '%252e%252e%252f' yields '%2e%2e%2f' (still
+    // percent-encoded, not a real ".." traversal) — the message must name
+    // THAT actual offending (once-decoded) value, not a blank/generic string.
+    assert.ok(message.includes('%2e%2e%2f'), `double-encoded-traversal variant must name the once-decoded offending value "%2e%2e%2f", got: ${message}`);
+  }
+}
+
 test('AT-45: sessionId slug validation rejects every traversal/malformed variant with 400, BEFORE any fs read', async () => {
   const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
   for (const variant of BAD_PATH_SEGMENT_VARIANTS) {
@@ -380,7 +459,9 @@ test('AT-45: sessionId slug validation rejects every traversal/malformed variant
     const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
     assert.equal(handled, true, `variant ${JSON.stringify(variant)} must be handled (not passthrough)`);
     assert.equal(status(), 400, `variant ${JSON.stringify(variant)} must be rejected with 400, got ${status()}`);
-    assert.ok(typeof (body() as { error?: string })?.error === 'string', `variant ${JSON.stringify(variant)} must carry an error message`);
+    const errorMessage = (body() as { error?: string })?.error;
+    assert.ok(typeof errorMessage === 'string', `variant ${JSON.stringify(variant)} must carry an error message`);
+    assertActionableMessage(variant, errorMessage!);
   }
 });
 
@@ -392,7 +473,9 @@ test('AT-46: project slug validation rejects every traversal/malformed variant w
     const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
     assert.equal(handled, true, `variant ${JSON.stringify(variant)} must be handled (not passthrough)`);
     assert.equal(status(), 400, `project variant ${JSON.stringify(variant)} must be rejected with 400, got ${status()}`);
-    assert.ok(typeof (body() as { error?: string })?.error === 'string');
+    const errorMessage = (body() as { error?: string })?.error;
+    assert.ok(typeof errorMessage === 'string');
+    assertActionableMessage(variant, errorMessage!);
   }
 });
 
@@ -423,4 +506,42 @@ test('AT-48: an unknown-stage checkpoint surfaces as a non-200 (or ok:false), na
   const message = parsed.error ?? text;
   assert.ok(message.includes('no-such-stage'), `response must name the offending value, got: ${message}`);
   assert.ok(message.includes('roadmap'), `response must name the allowed stage set, got: ${message}`);
+});
+
+// ---------------------------------------------------------------------------
+// AT-59 (A1, the reviewer-flagged BLOCKER) — status.json symlink escape.
+// `phase` is read via `readSessionStatus` (interactive-session.ts), a plain
+// existsSync/readFileSync with NO realpath check — a different, unguarded
+// read path from session-transcript.ts's `safeReadFileInSession`. The
+// session DIRECTORY here is genuine and real (unlike AT-47's whole-dir
+// symlink) — only the single status.json FILE inside it is a symlink
+// pointing outside. Reviewer repro: this currently returns 200 with the
+// fabricated phase leaked straight into the response.
+// ---------------------------------------------------------------------------
+
+test('AT-59: a session dir whose status.json is a symlink pointing OUTSIDE it is rejected (404) — the escaped phase value never appears anywhere in the response', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${STATUS_ESCAPE_SESSION}?project=statusescapeproj`);
+  const text = await res.text();
+  assert.ok(!text.includes(STATUS_SECRET_MARKER), `the escaped status.json content must never appear in the response, got: ${text}`);
+  // The intended post-fix behaviour: treated the same as "no readable
+  // status.json" — a 404, not a 200 with a guessed/leaked phase.
+  assert.equal(res.status, 404, `expected 404 (escaped status.json treated as unreadable), got status=${res.status} body=${text}`);
+});
+
+// ---------------------------------------------------------------------------
+// AT-60 (A2 route-level) — the route's already-known `phase` must be
+// threaded into deriveSessionTranscript so the phase-driven pending-turn
+// contract (session-transcript.test.ts AT-57/58) reaches the wire.
+// ---------------------------------------------------------------------------
+
+test('AT-60: a session genuinely awaiting-answers, with a VERBATIM re-asked question → the pending agent turn IS present in the route response', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REASK_SESSION}?project=reaskproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.phase, 'awaiting-answers');
+  const pending = body.turns.find((t) => t.source === 'questions.json');
+  assert.ok(pending, `expected a pending agent turn for the verbatim re-ask (phase awaiting-answers), got turns: ${JSON.stringify(body.turns)}`);
+  assert.equal(pending!.role, 'agent');
+  assert.equal(pending!.text, 'What is the project name?');
 });

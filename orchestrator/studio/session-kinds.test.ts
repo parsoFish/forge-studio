@@ -12,6 +12,21 @@
  *   AT-1  .. AT-18 — this file (session-kinds.ts)
  *   AT-19 .. AT-37 — orchestrator/studio/session-transcript.test.ts
  *   AT-38 .. AT-48 — cli/bridge-studio-sessions.test.ts
+ * AT-amendment-2 round (T2-ratified, adversarial-review findings) adds:
+ *   AT-49 .. AT-56 — this file (A3: legacyRoutes declared-data-fails-open;
+ *                    A4: YAML structural coverage gap)
+ *   AT-57 .. AT-58 — session-transcript.test.ts (A2: phase-driven pending)
+ *   AT-59 .. AT-60 — bridge-studio-sessions.test.ts (A1: status.json symlink
+ *                    escape blocker; A2 route-level re-ask case)
+ *
+ * A3 (this file, AT-49..52): `legacyRoutes` was parsed, typed, and echoed
+ * back, but never actually checked — declared-data-fails-open. New contract:
+ * `validateSessionKinds` errors when a `legacyRoutes` entry is empty/blank OR
+ * does not correspond to a real route directory under `forge-ui/app/` (route
+ * path segments map 1:1 onto Next.js App Router directory names, including
+ * literal `[sessionId]` dynamic-segment folders — e.g.
+ * `/architect/[sessionId]/interview` → `forge-ui/app/architect/[sessionId]/interview`,
+ * verified to exist on disk for AT-52).
  *
  * Design decisions this file pins (see the T3 report for the full rationale):
  *   - `studio/session-kinds.yaml` is a bare top-level YAML sequence of
@@ -37,7 +52,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
@@ -128,6 +143,16 @@ function byId(descs: readonly SessionKindDescriptor[], id: string): SessionKindD
   const d = descs.find((x) => x.id === id);
   assert.ok(d, `expected descriptor "${id}" to be present`);
   return d!;
+}
+
+/** Creates a REAL `forge-ui/app/<...segments>/` directory under `root` for a
+ *  legacyRoutes entry like `/fixture-kind/[sessionId]` — route path segments
+ *  map 1:1 onto Next.js App Router directory names, including a literal
+ *  `[sessionId]` dynamic-segment folder (verified against the real repo:
+ *  `forge-ui/app/architect/[sessionId]/interview/page.tsx` exists on disk). */
+function writeForgeUiRoute(root: string, routePath: string): void {
+  const segments = routePath.replace(/^\//, '').split('/').filter((s) => s.length > 0);
+  mkdirSync(join(root, 'forge-ui', 'app', ...segments), { recursive: true });
 }
 
 // ===========================================================================
@@ -270,15 +295,21 @@ describe('validateSessionKinds — semantic errors', () => {
     assert.ok(f!.message.includes('dupe'));
   });
 
-  it('AT-12: an agent ref that resolves to no real agent definition → error naming it', () => {
+  it('AT-12: an agent ref that resolves to no real agent definition → error naming BOTH the offending value AND the known-agent set (strengthened — mirrors AT-6/AT-9\'s shape, a reviewer-flagged gap)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'real-agent-fixture');
+    writeAgentSkill(root, 'another-real-agent-fixture');
     writeSessionKindsYaml(root, [baseDescriptor({ agent: 'ghost-agent-does-not-exist' })]);
     const findings = validateSessionKinds(root);
     const f = findings.find((x) => x.check === 'session-kinds/unknown-agent');
     assert.ok(f, `expected a session-kinds/unknown-agent finding, got: ${JSON.stringify(findings)}`);
     assert.equal(f!.level, 'error');
     assert.ok(f!.message.includes('ghost-agent-does-not-exist'), 'message must name the offending agent id');
+    // Strengthened: AT-6 (unknown stage) and AT-9 (unknown artifact kind)
+    // both enumerate the full allowed set in their message — the unknown-agent
+    // message must meet the same bar, not just name the bad value in isolation.
+    assert.ok(f!.message.includes('real-agent-fixture'), `message must enumerate the known-agent set (missing "real-agent-fixture"), got: ${f!.message}`);
+    assert.ok(f!.message.includes('another-real-agent-fixture'), `message must enumerate the known-agent set (missing "another-real-agent-fixture"), got: ${f!.message}`);
   });
 
   it('AT-13: a missing studio/session-kinds.yaml → loadSessionKinds throws; validateSessionKinds returns exactly one error finding, never a silent empty list', () => {
@@ -377,5 +408,115 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(projectBrain.stages, ['brain']);
     assert.equal(projectBrain.defaultStage, 'brain');
     assert.deepEqual(projectBrain.artifact, { kind: 'brain-structure', label: 'Seeded structure' });
+  });
+});
+
+// ===========================================================================
+// A3 — legacyRoutes is no longer declared-data-fails-open (AT-49..52)
+// ===========================================================================
+
+describe('validateSessionKinds — legacyRoutes must resolve to a real forge-ui/app/ route (AT-amendment-2, A3)', () => {
+  it('AT-49: a legacyRoutes entry that does not correspond to a real forge-ui/app/ directory → error naming ONLY the bogus entry, not the sibling that DOES resolve', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]'); // this one is real
+    // '/totally-bogus-route/[sessionId]' has NO matching forge-ui/app/ dir.
+    writeSessionKindsYaml(root, [
+      baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', '/totally-bogus-route/[sessionId]'] }),
+    ]);
+    const findings = validateSessionKinds(root);
+    // Exactly ONE finding proves the real, resolving sibling route was never
+    // flagged (a false positive would produce a second finding for it).
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 bogus-route finding (not the real sibling too), got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes('/totally-bogus-route/[sessionId]'), `message must name the offending route, got: ${routeFindings[0].message}`);
+  });
+
+  it('AT-50: an empty/blank legacyRoutes entry → error', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', ''] })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/legacy-route-not-found');
+    assert.ok(f, `expected a session-kinds/legacy-route-not-found finding for the blank entry, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+  });
+
+  it('AT-51: an EMPTY legacyRoutes list → allowed, no finding (a future kind may declare none)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: [] })]);
+    const findings = validateSessionKinds(root);
+    assert.deepEqual(findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found'), [], 'an empty legacyRoutes list must never itself be an error');
+  });
+
+  it('AT-52: the real repo — all three shipped descriptors\' legacyRoutes resolve to real forge-ui/app/ directories (verified independently of the validator too)', () => {
+    const findings = validateSessionKinds(REPO_ROOT);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.deepEqual(routeFindings, [], `expected 0 legacy-route-not-found findings in the real repo, got: ${JSON.stringify(routeFindings)}`);
+
+    // Independent verification (not just trusting the validator under test):
+    // every shipped legacyRoutes entry really does exist as a forge-ui/app/ dir.
+    const descs = loadSessionKinds(REPO_ROOT);
+    for (const d of descs) {
+      for (const route of d.legacyRoutes) {
+        const segments = route.replace(/^\//, '').split('/').filter((s) => s.length > 0);
+        const dirPath = join(REPO_ROOT, 'forge-ui', 'app', ...segments);
+        assert.ok(existsSync(dirPath), `expected "${dirPath}" (from legacyRoutes entry "${route}" on session kind "${d.id}") to exist`);
+      }
+    }
+  });
+});
+
+// ===========================================================================
+// A4 — YAML structural coverage gap (AT-53..56): these already work
+// correctly against the shipped loader (loadSessionKindsSequence's
+// `!Array.isArray(parsed)` guard, and parseSessionKindDescriptor's mapping
+// guard) — reviewer-reproduced but previously UNPINNED. Each must yield
+// EXACTLY ONE session-kinds/load-error finding, never a silent empty list.
+// ===========================================================================
+
+describe('validateSessionKinds — YAML structural coverage (AT-amendment-2, A4)', () => {
+  function writeRawYaml(root: string, content: string): void {
+    const dir = join(root, 'studio');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'session-kinds.yaml'), content, 'utf8');
+  }
+
+  function assertExactlyOneLoadError(root: string): void {
+    assert.throws(() => loadSessionKinds(root), 'loadSessionKinds must throw — this is a structural violation, not a semantic one');
+    const findings = validateSessionKinds(root);
+    assert.equal(findings.length, 1, `expected exactly 1 finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(findings[0].check, 'session-kinds/load-error');
+    assert.equal(findings[0].level, 'error');
+  }
+
+  it('AT-53: top-level YAML parses to a MAP (not a sequence) → exactly one session-kinds/load-error finding', () => {
+    const root = makeForgeRoot();
+    writeRawYaml(root, 'id: not-a-sequence-at-all\nagent: whatever\n');
+    assertExactlyOneLoadError(root);
+  });
+
+  it('AT-54: top-level YAML parses to a BARE SCALAR (a plain string) → exactly one session-kinds/load-error finding', () => {
+    const root = makeForgeRoot();
+    writeRawYaml(root, 'just a bare scalar string\n');
+    assertExactlyOneLoadError(root);
+  });
+
+  it('AT-55: top-level YAML parses to NULL/empty (an empty file, and an explicit "null") → exactly one session-kinds/load-error finding, in BOTH cases', () => {
+    const emptyRoot = makeForgeRoot();
+    writeRawYaml(emptyRoot, '');
+    assertExactlyOneLoadError(emptyRoot);
+
+    const nullRoot = makeForgeRoot();
+    writeRawYaml(nullRoot, 'null\n');
+    assertExactlyOneLoadError(nullRoot);
+  });
+
+  it('AT-56: a sequence item that is a BARE STRING rather than a mapping → exactly one session-kinds/load-error finding', () => {
+    const root = makeForgeRoot();
+    writeRawYaml(root, '- "just a string, not a mapping"\n- id: also-irrelevant\n');
+    assertExactlyOneLoadError(root);
   });
 });

@@ -7,8 +7,26 @@
  * expected red).
  *
  * AT numbers continue the flat R2-10 sequence started in
- * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18). This file covers
- * AT-19..AT-37. cli/bridge-studio-sessions.test.ts covers AT-38..AT-48.
+ * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18, +AT-49..AT-56 in
+ * the AT-amendment-2 round). This file covers AT-19..AT-37, +AT-57..AT-58
+ * (AT-amendment-2). cli/bridge-studio-sessions.test.ts covers AT-38..AT-48,
+ * +AT-59..AT-60.
+ *
+ * AT-amendment-2 (T2-ratified, supersedes the implementer's original design):
+ * `questions.json` pending-ness is no longer exact-text set-difference
+ * against answered questions (that silently DROPPED a legitimately re-asked
+ * VERBATIM question — a session genuinely `awaiting-answers` would render
+ * with no pending turn, looking idle). `deriveSessionTranscript` now takes
+ * the caller's real `phase` and a `questions.json` entry is a pending agent
+ * turn IFF `phase === 'awaiting-answers'` (the same string both
+ * architect-runner.ts and instructions-runner.ts write to status.json while
+ * blocked on the operator — orchestrator/interactive-session.ts's
+ * questions/answers handoff). Any other phase ⇒ questions.json (if present)
+ * is stale leftover and contributes no turn, regardless of its text. AT-57/58
+ * pin the two directions; every pre-existing call site below was amended to
+ * pass an explicit `phase` (most don't have a questions.json fixture at all,
+ * so the exact value is inert for them — a real, grounded phase string is
+ * used regardless, never a placeholder).
  *
  * Design decisions this file pins (see the T3 report for full rationale):
  *
@@ -129,7 +147,11 @@ describe('deriveSessionTranscript — ordering (2-round architect fixture)', () 
     writeJson(sessionDir, 'questions.json', [{ question: 'Any constraints?', header: 'Constraints', options: [{ label: 'None', description: 'No constraints' }] }]);
     writeFileSync(join(sessionDir, 'feedback.md'), 'Please add a budget section.\n', 'utf8');
 
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir });
+    // AT-amendment-2: the pending questions.json turn now requires an
+    // explicit phase === 'awaiting-answers' — the fixture's questions.json
+    // is genuinely pending, so this is the real phase a live session would
+    // carry at this checkpoint.
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-answers' });
     const turns = okTurns(result);
 
     assert.equal(turns.length, 7, `expected 7 turns, got: ${JSON.stringify(turns)}`);
@@ -166,7 +188,7 @@ describe('deriveSessionTranscript — stage defaulting comes from the descriptor
     writeFileSync(join(sessionDir, 'prompt.md'), 'A brief.\n', 'utf8');
 
     const descriptor = instructionsDescriptor({ stages: ['demo'], defaultStage: 'demo' });
-    const turns = okTurns(deriveSessionTranscript({ descriptor, sessionDir }));
+    const turns = okTurns(deriveSessionTranscript({ descriptor, sessionDir, phase: 'drafting' }));
 
     assert.equal(turns.length, 1);
     assert.equal(turns[0].stage, 'demo', 'the turn stage must come from descriptor.defaultStage, not a literal default baked into the derivation');
@@ -185,7 +207,7 @@ describe('deriveSessionTranscript — stage machinery is genuinely exercised (fa
       { round: 1, stage: 'no-such-stage', answers: [{ question: 'Q1?', answer: 'A1.' }] },
     ]);
     const descriptor = architectDescriptor({ stages: ['roadmap'], defaultStage: 'roadmap' });
-    const result = deriveSessionTranscript({ descriptor, sessionDir }) as { ok: boolean; error?: { message: string } };
+    const result = deriveSessionTranscript({ descriptor, sessionDir, phase: 'awaiting-verdict' }) as { ok: boolean; error?: { message: string } };
     assert.equal(result.ok, false, 'an unknown stage marker must fail closed, not default or silently drop the turn');
     assert.ok(result.error && result.error.message.includes('no-such-stage'), 'error must name the offending value');
     assert.ok(result.error && result.error.message.includes('roadmap'), 'error must name the descriptor\'s allowed stage set');
@@ -199,7 +221,7 @@ describe('deriveSessionTranscript — stage machinery is genuinely exercised (fa
       { round: 3, stage: 'roadmap', answers: [{ question: 'Roadmap Q?', answer: 'Roadmap A.' }] },
     ]);
     const descriptor = architectDescriptor({ stages: ['contract', 'instructions', 'secrets', 'demo', 'roadmap'], defaultStage: 'contract' });
-    const turns = okTurns(deriveSessionTranscript({ descriptor, sessionDir }));
+    const turns = okTurns(deriveSessionTranscript({ descriptor, sessionDir, phase: 'awaiting-verdict' }));
 
     assert.equal(turns.length, 6, `expected 3 rounds × 2 turns, got: ${JSON.stringify(turns)}`);
     assert.deepEqual(
@@ -216,7 +238,7 @@ describe('deriveSessionTranscript — stage machinery is genuinely exercised (fa
 describe('deriveSessionTranscript — empty session honesty', () => {
   it('AT-23: an empty session dir → {ok:true, turns:[]} with sourcesScanned NON-empty, naming the files it looked for', () => {
     const sessionDir = makeTmpDir('transcript-empty-');
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir }) as {
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as {
       ok: true;
       turns: unknown[];
       sourcesScanned: string[];
@@ -238,28 +260,28 @@ describe('deriveSessionTranscript — malformed answers.json fails closed', () =
   it('AT-24: answers.json is not an array at all → {ok:false}', () => {
     const sessionDir = makeTmpDir('transcript-malformed-a-');
     writeJson(sessionDir, 'answers.json', { round: 1, answers: [] });
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir }) as { ok: boolean };
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as { ok: boolean };
     assert.equal(result.ok, false);
   });
 
   it('AT-25: a round object is missing the "answers" key → {ok:false}', () => {
     const sessionDir = makeTmpDir('transcript-malformed-b-');
     writeJson(sessionDir, 'answers.json', [{ round: 1 }]);
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir }) as { ok: boolean };
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as { ok: boolean };
     assert.equal(result.ok, false);
   });
 
   it('AT-26: a round\'s "answers" is not an array (a string) → {ok:false}', () => {
     const sessionDir = makeTmpDir('transcript-malformed-c-');
     writeJson(sessionDir, 'answers.json', [{ round: 1, answers: 'not-an-array' }]);
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir }) as { ok: boolean };
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as { ok: boolean };
     assert.equal(result.ok, false);
   });
 
   it('AT-27: an answer entry\'s "question" is not a string (a number) → {ok:false}, never a turn with undefined/empty text', () => {
     const sessionDir = makeTmpDir('transcript-malformed-d-');
     writeJson(sessionDir, 'answers.json', [{ round: 1, answers: [{ question: 42, answer: 'A1.' }] }]);
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir }) as { ok: boolean };
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' }) as { ok: boolean };
     assert.equal(result.ok, false, 'a non-string question must fail closed, never surface as a turn with undefined/empty text');
   });
 });
@@ -272,7 +294,7 @@ describe('deriveSessionTranscript — project-brain has no interview', () => {
   it('AT-28: a project-brain session dir with only prompt.md → exactly ONE turn, never a fabricated agent turn', () => {
     const sessionDir = makeTmpDir('transcript-pbrain-');
     writeFileSync(join(sessionDir, 'prompt.md'), 'Seed the brain from the current code.\n', 'utf8');
-    const turns = okTurns(deriveSessionTranscript({ descriptor: projectBrainDescriptor(), sessionDir }));
+    const turns = okTurns(deriveSessionTranscript({ descriptor: projectBrainDescriptor(), sessionDir, phase: 'analyzing' }));
     assert.equal(turns.length, 1, `project-brain must be honestly one turn, got: ${JSON.stringify(turns)}`);
     assert.equal(turns[0].role, 'operator');
     assert.equal(turns[0].source, 'prompt.md');
@@ -411,10 +433,18 @@ describe('deriveSessionArtifact — a reserved artifact kind is never a stub', (
 // Traversal / escape — REAL symlinks, realpath is the only thing that catches
 // them (a lexical prefix check on the entry's OWN path always passes, since
 // the symlink itself lives inside sessionDir) (AT-35, 36, 37)
+//
+// AT amendment (reviewer finding): each escape AT below now carries a
+// POSITIVE CONTROL — a plain, non-symlinked sibling file in the SAME fixture
+// whose content MUST appear in the result. Without it, an implementation
+// that simply never reads the target directory AT ALL would also pass
+// (absence of the secret proves nothing if nothing was ever read). The
+// positive control proves the guard actually DISCRIMINATES: real content in,
+// escaped content out.
 // ===========================================================================
 
 describe('escape via symlink — realpath required, lexical prefix checks are insufficient', () => {
-  it('AT-35: deriveSessionTranscript — idea.md is a symlink pointing OUTSIDE sessionDir → the escaped secret content is never returned', () => {
+  it('AT-35: deriveSessionTranscript — idea.md is a symlink pointing OUTSIDE sessionDir → the escaped secret content is never returned, but a real sibling file IS (positive control)', () => {
     const outsideDir = makeTmpDir('transcript-escape-outside-');
     const secretPath = join(outsideDir, 'secret.txt');
     const SECRET_MARKER = 'TOP-SECRET-TRANSCRIPT-MARKER-8271';
@@ -425,12 +455,19 @@ describe('escape via symlink — realpath required, lexical prefix checks are in
     // `path.startsWith(sessionDir)` on `idea.md`'s path trivially passes.
     // Only resolving via realpathSync(...) reveals the target escapes.
     symlinkSync(secretPath, join(sessionDir, 'idea.md'));
+    // Positive control: a plain, non-symlinked sibling file the derivation
+    // MUST still read and surface — proves the guard discriminates rather
+    // than just refusing to read anything.
+    const REAL_MARKER = 'REAL-NON-ESCAPED-FEEDBACK-CONTENT-3391';
+    writeFileSync(join(sessionDir, 'feedback.md'), REAL_MARKER + '\n', 'utf8');
 
-    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir });
-    assert.ok(!JSON.stringify(result).includes(SECRET_MARKER), 'the escaped file\'s content must never appear in the derived transcript');
+    const result = deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-verdict' });
+    const resultText = JSON.stringify(result);
+    assert.ok(!resultText.includes(SECRET_MARKER), 'the escaped file\'s content must never appear in the derived transcript');
+    assert.ok(resultText.includes(REAL_MARKER), 'a plain, non-symlinked sibling file\'s content MUST still appear — the guard must discriminate, not just refuse to read anything');
   });
 
-  it('AT-36: deriveSessionArtifact (roadmap-draft) — a manifests/ entry is a symlink pointing OUTSIDE sessionDir → its content is never returned', () => {
+  it('AT-36: deriveSessionArtifact (roadmap-draft) — a manifests/ entry is a symlink pointing OUTSIDE sessionDir → its content is never returned, but a real sibling manifest IS (positive control)', () => {
     const outsideDir = makeTmpDir('artifact-escape-outside-');
     const SECRET_MARKER = 'TOP-SECRET-MANIFEST-MARKER-5533';
     const secretManifestPath = join(outsideDir, 'secret-manifest.md');
@@ -440,12 +477,18 @@ describe('escape via symlink — realpath required, lexical prefix checks are in
     const manifestsDir = join(sessionDir, 'manifests');
     mkdirSync(manifestsDir, { recursive: true });
     symlinkSync(secretManifestPath, join(manifestsDir, 'evil.md'));
+    // Positive control: a plain, non-symlinked sibling manifest — MUST
+    // surface as a real row.
+    const REAL_MARKER = 'INIT-2026-01-03-real-sibling-manifest';
+    writeFileSync(join(manifestsDir, 'real-sibling.md'), serializeManifest(realManifest({ initiative_id: REAL_MARKER })), 'utf8');
 
     const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir });
-    assert.ok(!JSON.stringify(artifact).includes(SECRET_MARKER), 'the escaped manifest\'s content must never surface as a row');
+    const artifactText = JSON.stringify(artifact);
+    assert.ok(!artifactText.includes(SECRET_MARKER), 'the escaped manifest\'s content must never surface as a row');
+    assert.ok(artifactText.includes(REAL_MARKER), 'a plain, non-symlinked sibling manifest MUST still surface as a row — the guard must discriminate, not just refuse to read anything');
   });
 
-  it('AT-37: deriveSessionArtifact (brain-structure) — a themes/ entry is a symlink pointing OUTSIDE sessionDir → its content is never returned', () => {
+  it('AT-37: deriveSessionArtifact (brain-structure) — a themes/ entry is a symlink pointing OUTSIDE sessionDir → its content is never returned, but a real sibling theme IS (positive control)', () => {
     const outsideDir = makeTmpDir('brain-escape-outside-');
     const SECRET_MARKER = 'TOP-SECRET-THEME-MARKER-9042';
     const secretThemePath = join(outsideDir, 'secret-theme.md');
@@ -455,8 +498,55 @@ describe('escape via symlink — realpath required, lexical prefix checks are in
     const themesDir = join(sessionDir, 'themes');
     mkdirSync(themesDir, { recursive: true });
     symlinkSync(secretThemePath, join(themesDir, 'evil.md'));
+    // Positive control: a plain, non-symlinked sibling theme file — MUST
+    // surface in files[].
+    const REAL_MARKER = 'REAL-NON-ESCAPED-THEME-CONTENT-7714';
+    writeFileSync(join(themesDir, 'real-sibling.md'), `# ${REAL_MARKER}\n`, 'utf8');
 
     const artifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir });
-    assert.ok(!JSON.stringify(artifact).includes(SECRET_MARKER), 'the escaped theme file\'s content must never surface in files[]');
+    const artifactText = JSON.stringify(artifact);
+    assert.ok(!artifactText.includes(SECRET_MARKER), 'the escaped theme file\'s content must never surface in files[]');
+    assert.ok(artifactText.includes(REAL_MARKER), 'a plain, non-symlinked sibling theme file MUST still surface in files[] — the guard must discriminate, not just refuse to read anything');
+  });
+});
+
+// ===========================================================================
+// AT-amendment-2 — questions.json pending-ness is phase-driven, not a
+// text-based set-difference (AT-57, AT-58). See the module header for the
+// full T2-ratified contract this supersedes.
+// ===========================================================================
+
+describe('deriveSessionTranscript — questions.json pending-ness is phase-driven (AT-amendment-2)', () => {
+  it('AT-57: a question re-asked VERBATIM in questions.json, phase "awaiting-answers" → the pending agent turn IS present (the defect this pins — the old text-diff logic silently dropped this)', () => {
+    const sessionDir = makeTmpDir('transcript-reask-');
+    writeJson(sessionDir, 'answers.json', [
+      { round: 1, answers: [{ question: 'What is the project name?', answer: 'Foo.' }] },
+    ]);
+    // A genuine, legitimate shape: the interview re-asks the SAME question
+    // verbatim (e.g. the prior answer was ambiguous or rejected) — this is
+    // NOT a stale leftover, the runner is truly waiting on it again.
+    writeJson(sessionDir, 'questions.json', [{ question: 'What is the project name?', header: 'Name', options: [] }]);
+
+    const turns = okTurns(deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'awaiting-answers' }));
+    const pending = turns.find((t) => t.source === 'questions.json');
+    assert.ok(pending, `expected a pending agent turn for the verbatim re-ask when phase is "awaiting-answers", got: ${JSON.stringify(turns)}`);
+    assert.equal(pending!.role, 'agent');
+    assert.equal(pending!.text, 'What is the project name?');
+  });
+
+  it('AT-58: a stale questions.json present but phase is NOT "awaiting-answers" → no pending turn is derived, regardless of the question\'s text', () => {
+    const sessionDir = makeTmpDir('transcript-stale-question-');
+    writeJson(sessionDir, 'answers.json', [
+      { round: 1, answers: [{ question: 'Q1?', answer: 'A1.' }] },
+    ]);
+    // A genuinely NEW, never-before-answered question sitting in
+    // questions.json — under the OLD text-diff contract this would have been
+    // treated as "unanswered" and surfaced as pending; under the phase-driven
+    // contract it must NOT, because the session has already moved past the
+    // interview (phase: drafting) — this file is stale leftover.
+    writeJson(sessionDir, 'questions.json', [{ question: 'A brand new never-answered question?', header: 'New', options: [] }]);
+
+    const turns = okTurns(deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'drafting' }));
+    assert.ok(!turns.some((t) => t.source === 'questions.json'), `expected NO pending turn when phase is not "awaiting-answers", got: ${JSON.stringify(turns)}`);
   });
 });
