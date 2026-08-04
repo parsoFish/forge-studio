@@ -11,11 +11,11 @@ runtime:
 
 # Dependency diff review
 
-> A community-seed package shipped with forge (`studio/community/skills/`). Its
-> `runtime:` and `allowed-tools:` frontmatter is **permanently quarantined at
-> install** — installing a community package can never grant it a runtime or its
-> own tool permissions. Making it runnable is a separate, explicit act in the
-> Agent Builder.
+> A community-seed package shipped with forge (`studio/community/skills/`).
+> Its `runtime:` and `allowed-tools:` frontmatter is
+> **permanently quarantined at install** — installing a community package
+> can never grant it a runtime or its own tool permissions. Making it
+> runnable is a separate, explicit act in the Agent Builder.
 
 ## When to use
 
