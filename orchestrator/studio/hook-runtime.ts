@@ -18,6 +18,32 @@
  * *** see the var missing and may misbehave), it does NOT and cannot detect
  * *** what the running process actually reads. Two different, independently
  * *** true properties; neither substitutes for the other.
+ * ***
+ * *** `env` is the ONE permission dimension that gets real prevention. `read`
+ * *** and `network` do NOT — 2026-08-04 finding, stated here rather than left
+ * *** to be inferred: `permissions.read`/`permissions.network` are declared,
+ * *** and cross-checked by hook-scan.ts's pre-approval STATIC TEXT SCAN, but
+ * *** nothing at spawn time actually restricts what the real `bash` process
+ * *** can touch. A hook can read any file the OS user can read, and reach the
+ * *** network via anything the scan's four literal patterns
+ * *** (curl/wget/fetch(/nc/raw-socket) don't happen to match — bash's
+ * *** `/dev/tcp/` redirection, `python3 -c`, `ssh`, `dig` for DNS exfil, and
+ * *** so on. Real enforcement of either would mean an OS-level process
+ * *** isolator (a restricted user/namespace/container/seccomp policy) — this
+ * *** repo's standing rule (CLAUDE.md: "Never re-invent a job queue, worker
+ * *** pool, resource controller, or process isolator") is not to hand-roll
+ * *** one, so this boundary is drawn here deliberately, not left unenforced
+ * *** by oversight.
+ * ***
+ * *** File WRITES are not modelled at all. `HookPermissionManifest` declares
+ * *** `env`/`read`/`network` only — there is no `write` field, and F2's scan
+ * *** names four categories (network-egress, env-read, file-read,
+ * *** obfuscation), none of which look for a write/delete. A hook can write,
+ * *** overwrite, or delete anything the OS user can, completely undeclared
+ * *** and unscanned. A half-enforced write permission (declared but not
+ * *** checked) would be worse than this — it would read as a promise this
+ * *** module cannot keep — so it is left out entirely rather than added as a
+ * *** field nothing verifies.
  *
  * `runHookScript`'s own gate is narrower than the library's
  * "has an operator approved this" state (`isHookRunnable`, hook-scan.ts): it

@@ -327,50 +327,75 @@ export function lintHookDefinitions(forgeRoot: string): Finding[] {
 }
 
 // ---------------------------------------------------------------------------
-// lintHookComposition — SYMMETRIC enforcement of the guards/hooks split.
-// Sourced from PLATFORM_GUARD_IDS (a fixed platform-vocabulary constant), not
-// studio/catalog.yaml — catalog.yaml is a display surface over these ids, not
-// their source of truth, and a lint fixture root may not seed one at all.
+// checkHookComposition — the SYMMETRIC guards/hooks-split rule, factored to a
+// PURE predicate over one agent's composition (2026-08-04, third appearance
+// of the same defect class: a rule implemented, unit-tested, and inert
+// because production never invokes it — see cli/bridge-studio-writes-hook-
+// unknown.test.ts's header). `lintHookComposition` below scans ON-DISK
+// agents; the bridge PUT route (cli/bridge-studio-writes.ts) needs the SAME
+// rule applied to the IN-MEMORY candidate composition it is about to write,
+// which is NOT yet on disk — re-scanning disk there would silently miss the
+// very save it's supposed to gate. One shared rule, two callers, rather than
+// a second copy that could drift from this one.
+// ---------------------------------------------------------------------------
+
+export function checkHookComposition(
+  agentSlug: string,
+  composition: { hooks: readonly string[]; guards: readonly string[] },
+  guardIds: ReadonlySet<string>,
+  hookIds: ReadonlySet<string>,
+): Finding[] {
+  const findings: Finding[] = [];
+  const obj = `agent:${agentSlug}`;
+
+  for (const hookRef of composition.hooks) {
+    if (guardIds.has(hookRef)) {
+      findings.push({
+        level: 'error',
+        object: obj,
+        check: 'hook-library/guard-in-hooks',
+        message: `Agent "${agentSlug}" composes platform guard id "${hookRef}" under composition.hooks — guard ids belong under composition.guards (ADR-027 R3-03 amendment)`,
+      });
+    } else if (!hookIds.has(hookRef)) {
+      findings.push({
+        level: 'error',
+        object: obj,
+        check: 'hook-library/unknown-hook-ref',
+        message: `Agent "${agentSlug}" composes hook id "${hookRef}" under composition.hooks which resolves to neither a platform guard nor a real library hook (studio/hooks/${hookRef}/)`,
+      });
+    }
+  }
+
+  for (const guardRef of composition.guards) {
+    if (!guardIds.has(guardRef) && hookIds.has(guardRef)) {
+      findings.push({
+        level: 'error',
+        object: obj,
+        check: 'hook-library/hook-in-guards',
+        message: `Agent "${agentSlug}" composes library hook id "${guardRef}" under composition.guards — library hook ids belong under composition.hooks (ADR-027 R3-03 amendment)`,
+      });
+    }
+  }
+
+  return findings;
+}
+
+// ---------------------------------------------------------------------------
+// lintHookComposition — SYMMETRIC enforcement of the guards/hooks split,
+// scanned across every ON-DISK agent. Sourced from PLATFORM_GUARD_IDS (a
+// fixed platform-vocabulary constant), not studio/catalog.yaml —
+// catalog.yaml is a display surface over these ids, not their source of
+// truth, and a lint fixture root may not seed one at all.
 // ---------------------------------------------------------------------------
 
 export function lintHookComposition(forgeRoot: string): Finding[] {
-  const findings: Finding[] = [];
   const guardIds = new Set<string>(PLATFORM_GUARD_IDS);
   const hookIds = new Set(listHookIds(forgeRoot));
   const agents = listAgentDefinitionsResilient(forgeRoot);
 
+  const findings: Finding[] = [];
   for (const agent of agents) {
-    const obj = `agent:${agent.slug}`;
-
-    for (const hookRef of agent.composition.hooks) {
-      if (guardIds.has(hookRef)) {
-        findings.push({
-          level: 'error',
-          object: obj,
-          check: 'hook-library/guard-in-hooks',
-          message: `Agent "${agent.slug}" composes platform guard id "${hookRef}" under composition.hooks — guard ids belong under composition.guards (ADR-027 R3-03 amendment)`,
-        });
-      } else if (!hookIds.has(hookRef)) {
-        findings.push({
-          level: 'error',
-          object: obj,
-          check: 'hook-library/unknown-hook-ref',
-          message: `Agent "${agent.slug}" composes hook id "${hookRef}" under composition.hooks which resolves to neither a platform guard nor a real library hook (studio/hooks/${hookRef}/)`,
-        });
-      }
-    }
-
-    for (const guardRef of agent.composition.guards) {
-      if (!guardIds.has(guardRef) && hookIds.has(guardRef)) {
-        findings.push({
-          level: 'error',
-          object: obj,
-          check: 'hook-library/hook-in-guards',
-          message: `Agent "${agent.slug}" composes library hook id "${guardRef}" under composition.guards — library hook ids belong under composition.hooks (ADR-027 R3-03 amendment)`,
-        });
-      }
-    }
+    findings.push(...checkHookComposition(agent.slug, agent.composition, guardIds, hookIds));
   }
-
   return findings;
 }

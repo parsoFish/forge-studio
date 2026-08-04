@@ -35,6 +35,8 @@ import {
   serializeFlowDefinition,
   listFlowIds,
 } from '../orchestrator/studio/registry.ts';
+import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
+import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir, skillDir, skillPath } from '../orchestrator/skill-path.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
@@ -449,8 +451,27 @@ export async function handleStudioWriteRoutes(
         }
       }
 
+      // 5c. Symmetric hooks/guards composition check (ADR-027 R3-03 amendment;
+      // 2026-08-04 finding — the THIRD appearance of the same defect class in
+      // this initiative: a rule implemented and unit-tested but inert because
+      // production never invokes it). `checkHookComposition` is the SAME pure
+      // predicate `lintHookComposition` runs over on-disk agents
+      // (orchestrator/studio/hook-library.ts) — applied HERE to the
+      // IN-MEMORY `merged.composition` candidate, since it is not yet
+      // written; re-scanning disk would miss the very save this gates.
+      // PLATFORM_GUARD_IDS is a fixed platform-vocabulary constant (not
+      // catalog-sourced), and listHookIds reads studio/hooks/ directly, so
+      // neither needs the catalog-load guard the guard-unknown check above
+      // needs.
+      const hookCompositionFindings = checkHookComposition(
+        slug,
+        merged.composition,
+        new Set(PLATFORM_GUARD_IDS),
+        new Set(listHookIds(ctx.forgeRoot)),
+      );
+
       // 6. Validate — reject on any error-level finding
-      const findings = validateAgent(merged, undefined, validGuardIds);
+      const findings = [...validateAgent(merged, undefined, validGuardIds), ...hookCompositionFindings];
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {
         sendJson(res, 400, { error: 'validation failed', findings }, origin);

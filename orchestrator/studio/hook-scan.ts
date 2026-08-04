@@ -38,6 +38,24 @@
  * spells a flagged token as a contiguous literal, and uses neither base64 nor
  * eval, defeats it. This is a documented boundary, not a bug to be quietly
  * patched — see hook-scan.test.ts's own pinned "DOCUMENTED GAP" case.
+ *
+ * A SECOND, broader honest limit (2026-08-04 finding): this whole module is a
+ * PRE-APPROVAL static scan, not a runtime enforcement mechanism, for three of
+ * its four categories. `env` is the one dimension `hook-runtime.ts`'s
+ * `buildHookChildEnv` actually PREVENTS at spawn time (structural env
+ * stripping — see that module's own honesty block). `network-egress` and
+ * `file-read` are declared (`permissions.network`/`permissions.read`) and
+ * scanned for HERE, but nothing at spawn time stops the real `bash` process
+ * from making a network call the four literal egress patterns don't match
+ * (`/dev/tcp/`, `python3 -c`, `ssh`, `dig`, ...) or reading any file the OS
+ * user can read. `file-write` isn't modelled at all — no manifest field, no
+ * fifth scan category — so a hook can write, overwrite, or delete anything
+ * the OS user can, entirely undeclared. Closing this for real means an
+ * OS-level process isolator (restricted user/namespace/container/seccomp);
+ * this repo's standing rule is not to re-invent one (CLAUDE.md: "Never
+ * re-invent a job queue, worker pool, resource controller, or process
+ * isolator"), so the boundary is drawn at "declared + statically scanned,
+ * not runtime-enforced" on purpose, not by oversight.
  */
 
 import { createHash } from 'node:crypto';
@@ -71,9 +89,22 @@ export interface HookScanReport {
   findings: HookScanFinding[];
 }
 
+/**
+ * 2026-08-04 JOB B (second post-migration adversarial review): a pin that
+ * covers only HALF of what it protects is not a pin. An approval means "this
+ * exact script WITH these exact declared permissions" — `permissions.env`/
+ * `read`/`network` live in `hook.yaml`, a separate file from the script, so
+ * pinning `scriptHash` alone let an operator (or attacker) widen a hook's
+ * granted permissions after approval without ever touching the script bytes,
+ * and the ledger would keep reporting the hook needed no re-review. TWO
+ * separate named hashes — never one concatenated blob, never a whole-package
+ * hash covering `name`/`description`/`matcher`/`on` too — so a mismatch
+ * unambiguously tells an operator/log WHICH half changed.
+ */
 export interface HookApprovalLedgerEntry {
   id: string;
-  contentHash: string;
+  scriptHash: string;
+  permissionsHash: string;
   overridden: boolean;
   reason?: string;
   approvedAt: string;
@@ -260,11 +291,32 @@ export function scanHookPackage(forgeRoot: string, id: string): HookScanReport {
 }
 
 // ---------------------------------------------------------------------------
-// hashHookScript — deterministic content pin for the approval ledger.
+// hashHookScript / hashHookPermissions — deterministic content pins for the
+// approval ledger, deliberately SEPARATE (see HookApprovalLedgerEntry's own
+// doc comment / JOB B): a mismatch on one must never be mistaken for the
+// other.
 // ---------------------------------------------------------------------------
 
 export function hashHookScript(body: string): string {
   return `sha256:${createHash('sha256').update(body, 'utf8').digest('hex')}`;
+}
+
+/**
+ * Pure, content-addressed hash over a hook's PERMISSION MANIFEST — the
+ * approval ledger's second pin (JOB B). Canonicalized before hashing:
+ * `env`/`read` are SORTED so a pure reordering of an already-granted list
+ * (no actual change to the grant set) does not spuriously demand
+ * re-approval, while any REAL change — a var added/removed, `network`
+ * flipped either direction, tightening as much as widening — produces a
+ * different hash and correctly forces review.
+ */
+export function hashHookPermissions(permissions: HookPermissionManifest): string {
+  const canonical = {
+    env: [...permissions.env].sort((a, b) => a.localeCompare(b)),
+    read: [...permissions.read].sort((a, b) => a.localeCompare(b)),
+    network: permissions.network,
+  };
+  return `sha256:${createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex')}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -303,7 +355,8 @@ function parseHookApprovalLedgerEntries(raw: unknown, file: string): HookApprova
     seenIds.add(id);
     return {
       id,
-      contentHash: reqString(e, 'contentHash', file),
+      scriptHash: reqString(e, 'scriptHash', file),
+      permissionsHash: reqString(e, 'permissionsHash', file),
       overridden: e['overridden'] === true,
       reason: optString(e, 'reason'),
       approvedAt: reqString(e, 'approvedAt', file),
@@ -348,16 +401,23 @@ export function writeHookApprovalLedgerEntry(forgeRoot: string, entry: HookAppro
 
 // ---------------------------------------------------------------------------
 // Trust state — hookRunState re-scans CURRENT bytes every call (never trusts
-// a cached verdict), and cross-checks the ledger's pinned hash against the
-// freshly-recomputed one so an edit after approval falls back to needing
-// review (mirrors R3-01's changed-hash-forces-re-review rule).
+// a cached verdict), and cross-checks BOTH of the ledger's pinned hashes
+// (script AND permissions — JOB B) against freshly-recomputed ones so an
+// edit to EITHER the script or the manifest after approval falls back to
+// needing review (mirrors R3-01's changed-hash-forces-re-review rule, now
+// covering the pair rather than the script alone).
 // ---------------------------------------------------------------------------
 
 export function hookRunState(forgeRoot: string, id: string): HookRunState {
   const report = scanHookPackage(forgeRoot, id);
-  const currentHash = hashHookScript(readHookScriptBody(forgeRoot, id));
+  const def = loadHookDefinition(id, forgeRoot);
+  const currentScriptHash = hashHookScript(readHookScriptBody(forgeRoot, id));
+  const currentPermissionsHash = hashHookPermissions(def.permissions);
   const ledgerEntry = readHookApprovalLedger(forgeRoot).get(id);
-  const needsReview = !ledgerEntry || ledgerEntry.contentHash !== currentHash;
+  const needsReview =
+    !ledgerEntry ||
+    ledgerEntry.scriptHash !== currentScriptHash ||
+    ledgerEntry.permissionsHash !== currentPermissionsHash;
   const runnable = !needsReview && (report.verdict !== 'blocked' || Boolean(ledgerEntry?.overridden));
   return { verdict: report.verdict, runnable, needsReview };
 }
@@ -377,10 +437,11 @@ export function approveHook(input: { forgeRoot: string; id: string }): void {
       `approveHook: hook "${id}" scan verdict is "blocked" — approveHook refuses a blocked hook; use overrideHookBlock to explicitly accept the risk`,
     );
   }
-  const currentHash = hashHookScript(readHookScriptBody(forgeRoot, id));
+  const def = loadHookDefinition(id, forgeRoot);
   writeHookApprovalLedgerEntry(forgeRoot, {
     id,
-    contentHash: currentHash,
+    scriptHash: hashHookScript(readHookScriptBody(forgeRoot, id)),
+    permissionsHash: hashHookPermissions(def.permissions),
     overridden: false,
     approvedAt: new Date().toISOString(),
   });
@@ -394,10 +455,11 @@ export function overrideHookBlock(input: { forgeRoot: string; id: string; reason
   if (!reason || !reason.trim()) {
     throw new Error('overrideHookBlock: a non-empty reason is required — the override must be explainable, not silent');
   }
-  const currentHash = hashHookScript(readHookScriptBody(forgeRoot, id));
+  const def = loadHookDefinition(id, forgeRoot);
   writeHookApprovalLedgerEntry(forgeRoot, {
     id,
-    contentHash: currentHash,
+    scriptHash: hashHookScript(readHookScriptBody(forgeRoot, id)),
+    permissionsHash: hashHookPermissions(def.permissions),
     overridden: true,
     reason,
     approvedAt: new Date().toISOString(),
