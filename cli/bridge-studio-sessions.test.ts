@@ -209,41 +209,87 @@ after(async () => {
 // 200 happy path — the three real kinds (AT-38, 39, 40)
 // ---------------------------------------------------------------------------
 
+type SessionShellTurn = { index: number; role: string; stage: string; text: string; source: string };
+type SessionShellBody = {
+  ok: boolean; kind: string; sessionId: string; project: string; phase: string;
+  stages: string[]; defaultStage: string; turns: SessionShellTurn[]; artifact: unknown;
+};
+
 test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the full shell payload', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}?project=demoproj`);
-  assert.equal(res.status, 200, JSON.stringify(await res.text().catch(() => '')));
-  const body = (await res.json()) as {
-    ok: boolean; kind: string; sessionId: string; project: string; phase: string;
-    stages: string[]; defaultStage: string; turns: unknown[]; artifact: unknown;
-  };
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+
   assert.equal(body.ok, true);
   assert.equal(body.kind, 'architect');
   assert.equal(body.sessionId, REAL_ARCHITECT_SESSION);
   assert.equal(body.project, 'demoproj');
-  assert.equal(body.phase, 'awaiting-verdict');
+  assert.equal(body.phase, 'awaiting-verdict', 'phase must be the real value read from the session\'s status.json');
   assert.deepEqual(body.stages, ['roadmap']);
   assert.equal(body.defaultStage, 'roadmap');
-  assert.ok(Array.isArray(body.turns) && body.turns.length > 0);
-  assert.ok(body.artifact && typeof body.artifact === 'object');
+
+  // The fixture is idea.md + a single answered round (no questions.json, no
+  // feedback.md) — the exact, known transcript this session must derive.
+  assert.equal(body.turns.length, 3, `expected idea.md + round-1 agent + round-1 operator, got: ${JSON.stringify(body.turns)}`);
+  assert.deepEqual(body.turns.map((t) => t.source), ['idea.md', 'answers.json#round-1', 'answers.json#round-1']);
+  assert.deepEqual(body.turns.map((t) => t.role), ['operator', 'agent', 'operator']);
+
+  const artifact = body.artifact as { kind: string; rows: unknown[] };
+  assert.equal(artifact.kind, 'roadmap-draft');
+  assert.deepEqual(artifact.rows, [], 'the fixture\'s manifests/ dir is empty — the artifact must be an honest empty roadmap, not a fabricated row');
 });
 
 test('AT-39: GET /api/studio/sessions/instructions/<id>?project=<p> returns the full shell payload', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${REAL_INSTRUCTIONS_SESSION}?project=demoproj`);
-  assert.equal(res.status, 200, JSON.stringify(await res.text().catch(() => '')));
-  const body = (await res.json()) as { ok: boolean; kind: string; phase: string; artifact: { body?: string } };
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+
   assert.equal(body.ok, true);
   assert.equal(body.kind, 'instructions');
-  assert.equal(body.phase, 'drafting');
-  assert.ok(body.artifact);
+  assert.equal(body.sessionId, REAL_INSTRUCTIONS_SESSION);
+  assert.equal(body.project, 'demoproj');
+  assert.equal(body.phase, 'drafting', 'phase must be the real value read from the session\'s status.json');
+  assert.deepEqual(body.stages, ['instructions']);
+  assert.equal(body.defaultStage, 'instructions');
+
+  // The fixture is prompt.md only (no answers.json/questions.json/feedback.md).
+  assert.equal(body.turns.length, 1, `expected the single prompt.md operator turn, got: ${JSON.stringify(body.turns)}`);
+  assert.equal(body.turns[0].role, 'operator');
+  assert.equal(body.turns[0].source, 'prompt.md');
+
+  const artifact = body.artifact as { kind: string; body: string | null; hasDraft: boolean };
+  assert.equal(artifact.kind, 'markdown-draft');
+  assert.equal(artifact.body, '# AGENTS.md\n\nDraft body.\n', 'the draft body must be byte-faithful, including the trailing newline');
+  assert.equal(artifact.hasDraft, true);
 });
 
 test('AT-40: GET /api/studio/sessions/project-brain/<id>?project=<p> returns the full shell payload, honestly one turn', async () => {
   const res = await fetch(`${bridgeUrl}/api/studio/sessions/project-brain/${REAL_PROJECT_BRAIN_SESSION}?project=demoproj`);
-  assert.equal(res.status, 200, JSON.stringify(await res.text().catch(() => '')));
-  const body = (await res.json()) as { ok: boolean; kind: string; turns: unknown[] };
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+
   assert.equal(body.ok, true);
   assert.equal(body.kind, 'project-brain');
-  assert.equal(body.turns.length, 1, 'project-brain must surface honestly as one turn, no fabricated interview');
+  assert.equal(body.sessionId, REAL_PROJECT_BRAIN_SESSION);
+  assert.equal(body.project, 'demoproj');
+  assert.equal(body.phase, 'analyzing', 'phase must be the real value read from the session\'s status.json');
+  assert.deepEqual(body.stages, ['brain']);
+  assert.equal(body.defaultStage, 'brain');
+
+  // project-brain's runner has NO interview machinery (no answers.json/
+  // questions.json/feedback.md ever exist for this kind) — one turn here is
+  // the honest, complete transcript, not a truncation of something longer.
+  assert.equal(body.turns.length, 1, `project-brain must surface honestly as one turn, no fabricated interview, got: ${JSON.stringify(body.turns)}`);
+  assert.equal(body.turns[0].role, 'operator');
+  assert.equal(body.turns[0].source, 'prompt.md');
+
+  const artifact = body.artifact as { kind: string; themeCount: number; files: Array<{ path: string; body: string }> };
+  assert.equal(artifact.kind, 'brain-structure');
+  assert.equal(artifact.themeCount, 1);
+  assert.ok(artifact.files.some((f) => f.path.includes('alpha.md')), 'the fixture\'s themes/alpha.md must appear in files');
 });
 
 // ---------------------------------------------------------------------------
