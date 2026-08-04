@@ -1,0 +1,482 @@
+/**
+ * Forge Studio community-browser bridge routes (R3-07-F2/F3,
+ * `_wave5/specs/R3-07.md`).
+ *
+ * Owns EVERY `/api/studio/community*` route:
+ *
+ *   GET  /api/studio/community            → { hubs, items } (D1: derived from
+ *        WI-1's `hubsWithCounts` / `listCommunityIndex` — no fourth declared
+ *        list; each item is projected onto the wire shape below)
+ *   GET  /api/studio/community/:kind/:id  → the item plus kind-appropriate
+ *        payload: `files` for vendored skill/hook packages, `scan` (a REAL,
+ *        pre-install run of R3-03's scanner over the vendored bytes) for
+ *        hooks, `capabilities`/`capabilitiesSource`/`install`/`config`/`probe`
+ *        for mcp/tool (mirrors bridge-studio-connections.ts's own detail
+ *        shape exactly).
+ *   POST /api/studio/community/:kind/:id/install → dispatches to whichever
+ *        already-merged pipeline `routeCommunityInstall` names — this module
+ *        never decides trust, it only routes to the pipeline that does.
+ *
+ * D2 (structural negative AC): this module never approves, overrides, or
+ * mutates trust for anything — every branch below either materialises a
+ * quarantined draft (the owning pipeline's own contract) or 400/404s. No
+ * function in this file can turn an installed-but-unreviewed object into a
+ * trusted one (`cli/community-no-trust-decisions.test.ts` scans this file's
+ * source text for the five functions that could).
+ *
+ * WIRE PROJECTION — WI-1's `CommunityItem` (orchestrator/studio/
+ * community-index.ts) carries `description?`/`probeState?` as narrow/optional
+ * facts; the wire item below is a STRICTER, always-present projection built
+ * for the client's refuse-don't-coerce parser
+ * (forge-ui/lib/community-client.ts):
+ *
+ *   - `desc` is ALWAYS a string — a source record with no description
+ *     renders the honest sentinel "No description published." (same idiom
+ *     D5 already uses for signals: state the absence, never fabricate content
+ *     or default to "").
+ *   - `upstream` is the item's OWN real source URL — a vendored item's own
+ *     forge-seed URL (matches VENDORED_UPSTREAM_SOURCE, the same real,
+ *     literal constant community-index.ts/community-install.ts already use
+ *     for hub resolution), or the catalog `source`/connection `provenance`
+ *     field for a non-vendored item. Read from the SAME primary records WI-1
+ *     itself reads (studio/catalog.yaml, listConnections) — never a second
+ *     declared list, never hub.url substituted in (a hub can be a coarser
+ *     prefix of an item's own upstream link — see studio/catalog.yaml's real
+ *     MCP entries, which point at a `tree/main/src/<name>` subpath of their
+ *     hub's repo root).
+ *   - `probeState` is the REAL live probe state for a tool/mcp item (not just
+ *     the narrower "misconfigured only" fact WI-1's own type surfaces), and
+ *     null for a skill/hook (no probe concept exists for either).
+ *   - `origin` names which real registry record produced the item, mirroring
+ *     `usedByDerivation`/`carriedByDerivation`'s "name the source" device
+ *     elsewhere in this codebase.
+ *
+ * Anti-pattern #3 (this campaign's own named lesson — "a route that 500s on
+ * one bad neighbour"): the LIST route wraps each item's wire projection in
+ * its own try/catch (`toWireItemSafe`) — one item's derivation failure
+ * degrades to an honest `error` field on THAT item, never a 500 for the
+ * other N-1.
+ */
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { spawnSync } from 'node:child_process';
+import { existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import yaml from 'js-yaml';
+
+import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } from './bridge-studio.ts';
+import { isDryBridge } from './dry-bridge.ts';
+import { assertSkillSlug } from '../orchestrator/skill-path.ts';
+import {
+  hubsWithCounts,
+  listCommunityIndex,
+  communityItem,
+  readVendoredPackage,
+  type CommunityKind,
+  type CommunityItem,
+} from '../orchestrator/studio/community-index.ts';
+import { routeCommunityInstall, installCommunityHookPackage } from '../orchestrator/studio/community-install.ts';
+import { installSkillPackage, type PackageFile } from '../orchestrator/studio/skill-library.ts';
+import { scanHookScript, type HookScanReport } from '../orchestrator/studio/hook-scan.ts';
+import type { HookPermissionManifest } from '../orchestrator/studio/hook-library.ts';
+import { listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
+import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR, type ProbeState } from '../orchestrator/studio/connection-probe.ts';
+import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
+import { loadCatalog } from '../orchestrator/studio/registry.ts';
+import { reqString, stringArray, optBool } from '../orchestrator/studio/yaml-fields.ts';
+import type { CommunitySkill } from '../orchestrator/studio/types.ts';
+
+/** Bounded wall-clock budget for the real `npm install` child (production
+ *  only — every AT that exercises this route pins FORGE_ARCHITECT_NO_SPAWN=1
+ *  and never reaches this branch). Mirrors bridge-studio-connections.ts's own
+ *  constant exactly — kept local rather than shared to avoid a cross-module
+ *  coupling for one number. */
+const INSTALL_TIMEOUT_MS = 120_000;
+
+/** Every real committed vendored package (studio/community/{skills,hooks}/)
+ *  is forge-authored and attributed to this repo's own seed hub — the same
+ *  real, literal URL community-index.ts/community-install.ts already name
+ *  for hub resolution (duplicated there twice already; a third read-only
+ *  copy here follows that established convention rather than exporting a
+ *  cross-module constant for one string). */
+const VENDORED_UPSTREAM_SOURCE = 'https://github.com/parsoFish/forge-studio';
+
+/** D5's "no signals published" idiom, applied to description: a source
+ *  record with no description renders an honest statement of absence, never
+ *  a fabricated string and never a silently-dropped wire field. */
+const NO_DESCRIPTION = 'No description published.';
+
+// ---------------------------------------------------------------------------
+// Wire projection
+// ---------------------------------------------------------------------------
+
+type CommunityItemWire = {
+  id: string;
+  kind: CommunityKind;
+  name: string;
+  desc: string;
+  upstream: string;
+  hub: CommunityItem['hub'];
+  signals: CommunityItem['signals'];
+  vendored: boolean;
+  installState: CommunityItem['installState'];
+  probeState: ProbeState | null;
+  origin: string;
+  error?: string;
+};
+
+type WireCtx = {
+  communitySkills: readonly CommunitySkill[];
+  connections: readonly ConnectionDefinition[];
+};
+
+function buildWireCtx(forgeRoot: string): WireCtx {
+  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
+  const communitySkills = existsSync(catalogPath) ? (loadCatalog(catalogPath).communitySkills ?? []) : [];
+  return { communitySkills, connections: listConnections(forgeRoot) };
+}
+
+function originFor(item: CommunityItem): string {
+  if (item.kind === 'skill') {
+    return item.vendored ? `studio/community/skills/${item.id}/SKILL.md` : 'studio/catalog.yaml (community-skills)';
+  }
+  if (item.kind === 'hook') return `studio/community/hooks/${item.id}/hook.yaml`;
+  return `listConnections (studio/catalog.yaml ${item.kind}s:)`;
+}
+
+/** The item's own real source link — never hub.url substituted in (see this
+ *  file's header: a hub can be a coarser prefix of an item's own upstream). */
+function upstreamFor(item: CommunityItem, ctx: WireCtx): string {
+  if (item.vendored) return VENDORED_UPSTREAM_SOURCE;
+  if (item.kind === 'hook') {
+    // Unreachable under D1 (every hook item is sourced from a vendored
+    // package) — thrown, not guessed, if that invariant is ever violated.
+    throw new Error(`community item "${item.id}" (hook) is not vendored — every hook item must be vendored (D1)`);
+  }
+  if (item.kind === 'skill') {
+    const cs = ctx.communitySkills.find((c) => c.id === item.id);
+    if (!cs) {
+      throw new Error(`community item "${item.id}" (skill) is not vendored and has no studio/catalog.yaml community-skills entry`);
+    }
+    return cs.source;
+  }
+  const conn = ctx.connections.find((c) => c.kind === item.kind && c.id === item.id);
+  if (!conn) throw new Error(`community item "${item.id}" (${item.kind}) has no matching listConnections entry`);
+  return conn.provenance;
+}
+
+/** The REAL live probe state for a tool/mcp item; null for skill/hook (no
+ *  probe concept exists for either). Broader than WI-1's own `probeState?`
+ *  field (which only ever surfaces "misconfigured") — this surface renders
+ *  the full real state, never a narrower attributed one. */
+function probeStateFor(forgeRoot: string, item: CommunityItem, ctx: WireCtx): ProbeState | null {
+  if (item.kind !== 'tool' && item.kind !== 'mcp') return null;
+  const conn = ctx.connections.find((c) => c.kind === item.kind && c.id === item.id);
+  if (!conn) throw new Error(`community item "${item.id}" (${item.kind}) has no matching listConnections entry`);
+  return probeConnection(forgeRoot, conn).state;
+}
+
+/** One item's wire projection. THROWS on a genuine derivation failure — the
+ *  caller (`toWireItemSafe`) is the one place that degrades, so this
+ *  function itself stays honest about failing loud. */
+function toWireItem(forgeRoot: string, item: CommunityItem, ctx: WireCtx): CommunityItemWire {
+  return {
+    id: item.id,
+    kind: item.kind,
+    name: item.name,
+    desc: item.description ?? NO_DESCRIPTION,
+    upstream: upstreamFor(item, ctx),
+    hub: item.hub,
+    signals: item.signals,
+    vendored: item.vendored,
+    installState: item.installState,
+    probeState: probeStateFor(forgeRoot, item, ctx),
+    origin: originFor(item),
+    ...(item.error !== undefined ? { error: item.error } : {}),
+  };
+}
+
+/** Anti-pattern #3: one item's wire-projection failure degrades to an honest
+ *  `error` field on THAT item — never a 500 for the other N-1 rows in the
+ *  list route. */
+function toWireItemSafe(forgeRoot: string, item: CommunityItem, ctx: WireCtx): CommunityItemWire {
+  try {
+    return toWireItem(forgeRoot, item, ctx);
+  } catch (err) {
+    return {
+      id: item.id,
+      kind: item.kind,
+      name: item.name,
+      desc: item.description ?? NO_DESCRIPTION,
+      upstream: VENDORED_UPSTREAM_SOURCE,
+      hub: item.hub,
+      signals: item.signals,
+      vendored: item.vendored,
+      installState: item.installState,
+      probeState: null,
+      origin: originFor(item),
+      error: `cannot fully derive community wire item — ${sanitizeError(err)}`,
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Pre-install hook scan (D7) — scanHookScript is pure; run it on the VENDORED
+// bytes, never the installed ones (there may be no installed copy yet at
+// all). Parses hook.yaml with the SAME shared low-level field helpers
+// hook-library.ts's own loadHookDefinition uses (reqString/stringArray/
+// optBool/loadYaml) — a narrow, generic YAML read, not a re-implementation of
+// hook-library.ts's own (install-path-scoped) loader.
+// ---------------------------------------------------------------------------
+
+function scanVendoredHookPackage(id: string, files: readonly PackageFile[]): HookScanReport {
+  const label = `studio/community/hooks/${id}/hook.yaml`;
+  const yamlFile = files.find((f) => f.path === 'hook.yaml');
+  if (!yamlFile) throw new Error(`${label}: no vendored hook.yaml — cannot run the pre-install scan`);
+
+  const parsed: unknown = yaml.load(yamlFile.body);
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    throw new Error(`${label}: YAML root must be a mapping`);
+  }
+  const d = parsed as Record<string, unknown>;
+
+  const scriptRel = reqString(d, 'script', label);
+  const permsRaw = d['permissions'];
+  const permsObj = permsRaw !== null && typeof permsRaw === 'object' && !Array.isArray(permsRaw) ? (permsRaw as Record<string, unknown>) : {};
+  const permissions: HookPermissionManifest = {
+    env: stringArray(permsObj, 'env', label),
+    read: stringArray(permsObj, 'read', label),
+    network: optBool(permsObj, 'network') ?? false,
+  };
+
+  const scriptFile = files.find((f) => f.path === scriptRel);
+  if (!scriptFile) throw new Error(`${label}: declares script "${scriptRel}" but no such file exists in the vendored package`);
+
+  return scanHookScript({ body: scriptFile.body, permissions });
+}
+
+// ---------------------------------------------------------------------------
+// Id resolution — decode + slug-validate. Writes its own 400 and returns null
+// on failure, mirroring bridge-studio-connections.ts's
+// resolveConnectionOrRespond.
+// ---------------------------------------------------------------------------
+
+function decodeIdOrRespond(rawIdSegment: string, res: ServerResponse, origin: string): string | null {
+  let id: string;
+  try {
+    id = decodeURIComponent(rawIdSegment);
+  } catch {
+    sendJson(res, 400, { error: 'invalid community item id — malformed URL encoding' }, origin);
+    return null;
+  }
+  try {
+    assertSkillSlug(id);
+  } catch (err) {
+    sendJson(res, 400, { error: sanitizeError(err) }, origin);
+    return null;
+  }
+  return id;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/studio/community/:kind/:id — detail
+// ---------------------------------------------------------------------------
+
+function handleDetail(ctx: StudioContext, res: ServerResponse, origin: string, rawKind: string, rawIdSegment: string): true {
+  try {
+    const id = decodeIdOrRespond(rawIdSegment, res, origin);
+    if (id === null) return true;
+
+    // A kind segment outside the closed set simply matches no item below
+    // (communityItem/routeCommunityInstall both degrade to "not found" for
+    // an unrecognised discriminant) — no separate validation branch needed.
+    const kind = rawKind as CommunityKind;
+
+    const item = communityItem(ctx.forgeRoot, kind, id);
+    if (!item) {
+      sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
+      return true;
+    }
+
+    const wctx = buildWireCtx(ctx.forgeRoot);
+    const base = toWireItemSafe(ctx.forgeRoot, item, wctx);
+
+    if (kind === 'skill') {
+      sendJson(res, 200, { ...base, files: readVendoredPackage(ctx.forgeRoot, 'skill', id) }, origin);
+      return true;
+    }
+
+    if (kind === 'hook') {
+      const files = readVendoredPackage(ctx.forgeRoot, 'hook', id);
+      const scan = scanVendoredHookPackage(id, files);
+      sendJson(res, 200, { ...base, files, scan }, origin);
+      return true;
+    }
+
+    // mcp | tool — mirrors bridge-studio-connections.ts's toWireConnection
+    // shape exactly (D8: capabilities present iff the catalog entry declares
+    // them, never a fabricated empty array).
+    const conn = wctx.connections.find((c) => c.kind === kind && c.id === id);
+    if (!conn) {
+      sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
+      return true;
+    }
+    sendJson(res, 200, {
+      ...base,
+      install: conn.install,
+      config: conn.config,
+      probe: probeConnection(ctx.forgeRoot, conn),
+      ...(conn.capabilities !== undefined ? { capabilities: conn.capabilities } : {}),
+      ...(conn.capabilitiesSource !== undefined ? { capabilitiesSource: conn.capabilitiesSource } : {}),
+    }, origin);
+    return true;
+  } catch (err) {
+    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/community/:kind/:id/install — F3 routing (D2/D9)
+// ---------------------------------------------------------------------------
+
+/** The mcp/tool install branch — byte-identical behaviour to
+ *  bridge-studio-connections.ts's own install route (D13 refusal, D6 argv
+ *  derivation, D7 dual suppression seam) so the community surface can never
+ *  drift from R3-04's own security core. */
+function handleConnectionInstall(ctx: StudioContext, res: ServerResponse, origin: string, wctx: WireCtx, connectionId: string): true {
+  const def = wctx.connections.find((c) => c.id === connectionId && (c.kind === 'tool' || c.kind === 'mcp'));
+  if (!def) {
+    // Unreachable in practice — routeCommunityInstall only returns
+    // pipeline:'connection' for an id it just confirmed via the SAME
+    // listConnections read. Defensive only, never a fabricated 200.
+    sendJson(res, 404, { error: `unknown connection "${connectionId}"` }, origin);
+    return true;
+  }
+
+  if (!def.installable) {
+    sendJson(res, 400, {
+      error: `connection "${def.id}" has install method "${def.install.method}" — no install action exists for a "${def.install.method}" entry (D13: system-provided and external are both non-installable)`,
+    }, origin);
+    return true;
+  }
+
+  const connectionsRoot = resolve(ctx.forgeRoot, CONNECTIONS_DIR);
+  const argv = installArgvFor(def, connectionsRoot);
+
+  if (isDryBridge() || process.env.FORGE_ARCHITECT_NO_SPAWN === '1') {
+    sendJson(res, 200, {
+      ok: true,
+      routedTo: 'connection-install',
+      suppressed: true,
+      wouldInstall: { command: argv.command, args: argv.args },
+    }, origin);
+    return true;
+  }
+
+  const result = installConnection(ctx.forgeRoot, def, {
+    executor: (command, args) => {
+      const spawned = spawnSync(command, args, {
+        shell: false,
+        timeout: INSTALL_TIMEOUT_MS,
+        encoding: 'utf8',
+        env: buildProbeChildEnv(process.env),
+      });
+      return { exitCode: spawned.status };
+    },
+  });
+  sendJson(res, 200, { ok: true, routedTo: 'connection-install', installed: result.ok, argv: result.argv, probe: result.probeAfter }, origin);
+  return true;
+}
+
+function handleInstall(ctx: StudioContext, res: ServerResponse, origin: string, rawKind: string, rawIdSegment: string): true {
+  try {
+    const id = decodeIdOrRespond(rawIdSegment, res, origin);
+    if (id === null) return true;
+    const kind = rawKind as CommunityKind;
+
+    // T2 ruling: resolve the item FIRST so 404 (unknown) and 400 (known, no
+    // route) can never collapse into each other — routeCommunityInstall's
+    // two "no route" reasons are textually distinguishable, but this bridge
+    // doesn't need to parse them: an item communityItem() cannot find is
+    // unconditionally 404; anything routeCommunityInstall still calls
+    // pipeline:'none' AFTER that is unconditionally the "known, no route"
+    // 400 case.
+    const item = communityItem(ctx.forgeRoot, kind, id);
+    if (!item) {
+      sendJson(res, 404, { error: `unknown community item "${kind}/${id}"` }, origin);
+      return true;
+    }
+
+    const route = routeCommunityInstall(ctx.forgeRoot, kind, id);
+
+    if (route.pipeline === 'skill') {
+      const result = installSkillPackage({ forgeRoot: ctx.forgeRoot, id, packageDir: route.packageDir, upstream: route.upstream });
+      sendJson(res, 200, { ok: true, routedTo: 'skill-draft', alreadyInstalled: result.alreadyInstalled }, origin);
+      return true;
+    }
+
+    if (route.pipeline === 'hook') {
+      const result = installCommunityHookPackage({ forgeRoot: ctx.forgeRoot, id });
+      sendJson(res, 200, { ok: true, routedTo: 'hook-needs-approval', alreadyInstalled: result.alreadyInstalled }, origin);
+      return true;
+    }
+
+    if (route.pipeline === 'connection') {
+      const wctx = buildWireCtx(ctx.forgeRoot);
+      return handleConnectionInstall(ctx, res, origin, wctx, route.connectionId);
+    }
+
+    // pipeline === 'none' — item is KNOWN (checked above), so this is always
+    // the "known but not vendored" case, never "unknown".
+    sendJson(res, 400, { error: route.reason }, origin);
+    return true;
+  } catch (err) {
+    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    return true;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Route handler
+// ---------------------------------------------------------------------------
+
+export async function handleStudioCommunityRoutes(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: StudioContext,
+  rawUrl: string,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'GET' && method !== 'POST') return false;
+
+  const url = pathOnly(rawUrl);
+  const origin = allowedOrigin(req);
+
+  // ---- GET /api/studio/community — hubs + cross-kind items (D1) -----------
+  if (method === 'GET' && url === '/api/studio/community') {
+    try {
+      const wctx = buildWireCtx(ctx.forgeRoot);
+      const hubs = hubsWithCounts(ctx.forgeRoot);
+      const items = listCommunityIndex(ctx.forgeRoot).map((item) => toWireItemSafe(ctx.forgeRoot, item, wctx));
+      sendJson(res, 200, { hubs, items }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- POST /api/studio/community/:kind/:id/install ------------------------
+  const installMatch = url.match(/^\/api\/studio\/community\/([^/]+)\/([^/]+)\/install$/);
+  if (method === 'POST' && installMatch) {
+    return handleInstall(ctx, res, origin, installMatch[1], installMatch[2]);
+  }
+
+  // ---- GET /api/studio/community/:kind/:id — detail ------------------------
+  const detailMatch = url.match(/^\/api\/studio\/community\/([^/]+)\/([^/]+)$/);
+  if (method === 'GET' && detailMatch) {
+    return handleDetail(ctx, res, origin, detailMatch[1], detailMatch[2]);
+  }
+
+  return false;
+}

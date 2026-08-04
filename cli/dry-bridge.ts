@@ -159,6 +159,15 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/connections/:id/install', classification: 'stub-actions',
     reason: 'a real `npm install` (network + child process) would run; FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1 suppress it and return {suppressed:true, wouldInstall} instead (D7, mirrors run-agent.ts\'s own double env check)' },
 
+  // ---- stub-actions: community install (R3-07, D2/D9) --------------------
+  // For a mcp/tool item this route delegates to the SAME connection-install
+  // path as /api/studio/connections/:id/install above (byte-identical
+  // suppression check, argv derivation, and executor) — a skill/hook item
+  // never reaches a real-acting call at all (installSkillPackage /
+  // installCommunityHookPackage only copy already-vendored local bytes).
+  { method: 'POST', route: '/api/studio/community/:kind/:id/install', classification: 'stub-actions',
+    reason: 'mcp/tool items route to the same real `npm install` path as /api/studio/connections/:id/install (same suppression, D7); skill/hook items only copy already-vendored local bytes, never real-acting' },
+
   // ---- stub-actions: verdict-approve special case -----------------------
   { method: 'POST', route: '/api/verdict', classification: 'stub-actions',
     reason: 'approve path proceeds (state transition + artifact writes) but skips runReleaseFinalize/mergePr/finalizeAfterMerge — the exact incident actions' },
