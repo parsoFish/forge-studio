@@ -93,10 +93,10 @@ test('C1: readiness/guard flags empty composition.guards (RED — today the chec
 });
 
 // ---------------------------------------------------------------------------
-// C2 — composition/band-hook, sourced from composition.guards
+// C2 — composition/band-guard, sourced from composition.guards
 // ---------------------------------------------------------------------------
 
-test('C2a: a foreign def declaring wi-contract in composition.guards → composition/band-hook error (canonical-slug restriction)', () => {
+test('C2a: a foreign def declaring wi-contract in composition.guards → composition/band-guard error (canonical-slug restriction)', () => {
   const findings = validateAgent(
     mk('some-agent', {
       composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log', 'wi-contract'] },
@@ -104,8 +104,8 @@ test('C2a: a foreign def declaring wi-contract in composition.guards → composi
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }),
   );
-  const bandErrs = findings.filter((x) => x.check === 'composition/band-hook' && x.level === 'error');
-  assert.ok(bandErrs.length >= 1, `expected >=1 composition/band-hook error for a foreign guards declarer — got ${JSON.stringify(findings.map((f) => f.check))}`);
+  const bandErrs = findings.filter((x) => x.check === 'composition/band-guard' && x.level === 'error');
+  assert.ok(bandErrs.length >= 1, `expected >=1 composition/band-guard error for a foreign guards declarer — got ${JSON.stringify(findings.map((f) => f.check))}`);
 });
 
 test('C2b: two band ids in composition.guards → "at most one" error', () => {
@@ -117,8 +117,8 @@ test('C2b: two band ids in composition.guards → "at most one" error', () => {
     }),
   );
   assert.ok(
-    findings.some((x) => x.check === 'composition/band-hook' && x.message.includes('at most one')),
-    `expected an "at most one" composition/band-hook error — got ${JSON.stringify(findings.map((f) => f.check))}`,
+    findings.some((x) => x.check === 'composition/band-guard' && x.message.includes('at most one')),
+    `expected an "at most one" composition/band-guard error — got ${JSON.stringify(findings.map((f) => f.check))}`,
   );
 });
 
@@ -128,9 +128,9 @@ test('C2c: a band id in composition.guards without loopStrategy/budget caps → 
       composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['wi-contract'] },
     }),
   );
-  assert.ok(findings.some((x) => x.check === 'composition/band-hook' && x.message.includes('one-shot')), 'expected the one-shot requirement error');
-  assert.ok(findings.some((x) => x.check === 'composition/band-hook' && x.message.includes('maxTurns')), 'expected the maxTurns requirement error');
-  assert.ok(findings.some((x) => x.check === 'composition/band-hook' && x.message.includes('budget cap')), 'expected the budget-cap requirement error');
+  assert.ok(findings.some((x) => x.check === 'composition/band-guard' && x.message.includes('one-shot')), 'expected the one-shot requirement error');
+  assert.ok(findings.some((x) => x.check === 'composition/band-guard' && x.message.includes('maxTurns')), 'expected the maxTurns requirement error');
+  assert.ok(findings.some((x) => x.check === 'composition/band-guard' && x.message.includes('budget cap')), 'expected the budget-cap requirement error');
 });
 
 test('C2d: the canonical agent DOES carry its band id in composition.guards → the inverse guard must NOT false-positive', () => {
@@ -142,9 +142,9 @@ test('C2d: the canonical agent DOES carry its band id in composition.guards → 
     }),
   );
   assert.ok(
-    !findings.some((x) => x.check === 'composition/band-hook' && x.message.includes('must declare its')),
+    !findings.some((x) => x.check === 'composition/band-guard' && x.message.includes('must declare its')),
     `expected NO "must declare its" inverse-guard error since composition.guards DOES carry reflection-close — got ${JSON.stringify(
-      findings.filter((f) => f.check === 'composition/band-hook'),
+      findings.filter((f) => f.check === 'composition/band-guard'),
     )}`,
   );
 });

@@ -11,34 +11,44 @@
  * DESIGN CONSTRAINT: this fixture records the RESOLVED decision only. It
  * never contains the raw `composition.hooks`/`composition.guards` array or
  * any field name from it — every row is built by calling the PRODUCT
- * functions (`resolveBandHook`, `resolveNodeKind`), never by re-implementing
+ * functions (`resolveBandGuard`, `resolveNodeKind`), never by re-implementing
  * or echoing the underlying scan. The upcoming rename must be invisible to
  * this fixture; any change to what dispatch actually DOES must not be.
  *
+ * IDENTIFIER RENAME (2026-08-04, adversarial-review Job B): `agent-bands.ts`'s
+ * `resolveBandHook`/`BAND_HOOK_IDS`/`BandHookId` are being renamed to
+ * `resolveBandGuard`/`BAND_GUARD_IDS`/`BandGuardId` to finish the vocabulary
+ * split ahead of the follow-on PR that reintroduces `composition.hooks` for a
+ * disjoint, user-authorable lifecycle-hook vocabulary. `BAND_CANONICAL_SLUG`
+ * and `AGENT_BAND_EXECUTORS` keep their names (no "hook" in either). This
+ * file's imports/locals are updated below; the fixture's `bandHookIds` JSON
+ * KEY is deliberately left unchanged (see the note beside it) — only the
+ * source identifier populating it moved.
+ *
  * `dispatchPath` mirrors `execAgent`'s branch order exactly
- * (`orchestrator/flow-runner.ts` ~L1065-1130: band hook wins first, then a
+ * (`orchestrator/flow-runner.ts` ~L1065-1130: band guard wins first, then a
  * declared `loopStrategy: 'ralph'`, else the generic one-shot/legacy spawn)
- * by calling the SAME `resolveBandHook` the product uses and reading the
+ * by calling the SAME `resolveBandGuard` the product uses and reading the
  * SAME `runtime.loopStrategy` field `execAgent` reads — no re-implementation
- * of the hook-scan itself, only the same three-way sequencing `execAgent`
+ * of the guard-scan itself, only the same three-way sequencing `execAgent`
  * already performs.
  *
  * ## Stated limit
  *
  * `AGENT_BAND_EXECUTORS` (`orchestrator/flow-runner.ts` ~L1155) — the
- * band-hook-id → concrete `NodeExecutor` table `execAgent` looks up once it
- * has resolved a band hook — is NOT pinned by this fixture, and cannot be
+ * band-guard-id → concrete `NodeExecutor` table `execAgent` looks up once it
+ * has resolved a band guard — is NOT pinned by this fixture, and cannot be
  * with zero production change. It is a module-private `const`, never
  * exported; nothing in `flow-runner.ts`'s public surface
  * (`runFlow`/`resolveNodeKind`/`flowPathForId`/`readOnDiskFlowVersion`/
  * `checkFlowVersionSeam`/`triggeredRunContextLine`) re-exposes it, and
  * `runFlow`'s own injectable seam (`FlowRunArgs.nodeExecutors`) is keyed by
  * `NodeKind` ('architect'|'review'|'agent'|'unknown'), a coarser grain than
- * `BandHookId` — overriding it replaces `execAgent` wholesale rather than
+ * `BandGuardId` — overriding it replaces `execAgent` wholesale rather than
  * observing what it would have looked up. The only way to OBSERVE the table
  * without an export or source-scraping would be to drive each band's real
  * pipeline end-to-end through a full `runFlow` run (real git worktrees, WI
- * fixtures, demo dirs, etc., one per hook id) and infer the executor
+ * fixtures, demo dirs, etc., one per guard id) and infer the executor
  * identity indirectly from each pipeline's own event vocabulary — that is
  * not pinning the TABLE (a static mapping), only re-demonstrating, through a
  * far heavier mechanism, exactly what the four dedicated spawn-capture
@@ -46,9 +56,9 @@
  * `demo-agent-spawn-capture.test.ts`, `adversarial-review-spawn-capture.test.ts`)
  * and the pipelines' own unit tests already cover. Per instruction, this is
  * reported rather than silently omitted or worked around with an export or
- * text-scrape: `BAND_HOOK_IDS` + `BAND_CANONICAL_SLUG` (the DECLARED-DATA
+ * text-scrape: `BAND_GUARD_IDS` + `BAND_CANONICAL_SLUG` (the DECLARED-DATA
  * side of band dispatch — the KEY) are pinned below; the internal
- * hook→executor wiring (the platform-code side, ADR-039's "the platform
+ * guard→executor wiring (the platform-code side, ADR-039's "the platform
  * bakes only execution machinery") is not.
  *
  * `allDefinitions` is a SECOND, wider table over the SAME fixture: every
@@ -78,7 +88,7 @@ import { join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import { isStudioAgent, listAgentDefinitions, loadAgentDefinition, listFlowIds, loadFlowDefinition } from './studio/registry.ts';
-import { resolveBandHook, BAND_HOOK_IDS, BAND_CANONICAL_SLUG, type BandHookId } from './agent-bands.ts';
+import { resolveBandGuard, BAND_GUARD_IDS, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
 import { resolveNodeKind, flowPathForId } from './flow-runner.ts';
 import { skillsDir, listSkillMdDirs } from './skill-path.ts';
 import type { AgentDefinition } from './studio/types.ts';
@@ -90,14 +100,14 @@ const FIXTURE_PATH = resolve(FORGE_ROOT, 'orchestrator', 'test-fixtures', 'spawn
 /**
  * The branch `execAgent` (flow-runner.ts) takes for a resolved 'agent'-kind
  * node carrying this def, expressed as a string — band wins first (keyed by
- * the resolved `BandHookId`), then a declared ralph loop, else the generic
- * one-shot/legacy spawn. Uses `resolveBandHook` (the product function) for
+ * the resolved `BandGuardId`), then a declared ralph loop, else the generic
+ * one-shot/legacy spawn. Uses `resolveBandGuard` (the product function) for
  * the band decision; the sequencing below is the same three-way order
- * `execAgent` performs, not a re-implementation of the hook scan itself.
+ * `execAgent` performs, not a re-implementation of the guard scan itself.
  */
 function dispatchPathFor(def: AgentDefinition): string {
-  const bandHook = resolveBandHook(def);
-  if (bandHook) return `band:${bandHook}`;
+  const bandGuard = resolveBandGuard(def);
+  if (bandGuard) return `band:${bandGuard}`;
   if (def.runtime.loopStrategy === 'ralph') return 'ralph';
   return 'generic';
 }
@@ -120,11 +130,11 @@ test('dispatch decisions: every roster agent + every flow node, resolved via the
 
   const rosterRows = roster
     .map((def) => {
-      const bandHook: BandHookId | null = resolveBandHook(def) ?? null;
+      const bandGuard: BandGuardId | null = resolveBandGuard(def) ?? null;
       return {
         slug: def.slug,
-        band: bandHook,
-        canonicalSlug: bandHook ? BAND_CANONICAL_SLUG[bandHook] : null,
+        band: bandGuard,
+        canonicalSlug: bandGuard ? BAND_CANONICAL_SLUG[bandGuard] : null,
         loopStrategy: def.runtime.loopStrategy ?? null,
         dispatchPath: dispatchPathFor(def),
       };
@@ -148,11 +158,11 @@ test('dispatch decisions: every roster agent + every flow node, resolved via the
       // this fixture cannot confidently classify — fail loud rather than
       // guess or silently drop it from the table.
       const def = loadAgentDefinition(skillMdPath);
-      const bandHook: BandHookId | null = resolveBandHook(def) ?? null;
+      const bandGuard: BandGuardId | null = resolveBandGuard(def) ?? null;
       return {
         slug: def.slug,
-        band: bandHook,
-        canonicalSlug: bandHook ? BAND_CANONICAL_SLUG[bandHook] : null,
+        band: bandGuard,
+        canonicalSlug: bandGuard ? BAND_CANONICAL_SLUG[bandGuard] : null,
         loopStrategy: def.runtime.loopStrategy ?? null,
         dispatchPath: dispatchPathFor(def),
         inComposableRoster: isStudioAgent(skillMdPath),
@@ -176,7 +186,11 @@ test('dispatch decisions: every roster agent + every flow node, resolved via the
   const fixture = {
     roster: rosterRows,
     allDefinitions: allDefinitionsRows,
-    bandHookIds: [...BAND_HOOK_IDS],
+    // KEY STAYS `bandHookIds` on purpose (Job B identifier rename,
+    // 2026-08-04): only the imported symbol moved from `BAND_HOOK_IDS` to
+    // `BAND_GUARD_IDS` — do NOT "tidy" this JSON key to `bandGuardIds`, that
+    // would move the fixture bytes for a rename that must be invisible to it.
+    bandHookIds: [...BAND_GUARD_IDS],
     bandCanonicalSlug: { ...BAND_CANONICAL_SLUG },
     flows,
   };

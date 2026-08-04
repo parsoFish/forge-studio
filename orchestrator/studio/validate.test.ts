@@ -1685,8 +1685,8 @@ describe('validateAgent runtime/loop-strategy', () => {
   });
 });
 
-// ── composition/band-hook + budgets/range (R4-01 whole-branch review) ──────
-describe('validateAgent composition/band-hook + budgets/range', () => {
+// ── composition/band-guard + budgets/range (R4-01 whole-branch review) ──────
+describe('validateAgent composition/band-guard + budgets/range', () => {
   const mk = (slug: string, over: Record<string, unknown> = {}) => ({
     slug,
     name: slug,
@@ -1705,7 +1705,7 @@ describe('validateAgent composition/band-hook + budgets/range', () => {
     ...over,
   });
   const bandErrs = (f: Array<{ check: string; level: string }>) =>
-    f.filter((x) => x.check === 'composition/band-hook' && x.level === 'error');
+    f.filter((x) => x.check === 'composition/band-guard' && x.level === 'error');
 
   it('a foreign def declaring wi-contract → error (canonical-slug restriction)', () => {
     const findings = validateAgent(mk('some-agent', {
@@ -1716,28 +1716,28 @@ describe('validateAgent composition/band-hook + budgets/range', () => {
     assert.ok(bandErrs(findings).length >= 1);
   });
 
-  it('two band hooks on one def → error; band hook without one-shot/caps → errors', () => {
+  it('two band guards on one def → error; band guard without one-shot/caps → errors', () => {
     const both = validateAgent(mk('project-manager', {
       composition: { skills: [], tools: [], mcps: [], guards: ['wi-contract', 'reflection-close'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }));
-    assert.ok(both.some((x) => x.check === 'composition/band-hook' && x.message.includes('at most one')));
+    assert.ok(both.some((x) => x.check === 'composition/band-guard' && x.message.includes('at most one')));
 
     const bare = validateAgent(mk('project-manager', {
       composition: { skills: [], tools: [], mcps: [], guards: ['wi-contract'] },
     }));
-    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('one-shot')));
-    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('maxTurns')));
-    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('budget cap')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('one-shot')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('maxTurns')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('budget cap')));
   });
 
-  it('the canonical agents must CARRY their band hook (inverse guard)', () => {
+  it('the canonical agents must CARRY their band guard (inverse guard)', () => {
     const stripped = validateAgent(mk('reflector', {
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 60, maxBudgetUsd: 1.5 },
     }));
-    assert.ok(stripped.some((x) => x.check === 'composition/band-hook' && x.message.includes('must declare its')));
+    assert.ok(stripped.some((x) => x.check === 'composition/band-guard' && x.message.includes('must declare its')));
   });
 
   it('the real shipped PM/reflector shapes are band-lint clean', () => {

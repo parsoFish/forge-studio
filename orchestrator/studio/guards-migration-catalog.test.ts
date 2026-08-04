@@ -4,10 +4,16 @@
  * targeting `studio/catalog.yaml` + `orchestrator/studio/registry.ts`'s
  * `loadCatalog` + `orchestrator/studio/validate.ts`'s `validateCatalog`.
  *
- * The 9 ids are unchanged (5 toggles, 4 bands — `BAND_HOOK_IDS`); what moves
+ * The 9 ids are unchanged (5 toggles, 4 bands — `BAND_GUARD_IDS`); what moves
  * is the section name (`hooks:` → `guards:`) and what's NEW is a DERIVED
- * `kind` (`band`/`toggle`) per entry — derived from `BAND_HOOK_IDS`, never
+ * `kind` (`band`/`toggle`) per entry — derived from `BAND_GUARD_IDS`, never
  * declared in the YAML (the anti-"declared-data-fails-open" point of B2).
+ *
+ * IDENTIFIER RENAME (2026-08-04, Job B): `agent-bands.ts`'s `BAND_HOOK_IDS`
+ * is being renamed to `BAND_GUARD_IDS` to finish the vocabulary split — this
+ * file's import is updated below, which now names an identifier that does
+ * not exist in today's `agent-bands.ts` (B2's own RED signal, independent of
+ * B1-B3's original field-migration subject, which is already landed).
  *
  * B1 reads the REAL on-disk `studio/catalog.yaml` (not a fixture) — today it
  * has a `hooks:` section, not `guards:`, so this is a direct, honest RED
@@ -34,7 +40,7 @@ import { join, resolve } from 'node:path';
 import { loadCatalog } from './registry.ts';
 import { validateCatalog } from './validate.ts';
 import { loadYaml } from './yaml-fields.ts';
-import { BAND_HOOK_IDS } from '../agent-bands.ts';
+import { BAND_GUARD_IDS } from '../agent-bands.ts';
 import type { Catalog } from './types.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
@@ -71,7 +77,7 @@ function writeGuardsCatalogFixture(dir: string): string {
     '  - { id: merge-gate, name: Merge gate, desc: Dependent WIs wait on prerequisite merge. }',
     '  - { id: scratch-strip, name: Scratch strip, desc: Base-guard strips scratch files pre-PR. }',
     // Deliberately WRONG kind — a real band id declared as a toggle. B2 must
-    // prove the derivation from BAND_HOOK_IDS overrides this, not trust it.
+    // prove the derivation from BAND_GUARD_IDS overrides this, not trust it.
     '  - { id: wi-contract, name: WI contract band, desc: "Plan-agent band.", kind: toggle }',
     '  - { id: reflection-close, name: Reflection close band, desc: "Reflect-agent band." }',
     '  - { id: demo-band, name: Demo band, desc: "Demo-agent band." }',
@@ -81,7 +87,7 @@ function writeGuardsCatalogFixture(dir: string): string {
   return path;
 }
 
-test('B2: loadCatalog surfaces guards with a DERIVED kind (band for BAND_HOOK_IDS, toggle otherwise), overriding a wrong declared kind (RED until migrated)', () => {
+test('B2: loadCatalog surfaces guards with a DERIVED kind (band for BAND_GUARD_IDS, toggle otherwise), overriding a wrong declared kind (RED until the Job B rename lands)', () => {
   const dir = mkdtempSync(join(tmpdir(), 'guards-migration-catalog-'));
   try {
     const catalogPath = writeGuardsCatalogFixture(dir);
@@ -89,7 +95,7 @@ test('B2: loadCatalog surfaces guards with a DERIVED kind (band for BAND_HOOK_ID
     const guards = (catalog as unknown as { guards?: Array<{ id: string; kind?: string }> }).guards;
     assert.ok(guards, `expected loadCatalog to surface a .guards array — got: ${JSON.stringify(catalog)}`);
 
-    const bandIds = new Set<string>(BAND_HOOK_IDS as readonly string[]);
+    const bandIds = new Set<string>(BAND_GUARD_IDS as readonly string[]);
     for (const entry of guards!) {
       const expectedKind = bandIds.has(entry.id) ? 'band' : 'toggle';
       assert.equal(
