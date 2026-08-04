@@ -1071,7 +1071,7 @@ function makeAgentDef(overrides: Partial<AgentDefinition> = {}): AgentDefinition
     name: 'My Agent',
     description: 'An agent.',
     purpose: 'Do things.',
-    composition: { skills: [], tools: [], mcps: [], hooks: [] },
+    composition: { skills: [], tools: [], mcps: [], guards: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',
@@ -1099,7 +1099,7 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
         makeAgentDef({
           slug: 'project-manager',
           name: 'PM',
-          composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
+          composition: { skills: [], tools: [], mcps: [], guards: ['event-log', 'wi-contract'] },
         }),
       ],
       // R4-01-F2: the dev agent's dispatch key is its declared ralph loop
@@ -1121,7 +1121,7 @@ describe('flow-runner node-executor registry seam (ADR-028)', () => {
         makeAgentDef({
           slug: 'reflector',
           name: 'Reflector',
-          composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] },
+          composition: { skills: [], tools: [], mcps: [], guards: ['event-log', 'reflection-close'] },
         }),
       ],
       [

@@ -332,7 +332,7 @@ export const journey = defineJourney({
       {
         id: 'agents-builder',
         title: 'Agent builder — /agents/project-manager',
-        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/hook drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract hook, a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. Because it is unattended, the agent also carries a generic run surface (R2-01-F3): it dispatches standalone straight from the agent page — no flow required — the runnable primitive reaching the UI. The same surface makes the develop flow\'s two successor agents runnable in isolation (R4-10-F3): demo-agent and adversarial-review dispatch standalone through their FLOW pipeline (not a bare spawn), yielding the identical artifacts — the ship-both principle, valuable alone as well as in a flow. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
+        narration: 'Reopening the shipped project-manager agent, the operator expands Advanced to see its skill/tool/MCP/guard drop zones and runtime SDK, edits its purpose field, and SAVES — proof an OOTB agent stays genuinely editable after the fact, not just re-composable from a fresh starter. Since R4-01 the plan agent is a MIGRATED artifact: its flow dispatch is declared data (the wi-contract GUARD — renamed from "hook" by the R3-03 amendment to ADR-027, so the word "hook" is free for user-authorable agent-lifecycle customisations — a one-shot loop strategy, budget caps in frontmatter — ADR-039), and the save round-trip provably preserves all of it, so editing in the builder can never silently break dispatch. The readiness panel\'s 6 checks (including runtime) are sourced from the server-computed capability descriptor, not a client guess, and an informational chip shows whether the agent is interactive or unattended straight from that same descriptor. Because it is unattended, the agent also carries a generic run surface (R2-01-F3): it dispatches standalone straight from the agent page — no flow required — the runnable primitive reaching the UI. The same surface makes the develop flow\'s two successor agents runnable in isolation (R4-10-F3): demo-agent and adversarial-review dispatch standalone through their FLOW pipeline (not a bare spawn), yielding the identical artifacts — the ship-both principle, valuable alone as well as in a flow. (The real shipped bytes are stashed first and restored after, so the walkthrough never leaves project-manager\'s production SKILL.md mutated.)',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A3: Agent builder — an agent is data ──────────────────────────────────
@@ -364,7 +364,7 @@ export const journey = defineJourney({
                     () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
                     null, { timeout: 5000 },
                   ).catch(() => {});
-                  for (const kind of ['skill', 'tool', 'mcp', 'hook']) {
+                  for (const kind of ['skill', 'tool', 'mcp', 'guard']) {
                     check(
                       await page.evaluate((k) => document.querySelector(`[data-accepts="${k}"]`) !== null, kind),
                       `agent-builder: drop zone [data-accepts="${kind}"] present`,
@@ -380,7 +380,7 @@ export const journey = defineJourney({
                   });
                   check(readyCount !== null, `agent-builder: [data-ready-count] attribute present (got ${readyCount})`);
                   if (readyCount !== null) {
-                    // R2-02-F4: 6 checks total (purpose/skill/hook/process/interactivity
+                    // R2-02-F4: 6 checks total (purpose/skill/guard/process/interactivity
                     // content-completeness + a `runtime` check now sourced from the
                     // server-computed F1 capability descriptor, not a client heuristic).
                     // project-manager's shipped SKILL.md fills every field and carries a
@@ -466,7 +466,7 @@ export const journey = defineJourney({
                     if (savedOnDisk) {
                       const savedPm = readFileSync(PM_SKILL_PATH, 'utf8');
                       check(savedPm.includes('wi-contract'),
-                        'agent-builder (R4-01-F3): the save preserves the declared wi-contract dispatch hook');
+                        'agent-builder (R4-01-F3): the save preserves the declared wi-contract dispatch guard');
                       check(savedPm.includes('loopStrategy: one-shot'),
                         'agent-builder (R4-01-F3): the save preserves runtime.loopStrategy: one-shot');
                       check(savedPm.includes('maxTurns: 70') && savedPm.includes('maxBudgetUsdShare: 0.2'),

@@ -74,7 +74,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: []
+  guards: []
 brainAccess: advisory
 interactivity: Fully autonomous.
 allowed-tools: [Read]
@@ -217,7 +217,7 @@ function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDef
     name: 'Fixture Agent',
     description: 'A fixture agent for descriptor tests.',
     purpose: 'Testing descriptor computation.',
-    composition: { skills: [], tools: [], mcps: [], hooks: [] },
+    composition: { skills: [], tools: [], mcps: [], guards: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',

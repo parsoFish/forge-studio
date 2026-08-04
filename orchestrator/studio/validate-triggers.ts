@@ -10,7 +10,7 @@
 import { Cron } from 'croner';
 
 import { TRIGGER_KINDS, TRIGGER_KIND_IDS } from '../flow-trigger.ts';
-import { resolveBandHook } from '../agent-bands.ts';
+import { resolveBandGuard } from '../agent-bands.ts';
 import { TRIGGER_MODES } from './types.ts';
 import type { AgentDefinition, FlowDefinition } from './types.ts';
 
@@ -111,7 +111,7 @@ export function checkFlowTriggers(
         findings.push(
           err(obj, 'trigger-target', `Trigger target agent "${trigger.target.ref}" is not a known agent`),
         );
-      } else if (trigger.on === 'merged' && resolveBandHook(agentDef) !== 'reflection-close') {
+      } else if (trigger.on === 'merged' && resolveBandGuard(agentDef) !== 'reflection-close') {
         // R4-09-F1: an `on: merged` agent target is dispatched by
         // finalize-merged.ts ONLY when the agent declares the `reflection-close`
         // band (resolveMergeAgentHandler). Any other agent would silently land

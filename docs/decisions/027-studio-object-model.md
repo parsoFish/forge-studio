@@ -252,3 +252,77 @@ entry's `used-by` **derived** from the real flow graph (planning) or real projec
 (demo-output) rather than hand-maintained. See `studio/artifact-templates/README.md` for
 the canonical 7-template inventory and which are edge-backed vs. travel by
 orchestrator-band re-entry.
+
+## Amendment (R3-03, 2026-08-04): `composition.hooks` splits into `guards` + `hooks`
+
+The 2026-07-24 amendment above let **band keys** (`wi-contract`,
+`reflection-close`, later `demo-band`, `review-band`) share
+`composition.hooks` with the **toggle-style** orchestrator behaviours
+(`event-log`, `cost-guard`, `stall-watchdog`, `merge-gate`, `scratch-strip`).
+Both are orchestrator-owned and neither is operator-authorable, so one field
+was defensible.
+
+R3-03's wave-5 re-scope (roadmap `R3-library-componentry.md`, operator
+decision 1) breaks that premise: a library **hook** becomes an
+*agent-lifecycle customisation* — `{id, name, description, lifecycle event
+(PreToolUse | PostToolUse | SessionStart | SessionEnd | Notification | …),
+matcher, script, permission manifest}` — **authored by an operator or
+installed from a community hub**, i.e. user-supplied data with a user-chosen
+id. All nine ids currently in `composition.hooks` are neither: they name
+platform machinery whose implementation stays in `orchestrator/`.
+
+Two disjoint vocabularies must not silently share one field. Concretely:
+`resolveBandGuard` (`orchestrator/agent-bands.ts`) scans the array and routes
+the node to another agent's canonical pipeline. If a user-authorable hook id
+landed in the same array, an operator (or an installed community package)
+choosing the id `wi-contract` would **hijack flow dispatch** — the
+declared-data hazard class this repo already pays for elsewhere, and a
+constraint that is correct for shipped data being wrong for user-authored
+data (the R3-06 `every`-vs-`some` lesson).
+
+**Decision — split the field; no back-compat, no shim.**
+
+1. **`composition.guards: string[]`** — the platform vocabulary. Holds the
+   nine existing ids **unchanged** (ids are dispatch keys; renaming one would
+   change dispatch, which the golden spawn-capture suite forbids).
+   `composition.hooks` is **deleted** in the same change; a SKILL.md still
+   carrying `hooks:` fails `forge studio lint` outright rather than being
+   silently read.
+2. **`composition.hooks: string[]` is re-introduced by R3-03's library PR**
+   meaning *library lifecycle hook ids only*, resolved against the hooks
+   registry (`studio/hooks/<id>/`). It is **bound only in the Agent Builder**;
+   a hook definition never names an agent (round-4 mockup rule — "carried by"
+   derives from agent specs).
+3. **Symmetric enforcement.** Once both fields exist: a guard id under
+   `hooks:` is a lint error, and a hook id under `guards:` is a lint error.
+   Both directions, because a one-directional check is the half-guard this
+   repo has been bitten by before ("defense-in-depth lint must mirror the
+   dispatch it backstops").
+4. **`studio/catalog.yaml`'s `hooks:` section is deleted and replaced by
+   `guards:`** with the same nine entries. Whether an entry is a *band*
+   (selects a pipeline) or a *toggle* (switches one behaviour) is **DERIVED**
+   from `BAND_GUARD_IDS`, not declared — no new declared field is introduced.
+   Guards remain read-only/locked in the palette: they are composable onto an
+   agent, never editable from Studio.
+5. **The rename is provably behaviour-free.** `orchestrator/test-fixtures/
+   spawn-capture/` is extended from two fixtures to the full roster — all four
+   band pipelines' `{prompt, options}` spawn calls, the generic one-shot
+   option shape, and a dispatch decision table (agent slug → resolved band,
+   canonical slug, loop strategy, selected executor) over the real on-disk
+   roster. The table pins the resolved **decision**, never the raw array, so
+   the field rename is invisible to it while any real dispatch change is not.
+   The migration's acceptance is an empty diff on those fixtures.
+
+**Consequence for ADR 039 — factual cross-reference correction tracking this
+amendment; decision unchanged.** ADR 039 §2's third bullet, its item-3 caveat,
+and its ADR-027 cross-reference name `composition.hooks` as the band-selection
+field; that is now `composition.guards`. The *decision* ADR 039 records is
+untouched — band selection is still declared data on the agent definition, the
+pipelines are still platform code, and the honest caveat still stands. Only the
+field name changes, corrected in place with a pointer here.
+
+**Stated limit, not overclaimed.** This split removes the *id-collision*
+hijack path. It does not make band selection safe against an operator editing
+`composition.guards` directly — that remains guarded by the existing
+`composition/band-guard` lint plus `execAgent`'s runtime slug backstop, which
+are unchanged by this amendment.

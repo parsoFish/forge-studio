@@ -626,7 +626,7 @@ registry + parity view; §4 story-beat parity rule).
   Built bottom-up across the wave-4 campaign (PRs #39–#69):
   - **R4-01 platform→artifact migration** F1–F3 (#39) then **F4 unifier retirement**
     (#69, main `cb8fff91`): declared dispatch (ADR-039) retired `pm`/`dev`/`reflect`
-    onto loopStrategy + band hooks; F4 removed the last legacy phase executor, the
+    onto loopStrategy + band guards; F4 removed the last legacy phase executor, the
     `unifier` (−4486 lines: `unifier-invocation.ts`/`unifier-items.ts`/
     `developer-unifier`, `execUnifier`, `runUnifierPhase`, the UWI machinery,
     `WorkItem.kind`). `PHASE_EXECUTOR_KINDS` is now empty — every phase is a generic

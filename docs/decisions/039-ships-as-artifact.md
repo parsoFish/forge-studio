@@ -79,14 +79,17 @@ every other roster agent already has carry the behaviour the phase needs:
   `max(maxBudgetUsd, maxBudgetUsdShare × initiative cost budget)` — so a
   migrated phase's cost cap is a declared number, not a constant hand-coded
   per phase in `orchestrator/`.
-- **`composition.hooks` gains band keys** — `wi-contract` selects the PM
+- **`composition.guards` gains band keys** — `wi-contract` selects the PM
   work-item contract pipeline, `reflection-close` selects the reflector close
-  pipeline — read alongside the existing toggle-style hook names (event-log,
+  pipeline — read alongside the existing toggle-style guard names (event-log,
   cost-guard, stall-watchdog, merge-gate, scratch-strip). A band key doesn't
   toggle one behaviour; it selects an orchestrator-implemented pre/post band
-  around the generic spawn.
+  around the generic spawn. *(Field renamed from `composition.hooks` by
+  [ADR 027](./027-studio-object-model.md)'s R3-03 amendment, 2026-08-04 —
+  a factual cross-reference correction tracking that amendment; the decision
+  recorded here is unchanged.)*
 
-**3. Honest caveat.** Hook band ids select orchestrator-**implemented**
+**3. Honest caveat.** Guard band ids select orchestrator-**implemented**
 bands — the PM contract pipeline and the reflector close pipeline remain
 platform code, deliberately, per this ADR's own principle ("the platform
 bakes only execution machinery"). What changes is *how* a phase reaches that
@@ -96,7 +99,7 @@ thing that spawns the agent is the one generic `runAgent` primitive rather
 than a bespoke per-phase invocation file. A purer future shape — where the
 pipeline contract is attached to the artifact template an agent produces
 (ADR 027's `ArtifactTemplate`, not the agent definition) rather than named by
-a hook key on the agent — is a plausible next step, but it is **not built
+a guard key on the agent — is a plausible next step, but it is **not built
 here**: there is exactly one consumer of each band today, and building a
 templates-as-contracts indirection ahead of a second consumer would itself be
 the unjustified complexity CLAUDE.md's "simplest thing that could work" rule
@@ -143,7 +146,7 @@ anything yet:
   checkable instance — `PHASE_EXECUTOR_KINDS` narrowing to a single slug
   (`developer-unifier`, until R4-01-F4) is the measurable signal that the
   artifact migration is progressing, not just a restated intention.
-- **Negative / accepted:** the hook-band caveat in item 3 is a real
+- **Negative / accepted:** the guard-band caveat in item 3 is a real
   limitation, not resolved here — `wi-contract` and `reflection-close` still
   name platform pipelines an operator cannot redefine from Studio. Accepted
   under the "simplest thing that could work" rule; revisited only if a
@@ -193,11 +196,11 @@ anything yet:
   migration this ADR's dispatch-seam design completes the artifact-migration
   remainder of.
 - [ADR 027](./027-studio-object-model.md) — the agent-definition format
-  (`runtime`, `budgets`, `composition.hooks`) this ADR extends.
+  (`runtime`, `budgets`, `composition.guards`) this ADR extends.
 - [ADR 028](./028-flow-engine.md) — the flow-engine node dispatch this ADR
   changes (`executor:` enum narrowing, generic-agent path becoming the
   default).
 - [ADR 036](./036-orchestrator-owned-gate-execution.md) — the
-  agents-judge/orchestrator-executes boundary this ADR's hook bands and
+  agents-judge/orchestrator-executes boundary this ADR's guard bands and
   `runAgent` spawn both preserve (`runAgent` imports no gate/CI/capture
   machinery).

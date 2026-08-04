@@ -98,6 +98,7 @@ export function findFanOutViolations(flow: FlowDefinition): FanOutViolation[] {
 export function validateAgent(
   def: AgentDefinition,
   validModelIds?: ReadonlySet<string>,
+  validGuardIds?: ReadonlySet<string>,
 ): Finding[] {
   const findings: Finding[] = [];
   const obj = `agent:${def.slug}`;
@@ -117,9 +118,9 @@ export function validateAgent(
     findings.push(flag(obj, 'readiness/skill', 'No composed skills — at least one skill is recommended'));
   }
 
-  // readiness/hook — flag (same reasoning; mock renders this progressively, not a hard blocker)
-  if (def.composition.hooks.length === 0) {
-    findings.push(flag(obj, 'readiness/hook', 'No observability hooks — at least event-log is recommended'));
+  // readiness/guard — flag (same reasoning; mock renders this progressively, not a hard blocker)
+  if (def.composition.guards.length === 0) {
+    findings.push(flag(obj, 'readiness/guard', 'No observability guards — at least event-log is recommended'));
   }
 
   // readiness/process — error
@@ -155,7 +156,7 @@ export function validateAgent(
   ) {
     const valid = (PHASE_EXECUTOR_KINDS as readonly string[]).length > 0
       ? `must be one of ${PHASE_EXECUTOR_KINDS.join('|')}`
-      : 'no phase executors remain (R4-01-F4) — every phase is a generic agent or a band hook, so drop the `executor` field';
+      : 'no phase executors remain (R4-01-F4) — every phase is a generic agent or a band guard, so drop the `executor` field';
     findings.push(err(obj, 'executor/enum', `unknown executor "${def.executor}" — ${valid}`));
   }
 
@@ -202,42 +203,42 @@ export function validateAgent(
     );
   }
 
-  // composition/band-hook — error (R4-01 whole-branch review). Band hooks are
-  // declared DISPATCH (execAgent routes them to the canonical PM/reflector
+  // composition/band-guard — error (R4-01 whole-branch review). Band guards
+  // are declared DISPATCH (execAgent routes them to the canonical PM/reflector
   // pipelines, which load their own SKILL.md and ignore the declaring def) —
   // the exact wrong-identity hazard the ralph restriction above closes, so
-  // they get the same treatment: each hook is restricted to its canonical
-  // slug until the bands generalise (R4-06+); at most one band hook per def;
-  // a band-hook def must declare the one-shot loop the band spawns with.
+  // they get the same treatment: each guard is restricted to its canonical
+  // slug until the bands generalise (R4-06+); at most one band guard per def;
+  // a band-guard def must declare the one-shot loop the band spawns with.
   // The INVERSE also lints: the canonical phase agents must CARRY their band
-  // hook — deleting it would silently degrade the phase node to the bare
+  // guard — deleting it would silently degrade the phase node to the bare
   // generic spawn (no WI validation, no brain gate) with lint green.
   // Single source shared with execAgent's runtime backstop (agent-bands.ts) —
   // the "lint must mirror the dispatch it backstops" rule made structural.
   const CANONICAL_BAND_SLUGS: Record<string, string> = BAND_CANONICAL_SLUG;
-  const declaredBands = def.composition.hooks.filter((h) => h in CANONICAL_BAND_SLUGS);
+  const declaredBands = def.composition.guards.filter((h) => h in CANONICAL_BAND_SLUGS);
   for (const band of declaredBands) {
     if (CANONICAL_BAND_SLUGS[band] !== def.slug) {
       findings.push(
         err(
           obj,
-          'composition/band-hook',
-          `band hook "${band}" is restricted to ${CANONICAL_BAND_SLUGS[band]} — it routes this node to that agent's canonical pipeline, ignoring this def (lifts when the bands generalise)`,
+          'composition/band-guard',
+          `band guard "${band}" is restricted to ${CANONICAL_BAND_SLUGS[band]} — it routes this node to that agent's canonical pipeline, ignoring this def (lifts when the bands generalise)`,
         ),
       );
     }
   }
   if (declaredBands.length > 1) {
     findings.push(
-      err(obj, 'composition/band-hook', `at most one band hook per agent (got: ${declaredBands.join(', ')})`),
+      err(obj, 'composition/band-guard', `at most one band guard per agent (got: ${declaredBands.join(', ')})`),
     );
   }
   if (declaredBands.length === 1 && loopStrategy !== 'one-shot') {
     findings.push(
       err(
         obj,
-        'composition/band-hook',
-        `a band-hook agent must declare runtime.loopStrategy: one-shot (the band spawns through the one-shot primitive)`,
+        'composition/band-guard',
+        `a band-guard agent must declare runtime.loopStrategy: one-shot (the band spawns through the one-shot primitive)`,
       ),
     );
   }
@@ -245,8 +246,8 @@ export function validateAgent(
     findings.push(
       err(
         obj,
-        'composition/band-hook',
-        `a band-hook agent must declare budgets.maxTurns — the caps are frontmatter data now; an uncapped unattended phase agent re-opens the F-42/F-43 silent-spend vector`,
+        'composition/band-guard',
+        `a band-guard agent must declare budgets.maxTurns — the caps are frontmatter data now; an uncapped unattended phase agent re-opens the F-42/F-43 silent-spend vector`,
       ),
     );
   }
@@ -256,7 +257,7 @@ export function validateAgent(
     def.budgets.maxBudgetUsdShare === undefined
   ) {
     findings.push(
-      err(obj, 'composition/band-hook', `a band-hook agent must declare a budget cap (maxBudgetUsd and/or maxBudgetUsdShare)`),
+      err(obj, 'composition/band-guard', `a band-guard agent must declare a budget cap (maxBudgetUsd and/or maxBudgetUsdShare)`),
     );
   }
 
@@ -274,12 +275,12 @@ export function validateAgent(
     }
   }
   const owedBand = Object.entries(CANONICAL_BAND_SLUGS).find(([, slug]) => slug === def.slug)?.[0];
-  if (owedBand !== undefined && !def.composition.hooks.includes(owedBand)) {
+  if (owedBand !== undefined && !def.composition.guards.includes(owedBand)) {
     findings.push(
       err(
         obj,
-        'composition/band-hook',
-        `${def.slug} must declare its "${owedBand}" band hook — without it the phase node silently degrades to the bare generic spawn`,
+        'composition/band-guard',
+        `${def.slug} must declare its "${owedBand}" band guard — without it the phase node silently degrades to the bare generic spawn`,
       ),
     );
   }
@@ -326,12 +327,25 @@ export function validateAgent(
     ['composition/skills', def.composition.skills],
     ['composition/tools', def.composition.tools],
     ['composition/mcps', def.composition.mcps],
-    ['composition/hooks', def.composition.hooks],
+    ['composition/guards', def.composition.guards],
   ];
   for (const [field, entries] of compArrays) {
     for (const entry of entries) {
       if (typeof entry !== 'string' || !COMP_ENTRY_RE.test(entry)) {
         findings.push(err(obj, field, `Entry "${entry}" in ${field} must match ${COMP_ENTRY_RE}`));
+      }
+    }
+  }
+
+  // composition/guard-unknown — error (ADR-027 R3-03 amendment). Only fires
+  // when the caller supplies the catalog guard-id set (mirrors the
+  // runtime/model-catalog check's validModelIds convention above) — a typo'd
+  // guard id would otherwise silently resolve to no dispatch/observability
+  // effect with lint green.
+  if (validGuardIds) {
+    for (const guardId of def.composition.guards) {
+      if (!validGuardIds.has(guardId)) {
+        findings.push(err(obj, 'composition/guard-unknown', `Guard "${guardId}" is not in catalog.guards`));
       }
     }
   }
@@ -708,7 +722,7 @@ export function validateCatalog(c: Catalog): Finding[] {
     ['models', c.models],
     ['tools', c.tools],
     ['mcps', c.mcps],
-    ['hooks', c.hooks],
+    ['guards', c.guards],
   ];
 
   for (const [section, entries] of sections) {

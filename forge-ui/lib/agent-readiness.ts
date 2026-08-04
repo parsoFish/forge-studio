@@ -11,7 +11,7 @@
  * (`runtimeConfigured(rt)`: sdk truthy + model/range chosen) was the
  * "hardcoded heuristic" R2-02-F4's AC replaces.
  *
- * CONTENT-COMPLETENESS checks (purpose/skill/hook/process/interactivity) are
+ * CONTENT-COMPLETENESS checks (purpose/skill/guard/process/interactivity) are
  * independent readiness signals — did the operator fill in the form — and
  * are not "the hardcoded heuristic" the AC targets, so they stay as direct
  * field checks, unrelated to the descriptor.
@@ -21,7 +21,7 @@ import type { AgentCapabilityDescriptor } from './studio-client';
 export type ReadinessInput = {
   purpose: string;
   skills: string[];
-  hooks: string[];
+  guards: string[];
   process: string;
   interactivity: string;
   /** Server-computed F1 descriptor; undefined only before the first load/save round-trip. */
@@ -41,7 +41,7 @@ export function computeReadinessChecks(state: ReadinessInput): ReadinessCheck[] 
   return [
     { key: 'purpose', label: 'Purpose defined', ok: state.purpose.trim().length > 0 },
     { key: 'skill', label: 'At least one skill', ok: state.skills.length > 0 },
-    { key: 'hook', label: 'Observability hook attached', ok: state.hooks.length > 0 },
+    { key: 'guard', label: 'Observability guard attached', ok: state.guards.length > 0 },
     { key: 'process', label: 'Process described', ok: state.process.trim().length > 0 },
     { key: 'interactivity', label: 'Interactivity described', ok: state.interactivity.trim().length > 0 },
     { key: 'runtime', label: 'Runtime configured (SDK + model)', ok: runtimeSdks.length > 0 },

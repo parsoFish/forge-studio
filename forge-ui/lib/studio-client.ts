@@ -106,7 +106,7 @@ export type Agent = {
   skills: string[];
   tools: string[];
   mcps: string[];
-  hooks: string[];
+  guards: string[];
   interactivity?: string;
   process?: string;
   runtime?: AgentRuntime;
@@ -369,7 +369,7 @@ export type Catalog = {
   skills?: CatalogItem[];
   tools?: CatalogItem[];
   mcps?: CatalogItem[];
-  hooks?: CatalogItem[];
+  guards?: CatalogItem[];
   artifacts?: CatalogItem[];
   models?: CatalogItem[];
   sdks?: CatalogItem[];
@@ -550,9 +550,9 @@ export function parseFanout(raw: unknown): AgentFanout | undefined {
 
 /**
  * Map a raw AgentDefinition (server shape) to the client Agent type.
- * Server: slug, composition.{skills,tools,mcps,hooks}, body, name, purpose,
+ * Server: slug, composition.{skills,tools,mcps,guards}, body, name, purpose,
  *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools, capability
- * Client: id, skills, tools, mcps, hooks, process, name, purpose,
+ * Client: id, skills, tools, mcps, guards, process, name, purpose,
  *         interactivity, brainAccess, runtime, phase, allowedTools, disallowedTools, capability
  */
 function parseAgentDefinition(raw: unknown): Agent {
@@ -566,7 +566,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     skills:         Array.isArray(comp['skills'])  ? (comp['skills']  as string[]) : [],
     tools:          Array.isArray(comp['tools'])   ? (comp['tools']   as string[]) : [],
     mcps:           Array.isArray(comp['mcps'])    ? (comp['mcps']    as string[]) : [],
-    hooks:          Array.isArray(comp['hooks'])   ? (comp['hooks']   as string[]) : [],
+    guards:         Array.isArray(comp['guards'])  ? (comp['guards']  as string[]) : [],
     process:        typeof r['body']          === 'string' ? r['body']          : '',
     interactivity:  typeof r['interactivity'] === 'string' ? r['interactivity'] : '',
     brainAccess:    typeof r['brainAccess']   === 'string' ? r['brainAccess']   : 'none',

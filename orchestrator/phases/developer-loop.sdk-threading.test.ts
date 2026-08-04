@@ -44,7 +44,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: []
+  guards: []
 brainAccess: advisory
 interactivity: Fully autonomous.
 allowed-tools: [Read, Write, Edit, Bash]

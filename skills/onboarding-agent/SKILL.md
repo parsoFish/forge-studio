@@ -12,7 +12,7 @@ composition:
     - forge-onboard-project
   tools: []
   mcps: []
-  hooks:
+  guards:
     - event-log
 runtime:
   sdk: claude

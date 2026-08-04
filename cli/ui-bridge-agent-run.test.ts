@@ -30,7 +30,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: []
+  guards: []
 runtime:
   sdk: claude
   strategy: fixed

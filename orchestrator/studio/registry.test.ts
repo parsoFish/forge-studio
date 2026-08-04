@@ -38,7 +38,7 @@ composition:
   skills: [demo]
   tools: []
   mcps: []
-  hooks: [event-log]
+  guards: [event-log]
 runtime:
   sdk: claude
   strategy: fixed
@@ -101,7 +101,7 @@ tools:
   - { id: Grep, name: Grep }
 mcps:
   - { id: gmail, name: Gmail MCP }
-hooks:
+guards:
   - { id: event-log, name: Event Log Hook }
 `;
 
@@ -173,10 +173,10 @@ describe('loadAgentDefinition', () => {
     assert.equal(def.phase, 'tester');
   });
 
-  it('parses composition.hooks', () => {
-    const p = writeAgentFixture('hooks-agent', AGENT_FIXTURE);
+  it('parses composition.guards', () => {
+    const p = writeAgentFixture('guards-agent', AGENT_FIXTURE);
     const def = loadAgentDefinition(p);
-    assert.deepEqual(def.composition.hooks, ['event-log']);
+    assert.deepEqual(def.composition.guards, ['event-log']);
     assert.deepEqual(def.composition.skills, ['demo']);
     assert.deepEqual(def.composition.tools, []);
     assert.deepEqual(def.composition.mcps, []);
@@ -739,7 +739,7 @@ describe('loadCatalog', () => {
     assert.equal(catalog.models[0].tier, 'sonnet');
     assert.equal(catalog.tools.length, 2);
     assert.equal(catalog.mcps.length, 1);
-    assert.equal(catalog.hooks.length, 1);
+    assert.equal(catalog.guards.length, 1);
     assert.equal(catalog.path, p);
   });
 
@@ -750,7 +750,7 @@ describe('loadCatalog', () => {
     assert.deepEqual(catalog.models, []);
     assert.deepEqual(catalog.tools, []);
     assert.deepEqual(catalog.mcps, []);
-    assert.deepEqual(catalog.hooks, []);
+    assert.deepEqual(catalog.guards, []);
   });
 });
 

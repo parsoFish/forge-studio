@@ -35,7 +35,7 @@ import { writeVerdictJson } from './flow-artifacts.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { loadFlowDefinition, loadAgentDefinition } from './studio/registry.ts';
 import { flowPathForId } from './flow-runner.ts';
-import { resolveBandHook } from './agent-bands.ts';
+import { resolveBandGuard } from './agent-bands.ts';
 import { skillPath } from './skill-path.ts';
 import { DEVELOP_FLOW_ID } from './enqueue-develop-run.ts';
 import { REFLECTION_LOST_EVENT } from './cycle-context.ts';
@@ -66,7 +66,7 @@ export type FinalizeDeps = {
   runReflector?: (input: CycleInput, logger: EventLogger) => Promise<void>;
   /**
    * Resolve an agent-target `ref` (slug) to its `AgentDefinition` so the
-   * dispatch can read its declared band hook (R4-09-F1: registry-driven, not a
+   * dispatch can read its declared band guard (R4-09-F1: registry-driven, not a
    * hardcoded slug). Defaults to the real skills/ registry; injectable so a
    * trigger-dispatch test needn't depend on a SKILL.md on disk.
    */
@@ -126,7 +126,7 @@ function defaultLoadAgentDef(ref: string): AgentDefinition {
  * merge-time handler. The resolution is REGISTRY-DRIVEN, not a hardcoded slug:
  * a `{kind: agent}` target whose `AgentDefinition` declares the
  * `reflection-close` band (`agent-bands.ts`) is forge's standalone reflect
- * consumer — the same band-hook indirection `flow-runner`'s `execReflect` uses.
+ * consumer — the same band-guard indirection `flow-runner`'s `execReflect` uses.
  * Returns the reflect action for that case, else `null` (a flow target, or an
  * agent whose band is not a merge-time handler) so the caller logs it loud +
  * unhandled rather than silently dispatching. Replaces the pre-R4-09 hardcoded
@@ -144,7 +144,7 @@ function resolveMergeAgentHandler(
   } catch {
     return null;
   }
-  if (resolveBandHook(def) === 'reflection-close') return runReflectorFn;
+  if (resolveBandGuard(def) === 'reflection-close') return runReflectorFn;
   return null;
 }
 
@@ -154,7 +154,7 @@ function resolveMergeAgentHandler(
  * through the generic FlowTrigger path. The SINGLE source of "merge fires
  * reflect" is forge-develop's `{on: merged, target: {kind: agent, ref:
  * reflector}}` declaration in its flow.yaml (R4-09-F1 standalone-reflect
- * cutover), resolved here through the registry band hook — NOT a hardcoded
+ * cutover), resolved here through the registry band guard — NOT a hardcoded
  * runReflector call. Built from `deps` so a test can inject the closure +
  * reflector + trigger source + agent-def resolver.
  */
@@ -189,7 +189,7 @@ function makeDefaultFinalizeOne(
           }),
         dispatch: async (t) => {
           // R4-09-F1: resolve the declared target to its standalone merge-time
-          // handler via the registry band hook (an agent whose def declares
+          // handler via the registry band guard (an agent whose def declares
           // `reflection-close` is the reflect consumer) — not a hardcoded slug.
           const handler = resolveMergeAgentHandler(t.target, runReflectorFn, loadAgentDef);
           if (handler) {

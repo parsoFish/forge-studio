@@ -99,7 +99,7 @@ function writeSkillFile(root: string, id: string, relPath: string, content: stri
 function writeCatalogYaml(root: string, communitySkills: Array<Record<string, unknown>> = []): void {
   const studioDir = join(root, 'studio');
   mkdirSync(studioDir, { recursive: true });
-  const lines: string[] = ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'hooks: []', 'community-skills:'];
+  const lines: string[] = ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills:'];
   if (communitySkills.length === 0) {
     lines[lines.length - 1] = 'community-skills: []';
   } else {
@@ -117,7 +117,7 @@ function makeAgentDef(slug: string, composedSkills: string[]): AgentDefinition {
     name: slug,
     description: `Agent ${slug}.`,
     purpose: 'Test purpose.',
-    composition: { skills: composedSkills, tools: [], mcps: [], hooks: [] },
+    composition: { skills: composedSkills, tools: [], mcps: [], guards: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',
@@ -254,7 +254,7 @@ describe('listSkillLibrary — union + source discrimination', () => {
       purpose: 'test',
       brainAccess: 'none',
       interactivity: 'auto',
-      composition: { skills: [], tools: [], mcps: [], hooks: [] },
+      composition: { skills: [], tools: [], mcps: [], guards: [] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
       'allowed-tools': [],
       'disallowed-tools': [],
@@ -591,7 +591,7 @@ describe('installSkillPackage', () => {
       purpose: 'test',
       brainAccess: 'none',
       interactivity: 'auto',
-      composition: { skills: ['some-other-skill'], tools: [], mcps: [], hooks: [] },
+      composition: { skills: ['some-other-skill'], tools: [], mcps: [], guards: [] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
       'allowed-tools': [],
       'disallowed-tools': [],
@@ -727,7 +727,7 @@ describe('approveSkillDraft', () => {
       purpose: 'test',
       brainAccess: 'none',
       interactivity: 'auto',
-      composition: { skills: ['some-other-skill'], tools: [], mcps: [], hooks: [] },
+      composition: { skills: ['some-other-skill'], tools: [], mcps: [], guards: [] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
       'allowed-tools': [],
       'disallowed-tools': [],
@@ -897,7 +897,7 @@ describe('lintSkillTrust / lintSkillRefs', () => {
       purpose: 'test',
       brainAccess: 'none',
       interactivity: 'auto',
-      composition: { skills: ['some-draft-skill'], tools: [], mcps: [], hooks: [] },
+      composition: { skills: ['some-draft-skill'], tools: [], mcps: [], guards: [] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
       'allowed-tools': [],
       'disallowed-tools': [],
@@ -930,7 +930,7 @@ describe('lintSkillTrust / lintSkillRefs', () => {
       purpose: 'test',
       brainAccess: 'none',
       interactivity: 'auto',
-      composition: { skills: ['totally-unknown-skill-id'], tools: [], mcps: [], hooks: [] },
+      composition: { skills: ['totally-unknown-skill-id'], tools: [], mcps: [], guards: [] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
       'allowed-tools': [],
       'disallowed-tools': [],
@@ -1403,7 +1403,7 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
     description: 'A test agent.',
     phase: 'tester',
     purpose: 'Test things.',
-    composition: { skills: [], tools: [], mcps: [], hooks: [] },
+    composition: { skills: [], tools: [], mcps: [], guards: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',

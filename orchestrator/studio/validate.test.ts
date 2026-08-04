@@ -39,7 +39,7 @@ function makeAgent(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
     name: 'My Agent',
     description: 'An agent.',
     purpose: 'Do things.',
-    composition: { skills: ['demo'], tools: [], mcps: [], hooks: ['event-log'] },
+    composition: { skills: ['demo'], tools: [], mcps: [], guards: ['event-log'] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',
@@ -83,7 +83,7 @@ function makeCatalog(overrides: Partial<Catalog> = {}): Catalog {
     models: [{ id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', sdk: 'claude', tier: 'sonnet' }],
     tools: [{ id: 'Read', name: 'Read' }],
     mcps: [],
-    hooks: [{ id: 'event-log', name: 'Event Log' }],
+    guards: [{ id: 'event-log', name: 'Event Log', kind: 'toggle' }],
     path: '/studio/catalog.yaml',
     ...overrides,
   };
@@ -147,7 +147,7 @@ describe('validateAgent — readiness/purpose', () => {
 describe('validateAgent — readiness/skill', () => {
   it('empty composition.skills → flag readiness/skill', () => {
     const findings = validateAgent(
-      makeAgent({ composition: { skills: [], tools: [], mcps: [], hooks: ['event-log'] } }),
+      makeAgent({ composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] } }),
     );
     const f = findings.find((x) => x.check === 'readiness/skill');
     assert.ok(f, 'expected readiness/skill finding');
@@ -160,19 +160,19 @@ describe('validateAgent — readiness/skill', () => {
   });
 });
 
-describe('validateAgent — readiness/hook', () => {
-  it('empty composition.hooks → flag readiness/hook', () => {
+describe('validateAgent — readiness/guard', () => {
+  it('empty composition.guards → flag readiness/guard', () => {
     const findings = validateAgent(
-      makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], hooks: [] } }),
+      makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], guards: [] } }),
     );
-    const f = findings.find((x) => x.check === 'readiness/hook');
-    assert.ok(f, 'expected readiness/hook finding');
+    const f = findings.find((x) => x.check === 'readiness/guard');
+    assert.ok(f, 'expected readiness/guard finding');
     assert.equal(f.level, 'flag');
   });
 
-  it('non-empty composition.hooks → no readiness/hook finding', () => {
+  it('non-empty composition.guards → no readiness/guard finding', () => {
     const findings = validateAgent(makeAgent());
-    assert.ok(!findings.some((x) => x.check === 'readiness/hook'));
+    assert.ok(!findings.some((x) => x.check === 'readiness/guard'));
   });
 });
 
@@ -408,14 +408,14 @@ describe('validateAgent — slug', () => {
 });
 
 describe('validateAgent — fully-ready agent', () => {
-  it('fully-ready agent with populated skills+hooks → [] findings', () => {
+  it('fully-ready agent with populated skills+guards → [] findings', () => {
     const findings = validateAgent(makeAgent());
     assert.deepEqual(findings, []);
   });
 
-  it('fully-ready agent with empty skills+hooks → flags only (2), no errors', () => {
+  it('fully-ready agent with empty skills+guards → flags only (2), no errors', () => {
     const findings = validateAgent(
-      makeAgent({ composition: { skills: [], tools: [], mcps: [], hooks: [] } }),
+      makeAgent({ composition: { skills: [], tools: [], mcps: [], guards: [] } }),
     );
     assert.ok(findings.every((f) => f.level === 'flag'));
     assert.equal(findings.length, 2);
@@ -900,7 +900,7 @@ describe('validateFlow — trigger-target', () => {
 
   it('on:merged agent target with the reflection-close band → no trigger-target finding', () => {
     const reflectAgent = makeAgent({
-      composition: { skills: ['demo'], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] },
+      composition: { skills: ['demo'], tools: [], mcps: [], guards: ['event-log', 'reflection-close'] },
     });
     const flow = makeFlow({
       triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' } }],
@@ -910,7 +910,7 @@ describe('validateFlow — trigger-target', () => {
   });
 
   it('R4-09-F1: on:merged agent target WITHOUT the reflection-close band → error trigger-target', () => {
-    // makeAgent's default hooks are ['event-log'] — no reflection-close band —
+    // makeAgent's default guards are ['event-log'] — no reflection-close band —
     // so finalize-merged would never dispatch it; lint must reject it.
     const flow = makeFlow({
       triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' } }],
@@ -1215,7 +1215,7 @@ describe('validateFlow — trigger-shape', () => {
 
   // R4-09-F3 — the reflect `mode` field
   const reflectAgent = () =>
-    makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], hooks: ['event-log', 'reflection-close'] } });
+    makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], guards: ['event-log', 'reflection-close'] } });
 
   it('mode: automated on an on:merged reflect-agent target → no trigger-mode/shape finding', () => {
     const flow = makeFlow({
@@ -1409,11 +1409,11 @@ describe('validateCatalog — unique-ids', () => {
     assert.equal(f.level, 'error');
   });
 
-  it('duplicate hook ids → error unique-ids', () => {
+  it('duplicate guard ids → error unique-ids', () => {
     const catalog = makeCatalog({
-      hooks: [
-        { id: 'event-log', name: 'Event Log' },
-        { id: 'event-log', name: 'Event Log Dup' },
+      guards: [
+        { id: 'event-log', name: 'Event Log', kind: 'toggle' },
+        { id: 'event-log', name: 'Event Log Dup', kind: 'toggle' },
       ],
     });
     const findings = validateCatalog(catalog);
@@ -1658,7 +1658,7 @@ describe('validateAgent runtime/loop-strategy', () => {
     description: 'd',
     library: true,
     purpose: 'p',
-    composition: { skills: [], tools: [], mcps: [], hooks: ['event-log'] },
+    composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] },
     runtime: { sdk: 'claude', strategy: 'fixed' as const, model: 'claude-sonnet-4-6', loopStrategy },
     brainAccess: 'none' as const,
     interactivity: 'autonomous',
@@ -1685,15 +1685,15 @@ describe('validateAgent runtime/loop-strategy', () => {
   });
 });
 
-// ── composition/band-hook + budgets/range (R4-01 whole-branch review) ──────
-describe('validateAgent composition/band-hook + budgets/range', () => {
+// ── composition/band-guard + budgets/range (R4-01 whole-branch review) ──────
+describe('validateAgent composition/band-guard + budgets/range', () => {
   const mk = (slug: string, over: Record<string, unknown> = {}) => ({
     slug,
     name: slug,
     description: 'd',
     library: true,
     purpose: 'p',
-    composition: { skills: [], tools: [], mcps: [], hooks: ['event-log'] },
+    composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] },
     runtime: { sdk: 'claude', strategy: 'fixed' as const, model: 'claude-sonnet-4-6' },
     brainAccess: 'none' as const,
     interactivity: 'autonomous',
@@ -1705,44 +1705,44 @@ describe('validateAgent composition/band-hook + budgets/range', () => {
     ...over,
   });
   const bandErrs = (f: Array<{ check: string; level: string }>) =>
-    f.filter((x) => x.check === 'composition/band-hook' && x.level === 'error');
+    f.filter((x) => x.check === 'composition/band-guard' && x.level === 'error');
 
   it('a foreign def declaring wi-contract → error (canonical-slug restriction)', () => {
     const findings = validateAgent(mk('some-agent', {
-      composition: { skills: [], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
+      composition: { skills: [], tools: [], mcps: [], guards: ['event-log', 'wi-contract'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }));
     assert.ok(bandErrs(findings).length >= 1);
   });
 
-  it('two band hooks on one def → error; band hook without one-shot/caps → errors', () => {
+  it('two band guards on one def → error; band guard without one-shot/caps → errors', () => {
     const both = validateAgent(mk('project-manager', {
-      composition: { skills: [], tools: [], mcps: [], hooks: ['wi-contract', 'reflection-close'] },
+      composition: { skills: [], tools: [], mcps: [], guards: ['wi-contract', 'reflection-close'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }));
-    assert.ok(both.some((x) => x.check === 'composition/band-hook' && x.message.includes('at most one')));
+    assert.ok(both.some((x) => x.check === 'composition/band-guard' && x.message.includes('at most one')));
 
     const bare = validateAgent(mk('project-manager', {
-      composition: { skills: [], tools: [], mcps: [], hooks: ['wi-contract'] },
+      composition: { skills: [], tools: [], mcps: [], guards: ['wi-contract'] },
     }));
-    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('one-shot')));
-    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('maxTurns')));
-    assert.ok(bare.some((x) => x.check === 'composition/band-hook' && x.message.includes('budget cap')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('one-shot')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('maxTurns')));
+    assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('budget cap')));
   });
 
-  it('the canonical agents must CARRY their band hook (inverse guard)', () => {
+  it('the canonical agents must CARRY their band guard (inverse guard)', () => {
     const stripped = validateAgent(mk('reflector', {
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 60, maxBudgetUsd: 1.5 },
     }));
-    assert.ok(stripped.some((x) => x.check === 'composition/band-hook' && x.message.includes('must declare its')));
+    assert.ok(stripped.some((x) => x.check === 'composition/band-guard' && x.message.includes('must declare its')));
   });
 
   it('the real shipped PM/reflector shapes are band-lint clean', () => {
     const pm = validateAgent(mk('project-manager', {
-      composition: { skills: ['brain-query'], tools: [], mcps: [], hooks: ['event-log', 'wi-contract'] },
+      composition: { skills: ['brain-query'], tools: [], mcps: [], guards: ['event-log', 'wi-contract'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 70, maxBudgetUsd: 2.5, maxBudgetUsdShare: 0.2 },
     }));

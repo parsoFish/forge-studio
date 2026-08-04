@@ -10,7 +10,7 @@
  * `AgentRuntime` form state. That client re-derivation
  * (`runtimeConfigured(rt)`: sdk truthy + model/range chosen) was the exact
  * "hardcoded heuristic" the R2-02-F4 AC replaces. The content-completeness
- * checks (purpose/skill/hook/process/interactivity) are real readiness
+ * checks (purpose/skill/guard/process/interactivity) are real readiness
  * signals independent of the descriptor and stay as direct field checks.
  */
 import { test, expect } from 'vitest';
@@ -21,7 +21,7 @@ import type { AgentCapabilityDescriptor } from './studio-client';
 const FULL_CONTENT = {
   purpose: 'Decompose initiatives.',
   skills: ['brain-query'],
-  hooks: ['event-log'],
+  guards: ['event-log'],
   process: '# Project Manager\n...',
   interactivity: 'Fully autonomous; never blocks on the operator.',
 };
@@ -32,7 +32,7 @@ test('computeReadinessChecks: all 6 checks ok when content complete + descriptor
   const checks = computeReadinessChecks({ ...FULL_CONTENT, capability: READY_CAPABILITY });
   expect(checks).toHaveLength(6);
   expect(checks.every((c) => c.ok)).toBe(true);
-  expect(checks.map((c) => c.key)).toEqual(['purpose', 'skill', 'hook', 'process', 'interactivity', 'runtime']);
+  expect(checks.map((c) => c.key)).toEqual(['purpose', 'skill', 'guard', 'process', 'interactivity', 'runtime']);
 });
 
 test('computeReadinessChecks: runtime check fails when capability.runtimeSdks is empty (descriptor fact, not client-derived)', () => {
@@ -49,7 +49,7 @@ test('computeReadinessChecks: content-completeness checks stay independent of th
   const checks = computeReadinessChecks({
     purpose: '',
     skills: [],
-    hooks: [],
+    guards: [],
     process: '',
     interactivity: '',
     capability: READY_CAPABILITY, // descriptor fully ready, but content is empty

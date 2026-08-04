@@ -28,6 +28,7 @@ import type { ClauseResult } from './preflight.ts';
 import {
   listAgentDefinitions,
   loadAgentDefinition,
+  loadCatalog,
   loadFlowDefinition,
   discoverProjects,
   serializeAgentDefinition,
@@ -376,7 +377,7 @@ export async function handleStudioWriteRoutes(
         skills: Array.isArray(compIn['skills']) ? (compIn['skills'] as string[]) : (existing?.composition.skills ?? []),
         tools: Array.isArray(compIn['tools']) ? (compIn['tools'] as string[]) : (existing?.composition.tools ?? []),
         mcps: Array.isArray(compIn['mcps']) ? (compIn['mcps'] as string[]) : (existing?.composition.mcps ?? []),
-        hooks: Array.isArray(compIn['hooks']) ? (compIn['hooks'] as string[]) : (existing?.composition.hooks ?? []),
+        guards: Array.isArray(compIn['guards']) ? (compIn['guards'] as string[]) : (existing?.composition.guards ?? []),
       };
 
       // Runtime: merge from body, fall back to existing
@@ -418,8 +419,25 @@ export async function handleStudioWriteRoutes(
         path: skillMdPath,
       };
 
+      // 5b. Pre-load catalog guard ids for the composition/guard-unknown check
+      // below (ADR-027 §6: "the same validation runs at save (bridge PUT) and
+      // at spawn") — mirrors cli/studio-lint.ts's identical block; a missing
+      // or malformed catalog leaves the set undefined so the rule simply does
+      // not fire (a catalog load failure must not turn every save into a 400).
+      let validGuardIds: ReadonlySet<string> | undefined;
+      {
+        const catalogPathEarly = join(ctx.forgeRoot, 'studio', 'catalog.yaml');
+        if (existsSync(catalogPathEarly)) {
+          try {
+            validGuardIds = new Set(loadCatalog(catalogPathEarly).guards.map((g) => g.id));
+          } catch {
+            validGuardIds = undefined;
+          }
+        }
+      }
+
       // 6. Validate — reject on any error-level finding
-      const findings = validateAgent(merged);
+      const findings = validateAgent(merged, undefined, validGuardIds);
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {
         sendJson(res, 400, { error: 'validation failed', findings }, origin);

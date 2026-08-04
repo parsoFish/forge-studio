@@ -10,7 +10,7 @@
  * execDemo (the `demo-band`) wraps the R4-07 demo pipeline + the RELOCATED
  * close-contract gates (items 4-8) and the demo-fix loop; execAdversarialReview
  * (the `review-band`) wraps the R4-08 critique pipeline. Both are selected by a
- * declared `composition.hooks` band, not a privileged executor enum. The former
+ * declared `composition.guards` band, not a privileged executor enum. The former
  * unifier node — execUnifier / the `developer-unifier` slug — STAYS in the
  * registry (retired at R4-01-F4) but is off the live flow; it still executes for
  * the retained forge-cycle-shaped DAG fixtures.
@@ -83,7 +83,7 @@ import {
 } from './cycle-helpers.ts';
 import { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
-import { resolveBandHook, BAND_CANONICAL_SLUG, type BandHookId } from './agent-bands.ts';
+import { resolveBandGuard, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
 import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
@@ -272,7 +272,7 @@ function topoSort(flow: FlowDefinition): string[] {
 export type NodeKind =
   | 'architect'   // has gate:'plan' — pre-satisfied, emit synthetic events
   | 'review'      // has gate:'verdict' — openPrInline + runClosure
-  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); ADR-039 declared dispatch: a band hook (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
+  | 'agent'       // agent def exists, no executor declared — generic path (R2-01-F2); ADR-039 declared dispatch: a band guard (wi-contract / reflection-close) or loopStrategy:'ralph' routes to its orchestrator band inside execAgent
   | 'unknown';    // defensive fallback — no def, or an invalid declared executor
 
 /**
@@ -940,7 +940,7 @@ const execReview: NodeExecutor = async (ctx) => {
 /**
  * The `reflection-close` band (R4-01-F2, ADR-039) — formerly the dedicated
  * `reflect` NodeKind's executor, now selected by the reflector def's declared
- * `composition.hooks` entry instead of a privileged executor enum. Semantics
+ * `composition.guards` entry instead of a privileged executor enum. Semantics
  * unchanged: runs only when the closure confirmed a merge (G10), records a
  * reflection loss on a caller-side crash, and ALWAYS promotes `merged → done`
  * in the finally (R4-11-F1 — reflection-lost still reaches done).
@@ -1009,7 +1009,7 @@ const execUnknown: NodeExecutor = async (ctx) => {
  * Assemble a minimal prompt for a generic execAgent run: the agent's own
  * SKILL.md process intent (`def.body`) followed by a small "## Run context"
  * section naming the project, initiative, and any inbound artifact refs.
- * Richer assembly (composition.tools/mcps/hooks, artifact bodies) is later
+ * Richer assembly (composition.tools/mcps/guards, artifact bodies) is later
  * work (R2-05/R4) — kept deliberately small here.
  */
 function buildAgentPrompt(def: AgentDefinition, ctx: NodeExecContext): string {
@@ -1070,21 +1070,21 @@ const execAgent: NodeExecutor = async (ctx) => {
     throw new Error(`execAgent: no agent definition for node "${ctx.nodeId}" (agent:"${node.agent}")`);
   }
 
-  // ADR-039: a declared band hook routes this node to its orchestrator band
+  // ADR-039: a declared band guard routes this node to its orchestrator band
   // (the phase pipeline machinery) instead of the bare generic spawn.
   // Runtime backstop mirroring the ralph guard below (and the
-  // composition/band-hook lint): the band pipelines load the CANONICAL
-  // agent's SKILL.md themselves, so a non-canonical def declaring the hook
+  // composition/band-guard lint): the band pipelines load the CANONICAL
+  // agent's SKILL.md themselves, so a non-canonical def declaring the guard
   // would silently run the wrong identity — fail loud instead.
-  const bandHook = resolveBandHook(def);
-  if (bandHook) {
-    const canonicalSlug = BAND_CANONICAL_SLUG[bandHook];
+  const bandGuard = resolveBandGuard(def);
+  if (bandGuard) {
+    const canonicalSlug = BAND_CANONICAL_SLUG[bandGuard];
     if (def.slug !== canonicalSlug) {
       throw new Error(
-        `execAgent: agent "${def.slug}" declares band hook "${bandHook}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
+        `execAgent: agent "${def.slug}" declares band guard "${bandGuard}", which routes to the canonical ${canonicalSlug} pipeline — restricted to that slug until the bands generalise; \`forge studio lint\` flags this at authoring time`,
       );
     }
-    return AGENT_BAND_EXECUTORS[bandHook](ctx);
+    return AGENT_BAND_EXECUTORS[bandGuard](ctx);
   }
 
   // ADR-039: a declared ralph loop routes to the dev-loop pipeline — the one
@@ -1146,13 +1146,13 @@ const DEFAULT_NODE_EXECUTORS: Readonly<Record<NodeKind, NodeExecutor>> = {
 };
 
 /**
- * Band-hook id → executor (ADR-039). The KEY is declared data (a
- * `composition.hooks` entry on the agent's SKILL.md); the executors are the
+ * Band-guard id → executor (ADR-039). The KEY is declared data (a
+ * `composition.guards` entry on the agent's SKILL.md); the executors are the
  * same orchestrator-band implementations the retired phase-executor rows
  * carried. `wi-contract` is registered ahead of the PM's own migration in
- * this same change-set so the table is total over BAND_HOOK_IDS.
+ * this same change-set so the table is total over BAND_GUARD_IDS.
  */
-const AGENT_BAND_EXECUTORS: Readonly<Record<BandHookId, NodeExecutor>> = {
+const AGENT_BAND_EXECUTORS: Readonly<Record<BandGuardId, NodeExecutor>> = {
   'wi-contract': execPm,
   'reflection-close': execReflect,
   'demo-band': execDemo,
@@ -1310,7 +1310,7 @@ export async function runFlow({
     const isReflectionCloseNode =
       kind === 'agent' &&
       nodeDefForExemption !== undefined &&
-      resolveBandHook(nodeDefForExemption) === 'reflection-close';
+      resolveBandGuard(nodeDefForExemption) === 'reflection-close';
     if (!isReflectionCloseNode && !input.dryRun) {
       assertInboundArtifacts({
         flow,

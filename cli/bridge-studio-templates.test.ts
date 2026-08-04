@@ -40,7 +40,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'studio', 'flows'), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'studio', 'catalog.yaml'),
-    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'hooks: []', 'community-skills: []', ''].join('\n'),
+    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'),
   );
 
   const artifactDir = join(forgeRoot, 'studio', 'artifact-templates');

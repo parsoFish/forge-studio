@@ -8,14 +8,14 @@ import type { Catalog, CatalogItem } from '@/lib/studio-client';
 // Search + collapsible groups + draggable chips + used-dimming
 // ---------------------------------------------------------------------------
 
-type Group = { key: keyof Pick<Catalog, 'skills' | 'tools' | 'mcps' | 'hooks'>; kind: Kind; label: string };
-export type Kind = 'skill' | 'tool' | 'mcp' | 'hook';
+type Group = { key: keyof Pick<Catalog, 'skills' | 'tools' | 'mcps' | 'guards'>; kind: Kind; label: string };
+export type Kind = 'skill' | 'tool' | 'mcp' | 'guard';
 
 const GROUPS: Group[] = [
   { key: 'skills', kind: 'skill', label: 'Skills' },
   { key: 'tools',  kind: 'tool',  label: 'Tools / CLIs' },
   { key: 'mcps',   kind: 'mcp',   label: 'MCP Servers' },
-  { key: 'hooks',  kind: 'hook',  label: 'Hooks' },
+  { key: 'guards', kind: 'guard', label: 'Guards' },
 ];
 
 type Props = {
@@ -102,7 +102,7 @@ export function CatalogPalette({ catalog, usedIds }: Props) {
         <input
           className="input"
           type="search"
-          placeholder="Search skills, tools, hooks…"
+          placeholder="Search skills, tools, guards…"
           autoComplete="off"
           value={search}
           onChange={(e) => setSearch(e.target.value)}

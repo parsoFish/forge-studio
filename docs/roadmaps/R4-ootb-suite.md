@@ -173,9 +173,10 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
   `onMessage` observer (telemetry stays caller-side, ADR-036), scratch
   `.forge/agent-run/PROMPT.md` on the legacy path. Shared `StreamQueryFn` seam in
   `orchestrator/pinned-sdk-query.ts` (`pinnedStreamQuery`, the one structural cast).
-- **`orchestrator/agent-bands.ts`** — band-hook registry (`wi-contract`, `reflection-close`);
+- **`orchestrator/agent-bands.ts`** — band-guard registry (`wi-contract`, `reflection-close`;
+  named band-*hook* until R3-03 renamed the vocabulary, 2026-08-04);
   flow-runner's `AGENT_BAND_EXECUTORS` maps them onto the unchanged `execPm`/`execReflect`
-  bands; `execAgent` routes band hooks first, then `loopStrategy: 'ralph'` → the dev-loop
+  bands; `execAgent` routes band guards first, then `loopStrategy: 'ralph'` → the dev-loop
   pipeline (lint + runtime-guard restricted to `developer-ralph`).
 - **Pipelines** (`orchestrator/phases/project-manager.ts` / `reflector.ts`) spawn via
   `runAgent(lifecycle:'caller')`; every judgment band (brain-gate, WI validation/compile,
@@ -236,8 +237,9 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
   SDK stream inside `runAgent`; `ralph` = execAgent routes to the dev-loop
   pipeline, lint-restricted to `developer-ralph` until R2-03/R4-06),
   `budgets.maxTurns/maxBudgetUsd/maxBudgetUsdShare` (the PM's
-  floor-plus-share cap as frontmatter data), and `composition.hooks` band
-  keys (`wi-contract` → PM pipeline, `reflection-close` → reflector pipeline;
+  floor-plus-share cap as frontmatter data), and `composition.guards` band
+  keys (renamed from `composition.hooks` by ADR 027's R3-03 amendment,
+  2026-08-04; `wi-contract` → PM pipeline, `reflection-close` → reflector;
   `orchestrator/agent-bands.ts`). Pipelines keep 100% of their judgment bands
   (ADR-036); only the SDK call moved, behind `runAgent`'s
   `lifecycle:'caller'` (no event/cost double-emission). Parity proof: golden
@@ -256,7 +258,7 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
   interactive runner (ADR-039 §5); its residual TS prompt prose is R4-04
   material. The whole-branch review hardened the seam post-build: band
   hooks + ralph got matching lint/runtime canonical-slug guards, budget
-  caps fail loud (pipelines + `budgets/range`/`composition/band-hook`
+  caps fail loud (pipelines + `budgets/range`/`composition/band-guard`
   lints), `execAgent` threads the initiative cost budget so declared
   share caps resolve, and the builder renders `loopStrategy` honestly.
 - **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder
@@ -928,7 +930,7 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
     single-node forge-reflect flow wrapper to the reflect **agent** target
     (`{kind: agent, ref: reflector}`), consuming R2-04/ADR-041's agent-target
     seam with no schema change. `orchestrator/finalize-merged.ts` resolves it
-    via the agent's `reflection-close` band hook (`resolveMergeAgentHandler`) —
+    via the agent's `reflection-close` band guard (`resolveMergeAgentHandler`) —
     registry-driven, no hardcoded slug — and the pre-R4-09 `forge-reflect`
     flow-string match is removed. Atomic cutover (flow.yaml flip + dispatch
     rewrite in one change): exactly one reflect fires per merge (asserted);
@@ -1026,9 +1028,9 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
 - **Implemented-notes F1 (2026-08-02 — in-place cutover, ADR-039/040):** the live
   `forge-develop` flow was rewritten IN PLACE `dev→unifier→review` →
   `dev→demo→adversarial-review→verdict` (v2). The two successor agents are wired
-  via **band hooks** (not new executor kinds): `agent-bands.ts` gains
+  via **band guards** (not new executor kinds): `agent-bands.ts` gains
   `demo-band`/`review-band` + a single-source `BAND_CANONICAL_SLUG` map consumed by
-  both `execAgent`'s runtime backstop and `validate.ts`'s band-hook lint;
+  both `execAgent`'s runtime backstop and `validate.ts`'s band-guard lint;
   `demo-agent`/`adversarial-review` SKILL.md declare the hooks. **`execDemo`** wraps
   `runDemoAgentPipeline` and carries the RELOCATED unifier residual — the demo agent
   authors `.forge/pr-description.md` alongside `demo.json` (hard-required by
@@ -1586,7 +1588,7 @@ free R4 ID's features.
   (R4-09). **Wave 2 (R4-05 + R4-11) COMPLETE.**
 - 2026-07-24 — **Wave 4 opened: R4-01 F1–F3 built** (branch `feat/r4-01-artifact-migration`; R4 gains baseline
   **R4-B12**). ADR-039 ships-as-artifact + the declared-dispatch seam: `executor:` rows `pm`/`dev`/`reflect`
-  retired onto band hooks (`wi-contract`/`reflection-close`, `orchestrator/agent-bands.ts`) + `loopStrategy:
+  retired onto band guards (`wi-contract`/`reflection-close`, `orchestrator/agent-bands.ts`) + `loopStrategy:
   'ralph'` routing; `runAgent` gains the one-shot runtime (`lifecycle:'caller'`, declared budget caps, streamGuard,
   scratch PROMPT.md — closes the known-gaps §8 rider); pipelines keep their judgment bands, only the SDK call
   moved; `*-invocation.ts` dissolved into `phases/*-binding.ts`. `PHASE_EXECUTOR_KINDS` = `['unifier']` (held for

@@ -12,6 +12,7 @@ import yaml from 'js-yaml';
 import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
 import { skillTrustState } from './skill-library.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
+import { BAND_GUARD_IDS } from '../agent-bands.ts';
 import type {
   AgentBudgets,
   AgentComposition,
@@ -20,6 +21,7 @@ import type {
   AgentRuntime,
   ArtifactTemplate,
   Catalog,
+  CatalogGuardEntry,
   CommunitySkill,
   CatalogEntry,
   CatalogModel,
@@ -86,11 +88,11 @@ export const SURFACE_KINDS = ['unattended', 'interactive', 'operator-triggered',
 // findFanOutViolations).
 //
 // R4-01-F2 (ADR-039) retired the enum row by row as each phase moved to
-// declared dispatch (loopStrategy + band hooks): 'reflect' with the reflector
+// declared dispatch (loopStrategy + band guards): 'reflect' with the reflector
 // migration, 'pm' with the plan agent, 'dev' with the ralph loopStrategy
 // routing. 'unifier' was the LAST row — retired in R4-01-F4 (the develop flow's
 // successor demo + adversarial-review nodes replace it). No phase executors
-// remain: every phase is now a generic agent or a band hook, so any `executor:`
+// remain: every phase is now a generic agent or a band guard, so any `executor:`
 // declaration on an agent def is invalid (validate.ts rejects it).
 export const PHASE_EXECUTOR_KINDS = [] as const;
 
@@ -146,11 +148,20 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     rawComposition != null && typeof rawComposition === 'object' && !Array.isArray(rawComposition)
       ? (rawComposition as Record<string, unknown>)
       : {};
+  // ADR-027 R3-03 amendment: composition.hooks is retired in favour of
+  // composition.guards — fail loud on a stale key rather than silently
+  // reading it (no back-compat parsing), mirroring parseFlowTrigger's stale
+  // "flow:" key precedent (registry.ts's other one-shot vocabulary swap).
+  if ('hooks' in comp) {
+    throw new Error(
+      `${skillMdPath}: "composition.hooks" is retired — declare "composition.guards" instead (ADR-027 R3-03 amendment; no back-compat)`,
+    );
+  }
   const composition: AgentComposition = {
     skills: stringArray(comp, 'skills', skillMdPath),
     tools: stringArray(comp, 'tools', skillMdPath),
     mcps: stringArray(comp, 'mcps', skillMdPath),
-    hooks: stringArray(comp, 'hooks', skillMdPath),
+    guards: stringArray(comp, 'guards', skillMdPath),
   };
 
   const rawRuntime = reqObject(d, 'runtime', skillMdPath);
@@ -720,6 +731,30 @@ function parseCatalogEntries(raw: unknown, file: string, key: string): CatalogEn
   });
 }
 
+/**
+ * Parse `catalog.yaml`'s `guards:` section. `kind` is DERIVED from
+ * `BAND_GUARD_IDS`, never read from the file — a declared `kind:` value in the
+ * YAML (if present) is parsed and then discarded, never merged or trusted
+ * (ADR-027 R3-03 amendment).
+ */
+function parseCatalogGuards(raw: unknown, file: string): CatalogGuardEntry[] {
+  if (!Array.isArray(raw)) return [];
+  const bandIds = new Set<string>(BAND_GUARD_IDS as readonly string[]);
+  return raw.map((item, i) => {
+    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
+      throw new Error(`${file}: guards[${i}] must be a mapping`);
+    }
+    const e = item as Record<string, unknown>;
+    const id = reqString(e, 'id', file);
+    return {
+      id,
+      name: reqString(e, 'name', file),
+      desc: optString(e, 'desc'),
+      kind: bandIds.has(id) ? 'band' : 'toggle',
+    };
+  });
+}
+
 function parseCommunitySkills(raw: unknown, file: string): CommunitySkill[] {
   if (raw === undefined || raw === null) return [];
   if (!Array.isArray(raw)) {
@@ -751,7 +786,7 @@ export function loadCatalog(catalogYamlPath: string): Catalog {
     models: parseCatalogModels(d['models'], catalogYamlPath),
     tools: parseCatalogEntries(d['tools'], catalogYamlPath, 'tools'),
     mcps: parseCatalogEntries(d['mcps'], catalogYamlPath, 'mcps'),
-    hooks: parseCatalogEntries(d['hooks'], catalogYamlPath, 'hooks'),
+    guards: parseCatalogGuards(d['guards'], catalogYamlPath),
     communitySkills: parseCommunitySkills(d['community-skills'], catalogYamlPath),
     path: catalogYamlPath,
   };

@@ -28,6 +28,16 @@
  *    so it can never collide with a real cycle, and its `_logs/` dir is
  *    removed in `finally` regardless of outcome.
  *
+ * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * `composition.guards`, 2026-08-04): `reflector.json` moved by exactly one
+ * byte — `hook` → `guard` at a single site — because `renderReflectorUserPrompt`
+ * (via `reflector-binding.ts`) reads the canonical `reflector` agent's RAW
+ * `skills/reflector/SKILL.md` text and embeds it verbatim into the rendered
+ * prompt. Renaming the frontmatter key changes those embedded prompt bytes
+ * even though nothing about the reflector's own logic changed — a one-token
+ * diff here is expected and should be trusted; a diff touching anything
+ * else in the fixture is not.
+ *
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/reflector-spawn-capture.test.ts
  * (or delete the fixture) rewrites

@@ -1,0 +1,25 @@
+{
+  "prompt": "SPAWN-CAPTURE-TEST fixed prompt for the generic one-shot primitive.",
+  "options": {
+    "cwd": "<TMP>",
+    "systemPrompt": "SPAWN-CAPTURE-TEST fixed system prompt.",
+    "model": "claude-sonnet-4-6",
+    "permissionMode": "acceptEdits",
+    "allowedTools": [
+      "Read",
+      "Grep",
+      "Glob",
+      "Write"
+    ],
+    "disallowedTools": [
+      "Edit",
+      "MultiEdit",
+      "NotebookEdit",
+      "Bash",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "maxTurns": 25,
+    "maxBudgetUsd": 3.5
+  }
+}
