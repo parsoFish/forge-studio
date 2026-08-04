@@ -519,6 +519,22 @@ create-project action added from `/templates` itself).
     pending explicit operator override; a benign fixture passes with an empty
     findings list; the scan runs on *edit* too (an approved hook that changes
     re-enters review).
+    **AC corrected 2026-08-04 (R3-03 library PR, adversarial review).** As
+    originally written this AC exercised the **undeclared** variant — and that
+    variant is **inert**: an undeclared env var never reaches the child, so that
+    fixture could not leak even if it ran. The variant that *can* leak is the
+    **declared** one (`permissions: {env: [<secret>], network: true}`), and as
+    first built, declaring *downgraded* both findings, so it scored `findings`
+    and was approvable with no override at all — while the manifest-keyed env
+    build handed the child the real value. The AC is therefore restated with the
+    invariant it was always meant to express: **the declared path must never
+    carry less friction than the undeclared path.** Severity keys off the
+    capability **grant**, not scanner detection — a manifest *requesting* a
+    secret-shaped name is critical whether or not the scanner finds a matching
+    reference — so declared-secret-grant + declared-egress resolves to
+    `blocked`. Benign combinations (egress with no secret grant) stay
+    non-blocked, pinned in both directions so the rule cannot degenerate into
+    everything-blocked.
   - **R3-03-F3 — Permission model (declare-what-you-access).** Each hook's
     definition carries a permission manifest: which env vars it may read,
     which paths it may touch, whether network egress is allowed.
