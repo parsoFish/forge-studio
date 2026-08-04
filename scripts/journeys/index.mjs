@@ -5,8 +5,9 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving): skills → templates → stand-up-onboard → stand-up-create →
- * knowledge → agents → flows-author → flows-run → roadmap → demo-builder.
+ * interleaving): skills → hooks → templates → stand-up-onboard →
+ * stand-up-create → knowledge → agents → flows-author → flows-run → roadmap
+ * → demo-builder.
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -20,8 +21,8 @@
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
  *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
  *     flows-run journey itself) has completed.
- * Every other journey (skills, templates, agents, knowledge, demo-builder) is
- * self-contained: templates is pure read-only browsing (no seed, no
+ * Every other journey (skills, hooks, templates, agents, knowledge,
+ * demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
  * skills-detail-package's own read-only precedent (R3-01-F3/F4)); skills-edit
  * restores the real shipped skill it edits,
@@ -47,8 +48,32 @@
  * skills-create in RUN_ORDER, above). cleanSkillArtifacts (the runner's
  * crash-safe sweep) still covers the install artifacts too, via the same
  * narrow function, for the case where a crash skips this beat's own finally.
+ *
+ * hooks (R3-03-F4) mirrors skills' own cleanup discipline with its own,
+ * disjoint set of ids (HK_NEW_ID/HK_SECURITY_ID/HK_BIND_AGENT_SLUG,
+ * journey-fixtures.mjs) — never SK_*, never a skills-pillar path.
+ * hooks-library/hooks-detail are read-only browse beats (no seed/cleanup of
+ * their own, mirroring skills-library/skills-detail-package). hooks-create
+ * authors HK_NEW (studio/hooks/journey-stack-base-guard/) as a throughline
+ * WITHIN this journey only — consumed by hooks-bind two beats later, then
+ * swept there via the narrow cleanHookCreateArtifacts(). hooks-security
+ * authors a SEPARATE, never-bound hook (HK_SECURITY) purely to demonstrate
+ * the scan's blocked verdict + the override discipline; it is fully created
+ * and swept (package + the studio/hook-approvals.yaml ledger entry, restored
+ * to their exact prior state) inside that one beat's own try/finally via the
+ * narrow cleanHookSecurityArtifacts() — called again between its main pass
+ * and its clip (which reuses the SAME id sequentially rather than a second
+ * scratch id, since re-POSTing an existing id 409s and this artifact is
+ * never a throughline past this one beat). hooks-bind stashes/restores the
+ * real shipped skills/developer-ralph/SKILL.md it binds HK_NEW into (a
+ * low-risk pick no other journey module stashes), restoring once between its
+ * own main pass and its clip (a "used" chip's drag is refused by
+ * CatalogPalette itself, so the clip needs the pre-bind bytes back to drag
+ * the same chip again) and once more, alongside cleanHookCreateArtifacts(),
+ * in its own finally.
  */
 import { journey as skills } from './skills.mjs';
+import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
 import { journey as standUpCreate } from './stand-up-create.mjs';
@@ -61,6 +86,7 @@ import { journey as demoBuilder } from './demo-builder.mjs';
 
 export const JOURNEYS = [
   skills,
+  hooks,
   templates,
   standUpOnboard,
   standUpCreate,
@@ -80,6 +106,12 @@ export const RUN_ORDER = [
   ['skills', 'skills-create'],
   ['skills', 'skills-install-approve'],
   ['skills', 'skills-agentic-author'],
+
+  ['hooks', 'hooks-library'],
+  ['hooks', 'hooks-detail'],
+  ['hooks', 'hooks-create'],
+  ['hooks', 'hooks-security'],
+  ['hooks', 'hooks-bind'],
 
   ['templates', 'templates-library'],
   ['templates', 'templates-search'],

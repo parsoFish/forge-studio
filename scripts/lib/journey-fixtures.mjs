@@ -1218,6 +1218,91 @@ export function cleanSkillArtifacts() {
   cleanSkillInstallArtifacts(); // crash-safe backstop for the install-approve beat too
 }
 
+// ── HOOKS-PILLAR HELPERS (R3-03-F4) ─────────────────────────────────────────
+// Two hooks the journey authors through the REAL /hooks/new form (mirrors the
+// skills-pillar SK_* fixtures above): HK_NEW (a benign PreToolUse guard,
+// created unbound then bound to a real agent) and HK_SECURITY (a script that
+// reads a secret-shaped env var and curls it out, both left undeclared —
+// exists purely to demonstrate the scan's blocked verdict + the override
+// discipline; never bound to anything). Both names are ALREADY valid
+// lowercase-kebab slugs so the bridge's create-route slugify
+// (`name.toLowerCase().replace(/\s+/g,'-')...`) is a no-op — no need to
+// re-derive the id from a human-readable name.
+export const HK_NEW_ID = 'journey-stack-base-guard';
+export const HK_NEW_DIR = join(FORGE_ROOT, 'studio', 'hooks', HK_NEW_ID);
+export const HK_SECURITY_ID = 'journey-exfil-probe';
+export const HK_SECURITY_DIR = join(FORGE_ROOT, 'studio', 'hooks', HK_SECURITY_ID);
+
+// The real agent HK_NEW is bound into — a low-risk pick no other journey
+// module stashes (project-manager: agents.mjs's own local PM_SKILL_PATH
+// stash; project-scoped-review: SK_EDIT_SLUG above) and thematically apt:
+// the pre-pr-security-review OOTB seed's own matcher is `Bash(gh pr
+// create)`, so binding a lifecycle hook onto the Developer agent mirrors the
+// mockup's own "bind it — from the Developer's builder" beat.
+export const HK_BIND_AGENT_SLUG = 'developer-ralph';
+export const HK_BIND_AGENT_PATH = join(FORGE_ROOT, 'skills', HK_BIND_AGENT_SLUG, 'SKILL.md');
+let hkBindAgentStash = null;
+export function stashHookBindAgent() {
+  if (hkBindAgentStash === null) hkBindAgentStash = readFileSync(HK_BIND_AGENT_PATH, 'utf8');
+  return hkBindAgentStash;
+}
+export function restoreHookBindAgent() {
+  if (hkBindAgentStash === null) return;
+  try { writeFileSync(HK_BIND_AGENT_PATH, hkBindAgentStash); } catch { /* best-effort */ }
+}
+
+// studio/hook-approvals.yaml — a SECOND, git-tracked ledger (mirrors
+// SK_INSTALL_LEDGER_PATH's handling immediately above): approve/override on
+// HK_SECURITY writes an entry here. The file does not exist pre-run (no
+// studio/hook-approvals.yaml is checked in), so restoring to "did not exist"
+// rather than merely filtering an entry out is what keeps a run leaving zero
+// residue — same rationale as skInstallLedgerStash's own doc comment.
+const HK_APPROVAL_LEDGER_PATH = join(FORGE_ROOT, 'studio', 'hook-approvals.yaml');
+let hkApprovalLedgerStash;
+function restoreHookApprovalLedger() {
+  if (hkApprovalLedgerStash === undefined) {
+    hkApprovalLedgerStash = existsSync(HK_APPROVAL_LEDGER_PATH) ? readFileSync(HK_APPROVAL_LEDGER_PATH, 'utf8') : null;
+  }
+  if (hkApprovalLedgerStash === null) {
+    try { rmSync(HK_APPROVAL_LEDGER_PATH, { force: true }); } catch { /* */ }
+  } else {
+    try { writeFileSync(HK_APPROVAL_LEDGER_PATH, hkApprovalLedgerStash, 'utf8'); } catch { /* */ }
+  }
+}
+
+/** Narrow sweep for the hooks-security beat's OWN artifact only — its
+ *  studio/hooks/<id>/ package + the approval ledger, restored to their exact
+ *  prior state. Idempotent + best-effort: safe to call at the beat's start
+ *  (stale-state sweep), between its main pass and its clip (the clip reuses
+ *  the SAME id sequentially rather than a second scratch id, since this
+ *  artifact is never a throughline past this one beat — a POST to an
+ *  already-existing id 409s, so the id must be fully cleared first), and at
+ *  the beat's own end. */
+export function cleanHookSecurityArtifacts() {
+  try { rmSync(HK_SECURITY_DIR, { recursive: true, force: true }); } catch { /* */ }
+  restoreHookApprovalLedger();
+}
+
+/** Narrow sweep for the hooks-create/hooks-bind beats' OWN artifact — the
+ *  hook package created via /hooks/new that later gets bound to
+ *  HK_BIND_AGENT_SLUG. A throughline WITHIN this journey only (created in
+ *  hooks-create, consumed in hooks-bind); nothing outside scripts/journeys/
+ *  hooks.mjs depends on it, so it is swept once, at hooks-bind's own end. */
+export function cleanHookCreateArtifacts() {
+  try { rmSync(HK_NEW_DIR, { recursive: true, force: true }); } catch { /* */ }
+}
+
+/** Broad, journey-scoped sweep — every artifact THIS journey (hooks.mjs)
+ *  creates, nothing from any other pillar. Used ONLY as a stale-state
+ *  pre-sweep at the top of the journey's first MUTATING beat (mirrors where
+ *  cleanSkillArtifacts first appears in skills.mjs — SK-2, not SK-0/SK-0b —
+ *  narrowed here to this journey's own ids). */
+export function cleanHookArtifacts() {
+  cleanHookSecurityArtifacts();
+  cleanHookCreateArtifacts();
+  restoreHookBindAgent();
+}
+
 // ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────
 // The onboard-existing preflight-resolution arc: onboard clean, then seed disk state
 // so the AUTO-tier ARTIFACTS clause fails, and resolve it deterministically (no LLM).
