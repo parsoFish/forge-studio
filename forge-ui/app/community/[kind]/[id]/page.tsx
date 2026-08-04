@@ -373,9 +373,39 @@ function InstallSection({
   return (
     <section
       data-section="install"
+      {...(isConnectionDetail(item) ? { 'data-install-method': item.install.method } : {})}
       style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius, 8px)', padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 10 }}
     >
       <SectionLabel>Install</SectionLabel>
+
+      {/* R3-04-F4's whole posture is that every installable entry pins an exact
+          version — this is precisely where an operator must see that pin BEFORE
+          clicking install. Mirrors /connections/[id]'s InstallSection vocabulary
+          exactly (data-install-method / data-install-version), never a new one.
+          system-provided/external have no version to pin — structurally absent,
+          not an empty attribute. */}
+      {isConnectionDetail(item) && (
+        <div style={{ fontSize: 12.5, color: 'var(--dim)' }}>
+          {item.install.method === 'system-provided' && (
+            <span>System-provided — no version to pin.</span>
+          )}
+          {item.install.method === 'npm' && (
+            <span>
+              npm package <code>{item.install.package}</code> pinned to exact version{' '}
+              <code data-install-version={item.install.version}>{item.install.version}</code>.
+            </span>
+          )}
+          {item.install.method === 'external' && (
+            <span>
+              External — forge does not install this. Distributed at{' '}
+              <a href={item.install.upstream} target="_blank" rel="noreferrer">
+                {item.install.upstream}
+              </a>
+              .
+            </span>
+          )}
+        </div>
+      )}
 
       {!canRoute && (
         <p style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', margin: 0 }}>

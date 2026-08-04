@@ -246,8 +246,19 @@ inventory rather than one shared page-level contract:
   the same scanner as) `/hooks/[id]`'s own `[data-section="scan-report"]`;
   `[data-section="capabilities"][data-capabilities-source="curated"]
   [data-capability-count]` for an mcp/tool that declares any, mirroring
-  `/connections/[id]`'s own labelled-curated convention exactly. The ONE
-  mutating affordance is `[data-action="install-community-item"]
+  `/connections/[id]`'s own labelled-curated convention exactly. For an
+  mcp/tool, `[data-section="install"]` ALSO carries
+  `[data-install-method="system-provided"|"npm"|"external"]` (fixed
+  2026-08-05, R3-07 journey-found defect: R3-04-F4's whole posture is that
+  every installable entry pins an exact version, and this pre-install page's
+  entire reason to exist is showing the operator what they're approving
+  BEFORE they click install — the pin was previously never rendered here at
+  all) — an `npm` entry additionally renders `[data-install-version]` with
+  the exact pinned version, the SAME vocabulary `/connections/[id]`'s own
+  InstallSection uses, never a second one; `system-provided`/`external` have
+  no version to pin and render no `data-install-version` at all — structural
+  absence, not an empty attribute. This is separate from, and precedes, the
+  ONE mutating affordance: `[data-action="install-community-item"]
   [data-install-routed-to="skill-draft"|"hook-needs-approval"|"connection-install"]`
   — **structurally ABSENT, not disabled,** whenever the route cannot
   complete: a non-vendored skill/hook with no server-resolved install path
@@ -421,10 +432,24 @@ inventory rather than one shared page-level contract:
   stars) still surface as draggable chips inside the agent builder's palette
   (`/agents/new`, `/agents/[id]`) — that union is unchanged — but `/skills` is
   now a real standalone library route, not just a palette. Root:
-  `main[data-page="skill-library"][data-page-ready][data-skill-count][data-local-count][data-community-count]`
+  `main[data-page="skill-library"][data-page-ready][data-community-join="pending"|"ready"|"unavailable"][data-skill-count][data-local-count][data-community-count]`
   over two sections (Local — hand-authored or already-installed skills on
   disk; Community — catalog entries with no on-disk package yet), whose
-  counts always equal the rendered card count in each section. Per card:
+  counts always equal the rendered card count in each section.
+  `data-community-join` is a SEPARATE readiness signal from `data-page-ready`
+  (fixed 2026-08-05, R3-07 journey-found defect): the primary skill list is
+  deliberately not raced by the community-index fetch that backs the hub/
+  signals join (a slow or unreachable community index must never blank the
+  primary list), so `data-page-ready` flips on the primary fetch alone while
+  `data-community-join` independently tracks the join's own three real
+  states — `pending` (join fetch still in flight — a card's `data-skill-hub`/
+  `data-skill-has-signals` are not yet trustworthy), `ready` (join resolved —
+  those two attributes now reflect real data), `unavailable` (the community
+  fetch failed — every card still renders with no hub/signals, honestly, not
+  a guessed value). Before this fix all three states rendered identically
+  (the attributes simply absent), which automation waiting on
+  `data-page-ready` alone could read as "no hub" when the join had not even
+  resolved yet. Per card:
   `[data-card-type="skill"][data-skill-id][data-skill-source="local"|"community"][data-skill-trust="ready"|"draft"|"needs-review"][data-skill-installed="true"|"false"][data-skill-used-by-count]`
   — `data-skill-used-by-count` is DERIVED from every real agent's
   `composition.skills`, never a declared/catalog field (the `composedBy`

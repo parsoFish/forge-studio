@@ -78,6 +78,14 @@ function realKindCount(kind) { return realCommunityItems().filter((i) => i.kind 
 function realHubItemCount(hubId) { return realCommunityItems().filter((i) => i.hub?.id === hubId).length; }
 function realTotalCount() { return realCommunityItems().length; }
 
+/** Collapse runs of whitespace (including a markdown-authored line wrap) to a
+ *  single space before a literal-phrase match — a paragraph the seed wraps
+ *  mid-phrase for line length is still the SAME claim; the assertion should
+ *  depend on the words, never on wherever the source happens to wrap them. */
+function normalizeWs(text) {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
 function realCommunitySkillEntry(id) {
   const doc = loadCatalogDoc();
   const entry = (doc['community-skills'] ?? []).find((cs) => cs.id === id);
@@ -227,6 +235,16 @@ export const journey = defineJourney({
       drive: async (ctx) => {
         const { page, frame, check } = ctx;
         console.log(`\n[CM-2] A community card's derived hub + signals (${CM_CATALOG_SKILL_ID})`);
+        // The join has its OWN readiness signal, independent of data-page-ready
+        // (which tracks only the primary skills fetch — the list is
+        // deliberately not raced by the community join). Reading the hub/
+        // signals attributes before the join settles would race a "still
+        // loading" state that looks identical to "this skill has no hub".
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-community-join') !== 'pending',
+          null, { timeout: 15000 }).catch(() => {});
+        const joinStatus = await page.evaluate(() => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-community-join'));
+        check(joinStatus === 'ready', `CM-2: the community join settled to "ready" (got "${joinStatus}") — a run where it stays unavailable must fail loudly here, not silently skip the checks below`);
         const real = realCommunitySkillEntry(CM_CATALOG_SKILL_ID);
         const card = page.locator(`[data-card-type="skill"][data-skill-id="${CM_CATALOG_SKILL_ID}"]`);
         check(await card.count() > 0, `CM-2: the ${CM_CATALOG_SKILL_ID} community card is listed`);
@@ -385,8 +403,14 @@ export const journey = defineJourney({
         check(domFileCount === 1, `CM-7: the vendored package is exactly one file (SKILL.md) (dom=${domFileCount})`);
         const previewText = await page.evaluate(() => document.querySelector('[data-component="file-package"]')?.textContent ?? '');
         check(previewText.includes('Dependency diff review'), 'CM-7: the real SKILL.md body renders — its own title, not a stub');
-        check(realBody.includes('permanently quarantined at install'), '(sanity) the vendored SKILL.md itself documents the quarantine contract');
-        check(previewText.includes('permanently quarantined at install'), 'CM-7: the quarantine-contract paragraph is visible in the preview — the operator reads it before installing');
+        // Whitespace-normalized comparison — the seed's own markdown wraps this
+        // exact phrase mid-line ("permanently quarantined at\ninstall"), so a
+        // literal .includes() against the raw bytes can never match; the CLAIM
+        // is what this beat asserts, not where the source happens to wrap it.
+        const normalizedBody = normalizeWs(realBody);
+        const normalizedPreview = normalizeWs(previewText);
+        check(normalizedBody.includes('permanently quarantined at install'), '(sanity) the vendored SKILL.md itself documents the quarantine contract');
+        check(normalizedPreview.includes('permanently quarantined at install'), 'CM-7: the quarantine-contract paragraph is visible in the preview — the operator reads it before installing');
 
         // The honest contrast — independently re-fetch the community index
         // (never the DOM's own memory of it) and confirm the CATALOG-sourced
@@ -737,6 +761,10 @@ export const journey = defineJourney({
         check(await page.evaluate(() => document.querySelector('[data-page="community-detail"]')?.getAttribute('data-install-state')) === 'not-installed',
           'CM-17: data-install-state="not-installed" — pre-install');
         const bodyText = await page.evaluate(() => document.body.textContent ?? '');
+        check(await page.locator(`[data-section="install"][data-install-method="${real.install.method}"]`).count() > 0,
+          `CM-17: [data-section="install"] carries data-install-method="${real.install.method}" — the same vocabulary /connections/[id] uses`);
+        const domVersion = await page.evaluate(() => document.querySelector('[data-install-version]')?.getAttribute('data-install-version'));
+        check(domVersion === real.install.version, `CM-17: data-install-version is the real pinned version, rendered BEFORE install (dom="${domVersion}", real="${real.install.version}")`);
         check(bodyText.includes(real.install.version), `CM-17: the real pinned version (${real.install.version}) renders`);
         check(bodyText.includes(real.provenance), 'CM-17: the real upstream provenance link renders');
         await caption(page, `${CM_MCP_ID} — the real pin + provenance, before any install exists.`);

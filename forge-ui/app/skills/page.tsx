@@ -53,6 +53,14 @@ export default function SkillLibraryPage() {
   // as the raw item list (not pre-keyed by id) — communityBadgeForSkill does
   // the actual (source, kind, id) join per card, never id alone.
   const [communityItems, setCommunityItems] = useState<readonly CommunityItem[] | null>(null);
+  // The join's OWN readiness, independent of `data-page-ready` (which tracks
+  // only the primary skills fetch — that fetch is deliberately not raced by
+  // this one, so the list renders even if the community index is slow or
+  // unreachable). Without this, "still loading" and "the join failed" and
+  // "this skill has no hub" all rendered identically (data-skill-hub simply
+  // absent in every case) — a fabricated-absent state automation cannot tell
+  // apart. `pending` -> `ready`|`unavailable`, never back.
+  const [communityJoinStatus, setCommunityJoinStatus] = useState<'pending' | 'ready' | 'unavailable'>('pending');
 
   useEffect(() => {
     let cancelled = false;
@@ -79,8 +87,12 @@ export default function SkillLibraryPage() {
     async function loadCommunity() {
       const r = await fetchCommunityIndex();
       if (cancelled) return;
-      if (!r.ok) return; // absence, not a fabricated join — the skill list itself is unaffected
+      if (!r.ok) {
+        setCommunityJoinStatus('unavailable'); // absence, not a fabricated join — the skill list itself is unaffected
+        return;
+      }
       setCommunityItems(r.items);
+      setCommunityJoinStatus('ready');
     }
     void loadCommunity();
     return () => {
@@ -95,6 +107,7 @@ export default function SkillLibraryPage() {
     <main
       data-page="skill-library"
       data-page-ready={status !== 'loading' ? 'true' : 'false'}
+      data-community-join={communityJoinStatus}
       data-skill-count={grouped.total}
       data-local-count={grouped.localCount}
       data-community-count={grouped.communityCount}
