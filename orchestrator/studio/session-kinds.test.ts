@@ -1,0 +1,381 @@
+/**
+ * Acceptance tests for orchestrator/studio/session-kinds.ts (R2-10, PR1: the
+ * session-shell backend contract).
+ *
+ * The module under test does not exist yet — this file is RED at branch base
+ * (ERR_MODULE_NOT_FOUND on the `./session-kinds.ts` import is the expected
+ * red). Mirrors orchestrator/studio/template-library.ts / .test.ts's idiom:
+ * real fs fixtures under mkdtempSync, plus the REAL repo (REPO_ROOT) for facts
+ * that must stay true (the 3 shipped session kinds, their real agent ids).
+ *
+ * AT numbers below are a flat sequence AT-1..AT-48 spanning THREE files:
+ *   AT-1  .. AT-18 — this file (session-kinds.ts)
+ *   AT-19 .. AT-37 — orchestrator/studio/session-transcript.test.ts
+ *   AT-38 .. AT-48 — cli/bridge-studio-sessions.test.ts
+ *
+ * Design decisions this file pins (see the T3 report for the full rationale):
+ *   - `studio/session-kinds.yaml` is a bare top-level YAML sequence of
+ *     descriptor objects (mirrors nothing else in the repo exactly, but is
+ *     the simplest shape for a single-purpose registry file).
+ *   - `loadSessionKinds` is STRUCTURAL only (mirrors loadFlowDefinition /
+ *     loadCatalog): it throws on missing file / unparseable YAML / a missing
+ *     required scalar field, but does NOT validate closed-vocabulary
+ *     membership (stage tokens, artifact kinds, agent refs, duplicate ids,
+ *     slug shape) — those are SEMANTIC checks, live only in
+ *     `validateSessionKinds`, exactly mirroring the load/validate split
+ *     validate.ts already draws for agents/flows (validateAgent's slug check
+ *     is a Finding, not a load-time throw).
+ *   - Agent-ref resolution scans EVERY skill dir's SKILL.md (skills/<slug>/SKILL.md)
+ *     with a `runtime:` block, REGARDLESS of `library: false` — NOT `listAgentDefinitions()`,
+ *     which deliberately excludes `library: false` agents from the composable
+ *     Studio roster (instructions-creator and project-brain-builder are both
+ *     `library: false` internal agents dispatched by the bridge — see their
+ *     SKILL.md frontmatter). Using `listAgentDefinitions()` for resolution
+ *     would wrongly flag 2 of the 3 real session-kind descriptors. AT-17
+ *     pins this against the real repo.
+ */
+
+import { describe, it, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join, resolve } from 'node:path';
+import { tmpdir } from 'node:os';
+import yaml from 'js-yaml';
+import matter from 'gray-matter';
+
+import {
+  SESSION_STAGES,
+  SESSION_ARTIFACT_KINDS,
+  sessionArtifactKindState,
+  loadSessionKinds,
+  validateSessionKinds,
+  type SessionKindDescriptor,
+} from './session-kinds.ts';
+
+const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
+
+// ---------------------------------------------------------------------------
+// Fixture helpers
+// ---------------------------------------------------------------------------
+
+const createdDirs: string[] = [];
+
+function makeForgeRoot(prefix = 'session-kinds-'): string {
+  const dir = mkdtempSync(join(tmpdir(), prefix));
+  createdDirs.push(dir);
+  return dir;
+}
+
+after(() => {
+  for (const dir of createdDirs) rmSync(dir, { recursive: true, force: true });
+});
+
+type FixtureDescriptor = {
+  id: string;
+  agent: string;
+  title: string;
+  legacyRoutes: string[];
+  stages: string[];
+  defaultStage: string;
+  artifact: { kind: string; label: string };
+};
+
+function baseDescriptor(overrides: Partial<FixtureDescriptor> = {}): FixtureDescriptor {
+  return {
+    id: 'fixture-kind',
+    agent: 'fixture-agent',
+    title: 'Fixture Kind',
+    legacyRoutes: ['/fixture/[sessionId]'],
+    stages: ['roadmap'],
+    defaultStage: 'roadmap',
+    artifact: { kind: 'roadmap-draft', label: 'Fixture draft' },
+    ...overrides,
+  };
+}
+
+/** Write `studio/session-kinds.yaml` from a list of plain descriptor objects. */
+function writeSessionKindsYaml(root: string, descriptors: unknown[]): string {
+  const dir = join(root, 'studio');
+  mkdirSync(dir, { recursive: true });
+  const p = join(dir, 'session-kinds.yaml');
+  writeFileSync(p, yaml.dump(descriptors), 'utf8');
+  return p;
+}
+
+/** Write a minimal SKILL.md with a `runtime:` block (a resolvable agent),
+ *  optionally `library: false` (an internal agent, still resolvable — this is
+ *  the exact shape instructions-creator / project-brain-builder use). */
+function writeAgentSkill(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
+  const dir = join(root, 'skills', slug);
+  mkdirSync(dir, { recursive: true });
+  const data: Record<string, unknown> = {
+    name: slug,
+    description: `Fixture agent ${slug}.`,
+    purpose: 'Fixture purpose.',
+    composition: { skills: [], tools: [], mcps: [], guards: [] },
+    runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
+    brainAccess: 'none',
+    interactivity: 'Fixture.',
+    'allowed-tools': [],
+    'disallowed-tools': [],
+    budgets: {},
+  };
+  if (opts.libraryFalse) data.library = false;
+  writeFileSync(join(dir, 'SKILL.md'), matter.stringify('\nFixture body.\n', data), 'utf8');
+}
+
+function byId(descs: readonly SessionKindDescriptor[], id: string): SessionKindDescriptor {
+  const d = descs.find((x) => x.id === id);
+  assert.ok(d, `expected descriptor "${id}" to be present`);
+  return d!;
+}
+
+// ===========================================================================
+// Vocabularies (AT-1, AT-2)
+// ===========================================================================
+
+describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () => {
+  it('AT-1: SESSION_STAGES is exactly the 6-token ordered vocabulary, frozen', () => {
+    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain']);
+    assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
+  });
+
+  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly the 3 live + 3 reserved rows, in order, frozen', () => {
+    const ids = SESSION_ARTIFACT_KINDS.map((k) => k.id);
+    assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
+    const live = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'live').map((k) => k.id);
+    const reserved = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'reserved').map((k) => k.id);
+    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure']);
+    assert.deepEqual(reserved, ['file-package', 'contract-buildout', 'generation-gallery']);
+    assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS));
+  });
+
+  it('AT-3: sessionArtifactKindState is a total function — live/reserved/unknown, never throws', () => {
+    assert.equal(sessionArtifactKindState('roadmap-draft'), 'live');
+    assert.equal(sessionArtifactKindState('brain-structure'), 'live');
+    assert.equal(sessionArtifactKindState('file-package'), 'reserved');
+    assert.equal(sessionArtifactKindState('generation-gallery'), 'reserved');
+    assert.equal(sessionArtifactKindState('no-such-kind-at-all'), undefined, 'an unrecognised kind must resolve to undefined, never a guess and never a throw');
+  });
+});
+
+// ===========================================================================
+// loadSessionKinds — structural parse only (AT-4, AT-5)
+// ===========================================================================
+
+describe('loadSessionKinds — structural parse (fixture-driven)', () => {
+  it('AT-4: parses a valid 3-descriptor fixture; ids unique; shape matches SessionKindDescriptor', () => {
+    const root = makeForgeRoot();
+    writeSessionKindsYaml(root, [
+      baseDescriptor({ id: 'alpha', agent: 'alpha-agent' }),
+      baseDescriptor({ id: 'beta', agent: 'beta-agent' }),
+      baseDescriptor({ id: 'gamma', agent: 'gamma-agent' }),
+    ]);
+    const descs = loadSessionKinds(root);
+    assert.equal(descs.length, 3);
+    assert.deepEqual(descs.map((d) => d.id).sort(), ['alpha', 'beta', 'gamma']);
+    const alpha = byId(descs, 'alpha');
+    assert.equal(alpha.agent, 'alpha-agent');
+    assert.equal(alpha.title, 'Fixture Kind');
+    assert.deepEqual(alpha.legacyRoutes, ['/fixture/[sessionId]']);
+    assert.deepEqual(alpha.stages, ['roadmap']);
+    assert.equal(alpha.defaultStage, 'roadmap');
+    assert.deepEqual(alpha.artifact, { kind: 'roadmap-draft', label: 'Fixture draft' });
+  });
+
+  it('AT-5: order is deterministic — a reverse-alpha fixture is returned in DECLARATION order, never silently resorted', () => {
+    const root = makeForgeRoot();
+    writeSessionKindsYaml(root, [
+      baseDescriptor({ id: 'zzz-kind', agent: 'z-agent' }),
+      baseDescriptor({ id: 'mmm-kind', agent: 'm-agent' }),
+      baseDescriptor({ id: 'aaa-kind', agent: 'a-agent' }),
+    ]);
+    const ids = loadSessionKinds(root).map((d) => d.id);
+    assert.deepEqual(ids, ['zzz-kind', 'mmm-kind', 'aaa-kind'], 'loadSessionKinds must preserve YAML declaration order, not re-sort alphabetically');
+  });
+});
+
+// ===========================================================================
+// validateSessionKinds — semantic errors, each its own AT (AT-6..AT-15)
+// ===========================================================================
+
+describe('validateSessionKinds — semantic errors', () => {
+  it('AT-6: a stage token outside SESSION_STAGES → error naming the value and the allowed set', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ stages: ['not-a-real-stage'], defaultStage: 'not-a-real-stage' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/unknown-stage');
+    assert.ok(f, `expected a session-kinds/unknown-stage finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('not-a-real-stage'), 'message must name the offending value');
+    for (const s of SESSION_STAGES) assert.ok(f!.message.includes(s), `message must name the allowed set (missing "${s}")`);
+  });
+
+  it('AT-7: defaultStage not a member of the descriptor\'s OWN stages → error naming both', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ stages: ['roadmap'], defaultStage: 'brain' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/default-stage-not-in-stages');
+    assert.ok(f, `expected a session-kinds/default-stage-not-in-stages finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('brain'), 'message must name the offending defaultStage');
+    assert.ok(f!.message.includes('roadmap'), 'message must name the descriptor\'s own declared stages');
+  });
+
+  it('AT-8: an empty stages list → error', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ stages: [] })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/empty-stages');
+    assert.ok(f, `expected a session-kinds/empty-stages finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('fixture-kind'), 'message must name the offending descriptor id');
+  });
+
+  it('AT-9: an artifact kind outside SESSION_ARTIFACT_KINDS entirely → error naming the value and the allowed set', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ artifact: { kind: 'no-such-kind-at-all', label: 'x' } })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/unknown-artifact-kind');
+    assert.ok(f, `expected a session-kinds/unknown-artifact-kind finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('no-such-kind-at-all'));
+    for (const k of SESSION_ARTIFACT_KINDS.map((x) => x.id)) assert.ok(f!.message.includes(k), `message must name the allowed set (missing "${k}")`);
+  });
+
+  it('AT-10: an artifact kind that IS a reserved row → error, DISTINCT check id from "unknown kind" (parses ok, lint error)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ artifact: { kind: 'file-package', label: 'x' } })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/reserved-artifact-kind');
+    assert.ok(f, `expected a session-kinds/reserved-artifact-kind finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('file-package'));
+    assert.ok(!findings.some((x) => x.check === 'session-kinds/unknown-artifact-kind'), 'a reserved kind must NOT also trip the unknown-kind check — they are distinct findings');
+  });
+
+  it('AT-11: duplicate descriptor ids → error naming the id', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ id: 'dupe' }), baseDescriptor({ id: 'dupe' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/duplicate-id');
+    assert.ok(f, `expected a session-kinds/duplicate-id finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('dupe'));
+  });
+
+  it('AT-12: an agent ref that resolves to no real agent definition → error naming it', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'real-agent-fixture');
+    writeSessionKindsYaml(root, [baseDescriptor({ agent: 'ghost-agent-does-not-exist' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/unknown-agent');
+    assert.ok(f, `expected a session-kinds/unknown-agent finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('ghost-agent-does-not-exist'), 'message must name the offending agent id');
+  });
+
+  it('AT-13: a missing studio/session-kinds.yaml → loadSessionKinds throws; validateSessionKinds returns exactly one error finding, never a silent empty list', () => {
+    const root = makeForgeRoot();
+    // No studio/ dir at all — the file is entirely absent.
+    assert.throws(() => loadSessionKinds(root), 'loadSessionKinds must throw on a missing file (mirrors loadFlowDefinition/loadCatalog)');
+    const findings = validateSessionKinds(root);
+    assert.equal(findings.length, 1, `expected exactly 1 finding on a missing file, got: ${JSON.stringify(findings)}`);
+    assert.equal(findings[0].check, 'session-kinds/load-error');
+    assert.equal(findings[0].level, 'error');
+    assert.ok(findings[0].message.length > 0);
+  });
+
+  it('AT-14: a malformed (unparseable) session-kinds.yaml → loadSessionKinds throws; validateSessionKinds returns exactly one error finding naming the file', () => {
+    const root = makeForgeRoot();
+    const dir = join(root, 'studio');
+    mkdirSync(dir, { recursive: true });
+    const p = join(dir, 'session-kinds.yaml');
+    writeFileSync(p, '- id: broken\n    this is not valid yaml: [\n', 'utf8');
+    assert.throws(() => loadSessionKinds(root));
+    const findings = validateSessionKinds(root);
+    assert.equal(findings.length, 1, `expected exactly 1 finding on malformed YAML, got: ${JSON.stringify(findings)}`);
+    assert.equal(findings[0].check, 'session-kinds/load-error');
+    assert.equal(findings[0].level, 'error');
+    assert.ok(findings[0].message.includes('session-kinds.yaml'), 'message must name the offending file');
+  });
+
+  it('AT-15: a descriptor id that is not a valid slug → error', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ id: 'Not_A_Valid_Slug' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/slug');
+    assert.ok(f, `expected a session-kinds/slug finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('Not_A_Valid_Slug'));
+  });
+});
+
+// ===========================================================================
+// Defense-in-depth — validate reads the SAME evidence load does (AT-16)
+// ===========================================================================
+
+describe('defense-in-depth — validate must not check a more permissive parse than load', () => {
+  it('AT-16: loadSessionKinds ACCEPTS a descriptor with an unknown stage (structural parse is lenient); validateSessionKinds still flags the SAME value', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ stages: ['not-a-real-stage'], defaultStage: 'not-a-real-stage' })]);
+
+    // The loader must not throw or drop the descriptor — semantic validation
+    // is validateSessionKinds's job, not the loader's.
+    let descs: SessionKindDescriptor[] = [];
+    assert.doesNotThrow(() => { descs = loadSessionKinds(root); });
+    assert.equal(descs.length, 1);
+    assert.deepEqual(descs[0].stages, ['not-a-real-stage'], 'the loader must carry the same offending value through, unmodified');
+
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/unknown-stage');
+    assert.ok(f, 'validateSessionKinds must flag the exact value the loader accepted — the same evidence, not a different, more permissive parse');
+    assert.ok(f!.message.includes('not-a-real-stage'));
+  });
+});
+
+// ===========================================================================
+// Real repo (AT-17, AT-18)
+// ===========================================================================
+
+describe('the real repo (studio/session-kinds.yaml) lints clean and matches the spec exactly', () => {
+  it('AT-17: validateSessionKinds(REPO_ROOT) returns ZERO error-level findings — including zero unknown-agent errors, even though instructions-creator and project-brain-builder are both `library: false` internal agents', () => {
+    const findings = validateSessionKinds(REPO_ROOT);
+    const errors = findings.filter((f) => f.level === 'error');
+    assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
+  });
+
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 3 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    assert.equal(descs.length, 3, `expected exactly 3 real session kinds, got ids: ${descs.map((d) => d.id).join(', ')}`);
+
+    const architect = byId(descs, 'architect');
+    assert.equal(architect.agent, 'architect');
+    assert.deepEqual(architect.legacyRoutes, ['/architect/[sessionId]', '/architect/[sessionId]/interview']);
+    assert.deepEqual(architect.stages, ['roadmap']);
+    assert.equal(architect.defaultStage, 'roadmap');
+    assert.deepEqual(architect.artifact, { kind: 'roadmap-draft', label: 'Roadmap draft' });
+
+    const instructions = byId(descs, 'instructions');
+    assert.equal(instructions.agent, 'instructions-creator');
+    assert.deepEqual(instructions.legacyRoutes, ['/instructions/[sessionId]']);
+    assert.deepEqual(instructions.stages, ['instructions']);
+    assert.equal(instructions.defaultStage, 'instructions');
+    assert.deepEqual(instructions.artifact, { kind: 'markdown-draft', label: 'AGENTS.md draft' });
+
+    const projectBrain = byId(descs, 'project-brain');
+    assert.equal(projectBrain.agent, 'project-brain-builder');
+    assert.deepEqual(projectBrain.legacyRoutes, ['/project-brain/[sessionId]']);
+    assert.deepEqual(projectBrain.stages, ['brain']);
+    assert.equal(projectBrain.defaultStage, 'brain');
+    assert.deepEqual(projectBrain.artifact, { kind: 'brain-structure', label: 'Seeded structure' });
+  });
+});
