@@ -151,6 +151,14 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/agents/:id/run', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnAgentDispatch (R2-01-F3 generic run host) — validation + runId proceed; the agent dispatch is skipped with marker + event' },
 
+  // ---- stub-actions: connections install (R3-04, D6/D7) -----------------
+  // installArgvFor derives the real `npm install` argv from the catalog pin
+  // ONLY (D6 — the request body is never even read); the suppression check
+  // is inline in the route (mirrors verdict-approve/reflect-answer below,
+  // not a named spawn-helper), so this row carries no `guard`.
+  { method: 'POST', route: '/api/studio/connections/:id/install', classification: 'stub-actions',
+    reason: 'a real `npm install` (network + child process) would run; FORGE_DRY_BRIDGE=1 or FORGE_ARCHITECT_NO_SPAWN=1 suppress it and return {suppressed:true, wouldInstall} instead (D7, mirrors run-agent.ts\'s own double env check)' },
+
   // ---- stub-actions: verdict-approve special case -----------------------
   { method: 'POST', route: '/api/verdict', classification: 'stub-actions',
     reason: 'approve path proceeds (state transition + artifact writes) but skips runReleaseFinalize/mergePr/finalizeAfterMerge — the exact incident actions' },
@@ -186,6 +194,7 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
   { method: 'POST', route: '/api/studio/hooks', classification: 'exempt-local', reason: 'writes a local hook.yaml + scripts/run.sh package — no spawn/remote' },
   { method: 'POST', route: '/api/studio/hooks/:id/approve', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry — no spawn/remote' },
   { method: 'POST', route: '/api/studio/hooks/:id/override', classification: 'exempt-local', reason: 'writes a local hook-approvals.yaml ledger entry (overridden:true) — no spawn/remote' },
+  { method: 'POST', route: '/api/studio/connections/:id/probe', classification: 'exempt-local', reason: 'R3-04 D3/D11 — spawns a declared, credential-stripped local presence/version check only; deliberately NEVER suppressed by dry-bridge (readiness must stay real, D3) — no git-remote/daemon/agent-turn' },
   { method: 'POST', route: '/api/studio/kbs', classification: 'exempt-local', reason: 'creates a local KB directory' },
   { method: 'POST', route: '/api/studio/kbs/:id (delete)', classification: 'exempt-local', reason: 'removes a local KB directory' },
   { method: 'POST', route: '/api/studio/kbs/:id/guidance', classification: 'exempt-local', reason: 'writes a local guidance markdown file' },
