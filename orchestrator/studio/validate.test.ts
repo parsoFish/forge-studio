@@ -29,6 +29,24 @@ import {
 } from './validate.ts';
 import type { InstructionSeed } from './types.ts';
 
+// R3-04-F1/F4 (`_wave5/specs/R3-04.md` D5/D6/D8) — `validateConnections`
+// DOES NOT EXIST YET on validate.ts. Imported as a NAMESPACE (not a named
+// import) deliberately: a named `import { validateConnections } from
+// './validate.ts'` would throw `SyntaxError: does not provide an export
+// named …` at MODULE-LOAD time, which would kill this entire file — every
+// one of the ~150 pre-existing, currently-green tests above this line would
+// stop running, not just the new ones. A namespace import never throws for
+// a missing member; `validateModule.validateConnections` merely reads back
+// `undefined` until WI-1 lands, so calling it below fails LOCALLY (that one
+// `it()` block), the correct, isolated red. `runStudioLint`, by contrast, is
+// imported by NAME below because it already exists today (cli/studio-lint.ts)
+// — only its behaviour (not yet wired to the new connections checks) is red.
+import * as validateModule from './validate.ts';
+import { runStudioLint } from '../../cli/studio-lint.ts';
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 // ---------------------------------------------------------------------------
 // Fixture helpers
 // ---------------------------------------------------------------------------
@@ -1809,5 +1827,388 @@ describe('validateInstructionSeed (R3-05)', () => {
   it('blank title → error', () => {
     const f = validateInstructionSeed(mkSeed({ title: '  ' }));
     assert.ok(f.some((x) => x.check === 'title'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateConnections (R3-04-F1/F4) — `_wave5/specs/R3-04.md` D5/D6/D8's
+// five lint rules: unpinned installable entry, missing probe, bad
+// env-var-name shape, mcp with zero capabilities, unknown config key.
+//
+// CONTRACT DECISION (mine, escalated in the T3 final report): `validateModule
+// .validateConnections(catalog: Catalog)` scans BOTH `catalog.tools` and
+// `catalog.mcps` (WI-1 extends their element type to carry install/config/
+// probe/provenance/capabilities — not yet reflected in `./types.ts`'s
+// `Catalog`/`CatalogEntry`, hence the local fixture type + `as unknown as
+// Catalog` casts below rather than `any`). Findings use `object:
+// "connection:<id>"`, `check: "connection/<rule>"` — mirrors
+// `validateInstructionSeed`'s per-domain-function precedent, not a bolt-on
+// to `validateCatalog` (a single-purpose function per domain, matching
+// `validateDiscoveredProjects`/`validateInstructionSeed`'s existing shape).
+// ---------------------------------------------------------------------------
+
+// ROUND 3 (D13/D15): install is a THREE-method union; probe is a
+// KIND-TAGGED union coherent with the install method (npm ⇒ npm-package;
+// system-provided ⇒ command; external ⇒ command | command-presence).
+type ConnectionConfigVarFixture = { env: string; required: boolean; purpose: string };
+type ConnectionInstallFixture =
+  | { method: 'system-provided' }
+  | { method: 'npm'; package: string; version: string }
+  | { method: 'external'; upstream: string };
+type ConnectionProbeFixture =
+  | { kind: 'command'; command: string; args: string[] }
+  | { kind: 'command-presence'; command: string }
+  | { kind: 'npm-package' };
+type ConnectionCatalogEntryFixture = {
+  id: string;
+  name: string;
+  desc?: string;
+  install: ConnectionInstallFixture;
+  config: ConnectionConfigVarFixture[];
+  probe?: ConnectionProbeFixture;
+  provenance: string;
+  capabilities?: Array<{ name: string; summary: string }>;
+};
+
+function connCatalog(overrides: { tools?: ConnectionCatalogEntryFixture[]; mcps?: ConnectionCatalogEntryFixture[] }): Catalog {
+  return {
+    ...makeCatalog(),
+    tools: (overrides.tools ?? []) as unknown as Catalog['tools'],
+    mcps: (overrides.mcps ?? []) as unknown as Catalog['mcps'],
+  };
+}
+
+function cleanToolEntry(id = 'git'): ConnectionCatalogEntryFixture {
+  return {
+    id,
+    name: id,
+    install: { method: 'system-provided' },
+    config: [],
+    probe: { kind: 'command', command: id, args: ['--version'] },
+    provenance: 'system',
+  };
+}
+
+/** D16: `memory` (npm-distributed, no required config) is the real
+ *  installable example — NOT `sqlite` (external, no npm distribution). */
+function cleanMcpEntry(id = 'memory'): ConnectionCatalogEntryFixture {
+  return {
+    id,
+    name: id,
+    install: { method: 'npm', package: `@forge-test/${id}`, version: '1.0.0' },
+    config: [],
+    probe: { kind: 'npm-package' },
+    provenance: 'https://example.com',
+    capabilities: [{ name: 'query', summary: 'Do the thing.' }],
+  };
+}
+
+/** D13: the real "no npm distribution" example — an external mcp. */
+function cleanExternalMcpEntry(id = 'sqlite'): ConnectionCatalogEntryFixture {
+  return {
+    id,
+    name: id,
+    install: { method: 'external', upstream: 'https://pypi.org/project/mcp-server-sqlite/' },
+    config: [],
+    probe: { kind: 'command-presence', command: `mcp-server-${id}` },
+    provenance: 'https://example.com',
+    capabilities: [{ name: 'query', summary: 'Do the thing.' }],
+  };
+}
+
+function connectionFindings(catalog: Catalog): Array<{ level: string; object: string; check: string; message: string }> {
+  const fn = (validateModule as unknown as { validateConnections?: (c: Catalog) => Array<{ level: string; object: string; check: string; message: string }> }).validateConnections;
+  assert.ok(typeof fn === 'function', 'validateModule.validateConnections is not exported yet — expected red until WI-1 lands');
+  return fn(catalog);
+}
+
+// T2 ruling (round 2, item 5): "unpinned" means NOT AN EXACT VERSION — four
+// distinct shapes, each independently an ERROR. A range/`latest` is the
+// realistic real-world mistake; if the lint only rejects the empty string,
+// the rule is decorative. `install:` itself is a CLOSED two-method
+// discriminated union (`system-provided` | `npm`) — an unrecognised method
+// value is NOT a `connection/unpinned` lint finding at all, it is a LOAD
+// THROW (see `connection-library.test.ts`'s "closed two-value discriminated
+// union" describe block, and the `runStudioLint` "unknown install method"
+// AT below, which pins that the throw surfaces via `forge studio lint`'s
+// EXISTING catalog-load try/catch, not a new bespoke error path).
+describe('validateConnections — unpinned installable entry (D6, T2 ruling: 4 shapes)', () => {
+  const UNPINNED_VERSIONS: Array<{ label: string; version: unknown }> = [
+    { label: 'missing version key entirely', version: undefined },
+    { label: 'empty string', version: '' },
+    { label: 'a caret range ("^1.2.3")', version: '^1.2.3' },
+    { label: 'a tilde range ("~1.2")', version: '~1.2' },
+    { label: 'an x-range ("1.x")', version: '1.x' },
+    { label: 'a wildcard ("*")', version: '*' },
+    { label: 'the "latest" tag', version: 'latest' },
+  ];
+
+  for (const { label, version } of UNPINNED_VERSIONS) {
+    it(`${label} → error connection/unpinned (a real pin is required, not merely a non-empty string)`, () => {
+      const install: Record<string, unknown> = { method: 'npm', package: '@x/y' };
+      if (version !== undefined) install['version'] = version;
+      const entry = { ...cleanMcpEntry('unpinned-mcp'), install: install as unknown as ConnectionInstallFixture };
+      const catalog = connCatalog({ mcps: [entry] });
+      const findings = connectionFindings(catalog);
+      const f = findings.find((x) => x.check === 'connection/unpinned');
+      assert.ok(f, `expected connection/unpinned finding for ${label} (version: ${JSON.stringify(version)})`);
+      assert.equal(f!.level, 'error');
+      assert.ok(f!.message.includes('unpinned-mcp'));
+    });
+  }
+
+  it('a system-provided entry is never flagged unpinned (it has no version to pin)', () => {
+    const catalog = connCatalog({ tools: [cleanToolEntry('git')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/unpinned'));
+  });
+
+  it('a fully-pinned EXACT npm version → no connection/unpinned finding', () => {
+    const catalog = connCatalog({ mcps: [cleanMcpEntry('memory')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/unpinned'));
+  });
+
+  it('sanity: cleanMcpEntry\'s own fixture pin ("1.0.0") really is exact — a guard against this whole describe block silently testing nothing', () => {
+    assert.equal(cleanMcpEntry('x').install.method, 'npm');
+    assert.equal((cleanMcpEntry('x').install as { version: string }).version, '1.0.0');
+  });
+});
+
+describe('validateConnections — missing probe (D3/D4)', () => {
+  it('an entry with no probe field → error connection/missing-probe', () => {
+    const { probe: _drop, ...withoutProbe } = cleanToolEntry('no-probe-tool');
+    const catalog = connCatalog({ tools: [withoutProbe as ConnectionCatalogEntryFixture] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/missing-probe');
+    assert.ok(f, 'expected connection/missing-probe finding');
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('no-probe-tool'));
+  });
+
+  it('an entry with a probe → no connection/missing-probe finding', () => {
+    const catalog = connCatalog({ tools: [cleanToolEntry('git')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/missing-probe'));
+  });
+});
+
+describe('validateConnections — bad env-var-name shape (D5)', () => {
+  it('a config env value not matching ^[A-Z_][A-Z0-9_]*$ → error connection/bad-env-name', () => {
+    const entry = cleanMcpEntry('bad-env-mcp');
+    entry.config = [{ env: 'not-a-valid-name', required: true, purpose: 'x' }];
+    const catalog = connCatalog({ mcps: [entry] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/bad-env-name');
+    assert.ok(f, 'expected connection/bad-env-name finding');
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('not-a-valid-name'));
+  });
+
+  it('a well-shaped SCREAMING_SNAKE env name → no connection/bad-env-name finding', () => {
+    const entry = cleanMcpEntry('good-env-mcp');
+    entry.config = [{ env: 'GITHUB_TOKEN', required: true, purpose: 'x' }];
+    const catalog = connCatalog({ mcps: [entry] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/bad-env-name'));
+  });
+});
+
+describe('validateConnections — mcp with zero capabilities (D8)', () => {
+  it('an mcp entry with capabilities: [] → error connection/mcp-capabilities', () => {
+    const entry = cleanMcpEntry('empty-caps-mcp');
+    entry.capabilities = [];
+    const catalog = connCatalog({ mcps: [entry] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/mcp-capabilities');
+    assert.ok(f, 'expected connection/mcp-capabilities finding');
+    assert.equal(f!.level, 'error');
+  });
+
+  it('a tool entry with no capabilities at all is NEVER flagged (the rule is mcp-only)', () => {
+    const catalog = connCatalog({ tools: [cleanToolEntry('git')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/mcp-capabilities'));
+  });
+
+  it('an mcp entry with ≥1 capability → no connection/mcp-capabilities finding', () => {
+    const catalog = connCatalog({ mcps: [cleanMcpEntry('memory')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/mcp-capabilities'));
+  });
+});
+
+// T2 round-3 mandate: probe kind must COHERE with install method (D15) —
+// `forge studio lint` errors on a mismatch. Table (D15):
+//   npm              ⇒ REQUIRED kind: npm-package
+//   system-provided  ⇒ REQUIRED kind: command
+//   external         ⇒ kind: command OR command-presence
+describe('validateConnections — probe-kind vs install-method coherence (D15, T2 round-3 mandate)', () => {
+  it('an npm entry declaring a "command" probe (instead of npm-package) → error connection/probe-kind-mismatch', () => {
+    const entry = { ...cleanMcpEntry('npm-with-command-probe'), probe: { kind: 'command' as const, command: 'npx', args: ['--version'] } };
+    const catalog = connCatalog({ mcps: [entry] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/probe-kind-mismatch');
+    assert.ok(f, 'expected connection/probe-kind-mismatch for an npm entry declaring a non-npm-package probe');
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('npm-with-command-probe'));
+  });
+
+  it('an npm entry declaring a "command-presence" probe → error connection/probe-kind-mismatch (still wrong — npm requires npm-package)', () => {
+    const entry = { ...cleanMcpEntry('npm-with-presence-probe'), probe: { kind: 'command-presence' as const, command: 'npx' } };
+    const catalog = connCatalog({ mcps: [entry] });
+    assert.ok(connectionFindings(catalog).some((x) => x.check === 'connection/probe-kind-mismatch'));
+  });
+
+  it('a system-provided entry declaring an "npm-package" probe → error connection/probe-kind-mismatch', () => {
+    const entry = { ...cleanToolEntry('sys-with-npmpkg-probe'), probe: { kind: 'npm-package' as const } };
+    const catalog = connCatalog({ tools: [entry] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/probe-kind-mismatch');
+    assert.ok(f, 'expected connection/probe-kind-mismatch for a system-provided entry declaring npm-package');
+    assert.ok(f!.message.includes('sys-with-npmpkg-probe'));
+  });
+
+  it('a system-provided entry declaring a "command-presence" probe → error connection/probe-kind-mismatch (system-provided REQUIRES command, not presence-only)', () => {
+    const entry = { ...cleanToolEntry('sys-with-presence-probe'), probe: { kind: 'command-presence' as const, command: 'git' } };
+    const catalog = connCatalog({ tools: [entry] });
+    assert.ok(connectionFindings(catalog).some((x) => x.check === 'connection/probe-kind-mismatch'));
+  });
+
+  it('an external entry declaring an "npm-package" probe → error connection/probe-kind-mismatch (external is command | command-presence, never npm-package)', () => {
+    const entry = { ...cleanExternalMcpEntry('ext-with-npmpkg-probe'), probe: { kind: 'npm-package' as const } };
+    const catalog = connCatalog({ mcps: [entry] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/probe-kind-mismatch');
+    assert.ok(f, 'expected connection/probe-kind-mismatch for an external entry declaring npm-package');
+    assert.ok(f!.message.includes('ext-with-npmpkg-probe'));
+  });
+
+  it('an external entry declaring a "command" probe → NO mismatch finding (command IS a valid choice for external)', () => {
+    const entry = { ...cleanExternalMcpEntry('ext-with-command-probe'), probe: { kind: 'command' as const, command: 'github-mcp-server', args: ['--version'] } };
+    const catalog = connCatalog({ mcps: [entry] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/probe-kind-mismatch'));
+  });
+
+  it('an external entry declaring a "command-presence" probe → NO mismatch finding (the other valid choice for external)', () => {
+    const catalog = connCatalog({ mcps: [cleanExternalMcpEntry('ext-with-presence-probe')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/probe-kind-mismatch'));
+  });
+
+  it('an npm entry declaring the CORRECT npm-package probe → no mismatch finding', () => {
+    const catalog = connCatalog({ mcps: [cleanMcpEntry('npm-correct')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/probe-kind-mismatch'));
+  });
+
+  it('a system-provided entry declaring the CORRECT command probe → no mismatch finding', () => {
+    const catalog = connCatalog({ tools: [cleanToolEntry('sys-correct')] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/probe-kind-mismatch'));
+  });
+});
+
+describe('validateConnections — unknown config key (D5)', () => {
+  it('a config entry declaring a key outside {env,required,purpose} → error connection/unknown-config-key', () => {
+    const entry = cleanMcpEntry('extra-key-mcp');
+    entry.config = [{ env: 'GITHUB_TOKEN', required: true, purpose: 'x', default: 'sneaky' } as unknown as ConnectionConfigVarFixture];
+    const catalog = connCatalog({ mcps: [entry] });
+    const f = connectionFindings(catalog).find((x) => x.check === 'connection/unknown-config-key');
+    assert.ok(f, 'expected connection/unknown-config-key finding');
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('default'));
+  });
+
+  it('a config entry with only env/required/purpose → no connection/unknown-config-key finding', () => {
+    const entry = cleanMcpEntry('clean-key-mcp');
+    entry.config = [{ env: 'GITHUB_TOKEN', required: true, purpose: 'x' }];
+    const catalog = connCatalog({ mcps: [entry] });
+    assert.ok(!connectionFindings(catalog).some((x) => x.check === 'connection/unknown-config-key'));
+  });
+});
+
+describe('validateConnections: a fully-clean connections catalog → zero connection/* findings', () => {
+  it('one clean tool + one clean npm mcp + one clean external mcp → []', () => {
+    const catalog = connCatalog({ tools: [cleanToolEntry('git')], mcps: [cleanMcpEntry('memory'), cleanExternalMcpEntry('sqlite')] });
+    assert.deepEqual(connectionFindings(catalog).filter((f) => f.check.startsWith('connection/')), []);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The REAL entry point (D6 AC, and the T3 brief's non-negotiable rule): at
+// least the unpinned-entry-fails-lint AT must drive the REAL `forge studio
+// lint` entry point (`runStudioLint`), not just the rule function in
+// isolation — an optional rule the production caller forgets is an inert
+// rule, this campaign's most-repeated defect class.
+// ---------------------------------------------------------------------------
+
+describe('runStudioLint (REAL entry point): an unpinned installable connection fails the real `forge studio lint`', () => {
+  function tmpRoot(): string {
+    return mkdtempSync(join(tmpdir(), 'validate-connections-lint-'));
+  }
+
+  it('a real forge root whose catalog.yaml declares an unpinned npm mcp entry surfaces connection/unpinned via runStudioLint', () => {
+    const root = tmpRoot();
+    try {
+      mkdirSync(join(root, 'skills'), { recursive: true });
+      mkdirSync(join(root, 'studio', 'flows'), { recursive: true });
+      const catalogYaml = `sdks:
+  - { id: claude, name: Claude, available: true }
+models:
+  - { id: claude-sonnet-4-6, name: Claude Sonnet 4.6, sdk: claude, tier: sonnet }
+tools: []
+mcps:
+  - id: unpinned-real-lint-mcp
+    name: Unpinned Real Lint Mcp
+    install: { method: npm, package: "@forge-test/unpinned-real-lint", version: "" }
+    config: []
+    probe: { kind: npm-package }
+    provenance: "https://example.com"
+    capabilities:
+      - { name: query, summary: "Do the thing." }
+guards: []
+`;
+      writeFileSync(join(root, 'studio', 'catalog.yaml'), catalogYaml, 'utf8');
+
+      const result = runStudioLint(root);
+      const hit = result.findings.find((f) => f.check === 'connection/unpinned');
+      assert.ok(
+        hit,
+        `expected runStudioLint to surface a connection/unpinned finding for the unpinned mcp — this AT is legitimately RED until WI-1 wires validateConnections into cli/studio-lint.ts's catalog section. Got findings: ${JSON.stringify(result.findings.map((f) => f.check))}`,
+      );
+      assert.equal(hit!.level, 'error');
+      assert.ok(hit!.message.includes('unpinned-real-lint-mcp'));
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  // T2 ruling (round 2, item 5): install: is a CLOSED two-method
+  // discriminated union — an unrecognised method value THROWS at load,
+  // surfaced by forge studio lint's ALREADY-SHIPPED catalog try/catch
+  // (cli/studio-lint.ts section 3 — `catch (err) { push a 'load' finding }`)
+  // — never a bespoke connection/* finding of its own. This is the "closed
+  // set, no silent binary/brew/curl escape hatch" acceptance criterion.
+  it('an unrecognised install method (e.g. "binary") THROWS at catalog load — surfaced by runStudioLint\'s EXISTING catalog try/catch as a "load" finding, never a fabricated connection/* finding', () => {
+    const root = tmpRoot();
+    try {
+      mkdirSync(join(root, 'skills'), { recursive: true });
+      mkdirSync(join(root, 'studio', 'flows'), { recursive: true });
+      const catalogYaml = `sdks:
+  - { id: claude, name: Claude, available: true }
+models:
+  - { id: claude-sonnet-4-6, name: Claude Sonnet 4.6, sdk: claude, tier: sonnet }
+tools:
+  - id: bad-method-tool
+    name: Bad Method Tool
+    install: { method: binary, url: "https://example.com/bad-method-tool" }
+    config: []
+    probe: { kind: command, command: bad-method-tool, args: ["--version"] }
+    provenance: "https://example.com"
+guards: []
+`;
+      writeFileSync(join(root, 'studio', 'catalog.yaml'), catalogYaml, 'utf8');
+
+      const result = runStudioLint(root);
+      const loadFinding = result.findings.find((f) => f.object === 'studio:catalog' && f.check === 'load');
+      assert.ok(
+        loadFinding,
+        `expected a studio:catalog "load" finding for the unrecognised install method — this AT is legitimately RED until WI-1's connection catalog parser throws on an unknown method. Got findings: ${JSON.stringify(result.findings.map((f) => `${f.object}:${f.check}`))}`,
+      );
+      assert.equal(loadFinding!.level, 'error');
+      // A "binary" download method is DELIBERATELY not built (T2 ruling: it
+      // would need a checksum/verification story nothing in the curated set
+      // needs) — this must never quietly succeed as though it were a third
+      // supported install method.
+      assert.ok(!result.findings.some((f) => f.check.startsWith('connection/')), 'a structurally-invalid entry must never ALSO produce a fabricated connection/* finding alongside the load error');
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });
