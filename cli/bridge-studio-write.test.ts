@@ -55,7 +55,7 @@ function makeAgentSkillMd(): string {
     '    - tdd-workflow',
     '  tools: []',
     '  mcps: []',
-    '  hooks:',
+    '  guards:',
     '    - event-log',
     'runtime:',
     '  sdk: claude-code',
@@ -107,7 +107,7 @@ function makePutAgentBody(overrides: Record<string, unknown> = {}): Record<strin
       skills: ['tdd-workflow', 'coding-standards'],
       tools: ['Read'],
       mcps: [],
-      hooks: ['event-log'],
+      guards: ['event-log'],
     },
     runtime: {
       sdk: 'claude-code',
@@ -712,7 +712,7 @@ test('PUT with composition entry containing bad char → 400 validation error', 
       skills: ['tdd-workflow', 'bad skill!'],
       tools: [],
       mcps: [],
-      hooks: ['event-log'],
+      guards: ['event-log'],
     },
   });
   const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, body);

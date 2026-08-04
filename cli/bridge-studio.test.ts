@@ -153,7 +153,7 @@ function makeSkillMd(): string {
     '  skills: []',
     '  tools: []',
     '  mcps: []',
-    '  hooks: []',
+    '  guards: []',
     'runtime:',
     '  sdk: claude-code',
     '  strategy: fixed',
@@ -237,7 +237,7 @@ function makeCatalogYaml(): string {
     '    tier: standard',
     'tools: []',
     'mcps: []',
-    'hooks: []',
+    'guards: []',
   ].join('\n');
 }
 
@@ -638,7 +638,7 @@ test('GET /api/studio/catalog reconciles sdk availability with the adapter regis
       'models: []',
       'tools: []',
       'mcps: []',
-      'hooks: []',
+      'guards: []',
     ].join('\n'));
 
     const bridgeResult = await startBridge({ forgeRoot: registryRoot, port: 0 });
@@ -682,7 +682,7 @@ test('GET /api/studio/catalog unions a filesystem plain skill (no runtime block)
       'models: []',
       'tools: []',
       'mcps: []',
-      'hooks: []',
+      'guards: []',
       'communitySkills: []',
     ].join('\n'));
 

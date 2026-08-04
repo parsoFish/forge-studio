@@ -109,14 +109,14 @@ test('B3: the catalog duplicate-id validation covers the guards section (RED unt
     models: [{ id: 'claude-sonnet-4-6', name: 'Claude Sonnet 4.6', sdk: 'claude', tier: 'sonnet' }],
     tools: [],
     mcps: [],
-    hooks: [],
+    guards: [],
     path: '/studio/catalog.yaml',
   };
   const fixture = {
     ...base,
     guards: [
-      { id: 'event-log', name: 'JSONL event log' },
-      { id: 'event-log', name: 'Duplicate event log' },
+      { id: 'event-log', name: 'JSONL event log', kind: 'toggle' },
+      { id: 'event-log', name: 'Duplicate event log', kind: 'toggle' },
     ],
   } as unknown as Catalog;
 

@@ -90,7 +90,7 @@ function makeAgentSkillMd(): string {
     '  skills: [tdd-workflow]',
     '  tools: []',
     '  mcps: []',
-    '  hooks: [event-log]',
+    '  guards: [event-log]',
     'runtime:',
     '  sdk: claude-code',
     '  strategy: fixed',

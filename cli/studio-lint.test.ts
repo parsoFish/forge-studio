@@ -46,7 +46,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: []
+  guards: []
 runtime:
   sdk: claude-agent-sdk
   strategy: fixed
@@ -87,7 +87,7 @@ models:
   - { id: claude-sonnet-4-6, name: Sonnet 4.6, sdk: claude-agent-sdk, tier: standard }
 tools: []
 mcps: []
-hooks: []
+guards: []
 `;
 }
 
@@ -563,7 +563,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: []
+  guards: []
 runtime:
   sdk: claude-agent-sdk
   strategy: fixed

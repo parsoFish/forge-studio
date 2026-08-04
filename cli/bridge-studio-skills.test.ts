@@ -52,7 +52,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
   writeFileSync(
     join(forgeRoot, 'studio', 'catalog.yaml'),
-    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'hooks: []', 'community-skills: []', ''].join('\n'),
+    ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'),
   );
 
   // A plain, ready, hand-authored skill — surfaces in GET /api/studio/skills.

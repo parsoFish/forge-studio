@@ -38,6 +38,16 @@
  *    commit SHAs also fold in wall-clock commit time, which IS volatile. The
  *    real head SHA is therefore normalized too (see `<HEAD_SHA>` below).
  *
+ * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * `composition.guards`, 2026-08-04): `demo-agent.json` moved by exactly one
+ * byte — `hook` → `guard` at a single site — because `demo-agent-binding.ts`
+ * reads the canonical `demo-agent` agent's RAW `skills/demo-agent/SKILL.md`
+ * text and embeds it verbatim into the rendered system prompt. Renaming the
+ * frontmatter key changes those embedded prompt bytes even though nothing
+ * about the demo-agent pipeline's own logic changed — a one-token diff here
+ * is expected and should be trusted; a diff touching anything else in the
+ * fixture is not.
+ *
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/demo-agent-spawn-capture.test.ts
  * (or delete the fixture) rewrites

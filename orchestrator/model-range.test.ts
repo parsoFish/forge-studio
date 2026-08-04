@@ -24,7 +24,7 @@ const CATALOG: Catalog = {
   ],
   tools: [],
   mcps: [],
-  hooks: [],
+  guards: [],
   path: '/fake/catalog.yaml',
 };
 

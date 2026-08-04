@@ -21,6 +21,17 @@
  *    marker (a fresh controller is constructed every call; only ITS
  *    PRESENCE, not its identity, is a behavioural signal).
  *
+ * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * `composition.guards`, 2026-08-04): `pm.json` moved by exactly one byte —
+ * `hook` → `guard` at a single site — because `renderPmUserPrompt` (via
+ * `pm-binding.ts`) reads the canonical `project-manager`
+ * agent's RAW `skills/project-manager/SKILL.md` text and embeds it verbatim
+ * into the rendered prompt (the manifest/gate-recipe/tree-listing framing
+ * around it). Renaming the frontmatter key changes those embedded prompt
+ * bytes even though nothing about the PM's own logic changed — a one-token
+ * diff here is expected and should be trusted; a diff touching anything
+ * else in the fixture is not.
+ *
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/pm-spawn-capture.test.ts
  * (or delete the fixture) rewrites

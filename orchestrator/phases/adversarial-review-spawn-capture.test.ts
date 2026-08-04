@@ -37,6 +37,16 @@
  *    NOT stable across separate bootstrap runs and must be normalized for the
  *    fixture to compare equal on every re-run.
  *
+ * Fixture-move note (ADR-027 R3-03 amendment, `composition.hooks` →
+ * `composition.guards`, 2026-08-04): `adversarial-review.json` moved by
+ * exactly one byte — `hook` → `guard` at a single site — because
+ * `adversarial-review-binding.ts` reads the canonical `adversarial-review`
+ * agent's RAW `skills/adversarial-review/SKILL.md` text and embeds it
+ * verbatim into the rendered system prompt. Renaming the frontmatter key
+ * changes those embedded prompt bytes even though nothing about the review
+ * pipeline's own logic changed — a one-token diff here is expected and
+ * should be trusted; a diff touching anything else in the fixture is not.
+ *
  * Bootstrap / regenerate:
  *   UPDATE_SNAPSHOT=1 node --experimental-strip-types --test orchestrator/phases/adversarial-review-spawn-capture.test.ts
  * (or delete the fixture) rewrites

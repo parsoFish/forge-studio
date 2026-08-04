@@ -20,11 +20,28 @@
  * The test asserts `composition.guards` (once it exists) deep-equals this
  * table for every one of them, sorted for stable comparison.
  *
- * A2 — asserts NO SKILL.md anywhere under `skills/` still carries a `hooks:`
- * key inside its `composition:` block, read from the RAW frontmatter
- * (gray-matter on the file text, not the parsed `AgentDefinition`) — a parsed
- * object can silently drop an unrecognized key, so this assertion exists
- * specifically to catch a leftover the parser would otherwise ignore.
+ * A2 — asserts NO SKILL.md anywhere under `skills/` OR
+ * `studio/starters/agents/` still carries a `hooks:` key inside its
+ * `composition:` block, read from the RAW frontmatter (gray-matter on the
+ * file text, not the parsed `AgentDefinition`) — a parsed object can
+ * silently drop an unrecognized key, so this assertion exists specifically
+ * to catch a leftover the parser would otherwise ignore.
+ *
+ * `studio/starters/agents/` (2026-08-04 coverage-gap close): the ORIGINAL
+ * A2 only scanned `skills/`, but `studio/starters/agents/{plan,dev,review}`
+ * also carry `composition:` blocks and ALSO flow through `loadAgentDefinition`
+ * (via `listStarterAgents`, `orchestrator/studio/registry.ts` — the New-Agent
+ * picker's StarterPicker source) — a directory the sweep could silently miss
+ * while `skills/` alone stayed clean, since nothing else pinned it. These
+ * three are the ONLY other on-disk `composition:`-bearing definitions:
+ * confirmed by grepping every `loadAgentDefinition(...)` call site in
+ * `orchestrator/`/`cli/` — every one resolves either through `skillPath()`
+ * (`skills/<slug>/SKILL.md`) or through `listStarterAgents`'s
+ * `studio/starters/agents/` walk; `studio/starters/flows/` (flow.yaml, not
+ * agent SKILL.mds) and `studio/starters/projects/` (project scaffolds) never
+ * reach `loadAgentDefinition` at all. If a THIRD such directory is ever
+ * added, it must be added here too — this is the one general "no residual
+ * hooks: anywhere loadAgentDefinition can reach" sweep-completeness gate.
  *
  * `composition.guards` does not exist on today's `AgentDefinition` type
  * (`AgentComposition` still declares only `hooks: string[]`). Referencing it
@@ -118,8 +135,19 @@ test('A1: every composition-bearing SKILL.md carries composition.guards matching
   );
 });
 
-test('A2: no SKILL.md under skills/ still declares a raw composition.hooks key (RED until the sweep lands)', () => {
-  const skillMdPaths = listSkillMdDirs(skillsDir(FORGE_ROOT)).map((dir) => join(dir, 'SKILL.md'));
+/** Every directory a real `loadAgentDefinition(...)` call site can reach
+ * (see the A2 header note) — `skills/` (the live roster + installed
+ * packages, same physical tree) and `studio/starters/agents/` (the
+ * New-Agent picker's StarterPicker source, via `listStarterAgents`). */
+function loadAgentDefinitionReachableDirs(forgeRoot: string): string[] {
+  return [skillsDir(forgeRoot), join(forgeRoot, 'studio', 'starters', 'agents')];
+}
+
+test('A2: no SKILL.md under skills/ or studio/starters/agents/ still declares a raw composition.hooks key (RED until the sweep lands)', () => {
+  const skillMdPaths = loadAgentDefinitionReachableDirs(FORGE_ROOT).flatMap((dir) =>
+    listSkillMdDirs(dir).map((d) => join(d, 'SKILL.md')),
+  );
+  assert.ok(skillMdPaths.length > 0, 'expected at least one SKILL.md across skills/ + studio/starters/agents/');
 
   const offenders: string[] = [];
   for (const skillMdPath of skillMdPaths) {

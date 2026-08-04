@@ -124,7 +124,7 @@ test('finalize: merged → non-reflect agent-target is unhandled, reflect does N
       runReflector: async () => { reflected = true; },
       loadFlowTriggers: () => [{ on: 'merged', target: { kind: 'agent', ref: 'some-other-agent' } }],
       // A def that declares a DIFFERENT band (not reflection-close).
-      loadAgentDef: () => ({ composition: { hooks: ['wi-contract'] } }) as never,
+      loadAgentDef: () => ({ composition: { guards: ['wi-contract'] } }) as never,
     });
     assert.deepEqual(results.map((r) => r.status), ['finalized'], 'still finalizes (merge confirmed)');
     assert.equal(reflected, false, 'a non-reflection-close agent target must not fire reflect');
