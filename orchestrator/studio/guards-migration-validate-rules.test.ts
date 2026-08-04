@@ -72,7 +72,7 @@ function mk(slug: string, over: Record<string, unknown> = {}): AgentDefinition {
 // ---------------------------------------------------------------------------
 
 test('sanity: validateAgent does not throw on a TRUE post-migration def (composition.guards present, composition.hooks entirely absent) (RED until migrated)', () => {
-  const crashFixture = mk('crash-fixture', { composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] } });
+  const crashFixture = mk('crash-fixture', { composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log'] } });
   assert.doesNotThrow(
     () => validateAgent(crashFixture),
     'expected validateAgent to handle a genuinely hooks-less, guards-only def without throwing — today it crashes reading composition.hooks.length, which is a stronger gap than mere unawareness',

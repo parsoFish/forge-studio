@@ -328,6 +328,7 @@ export function validateAgent(
     ['composition/tools', def.composition.tools],
     ['composition/mcps', def.composition.mcps],
     ['composition/guards', def.composition.guards],
+    ['composition/hooks', def.composition.hooks],
   ];
   for (const [field, entries] of compArrays) {
     for (const entry of entries) {

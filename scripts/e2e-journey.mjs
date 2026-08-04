@@ -118,6 +118,7 @@ import {
   cleanSeededBrain,
   cleanDemoBuilderSession,
   cleanSkillArtifacts,
+  cleanHookArtifacts,
   ONB_EXISTING_SLUG, cleanOnboardedProject,
 } from './lib/journey-fixtures.mjs';
 
@@ -394,6 +395,7 @@ async function main() {
           try { cleanOnboardedProject(s); } catch { /* best-effort */ }
         }
         cleanSkillArtifacts();                        // Part 2 — skills pillar
+        cleanHookArtifacts();                          // Part 2 — hooks pillar (R3-03-F4)
         cleanScratchFlow();
         cleanStarterAgents();
         cleanFirstFlow();

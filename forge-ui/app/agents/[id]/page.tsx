@@ -45,7 +45,7 @@ import {
 // Types
 // ---------------------------------------------------------------------------
 
-type Kind = 'skill' | 'tool' | 'mcp' | 'guard';
+type Kind = 'skill' | 'tool' | 'mcp' | 'guard' | 'hook';
 
 type AgentState = {
   slug: string;
@@ -55,6 +55,9 @@ type AgentState = {
   tools: string[];
   mcps: string[];
   guards: string[];
+  // Library hook ids this agent carries (R3-03-F4) — distinct vocabulary
+  // from guards; binding happens ONLY here in the Agent Builder.
+  hooks: string[];
   process: string;
   interactivity: string;
   runtime: AgentRuntime;
@@ -86,6 +89,7 @@ const EMPTY_STATE: AgentState = {
   tools: [],
   mcps: [],
   guards: [],
+  hooks: [],
   process: '',
   interactivity: '',
   runtime: { ...DEFAULT_RUNTIME },
@@ -123,6 +127,7 @@ function parseAgent(raw: Agent): AgentState {
     tools:          (raw.tools ?? []).slice(),
     mcps:           (raw.mcps ?? []).slice(),
     guards:         (raw.guards ?? []).slice(),
+    hooks:          (raw.hooks ?? []).slice(),
     process:        raw.process ?? '',
     interactivity:  raw.interactivity ?? '',
     runtime: {
@@ -155,6 +160,7 @@ function buildPutBody(state: AgentState): Record<string, unknown> {
       tools:  state.tools,
       mcps:   state.mcps,
       guards: state.guards,
+      hooks:  state.hooks,
     },
     runtime: {
       sdk:          state.runtime.sdk,
@@ -337,7 +343,7 @@ export default function AgentBuilderPage() {
   }
 
   // ---- used ids (for palette dimming) ----
-  const usedIds = [...state.skills, ...state.tools, ...state.mcps, ...state.guards];
+  const usedIds = [...state.skills, ...state.tools, ...state.mcps, ...state.guards, ...state.hooks];
 
   // ---- readiness check inputs ----
   // R2-02-F4: `capability` (the runtime-SDK + interactive facts) is the
@@ -487,7 +493,7 @@ export default function AgentBuilderPage() {
                     Capabilities &amp; Constraints
                   </label>
                   <div className="zones-grid">
-                    {(['skill', 'tool', 'mcp', 'guard'] as Kind[]).map((kind) => (
+                    {(['skill', 'tool', 'mcp', 'guard', 'hook'] as Kind[]).map((kind) => (
                       <ZoneWrap key={kind} kind={kind}>
                         <DropZone
                           kind={kind}
@@ -798,6 +804,7 @@ const ZONE_META: Record<string, { dotKind: string; label: string; hint: string }
   tool:  { dotKind: 'tool',  label: 'Tools & CLIs', hint: 'external processes it can invoke' },
   mcp:   { dotKind: 'mcp',   label: 'MCP Servers',  hint: 'structured data + action access' },
   guard: { dotKind: 'guard', label: 'Guards',        hint: 'dispatch keys, gates & observability' },
+  hook:  { dotKind: 'hook',  label: 'Hooks',         hint: 'lifecycle scripts it carries' },
 };
 
 function ZoneWrap({ kind, children }: { kind: string; children: React.ReactNode }) {

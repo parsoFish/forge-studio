@@ -90,6 +90,18 @@ is deleted and reserved for the *library* lifecycle hooks R3-03's remaining
 features introduce. See [ADR 027](../decisions/027-studio-object-model.md)'s
 R3-03 amendment.
 
+**Superseded 2026-08-04 (R3-03 library PR) — this baseline entry no longer
+describes the as-built.** The hooks library now exists: `studio/hooks/<id>/`
+file packages, `orchestrator/studio/hook-library.ts` (registry + derived
+`carriedBy` + symmetric `composition.hooks`/`composition.guards` lint),
+`hook-scan.ts` (static scan + verdict + approval ledger hashing script AND
+manifest), `hook-runtime.ts` (deny-by-default env via `HOOK_ENV_BASE_ALLOWLIST`),
+`cli/bridge-studio-hooks.ts` (5 routes), `/hooks` + `/hooks/[id]` + `/hooks/new`,
+and the `hooks` journey. The security model was designed WITH the library, not
+retrofitted — which is exactly what this entry said it would have to be. Its
+honest remaining limits (writes ungoverned; `read`/`network` declared and
+scanned but not OS-enforced) are recorded in the R3-03 change-log entry.
+
 ### R3-B6 Skill provenance pattern already proven
 
 The catalog's community-skills demonstrate the provenance shape R3 generalises:
@@ -409,9 +421,9 @@ create-project action added from `/templates` itself).
 
 ### R3-03 Hooks library
 
-- **Status:** in-progress (re-scoped 2026-08-03, wave-5 cut — see the re-scope
-  block below; the F1 migration clause landed 2026-08-04, the library itself is
-  the follow-on PR)  ·  **Wave:** 5 (module: library-hooks)
+- **Status:** implemented (2026-08-04, two PRs — the F1 migration clause, then
+  F1-F4 the library; re-scoped 2026-08-03, wave-5 cut — see the re-scope block
+  below)  ·  **Wave:** 5 (module: library-hooks)
 - **Depends on:** R5-01 (soft — the dry-bridge safety seam and R5-02 env-pin
   should land before forge ships *installable, in-harness-executing*
   components; sequencing preference per Q6-A wave 0, not a hard blocker).
@@ -507,6 +519,22 @@ create-project action added from `/templates` itself).
     pending explicit operator override; a benign fixture passes with an empty
     findings list; the scan runs on *edit* too (an approved hook that changes
     re-enters review).
+    **AC corrected 2026-08-04 (R3-03 library PR, adversarial review).** As
+    originally written this AC exercised the **undeclared** variant — and that
+    variant is **inert**: an undeclared env var never reaches the child, so that
+    fixture could not leak even if it ran. The variant that *can* leak is the
+    **declared** one (`permissions: {env: [<secret>], network: true}`), and as
+    first built, declaring *downgraded* both findings, so it scored `findings`
+    and was approvable with no override at all — while the manifest-keyed env
+    build handed the child the real value. The AC is therefore restated with the
+    invariant it was always meant to express: **the declared path must never
+    carry less friction than the undeclared path.** Severity keys off the
+    capability **grant**, not scanner detection — a manifest *requesting* a
+    secret-shaped name is critical whether or not the scanner finds a matching
+    reference — so declared-secret-grant + declared-egress resolves to
+    `blocked`. Benign combinations (egress with no secret grant) stay
+    non-blocked, pinned in both directions so the rule cannot degenerate into
+    everything-blocked.
   - **R3-03-F3 — Permission model (declare-what-you-access).** Each hook's
     definition carries a permission manifest: which env vars it may read,
     which paths it may touch, whether network egress is allowed.
@@ -979,3 +1007,38 @@ rather than deferred within it:
   its security scan and permission manifest) remain **planned** and are the
   follow-on PR; `composition.hooks` is re-introduced there with the
   lifecycle-hook meaning.
+
+- **2026-08-04 (R3-03, library PR).** F1-F4 landed, completing the initiative.
+  **F1:** a hook is a **file package** — `studio/hooks/<id>/hook.yaml` plus its
+  scripts — generic and host-agnostic; the payload field is `script:` (not
+  `guard:`, which this initiative had just finished disambiguating). A
+  `hook.yaml` declaring any binding field is **rejected**, so "definitions land
+  unbound" is structural rather than conventional; `carriedBy` is DERIVED from
+  real agent specs and the derivation names its own scan. `composition.hooks`
+  returns meaning library hook ids only, with **symmetric** enforcement in both
+  directions, and `resolveBandGuard` still reads only `composition.guards` — so
+  nothing in `composition.hooks` can reach dispatch, which was the whole reason
+  for the rename. Two OOTB seeds ship (`pre-pr-security-review`,
+  `post-merge-brain-ingest`). **F2:** a static scan over the script — egress,
+  secret-shaped env reads, out-of-scope file reads, obfuscation — producing a
+  real verdict (`blocked|findings|clean`), unlike R3-01's skill-install scan
+  which deliberately refused one because prose is unscannable. Approval refuses
+  a blocked verdict; only a separate **recorded override** flips runnability,
+  and it leaves the verdict `blocked` — an override records a decision, it never
+  launders a verdict. Declared behaviour is **downgraded but never hidden**.
+  The approval hash covers the **script and the manifest**, so permissions
+  cannot be widened without re-entering review. **F3:** deny-by-default
+  execution via `HOOK_ENV_BASE_ALLOWLIST`, derived from `AGENT_ENV_ALLOWLIST` by
+  subtraction so the two cannot drift. **F4:** `/hooks`, `/hooks/[id]` (file
+  package + a visible SECURITY SCAN panel), `/hooks/new`, five bridge routes in
+  one module, and Agent-Builder binding on a `[data-accepts="hook"]` zone
+  distinct from `[data-accepts="guard"]`. New `hooks` journey (5 beats).
+  **Stated limits, not overclaimed:** file writes are **ungoverned** (the
+  manifest models `env`/`read`/`network`; F2 names four scan categories and a
+  half-enforced fifth would be worse than a clearly-absent one), and
+  `read`/`network` are declared and scanned but **not OS-enforced** — only `env`
+  gets real prevention. Real enforcement means a process isolator, which
+  [PRINCIPLES](../../PRINCIPLES.md)/CLAUDE.md forbid re-inventing. The scanner's
+  string-concatenation obfuscation gap is documented by a test rather than
+  hidden. Marketplace install remains **R3-07's** entry point, routed through
+  this feature's scan + approval unchanged.

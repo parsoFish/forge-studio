@@ -107,6 +107,10 @@ export type Agent = {
   tools: string[];
   mcps: string[];
   guards: string[];
+  // Library hook ids this agent carries (R3-03-F4) — a DISTINCT vocabulary
+  // from `guards` (ADR-027 R3-03 amendment: composition.hooks holds library
+  // hook ids, composition.guards holds the fixed platform dispatch-key set).
+  hooks: string[];
   interactivity?: string;
   process?: string;
   runtime?: AgentRuntime;
@@ -370,6 +374,10 @@ export type Catalog = {
   tools?: CatalogItem[];
   mcps?: CatalogItem[];
   guards?: CatalogItem[];
+  // Real library hooks (studio/hooks/<id>/), filesystem-scanned rather than
+  // catalog rows — unioned in server-side by the /api/studio/catalog route
+  // the same way listPlainSkills is unioned into `skills` (R3-03-F4).
+  hooks?: CatalogItem[];
   artifacts?: CatalogItem[];
   models?: CatalogItem[];
   sdks?: CatalogItem[];
@@ -567,6 +575,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     tools:          Array.isArray(comp['tools'])   ? (comp['tools']   as string[]) : [],
     mcps:           Array.isArray(comp['mcps'])    ? (comp['mcps']    as string[]) : [],
     guards:         Array.isArray(comp['guards'])  ? (comp['guards']  as string[]) : [],
+    hooks:          Array.isArray(comp['hooks'])   ? (comp['hooks']   as string[]) : [],
     process:        typeof r['body']          === 'string' ? r['body']          : '',
     interactivity:  typeof r['interactivity'] === 'string' ? r['interactivity'] : '',
     brainAccess:    typeof r['brainAccess']   === 'string' ? r['brainAccess']   : 'none',

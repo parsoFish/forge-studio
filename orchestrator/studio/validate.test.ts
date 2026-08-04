@@ -39,7 +39,7 @@ function makeAgent(overrides: Partial<AgentDefinition> = {}): AgentDefinition {
     name: 'My Agent',
     description: 'An agent.',
     purpose: 'Do things.',
-    composition: { skills: ['demo'], tools: [], mcps: [], guards: ['event-log'] },
+    composition: { skills: ['demo'], tools: [], mcps: [], hooks: [], guards: ['event-log'] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',
@@ -147,7 +147,7 @@ describe('validateAgent — readiness/purpose', () => {
 describe('validateAgent — readiness/skill', () => {
   it('empty composition.skills → flag readiness/skill', () => {
     const findings = validateAgent(
-      makeAgent({ composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] } }),
+      makeAgent({ composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log'] } }),
     );
     const f = findings.find((x) => x.check === 'readiness/skill');
     assert.ok(f, 'expected readiness/skill finding');
@@ -163,7 +163,7 @@ describe('validateAgent — readiness/skill', () => {
 describe('validateAgent — readiness/guard', () => {
   it('empty composition.guards → flag readiness/guard', () => {
     const findings = validateAgent(
-      makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], guards: [] } }),
+      makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], hooks: [], guards: [] } }),
     );
     const f = findings.find((x) => x.check === 'readiness/guard');
     assert.ok(f, 'expected readiness/guard finding');
@@ -415,7 +415,7 @@ describe('validateAgent — fully-ready agent', () => {
 
   it('fully-ready agent with empty skills+guards → flags only (2), no errors', () => {
     const findings = validateAgent(
-      makeAgent({ composition: { skills: [], tools: [], mcps: [], guards: [] } }),
+      makeAgent({ composition: { skills: [], tools: [], mcps: [], hooks: [], guards: [] } }),
     );
     assert.ok(findings.every((f) => f.level === 'flag'));
     assert.equal(findings.length, 2);
@@ -900,7 +900,7 @@ describe('validateFlow — trigger-target', () => {
 
   it('on:merged agent target with the reflection-close band → no trigger-target finding', () => {
     const reflectAgent = makeAgent({
-      composition: { skills: ['demo'], tools: [], mcps: [], guards: ['event-log', 'reflection-close'] },
+      composition: { skills: ['demo'], tools: [], mcps: [], hooks: [], guards: ['event-log', 'reflection-close'] },
     });
     const flow = makeFlow({
       triggers: [{ on: 'merged', target: { kind: 'agent', ref: 'my-agent' } }],
@@ -1215,7 +1215,7 @@ describe('validateFlow — trigger-shape', () => {
 
   // R4-09-F3 — the reflect `mode` field
   const reflectAgent = () =>
-    makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], guards: ['event-log', 'reflection-close'] } });
+    makeAgent({ composition: { skills: ['demo'], tools: [], mcps: [], hooks: [], guards: ['event-log', 'reflection-close'] } });
 
   it('mode: automated on an on:merged reflect-agent target → no trigger-mode/shape finding', () => {
     const flow = makeFlow({
@@ -1658,7 +1658,7 @@ describe('validateAgent runtime/loop-strategy', () => {
     description: 'd',
     library: true,
     purpose: 'p',
-    composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] },
+    composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log'] },
     runtime: { sdk: 'claude', strategy: 'fixed' as const, model: 'claude-sonnet-4-6', loopStrategy },
     brainAccess: 'none' as const,
     interactivity: 'autonomous',
@@ -1693,7 +1693,7 @@ describe('validateAgent composition/band-guard + budgets/range', () => {
     description: 'd',
     library: true,
     purpose: 'p',
-    composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] },
+    composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log'] },
     runtime: { sdk: 'claude', strategy: 'fixed' as const, model: 'claude-sonnet-4-6' },
     brainAccess: 'none' as const,
     interactivity: 'autonomous',
@@ -1709,7 +1709,7 @@ describe('validateAgent composition/band-guard + budgets/range', () => {
 
   it('a foreign def declaring wi-contract → error (canonical-slug restriction)', () => {
     const findings = validateAgent(mk('some-agent', {
-      composition: { skills: [], tools: [], mcps: [], guards: ['event-log', 'wi-contract'] },
+      composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['event-log', 'wi-contract'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }));
@@ -1718,14 +1718,14 @@ describe('validateAgent composition/band-guard + budgets/range', () => {
 
   it('two band guards on one def → error; band guard without one-shot/caps → errors', () => {
     const both = validateAgent(mk('project-manager', {
-      composition: { skills: [], tools: [], mcps: [], guards: ['wi-contract', 'reflection-close'] },
+      composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['wi-contract', 'reflection-close'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 10, maxBudgetUsd: 1 },
     }));
     assert.ok(both.some((x) => x.check === 'composition/band-guard' && x.message.includes('at most one')));
 
     const bare = validateAgent(mk('project-manager', {
-      composition: { skills: [], tools: [], mcps: [], guards: ['wi-contract'] },
+      composition: { skills: [], tools: [], mcps: [], hooks: [], guards: ['wi-contract'] },
     }));
     assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('one-shot')));
     assert.ok(bare.some((x) => x.check === 'composition/band-guard' && x.message.includes('maxTurns')));
@@ -1742,7 +1742,7 @@ describe('validateAgent composition/band-guard + budgets/range', () => {
 
   it('the real shipped PM/reflector shapes are band-lint clean', () => {
     const pm = validateAgent(mk('project-manager', {
-      composition: { skills: ['brain-query'], tools: [], mcps: [], guards: ['event-log', 'wi-contract'] },
+      composition: { skills: ['brain-query'], tools: [], mcps: [], hooks: [], guards: ['event-log', 'wi-contract'] },
       runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6', loopStrategy: 'one-shot' },
       budgets: { maxTurns: 70, maxBudgetUsd: 2.5, maxBudgetUsdShare: 0.2 },
     }));

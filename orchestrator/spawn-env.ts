@@ -74,6 +74,36 @@ export const AGENT_ENV_ALLOWLIST: readonly string[] = [
 export const MAX_ENV_OVERRIDE_KEYS = 8 as const;
 
 /**
+ * R3-03-F3 (2026-08-04 peer-review finding, confirmed-then-fixed defect) —
+ * the env base for an UNTRUSTED hook script child, as opposed to
+ * `AGENT_ENV_ALLOWLIST` above which is calibrated for forge's OWN trusted
+ * agent children.
+ *
+ * `AGENT_ENV_ALLOWLIST` legitimately carries `ANTHROPIC_API_KEY` — forge's
+ * own spawned agents need it to call the API. A third-party hook script is
+ * NOT a trusted agent child: it is operator-authored (or worse, installed
+ * from an untrusted source) shell run under a narrower contract
+ * (`studio/hooks/<id>/hook.yaml`'s `permissions.env` allowlist,
+ * `orchestrator/studio/hook-runtime.ts`'s `buildHookChildEnv`). A hook
+ * manifest declaring `env: []` (asking for NOTHING) must see NOTHING beyond
+ * bare process hygiene — composing `buildChildEnv` over the full
+ * `AGENT_ENV_ALLOWLIST` would silently hand every hook the operator's real
+ * API key regardless of what its manifest declared, which is the exact
+ * exfiltration class this whole feature exists to prevent.
+ *
+ * DERIVED from `AGENT_ENV_ALLOWLIST` by SUBTRACTING the credential-bearing
+ * names below — never independently retyped — so a future credential added
+ * to `AGENT_ENV_ALLOWLIST` cannot silently widen the hook base by omission;
+ * the exclusion has to be named explicitly right here for the hook base to
+ * stay narrow.
+ */
+const HOOK_ENV_CREDENTIAL_EXCLUSIONS: ReadonlySet<string> = new Set(['ANTHROPIC_API_KEY']);
+
+export const HOOK_ENV_BASE_ALLOWLIST: readonly string[] = AGENT_ENV_ALLOWLIST.filter(
+  (name) => !HOOK_ENV_CREDENTIAL_EXCLUSIONS.has(name),
+);
+
+/**
  * Build the full env for an SDK-spawned agent child: an allowlist-filtered
  * snapshot of `parentEnv` (only `AGENT_ENV_ALLOWLIST` names, when defined),
  * with `overrides` layered on top unconditionally.

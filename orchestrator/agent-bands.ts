@@ -26,6 +26,30 @@ export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'demo-band', '
 export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
 
 /**
+ * The toggle-style guard ids (ADR-027 R3-03 amendment) — platform behaviours
+ * an agent switches on/off, as opposed to BAND_GUARD_IDS's dispatch-routing
+ * ids. Each has a display row in `studio/catalog.yaml`'s `guards:` section
+ * but, unlike a band guard, resolves nothing through `resolveBandGuard` —
+ * each is read directly by its own subsystem (event-log by the logger
+ * config, cost-guard by the budget enforcer, ...).
+ */
+export const TOGGLE_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip'] as const;
+export type ToggleGuardId = (typeof TOGGLE_GUARD_IDS)[number];
+
+/**
+ * The full closed set of platform guard ids (ADR-027 R3-03 amendment) — the
+ * union of the 5 toggle ids and the 4 band ids. This is the "is this id
+ * platform machinery, not a library hook" check `lintHookComposition`
+ * (`orchestrator/studio/hook-library.ts`) needs to enforce the
+ * `composition.hooks` vs `composition.guards` split — sourced as a fixed
+ * platform-vocabulary constant, deliberately NOT re-derived from
+ * `studio/catalog.yaml`, because catalog.yaml is a DISPLAY surface over
+ * these ids (a hand-edited name/desc row), not their source of truth, and a
+ * lint fixture root legitimately may not seed a catalog.yaml at all.
+ */
+export const PLATFORM_GUARD_IDS: readonly string[] = [...TOGGLE_GUARD_IDS, ...BAND_GUARD_IDS];
+
+/**
  * Band guard id → the ONE canonical agent slug the band's pipeline loads its
  * SKILL.md from. The band implementations (flow-runner's executor table) load
  * the canonical agent's intent themselves, so a non-canonical def declaring the

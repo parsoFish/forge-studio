@@ -1,0 +1,10 @@
+id: pre-pr-security-review
+name: pre-pr-security-review
+description: Run security-review before any PR-creating command on auth-touching diffs.
+on: PreToolUse
+matcher: "Bash(gh pr create)"
+script: scripts/run.sh
+permissions:
+  env: []
+  read: []
+  network: false

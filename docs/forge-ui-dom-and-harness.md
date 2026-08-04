@@ -115,10 +115,52 @@ inventory rather than one shared page-level contract:
   routes are now permanent client-side redirects into `/artifact` (M7-3,
   ADR-031) — `[data-page="review-redirect"|"reflect-redirect"][data-page-ready="true"]`
   — kept only so stale bookmarks keep working.
+- **`/hooks`, `/hooks/[id]`, `/hooks/new`** (R3-03-F4) — the hooks pillar. A
+  library "hook" is an **agent-lifecycle customisation** and a FILE PACKAGE
+  (`studio/hooks/<id>/hook.yaml` + its scripts), generic and host-agnostic;
+  a definition names the event and the script and never a binding. Root:
+  `main[data-page="hook-library"][data-page-ready][data-hook-count][data-needs-review-count]`,
+  per card
+  `[data-card-type="hook"][data-hook-id][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-carried-by-count]`.
+  `data-hook-carried-by-count` is DERIVED from every real agent's
+  `composition.hooks` and the derivation names its own scan, so an empty count
+  reads "scanned N, found none" and never "unknown". There is deliberately **no
+  Local/Community split and no install affordance** — unlike `/skills`, there is
+  no community-hook source to back either, and fabricating the distinction would
+  be inventing data; the install entry point is R3-07's.
+  `[data-action="new-hook"]` links to
+  `main[data-page="hook-builder"][data-page-ready][data-section="hook-new"]`
+  (fields `[data-field="hook-name"|"hook-description"|"hook-on"|"hook-matcher"|"hook-script-body"|"hook-permissions-env"|"hook-permissions-read"|"hook-permissions-network"]`,
+  `[data-action="create-hook"]`).
+  `/hooks/[id]` is
+  `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable]`
+  — the last four are ABSENT while loading, on a fetch error and for an unknown
+  id; no verdict is ever fabricated. It reuses the shared
+  `[data-component="file-package"]` renderer R3-01 built, and adds the
+  **SECURITY SCAN** panel
+  `[data-section="scan-report"][data-scan-verdict][data-finding-count][data-critical-count]`
+  with per-finding
+  `[data-finding-category][data-finding-severity][data-finding-declared]`.
+  `data-finding-declared` matters: a behaviour the manifest DECLARES is
+  downgraded but still rendered and still counted — never hidden — because the
+  gate exists so a human can decide whether to run this code with their
+  credentials, and the declaration is written by the same untrusted party as the
+  script. `data-hook-verdict` and `data-hook-trust` are **two independent axes**:
+  an overridden hook still reads `verdict="blocked"`, which is the honest record
+  of an operator decision. `[data-action="approve-hook"]` is enabled only when
+  the verdict is not blocked and trust is `needs-review`;
+  `[data-action="override-hook-block"]` + `[data-field="override-reason"]` only
+  when it IS blocked — approval can never launder a blocked verdict.
+
 - **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
   default (`[data-section="advanced"][data-advanced-open]`) behind which sit
-  the capability drop zones `[data-accepts="skill"|"tool"|"mcp"|"guard"]`, a
+  the capability drop zones
+  `[data-accepts="skill"|"tool"|"mcp"|"guard"|"hook"]` — `guard` and `hook` are
+  two DISTINCT zones with distinct styling and must never merge; keeping those
+  vocabularies apart is the whole reason R3-03 renamed `composition.hooks` to
+  `composition.guards` before reintroducing `composition.hooks` for library
+  lifecycle hooks — a
   `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel (6
   checks — purpose/skill/guard/process/interactivity content-completeness plus
   a `runtime` check sourced from the server-computed F1 capability descriptor,

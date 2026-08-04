@@ -18,6 +18,22 @@ export type AgentComposition = {
    * id-collision hijack of flow dispatch structurally impossible.
    */
   guards: string[];
+  /**
+   * Library lifecycle-hook ids (R3-03-F1b, ADR-027 amendment "R3-03,
+   * 2026-08-04"): REINTRODUCED with a narrowed meaning — resolves ONLY
+   * against the hooks registry (`studio/hooks/<id>/`,
+   * `orchestrator/studio/hook-library.ts`), never a `composition.guards`
+   * platform id. A library hook definition never names an agent; binding is
+   * declared here, in the Agent Builder, only — "carried by" is DERIVED from
+   * real agent specs (`deriveHookUsage`), never the reverse. REQUIRED
+   * (2026-08-04 peer-review finding): a loaded `AgentDefinition` (via
+   * `loadAgentDefinition`) always normalizes this to `[]` when absent from
+   * the source SKILL.md, so every real consumer already had a real array —
+   * leaving the field optional only forced every consumer into a fail-open
+   * `?? []`, inventing data a payload never sent. All hand-built
+   * `AgentComposition` fixtures across the repo were swept to carry it.
+   */
+  hooks: string[];
 };
 
 export type AgentRuntime = {

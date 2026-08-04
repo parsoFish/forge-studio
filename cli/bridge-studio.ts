@@ -46,6 +46,7 @@ import {
   listDemoElements,
   listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
+import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
 import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
@@ -686,7 +687,15 @@ export async function handleStudioRoutes(
       const seen = new Set(community.map((s) => s.id));
       const local = listPlainSkills(ctx.forgeRoot).filter((s) => !seen.has(s.id));
       const skills = [...community, ...local];
-      sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills } }, origin);
+      // R3-03-F4: real library hooks (studio/hooks/<id>/) are filesystem-
+      // scanned, not catalog rows — union them into the palette the same way
+      // listPlainSkills is unioned into `skills` above, so the palette offers
+      // REAL hooks, never a fabricated catalog list. Only well-formed (ok:true)
+      // hooks are palette-visible — a malformed one has nothing safe to bind.
+      const hooks = listHookLibrary(ctx.forgeRoot)
+        .filter((h) => h.ok)
+        .map((h) => ({ id: h.id, name: h.name, desc: h.description }));
+      sendJson(res, 200, { catalog: { ...catalog, sdks: reconciledSdks, skills, hooks } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
