@@ -79,6 +79,42 @@
  *       `overridden: true` + the reason — queryable and distinguishable from
  *       an ordinary `clean`/`findings` approval, never silently merged into
  *       the same code path.
+ *  D-J. JOB B (2026-08-04, second post-migration adversarial review): the
+ *       approval ledger pinned ONLY `hashHookScript(scriptBody)` —
+ *       `permissions.env`/`read`/`network` could be WIDENED in hook.yaml
+ *       (an entirely separate file from the script) without ever touching
+ *       the script bytes, and `hookRunState` would keep reporting
+ *       `needsReview: false`. An approval means "this exact script WITH
+ *       these exact declared permissions" — pinning only the script half is
+ *       the sharper cousin of the R3-01 lesson this whole trust pipeline is
+ *       modelled on: a pin that does not cover the thing it protects is not
+ *       a pin. SHAPE CHOSEN (mine, documented, one target for the
+ *       implementer): TWO separate named hashes, not one concatenated blob
+ *       and not a whole-package hash —
+ *         `HookApprovalLedgerEntry.scriptHash` (was `contentHash`;
+ *         `hashHookScript`, UNCHANGED — still a pure hash over script text
+ *         only, still independently tested below) and
+ *         `.permissionsHash` (NEW — `hashHookPermissions(permissions)`, a
+ *         pure hash over the manifest, canonicalized by SORTING `env`/`read`
+ *         before hashing so a pure reordering of an already-granted list is
+ *         NOT a re-review trigger — pinned explicitly below). `needsReview`
+ *         becomes true if EITHER hash differs from the ledger's pinned pair.
+ *       REJECTED alternatives: (a) one hash over `script + JSON(manifest)`
+ *       concatenated — opaque; an operator/log inspecting a mismatch cannot
+ *       tell whether the SCRIPT or the PERMISSIONS changed, which matters
+ *       for exactly the audit trail this feature exists to provide; (b) a
+ *       whole-package hash mirroring `hashSkillPackage` (hash every file,
+ *       including hook.yaml's `name`/`description`/`matcher`/`on`) —
+ *       broader than what was asked (a description-only edit would also
+ *       force re-review, which is defensible but not what JOB B named), and
+ *       loses the same script-vs-manifest legibility as (a).
+ *       CONFIRMED DIRECTION (asked for explicitly): TIGHTENING permissions
+ *       (narrowing, not just widening) ALSO re-enters review — the hash
+ *       simply differs either way, symmetric with how ANY script edit,
+ *       including a whitespace-only one, already re-triggers review today.
+ *       This is deliberate: consistency ("the pin means exactly this byte
+ *       state") outweighs the minor operator inconvenience of one redundant
+ *       re-approval click on a strictly-safer edit.
  *
  * HONEST LIMIT (stated, not overclaimed — see the "adversarial probes"
  * describe block below for the specific pinned case): this is a MODEST
@@ -95,7 +131,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
@@ -104,6 +140,8 @@ import {
   scanHookScript,
   scanHookPackage,
   hashHookScript,
+  hashHookPermissions,
+  readHookApprovalLedger,
   hookRunState,
   approveHook,
   overrideHookBlock,
@@ -364,6 +402,98 @@ describe('scan on edit: content change forces re-review', () => {
     const state = hookRunState(root, 'editable-hook');
     assert.equal(state.needsReview, true);
     assert.equal(isHookRunnable(root, 'editable-hook'), false, 'an edited hook must fall back to unrunnable until re-approved');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// JOB B (2026-08-04 second peer review): the approval pins the MANIFEST too,
+// not only the script — see D-J in the file header for the chosen shape
+// (scriptHash + permissionsHash, both must match).
+// ---------------------------------------------------------------------------
+
+/** Rewrite ONLY the `permissions:` block of an existing hook.yaml, leaving
+ *  every other field (and the script file) byte-identical — isolates a
+ *  manifest-only edit from a script edit, which is the whole point of this
+ *  describe block. */
+function patchHookPermissions(root: string, id: string, permissions: HookPermissionManifest): void {
+  const hookYamlPath = join(root, 'studio', 'hooks', id, 'hook.yaml');
+  const doc = yaml.load(readFileSync(hookYamlPath, 'utf8')) as Record<string, unknown>;
+  doc['permissions'] = permissions;
+  writeFileSync(hookYamlPath, yaml.dump(doc), 'utf8');
+}
+
+describe('JOB B: approval pins the manifest as well as the script (D-J)', () => {
+  it('WIDENING permissions.env only (script byte-identical) falls back to needing review', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'widen-hook', BENIGN_SCRIPT, DENY_ALL);
+    approveHook({ forgeRoot: root, id: 'widen-hook' });
+    assert.equal(isHookRunnable(root, 'widen-hook'), true);
+
+    const scriptOnDiskBefore = readFileSync(join(root, 'studio', 'hooks', 'widen-hook', 'scripts', 'run.sh'), 'utf8');
+    patchHookPermissions(root, 'widen-hook', { env: ['ANTHROPIC_API_KEY'], read: [], network: false });
+    const scriptOnDiskAfter = readFileSync(join(root, 'studio', 'hooks', 'widen-hook', 'scripts', 'run.sh'), 'utf8');
+    assert.equal(scriptOnDiskAfter, scriptOnDiskBefore, 'sanity: the script file itself must be byte-identical — only the manifest changed');
+
+    const state = hookRunState(root, 'widen-hook');
+    assert.equal(state.needsReview, true, 'widening the granted env vars without touching the script must still force re-review');
+    assert.equal(isHookRunnable(root, 'widen-hook'), false, 'a widened, un-re-approved hook must not be runnable');
+  });
+
+  it('NARROWING (tightening) permissions.env also falls back to needing review — confirmed as the intended behaviour (D-J)', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'narrow-hook', BENIGN_SCRIPT, { env: ['SOME_GRANTED_VAR'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'narrow-hook' });
+    assert.equal(isHookRunnable(root, 'narrow-hook'), true);
+
+    patchHookPermissions(root, 'narrow-hook', { env: [], read: [], network: false });
+
+    const state = hookRunState(root, 'narrow-hook');
+    assert.equal(
+      state.needsReview,
+      true,
+      'even a strictly SAFER (narrowing) manifest edit must re-enter review — the pin means "this exact byte state", not "this state or anything more restrictive"',
+    );
+  });
+
+  it('reordering an ALREADY-GRANTED list (no actual change in the grant set) does NOT force re-review — canonicalized hashing', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'reorder-hook', BENIGN_SCRIPT, { env: ['VAR_A', 'VAR_B'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'reorder-hook' });
+
+    patchHookPermissions(root, 'reorder-hook', { env: ['VAR_B', 'VAR_A'], read: [], network: false });
+
+    const state = hookRunState(root, 'reorder-hook');
+    assert.equal(
+      state.needsReview,
+      false,
+      'reordering the SAME granted set (no real permission change) must not spuriously demand re-approval',
+    );
+    assert.equal(isHookRunnable(root, 'reorder-hook'), true);
+  });
+
+  it('the ledger records TWO distinct hashes (scriptHash, permissionsHash) after approval — the unambiguous target for the implementer', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'two-hash-hook', BENIGN_SCRIPT, { env: ['GRANTED'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'two-hash-hook' });
+
+    const entry = readHookApprovalLedger(root).get('two-hash-hook');
+    assert.ok(entry, 'expected a ledger entry after approveHook');
+    assert.equal(typeof (entry as unknown as { scriptHash: string }).scriptHash, 'string');
+    assert.equal(typeof (entry as unknown as { permissionsHash: string }).permissionsHash, 'string');
+    assert.notEqual(
+      (entry as unknown as { scriptHash: string }).scriptHash,
+      (entry as unknown as { permissionsHash: string }).permissionsHash,
+      'sanity: the two hashes are over different inputs and must not coincidentally collide in this fixture',
+    );
+  });
+
+  it('hashHookPermissions is pure and content-addressed: same manifest (any key order) → same hash; a real change → a different hash', () => {
+    const a = hashHookPermissions({ env: ['X', 'Y'], read: [], network: false });
+    const b = hashHookPermissions({ env: ['Y', 'X'], read: [], network: false });
+    assert.equal(a, b, 'array order within a field must not affect the hash');
+
+    const c = hashHookPermissions({ env: ['X', 'Y'], read: [], network: true });
+    assert.notEqual(a, c, 'a real field change (network) must change the hash');
   });
 });
 
