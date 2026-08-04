@@ -362,6 +362,34 @@ describe('communityInstallState — skill (D3)', () => {
     writeFileSync(p, readFileSync(p, 'utf8') + '\nTampered line.\n', 'utf8');
     assert.equal(communityInstallState(root, 'skill', 'tampered-skill'), 'needs-review');
   });
+
+  // T2 round 6, AT GROUP 4 (T2 ruling): install-state must describe THIS
+  // community package, not the path. A hand-authored local skill with NO
+  // provenance block genuinely never went through the community install
+  // pipeline — it merely happens to occupy the same id. Reporting it
+  // "installed" is a status attributed from path occupancy, exactly the
+  // standing wave-4 lesson this campaign keeps re-finding. Expected RED:
+  // the current implementation maps trust:'ready' (a hand-authored skill
+  // with no provenance, no ledger entry) straight to 'installed'.
+  it("an UNRELATED local skill (no provenance block) occupying the id → not-installed, NEVER installed — the id is occupied, but this community package was never installed", () => {
+    const root = makeForgeRoot();
+    const dir = join(root, 'skills', 'collide-id');
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      skillPath('collide-id', root),
+      matter.stringify('\n# Local\n\nHand-authored, unrelated to any community package.\n', {
+        name: 'My Local Skill',
+        description: 'hand-authored, unrelated',
+        library: true,
+      }),
+      'utf8',
+    );
+    assert.equal(
+      communityInstallState(root, 'skill', 'collide-id'),
+      'not-installed',
+      'a local skill with no provenance block must never be reported as an INSTALLED community package — it merely occupies the id',
+    );
+  });
 });
 
 describe('communityInstallState — hook (D3)', () => {

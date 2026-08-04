@@ -56,6 +56,7 @@ import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
 import yaml from 'js-yaml';
 
+import { skillPath } from '../skill-path.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
 import { hookRunState, isHookRunnable, readHookApprovalLedger, approveHook } from './hook-scan.ts';
 import { vendoredPackageDir } from './community-index.ts';
@@ -164,6 +165,40 @@ describe('routeCommunityInstall — skill', () => {
     if (route.pipeline !== 'none') return;
     assert.ok(route.reason.length > 0, 'the 400 the bridge returns must NAME this reason — it cannot be blank');
     assert.match(route.reason, /vendor/i, `expected the reason to name the actual cause (no vendored package); got: "${route.reason}"`);
+  });
+
+  // T2 round 6, AT GROUP 4: routeCommunityInstall must refuse a genuine
+  // collision — a vendored package exists (so routing would normally
+  // dispatch to the skill pipeline) but the REAL install destination
+  // (skills/<id>/) is already occupied by an UNRELATED local skill (no
+  // provenance block — established fact, see round-6 report: real
+  // execution proved installSkillPackage refuses (alreadyInstalled:true,
+  // no overwrite) rather than destroying it, but the ROUTE must refuse
+  // BEFORE that point, with a collision reason distinct from BOTH existing
+  // "none" reasons — a silent alreadyInstalled:true would report success
+  // to the operator while the community package was never actually
+  // installed at all). Expected RED: the current implementation checks
+  // ONLY whether a vendored package exists, never whether the install
+  // destination is already occupied by something else.
+  it('MAJOR (T2 ruling): a vendored skill whose install destination is occupied by an UNRELATED local skill (no provenance) → {pipeline:"none", reason} naming the collision — distinct from BOTH existing reasons', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    vendorSkillPackage(root, 'collide-id');
+    const localDir = join(root, 'skills', 'collide-id');
+    mkdirSync(localDir, { recursive: true });
+    writeFileSync(
+      skillPath('collide-id', root),
+      matter.stringify('\n# Local\n\nHand-authored, unrelated.\n', { name: 'My Local Skill', description: 'hand-authored, unrelated', library: true }),
+      'utf8',
+    );
+
+    const route = routeCommunityInstall(root, 'skill', 'collide-id');
+    assert.equal(route.pipeline, 'none', 'a collision must never silently dispatch to the skill pipeline — that would let installSkillPackage report alreadyInstalled:true for a package that was never actually installed');
+    if (route.pipeline !== 'none') return;
+    assert.ok(route.reason.length > 0);
+    assert.match(route.reason, /collid|occupied|exists/i, `expected the reason to name the collision specifically; got: "${route.reason}"`);
+    assert.doesNotMatch(route.reason, /vendor/i, 'the collision reason must not read as "no vendored package" — a vendored package DOES exist here; that would misdiagnose the actual cause');
+    assert.doesNotMatch(route.reason, /unknown|no such|not found|does not exist/i, 'the collision reason must not read as "unknown item" — the item is well known on both sides');
   });
 });
 

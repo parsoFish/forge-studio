@@ -26,9 +26,22 @@
  * quotes verbatim ("An item with no published signals renders 'no signals
  * published' — never a zero") and the README ("unaffiliated") — these are
  * not this file's own invented copy, they are spec-literal.
+ *
+ * ---------------------------------------------------------------------------
+ * T2 ROUND 6, AT GROUP 3: `communityBadgeForSkill` — DOES NOT EXIST YET.
+ * `forge-ui/app/skills/page.tsx` currently joins the community index onto
+ * EVERY skill card by (kind==='skill', id) alone, with no check that the
+ * card is actually source==='community' — a catalog community-skills entry
+ * sharing an id with a genuinely local, hand-authored skill (a collision
+ * `listSkillLibrary` documents as expected — "filesystem wins on existence/
+ * trust; catalog wins on display metadata") cross-attributes the catalog
+ * entry's hub/signals/provenance onto the operator's OWN file. The join
+ * logic must live here, as a pure function, so it is vitest-pinnable
+ * instead of only catchable by a live `ui:journey` DOM walk. Expected RED:
+ * `communityBadgeForSkill` is not yet exported from `./community-view.ts`.
  */
 import { test, expect } from 'vitest';
-import { filterByKind, filterCommunityItems, installStateLabel, signalsLabel, hubLabel } from './community-view.ts';
+import { filterByKind, filterCommunityItems, installStateLabel, signalsLabel, hubLabel, communityBadgeForSkill } from './community-view.ts';
 import type { CommunityItem, CommunityHub } from './community-client.ts';
 
 function item(overrides: Partial<CommunityItem> = {}): CommunityItem {
@@ -155,4 +168,52 @@ test('hubLabel(null) reads "unaffiliated" — the spec-literal word (D4), never 
 test('hubLabel with a real hub renders its name', () => {
   const hub: CommunityHub = { id: 'mcp-servers', name: 'modelcontextprotocol/servers', url: 'https://github.com/modelcontextprotocol/servers', kinds: 'MCPs' };
   expect(hubLabel(hub)).toContain('modelcontextprotocol/servers');
+});
+
+// ---------------------------------------------------------------------------
+// communityBadgeForSkill — T2 round 6, AT GROUP 3: the /skills join must be
+// gated on the skill's OWN source, never on id alone. `entry` deliberately
+// takes a minimal structural shape ({id, source}) rather than importing
+// forge-ui/lib/skill-client.ts's full SkillLibraryEntry type — this module
+// stays decoupled from that client, matching its own stated "no
+// re-derivation of a fact the community index didn't send" convention.
+// ---------------------------------------------------------------------------
+
+const COLLIDING_COMMUNITY_ITEM: CommunityItem = {
+  id: 'collide-id',
+  kind: 'skill',
+  name: 'Collide Id (community)',
+  desc: 'A catalog community-skills entry.',
+  upstream: 'https://example.com/collide-id',
+  hub: { id: 'example-hub', name: 'Example Hub', url: 'https://example.com', kinds: 'skills' },
+  signals: { stars: '9.9k', attributedTo: 'Catalog Curator' },
+  vendored: false,
+  installState: 'not-installed',
+  probeState: null,
+  origin: 'studio/catalog.yaml (community-skills)',
+};
+
+test('communityBadgeForSkill: a LOCAL entry never gets a badge, even when the community index carries an item with the SAME id — the reviewer-reproduced collision', () => {
+  const localEntry = { id: 'collide-id', source: 'local' };
+  const result = communityBadgeForSkill(localEntry, [COLLIDING_COMMUNITY_ITEM]);
+  expect(result).toBeNull();
+});
+
+test('communityBadgeForSkill: a genuine source:"community" entry with a matching index item returns that item', () => {
+  const communityEntry = { id: 'collide-id', source: 'community' };
+  const result = communityBadgeForSkill(communityEntry, [COLLIDING_COMMUNITY_ITEM]);
+  expect(result).toEqual(COLLIDING_COMMUNITY_ITEM);
+});
+
+test('communityBadgeForSkill: a source:"community" entry with NO matching index item returns null, not a fabricated badge', () => {
+  const communityEntry = { id: 'no-such-id-in-index', source: 'community' };
+  const result = communityBadgeForSkill(communityEntry, [COLLIDING_COMMUNITY_ITEM]);
+  expect(result).toBeNull();
+});
+
+test('communityBadgeForSkill: never matches a non-skill-kind item sharing the id (kind discrimination, D13)', () => {
+  const communityEntry = { id: 'collide-id', source: 'community' };
+  const mcpItem: CommunityItem = { ...COLLIDING_COMMUNITY_ITEM, kind: 'mcp' };
+  const result = communityBadgeForSkill(communityEntry, [mcpItem]);
+  expect(result).toBeNull();
 });

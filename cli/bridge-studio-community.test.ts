@@ -64,6 +64,25 @@
  * is covered in the SEPARATE file
  * `cli/bridge-studio-community-connection-install.test.ts` — see that
  * file's own header for why it needs its own environment.
+ *
+ * ---------------------------------------------------------------------------
+ * T2 ROUND 6 additions:
+ *  - AT GROUP 4 (T2 ruling — install-state describes the community
+ *    package, not the path): an end-to-end collision test — POST install
+ *    for a vendored skill id whose destination is occupied by an unrelated
+ *    local skill must be refused (400), and the local skill's bytes must
+ *    be byte-identical afterward. FACT ESTABLISHED BY REAL EXECUTION
+ *    (round-6 report): `installSkillPackage` already refuses to overwrite
+ *    an occupied destination (returns `alreadyInstalled:true`, no write) —
+ *    so this AT is a genuine end-to-end regression guard, not a "does it
+ *    corrupt data" probe; the bug this round fixes is that the ROUTE
+ *    doesn't refuse the collision BEFORE that point, which would silently
+ *    report success for a package that was never actually installed.
+ *  - AT GROUP 5 (carried finding): `buildWireCtx` calls `listConnections`
+ *    unconditionally, so a MISSING studio/catalog.yaml 500s both the list
+ *    and detail routes — inconsistent with round 4's deliberate
+ *    missing-vs-malformed split in `listCommunityIndex` itself. Pins the
+ *    same split at the ROUTE level.
  */
 
 import { test, before, after } from 'node:test';
@@ -182,8 +201,74 @@ async function postJson(url: string, body: unknown): Promise<Response> {
 }
 
 // ---------------------------------------------------------------------------
-// GET /api/studio/community — { hubs, items }
+// T2 round 6, AT GROUP 5: missing vs malformed studio/catalog.yaml at the
+// ROUTE level — mirrors round 4's deliberate split in listCommunityIndex
+// itself (missing ⇒ degrade, never throw; malformed ⇒ throw loud with real
+// detail), now pinned for the bridge's OWN buildWireCtx, which currently
+// calls listConnections(forgeRoot) unconditionally and 500s on EITHER case.
+// Every test here explicitly removes/corrupts studio/catalog.yaml, then
+// restores a valid empty one afterward — this file shares ONE bridge/
+// forgeRoot across all tests, and later tests assume a catalog.yaml exists
+// (each calls writeCatalog itself, but relies on the FILE being writable/
+// replaceable, not on some particular prior state surviving).
 // ---------------------------------------------------------------------------
+
+function removeCatalog(): void {
+  rmSync(join(forgeRoot, 'studio', 'catalog.yaml'), { force: true });
+}
+
+test('AT GROUP 5: GET /api/studio/community with a MISSING catalog.yaml → 200 with vendored items only, never a 500', async () => {
+  removeCatalog();
+  vendorSkillPackage('missing-catalog-skill');
+  vendorHookPackage('missing-catalog-hook');
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/community`);
+    assert.equal(res.status, 200, `a missing catalog.yaml must degrade to the vendored sources, never 500 — got ${res.status}`);
+    const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+    assert.ok(body.items.some((i) => i['id'] === 'missing-catalog-skill'));
+    assert.ok(body.items.some((i) => i['id'] === 'missing-catalog-hook'));
+  } finally {
+    writeCatalog({});
+  }
+});
+
+test('AT GROUP 5: GET /api/studio/community/hook/<vendored-id> with a MISSING catalog.yaml → 200, never a 500', async () => {
+  removeCatalog();
+  vendorHookPackage('missing-catalog-detail-hook');
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/community/hook/missing-catalog-detail-hook`);
+    assert.equal(res.status, 200, `a missing catalog.yaml must not break a hook detail view — got ${res.status}`);
+  } finally {
+    writeCatalog({});
+  }
+});
+
+test('AT GROUP 5: GET /api/studio/community with a MALFORMED catalog.yaml → a clean error response carrying the real parse detail, NEVER 200 with an empty list', async () => {
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), 'tools: [unclosed\n  bad: [[[ yaml', 'utf8');
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/community`);
+    assert.notEqual(res.status, 200, 'a malformed catalog.yaml must never be reported as a successful, merely-empty list — that is a broken registry rendering the same as an honest empty one');
+    const body = (await res.json()) as { error: string };
+    assert.match(body.error, /YAML parse error/i, `expected the real underlying parse detail in the error message; got: "${body.error}"`);
+  } finally {
+    writeCatalog({});
+  }
+});
+
+test('AT GROUP 5: GET /api/studio/community/<kind>/<id> with a MALFORMED catalog.yaml → a clean error response, never a 200', async () => {
+  vendorHookPackage('malformed-catalog-detail-hook');
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'catalog.yaml'), 'tools: [unclosed\n  bad: [[[ yaml', 'utf8');
+  try {
+    const res = await fetch(`${bridgeUrl}/api/studio/community/hook/malformed-catalog-detail-hook`);
+    assert.notEqual(res.status, 200, 'a malformed catalog.yaml must never be silently absorbed into a 200 on the detail route either');
+    const body = (await res.json()) as { error: string };
+    assert.match(body.error, /YAML parse error/i, `expected the real underlying parse detail; got: "${body.error}"`);
+  } finally {
+    writeCatalog({});
+  }
+});
 
 test('GET /api/studio/community: returns hubs (with itemCount) and the cross-kind items list', async () => {
   writeHubs([{ id: 'list-hub', name: 'List Hub', url: 'https://example.com/list-hub', kinds: 'skills' }]);
@@ -391,6 +476,30 @@ test('HEADLINE AC (skill): driving the community install route leaves the skill 
   assert.ok(!paletteVisibleIds.includes('headline-trust-skill'), 'a pre-approval draft must NEVER be palette-visible, asserted from THIS surface (the community install route), not just skill-library.ts in isolation');
 
   assert.equal(skillTrustState(forgeRoot, 'headline-trust-skill'), 'draft');
+});
+
+// T2 round 6, AT GROUP 4: the end-to-end collision guard. A vendored
+// package exists for this id, AND the real install destination is already
+// occupied by an unrelated local skill — the route must refuse (400), and
+// (established by real execution, see this round's report) the local
+// skill's bytes must remain byte-identical afterward.
+test('AT GROUP 4: POST install for a vendored skill whose destination is occupied by an UNRELATED local skill is REFUSED (400), and the local skill\'s bytes are untouched', async () => {
+  vendorSkillPackage('collide-id');
+  const localSkillPath = skillPath('collide-id', forgeRoot);
+  const localDir = join(forgeRoot, 'skills', 'collide-id');
+  mkdirSync(localDir, { recursive: true });
+  const originalLocalContent = matter.stringify('\n# Local\n\nHand-authored, unrelated to any community package.\n', {
+    name: 'My Local Skill',
+    description: 'hand-authored, unrelated',
+    library: true,
+  });
+  writeFileSync(localSkillPath, originalLocalContent, 'utf8');
+
+  const res = await postJson(`${bridgeUrl}/api/studio/community/skill/collide-id/install`, {});
+  assert.equal(res.status, 400, 'a collision between a vendored package and an unrelated occupied local id must be refused, never silently "succeed"');
+
+  const afterContent = readFileSync(localSkillPath, 'utf8');
+  assert.equal(afterContent, originalLocalContent, 'the operator\'s own local skill bytes must be byte-identical after a refused install — this is the only thing standing between this surface and silent data loss on a collision');
 });
 
 test('HEADLINE AC (hook): driving the community install route materialises the hook, but it stays needs-review / not-runnable / no ledger entry', async () => {
