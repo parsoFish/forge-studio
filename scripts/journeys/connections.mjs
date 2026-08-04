@@ -368,6 +368,19 @@ export const journey = defineJourney({
           await page.waitForSelector('#purpose-input', { timeout: 10000 });
           await page.locator('input.agent-name-input').fill(CONN_SCRATCH_NAME);
           await page.locator('#purpose-input').fill('Journey-only scratch agent — proves the connections readiness block, never run for real.');
+          // Explicit process + interactivity (readiness/process and
+          // readiness/interactivity are ERROR-level in validate.ts — the
+          // PUT 400s without them). The blank starter pre-fills sensible
+          // defaults for both, but this beat re-asserts them itself rather
+          // than leaning on a default surviving untouched, mirroring
+          // agents.mjs's agents-scratch-build (the working from-scratch-save
+          // precedent), which fills every field it needs explicitly instead
+          // of trusting the starter's own defaults to reach the save intact.
+          await page.locator('#process-input').fill(
+            'Journey-only scratch agent: never actually run. Exists purely to prove ' +
+            'the connections readiness check and the blocked Run control both fire ' +
+            'on a bound, not-installed MCP.');
+          await page.locator('#interactivity-input').fill('Autonomous — runs to completion without human input.');
           await sleep(THINK);
 
           await page.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
@@ -383,6 +396,27 @@ export const journey = defineJourney({
           check(mcpZoneCount === '1', `CONN-3: dragging memory into the mcp drop zone lands it (data-count="${mcpZoneCount}")`);
           await caption(page, 'A brand-new agent binds the still-not-installed memory MCP.');
           await frame(page, 'conn-4-scratch-bound', 'Part 2 (connections) — a brand-new agent binds the not-installed memory MCP', { key: true });
+
+          // Explicit runtime pick — readiness/runtime is ERROR-level too
+          // (strategy:fixed requires a non-empty model). Click the claude SDK
+          // card (mirrors agents-scratch-build's own availability check) then
+          // a real fixed-strategy model chip, and wait for the picker's own
+          // data-model-count to confirm the click landed before saving.
+          const claudeCard = page.locator('[data-sdk-id="claude"]');
+          check(await claudeCard.count() > 0, 'CONN-3: [data-sdk-id="claude"] is offered (adapter registered)');
+          await claudeCard.click().catch(() => {}); // selectSdk() no-ops if already 'claude' — safe either way
+          const modelChip = page.locator('[data-component="runtime-picker"] [data-model-id="claude-sonnet-4-6"]');
+          check(await modelChip.count() > 0, 'CONN-3: a real claude model chip is offered under fixed strategy');
+          // toggleModel() DESELECTS an already-selected chip — clicking
+          // unconditionally would clear a model that already survived from
+          // the blank starter's own default. Only click if not selected yet.
+          const modelAlreadySelected = await modelChip.evaluate((el) => el.classList.contains('selected')).catch(() => false);
+          if (!modelAlreadySelected) await modelChip.click().catch(() => {});
+          await page.waitForFunction(
+            () => document.querySelector('[data-component="runtime-picker"]')?.getAttribute('data-model-count') === '1',
+            null, { timeout: 5000 }).catch(() => {});
+          const modelCount = await page.evaluate(() => document.querySelector('[data-component="runtime-picker"]')?.getAttribute('data-model-count'));
+          check(modelCount === '1', `CONN-3: the runtime picker confirms one model picked before save (data-model-count="${modelCount}")`);
 
           await page.locator('[data-action="save-agent"]').click().catch(() => {});
           const landed = await waitForFile(CONN_SCRATCH_SKILL_PATH, 12000);
@@ -423,9 +457,16 @@ export const journey = defineJourney({
           await caption(page, 'Blocked — named, never generic: "mcp \\"memory\\" (not-installed)". Same rule the pre-spawn seam and the bridge run route enforce.');
           await frame(page, 'conn-5-run-blocked', 'Part 2 (connections) — readiness NOT ready + Run blocked, both naming the component', { key: true });
         } finally {
+          // Prove real cleanup, not a vacuous pass: assert the directory
+          // GENUINELY EXISTED right before sweeping it — a pass that would
+          // look identical whether or not the earlier save actually landed
+          // is exactly the "AT-pins-the-defect" failure this campaign keeps
+          // finding, and the standing house rule against it.
+          const existedBeforeCleanup = existsSync(CONN_SCRATCH_DIR);
+          check(existedBeforeCleanup, `CONN-3: skills/${CONN_SCRATCH_SLUG}/ genuinely existed before cleanup — a real artifact to remove, not a no-op`);
           cleanConnScratchAgent();
         }
-        check(!existsSync(CONN_SCRATCH_DIR), `CONN-3: skills/${CONN_SCRATCH_SLUG}/ removed after the beat (self-cleaning)`);
+        check(!existsSync(CONN_SCRATCH_DIR), `CONN-3: skills/${CONN_SCRATCH_SLUG}/ removed after the beat (self-cleaning, proven against a real prior existence, not passed by default)`);
       },
     },
   ],
