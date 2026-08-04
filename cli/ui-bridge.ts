@@ -64,6 +64,7 @@ import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
+import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
 import { handleRecoveryRoutes } from './bridge-recovery.ts';
@@ -944,6 +945,7 @@ async function handleHttp(
   if (await handleStudioSkillsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioHooksRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioTemplatesRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioConnectionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioCommunityRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   // ---- Studio POST write routes (M3-4): run start/resume + gate verdicts --
