@@ -36,7 +36,7 @@
  * id are two distinct CommunityItem rows.
  */
 
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import matter from 'gray-matter';
 
@@ -150,7 +150,16 @@ function vendoredBaseDir(forgeRoot: string, kind: 'skill' | 'hook'): string {
 /** The one path-construction point for a vendored package directory. Reuses
  *  skill-path.ts's slug guard (slug shape + MAX_SKILL_ID_LENGTH cap) rather
  *  than reimplementing it, and boundary-checks the resolved path as
- *  defense-in-depth on top of that guard (D9). */
+ *  defense-in-depth on top of that guard (D9).
+ *
+ *  MAJOR 1 (T2 round 4 adversarial review): the lexical check above only
+ *  catches a traversal-shaped ID — it does nothing about the package ROOT
+ *  itself being a symlink to somewhere outside the vendored tree (a slug
+ *  guard has no opinion on what a directory of that name resolves to on
+ *  disk). Mirrors hook-library.ts's `resolveHookScriptPath` exactly: the
+ *  real path can only be checked once the entry exists, so a non-existent id
+ *  still takes the ordinary not-found path everywhere else in this module,
+ *  never a realpath error here. */
 export function vendoredPackageDir(forgeRoot: string, kind: 'skill' | 'hook', id: string): string {
   assertSkillSlug(id);
   const base = vendoredBaseDir(forgeRoot, kind);
@@ -158,6 +167,15 @@ export function vendoredPackageDir(forgeRoot: string, kind: 'skill' | 'hook', id
   const boundary = resolve(base) + sep;
   if (resolve(dir) !== resolve(base) && !resolve(dir).startsWith(boundary)) {
     throw new Error(`vendoredPackageDir: resolved path for "${id}" escapes the vendored ${kind}s directory — refusing`);
+  }
+  if (existsSync(dir)) {
+    const real = realpathSync(dir);
+    const rootReal = resolve(base);
+    if (real !== rootReal && !real.startsWith(boundary)) {
+      throw new Error(
+        `vendoredPackageDir: "${id}" resolves (after following symlinks) outside the vendored ${kind}s directory "${base}" — refusing`,
+      );
+    }
   }
   return dir;
 }
@@ -287,12 +305,20 @@ function readVendoredHookMeta(forgeRoot: string, id: string): { name: string; de
 
 export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   const hubs = listCommunityHubs(forgeRoot);
-  const catalog = loadCatalog(join(forgeRoot, 'studio', 'catalog.yaml'));
-  // Catalog.communitySkills is typed optional (Catalog may be hand-constructed
-  // elsewhere without it) even though loadCatalog's own parser always
-  // populates it as an array, never undefined — normalized once, here, rather
-  // than at every call site (mirrors skill-library.ts's loadCatalogSafely).
-  const communitySkills = catalog.communitySkills ?? [];
+  const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
+  // MAJOR 2 (T2 round 4 adversarial review): a MISSING catalog.yaml is the
+  // fresh/half-onboarded shape — mirrors listCommunityHubs's own documented
+  // fresh-root precedent above — and degrades to the sources that don't need
+  // it (vendored skills + vendored hooks), never a throw. A catalog.yaml that
+  // EXISTS but fails to parse is a genuinely broken registry: loadCatalog is
+  // called unguarded below and its real parse error propagates uncaught, on
+  // purpose — a corrupt registry must never render identically to an honest
+  // empty one. Catalog.communitySkills is typed optional (Catalog may be
+  // hand-constructed elsewhere without it) even though loadCatalog's own
+  // parser always populates it as an array when the file DOES parse —
+  // normalized once, here (mirrors skill-library.ts's loadCatalogSafely).
+  const catalogExists = existsSync(catalogPath);
+  const communitySkills = catalogExists ? (loadCatalog(catalogPath).communitySkills ?? []) : [];
   const items: CommunityItem[] = [];
 
   // --- skill: catalog community-skills ∪ vendored-with-no-catalog-id (E-1) ---
@@ -369,20 +395,24 @@ export function listCommunityIndex(forgeRoot: string): CommunityItem[] {
   }
 
   // --- mcp / tool: listConnections(forgeRoot), 1:1, never re-parsed (D1) ---
-  for (const conn of listConnections(forgeRoot)) {
-    const probe = probeConnection(forgeRoot, conn);
-    const item: CommunityItem = {
-      kind: conn.kind,
-      id: conn.id,
-      name: conn.name,
-      description: conn.desc,
-      vendored: false,
-      installState: installStateFromProbe(probe.state),
-      signals: null,
-      hub: resolveHub(conn.provenance, hubs),
-    };
-    if (probe.state === 'misconfigured') item.probeState = 'misconfigured';
-    items.push(item);
+  // Skipped entirely when the catalog is absent (MAJOR 2) — there is nothing
+  // to source a connection from without it; never fabricated.
+  if (catalogExists) {
+    for (const conn of listConnections(forgeRoot)) {
+      const probe = probeConnection(forgeRoot, conn);
+      const item: CommunityItem = {
+        kind: conn.kind,
+        id: conn.id,
+        name: conn.name,
+        description: conn.desc,
+        vendored: false,
+        installState: installStateFromProbe(probe.state),
+        signals: null,
+        hub: resolveHub(conn.provenance, hubs),
+      };
+      if (probe.state === 'misconfigured') item.probeState = 'misconfigured';
+      items.push(item);
+    }
   }
 
   return items;

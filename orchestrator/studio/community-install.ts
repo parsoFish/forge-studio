@@ -36,6 +36,7 @@ import { listConnections } from './connection-library.ts';
 import { loadCatalog } from './registry.ts';
 import { vendoredPackageDir, readVendoredPackage } from './community-index.ts';
 import type { CommunityKind } from './community-index.ts';
+import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
 
 // ---------------------------------------------------------------------------
 // routeCommunityInstall
@@ -124,13 +125,33 @@ export function installCommunityHookPackage(input: InstallCommunityHookInput): I
     return { alreadyInstalled: true };
   }
 
+  const files = readVendoredPackage(forgeRoot, 'hook', id);
+
+  // MINOR (T2 round 4): package size caps, reused from skill-library.ts
+  // rather than retyped — symmetry with installSkillPackage's own caps, kept
+  // in step by derivation, not duplication.
+  if (files.length > MAX_PACKAGE_FILES) {
+    throw new Error(`installCommunityHookPackage: package "${id}" has ${files.length} files, exceeding the ${MAX_PACKAGE_FILES}-file cap`);
+  }
+  const totalBytes = files.reduce((sum, f) => sum + Buffer.byteLength(f.body, 'utf8'), 0);
+  if (totalBytes > MAX_PACKAGE_BYTES) {
+    throw new Error(`installCommunityHookPackage: package "${id}" exceeds the ${MAX_PACKAGE_BYTES}-byte cap`);
+  }
+
+  // Pre-validate every destination path BEFORE any write (mirrors
+  // installSkillPackage's own AT-21 discipline) — a failure above or below
+  // must never leave a partial install on disk.
   const destDir = hookDir(id, forgeRoot);
   const boundary = resolve(destDir) + sep;
-  for (const file of readVendoredPackage(forgeRoot, 'hook', id)) {
+  const destinations = files.map((file) => {
     const destPath = join(destDir, ...file.path.split('/'));
     if (!resolve(destPath).startsWith(boundary)) {
       throw new Error(`installCommunityHookPackage: destination for "${file.path}" escapes "${destDir}" — refusing to write`);
     }
+    return { destPath, file };
+  });
+
+  for (const { destPath, file } of destinations) {
     mkdirSync(dirname(destPath), { recursive: true });
     writeFileSync(destPath, file.body, 'utf8');
   }
