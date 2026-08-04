@@ -44,6 +44,7 @@ import {
   validateArtifactRef,
   validateArtifactTemplate,
   validateCatalog,
+  validateConnections,
   validateFlow,
   validateInstructionSeed,
   validateKb,
@@ -361,6 +362,7 @@ export function runStudioLint(root: string): StudioLintResult {
     try {
       const catalog = loadCatalog(catalogPath);
       findings.push(...validateCatalog(catalog));
+      findings.push(...validateConnections(catalog));
     } catch (err) {
       findings.push({
         level: 'error',

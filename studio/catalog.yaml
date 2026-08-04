@@ -8,18 +8,171 @@ models:
   - { id: claude-sonnet-4-6, name: Claude Sonnet 4.6, sdk: claude, tier: sonnet, costIn: 3, costOut: 15 }
   - { id: claude-opus-4-8, name: Claude Opus 4.8, sdk: claude, tier: opus, costIn: 5, costOut: 25 }
 tools:
-  - { id: git, name: git, desc: "Worktrees, branches, commits." }
-  - { id: node, name: Node.js, desc: Build + test runner. }
-  - { id: gh, name: gh CLI, desc: "GitHub PRs, reviews, merges, checks." }
+  - id: git
+    name: git
+    desc: "Worktrees, branches, commits."
+    provenance: "https://git-scm.com/"
+    install: { method: system-provided }
+    probe: { kind: command, command: git, args: ["--version"] }
+    config: []
+  - id: node
+    name: Node.js
+    desc: Build + test runner.
+    provenance: "https://nodejs.org/"
+    install: { method: system-provided }
+    probe: { kind: command, command: node, args: ["--version"] }
+    config: []
+  - id: gh
+    name: gh CLI
+    desc: "GitHub PRs, reviews, merges, checks."
+    provenance: "https://cli.github.com/"
+    install: { method: system-provided }
+    probe: { kind: command, command: gh, args: ["--version"] }
+    config:
+      - { env: GH_TOKEN, required: false, purpose: "Non-interactive auth. gh also authenticates from its own stored credentials, so this is not required." }
 # Curated OOTB MCP servers an agent can be given (drag from the agent-builder
-# library). Reference metadata only — operators wire real servers in their env.
+# library). Each entry below carries verified curation-time metadata — install
+# method + exact pin (or the real "external" upstream when forge has no npm
+# install path), a probe, and capabilities CURATED at curation time (labelled
+# capabilitiesSource: 'curated' — never presented as verified live capabilities
+# of a running server, D8). Readiness is EXECUTED per entry at request time
+# (D3), never declared in this file.
 mcps:
-  - { id: filesystem, name: Filesystem, desc: "Scoped read/write access to a directory tree." }
-  - { id: github, name: GitHub, desc: "Issues, PRs, code search + review over the GitHub API." }
-  - { id: playwright, name: Playwright, desc: "Drive a real browser — navigate, click, screenshot, assert." }
-  - { id: fetch, name: Fetch, desc: "Fetch + extract content from a URL as clean markdown." }
-  - { id: memory, name: Memory, desc: "A persistent knowledge graph the agent can read + write across turns." }
-  - { id: sqlite, name: SQLite, desc: "Query + mutate a local SQLite database." }
+  - id: filesystem
+    name: Filesystem
+    desc: "Scoped read/write access to a directory tree."
+    provenance: "https://github.com/modelcontextprotocol/servers/tree/main/src/filesystem"
+    install: { method: npm, package: "@modelcontextprotocol/server-filesystem", version: "2026.7.10" }
+    probe: { kind: npm-package }
+    config: []
+    capabilities:
+      - { name: read_text_file, summary: "Read a text file's contents." }
+      - { name: read_media_file, summary: "Read an image/audio file as base64." }
+      - { name: read_multiple_files, summary: "Read several files in one call." }
+      - { name: write_file, summary: "Create or overwrite a file." }
+      - { name: edit_file, summary: "Apply line-based edits to a file." }
+      - { name: create_directory, summary: "Create a directory (recursively)." }
+      - { name: list_directory, summary: "List a directory's entries." }
+      - { name: list_directory_with_sizes, summary: "List a directory's entries with file sizes." }
+      - { name: move_file, summary: "Move or rename a file or directory." }
+      - { name: search_files, summary: "Recursively search for files matching a pattern." }
+      - { name: directory_tree, summary: "Return a recursive JSON tree of a directory." }
+      - { name: get_file_info, summary: "Return metadata (size, timestamps, permissions) for a file." }
+      - { name: list_allowed_directories, summary: "List the directories this server is scoped to." }
+  - id: memory
+    name: Memory
+    desc: "A persistent knowledge graph the agent can read + write across turns."
+    provenance: "https://github.com/modelcontextprotocol/servers/tree/main/src/memory"
+    install: { method: npm, package: "@modelcontextprotocol/server-memory", version: "2026.7.4" }
+    probe: { kind: npm-package }
+    config:
+      - { env: MEMORY_FILE_PATH, required: false, purpose: "Where to persist the graph (defaults to memory.jsonl beside the server)." }
+    capabilities:
+      - { name: create_entities, summary: "Create new entities in the knowledge graph." }
+      - { name: create_relations, summary: "Create relations between entities." }
+      - { name: add_observations, summary: "Add observations to existing entities." }
+      - { name: delete_entities, summary: "Delete entities (and their relations)." }
+      - { name: delete_observations, summary: "Delete specific observations from an entity." }
+      - { name: delete_relations, summary: "Delete relations between entities." }
+      - { name: read_graph, summary: "Read the whole knowledge graph." }
+      - { name: search_nodes, summary: "Search entities by query." }
+      - { name: open_nodes, summary: "Open specific named entities." }
+  - id: playwright
+    name: Playwright
+    desc: "Drive a real browser — navigate, click, screenshot, assert. All PLAYWRIGHT_MCP_* env vars are optional; listing all 45 would bury the required-config signal, so none are curated here (see provenance for the full set) — a deliberate curation choice, not a silent omission."
+    provenance: "https://github.com/microsoft/playwright-mcp"
+    install: { method: npm, package: "@playwright/mcp", version: "0.0.78" }
+    probe: { kind: npm-package }
+    config: []
+    capabilities:
+      - { name: browser_click, summary: "Click an element." }
+      - { name: browser_close, summary: "Close the browser page." }
+      - { name: browser_console_messages, summary: "Read browser console messages." }
+      - { name: browser_drag, summary: "Drag one element onto another." }
+      - { name: browser_drop, summary: "Drop a dragged element." }
+      - { name: browser_evaluate, summary: "Evaluate JavaScript in the page." }
+      - { name: browser_file_upload, summary: "Upload a file through a file input." }
+      - { name: browser_fill_form, summary: "Fill multiple form fields." }
+      - { name: browser_find, summary: "Find an element on the page." }
+      - { name: browser_handle_dialog, summary: "Accept or dismiss a browser dialog." }
+      - { name: browser_hover, summary: "Hover over an element." }
+      - { name: browser_navigate, summary: "Navigate to a URL." }
+      - { name: browser_navigate_back, summary: "Go back to the previous page." }
+      - { name: browser_network_request, summary: "Inspect a single network request." }
+      - { name: browser_network_requests, summary: "List network requests." }
+      - { name: browser_press_key, summary: "Press a keyboard key." }
+      - { name: browser_resize, summary: "Resize the browser window." }
+      - { name: browser_run_code_unsafe, summary: "Run arbitrary code in the browser context (unsafe)." }
+      - { name: browser_select_option, summary: "Select an option in a dropdown." }
+      - { name: browser_snapshot, summary: "Take an accessibility-tree snapshot of the page." }
+      - { name: browser_take_screenshot, summary: "Take a screenshot of the page." }
+      - { name: browser_type, summary: "Type text into an element." }
+      - { name: browser_wait_for, summary: "Wait for a condition on the page." }
+      - { name: browser_tabs, summary: "List, open, or switch browser tabs." }
+  - id: github
+    name: GitHub
+    desc: "Issues, PRs, code search + review over the GitHub API. Distributed as a Go binary (Docker, a hosted remote endpoint, or build-from-source) — the old @modelcontextprotocol/server-github npm package is DEPRECATED (\"Package no longer supported\")."
+    provenance: "https://github.com/github/github-mcp-server"
+    install: { method: external, upstream: "https://github.com/github/github-mcp-server" }
+    probe: { kind: command, command: github-mcp-server, args: ["--version"] }
+    config:
+      - { env: GITHUB_PERSONAL_ACCESS_TOKEN, required: true, purpose: "PAT for the local/Docker auth path." }
+      - { env: GITHUB_TOOLSETS, required: false, purpose: "Restrict which toolsets are enabled." }
+      - { env: GITHUB_TOOLS, required: false, purpose: "Restrict which individual tools are enabled." }
+      - { env: GITHUB_HOST, required: false, purpose: "Point at a GitHub Enterprise host instead of github.com." }
+      - { env: GITHUB_READ_ONLY, required: false, purpose: "Run in read-only mode." }
+    capabilities:
+      - { name: context, summary: "Toolset: repository + user context tools." }
+      - { name: actions, summary: "Toolset: GitHub Actions workflows and runs." }
+      - { name: code_quality, summary: "Toolset: code-quality checks." }
+      - { name: code_security, summary: "Toolset: code-scanning security alerts." }
+      - { name: copilot, summary: "Toolset: Copilot coding-agent operations." }
+      - { name: copilot_issue_intents, summary: "Toolset: Copilot issue-intent operations." }
+      - { name: dependabot, summary: "Toolset: Dependabot alerts." }
+      - { name: discussions, summary: "Toolset: GitHub Discussions." }
+      - { name: gists, summary: "Toolset: gists." }
+      - { name: git, summary: "Toolset: low-level git data operations." }
+      - { name: issues, summary: "Toolset: issues." }
+      - { name: labels, summary: "Toolset: labels." }
+      - { name: notifications, summary: "Toolset: notifications." }
+      - { name: orgs, summary: "Toolset: organizations." }
+      - { name: projects, summary: "Toolset: GitHub Projects." }
+      - { name: pull_requests, summary: "Toolset: pull requests." }
+      - { name: repos, summary: "Toolset: repositories." }
+      - { name: secret_protection, summary: "Toolset: secret-scanning protection." }
+      - { name: security_advisories, summary: "Toolset: security advisories." }
+      - { name: stargazers, summary: "Toolset: stargazers." }
+      - { name: users, summary: "Toolset: users." }
+  - id: fetch
+    name: Fetch
+    desc: "Fetch + extract content from a URL as clean markdown. PyPI-only (uvx mcp-server-fetch) — there is no legitimate npm package."
+    provenance: "https://github.com/modelcontextprotocol/servers/tree/main/src/fetch"
+    install: { method: external, upstream: "https://pypi.org/project/mcp-server-fetch/" }
+    # SECURITY (R3-04 D13): do not resolve this server by npm package name.
+    # The npm package literally named "mcp-server-fetch" is a
+    # security-research typosquat/canary (github.com/theinfosecguy/npx-canary,
+    # only versions 0.0.1/0.0.2 ever published) — NOT the real MCP fetch
+    # server, which is PyPI-only (uvx mcp-server-fetch). install.method is
+    # "external", not "npm", specifically so this entry has no package name to
+    # resolve — the hazard cannot be reintroduced by editing this file alone.
+    probe: { kind: command-presence, command: mcp-server-fetch }
+    config: []
+    capabilities:
+      - { name: fetch, summary: "Fetch a URL and return its content as clean markdown." }
+  - id: sqlite
+    name: SQLite
+    desc: "Query + mutate a local SQLite database. Upstream is ARCHIVED (modelcontextprotocol/servers-archived; last PyPI release 2025.4.25) — not live-maintained software."
+    provenance: "https://github.com/modelcontextprotocol/servers-archived/tree/main/src/sqlite"
+    install: { method: external, upstream: "https://pypi.org/project/mcp-server-sqlite/" }
+    probe: { kind: command-presence, command: mcp-server-sqlite }
+    config: []
+    capabilities:
+      - { name: read_query, summary: "Run a read-only SQL query." }
+      - { name: write_query, summary: "Run a write SQL query." }
+      - { name: create_table, summary: "Create a new table." }
+      - { name: list_tables, summary: "List tables in the database." }
+      - { name: describe-table, summary: "Describe a table's schema." }
+      - { name: append_insight, summary: "Append a business-insight note to the memo." }
 guards:
   - { id: event-log, name: JSONL event log, desc: Structured events on every invocation. }
   - { id: cost-guard, name: Cost guard, desc: Per-cycle USD budget enforcement. }
