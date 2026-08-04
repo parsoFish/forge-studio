@@ -271,19 +271,51 @@ describe('probeConnection — kind:"command": REAL runner against real commands 
 });
 
 describe('probeConnection — kind:"command-presence": REAL PATH scan, NEVER executes (D15)', () => {
-  it('a real, guaranteed-present command ("node") resolves on PATH → available', () => {
-    const conn = makeConnection({ id: 'presence-node', probe: { kind: 'command-presence', command: 'node' } });
+  // T2 ruling (round 4): these two ATs deliberately call probeConnection
+  // with NO THIRD ARGUMENT AT ALL — the MANDATORY companion proof that the
+  // production DEFAULT (no opts) really does consult the REAL
+  // `process.env.PATH`, not merely that the injectable `opts.pathEnv` seam
+  // works when a test bothers to supply it. This is the exact "optional
+  // param the production caller forgets to wire" shape the campaign has
+  // shipped four times: an implementer could default `pathEnv` to `''` (or
+  // anything else disconnected from the real environment) and every OTHER
+  // test in this describe block — which all pass their own `pathEnv`
+  // explicitly — would still go green. These two cannot be faked that way:
+  // 'node' resolving to `available` is only possible by actually consulting
+  // the real environment's PATH; there is no other source that value could
+  // come from.
+  it('DEFAULT (no opts at all): a real, guaranteed-present command ("node") resolves against the REAL process.env.PATH → available', () => {
+    const conn = makeConnection({ id: 'presence-node-default', probe: { kind: 'command-presence', command: 'node' } });
     const result = probeConnection(process.cwd(), conn);
-    assert.equal(result.state, 'available');
+    assert.equal(result.state, 'available', 'the default (unwired) path must consult the REAL process.env.PATH, not a disconnected/empty default');
   });
 
-  it('a real, guaranteed-absent command → not-installed', () => {
-    const conn = makeConnection({ id: 'presence-absent', probe: { kind: 'command-presence', command: 'definitely-absent-binary-xyz-forge-presence-test' } });
+  it('DEFAULT (no opts at all): a real, guaranteed-absent command → not-installed', () => {
+    const conn = makeConnection({ id: 'presence-absent-default', probe: { kind: 'command-presence', command: 'definitely-absent-binary-xyz-forge-presence-test' } });
     const result = probeConnection(process.cwd(), conn);
     assert.equal(result.state, 'not-installed');
   });
 
-  it('T2-mandated AT: a command that WOULD create a marker file if run leaves NO marker — command-presence never executes it', () => {
+  it('opts.pathEnv INJECTED (a present command, via the seam, not the default): available', () => {
+    const conn = makeConnection({ id: 'presence-node-injected', probe: { kind: 'command-presence', command: 'node' } });
+    const result = probeConnection(process.cwd(), conn, { pathEnv: process.env.PATH ?? '' });
+    assert.equal(result.state, 'available');
+  });
+
+  it('opts.pathEnv INJECTED (an absent command, via the seam): not-installed', () => {
+    const conn = makeConnection({ id: 'presence-absent-injected', probe: { kind: 'command-presence', command: 'definitely-absent-binary-xyz-forge-presence-test' } });
+    const result = probeConnection(process.cwd(), conn, { pathEnv: process.env.PATH ?? '' });
+    assert.equal(result.state, 'not-installed');
+  });
+
+  it('T2-mandated AT (round 4 — rewritten to use opts.pathEnv, NEVER mutates process.env.PATH): a command that WOULD create a marker file if run leaves NO marker — command-presence never executes it', () => {
+    // No process.env.PATH mutation anywhere in this test (round-3's version
+    // did; T2 round-4 ruling: a process-global mutation in a suite node's
+    // test runner may run concurrently is a flake vector, and a flaky
+    // security AT is worse than none — it trains people to re-run until
+    // green). The injectable opts.pathEnv seam makes this fully hermetic:
+    // the real ambient process.env.PATH is never touched, read only via
+    // process.env.PATH ?? '' to COMPOSE the injected value, never assigned.
     const root = tmpRoot('forge-presence-noexec-');
     const markerPath = join(root, 'marker.txt');
     const scriptPath = join(root, 'marker-writer');
@@ -294,16 +326,10 @@ describe('probeConnection — kind:"command-presence": REAL PATH scan, NEVER exe
     chmodSync(scriptPath, 0o755);
 
     const conn = makeConnection({ id: 'marker-conn', probe: { kind: 'command-presence', command: 'marker-writer' } });
-    const priorPath = process.env.PATH;
-    try {
-      process.env.PATH = `${root}${delimiter}${priorPath ?? ''}`;
-      const result = probeConnection(process.cwd(), conn);
-      assert.equal(result.state, 'available', 'the script must be found on PATH (proves the probe actually looked)');
-      assert.equal(existsSync(markerPath), false, 'the marker file must NOT exist — command-presence must resolve without EVER executing the command');
-    } finally {
-      if (priorPath === undefined) delete process.env.PATH;
-      else process.env.PATH = priorPath;
-    }
+    const injectedPathEnv = `${root}${delimiter}${process.env.PATH ?? ''}`;
+    const result = probeConnection(process.cwd(), conn, { pathEnv: injectedPathEnv });
+    assert.equal(result.state, 'available', 'the script must be found on the injected PATH (proves the probe actually looked)');
+    assert.equal(existsSync(markerPath), false, 'the marker file must NOT exist — command-presence must resolve without EVER executing the command');
   });
 });
 
