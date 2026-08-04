@@ -28,6 +28,7 @@ export function ReadinessPanel({ state }: Props) {
             key={c.key}
             className={`readiness-item${c.ok ? ' ok' : ''}`}
             data-check={c.key}
+            title={c.detail}
           >
             <span className="ri-dot" />
             {c.label}
