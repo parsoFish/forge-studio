@@ -40,6 +40,7 @@ import {
 import { lintTemplateLibrary } from '../orchestrator/studio/template-library.ts';
 import { lintHookComposition, lintHookDefinitions } from '../orchestrator/studio/hook-library.ts';
 import { lintCommunityIndex } from '../orchestrator/studio/community-index.ts';
+import { validateSessionKinds } from '../orchestrator/studio/session-kinds.ts';
 import {
   validateAgent,
   validateArtifactRef,
@@ -527,6 +528,28 @@ export function runStudioLint(root: string): StudioLintResult {
   // ------------------------------------------------------------------
 
   findings.push(...lintCommunityIndex(root));
+
+  // ------------------------------------------------------------------
+  // 10. Session-kind registry (R2-10) — studio/session-kinds.yaml. Mirrors
+  //     the load-error idiom used throughout this file: a throw is caught
+  //     and surfaced as a loud, attributed `load` error finding, never
+  //     silently swallowed. validateSessionKinds already turns its own load
+  //     failure into a `session-kinds/load-error` Finding rather than
+  //     throwing, but this try/catch stays as the same defensive shape every
+  //     other section below it uses, so a future change to that contract
+  //     can never silently crash the whole lint run.
+  // ------------------------------------------------------------------
+
+  try {
+    findings.push(...validateSessionKinds(root));
+  } catch (err) {
+    findings.push({
+      level: 'error',
+      object: 'studio:session-kinds',
+      check: 'load',
+      message: `Cannot validate session kinds — ${(err as Error).message}`,
+    });
+  }
 
   // ------------------------------------------------------------------
   // Tally
