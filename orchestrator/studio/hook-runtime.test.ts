@@ -225,6 +225,15 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
   it('SECURITY: a hook with env: [] (asks for nothing) does NOT receive the operator\'s real ANTHROPIC_API_KEY — real spawned child', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'credential-exfil-probe-hook', CREDENTIAL_ECHO_SCRIPT, { env: [], read: [], network: false });
+    // Stale pin of the now-closed BLOCKER 1 vulnerability (2026-08-04 third
+    // adversarial review): this test's SUBJECT is env stripping, not
+    // approval — it was written when runHookScript's gate only refused an
+    // already-'blocked' verdict, so it never needed an approval to run.
+    // Now that approval genuinely gates every verdict, an unapproved hook
+    // is correctly refused before ever reaching the env-stripping code this
+    // test actually means to exercise — approve it so the real subject is
+    // what's under test, not the (already separately covered) gate itself.
+    approveHook({ forgeRoot: root, id: 'credential-exfil-probe-hook' });
     const logger = createLogger('credential-exfil-probe-cycle', makeLogsDir());
 
     const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK' };
@@ -242,6 +251,7 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
   it('a hook that DECLARES ANTHROPIC_API_KEY in permissions.env DOES receive it — the manifest is the only route in', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'credential-granted-hook', CREDENTIAL_ECHO_SCRIPT, { env: ['ANTHROPIC_API_KEY'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'credential-granted-hook' }); // stale pin of the closed BLOCKER 1 vulnerability (unapproved spawn) — subject here is the manifest grant, not approval
     const logger = createLogger('credential-granted-cycle', makeLogsDir());
 
     const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-deliberately-granted' };
@@ -254,6 +264,7 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
   it('a distinctive parent-set var NOT in the manifest is absent from the real child', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'canary-hook', ECHO_SCRIPT, { env: ['MY_GRANTED_VAR'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'canary-hook' }); // stale pin of the closed BLOCKER 1 vulnerability (unapproved spawn) — subject here is env stripping, not approval
     const logger = createLogger('hook-runtime-test-cycle', makeLogsDir());
 
     const parentEnv: NodeJS.ProcessEnv = {
@@ -276,6 +287,7 @@ echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
   it('a declared var IS present in the real child', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'canary-hook-2', ECHO_SCRIPT, { env: ['MY_GRANTED_VAR'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'canary-hook-2' }); // stale pin of the closed BLOCKER 1 vulnerability (unapproved spawn) — subject here is the manifest grant, not approval
     const logger = createLogger('hook-runtime-test-cycle-2', makeLogsDir());
 
     const parentEnv: NodeJS.ProcessEnv = { ...process.env, MY_GRANTED_VAR: 'granted-value' };
@@ -428,6 +440,7 @@ describe('runHookScript: mismatch emitted as a structured JSONL event', () => {
     const root = makeForgeRoot();
     const script = `#!/usr/bin/env bash\necho "\${UNDECLARED_RUNTIME_VAR:-ABSENT}"\n`;
     writeHookPackage(root, 'mismatch-hook', script, NO_ENV);
+    approveHook({ forgeRoot: root, id: 'mismatch-hook' }); // stale pin of the closed BLOCKER 1 vulnerability (unapproved spawn) — subject here is the mismatch-event emission, not approval
     const logsDir = makeLogsDir();
     const logger = createLogger('mismatch-test-cycle', logsDir);
 
@@ -444,6 +457,7 @@ describe('runHookScript: mismatch emitted as a structured JSONL event', () => {
     const root = makeForgeRoot();
     const script = `#!/usr/bin/env bash\necho "$MY_GRANTED_VAR"\n`;
     writeHookPackage(root, 'clean-manifest-hook', script, { env: ['MY_GRANTED_VAR'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'clean-manifest-hook' }); // stale pin of the closed BLOCKER 1 vulnerability (unapproved spawn) — subject here is the absence of a mismatch event, not approval
     const logsDir = makeLogsDir();
     const logger = createLogger('clean-manifest-test-cycle', logsDir);
 

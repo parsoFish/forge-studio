@@ -328,16 +328,24 @@ test('GET /api/studio/hooks/<id>: detail carries the real file package and scan 
 test('GET /api/studio/hooks/<id>: the scan report surfaces a REAL finding, including a declared: true one still visible (never hidden)', async () => {
   writeHookFixture('detail-findings-hook', {
     scriptBody: FINDINGS_SCRIPT,
-    permissions: { env: ['MY_API_KEY'], read: [], network: false }, // declared — downgraded, not removed
+    // declared — still visible, still critical (BLOCKER 2 fix, 2026-08-04
+    // third adversarial review: this assertion used to read
+    // `assert.notEqual(...severity..., 'critical')`, i.e. "declared
+    // downgrades severity" — that was the live vulnerability itself
+    // written down as a passing test (a declared secret-shaped grant
+    // scored LOWER severity than an undeclared one, which made declaring
+    // the exfiltration shape a way to dodge the override bar). Flipped to
+    // the fixed contract: declared no longer downgrades env-read severity.
+    permissions: { env: ['MY_API_KEY'], read: [], network: false },
   });
   try {
     const res = await fetch(`${bridgeUrl}/api/studio/hooks/detail-findings-hook`);
     const body = (await res.json()) as { scan: { verdict: string; findings: Array<Record<string, unknown>> } };
-    assert.equal(body.scan.verdict, 'findings');
-    assert.equal(body.scan.findings.length, 1, 'the declared finding must still appear — downgraded severity, never hidden');
+    assert.equal(body.scan.verdict, 'findings', 'a lone env-read finding with no accompanying network-egress finding stays "findings", not "blocked"');
+    assert.equal(body.scan.findings.length, 1, 'the declared finding must still appear — still visible, never hidden');
     assert.equal(body.scan.findings[0]!['category'], 'env-read');
     assert.equal(body.scan.findings[0]!['declared'], true);
-    assert.notEqual(body.scan.findings[0]!['severity'], 'critical');
+    assert.equal(body.scan.findings[0]!['severity'], 'critical', 'BLOCKER 2 fix: a declared secret-shaped grant stays critical — declaring it is no longer a way to score lower than leaving it undeclared');
   } finally {
     removeHookFixture('detail-findings-hook');
   }
