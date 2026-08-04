@@ -326,3 +326,59 @@ hijack path. It does not make band selection safe against an operator editing
 `composition.guards` directly — that remains guarded by the existing
 `composition/band-guard` lint plus `execAgent`'s runtime slug backstop, which
 are unchanged by this amendment.
+
+## Amendment (R2-10, 2026-08-05): the session kind as a typed studio object
+
+**Wave-5 R2-10 mints a new first-class studio object type: the *session kind*,
+declared in a git-tracked `studio/session-kinds.yaml`.**
+
+Before this, an interactive agent session was not an object at all — it was a
+hand-written Next.js page. Three of them existed (the architect interview,
+`/instructions/[sid]`, `/project-brain/[sid]`), each re-deriving its own phase
+layout, its own polling, and its own artifact presentation. Adding a fourth
+interactive agent meant writing a fourth page. The R2-10 spec's shared session
+shell needs a per-kind descriptor to adapt to, and this ADR is where object
+types are declared, so the descriptor lands here as data — not as a code
+constant — for the same reason every other studio object is data: it is
+lintable, greppable, and diffable, and it is what lets R4-15/R4-16/R4-17 add a
+session kind by editing a YAML file plus one renderer instead of adding a page.
+
+1. **`studio/session-kinds.yaml` is the registry.** Each descriptor declares
+   `id`, `agent` (the SKILL.md-backed agent it surfaces), `title`,
+   `legacyRoutes` (the pre-shell paths kept as redirects), `stages`,
+   `defaultStage`, and `artifact: {kind, label}`.
+2. **Two closed vocabularies.** Stages are
+   `contract | instructions | secrets | demo | roadmap | brain`; artifact
+   renderer kinds are `roadmap-draft | markdown-draft | brain-structure` **live**
+   plus `file-package | contract-buildout | generation-gallery` **reserved**.
+   Reserved rows parse but are a `forge studio lint` **error on use**, with zero
+   stubs behind them — the shipped `TRIGGER_KINDS` precedent (ADR 041 / R2-04).
+3. **A descriptor declares an ordered subset; `defaultStage` must be a member of
+   its own `stages`.** A turn carrying no stage marker takes `defaultStage` — a
+   *declared* value read from the descriptor, never a value hardcoded in the
+   derivation. A turn carrying a stage **outside** the kind's declared list is an
+   error that names the offending value and the allowed set; it is never
+   defaulted, never dropped, never smoothed into a success.
+4. **Turns are DERIVED from the runners' existing checkpoint files, and the
+   derivation names itself.** No chat transcript exists on disk and none is
+   invented: every turn is sourced from a real file (`idea.md`, `prompt.md`,
+   `answers.json#round-N`, `questions.json`, `feedback.md`) and carries that
+   source, and the result carries the full list of sources scanned, so an empty
+   transcript reads "scanned N sources, none found" rather than rendering empty.
+   The per-runner phase machines are untouched — this is the UI-side convergence
+   R2-01-F3 deliberately deferred server-side.
+5. **Three enforcement points, not one.** `forge studio lint` over the shipped
+   descriptors; the transcript derivation, which is the only path the shell gets
+   turns and which fails closed; and the shell itself, which renders the failure
+   as a first-class state rather than falling back to a stage. A vocabulary
+   enforced at one point is decoration.
+
+**Stated limit, not overclaimed.** All three session kinds shipping with R2-10
+are single-stage (`architect → roadmap`, `instructions → instructions`,
+`project-brain → brain`). The multi-stage product instance — onboarding's
+`contract → instructions → secrets → demo → roadmap` — lands with **R4-17**. So
+the staged-artifact machinery is proven here by unit and view-state tests over a
+multi-stage fixture descriptor and by lint over the real shipped descriptors, not
+by a shipped multi-stage session. `brain` was added to the vocabulary because the
+project-brain kind ships now and none of the onboarding five honestly describes
+seeding Brain 3; mapping it onto `contract` would have been a fabricated mapping.
