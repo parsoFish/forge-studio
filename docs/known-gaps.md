@@ -385,7 +385,7 @@ per-task reviews + a 4-lens adversarial whole-branch review (+ re-run integratio
 The whole-branch review surfaced three **latent, forward-looking** items, each owned by a
 downstream initiative. **Reachability update (2026-07-24, R4-01-F2):** the original "none reachable
 — no seed flow declares a generic-agent node" premise no longer holds: the pm/dev/reflect seed-flow
-nodes now resolve through the generic `agent` kind (band hooks / ralph routing, ADR-039), so the
+nodes now resolve through the generic `agent` kind (band guards / ralph routing, ADR-039), so the
 remaining items below are live-path concerns, not latent ones:
 
 - ~~**`execAgent` stamps `PROMPT.md` into the initiative git-worktree root.**~~ **RESOLVED

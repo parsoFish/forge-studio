@@ -36,9 +36,11 @@ role-subfolder move).
 [`studio/catalog.yaml`](../../studio/catalog.yaml) ships: **9
 community-skills** with provenance + stars (`handoff`, `pre-impl-interview`,
 `superpowers-tdd`, `systematic-debugging`, `webapp-testing`,
-`security-review`, `skill-creator`, `agent-browser`, `output-compress`), **5
-hooks** (`event-log`, `cost-guard`, `stall-watchdog`, `merge-gate`,
-`scratch-strip`), **3 tools** (`git`, `node`, `gh`), **6 MCPs**
+`security-review`, `skill-creator`, `agent-browser`, `output-compress`), **9
+guards** — 5 toggles (`event-log`, `cost-guard`, `stall-watchdog`,
+`merge-gate`, `scratch-strip`) and 4 bands (`wi-contract`,
+`reflection-close`, `demo-band`, `review-band`); the section was named
+`hooks:` until R3-03 renamed it 2026-08-04 — **3 tools** (`git`, `node`, `gh`), **6 MCPs**
 (`filesystem`, `github`, `playwright`, `fetch`, `memory`, `sqlite`) — MCPs
 explicitly "reference metadata only — operators wire real servers in their
 env". Catalog entries surface as draggable chips in the agent builder's
@@ -72,12 +74,21 @@ library** of language/domain best-practice instructions for it to draw on.
 
 ### R3-B5 Hook concepts exist only as orchestrator machinery + catalog metadata
 
-The 5 catalog hooks are display metadata mapping onto orchestrator-owned
-implementations (JSONL event log, cost guard, stall watchdog, merge gate,
-scratch strip — all inside `orchestrator/`). Agent definitions can carry
-`composition.hooks` (parsed by `orchestrator/studio/registry.ts`, see
-`registry.test.ts`), but there is no installable/creatable hook library, and
-no security model for one — hooks execute in-harness with the harness's env.
+The catalog's guard entries are display metadata mapping onto
+orchestrator-owned implementations (JSONL event log, cost guard, stall
+watchdog, merge gate, scratch strip — all inside `orchestrator/`). Agent
+definitions carry them in `composition.guards` (parsed by
+`orchestrator/studio/registry.ts`, see `registry.test.ts`), but there is no
+installable/creatable hook library, and no security model for one — hooks
+execute in-harness with the harness's env.
+
+**Updated 2026-08-04 (R3-03 migration PR).** This entry originally read "5
+catalog hooks" carried in `composition.hooks`. Both words changed: the
+catalog section is now `guards:` with **9** entries (the 4 band ids joined the
+5 toggles), and the agent field is `composition.guards` — `composition.hooks`
+is deleted and reserved for the *library* lifecycle hooks R3-03's remaining
+features introduce. See [ADR 027](../decisions/027-studio-object-model.md)'s
+R3-03 amendment.
 
 ### R3-B6 Skill provenance pattern already proven
 
