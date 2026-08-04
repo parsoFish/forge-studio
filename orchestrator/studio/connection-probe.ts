@@ -263,6 +263,12 @@ export interface ProbeConnectionOptions {
    *  there is an AT that calls with no opts at all and requires the real
    *  environment to be consulted. */
   pathEnv?: string;
+  /** kind:'command' ONLY — TEST-INJECTION-ONLY shortening of the spawn timeout,
+   *  so the real ETIMEDOUT branch can be exercised by a committed test instead
+   *  of resting on a manual sanity check. Defaults to `PROBE_TIMEOUT_MS`;
+   *  production code never sets it, and every other probe AT exercises that
+   *  default. */
+  timeoutMs?: number;
 }
 
 function probeCommand(
@@ -283,7 +289,7 @@ function probeCommand(
 
   const spawned = spawnSync(probe.command, probe.args, {
     shell: false,
-    timeout: PROBE_TIMEOUT_MS,
+    timeout: opts.timeoutMs ?? PROBE_TIMEOUT_MS,
     encoding: 'utf8',
     env,
   });
@@ -390,5 +396,3 @@ export function probeConnection(
 // this one path.
 // ---------------------------------------------------------------------------
 
-export { installArgvFor, installConnection, type InstallArgv, type InstallConnectionOptions, type InstallConnectionResult } from './connection-install.ts';
-export { connectionsReadinessFor, type UnreadyConnection } from './connection-readiness.ts';
