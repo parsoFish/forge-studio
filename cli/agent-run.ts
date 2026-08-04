@@ -194,7 +194,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
   }
 
   try {
-    // R4-10-F3 isolation surface: the two band-hook node agents (demo-agent /
+    // R4-10-F3 isolation surface: the two band-guard node agents (demo-agent /
     // adversarial-review) run standalone through their FLOW pipeline (parity),
     // against an existing initiative's worktree — NOT the bare `runAgent` spawn
     // the generic dispatch uses (which would skip the pipeline bands entirely).

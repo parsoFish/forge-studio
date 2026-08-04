@@ -22,19 +22,19 @@ import type { AgentDefinition } from './studio/types.ts';
  * `studio/catalog.yaml`'s `guards:` section (the palette surface) and an
  * executor registered in flow-runner's band table.
  */
-export const BAND_HOOK_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] as const;
-export type BandHookId = (typeof BAND_HOOK_IDS)[number];
+export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] as const;
+export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
 
 /**
- * Band hook id → the ONE canonical agent slug the band's pipeline loads its
+ * Band guard id → the ONE canonical agent slug the band's pipeline loads its
  * SKILL.md from. The band implementations (flow-runner's executor table) load
  * the canonical agent's intent themselves, so a non-canonical def declaring the
- * hook would silently run the wrong identity — every declared-dispatch consumer
- * (execAgent's runtime backstop + validate.ts's `composition/band-hook` lint)
- * checks the declarer's slug against THIS single source. Each hook stays pinned
+ * guard would silently run the wrong identity — every declared-dispatch consumer
+ * (execAgent's runtime backstop + validate.ts's `composition/band-guard` lint)
+ * checks the declarer's slug against THIS single source. Each guard stays pinned
  * to its slug until the bands generalise (R4-06+).
  */
-export const BAND_CANONICAL_SLUG: Readonly<Record<BandHookId, string>> = {
+export const BAND_CANONICAL_SLUG: Readonly<Record<BandGuardId, string>> = {
   'wi-contract': 'project-manager',
   'reflection-close': 'reflector',
   'demo-band': 'demo-agent',
@@ -42,15 +42,15 @@ export const BAND_CANONICAL_SLUG: Readonly<Record<BandHookId, string>> = {
 };
 
 /**
- * First declared band hook on the def, or undefined for a bare generic
- * agent. Declaring more than one band is a `composition/band-hook` lint
+ * First declared band guard on the def, or undefined for a bare generic
+ * agent. Declaring more than one band is a `composition/band-guard` lint
  * error (validate.ts) — first-wins here is only the defensive runtime
  * order, and execAgent's slug backstop fails loud on any non-canonical
  * declarer regardless.
  */
-export function resolveBandHook(def: AgentDefinition): BandHookId | undefined {
+export function resolveBandGuard(def: AgentDefinition): BandGuardId | undefined {
   for (const guard of def.composition.guards) {
-    if ((BAND_HOOK_IDS as readonly string[]).includes(guard)) return guard as BandHookId;
+    if ((BAND_GUARD_IDS as readonly string[]).includes(guard)) return guard as BandGuardId;
   }
   return undefined;
 }

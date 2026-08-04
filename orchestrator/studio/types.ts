@@ -11,7 +11,7 @@ export type AgentComposition = {
    * Platform dispatch-key vocabulary (ADR-027 R3-03 amendment): the 5 toggle
    * ids (event-log, cost-guard, stall-watchdog, merge-gate, scratch-strip)
    * and the 4 band ids (wi-contract, reflection-close, demo-band,
-   * review-band). Guard ids are DISPATCH KEYS — `resolveBandHook` scans them
+   * review-band). Guard ids are DISPATCH KEYS — `resolveBandGuard` scans them
    * to route a flow node to another agent's canonical pipeline — so this
    * field is platform-owned, never user-authorable. Split from the
    * user-authorable library `hooks` vocabulary specifically to make an
@@ -355,7 +355,7 @@ export type CatalogEntry = { id: string; name: string; desc?: string };
 
 /**
  * A catalog `guards:` entry (ADR-027 R3-03 amendment). `kind` is DERIVED from
- * `BAND_HOOK_IDS` (`orchestrator/agent-bands.ts`) at load time — never
+ * `BAND_GUARD_IDS` (`orchestrator/agent-bands.ts`) at load time — never
  * declared in `studio/catalog.yaml` — so a `kind:` value present in the YAML
  * is parsed and then overridden, not merged or trusted (the
  * declared-data-fails-open failure class this repo already guards against

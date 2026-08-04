@@ -1,5 +1,5 @@
 /**
- * band-agent-run.ts — standalone isolation surface for the band-hook node
+ * band-agent-run.ts — standalone isolation surface for the band-guard node
  * agents (R4-10-F3, ADR-039).
  *
  * The develop flow's two successor agents — `demo-agent` and
@@ -43,12 +43,12 @@ import { getPaths } from './queue.ts';
 import { createLogger } from './logging.ts';
 import { loadAgentDefinition } from './studio/registry.ts';
 import { skillPath } from './skill-path.ts';
-import { resolveBandHook } from './agent-bands.ts';
+import { resolveBandGuard } from './agent-bands.ts';
 import { runDemoAgentPipeline, type DemoAgentPipelineResult } from './phases/demo-agent.ts';
 import { runAdversarialReview, type AdversarialReviewResult } from './phases/adversarial-review.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
-/** The two band-hook slugs runnable standalone here → their pipeline kind. */
+/** The two band-guard slugs runnable standalone here → their pipeline kind. */
 const STANDALONE_BAND_SLUGS: Record<string, 'demo' | 'review'> = {
   'demo-agent': 'demo',
   'adversarial-review': 'review',
@@ -80,7 +80,7 @@ export type RunBandAgentStandaloneOpts = {
   queryFn?: StreamQueryFn;
 };
 
-/** True iff `slug` is a band-hook agent this surface can run standalone. */
+/** True iff `slug` is a band-guard agent this surface can run standalone. */
 export function isStandaloneBandAgent(slug: string): boolean {
   return slug in STANDALONE_BAND_SLUGS;
 }
@@ -156,7 +156,7 @@ function resolveInitiativeContext(
 }
 
 /**
- * Run one band-hook node agent standalone through its FLOW pipeline (parity),
+ * Run one band-guard node agent standalone through its FLOW pipeline (parity),
  * against an existing initiative's settled worktree. Isolated under `runId`.
  */
 export async function runBandAgentStandalone(
@@ -165,10 +165,10 @@ export async function runBandAgentStandalone(
   const kind = STANDALONE_BAND_SLUGS[opts.slug];
   if (!kind) {
     const def = loadAgentDefinition(skillPath(opts.slug));
-    const hook = resolveBandHook(def);
+    const guard = resolveBandGuard(def);
     throw new Error(
       `runBandAgentStandalone: agent "${opts.slug}" is not a standalone-runnable band agent` +
-        (hook ? ` (band hook "${hook}" has no standalone pipeline surface)` : ' (no band hook)'),
+        (guard ? ` (band guard "${guard}" has no standalone pipeline surface)` : ' (no band guard)'),
     );
   }
   if (!opts.runId) throw new Error('runBandAgentStandalone: runId is required (the isolated run identity)');
