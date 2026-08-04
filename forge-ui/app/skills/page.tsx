@@ -3,17 +3,10 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { StudioNav } from '@/components/StudioNav';
-import {
-  fetchSkillLibrary,
-  installSkill,
-  type SkillLibraryEntry,
-} from '@/lib/skill-client';
-import {
-  groupSkillLibrary,
-  skillBadges,
-  filterSkills,
-  installStateOf,
-} from '@/lib/skill-library-view';
+import { fetchSkillLibrary, type SkillLibraryEntry } from '@/lib/skill-client';
+import { groupSkillLibrary, skillBadges, filterSkills } from '@/lib/skill-library-view';
+import { fetchCommunityIndex, type CommunityItem } from '@/lib/community-client';
+import { hubLabel, signalsLabel } from '@/lib/community-view';
 
 // ---------------------------------------------------------------------------
 // Skills library — /skills (R3-01-F3/F4, WI-3, D8: the ONE place "New skill"
@@ -21,6 +14,19 @@ import {
 // installed-from-community) plus every catalog community skill not yet
 // installed. Studio agents (SKILL.md WITH a runtime: block) are NOT skills —
 // they live under /agents.
+//
+// R3-07-F1: the per-card manual install affordance (a local-directory box +
+// "Install" button) is RETIRED here — it was driven by zero journey beats
+// and zero tests, and the cross-kind /community browser (linked above the
+// search field) is now the one real install entry point, routing through
+// the same install pipeline this page's cards still read from. What THIS
+// page adds instead is honesty about provenance: a community-sourced card
+// (badge `community`) shows its derived hub and hub-attributed signals,
+// fetched independently from `/api/studio/community` and joined by
+// (kind === 'skill', id) — never a re-derivation of a fact the community
+// index didn't send, and never rendered at all when that fetch fails
+// (absence is honest; a dead second fetch must never blank the primary
+// skill list, which is why it is a wholly separate effect / failure mode).
 // ---------------------------------------------------------------------------
 
 const BADGE_STYLE: Record<string, React.CSSProperties> = {
@@ -37,43 +43,43 @@ export default function SkillLibraryPage() {
   const [status, setStatus] = useState<'loading' | 'error' | 'ready'>('loading');
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState('');
-  const [installState, setInstallState] = useState<Record<string, 'none' | 'installing' | 'installed'>>({});
-  const [installDirs, setInstallDirs] = useState<Record<string, string>>({});
-  const [installError, setInstallError] = useState<Record<string, string>>({});
-
-  async function load(): Promise<void> {
-    const r = await fetchSkillLibrary();
-    if (!r.ok) {
-      setStatus('error');
-      setError(r.error ?? 'could not reach the forge bridge');
-      return;
-    }
-    setEntries(r.skills);
-    setStatus('ready');
-    setError(null);
-  }
+  // null = not yet resolved (loading OR the community fetch failed) — either
+  // way, cards render with no hub/signals rather than a guessed value.
+  const [communityById, setCommunityById] = useState<Map<string, CommunityItem> | null>(null);
 
   useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      const r = await fetchSkillLibrary();
+      if (cancelled) return;
+      if (!r.ok) {
+        setStatus('error');
+        setError(r.error ?? 'could not reach the forge bridge');
+        return;
+      }
+      setEntries(r.skills);
+      setStatus('ready');
+      setError(null);
+    }
     void load();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  async function handleInstall(id: string): Promise<void> {
-    const packageDir = (installDirs[id] ?? '').trim();
-    if (!packageDir) {
-      setInstallError((s) => ({ ...s, [id]: 'a local package directory is required' }));
-      return;
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCommunity() {
+      const r = await fetchCommunityIndex();
+      if (cancelled) return;
+      if (!r.ok) return; // absence, not a fabricated join — the skill list itself is unaffected
+      setCommunityById(new Map(r.items.filter((i) => i.kind === 'skill').map((i) => [i.id, i])));
     }
-    setInstallState((s) => ({ ...s, [id]: 'installing' }));
-    setInstallError((s) => { const { [id]: _drop, ...rest } = s; return rest; });
-    const r = await installSkill({ id, packageDir, upstream: { source: packageDir } });
-    if (!r.ok) {
-      setInstallState((s) => ({ ...s, [id]: 'none' }));
-      setInstallError((s) => ({ ...s, [id]: r.error ?? 'install failed' }));
-      return;
-    }
-    setInstallState((s) => ({ ...s, [id]: 'installed' }));
-    void load(); // refresh so the installed draft's real trust/badges land
-  }
+    void loadCommunity();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const filtered = filterSkills(entries, query);
   const grouped = groupSkillLibrary(filtered);
@@ -100,9 +106,14 @@ export default function SkillLibraryPage() {
               approve it.
             </p>
           </div>
-          <Link href="/skills/new" data-action="new-skill" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
-            + New skill
-          </Link>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
+              Browse community
+            </Link>
+            <Link href="/skills/new" data-action="new-skill" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+              + New skill
+            </Link>
+          </div>
         </div>
 
         <input
@@ -139,27 +150,11 @@ export default function SkillLibraryPage() {
         )}
 
         {status === 'ready' && grouped.local.length > 0 && (
-          <SkillSection
-            title="Local"
-            entries={grouped.local}
-            installState={installState}
-            installDirs={installDirs}
-            installError={installError}
-            onInstallDirChange={(id, v) => setInstallDirs((s) => ({ ...s, [id]: v }))}
-            onInstall={handleInstall}
-          />
+          <SkillSection title="Local" entries={grouped.local} communityById={communityById} />
         )}
 
         {status === 'ready' && grouped.community.length > 0 && (
-          <SkillSection
-            title="Community"
-            entries={grouped.community}
-            installState={installState}
-            installDirs={installDirs}
-            installError={installError}
-            onInstallDirChange={(id, v) => setInstallDirs((s) => ({ ...s, [id]: v }))}
-            onInstall={handleInstall}
-          />
+          <SkillSection title="Community" entries={grouped.community} communityById={communityById} />
         )}
       </div>
     </main>
@@ -173,19 +168,11 @@ export default function SkillLibraryPage() {
 function SkillSection({
   title,
   entries,
-  installState,
-  installDirs,
-  installError,
-  onInstallDirChange,
-  onInstall,
+  communityById,
 }: {
   title: string;
   entries: SkillLibraryEntry[];
-  installState: Record<string, 'none' | 'installing' | 'installed'>;
-  installDirs: Record<string, string>;
-  installError: Record<string, string>;
-  onInstallDirChange: (id: string, value: string) => void;
-  onInstall: (id: string) => void;
+  communityById: Map<string, CommunityItem> | null;
 }) {
   return (
     <section style={{ marginBottom: 28 }}>
@@ -194,19 +181,7 @@ function SkillSection({
       </h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
         {entries.map((entry) => (
-          // The persistent half of install state comes from the ONE derivation
-          // (installStateOf, the vitest-pinned helper); `installing` is a transient
-          // client-only overlay with no on-disk counterpart, so it is layered on top
-          // rather than being a fourth value the helper has to know about.
-          <SkillCard
-            key={entry.id}
-            entry={entry}
-            installState={installState[entry.id] ?? (installStateOf(entry) === 'installed' ? 'installed' : 'none')}
-            installDir={installDirs[entry.id] ?? ''}
-            installErr={installError[entry.id]}
-            onInstallDirChange={(v) => onInstallDirChange(entry.id, v)}
-            onInstall={() => onInstall(entry.id)}
-          />
+          <SkillCard key={entry.id} entry={entry} community={communityById?.get(entry.id) ?? null} />
         ))}
       </div>
     </section>
@@ -217,91 +192,48 @@ function SkillSection({
 // SkillCard
 // ---------------------------------------------------------------------------
 
-function SkillCard({
-  entry,
-  installState,
-  installDir,
-  installErr,
-  onInstallDirChange,
-  onInstall,
-}: {
-  entry: SkillLibraryEntry;
-  installState: 'none' | 'installing' | 'installed';
-  installDir: string;
-  installErr?: string;
-  onInstallDirChange: (value: string) => void;
-  onInstall: () => void;
-}) {
+function SkillCard({ entry, community }: { entry: SkillLibraryEntry; community: CommunityItem | null }) {
   const badges = skillBadges(entry);
   const usedByCount = entry.usedBy.length;
-  // A community entry that isn't installed has no on-disk package yet — the
-  // detail route 404s for it, and the detail page renders that as an
-  // explicit "not installed" state (not a crash, not an invented preview).
-  // The card still links there; the manual-install affordance below is
-  // additional, not a replacement for that link.
-  const notInstalled = !entry.installed;
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <Link
-        href={`/skills/${encodeURIComponent(entry.id)}`}
-        className="lib-card"
-        data-card-type="skill"
-        data-skill-id={entry.id}
-        data-skill-source={entry.source}
-        data-skill-trust={entry.trust}
-        data-skill-installed={entry.installed ? 'true' : 'false'}
-        data-skill-used-by-count={usedByCount}
-        style={{ display: 'block' }}
-      >
-        <div className="card-top">
-          <span className="card-name">{entry.name || entry.id}</span>
-          {badges.map((b) => (
-            <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>
-          ))}
-        </div>
-        <p className="card-body">{entry.description || 'No description.'}</p>
-        {entry.error && (
-          <p style={{ fontSize: 11.5, color: '#f87171', margin: '0 0 6px' }}>{entry.error}</p>
+    <Link
+      href={`/skills/${encodeURIComponent(entry.id)}`}
+      className="lib-card"
+      data-card-type="skill"
+      data-skill-id={entry.id}
+      data-skill-source={entry.source}
+      data-skill-trust={entry.trust}
+      data-skill-installed={entry.installed ? 'true' : 'false'}
+      data-skill-used-by-count={usedByCount}
+      data-skill-hub={community?.hub?.id}
+      data-skill-has-signals={community ? (community.signals !== null ? 'true' : 'false') : undefined}
+      style={{ display: 'block' }}
+    >
+      <div className="card-top">
+        <span className="card-name">{entry.name || entry.id}</span>
+        {badges.map((b) => (
+          <span key={b} className="badge" style={BADGE_STYLE[b]}>{b}</span>
+        ))}
+      </div>
+      <p className="card-body">{entry.description || 'No description.'}</p>
+      {entry.error && (
+        <p style={{ fontSize: 11.5, color: '#f87171', margin: '0 0 6px' }}>{entry.error}</p>
+      )}
+      <div className="card-meta">
+        <span className="card-stat">{usedByCount} agent{usedByCount === 1 ? '' : 's'}</span>
+        {!entry.paletteVisible && (
+          <span className="badge badge-dim" title="Not palette-visible — an agent cannot compose this skill yet">
+            hidden from palette
+          </span>
         )}
+      </div>
+      {community && (
         <div className="card-meta">
-          <span className="card-stat">{usedByCount} agent{usedByCount === 1 ? '' : 's'}</span>
-          {!entry.paletteVisible && (
-            <span className="badge badge-dim" title="Not palette-visible — an agent cannot compose this skill yet">
-              hidden from palette
-            </span>
-          )}
-        </div>
-      </Link>
-
-      {notInstalled && (
-        // D2: this initiative consumes an already-materialised local
-        // directory only — no hub fetch, no fabricated "vendored upstream"
-        // content. A real hub browser + fetch is R3-07's job.
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, padding: '0 2px' }}>
-          <input
-            type="text"
-            placeholder="local package directory to install from…"
-            value={installDir}
-            onChange={(e) => onInstallDirChange(e.target.value)}
-            disabled={installState !== 'none'}
-            style={{ fontSize: 11.5, padding: '5px 8px', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 4, color: 'var(--text)' }}
-          />
-          <button
-            type="button"
-            className="btn"
-            data-action="install-skill"
-            data-install-skill-id={entry.id}
-            data-install-state={installState}
-            disabled={installState === 'installing'}
-            onClick={onInstall}
-            style={{ fontSize: 11.5, padding: '5px 10px', alignSelf: 'flex-start' }}
-          >
-            {installState === 'installing' ? 'Installing…' : installState === 'installed' ? 'Installed ✓' : 'Install'}
-          </button>
-          {installErr && <span style={{ fontSize: 11, color: '#f87171' }}>{installErr}</span>}
+          <span className="card-stat">{hubLabel(community.hub)}</span>
+          <span className="card-stat">{signalsLabel(community.signals)}</span>
         </div>
       )}
-    </div>
+    </Link>
   );
 }
