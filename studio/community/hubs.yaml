@@ -1,0 +1,54 @@
+# Community source hubs (R3-07-F1).
+#
+# A REGISTRY OF REAL PUBLIC SOURCES, nothing more. It exists so an item's hub can
+# be DERIVED by matching the item's own upstream URL (D4) instead of trusting a
+# declared `hub:` name string. An item whose upstream matches no entry here
+# renders as `unaffiliated` with its raw upstream link — never an invented hub.
+#
+# Per-hub item counts are DERIVED from the index at request time; a hub with zero
+# items in this repo's curated index renders "0 items", which is the honest
+# statement that forge indexes nothing from it yet. This file is NOT a crawl
+# target: live hub API integration is explicitly out of scope for R3-07 (a new
+# external dependency = ask-first), and the browsable index is a static curated
+# seed (D10).
+#
+# `url` is matched as a repository/site prefix on a path-segment boundary, so
+# `.../modelcontextprotocol/servers-archived` does NOT match the
+# `.../modelcontextprotocol/servers` hub.
+hubs:
+  - id: superpowers
+    name: obra/superpowers
+    url: https://github.com/obra/superpowers
+    kinds: skills
+  - id: anthropics-skills
+    name: anthropics/skills
+    url: https://github.com/anthropics/skills
+    kinds: skills
+  - id: awesome-claude-skills
+    name: awesome-claude-skills
+    url: https://github.com/travisvn/awesome-claude-skills
+    kinds: skills
+  - id: skills-sh
+    name: skills.sh
+    url: https://skills.sh
+    kinds: skills
+  - id: mcp-servers
+    name: modelcontextprotocol/servers
+    url: https://github.com/modelcontextprotocol/servers
+    kinds: MCPs
+  - id: mcp-registry
+    name: MCP Registry
+    url: https://registry.modelcontextprotocol.io
+    kinds: MCPs
+  - id: smithery
+    name: smithery.ai
+    url: https://smithery.ai
+    kinds: MCPs
+  - id: cc-templates
+    name: claude-code-templates
+    url: https://github.com/davila7/claude-code-templates
+    kinds: hooks
+  - id: forge-seed
+    name: forge-studio community seed
+    url: https://github.com/parsoFish/forge-studio
+    kinds: skills, hooks

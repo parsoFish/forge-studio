@@ -201,6 +201,81 @@ inventory rather than one shared page-level contract:
   reads "scanned N, found none". Action errors surface as
   `[data-component="connection-action-error"]`.
 
+- **`/community`, `/community/[kind]/[id]`** (R3-07-F1/F2/F3) — the ONE
+  cross-kind community browser over skill/hook/mcp/tool, the surface `/skills`,
+  `/hooks` and `/connections` all link into via `[data-action="browse-community"]`
+  (a real `<a href="/community">` on each of the three). It owns **ZERO trust
+  decisions** (D2) — no approve, no override, no re-pin affordance exists
+  anywhere on this surface; install ROUTES to whichever pipeline owns the
+  kind (R3-01-F4 skills, R3-03-F2 hooks, R3-04-F2 connections) and the trust
+  decision (if the kind has one) happens only on that pipeline's own owning
+  page. There is deliberately **no create/edit/approve route under
+  `/community` anywhere** — curation of what's browsable stays forge-dev-owned
+  (a PR to `studio/catalog.yaml` / a vendored package under
+  `studio/community/`), mirroring `/connections`'s own D1 negative AC.
+  Root: `main[data-page="community-browser"][data-page-ready][data-item-count]
+  [data-kind-filter="all"|"skill"|"hook"|"mcp"|"tool"][data-hub-count]`, a
+  search field `[data-field="community-search"]`, kind-filter buttons
+  `[data-action="filter-kind"][data-kind]`, and
+  `[data-component="fetch-error"]` when the bridge is unreachable (never
+  rendered the same as a genuinely empty index — the same discipline
+  `/connections` and `/skills` already hold). `[data-component="hub-strip"]`
+  renders every real hub from `studio/community/hubs.yaml`, per hub
+  `[data-hub-id][data-hub-kinds][data-hub-item-count]` — the count is DERIVED
+  per request, never declared, so a real hub with nothing indexed from it yet
+  renders a genuine `"0"` rather than being dropped from the strip (the
+  honest-zero case). Per card: `[data-card-type="community-item"]
+  [data-item-id][data-item-kind][data-item-hub][data-install-state]
+  [data-has-signals="true"|"false"]` — `data-item-hub` is simply ABSENT for an
+  unaffiliated item (the rendered label is the spec-literal "unaffiliated",
+  never invented as an attribute value), and `data-has-signals="false"`
+  renders "no signals published" rather than a fabricated zero.
+  `/community/[kind]/[id]` root: `main[data-page="community-detail"]
+  [data-item-id][data-page-ready]` plus, **present ONLY once the item
+  resolves** (`[data-item-kind][data-install-state]` are ABSENT while
+  loading, on a fetch error, and for an unknown kind/id — an unvalidated
+  route param is never asserted as fact before the server confirms it):
+  `[data-section="hub-signals"]` (`[data-hub-id]` present only for a matched
+  hub, a signal-attribution attribute present only when the source record
+  actually carries signals — D4/D5, no invented hub name or signal figure
+  ever renders); `[data-component="file-package"]` for a skill/hook (the SAME
+  shared renderer `/skills/[id]` and `/hooks/[id]` use);
+  `[data-section="security-scan"][data-scan-verdict][data-finding-count]
+  [data-critical-count]` for a hook — the REAL pre-install scan, run on the
+  vendored bytes before any install exists, distinct from (but computed by
+  the same scanner as) `/hooks/[id]`'s own `[data-section="scan-report"]`;
+  `[data-section="capabilities"][data-capabilities-source="curated"]
+  [data-capability-count]` for an mcp/tool that declares any, mirroring
+  `/connections/[id]`'s own labelled-curated convention exactly. For an
+  mcp/tool, `[data-section="install"]` ALSO carries
+  `[data-install-method="system-provided"|"npm"|"external"]` (fixed
+  2026-08-05, R3-07 journey-found defect: R3-04-F4's whole posture is that
+  every installable entry pins an exact version, and this pre-install page's
+  entire reason to exist is showing the operator what they're approving
+  BEFORE they click install — the pin was previously never rendered here at
+  all) — an `npm` entry additionally renders `[data-install-version]` with
+  the exact pinned version, the SAME vocabulary `/connections/[id]`'s own
+  InstallSection uses, never a second one; `system-provided`/`external` have
+  no version to pin and render no `data-install-version` at all — structural
+  absence, not an empty attribute. This is separate from, and precedes, the
+  ONE mutating affordance: `[data-action="install-community-item"]
+  [data-install-routed-to="skill-draft"|"hook-needs-approval"|"connection-install"]`
+  — **structurally ABSENT, not disabled,** whenever the route cannot
+  complete: a non-vendored skill/hook with no server-resolved install path
+  renders no button at all, and an already-present item renders "\<state\>
+  already — continue at \<owning page\>" instead of a second control. The
+  install outcome renders `[data-component="install-outcome"]` — for
+  skill/hook, the text states "Installed as a draft." (or "Already
+  installed.") and links to the owning page where its approval gate (if any)
+  lives; for a connection under this harness's no-spawn suppression, a
+  `[data-would-install-argv]` element carries the real, never-executed argv
+  (there is deliberately no separate `data-install-outcome-status` attribute
+  on this surface — the suppressed/success/failed distinction is carried in
+  the outcome text and the presence of `[data-would-install-argv]` itself,
+  the same signal `[data-page="community-detail"]`'s own `data-install-state`
+  independently confirms by staying `"not-installed"` after a suppressed
+  attempt). Action errors surface as `[data-component="community-action-error"]`.
+
 - **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
   default (`[data-section="advanced"][data-advanced-open]`) behind which sit
@@ -357,10 +432,24 @@ inventory rather than one shared page-level contract:
   stars) still surface as draggable chips inside the agent builder's palette
   (`/agents/new`, `/agents/[id]`) — that union is unchanged — but `/skills` is
   now a real standalone library route, not just a palette. Root:
-  `main[data-page="skill-library"][data-page-ready][data-skill-count][data-local-count][data-community-count]`
+  `main[data-page="skill-library"][data-page-ready][data-community-join="pending"|"ready"|"unavailable"][data-skill-count][data-local-count][data-community-count]`
   over two sections (Local — hand-authored or already-installed skills on
   disk; Community — catalog entries with no on-disk package yet), whose
-  counts always equal the rendered card count in each section. Per card:
+  counts always equal the rendered card count in each section.
+  `data-community-join` is a SEPARATE readiness signal from `data-page-ready`
+  (fixed 2026-08-05, R3-07 journey-found defect): the primary skill list is
+  deliberately not raced by the community-index fetch that backs the hub/
+  signals join (a slow or unreachable community index must never blank the
+  primary list), so `data-page-ready` flips on the primary fetch alone while
+  `data-community-join` independently tracks the join's own three real
+  states — `pending` (join fetch still in flight — a card's `data-skill-hub`/
+  `data-skill-has-signals` are not yet trustworthy), `ready` (join resolved —
+  those two attributes now reflect real data), `unavailable` (the community
+  fetch failed — every card still renders with no hub/signals, honestly, not
+  a guessed value). Before this fix all three states rendered identically
+  (the attributes simply absent), which automation waiting on
+  `data-page-ready` alone could read as "no hub" when the join had not even
+  resolved yet. Per card:
   `[data-card-type="skill"][data-skill-id][data-skill-source="local"|"community"][data-skill-trust="ready"|"draft"|"needs-review"][data-skill-installed="true"|"false"][data-skill-used-by-count]`
   — `data-skill-used-by-count` is DERIVED from every real agent's
   `composition.skills`, never a declared/catalog field (the `composedBy`
@@ -369,11 +458,28 @@ inventory rather than one shared page-level contract:
   it links to the unchanged builder at `/skills/new`
   (`[data-page="skill-builder"][data-page-ready="true"][data-section="skill-new"]`,
   fields `[data-field="skill-name"|"skill-description"|"skill-body"]`,
-  `[data-action="create-skill"]`). A not-yet-installed community card carries
-  a manual local-directory install affordance:
-  `[data-action="install-skill"][data-install-skill-id][data-install-state="none"|"installing"|"installed"]`
-  (D2: this pipeline consumes an already-materialised local directory only —
-  no hub fetch; a real hub browse/fetch is R3-07's job, unbuilt).
+  `[data-action="create-skill"]`).
+  **R3-07 update (2026-08-05): the per-card manual install affordance was
+  REMOVED.** `[data-action="install-skill"]`, `[data-install-skill-id]`, and
+  the card-local `[data-install-state]` no longer exist — that box (a
+  local-directory path typed by the operator) was driven by zero journey
+  beats and zero ATs (verified by grep before deletion), and the cross-kind
+  `[data-action="browse-community"]` link now beside the search field is the
+  ONE real install entry point for every kind, routing installs through this
+  same F4 pipeline unchanged (see the `/community` entry below). Two new
+  attributes join a card whose `data-skill-source="community"`, carrying the
+  join `/community`'s own index performs — fetched independently from `GET
+  /api/studio/community` and matched on (kind, id), never on id alone (a
+  local hand-authored skill sharing an id with a catalog entry must never
+  inherit its hub/signals): `[data-skill-hub]` (the DERIVED hub id; an
+  unmatched entry simply omits the attribute — `unaffiliated` is a rendered
+  label, never a fabricated attribute value) and
+  `[data-skill-has-signals="true"|"false"]` (real hub-attributed stars vs. an
+  honest "no signals published" — never a guessed zero). Both are absent for
+  a `data-skill-source="local"` card, including one that started life as a
+  vendored community install: once installed, filesystem wins on existence
+  (D5) — the card is local from that point on, not permanently badged
+  "community".
   `/skills/[id]` is the real per-skill detail page —
   `main[data-page="skill-detail"][data-skill-id][data-page-ready]` — with
   `data-skill-trust`/`data-skill-source` present ONLY once a real value is

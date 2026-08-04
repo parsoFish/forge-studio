@@ -1,0 +1,10 @@
+id: block-protected-branch-push
+name: block-protected-branch-push
+description: Refuse a push while HEAD is on a protected branch — branch first, then push.
+on: PreToolUse
+matcher: "Bash(git push)"
+script: scripts/run.sh
+permissions:
+  env: []
+  read: []
+  network: false

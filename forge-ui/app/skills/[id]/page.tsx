@@ -134,7 +134,11 @@ export default function SkillDetailPage() {
               data-component="not-installed"
               style={{ fontSize: 13, color: 'var(--faint)', fontStyle: 'italic', padding: '14px 16px', border: '1px dashed var(--line-2)', borderRadius: 'var(--radius-sm, 6px)' }}
             >
-              Not installed — nothing to show yet. Install this skill from the library to see its package.
+              Not installed — nothing to show yet.{' '}
+              <Link href={`/community/skill/${encodeURIComponent(id)}`} style={{ color: 'var(--dim)' }}>
+                View it in the community browser
+              </Link>{' '}
+              to install it from there.
             </div>
           </div>
         )}

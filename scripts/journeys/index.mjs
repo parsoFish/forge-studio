@@ -7,7 +7,10 @@
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
  * interleaving): skills → hooks → templates → connections → stand-up-onboard
  * → stand-up-create → knowledge → agents → flows-author → flows-run →
- * roadmap → demo-builder.
+ * roadmap → demo-builder → community (R3-07 — deliberately LAST, see its own
+ * RUN_ORDER comment below: it installs a real skill + a real hook, mutating
+ * /skills, /hooks and the agent-builder palette counts every earlier
+ * journey's own beats pin).
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -48,6 +51,21 @@
  * skills-create in RUN_ORDER, above). cleanSkillArtifacts (the runner's
  * crash-safe sweep) still covers the install artifacts too, via the same
  * narrow function, for the case where a crash skips this beat's own finally.
+ *
+ * community (R3-07) installs its own two vendored artifacts
+ * (CM_SKILL_ID='dependency-diff-review', CM_HOOK_ID='block-protected-branch-push'
+ * — ids local to community.mjs, disjoint from every SK_/HK_ constant above)
+ * in one beat (community-skill-install / community-hook-install) and reads
+ * them across several later beats before its own try/finally
+ * (community-skills-approve-palette, the LAST beat that needs them) sweeps
+ * both plus the studio/installed-skills.yaml ledger entry the skill install
+ * wrote — restored to its EXACT prior state (including "the file did not
+ * exist"), the same stash discipline as SK_INSTALL_LEDGER_PATH above. Because
+ * that sweep lives several beats after the mutation, community.mjs exports
+ * its own cleanCommunityArtifacts() as a crash-safe backstop, called from
+ * scripts/e2e-journey.mjs's own top-level finally alongside
+ * cleanSkillArtifacts()/cleanHookArtifacts() — the same reason those two are
+ * called there rather than trusted to their own journeys' happy path alone.
  *
  * hooks (R3-03-F4) mirrors skills' own cleanup discipline with its own,
  * disjoint set of ids (HK_NEW_ID/HK_SECURITY_ID/HK_BIND_AGENT_SLUG,
@@ -107,6 +125,7 @@ import { journey as flowsAuthor } from './flows-author.mjs';
 import { journey as flowsRun } from './flows-run.mjs';
 import { journey as roadmap } from './roadmap.mjs';
 import { journey as demoBuilder } from './demo-builder.mjs';
+import { journey as community } from './community.mjs';
 
 export const JOURNEYS = [
   skills,
@@ -121,6 +140,7 @@ export const JOURNEYS = [
   flowsRun,
   roadmap,
   demoBuilder,
+  community,
 ];
 
 export const RUN_ORDER = [
@@ -208,4 +228,37 @@ export const RUN_ORDER = [
   ['demo-builder', 'demo-builder-brief'],
   ['demo-builder', 'demo-builder-generate'],
   ['demo-builder', 'demo-builder-lock'],
+
+  // community (R3-07) runs LAST, deliberately: it installs a real skill and a
+  // real hook into the repo, which changes /skills, /hooks and the
+  // agent-builder palette counts — placing it last means it cannot perturb
+  // any earlier journey's own pinned counts (skills-library's data-skill-
+  // count, hooks-library's data-hook-count, the agent-builder catalog's chip
+  // set). Its own two installed artifacts (skills/dependency-diff-review/,
+  // studio/hooks/block-protected-branch-push/) are swept by its own beat's
+  // try/finally (community-skills-approve-palette) with a crash-safe backstop
+  // in scripts/e2e-journey.mjs's own finally (cleanCommunityArtifacts,
+  // exported from community.mjs) — see that journey's own header comment.
+  ['community', 'community-skills-entry'],
+  ['community', 'community-skills-card-signals'],
+  ['community', 'community-browse-entry'],
+  ['community', 'community-hub-strip'],
+  ['community', 'community-filter-skill'],
+  ['community', 'community-skill-detail-open'],
+  ['community', 'community-skill-detail-signals'],
+  ['community', 'community-skill-install'],
+  ['community', 'community-hook-detail'],
+  ['community', 'community-hook-install'],
+  ['community', 'community-skills-shelf-return'],
+  ['community', 'community-skills-detail-provenance'],
+  ['community', 'community-skills-approve-palette'],
+  ['community', 'community-connections-entry'],
+  ['community', 'community-connections-browse-entry'],
+  ['community', 'community-filter-mcp'],
+  ['community', 'community-mcp-detail-open'],
+  ['community', 'community-mcp-detail-capabilities'],
+  ['community', 'community-mcp-install-suppressed'],
+  ['community', 'community-return-to-browser'],
+  ['community', 'community-connections-local-shelf'],
+  ['community', 'community-connections-used-by'],
 ];

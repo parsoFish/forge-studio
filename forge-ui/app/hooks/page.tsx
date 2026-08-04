@@ -68,9 +68,14 @@ export default function HookLibraryPage() {
               operator must explicitly approve or override it.
             </p>
           </div>
-          <Link href="/hooks/new" data-action="new-hook" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
-            + New hook
-          </Link>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
+              Browse community
+            </Link>
+            <Link href="/hooks/new" data-action="new-hook" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+              + New hook
+            </Link>
+          </div>
         </div>
 
         <input

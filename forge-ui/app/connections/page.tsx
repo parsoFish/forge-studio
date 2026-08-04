@@ -76,16 +76,21 @@ export default function ConnectionLibraryPage() {
     >
       <StudioNav />
       <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-            Connections
-          </h1>
-          <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 620, lineHeight: 1.6 }}>
-            Curated tools and MCP servers an agent can be given — read from
-            <code style={{ margin: '0 4px' }}>studio/catalog.yaml</code>. Readiness below is the REAL result of
-            probing each entry&apos;s own install + config, never a declared status. Curation happens by PR to
-            the catalog — there is no create/edit surface here.
-          </p>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
+          <div>
+            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
+              Connections
+            </h1>
+            <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 620, lineHeight: 1.6 }}>
+              Curated tools and MCP servers an agent can be given — read from
+              <code style={{ margin: '0 4px' }}>studio/catalog.yaml</code>. Readiness below is the REAL result of
+              probing each entry&apos;s own install + config, never a declared status. Curation happens by PR to
+              the catalog — there is no create/edit surface here.
+            </p>
+          </div>
+          <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
+            Browse community
+          </Link>
         </div>
 
         {status === 'ready' && (

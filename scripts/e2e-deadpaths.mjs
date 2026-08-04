@@ -42,6 +42,16 @@ const ROUTES = [
   // category anywhere (R3-04 D1, the structural negative AC); adding that
   // route here would assert the opposite of this initiative's own AC.
   { path: '/connections/git', name: 'connection detail (real shipped tool)' },
+  { path: '/community', name: 'community browser (R3-07 — cross-kind: skill/hook/mcp/tool)' },
+  // No `/community/new`, `/community/edit`, or `/community/approve` — this
+  // surface owns ZERO trust decisions (D2): install ROUTES to whichever
+  // pipeline owns the kind (R3-01/R3-03/R3-04), it never approves, overrides,
+  // or authors anything itself. One real detail route per kind that exists
+  // on disk today, mirroring the "no create/edit surface" negative AC above:
+  { path: '/community/skill/dependency-diff-review', name: 'community detail (vendored skill)' },
+  { path: '/community/hook/block-protected-branch-push', name: 'community detail (vendored hook)' },
+  { path: '/community/mcp/memory', name: 'community detail (catalog MCP)' },
+  { path: '/community/tool/git', name: 'community detail (catalog tool)' },
   { path: '/templates', name: 'templates library' },
   { path: '/templates/plan', name: 'template detail (real planning template)' },
   { path: '/architect/new', name: 'architect launcher' },
