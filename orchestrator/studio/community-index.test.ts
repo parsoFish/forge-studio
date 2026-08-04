@@ -41,11 +41,22 @@
  *       required (non-optional) string on the binding interface, so it must
  *       stay populated even for an item whose upstream matches no hub — it
  *       cannot be a mirror of `hub?.name`.
+ *
+ * ---------------------------------------------------------------------------
+ * T2 ROUND 4 (adversarial review, FIX FIRST) additions:
+ *  - Seed rename: the vendored hook id is now `block-protected-branch-push`
+ *    (was `block-force-push`). Every reference below updated; the scan
+ *    verdict is re-verified against the real scanner, not assumed.
+ *  - MAJOR 1: a symlinked vendored package ROOT must be refused by
+ *    readVendoredPackage, not followed to bytes outside the vendored tree.
+ *  - MAJOR 2: listCommunityIndex must NOT throw on a MISSING catalog.yaml
+ *    (degrades to vendored-only items) but MUST throw loudly, with the real
+ *    parse detail, on a MALFORMED one.
  */
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, symlinkSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -55,7 +66,7 @@ import { skillPath } from '../skill-path.ts';
 import { listConnections } from './connection-library.ts';
 import { installSkillPackage, approveSkillDraft } from './skill-library.ts';
 import { hookDir, hookYamlPath } from './hook-library.ts';
-import { approveHook } from './hook-scan.ts';
+import { approveHook, scanHookScript } from './hook-scan.ts';
 
 import {
   COMMUNITY_KINDS,
@@ -451,6 +462,55 @@ describe('listCommunityIndex — D1: derived from real registries, no fourth dec
   });
 });
 
+// ===========================================================================
+// T2 round 4, MAJOR 2: a fresh/half-onboarded root (no studio/catalog.yaml
+// at all) must NOT throw — it must degrade to the sources that don't need
+// the catalog (vendored skills + vendored hooks), mirroring
+// listCommunityHubs's own documented fresh-root precedent two functions
+// above in the same file. A MALFORMED catalog.yaml, by contrast, must
+// throw LOUDLY with the real parse detail — a corrupt catalog is an
+// operator-visible error; silently returning a short index would render
+// "nothing here" indistinguishable from a genuinely empty library (the
+// house rule: a broken registry must never look the same as an honest
+// empty one). Expected RED (not yet fixed) — listCommunityIndex currently
+// calls loadCatalog bare, so BOTH cases throw ENOENT/parse-error today,
+// undifferentiated.
+// ===========================================================================
+
+describe('listCommunityIndex — MAJOR 2: missing vs malformed studio/catalog.yaml', () => {
+  it('a MISSING studio/catalog.yaml does NOT throw — degrades to vendored skill + hook items only', () => {
+    const root = makeForgeRoot();
+    // Deliberately: no writeCatalog call at all — studio/catalog.yaml is
+    // entirely absent, the fresh/half-onboarded-root shape.
+    vendorSkillPackage(root, 'vendored-skill-no-catalog');
+    vendorHookPackage(root, 'vendored-hook-no-catalog');
+
+    const items = listCommunityIndex(root);
+
+    assert.equal(items.length, 2, `expected EXACTLY the two vendored items, no throw, no fabricated extras — got: ${JSON.stringify(items)}`);
+    assert.ok(items.some((i) => i.kind === 'skill' && i.id === 'vendored-skill-no-catalog'));
+    assert.ok(items.some((i) => i.kind === 'hook' && i.id === 'vendored-hook-no-catalog'));
+    assert.ok(!items.some((i) => i.kind === 'tool' || i.kind === 'mcp'), 'with no catalog there is nothing to source a tool/mcp item from — none may be fabricated');
+  });
+
+  it('a MALFORMED studio/catalog.yaml THROWS LOUDLY, carrying the real underlying parse detail, never a generic string', () => {
+    const root = makeForgeRoot();
+    mkdirSync(join(root, 'studio'), { recursive: true });
+    writeFileSync(join(root, 'studio', 'catalog.yaml'), 'tools: [unclosed\n  bad: [[[ yaml', 'utf8');
+
+    assert.throws(
+      () => listCommunityIndex(root),
+      (err: unknown) => {
+        const message = (err as Error).message;
+        assert.match(message, /catalog\.yaml/i, `expected the error to name the file; got: "${message}"`);
+        assert.match(message, /YAML parse error/i, `expected the real underlying parse detail (loadYaml's own wrapper), not a generic string; got: "${message}"`);
+        return true;
+      },
+      'a corrupt catalog.yaml must fail loud, not silently degrade to a short index (that would render a BROKEN registry the same as an honest EMPTY one)',
+    );
+  });
+});
+
 describe('listCommunityIndex — D5: signals are never invented', () => {
   it('the REAL "security-review" community-skill (no stars field in catalog.yaml) has signals: null — never stars: "0"', () => {
     const items = listCommunityIndex(REPO_ROOT);
@@ -590,17 +650,17 @@ describe('vendoredPackageDir / readVendoredPackage', () => {
       join(REPO_ROOT, 'studio', 'community', 'skills', 'dependency-diff-review'),
     );
     assert.equal(
-      vendoredPackageDir(REPO_ROOT, 'hook', 'block-force-push'),
-      join(REPO_ROOT, 'studio', 'community', 'hooks', 'block-force-push'),
+      vendoredPackageDir(REPO_ROOT, 'hook', 'block-protected-branch-push'),
+      join(REPO_ROOT, 'studio', 'community', 'hooks', 'block-protected-branch-push'),
     );
   });
 
   it('readVendoredPackage returns the REAL committed hook package bytes (hook.yaml + scripts/run.sh)', () => {
-    const files = readVendoredPackage(REPO_ROOT, 'hook', 'block-force-push');
+    const files = readVendoredPackage(REPO_ROOT, 'hook', 'block-protected-branch-push');
     const paths = files.map((f) => f.path).sort();
     assert.deepEqual(paths, ['hook.yaml', 'scripts/run.sh']);
     const script = files.find((f) => f.path === 'scripts/run.sh')!;
-    assert.ok(script.body.includes('block-force-push'), 'expected the real script body, not a placeholder');
+    assert.ok(script.body.includes('block-protected-branch-push'), 'expected the real script body, not a placeholder');
   });
 
   it('readVendoredPackage returns the REAL committed skill package bytes (SKILL.md)', () => {
@@ -613,6 +673,54 @@ describe('vendoredPackageDir / readVendoredPackage', () => {
   it('a non-vendored id (no package on disk) yields an empty file list, never a throw', () => {
     const root = makeForgeRoot();
     assert.deepEqual(readVendoredPackage(root, 'skill', 'never-vendored'), []);
+  });
+
+  // T2 round 4, item 0: re-verify the REAL committed seed hook's scan
+  // verdict is still "clean" post-rename — checked against the actual
+  // scanner, not assumed. Uses the real vendored bytes read via
+  // readVendoredPackage, exactly what the community detail route scans.
+  it('the REAL committed seed hook (block-protected-branch-push) still scans CLEAN — re-verified, not assumed, after the rename', () => {
+    const files = readVendoredPackage(REPO_ROOT, 'hook', 'block-protected-branch-push');
+    const hookYamlFile = files.find((f) => f.path === 'hook.yaml');
+    const scriptFile = files.find((f) => f.path === 'scripts/run.sh');
+    assert.ok(hookYamlFile && scriptFile, 'expected both real seed files to be present');
+    const parsedYaml = yaml.load(hookYamlFile!.body) as { permissions: { env: string[]; read: string[]; network: boolean } };
+    const report = scanHookScript({ body: scriptFile!.body, permissions: parsedYaml.permissions });
+    assert.equal(report.verdict, 'clean', `expected the real seed hook to scan clean, got: ${JSON.stringify(report)}`);
+  });
+
+  // ---------------------------------------------------------------------
+  // T2 round 4, MAJOR 1: a symlinked vendored package ROOT must be
+  // refused, not followed. Plants a REAL symlink (symlinkSync), not a
+  // simulation. Expected RED (not yet fixed) — vendoredPackageDir's
+  // current boundary check is purely lexical (resolve()+startsWith), no
+  // realpathSync, so it does not catch a symlinked package directory.
+  // ---------------------------------------------------------------------
+
+  it('MAJOR 1: readVendoredPackage REFUSES a vendored package dir that is a SYMLINK resolving outside the vendored root', () => {
+    const root = makeForgeRoot();
+    const externalDir = makeTmpDir('community-index-external-');
+    const marker = 'EXTERNAL_SECRET_MARKER_index_side';
+    writeFileSync(join(externalDir, 'hook.yaml'), yaml.dump({ id: 'evil-index-symlink', name: 'evil', description: 'planted', on: 'PreToolUse', script: 'scripts/run.sh', permissions: { env: [], read: [], network: false } }), 'utf8');
+    mkdirSync(join(externalDir, 'scripts'), { recursive: true });
+    writeFileSync(join(externalDir, 'scripts', 'run.sh'), `#!/usr/bin/env bash\necho "${marker}"\n`, 'utf8');
+
+    const vendoredHooksDir = join(root, 'studio', 'community', 'hooks');
+    mkdirSync(vendoredHooksDir, { recursive: true });
+    symlinkSync(externalDir, join(vendoredHooksDir, 'evil-index-symlink'), 'dir');
+
+    assert.throws(
+      () => readVendoredPackage(root, 'hook', 'evil-index-symlink'),
+      /./,
+      'a symlinked package root resolving outside the vendored tree must be refused (throw), never silently read',
+    );
+  });
+
+  it('the negative direction still holds for readVendoredPackage: an ordinary, non-symlinked vendored package still reads its real bytes', () => {
+    const root = makeForgeRoot();
+    vendorHookPackage(root, 'ordinary-non-symlink-read');
+    const files = readVendoredPackage(root, 'hook', 'ordinary-non-symlink-read');
+    assert.ok(files.some((f) => f.path === 'hook.yaml'), 'the fix must not degenerate into refusing every vendored package, symlinked or not');
   });
 });
 
