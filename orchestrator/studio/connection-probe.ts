@@ -218,7 +218,17 @@ function computeMissingConfig(config: ConnectionConfigVar[]): string[] {
  * blocks npm lifecycle-script execution, it does nothing to keep a credential
  * out of the child's environment — so the same narrow, credential-free base
  * applies. Env leaks in this repo get fixed at the shared seam, never
- * per-launcher; duplicating the filter is how the next one drifts. */
+ * per-launcher; duplicating the filter is how the next one drifts.
+ *
+ * STATED LIMIT of that reuse (adversarial review round 2, MINOR-1): the
+ * allowlist strips `HTTP_PROXY`/`HTTPS_PROXY`/`NO_PROXY`, `npm_config_*` and
+ * `NODE_EXTRA_CA_CERTS`, so an install on a network that needs proxy or custom
+ * CA settings **from the environment** will fail. `HOME` survives, so the
+ * `~/.npmrc` route to a registry, a proxy or an auth token still works, and
+ * that is the supported path. This is a deliberate trade — a narrow env that
+ * cannot leak the operator's API key, against convenience for an
+ * env-var-configured proxy — and it is written down rather than discovered
+ * later by whoever's install mysteriously times out. */
 export function buildProbeChildEnv(parentEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const probeBaseEnv: NodeJS.ProcessEnv = {};
   for (const name of HOOK_ENV_BASE_ALLOWLIST) {

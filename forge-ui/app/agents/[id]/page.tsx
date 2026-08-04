@@ -391,7 +391,17 @@ export default function AgentBuilderPage() {
   ];
   const connectionsUnready =
     connectionsStatus === 'ready' ? unreadyBoundConnections(boundConnections, connections) : undefined;
-  const runBlockMessage = connectionsUnready ? blockedRunMessage(connectionsUnready) : '';
+  // While the connections fetch is unresolved we do NOT know whether a bound
+  // connection is ready — so an agent that binds one must not read as runnable
+  // in that window. Saying "unknown" is honest; saying "ready" is an overclaim
+  // that the bridge would then refuse with a 409 anyway (adversarial review
+  // round 2, MINOR-3). An agent binding nothing is unaffected: there is nothing
+  // to be unsure about.
+  const runBlockMessage = connectionsUnready
+    ? blockedRunMessage(connectionsUnready)
+    : boundConnections.length > 0
+      ? `connection readiness is not known yet — ${boundConnections.length} bound connection(s) have not been probed in this session`
+      : '';
 
   const readinessState = {
     purpose:       state.purpose,

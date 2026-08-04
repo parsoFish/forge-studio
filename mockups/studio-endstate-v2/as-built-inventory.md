@@ -80,7 +80,12 @@ dashboard; no top-level Hooks/Tools/Templates.
 - Templates: `studio/artifact-templates/*.md` + starters — filesystem only,
   no management UI.
 - R3 (skills mgmt, skill-generator, hooks, tools/MCPs, instructions
-  libraries): all 5 initiatives still planned.
+  libraries): **stale as written — corrected 2026-08-04.** This file is a
+  point-in-time snapshot taken during the mockup campaign; since then R3-01
+  (skills library + marketplace), R3-03 (hooks library) and R3-04 (connections)
+  have landed, and R3-05-F1..F3 landed earlier. The living status is
+  `docs/roadmaps/R3-library-componentry.md`, which is authoritative — read that,
+  not this line.
 
 ## 8. Projects surface
 
