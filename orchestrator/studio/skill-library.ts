@@ -147,12 +147,23 @@ const UTF8_DECODER = new TextDecoder('utf-8', { fatal: true });
 // ---------------------------------------------------------------------------
 
 /** Tolerant catalog load — an absent studio/catalog.yaml means "no community
- *  skills yet", not an error (mirrors registry.ts's other list* tolerances). */
+ *  skills yet", not an error (mirrors registry.ts's other list* tolerances).
+ *  A catalog that FAILS to load (malformed YAML, or — R3-04 — a structurally
+ *  invalid connection entry under tools:/mcps:) is likewise tolerated here:
+ *  `runStudioLint`'s own catalog section (cli/studio-lint.ts) already loads
+ *  the same file and surfaces the real error as a `studio:catalog`/`load`
+ *  finding; this function's job is only to extract communitySkills for the
+ *  skill-trust pipeline, so re-throwing the SAME load error a second time
+ *  here would crash the whole lint run instead of reporting it once. */
 function loadCatalogSafely(forgeRoot: string): { communitySkills: CommunitySkill[] } {
   const catalogPath = join(forgeRoot, 'studio', 'catalog.yaml');
   if (!existsSync(catalogPath)) return { communitySkills: [] };
-  const catalog = loadCatalog(catalogPath);
-  return { communitySkills: catalog.communitySkills ?? [] };
+  try {
+    const catalog = loadCatalog(catalogPath);
+    return { communitySkills: catalog.communitySkills ?? [] };
+  } catch {
+    return { communitySkills: [] };
+  }
 }
 
 /** Every id `lintSkillRefs` accepts as "resolvable": ANY skill dir on disk

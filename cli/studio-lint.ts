@@ -51,6 +51,7 @@ import {
   validateLibraryFlag,
   type Finding,
 } from '../orchestrator/studio/validate.ts';
+import { validateConnections } from '../orchestrator/studio/connection-validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
@@ -361,6 +362,7 @@ export function runStudioLint(root: string): StudioLintResult {
     try {
       const catalog = loadCatalog(catalogPath);
       findings.push(...validateCatalog(catalog));
+      findings.push(...validateConnections(catalog));
     } catch (err) {
       findings.push({
         level: 'error',

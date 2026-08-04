@@ -381,6 +381,46 @@ export type CatalogGuardKind = 'band' | 'toggle';
 export type CatalogGuardEntry = CatalogEntry & { kind: CatalogGuardKind };
 
 /**
+ * Connection metadata (R3-04, `_wave5/specs/R3-04.md` D1/D13/D15). Every
+ * field below is OPTIONAL on the raw catalog-entry type — not because a
+ * well-formed connection may omit them (Appendix A gives every real tool/mcp
+ * a full set), but because `Catalog.tools`/`Catalog.mcps` is also the type of
+ * every OTHER catalog-entry consumer in this codebase (agent tool/mcp refs
+ * are plain `{id,name,desc}` display rows — see `registry.test.ts`'s
+ * `{id:'Read', name:'Read'}` / `{id:'gmail', name:'Gmail MCP'}` fixtures,
+ * which `loadCatalog` must keep parsing without a connection-metadata
+ * throw). PRESENCE is a `forge studio lint` concern
+ * (`validateConnections` in validate.ts), not a `loadCatalog` throw — only a
+ * MALFORMED value (an unrecognised `install.method`/`probe.kind`, or a
+ * variant missing ITS OWN required sub-field) throws at load, mirroring the
+ * load-vs-lint split used throughout this file (e.g. `CatalogGuardEntry.kind`).
+ */
+export type CatalogInstallMethod =
+  | { method: 'system-provided' }
+  | { method: 'npm'; package: string; version: string }
+  | { method: 'external'; upstream: string };
+
+export type CatalogProbeSpec =
+  | { kind: 'command'; command: string; args: string[] }
+  | { kind: 'command-presence'; command: string }
+  | { kind: 'npm-package' };
+
+/** `required`/`purpose` are always present for real entries (Appendix A) —
+ *  optional here only to admit the SAME "other consumer" fixtures noted above. */
+export type CatalogConfigVar = { env: string; required: boolean; purpose: string };
+
+export type CatalogCapability = { name: string; summary: string };
+
+export type CatalogConnectionEntry = CatalogEntry & {
+  install?: CatalogInstallMethod;
+  config?: CatalogConfigVar[];
+  probe?: CatalogProbeSpec;
+  provenance?: string;
+  /** `mcps:` entries only — never read from a `tools:` section entry. */
+  capabilities?: CatalogCapability[];
+};
+
+/**
  * A curated, proven community skill forge showcases in its OOTB library (like the
  * community skill-directory sites). Reference metadata only — `source` points at
  * the upstream; `tier` is the recommended model tier. Hand-edited in
@@ -497,8 +537,8 @@ export type ProjectDefinition = {
 export type Catalog = {
   sdks: CatalogSdk[];
   models: CatalogModel[];
-  tools: CatalogEntry[];
-  mcps: CatalogEntry[];
+  tools: CatalogConnectionEntry[];
+  mcps: CatalogConnectionEntry[];
   guards: CatalogGuardEntry[];
   communitySkills?: CommunitySkill[];
   path: string;

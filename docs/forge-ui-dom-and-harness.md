@@ -151,6 +151,55 @@ inventory rather than one shared page-level contract:
   the verdict is not blocked and trust is `needs-review`;
   `[data-action="override-hook-block"]` + `[data-field="override-reason"]` only
   when it IS blocked — approval can never launder a blocked verdict.
+- **`/connections`, `/connections/[id]`** (R3-04-F2/F3) — the connections
+  pillar: curated tools/MCP servers read from `studio/catalog.yaml`'s
+  `tools:`/`mcps:` sections (D2: kind is structural — `tool`|`mcp` — never a
+  third invented kind), with readiness EXECUTED per entry on every request,
+  never declared (D3). There is deliberately **no create/edit/delete route
+  anywhere** — curation is a PR to `catalog.yaml` (D1); the only mutating
+  routes act on the environment (`install`/`probe`), never a definition.
+  Root: `main[data-page="connection-library"][data-page-ready]
+  [data-connection-count][data-available-count][data-not-installed-count]
+  [data-misconfigured-count]`, a search field
+  `[data-field="connection-search"]`, and a `[data-component="fetch-error"]`
+  block when the bridge is unreachable (never rendered the same as a
+  genuinely empty library). Per card `[data-card-type="connection"]
+  [data-connection-id][data-connection-kind="tool"|"mcp"]
+  [data-connection-state="available"|"not-installed"|"misconfigured"]`.
+  `/connections/[id]` root: `main[data-page="connection-detail"]
+  [data-connection-id][data-page-ready][data-connection-kind]
+  [data-connection-state][data-connection-installable]
+  [data-connection-install-method]` (the last four ABSENT while loading, on a
+  fetch error, or for an unknown/uncomposable id — no state is ever
+  fabricated). Install section: `[data-section="install"]
+  [data-install-method][data-install-action="available"|"none"]`, with
+  `[data-install-version]` for a pinned npm entry;
+  `[data-action="install-connection"]` renders ONLY when `installable` is
+  true — a `system-provided`/`external` entry has no install control at all,
+  structural absence, not a disabled button (F2 AC). An install outcome
+  renders `[data-component="install-outcome"]
+  [data-install-outcome-status="installed"|"suppressed"|"failed"]`, a
+  suppressed result additionally carrying `[data-would-install-argv]` (the
+  real argv, never executed — every harness that drives this button runs
+  under the dry-bridge/no-spawn suppression, D7: no journey ever performs a
+  network install). Config schema: `[data-section="config-schema"]
+  [data-config-count]`, per row `[data-config-env][data-config-required]
+  [data-config-status="set"|"unset"|"unchecked"]` — NAMES only (D5); an
+  optional var's presence is never probed, so it reads `unchecked` rather
+  than a guessed set/unset. Capabilities (MCP only, when the catalog entry
+  declares them): `[data-section="capabilities"]
+  [data-capabilities-source="curated"][data-capability-count]` — labelled
+  curated, never presented as a verified live capability list of a running
+  server (D8: forge has no MCP client to launch and introspect one).  Probe
+  evidence: `[data-section="probe-evidence"][data-probe-state]
+  [data-probe-timed-out]` plus, when present, `[data-probe-exit-code]
+  [data-probe-missing-config][data-probe-stdout][data-probe-stderr]` (real
+  captured output, never a generic error string — F2 AC) and a re-check
+  button `[data-action="probe-connection"]`. Used-by: `[data-section="used-by"]
+  [data-used-by-count]`, per agent `[data-used-by-agent]` — DERIVED from real
+  `composition.tools`/`composition.mcps`, never declared, so an empty list
+  reads "scanned N, found none". Action errors surface as
+  `[data-component="connection-action-error"]`.
 
 - **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
@@ -164,8 +213,18 @@ inventory rather than one shared page-level contract:
   `[data-sdk]` runtime pick, and a `[data-ready-count]` readiness panel (6
   checks — purpose/skill/guard/process/interactivity content-completeness plus
   a `runtime` check sourced from the server-computed F1 capability descriptor,
-  never re-derived client-side). The descriptor's `interactive` fact also
-  surfaces as its own informational (non-gating) chip,
+  never re-derived client-side — **plus a 7th, conditional `connections`
+  check** (R3-04-F3): appended ONLY for an agent that binds at least one
+  tool/MCP (an agent binding none has nothing to be ready about, and a 7th
+  check that always passes would silently redefine the six-check contract
+  every other agent surface relies on) once the independently-fetched
+  connections library resolves. `[data-check="connections"]` reads NOT ready
+  whenever any bound tool/MCP's REAL probe state isn't `available`, its
+  `title` naming the component and state (e.g. `mcp "memory"
+  (not-installed)`) rather than a generic "not ready";
+  `[data-ready-count]` excludes it while unready. The
+  descriptor's `interactive` fact also surfaces as its own informational
+  (non-gating) chip,
   `[data-capability-interactive]`. A saved **non-interactive** agent gets a run
   surface (R2-01-F3 generic run host): `[data-section="agent-run"]
   [data-run-dispatchable="true"]` with a `[data-action="run-agent"]` button, a
@@ -173,7 +232,14 @@ inventory rather than one shared page-level contract:
   host's `inputs` map — e.g. the onboarding agent's `repo`/`northStar`), and
   `[data-run-id][data-run-status][data-run-cost]` (idle values `""` / `idle` /
   `0` before dispatch; after dispatch they reflect the polled `GET
-  /api/agents/runs/:runId`, `running` → `done`/`failed`/`suppressed`). An
+  /api/agents/runs/:runId`, `running` → `done`/`failed`/`suppressed`). The SAME
+  section also carries `[data-run-blocked="true"|"false"]` (R3-04-F3/D9.3):
+  true whenever any bound tool/MCP is not real probe-`available`, in which
+  case `[data-component="connection-run-block"]` renders the exact
+  blocked-run message naming the component and its state and the Run button
+  is disabled — the UI-layer mirror of the SAME block
+  `orchestrator/run-agent.ts` enforces pre-spawn and the bridge run route
+  enforces server-side (D9.1/D9.2), never the UI's own invention. An
   **interactive** agent instead renders `[data-section="agent-run"]
   [data-run-dispatchable="false"]` with no run button — it keeps its bespoke
   session page. `/agents/new` shows the curated starter picker first
@@ -413,10 +479,11 @@ breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 9 user-story journeys in
-[`scripts/journeys/`](./scripts/journeys/) — `stand-up-create`, `agents`,
-`flows-author`, `stand-up-onboard`, `skills`, `flows-run`, `roadmap`,
-`knowledge`, `demo-builder` — one file per journey (plus
+is a thin runner over 12 user-story journeys in
+[`scripts/journeys/`](./scripts/journeys/) — `skills`, `hooks`, `templates`,
+`connections`, `stand-up-onboard`, `stand-up-create`, `knowledge`, `agents`,
+`flows-author`, `flows-run`, `roadmap`, `demo-builder` (RUN_ORDER's own
+sequence, `index.mjs`) — one file per journey (plus
 `index.mjs`, the registry/run-order module — not itself a journey), each
 mapping to a capability-diagram user story rather than a step of one
 linear cycle. The standalone `swap-runtime` journey was retired

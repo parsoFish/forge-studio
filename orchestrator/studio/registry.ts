@@ -13,6 +13,7 @@ import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
 import { skillTrustState } from './skill-library.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
 import { BAND_GUARD_IDS } from '../agent-bands.ts';
+import { parseConnectionEntries } from './connection-catalog.ts';
 import type {
   AgentBudgets,
   AgentComposition,
@@ -23,7 +24,6 @@ import type {
   Catalog,
   CatalogGuardEntry,
   CommunitySkill,
-  CatalogEntry,
   CatalogModel,
   CatalogSdk,
   DemoElementDefinition,
@@ -716,21 +716,6 @@ function parseCatalogModels(raw: unknown, file: string): CatalogModel[] {
   });
 }
 
-function parseCatalogEntries(raw: unknown, file: string, key: string): CatalogEntry[] {
-  if (!Array.isArray(raw)) return [];
-  return raw.map((item, i) => {
-    if (item === null || typeof item !== 'object' || Array.isArray(item)) {
-      throw new Error(`${file}: ${key}[${i}] must be a mapping`);
-    }
-    const e = item as Record<string, unknown>;
-    return {
-      id: reqString(e, 'id', file),
-      name: reqString(e, 'name', file),
-      desc: optString(e, 'desc'),
-    };
-  });
-}
-
 /**
  * Parse `catalog.yaml`'s `guards:` section. `kind` is DERIVED from
  * `BAND_GUARD_IDS`, never read from the file — a declared `kind:` value in the
@@ -784,8 +769,8 @@ export function loadCatalog(catalogYamlPath: string): Catalog {
   return {
     sdks: parseCatalogSdks(d['sdks'], catalogYamlPath),
     models: parseCatalogModels(d['models'], catalogYamlPath),
-    tools: parseCatalogEntries(d['tools'], catalogYamlPath, 'tools'),
-    mcps: parseCatalogEntries(d['mcps'], catalogYamlPath, 'mcps'),
+    tools: parseConnectionEntries(d['tools'], catalogYamlPath, 'tools', { readCapabilities: false }),
+    mcps: parseConnectionEntries(d['mcps'], catalogYamlPath, 'mcps', { readCapabilities: true }),
     guards: parseCatalogGuards(d['guards'], catalogYamlPath),
     communitySkills: parseCommunitySkills(d['community-skills'], catalogYamlPath),
     path: catalogYamlPath,

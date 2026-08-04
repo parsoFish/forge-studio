@@ -770,6 +770,15 @@ export function validateCatalog(c: Catalog): Finding[] {
 }
 
 // ---------------------------------------------------------------------------
+// validateConnections MOVED (round-6 FIX-FIRST) to
+// `orchestrator/studio/connection-validate.ts` — this file was 997 lines
+// against the house 800-line hard cap and this initiative alone added 131 of
+// them. Same discipline already applied when `connection-catalog.ts` was
+// extracted out of `registry.ts`. `cli/studio-lint.ts` imports
+// `validateConnections` from the new module directly (no re-export shim).
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
 // validateProject
 // ---------------------------------------------------------------------------
 

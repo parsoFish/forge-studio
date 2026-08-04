@@ -37,6 +37,11 @@ const ROUTES = [
   { path: '/hooks', name: 'hook library' },
   { path: '/hooks/new', name: 'hook builder (new)' },
   { path: '/hooks/pre-pr-security-review', name: 'hook detail (real shipped hook)' },
+  { path: '/connections', name: 'connections library' },
+  // No `/connections/new` — there is no create/edit surface for this
+  // category anywhere (R3-04 D1, the structural negative AC); adding that
+  // route here would assert the opposite of this initiative's own AC.
+  { path: '/connections/git', name: 'connection detail (real shipped tool)' },
   { path: '/templates', name: 'templates library' },
   { path: '/templates/plan', name: 'template detail (real planning template)' },
   { path: '/architect/new', name: 'architect launcher' },

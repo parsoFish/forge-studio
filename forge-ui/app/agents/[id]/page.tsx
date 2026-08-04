@@ -40,6 +40,8 @@ import {
   type Catalog,
   type Flow,
 } from '@/lib/studio-client';
+import { fetchConnections, type ConnectionWire } from '@/lib/connection-client';
+import { unreadyBoundConnections, blockedRunMessage, type BoundConnectionRef } from '@/lib/connection-library-view';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -197,6 +199,14 @@ export default function AgentBuilderPage() {
   const [dirty,   setDirty]   = useState(false);
   const [ready,   setReady]   = useState(false);
   const [toasts,  setToasts]  = useState<Toast[]>([]);
+  // R3-04-F3: real probe-derived connections library, fetched independently
+  // of the agent load (it's the same catalog regardless of which agent is
+  // open). `connectionsStatus` stays 'loading' until the real fetch
+  // resolves — the readiness/run-block wiring below treats "not yet loaded"
+  // as distinct from "loaded, zero bound connections" (declared-data-
+  // fails-open: never fabricate readiness from data that hasn't arrived).
+  const [connections, setConnections] = useState<ConnectionWire[]>([]);
+  const [connectionsStatus, setConnectionsStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   // For a new agent: the user first picks a starter (or "blank"); only then is
   // the builder revealed. Existing agents skip the picker (chosen = true).
   const [starterChosen, setStarterChosen] = useState(false);
@@ -296,12 +306,30 @@ export default function AgentBuilderPage() {
         if (!signal.cancelled) setReady(true);
       }
     }
-
     void load();
     return () => { signal.cancelled = true; };
     // slugParam drives reload, router is stable
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [slugParam]);
+
+  // R3-04-F3: independent connections fetch (see state declaration above) —
+  // the connections library doesn't depend on which agent is open, so this
+  // is a separate, run-once effect rather than folded into the load() above.
+  useEffect(() => {
+    let cancelled = false;
+    async function loadConnections() {
+      const r = await fetchConnections();
+      if (cancelled) return;
+      if (!r.ok) {
+        setConnectionsStatus('error');
+        return;
+      }
+      setConnections(r.connections);
+      setConnectionsStatus('ready');
+    }
+    void loadConnections();
+    return () => { cancelled = true; };
+  }, []);
 
   // ---- agent selector change (with dirty guard) ----
   function handleSelectAgent(newSlug: string) {
@@ -350,6 +378,40 @@ export default function AgentBuilderPage() {
   // server-computed F1 descriptor, threaded through verbatim — NOT
   // re-derived from `state.runtime` here (that client re-derivation was the
   // "hardcoded heuristic" the AC replaces). See forge-ui/lib/agent-readiness.ts.
+  //
+  // R3-04-F3: `connectionsUnready` — this agent's bound tools/mcps that are
+  // NOT real probe-`available`, computed from the independently-fetched
+  // connections library. Left undefined while that fetch hasn't resolved
+  // (or failed) — omitted, never fabricated as ready (see the effect above
+  // + agent-readiness.ts's module header for the declared-data-fails-open
+  // rationale).
+  const boundConnections: BoundConnectionRef[] = [
+    ...state.tools.map((id) => ({ id, kind: 'tool' as const })),
+    ...state.mcps.map((id) => ({ id, kind: 'mcp' as const })),
+  ];
+  // The connections check is appended ONLY for an agent that actually binds a
+  // tool or MCP. An agent that binds none has nothing to be ready about, and a
+  // seventh check that always passes is noise that would also silently redefine
+  // the six-check contract every other agent surface (and the agents journey)
+  // relies on. Absent while the fetch is unresolved, too — omitted, never
+  // fabricated as ready; the Run control carries the "not known yet" block in
+  // that window.
+  const connectionsUnready =
+    boundConnections.length > 0 && connectionsStatus === 'ready'
+      ? unreadyBoundConnections(boundConnections, connections)
+      : undefined;
+  // While the connections fetch is unresolved we do NOT know whether a bound
+  // connection is ready — so an agent that binds one must not read as runnable
+  // in that window. Saying "unknown" is honest; saying "ready" is an overclaim
+  // that the bridge would then refuse with a 409 anyway (adversarial review
+  // round 2, MINOR-3). An agent binding nothing is unaffected: there is nothing
+  // to be unsure about.
+  const runBlockMessage = connectionsUnready
+    ? blockedRunMessage(connectionsUnready)
+    : boundConnections.length > 0
+      ? `connection readiness is not known yet — ${boundConnections.length} bound connection(s) have not been probed in this session`
+      : '';
+
   const readinessState = {
     purpose:       state.purpose,
     skills:        state.skills,
@@ -357,6 +419,7 @@ export default function AgentBuilderPage() {
     process:       state.process,
     interactivity: state.interactivity,
     capability:    state.capability,
+    connectionsUnready,
   };
 
   // ---- render ----
@@ -575,6 +638,7 @@ export default function AgentBuilderPage() {
             slug={state.slug}
             interactive={state.capability?.interactive === true}
             canRun={!isNew && !dirty && state.slug.length > 0}
+            blockedMessage={runBlockMessage}
           />
           <UsedInFlows agentSlug={state.slug} flows={flows} />
         </aside>
@@ -605,7 +669,22 @@ const RUN_PANEL_STYLE: CSSProperties = {
   marginTop: 12,
 };
 
-function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: boolean; canRun: boolean }) {
+function RunPanel({
+  slug,
+  interactive,
+  canRun,
+  blockedMessage,
+}: {
+  slug: string;
+  interactive: boolean;
+  canRun: boolean;
+  /** R3-04-F3/D9.3: non-empty iff a bound tool/mcp is not real probe-
+   *  `available` — NAMES the unready component(s) and their state
+   *  (`blockedRunMessage`, connection-library-view.ts). "Agent not ready"
+   *  alone is a documented failure of this AC, so this string is rendered
+   *  verbatim, never summarised away. */
+  blockedMessage: string;
+}) {
   const [project, setProject] = useState('');
   const [inputsText, setInputsText] = useState('');
   const [runId, setRunId] = useState<string | null>(null);
@@ -647,6 +726,7 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
   }
 
   const runState = status?.state ?? (runId ? 'running' : 'idle');
+  const effectiveCanRun = canRun && !blockedMessage;
 
   const onRun = async () => {
     setError(null);
@@ -672,6 +752,7 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
       data-run-id={runId ?? ''}
       data-run-status={runState}
       data-run-cost={status?.costUsd ?? 0}
+      data-run-blocked={blockedMessage ? 'true' : 'false'}
       style={RUN_PANEL_STYLE}
     >
       <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
@@ -681,7 +762,7 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
         placeholder="project (optional)"
         value={project}
         onChange={(e) => setProject(e.target.value)}
-        disabled={!canRun || dispatching}
+        disabled={!effectiveCanRun || dispatching}
         style={{ marginBottom: 8 }}
       />
       <textarea
@@ -691,19 +772,24 @@ function RunPanel({ slug, interactive, canRun }: { slug: string; interactive: bo
         placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
         value={inputsText}
         onChange={(e) => setInputsText(e.target.value)}
-        disabled={!canRun || dispatching}
+        disabled={!effectiveCanRun || dispatching}
         style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
       />
       <button
         className="btn btn-primary"
         data-action="run-agent"
         onClick={() => void onRun()}
-        disabled={!canRun || dispatching}
-        title={canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it'}
+        disabled={!effectiveCanRun || dispatching}
+        title={blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
       >
         {dispatching ? 'Dispatching…' : 'Run agent'}
       </button>
-      {!canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
+      {blockedMessage && (
+        <p data-component="connection-run-block" className="save-hint save-hint-dirty" style={{ fontSize: 12, margin: '6px 0 0' }}>
+          {blockedMessage}
+        </p>
+      )}
+      {!blockedMessage && !canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
       {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
       {runId && (
         <div style={{ marginTop: 8, fontSize: 12 }}>
