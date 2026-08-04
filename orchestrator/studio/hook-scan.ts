@@ -521,6 +521,13 @@ export function hookRunState(forgeRoot: string, id: string): HookRunState {
   return { verdict: report.verdict, runnable, needsReview };
 }
 
+/**
+ * Public predicate for "has an operator approved this, and does the approval
+ * still cover the current bytes". `runHookScript` gates on the identical value
+ * (`hookRunState(...).runnable`) rather than calling through here, because it
+ * needs `verdict` and `needsReview` from the same state read for its refusal
+ * message — one predicate, one meaning, no divergence risk.
+ */
 export function isHookRunnable(forgeRoot: string, id: string): boolean {
   return hookRunState(forgeRoot, id).runnable;
 }

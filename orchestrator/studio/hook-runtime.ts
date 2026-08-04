@@ -45,13 +45,18 @@
  * *** module cannot keep — so it is left out entirely rather than added as a
  * *** field nothing verifies.
  *
- * `runHookScript`'s own gate is narrower than the library's
- * "has an operator approved this" state (`isHookRunnable`, hook-scan.ts): it
- * refuses to spawn only when the CURRENT scan verdict is `blocked` and no
- * override has been recorded — the hard security invariant this primitive
- * owns. A clean/findings-verdict hook may run without having gone through the
- * (separate, library/composition-time) explicit-approval bureaucracy, which a
- * higher orchestration layer enforces before ever reaching this primitive.
+ * `runHookScript` refuses to spawn anything that is not GENUINELY RUNNABLE —
+ * `hookRunState(...).runnable`, i.e. approved, with the approval still covering
+ * the current script, permissions and trigger hashes.
+ *
+ * It did not always. The gate used to read `verdict === 'blocked' && !runnable`,
+ * so `runnable`/`needsReview` were consulted ONLY for an already-blocked hook,
+ * and anything scoring clean or findings ran without ever having been approved.
+ * That was justified at the time by "a higher orchestration layer enforces
+ * approval before reaching this primitive" — there is no such layer, and
+ * adversarial review reproduced it by running a hook with no ledger entry at
+ * all, which exfiltrated a planted key. The lesson worth keeping: a gate that
+ * defers to a caller which does not exist is not a gate.
  */
 
 import { spawnSync } from 'node:child_process';
