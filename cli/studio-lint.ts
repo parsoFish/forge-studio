@@ -44,7 +44,6 @@ import {
   validateArtifactRef,
   validateArtifactTemplate,
   validateCatalog,
-  validateConnections,
   validateFlow,
   validateInstructionSeed,
   validateKb,
@@ -52,6 +51,7 @@ import {
   validateLibraryFlag,
   type Finding,
 } from '../orchestrator/studio/validate.ts';
+import { validateConnections } from '../orchestrator/studio/connection-validate.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';

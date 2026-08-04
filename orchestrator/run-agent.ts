@@ -273,18 +273,17 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
         `runAgent: lifecycle 'caller' requires loopStrategy 'one-shot' (agent "${def.slug}" declares ${JSON.stringify(loopStrategy)}) — the legacy invocation path has no caller-owned event shape`,
       );
     }
-    // D9.1 (caller lifecycle, T2 ruling: uniform "no real spawn ⇒ no
-    // environment gate"): the SAME connection-readiness gate applies here,
-    // at the top of the branch — skipped under either suppression env var,
-    // exactly mirroring the 'self' path's own dry-bridge/no-spawn check
-    // below. Skipping the GATE does not change whether the underlying
-    // one-shot spawn proceeds: caller lifecycle has always unconditionally
-    // invoked queryFn regardless of these env vars — the phase pipelines own
-    // their own suppression at their own level (module doc, "In caller mode
-    // the caller also owns harness-safety").
-    const callerSuppressed =
-      process.env[FORGE_DRY_BRIDGE_ENV] === '1' || process.env[FORGE_ARCHITECT_NO_SPAWN_ENV] === '1';
-    if (!callerSuppressed) assertConnectionsReady(def, ctx);
+    // D9.1 (caller lifecycle, round-6 FIX-FIRST correction of the round-2/4
+    // ruling): the gate is skipped exactly when the spawn is genuinely
+    // suppressed — and on the caller branch it never is. Unlike the 'self'
+    // path below, `FORGE_DRY_BRIDGE`/`FORGE_ARCHITECT_NO_SPAWN` do NOT
+    // suppress anything here: `runOneShotSpawn` is called UNCONDITIONALLY on
+    // this branch regardless of either env var (module doc, "In caller mode
+    // the caller also owns harness-safety" — the phase pipelines suppress at
+    // their own level, before ever reaching runAgent). So gating on those env
+    // vars here would have skipped the check for a spawn that was about to
+    // happen for real. The gate therefore always runs on this branch.
+    assertConnectionsReady(def, ctx);
     return runOneShotSpawn(def, ctx, spec);
   }
 

@@ -56,7 +56,7 @@ import { sendJson, allowedOrigin, sanitizeError, pathOnly, type StudioContext } 
 import { isDryBridge } from './dry-bridge.ts';
 import { assertSkillSlug } from '../orchestrator/skill-path.ts';
 import { connectionById, listConnections, type ConnectionDefinition } from '../orchestrator/studio/connection-library.ts';
-import { probeConnection, CONNECTIONS_DIR } from '../orchestrator/studio/connection-probe.ts';
+import { probeConnection, buildProbeChildEnv, CONNECTIONS_DIR } from '../orchestrator/studio/connection-probe.ts';
 import { installArgvFor, installConnection } from '../orchestrator/studio/connection-install.ts';
 
 /** Bounded wall-clock budget for the real `npm install` child (production
@@ -183,10 +183,20 @@ export async function handleStudioConnectionsRoutes(
 
       const result = installConnection(ctx.forgeRoot, def, {
         executor: (command, args) => {
+          // The install child's env is stripped the SAME way the probe
+          // child's is (D11's `HOOK_ENV_BASE_ALLOWLIST`, reused via
+          // `buildProbeChildEnv` — no second filter): an install child runs
+          // arbitrary third-party npm package code, which is at least as
+          // untrusted as a probe child. `--ignore-scripts` (installArgvFor)
+          // blocks lifecycle-script EXECUTION; it does nothing to keep a
+          // credential like ANTHROPIC_API_KEY out of the child's environment
+          // — without this, the operator's real API key would be inherited
+          // by every npm install this route runs.
           const spawned = spawnSync(command, args, {
             shell: false,
             timeout: INSTALL_TIMEOUT_MS,
             encoding: 'utf8',
+            env: buildProbeChildEnv(process.env),
           });
           return { exitCode: spawned.status };
         },

@@ -209,8 +209,17 @@ function computeMissingConfig(config: ConnectionConfigVar[]): string[] {
  *  `buildChildEnv(parentEnv, {})` directly on the RAW parent env would filter
  *  by the wider `AGENT_ENV_ALLOWLIST` internally (which includes
  *  `ANTHROPIC_API_KEY`) — pre-narrowing first is what actually keeps the
- *  credential out; skipping this step would be the exact leak D11 forbids. */
-function buildProbeChildEnv(parentEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+ *  credential out; skipping this step would be the exact leak D11 forbids.
+ *
+ * Exported (round-6 FIX-FIRST, MAJOR item 2) so the install executor
+ * (`cli/bridge-studio-connections.ts`) can reuse this EXACT filter for the
+ * npm install child's environment, rather than a second hand-rolled copy. An
+ * install child is at least as untrusted as a probe child — `--ignore-scripts`
+ * blocks npm lifecycle-script execution, it does nothing to keep a credential
+ * out of the child's environment — so the same narrow, credential-free base
+ * applies. Env leaks in this repo get fixed at the shared seam, never
+ * per-launcher; duplicating the filter is how the next one drifts. */
+export function buildProbeChildEnv(parentEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const probeBaseEnv: NodeJS.ProcessEnv = {};
   for (const name of HOOK_ENV_BASE_ALLOWLIST) {
     const value = parentEnv[name];
