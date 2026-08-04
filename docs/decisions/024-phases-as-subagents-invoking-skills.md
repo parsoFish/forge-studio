@@ -203,7 +203,8 @@ phase is migrated.
 > migration was step one; phases as OOTB artifacts on the generic primitive is
 > the rest" (`docs/roadmaps/R4-ootb-suite.md`, R4-01 Context). ADR 039 owns
 > the artifact-migration's design — the dispatch seam (`runtime.loopStrategy`,
-> extended `budgets`, `composition.hooks` band keys) that replaces the
+> extended `budgets`, `composition.guards` band keys — renamed from
+> `composition.hooks` by ADR 027's R3-03 amendment) that replaces the
 > privileged `executor:` slug table with declared data on the generic
 > `runAgent` primitive. This ADR's scope stays exactly what it always was: one
 > agent, one skill, one clean-context spawn per phase.

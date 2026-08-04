@@ -236,8 +236,9 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
   SDK stream inside `runAgent`; `ralph` = execAgent routes to the dev-loop
   pipeline, lint-restricted to `developer-ralph` until R2-03/R4-06),
   `budgets.maxTurns/maxBudgetUsd/maxBudgetUsdShare` (the PM's
-  floor-plus-share cap as frontmatter data), and `composition.hooks` band
-  keys (`wi-contract` → PM pipeline, `reflection-close` → reflector pipeline;
+  floor-plus-share cap as frontmatter data), and `composition.guards` band
+  keys (renamed from `composition.hooks` by ADR 027's R3-03 amendment,
+  2026-08-04; `wi-contract` → PM pipeline, `reflection-close` → reflector;
   `orchestrator/agent-bands.ts`). Pipelines keep 100% of their judgment bands
   (ADR-036); only the SDK call moved, behind `runAgent`'s
   `lifecycle:'caller'` (no event/cost double-emission). Parity proof: golden
