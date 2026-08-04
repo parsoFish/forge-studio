@@ -104,6 +104,7 @@ import { assertNoLiveDaemon } from './lib/journey-daemon-guard.mjs';
 import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-boundary.mjs';
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
+import { cleanCommunityArtifacts } from './journeys/community.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
   OUT, FRAMES, CLIPS,
@@ -396,6 +397,7 @@ async function main() {
         }
         cleanSkillArtifacts();                        // Part 2 — skills pillar
         cleanHookArtifacts();                          // Part 2 — hooks pillar (R3-03-F4)
+        cleanCommunityArtifacts();                     // Part 2 — community pillar (R3-07)
         cleanScratchFlow();
         cleanStarterAgents();
         cleanFirstFlow();

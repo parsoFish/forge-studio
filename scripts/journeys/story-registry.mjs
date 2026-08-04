@@ -44,6 +44,15 @@ const DECISION_2 =
   'docs/roadmaps/README.md §8 "Wave-5A cut decisions (2026-08-03)" ' +
   'decision 2 — plan-band parallelism PARKED as R2-D2';
 
+const DECISION_R3_04_D2_R3_07_D8 =
+  'docs/roadmaps/R3-library-componentry.md R3-04 "Honest limits, stated not ' +
+  'hidden" (D2 — forge has two real connection kinds, tool and mcp, not ' +
+  'three; a clis: catalog section is a separate, out-of-scope migration) + ' +
+  'R3-07 D8 (_wave5/specs/R3-07.md — "the cli kind is not fabricated": a ' +
+  'clis: catalog section would move ids out of catalog.tools, which ' +
+  'composition.tools validates against and CatalogPalette renders from — a ' +
+  'dispatch-affecting migration, not a browse-surface addition)';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -184,37 +193,72 @@ export const STORY_REGISTRY = [
   {
     story: 'install-connections',
     batch: 'A',
-    port: null,
+    port: {
+      journey: 'community',
+      beats: [
+        'community-connections-entry',
+        'community-connections-browse-entry',
+        'community-hub-strip',
+        'community-filter-mcp',
+        'community-mcp-detail-open',
+        'community-mcp-detail-capabilities',
+        'community-mcp-install-suppressed',
+        'community-return-to-browser',
+        { excluded: 'commkind-cli filters to a "cli" kind that does not exist — forge has two real connection kinds (tool, mcp), not three', decision: DECISION_R3_04_D2_R3_07_D8 },
+        { excluded: 'install-stripe-cli installs from a fabricated "cli" kind — the same non-existent third kind the prior beat filters to', decision: DECISION_R3_04_D2_R3_07_D8 },
+        'community-connections-local-shelf',
+        'community-connections-used-by',
+      ],
+    },
     excluded: null,
     note:
-      'R3-04 (this initiative) shipped the connections pillar (/connections, ' +
-      '/connections/[id], install/probe against the environment, the F3 ' +
-      'readiness/run-block) and the new `connections` journey makes 3 of the ' +
-      "mockup's 12 steps real (mockup 1-indexed, journeys-data.jsx): step 1 " +
-      "(goto '#/library/connections') is the real /connections shelf with " +
-      "REAL per-entry probe states (connections-library beat — cross-checked " +
-      "against this journey's own independent disk/exec reads, never a " +
-      're-read of the product\'s own claim); step 11 ("Both land in the ' +
-      'local shelves, health-checked, provenance kept") and step 12 ' +
-      '("Agents reference them by name in their specs — nothing else to ' +
-      'wire") are real too — the connections-detail-tool/connections-' +
-      'detail-mcp beats show the real detail page (install method + exact ' +
-      'pin + provenance kept, MCP capabilities labelled curated, a REAL ' +
-      "re-probe) and the derived used-by section (agents referencing a " +
-      'connection by composition.tools/composition.mcps, never a declared ' +
-      "list). Steps 2-10 (`add-connection-btn` through `install-stripe-cli` " +
-      "— hover the hub strip, filter by kind, a community row's own detail " +
-      'page, install from there, switch to CLIs) are the cross-kind ' +
-      'COMMUNITY browser the mockup walks through — a unified ' +
-      'skills+hooks+connections browse/hub/filter/pre-install-detail ' +
-      "surface — which is R3-07's job and does not exist yet; per D2 the " +
-      "install action those steps end on would route into THIS initiative's " +
-      'real install pipeline unchanged once R3-07 builds the browse/detail ' +
-      'surface in front of it (the same relationship install-skills-hooks\' ' +
-      'own note describes for its analogous steps 3-7). Net: 3 of 12 mockup ' +
-      'steps are genuinely backed by a real beat id; port stays null — ' +
-      'claiming ported would misrepresent the other 9 as real, the exact ' +
-      "defect class this campaign's first initiative exists to prevent.",
+      'R3-07 (this initiative) shipped the cross-kind community browser and ' +
+      'the new `community` journey ports 10 of the mockup\'s 12 steps to real, ' +
+      'executed beats (mockup 1-indexed, journeys-data.jsx). Steps 1-2 are ' +
+      "the real /connections shelf plus its own real browse-community entry " +
+      'point (community-connections-entry: goto \'#/library/connections\'; ' +
+      'community-connections-browse-entry: add-connection-btn substitutes ' +
+      'honestly for the real [data-action="browse-community"] link on that ' +
+      'page — the mockup\'s own id does not exist verbatim, the real product ' +
+      'affordance it describes does). Step 3 (hover hub-strip) reuses the ' +
+      'SAME community-hub-strip beat install-skills-hooks also cites — one ' +
+      'real product moment, walked by both mockup stories. Steps 4-8 are the ' +
+      'MCP arc this initiative built for real: filter to mcp ' +
+      '(community-filter-mcp, which also demonstrates the tool filter in ' +
+      'passing); the mockup\'s crow-sentry-mcp is substituted honestly for ' +
+      'memory — connections.mjs\'s own proven fixture, real, curated, and ' +
+      'npm-installable, unlike the fictional sentry-mcp id (detail open + ' +
+      'capabilities: community-mcp-detail-open, community-mcp-detail-' +
+      'capabilities). Step 7 (citem-install on the MCP) IS ported to ' +
+      'community-mcp-install-suppressed — the real suppressed-install beat. ' +
+      'What that beat PROVES: the install action routes to R3-04\'s real ' +
+      'pipeline (data-install-routed-to="connection-install"), the byte-' +
+      'exact argv is shown (independently reconstructed from the catalog ' +
+      "pin, never re-read from the product's own claim), and the " +
+      "connection's state is unchanged — confirmed on the community page " +
+      "itself, then independently on disk, then again on the connection's " +
+      'OWN owning /connections/<id> page two beats later. What it does NOT ' +
+      'prove: no network install is ever performed in this gate — this ' +
+      "harness's FORGE_ARCHITECT_NO_SPAWN suppression means an install " +
+      "genuinely landing (R3-04 D7) is never exercised by this journey, by " +
+      'design. Step 8 ("back to the browser") is community-return-to-' +
+      'browser. Steps 9-10 (commkind-cli, install-stripe-cli) are ' +
+      '{excluded, decision}: forge has two real connection kinds (tool, ' +
+      'mcp), not the mockup\'s three (MCPs · CLIs · tools) — a clis: catalog ' +
+      'section would move ids out of catalog.tools, which composition.tools ' +
+      'validates against and CatalogPalette renders from, a dispatch-' +
+      'affecting migration, not a browse-surface addition (R3-04 D2, R3-07 ' +
+      'D8). Steps 11-12 close the arc for real: "both land in the local ' +
+      'shelves, health-checked, provenance kept" maps honestly onto ' +
+      'community-connections-local-shelf — since nothing was ever actually ' +
+      'installed (the suppression above), this beat proves the LOCAL shelf ' +
+      'genuinely still reads not-installed, health-checked against a REAL ' +
+      "re-probe, not that an install landed; \"agents reference them by " +
+      'name — nothing else to wire" maps onto community-connections-used-by ' +
+      "(the derived used-by section on memory's own owning page, unaffected " +
+      "by the browser). Net: 10 of 12 mockup steps are genuinely backed by " +
+      'a real beat id; the other 2 are explicit, decision-cited exclusions, ' +
+      'never silently skipped.',
   },
   {
     story: 'create-kb-project',
@@ -237,28 +281,65 @@ export const STORY_REGISTRY = [
   {
     story: 'install-skills-hooks',
     batch: 'A',
-    port: null,
+    port: {
+      journey: 'community',
+      beats: [
+        'community-skills-entry',
+        'community-skills-card-signals',
+        'community-browse-entry',
+        'community-hub-strip',
+        'community-filter-skill',
+        'community-skill-detail-open',
+        'community-skill-detail-signals',
+        'community-skill-install',
+        'community-hook-detail',
+        'community-hook-install',
+        'community-skills-shelf-return',
+        'community-skills-detail-provenance',
+        'community-skills-approve-palette',
+      ],
+    },
     excluded: null,
     note:
-      'R3-01-F3/F4 (this initiative) made beat 1 (goto \'#/library/skills\') ' +
-      'and beats 11-13 (back on the local shelf; "installed with provenance ' +
-      'kept"; ready for the agent-builder catalog) real — the /skills ' +
-      'library + detail page show source/provenance/content-hash for an ' +
-      'installed skill, and an approved install is palette-visible in the ' +
-      'agent-builder catalog (verified end to end by the ' +
-      "skills-install-approve journey beat). Beat 2 (hover a community " +
-      "card's hub+signals) is only PARTLY real: the library card shows " +
-      'source/category/tier/stars for a catalog entry via the F2 catalog ' +
-      'union, but there is no dedicated hub badge/signals treatment — that ' +
-      "richer surface also belongs to R3-07. Beats 3-7 (browse-community-btn, " +
-      'hub-strip, commkind-skill, crow-*, citem-* detail-preview) walk ' +
-      "R3-07's cross-kind community browser (a unified skills+hooks " +
-      'browse/filter/detail surface) — not built by this initiative. Beat 8 ' +
-      "(click citem-install for the skill) lives on that not-yet-built " +
-      'R3-07 detail page, but per D2 would route into THIS initiative\'s ' +
-      'real draft→scan→approve pipeline unchanged once R3-07 builds it — ' +
-      'the pipeline itself is not the gap, the browse/detail surface is. ' +
-      'Beats 9-10 (the hook security-scan + install) are R3-03\'s job.',
+      'R3-07 (this initiative) shipped the cross-kind community browser and ' +
+      'the new `community` journey ports all 13 mockup beats to real, ' +
+      "executed beats (mockup 1-indexed). Beats 1-2 are the /skills shelf's " +
+      "own real entry point (community-skills-entry: goto '#/library/skills' " +
+      '→ /skills; community-skills-card-signals: a CATALOG-sourced card\'s ' +
+      'real derived hub + hub-attributed signals, not the mockup\'s hover-only ' +
+      'gesture). Beats 3-8 are the real /community browser this initiative ' +
+      'built: browse-community-btn → the real [data-action="browse-community"] ' +
+      'entry point (community-browse-entry); the hub strip with real ' +
+      'per-hub counts (community-hub-strip); filter to skill ' +
+      '(community-filter-skill); the mockup\'s systematic-debugging is ' +
+      'substituted honestly for dependency-diff-review, forge\'s own vendored ' +
+      'skill package — only a vendored item has a real install path (D5), ' +
+      'and systematic-debugging (catalog-only, no vendored bytes) has none ' +
+      '— detail open + SKILL.md preview (community-skill-detail-open, ' +
+      'community-skill-detail-signals, which also cross-checks that ' +
+      'systematic-debugging itself carries real hub signals, the honest ' +
+      'contrast the vendored skill\'s signals:null makes visible); Install ' +
+      '(community-skill-install: routes to R3-01-F4\'s real draft pipeline, ' +
+      'not palette-visible). Beats 9-10 are the vendored hook\'s real arc: ' +
+      "the mockup's '#/library/citem/no-secrets-hook' substitutes honestly " +
+      'for block-protected-branch-push (forge\'s own vendored hook — ' +
+      '"no-secrets-hook" is not a real id) — the pre-install SECURITY SCAN ' +
+      '(community-hook-detail, verdict clean on the real vendored script) ' +
+      'and Install (community-hook-install: routes to R3-03-F2\'s real ' +
+      'pipeline, materialised but proven NOT runnable — no approval-ledger ' +
+      'entry exists, independently confirmed against studio/hook-approvals.yaml ' +
+      'on disk, cross-checked on the OWNING /hooks/<id> page, never the ' +
+      'browser\'s own claim). Beats 11-13 close the arc for real: back on ' +
+      '/skills (community-skills-shelf-return: filesystem wins on existence ' +
+      '— the card reads data-skill-source="local", not a permanent ' +
+      '"community" badge); "installed with provenance kept" ' +
+      '(community-skills-detail-provenance: the real provenance renders on ' +
+      "R3-01's own /skills/<id> surface, not duplicated on the browser); " +
+      '"ready to click into any agent from the builder catalog" ' +
+      '(community-skills-approve-palette) is real ONLY after the operator ' +
+      'approves at /skills/<id> — the beat performs that approval there, ' +
+      'which is the honest completion of the arc and keeps the trust ' +
+      'decision outside this surface, exactly as D2 requires.',
   },
   {
     story: 'run-agent-developer',

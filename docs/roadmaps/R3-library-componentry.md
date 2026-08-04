@@ -326,6 +326,106 @@ real kinds not three, curated-not-probed MCP capabilities, and an npm-package
 probe that verifies presence-at-pin not "the server runs" are stated limits,
 not silent gaps (D2/D8/D15 above).
 
+### R3-B11 Community browser — cross-kind index + pre-install detail + install routing (R3-07 F1-F3)
+
+Landed 2026-08-05 (branch `feat/r3-07-community-browser`). The ONE cross-kind
+browse/install surface over skill/hook/mcp/tool, retiring the per-kind
+marketplace-tab shape the mockup sketched: `orchestrator/studio/
+community-index.ts` derives a `CommunityItem[]` from three existing
+registries, no fourth declared list (D1) — `studio/catalog.yaml`
+`community-skills:` UNION vendored packages under `studio/community/skills/`
+with no matching catalog id; vendored packages under `studio/community/hooks/`
+only; `listConnections` (R3-04) 1:1 for `tool`/`mcp`. Hub attribution is
+DERIVED by matching an item's own upstream URL against
+`studio/community/hubs.yaml` (9 real hubs) on a path-segment boundary, never
+a declared `hub:` string — an unmatched item renders `unaffiliated`, never an
+invented hub. `orchestrator/studio/community-install.ts`'s
+`routeCommunityInstall` decides which of the three ALREADY-MERGED pipelines
+(R3-01-F4 skills, R3-03-F2 hooks, R3-04-F2 connections) owns an install and
+dispatches to it — this module never writes a trust decision itself
+(`cli/community-no-trust-decisions.test.ts` scans its source text for exactly
+that); `installCommunityHookPackage` is the one genuinely new install-side
+behaviour, materialising a vendored hook package and STOPPING — it never
+writes an approval-ledger entry. `cli/bridge-studio-community.ts` owns every
+`/api/studio/community*` route (list/detail/install). **UI:** `/community`
+(`forge-ui/app/community/page.tsx`, `[data-page="community-browser"]`) and
+`/community/[kind]/[id]` (`forge-ui/app/community/[kind]/[id]/page.tsx`,
+`[data-page="community-detail"]`) — full `data-*` contract in
+`docs/forge-ui-dom-and-harness.md`. `forge-ui/lib/community-view.ts` is pure
+view-state derivation (D2: scanned for zero references to approve/override/
+re-pin machinery, not even in a comment) and `forge-ui/lib/community-client.ts`
+REFUSES a malformed payload rather than coercing it, mirroring
+`connection-client.ts`'s convention.
+
+**The install-state union gained a fourth member, `needs-review`, deliberately
+not stopped at three.** `CommunityInstallState` is `not-installed |
+draft-pending-approval | needs-review | installed` — a browsing surface that
+owns zero trust decisions (D2) must still be honest about a tampered
+post-approval object: a skill whose package bytes drifted after approval (the
+R3-01-F4 hash-drift rule) reads `needs-review` here too, never silently
+laundered back into `installed` because this surface has no approve/override
+affordance of its own to notice the drift with.
+
+**No third-party bytes are vendored.** The 9 catalog `community-skills` and
+the 9 catalog `tools:`/`mcps:` connections are fully browsable here — real
+detail pages, real hub/signal data where the source record carries it — but
+their bytes are **not in this repo**. A skill's installability is DERIVED
+from whether a vendored package exists on disk (`vendoredPackageDir`), never
+declared; for a non-vendored skill the install control is structurally
+absent, not disabled. The two packages this initiative actually vendored
+(`studio/community/skills/dependency-diff-review/`,
+`studio/community/hooks/block-protected-branch-push/`) are **forge-authored**
+and attributed to the real `forge-seed` hub entry in `hubs.yaml` — never
+attributed to `obra/superpowers` or any other real third party. **No signal
+number is invented anywhere**: `signals` renders only where the source
+record already carries one (`community-skills.stars`), always with its hub
+attribution; an item with none renders the spec-literal "no signals
+published", never a fabricated zero.
+
+**There is no `cli` kind.** The kind filter offers exactly the four real
+kinds forge has (`skill | hook | mcp | tool`) — not the mockup's three-way
+connections split (MCPs · CLIs · tools). A `clis:` catalog section would move
+ids out of `catalog.tools`, which `composition.tools` validates against and
+`CatalogPalette` renders from — a dispatch-affecting migration, not a
+browse-surface addition, and stays out of scope here (D8, R3-04 D2).
+
+**Deletions, named:** `/skills`'s per-card manual install affordance —
+`[data-action="install-skill"]`, `[data-install-skill-id]`, and the card-local
+`[data-install-state]` in `forge-ui/app/skills/page.tsx` — is REMOVED.
+Verified unexercised before deletion (zero journey beats, zero ATs drove it);
+the capability is not lost, it moves to `/community`'s one cross-kind install
+entry point, which routes through the same F4 pipeline unchanged. **No new
+npm dependencies; no live network fetch** — live hub API crawling stays
+explicitly out of scope (a new external dependency is ask-first); the
+browsable index is a **static curated seed**, not a hub crawl, named as such
+here rather than presented as a live directory.
+
+**Demoed by the new `community` journey**
+(`scripts/journeys/community.mjs`, wired LAST into `RUN_ORDER` — it installs
+a real skill and a real hook, mutating `/skills`, `/hooks` and the
+agent-builder palette counts every earlier journey's own beats pin, so it
+must run after all of them). 22 beats covering both mockup arcs: the
+`/skills`/`/connections` shelf entry points into `/community`; the hub strip
+with real per-hub counts including an honest zero (`skills.sh`, 0 items); kind
+filtering across all four real kinds; the vendored
+`dependency-diff-review` skill's pre-install detail (SKILL.md preview, hub +
+signals:null) contrasted against a catalog-sourced sibling's real hub
+signals; installing it (lands a draft, not palette-visible) then approving it
+on R3-01's own `/skills/<id>` surface (only then palette-visible — the trust
+decision stays outside this browser); the vendored
+`block-protected-branch-push` hook's pre-install SECURITY SCAN (clean, on the
+real vendored bytes) and install (materialised but proven NOT runnable — no
+approval-ledger entry, cross-checked against `studio/hook-approvals.yaml` on
+disk and against the OWNING `/hooks/<id>` page); the `memory` MCP's curated
+capability list and a SUPPRESSED install (byte-exact argv, the connection's
+real state confirmed unchanged three ways — the community page's own
+refetch, a disk re-check, and the connection's own owning
+`/connections/<id>` page). **Parity outcome (R7-02-F3):** both stories this
+initiative owned flipped `pending` → `ported` — `install-skills-hooks`
+(13/13 mockup beats real) and `install-connections` (10/12 real, 2 explicit
+`{excluded, decision}` — `commkind-cli`/`install-stripe-cli`, the fabricated
+third connection kind above); `npm run parity:stories` exits 0.
+
 ## Planned initiatives
 
 ### R3-01 Skills first-class management
@@ -891,7 +991,8 @@ not silent gaps (D2/D8/D15 above).
 
 ### R3-07 Community browser
 
-- **Status:** planned  ·  **Wave:** 5 (module: community-browser)
+- **Status:** implemented (2026-08-05, branch feat/r3-07-community-browser;
+  baseline R3-B11)  ·  **Wave:** 5 (module: community-browser)
 - **Depends on:** R3-01-F4 (skill install pipeline — the browser is an entry
   point, never a second pipeline), R3-03-F2 (hook scan + approval), R3-04
   (connections registry + probe), R3-06 (soft — templates browsable later).
@@ -1173,3 +1274,35 @@ rather than deferred within it:
   claims in this file (R3-B2's connections clause, F2's AC, the wave-5
   amendment's `as-built-inventory.md` reference — that doc does not exist in
   this repo checkout, confirmed by grep).
+- 2026-08-05 — **R3-07 implemented** (branch `feat/r3-07-community-browser`;
+  baseline **R3-B11**). The ONE cross-kind community browser (skill/hook/mcp/
+  tool) — `orchestrator/studio/community-index.ts` (D1: three sources, no
+  fourth declared list), `community-install.ts` (routes to the owning
+  ALREADY-MERGED pipeline, never a trust decision itself, D2),
+  `cli/bridge-studio-community.ts`, `/community` + `/community/[kind]/[id]`.
+  The community `CommunityInstallState` union carries a fourth member,
+  `needs-review`, deliberately — a post-approval object that drifted must
+  never be laundered into `installed` by a surface that owns no
+  approve/override affordance of its own. No third-party bytes are vendored:
+  the 9 catalog community-skills + 9 catalog connections are browsable with
+  real detail pages but their bytes stay outside this repo, so
+  installability is DERIVED from disk, never declared; the two packages this
+  initiative actually vendored (`dependency-diff-review` skill,
+  `block-protected-branch-push` hook) are forge-authored and attributed to
+  the real `forge-seed` hub, never to a third party. No signal number is
+  ever invented — an item with none reads "no signals published". There is
+  no `cli` kind (D8) — a `clis:` catalog section would move ids out of
+  `catalog.tools`, a dispatch-affecting migration `composition.tools`/
+  `CatalogPalette` both key off, not a browse-surface addition. Deletion,
+  named: `/skills`'s per-card manual install affordance (verified
+  unexercised — zero journey beats, zero ATs — before removal); the
+  capability moves to `/community`'s one cross-kind entry point unchanged.
+  No new npm dependency, no live network fetch — the browsable index is a
+  static curated seed, named as such, not a hub crawl. New `community`
+  journey (`scripts/journeys/community.mjs`, 22 beats, wired LAST into
+  `RUN_ORDER` — it installs a real skill and a real hook, so it must run
+  after every journey whose own beats pin `/skills`/`/hooks`/agent-builder-
+  palette counts). **Parity (R7-02-F3):** both `install-skills-hooks` and
+  `install-connections` flip `pending` → `ported` — 13/13 and 10/12 (+2
+  explicit `{excluded, decision}` on the fabricated `cli` kind) respectively;
+  `npm run parity:stories` exits 0.
