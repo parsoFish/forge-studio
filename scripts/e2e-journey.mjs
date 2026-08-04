@@ -237,7 +237,11 @@ async function recordClip(browser, watch, name, route, interact, opts = {}) {
       // recording, not to fight the demo's purpose — the 129s-dead-video class it
       // exists for (a swallowed 30s locator timeout x N) blows past 4M regardless;
       // total clip weight still nets far below the removed 45M full-session video.
-      check(sizeBytes < 4_000_000, `clip ${name}.webm under 4M (got ${sizeBytes})`);
+      // 2026-08: raised 4M→5M. flow-scratch-build legitimately encodes 3.96–4.14M
+      // across identical-code runs (non-deterministic webm encode straddled the old
+      // cap by ~1%, false-failing gate runs on main — R3-03 ledger has the 4-run
+      // evidence). 5M keeps the runaway class caught; it is >2x every other clip.
+      check(sizeBytes < 5_000_000, `clip ${name}.webm under 5M (got ${sizeBytes})`);
       console.log(`  [clip] ${name} — ${cap} (${sizeBytes}B)`);
     }
   } catch (e) {
