@@ -1,0 +1,9 @@
+id: post-merge-brain-ingest
+name: post-merge-brain-ingest
+description: Queue a reflector pass when a session ends with a merged PR.
+on: SessionEnd
+script: scripts/run.sh
+permissions:
+  env: [FORGE_PR_NUMBER]
+  read: []
+  network: false

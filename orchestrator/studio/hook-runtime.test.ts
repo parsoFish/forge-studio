@@ -16,6 +16,15 @@
  *   event. The manifest renders in the approval gate (data-level here; UI is
  *   a later round).
  *
+ *   CREDENTIAL EXCLUSION (2026-08-04 peer-review finding, load-bearing — see
+ *   D-M below): `orchestrator/spawn-env.ts`'s `AGENT_ENV_ALLOWLIST` is
+ *   calibrated for forge's OWN trusted agent children, which legitimately
+ *   need `ANTHROPIC_API_KEY` to call the API. A hook script is UNTRUSTED
+ *   third-party code and must get a strictly SMALLER base — `env: []` in a
+ *   hook's manifest must mean "sees nothing", including `ANTHROPIC_API_KEY`,
+ *   not "sees everything forge's own agents see". This file's ATs pin that
+ *   narrower base explicitly; see D-M for the confirmed-then-fixed defect.
+ *
  * ---------------------------------------------------------------------------
  * *** HONEST LIMIT, STATED UP FRONT — DO NOT READ THE ACs BELOW AS CLAIMING
  * *** RUNTIME INTERCEPTION. This module does NOT observe or intercept a
@@ -62,6 +71,52 @@
  *       which is capped at `MAX_ENV_OVERRIDE_KEYS` (8) — a hook declaring
  *       more than 8 env vars will throw via that existing cap, not a new one
  *       invented here. This is a real, inherited constraint, asserted below.
+ *
+ *       REVISED 2026-08-04 (peer-review finding, CONFIRMED by direct code
+ *       read + a live repro before writing any test): the FIRST draft of
+ *       this file asserted `buildHookChildEnv` composes `buildChildEnv`
+ *       over the FULL `AGENT_ENV_ALLOWLIST` — which includes
+ *       `ANTHROPIC_API_KEY`. That is wrong: it means a hook manifest
+ *       declaring `env: []` (asking for NOTHING) still received the
+ *       operator's real `ANTHROPIC_API_KEY` in its child env, because
+ *       `buildChildEnv`'s base allowlist is unconditional and
+ *       manifest-independent. Confirmed live:
+ *       `buildHookChildEnv({PATH:'/usr/bin', ANTHROPIC_API_KEY:'sk-REAL'},
+ *       {env:[],read:[],network:false})` returned `ANTHROPIC_API_KEY:
+ *       'sk-REAL'` in the child. That is the exact exfiltration class F3
+ *       exists to prevent — a hook script IS untrusted third-party code,
+ *       unlike forge's own trusted agent children `AGENT_ENV_ALLOWLIST` is
+ *       calibrated for.
+ *
+ *       THE ORIGINAL ASSERTIONS ("composes buildChildEnv exactly" /
+ *       "inherits AGENT_ENV_ALLOWLIST") WERE THE R3-01 TRAP: a passing test
+ *       that pins a live defect as "correct behaviour", which would have
+ *       weaponised this file's own gate against fixing it. They are REPLACED
+ *       below, not merely patched — see the "deny-by-default: real child
+ *       process env" and "buildHookChildEnv composes orchestrator/spawn-
+ *       env.ts" describe blocks.
+ *
+ *       Fix pinned here (implementer's target, mine to specify only as
+ *       observable behaviour, not internal shape — same "drive it from the
+ *       outside" principle as the studio-lint real-entry-point redirect):
+ *       `orchestrator/spawn-env.ts` gains `HOOK_ENV_BASE_ALLOWLIST`, the
+ *       minimal process-hygiene subset of `AGENT_ENV_ALLOWLIST` (PATH, HOME,
+ *       SHELL, TERM, LANG, LC_*, TMPDIR/TMP/TEMP, USER, LOGNAME) —
+ *       explicitly EXCLUDING every credential-bearing name
+ *       (`ANTHROPIC_API_KEY` today). It must be DERIVED from
+ *       `AGENT_ENV_ALLOWLIST` by subtraction, not independently retyped —
+ *       so a future credential added to `AGENT_ENV_ALLOWLIST` cannot
+ *       silently widen the hook base by omission. `buildHookChildEnv` must
+ *       compose `buildChildEnv` over that NARROWER base (still reusing
+ *       `buildChildEnv`, never hand-rolling a second filter) plus the
+ *       manifest-granted overrides. `detectUndeclaredEnvRefs`
+ *       (hook-runtime.ts) has the SAME bug one level up — it currently
+ *       excludes `AGENT_ENV_ALLOWLIST` names (again including
+ *       `ANTHROPIC_API_KEY`) from the mismatch report as "always present",
+ *       which is now false; it must exclude `HOOK_ENV_BASE_ALLOWLIST`
+ *       instead, or a script referencing `$ANTHROPIC_API_KEY` without
+ *       declaring it is silently reported as fine while the child actually
+ *       gets an empty value. Also pinned below.
  */
 
 import { describe, it, after } from 'node:test';
@@ -71,7 +126,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { AGENT_ENV_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '../spawn-env.ts';
+import { AGENT_ENV_ALLOWLIST, HOOK_ENV_BASE_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '../spawn-env.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
 import { overrideHookBlock } from './hook-scan.ts';
 import type { HookPermissionManifest } from './hook-library.ts';
@@ -136,6 +191,46 @@ echo "CANARY=\${FORGE_HOOK_TEST_CANARY:-ABSENT}"
 echo "GRANTED=\${MY_GRANTED_VAR:-ABSENT}"
 `;
 
+  // -------------------------------------------------------------------
+  // HEADLINE SECURITY AT (2026-08-04 peer-review finding — see D-M in the
+  // file header for the confirmed-then-fixed defect). This is the single
+  // most important assertion in this file: a hook that declares NOTHING
+  // must not see the operator's real Anthropic API credential, full stop.
+  // Deliberately placed first and named unmissably.
+  // -------------------------------------------------------------------
+  const CREDENTIAL_ECHO_SCRIPT = `#!/usr/bin/env bash
+echo "APIKEY=\${ANTHROPIC_API_KEY:-ABSENT}"
+`;
+
+  it('SECURITY: a hook with env: [] (asks for nothing) does NOT receive the operator\'s real ANTHROPIC_API_KEY — real spawned child', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'credential-exfil-probe-hook', CREDENTIAL_ECHO_SCRIPT, { env: [], read: [], network: false });
+    const logger = createLogger('credential-exfil-probe-cycle', makeLogsDir());
+
+    const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK' };
+
+    const result = runHookScript({ forgeRoot: root, id: 'credential-exfil-probe-hook', logger, initiativeId: 'INIT-test', parentEnv });
+
+    assert.match(
+      result.stdout,
+      /APIKEY=ABSENT/,
+      'a hook declaring env: [] must not see ANTHROPIC_API_KEY even though it is in AGENT_ENV_ALLOWLIST for forge\'s own trusted agents',
+    );
+    assert.doesNotMatch(result.stdout, /sk-REAL-OPERATOR-SECRET-DO-NOT-LEAK/, 'the real secret value must never appear in hook output');
+  });
+
+  it('a hook that DECLARES ANTHROPIC_API_KEY in permissions.env DOES receive it — the manifest is the only route in', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'credential-granted-hook', CREDENTIAL_ECHO_SCRIPT, { env: ['ANTHROPIC_API_KEY'], read: [], network: false });
+    const logger = createLogger('credential-granted-cycle', makeLogsDir());
+
+    const parentEnv: NodeJS.ProcessEnv = { ...process.env, ANTHROPIC_API_KEY: 'sk-deliberately-granted' };
+
+    const result = runHookScript({ forgeRoot: root, id: 'credential-granted-hook', logger, initiativeId: 'INIT-test', parentEnv });
+
+    assert.match(result.stdout, /APIKEY=sk-deliberately-granted/, 'an operator can still deliberately grant a credential via the manifest');
+  });
+
   it('a distinctive parent-set var NOT in the manifest is absent from the real child', () => {
     const root = makeForgeRoot();
     writeHookPackage(root, 'canary-hook', ECHO_SCRIPT, { env: ['MY_GRANTED_VAR'], read: [], network: false });
@@ -176,11 +271,20 @@ echo "GRANTED=\${MY_GRANTED_VAR:-ABSENT}"
 // never internals.
 // ---------------------------------------------------------------------------
 
-describe('buildHookChildEnv composes orchestrator/spawn-env.ts', () => {
-  it('matches calling buildChildEnv directly with the manifest-granted subset as overrides', () => {
+/** Filters `env` down to the given allowlist — test-local helper used ONLY to
+ *  build the reference composition below; never imported from production. */
+function pickAllowed(env: NodeJS.ProcessEnv, allowlist: readonly string[]): NodeJS.ProcessEnv {
+  const out: NodeJS.ProcessEnv = {};
+  for (const name of allowlist) if (env[name] !== undefined) out[name] = env[name];
+  return out;
+}
+
+describe('buildHookChildEnv composes orchestrator/spawn-env.ts (over the NARROWER hook base — see D-M)', () => {
+  it('matches composing buildChildEnv over HOOK_ENV_BASE_ALLOWLIST (not the full AGENT_ENV_ALLOWLIST) plus the manifest-granted overrides', () => {
     const parentEnv: NodeJS.ProcessEnv = {
       PATH: '/usr/bin:/bin',
       HOME: '/home/operator',
+      ANTHROPIC_API_KEY: 'sk-should-not-leak-here', // present in AGENT_ENV_ALLOWLIST, must NOT be in the hook base
       ANTHROPIC_BASE_URL: 'https://evil.example.com', // the canonical spawn-env leak example
       MY_GRANTED_VAR: 'granted-value',
       SOME_OTHER_AMBIENT_VAR: 'should-never-appear',
@@ -188,17 +292,50 @@ describe('buildHookChildEnv composes orchestrator/spawn-env.ts', () => {
     const permissions: HookPermissionManifest = { env: ['MY_GRANTED_VAR'], read: [], network: false };
 
     const viaHookRuntime = buildHookChildEnv(parentEnv, permissions);
-    const viaDirectComposition = buildChildEnv(parentEnv, { MY_GRANTED_VAR: parentEnv.MY_GRANTED_VAR });
+    const viaDirectComposition = buildChildEnv(pickAllowed(parentEnv, HOOK_ENV_BASE_ALLOWLIST), pickAllowed(parentEnv, permissions.env));
 
-    assert.deepEqual(viaHookRuntime, viaDirectComposition, 'hook-runtime must delegate to buildChildEnv, not reimplement the filter');
+    assert.deepEqual(
+      viaHookRuntime,
+      viaDirectComposition,
+      'hook-runtime must delegate to buildChildEnv over the narrowed hook base, not reimplement the filter and not use the full agent allowlist',
+    );
+    assert.equal(viaHookRuntime.ANTHROPIC_API_KEY, undefined, 'sanity: the reference composition itself must not carry the credential either');
   });
 
-  it('the base AGENT_ENV_ALLOWLIST still passes through underneath the manifest (PATH/HOME survive)', () => {
+  it('HOOK_ENV_BASE_ALLOWLIST process-hygiene vars (PATH/HOME) pass through WITHOUT being declared in the manifest', () => {
     const parentEnv: NodeJS.ProcessEnv = { PATH: '/usr/bin', HOME: '/home/operator' };
     const child = buildHookChildEnv(parentEnv, NO_ENV);
-    for (const name of AGENT_ENV_ALLOWLIST) {
+    for (const name of HOOK_ENV_BASE_ALLOWLIST) {
       if (parentEnv[name] !== undefined) assert.equal(child[name], parentEnv[name]);
     }
+  });
+
+  it('HOOK_ENV_BASE_ALLOWLIST does not contain ANTHROPIC_API_KEY (structural — the field this whole finding is about)', () => {
+    assert.equal((HOOK_ENV_BASE_ALLOWLIST as readonly string[]).includes('ANTHROPIC_API_KEY'), false);
+  });
+
+  // -------------------------------------------------------------------
+  // Subtraction-derivation AT (peer-review requirement): HOOK_ENV_BASE_ALLOWLIST
+  // must be a proper subset of AGENT_ENV_ALLOWLIST, derived by SUBTRACTING
+  // credential-bearing names — never an independently retyped list. This is
+  // what keeps the two from silently drifting apart: if a future credential
+  // is added to AGENT_ENV_ALLOWLIST without also being excluded here, this
+  // AT's "strictly smaller, still a subset" shape stays true regardless (it
+  // cannot catch a NEW credential nobody excluded), but it DOES lock the
+  // relationship so the hook base can never independently grow a name the
+  // agent list doesn't already have, and it fails loud the moment someone
+  // tries to hand-add a name to HOOK_ENV_BASE_ALLOWLIST that isn't already
+  // agent-allowlisted (a copy-paste-typo class of drift).
+  // -------------------------------------------------------------------
+  it('HOOK_ENV_BASE_ALLOWLIST is a proper subset of AGENT_ENV_ALLOWLIST (derived by subtraction, not retyped)', () => {
+    const agentSet = new Set<string>(AGENT_ENV_ALLOWLIST);
+    for (const name of HOOK_ENV_BASE_ALLOWLIST) {
+      assert.ok(agentSet.has(name), `HOOK_ENV_BASE_ALLOWLIST entry "${name}" must also be present in AGENT_ENV_ALLOWLIST — it is a subset, not a parallel list`);
+    }
+    assert.ok(
+      HOOK_ENV_BASE_ALLOWLIST.length < AGENT_ENV_ALLOWLIST.length,
+      'the hook base must be STRICTLY smaller than the agent allowlist — at least one credential-bearing name must be excluded',
+    );
   });
 
   it('an ambient leak var (ANTHROPIC_BASE_URL) is stripped exactly as buildChildEnv strips it, manifest or not', () => {
@@ -242,6 +379,27 @@ describe('detectUndeclaredEnvRefs: static, pre-spawn scan', () => {
     const script = `#!/usr/bin/env bash\necho "$MY_GRANTED_VAR"\n`;
     const refs = detectUndeclaredEnvRefs(script, { env: ['MY_GRANTED_VAR'], read: [], network: false });
     assert.deepEqual(refs, []);
+  });
+
+  // 2026-08-04 peer-review finding (see D-M): detectUndeclaredEnvRefs used to
+  // exclude every AGENT_ENV_ALLOWLIST name — including ANTHROPIC_API_KEY —
+  // as "always present", which was true for forge's own trusted agents but
+  // is now FALSE for a hook (which only gets HOOK_ENV_BASE_ALLOWLIST
+  // unconditionally). Left unfixed, a script referencing $ANTHROPIC_API_KEY
+  // without declaring it would be silently reported as "no mismatch" while
+  // the real child actually gets an empty value — a quiet, misleading
+  // false-negative that looks like a correct copy of the PATH/HOME exclusion
+  // one line above it.
+  it('SECURITY: a script referencing $ANTHROPIC_API_KEY WITHOUT declaring it IS reported as a mismatch (it is not "always present" for a hook)', () => {
+    const script = `#!/usr/bin/env bash\necho "$ANTHROPIC_API_KEY"\n`;
+    const refs = detectUndeclaredEnvRefs(script, NO_ENV);
+    assert.deepEqual(refs, ['ANTHROPIC_API_KEY']);
+  });
+
+  it('a script referencing $PATH/$HOME (real, unconditional hook-base hygiene vars) is NOT reported as a mismatch', () => {
+    const script = `#!/usr/bin/env bash\necho "$PATH $HOME"\n`;
+    const refs = detectUndeclaredEnvRefs(script, NO_ENV);
+    assert.deepEqual(refs, [], 'PATH/HOME are genuinely always present for a hook (HOOK_ENV_BASE_ALLOWLIST), unlike ANTHROPIC_API_KEY');
   });
 });
 

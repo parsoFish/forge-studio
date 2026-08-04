@@ -38,6 +38,7 @@ import {
   discoverProjects,
 } from '../orchestrator/studio/registry.ts';
 import { lintTemplateLibrary } from '../orchestrator/studio/template-library.ts';
+import { lintHookComposition, lintHookDefinitions } from '../orchestrator/studio/hook-library.ts';
 import {
   validateAgent,
   validateArtifactRef,
@@ -506,6 +507,15 @@ export function runStudioLint(root: string): StudioLintResult {
       message: `Cannot lint template library — ${(err as Error).message}`,
     });
   }
+
+  // ------------------------------------------------------------------
+  // 8. Hooks library (R3-03) — hook.yaml load errors (bad `on`, traversal,
+  //    forbidden binding key, ...) and the SYMMETRIC composition.hooks vs
+  //    composition.guards enforcement. See orchestrator/studio/hook-library.ts.
+  // ------------------------------------------------------------------
+
+  findings.push(...lintHookDefinitions(root));
+  findings.push(...lintHookComposition(root));
 
   // ------------------------------------------------------------------
   // Tally

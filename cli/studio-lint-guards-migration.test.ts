@@ -34,6 +34,43 @@
  * neither the direct throw nor the derived studio-lint `load` error finding
  * exists yet.
  *
+ * === A3 SUPERSEDED (2026-08-04, R3-03 landed) — retired by DESIGN, not a
+ * rollback ===
+ *
+ * WHAT A3 PROTECTED: between the two PRs (guards-migration landing,
+ * library-hooks not yet landed), `composition.hooks` had no valid meaning at
+ * all — any SKILL.md still carrying the key was necessarily a legacy file
+ * silently mis-read as guards, so a hard load-time throw was the correct,
+ * maximally-loud guard for that specific window.
+ *
+ * WHY THE RULE ENDED: ADR-027's R3-03 amendment (docs/decisions/
+ * 027-studio-object-model.md) says so explicitly — item 1 deletes the field,
+ * item 2 REINTRODUCES it with the library-hook meaning. The moment
+ * `composition.hooks` is valid data again, "throw on any hooks: key" is not
+ * a security rule any more, it is a rule that rejects a legitimate feature.
+ * `loadAgentDefinition` correctly stopped throwing (see registry.ts's
+ * updated comment at the same call site) — this was a deliberate, PLANNED
+ * expiry of A3's job, decided in the redirect that created A3 in the first
+ * place ("the transitional rule").
+ *
+ * WHICH RULE CARRIES THE GUARANTEE NOW: `lintHookComposition`'s
+ * `hook-library/guard-in-hooks` check (`orchestrator/studio/hook-library.ts`)
+ * — strictly MORE precise than A3 ever was. A3 could only say "this key is
+ * stale, don't read it as guards" (true for every value). The new rule
+ * resolves the id: a legacy value under `composition.hooks` is READ as a
+ * library-hook reference, and because all nine legacy platform-guard ids
+ * (`PLATFORM_GUARD_IDS`, `orchestrator/agent-bands.ts`) collide with a real
+ * guard id, every one of them resolves to "this is a guard id sitting in the
+ * wrong field" — `hook-library/guard-in-hooks`, not a generic "stale key"
+ * error. A hand-authored id that is NOT a guard id (a real library hook)
+ * correctly does NOT fire this check — which A3 could never have expressed,
+ * since A3 didn't know library hooks existed. The two A3 cases below are
+ * REWRITTEN (not deleted) to assert this replacement guarantee directly, on
+ * both the direct-call and the real-`runStudioLint`-entry-point surfaces —
+ * including an exhaustive sweep of all nine legacy values, since "all nine
+ * legacy values are guard ids" is the specific claim that makes the
+ * replacement watertight rather than coincidental for `event-log` alone.
+ *
  * === C4 (real-entry-point half) — composition/guard-unknown must actually
  * fire through forge studio lint, not only when validateAgent is hand-called
  * with a manually-passed validGuardIds set ===
@@ -57,6 +94,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { loadAgentDefinition } from '../orchestrator/studio/registry.ts';
+import { lintHookComposition } from '../orchestrator/studio/hook-library.ts';
+import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { runStudioLint } from './studio-lint.ts';
 
 const LEGACY_SLUG = 'legacy-hooks-fixture';
@@ -65,8 +104,10 @@ const LEGACY_SLUG = 'legacy-hooks-fixture';
  * `composition.guards` key at all) — the exact "still on the old field"
  * shape the migration must reject loudly. Mirrors `studio-lint.test.ts`'s
  * `validSkillMd` minimal-valid-agent shape, with the one deliberate
- * deviation this test exists to exercise. */
-function legacyHooksSkillMd(slug: string): string {
+ * deviation this test exists to exercise. Parametrized by `hookId` (default
+ * `event-log`) so the SAME fixture shape drives both the single-id A3 cases
+ * and the exhaustive "all nine legacy values" sweep below. */
+function legacyHooksSkillMd(slug: string, hookId = 'event-log'): string {
   return `---
 name: ${slug}
 description: A fixture agent still declaring the old composition.hooks field.
@@ -78,7 +119,7 @@ composition:
   skills: []
   tools: []
   mcps: []
-  hooks: [event-log]
+  hooks: [${hookId}]
 runtime:
   sdk: claude-agent-sdk
   strategy: fixed
@@ -111,7 +152,7 @@ function seedValidProject(root: string, id = 'my-project'): void {
   writeFileSync(join(forgeDir, 'project.json'), JSON.stringify({ name: id }), 'utf8');
 }
 
-test('A3 (direct): loadAgentDefinition throws on a stale composition.hooks key, naming both fields (RED until migrated)', () => {
+test('A3 (direct) SUPERSEDED: loadAgentDefinition no longer throws — composition.hooks parses, and lintHookComposition flags the legacy value directly', () => {
   const dir = mkdtempSync(join(tmpdir(), 'guards-migration-legacy-hooks-'));
   try {
     const skillDir = join(dir, 'skills', LEGACY_SLUG);
@@ -119,20 +160,31 @@ test('A3 (direct): loadAgentDefinition throws on a stale composition.hooks key, 
     const skillMdPath = join(skillDir, 'SKILL.md');
     writeFileSync(skillMdPath, legacyHooksSkillMd(LEGACY_SLUG));
 
-    assert.throws(
+    // The transitional throw is GONE by design — composition.hooks is valid
+    // data again (R3-03 reintroduction). See the file header's "A3
+    // SUPERSEDED" paragraph.
+    assert.doesNotThrow(
       () => loadAgentDefinition(skillMdPath),
-      (err: unknown): boolean => {
-        const message = err instanceof Error ? err.message : String(err);
-        return message.includes(skillMdPath) && message.includes('composition.hooks') && message.includes('composition.guards');
-      },
-      'expected loadAgentDefinition to throw naming the file, composition.hooks, and composition.guards',
+      'loadAgentDefinition must no longer throw on a composition.hooks key — it is reintroduced, valid data',
     );
+
+    // The REPLACEMENT guarantee, at the direct-call level: a legacy value
+    // under composition.hooks resolves as a library-hook reference to a real
+    // guard id, which is precisely hook-library/guard-in-hooks — strictly
+    // more precise than A3's old "stale key" throw (it NAMES the collision).
+    const findings = lintHookComposition(dir);
+    const hit = findings.find((f) => f.object === `agent:${LEGACY_SLUG}` && f.check === 'hook-library/guard-in-hooks');
+    assert.ok(
+      hit,
+      `expected lintHookComposition to flag "event-log" under composition.hooks as hook-library/guard-in-hooks — got: ${JSON.stringify(findings)}`,
+    );
+    assert.equal(hit!.level, 'error');
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 });
 
-test('A3 (lint surface): forge studio lint reports a stale composition.hooks key as an agent:<slug> "load" error, not a crash or a silent skip (RED until migrated)', () => {
+test('A3 (lint surface) SUPERSEDED: forge studio lint reports a legacy composition.hooks key as hook-library/guard-in-hooks, not a generic "load" error', () => {
   const root = mkdtempSync(join(tmpdir(), 'guards-migration-legacy-hooks-lint-'));
   try {
     const skillDir = join(root, 'skills', LEGACY_SLUG);
@@ -145,16 +197,53 @@ test('A3 (lint surface): forge studio lint reports a stale composition.hooks key
 
     const result = runStudioLint(root);
 
-    const loadErrors = result.findings.filter(
+    // The old "load" error can never fire again for this fixture (the throw
+    // it depended on is gone) — assert its ABSENCE explicitly, so a future
+    // regression that reintroduces the throw is caught here too, not just
+    // the presence of the new check.
+    const staleLoadErrors = result.findings.filter(
       (f) => f.level === 'error' && f.object === `agent:${LEGACY_SLUG}` && f.check === 'load',
     );
+    assert.deepEqual(staleLoadErrors, [], 'the superseded "load" error must not reappear — A3 is retired, not merely unobserved');
+
+    const guardInHooksErrors = result.findings.filter(
+      (f) => f.level === 'error' && f.object === `agent:${LEGACY_SLUG}` && f.check === 'hook-library/guard-in-hooks',
+    );
     assert.strictEqual(
-      loadErrors.length,
+      guardInHooksErrors.length,
       1,
-      `expected exactly 1 agent:${LEGACY_SLUG} "load" error from a stale composition.hooks key — got: ${JSON.stringify(result.findings)}`,
+      `expected exactly 1 agent:${LEGACY_SLUG} hook-library/guard-in-hooks error from the REAL forge studio lint entry point — got: ${JSON.stringify(result.findings)}`,
     );
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// A3 SUPERSEDED — exhaustive sweep: "all nine legacy values are guard ids"
+// is the specific claim that makes the replacement watertight rather than
+// coincidental for "event-log" alone. Direct-call (lintHookComposition),
+// not a 9x real-runStudioLint spin-up — the real-entry-point wiring is
+// already proven once above; this sweep's job is exhaustiveness over ids,
+// not re-proving the wiring.
+// ---------------------------------------------------------------------------
+
+test('A3 SUPERSEDED (exhaustive): every one of the nine legacy PLATFORM_GUARD_IDS values fires hook-library/guard-in-hooks under composition.hooks', () => {
+  assert.strictEqual(PLATFORM_GUARD_IDS.length, 9, 'sanity: the migration note claims nine legacy values — pin the count so this sweep cannot silently under-cover');
+
+  for (const hookId of PLATFORM_GUARD_IDS) {
+    const dir = mkdtempSync(join(tmpdir(), `guards-migration-legacy-sweep-${hookId}-`));
+    try {
+      const skillDir = join(dir, 'skills', LEGACY_SLUG);
+      mkdirSync(skillDir, { recursive: true });
+      writeFileSync(join(skillDir, 'SKILL.md'), legacyHooksSkillMd(LEGACY_SLUG, hookId));
+
+      const findings = lintHookComposition(dir);
+      const hit = findings.find((f) => f.object === `agent:${LEGACY_SLUG}` && f.check === 'hook-library/guard-in-hooks');
+      assert.ok(hit, `legacy value "${hookId}" must fire hook-library/guard-in-hooks — got: ${JSON.stringify(findings)}`);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   }
 });
 

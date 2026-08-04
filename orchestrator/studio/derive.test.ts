@@ -217,7 +217,7 @@ function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDef
     name: 'Fixture Agent',
     description: 'A fixture agent for descriptor tests.',
     purpose: 'Testing descriptor computation.',
-    composition: { skills: [], tools: [], mcps: [], guards: [] },
+    composition: { skills: [], tools: [], mcps: [], hooks: [], guards: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',

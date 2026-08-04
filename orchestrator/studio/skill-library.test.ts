@@ -117,7 +117,7 @@ function makeAgentDef(slug: string, composedSkills: string[]): AgentDefinition {
     name: slug,
     description: `Agent ${slug}.`,
     purpose: 'Test purpose.',
-    composition: { skills: composedSkills, tools: [], mcps: [], guards: [] },
+    composition: { skills: composedSkills, tools: [], mcps: [], hooks: [], guards: [] },
     runtime: { sdk: 'claude', strategy: 'fixed', model: 'claude-sonnet-4-6' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',

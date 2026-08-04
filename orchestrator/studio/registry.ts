@@ -148,20 +148,20 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     rawComposition != null && typeof rawComposition === 'object' && !Array.isArray(rawComposition)
       ? (rawComposition as Record<string, unknown>)
       : {};
-  // ADR-027 R3-03 amendment: composition.hooks is retired in favour of
-  // composition.guards — fail loud on a stale key rather than silently
-  // reading it (no back-compat parsing), mirroring parseFlowTrigger's stale
-  // "flow:" key precedent (registry.ts's other one-shot vocabulary swap).
-  if ('hooks' in comp) {
-    throw new Error(
-      `${skillMdPath}: "composition.hooks" is retired — declare "composition.guards" instead (ADR-027 R3-03 amendment; no back-compat)`,
-    );
-  }
+  // ADR-027 R3-03 amendment ("R3-03, 2026-08-04"): composition.hooks is
+  // REINTRODUCED with a narrowed meaning — library lifecycle-hook ids only,
+  // resolved against the hooks registry (orchestrator/studio/hook-library.ts),
+  // never a platform guard id. Symmetric enforcement of the split
+  // (guard-in-hooks / hook-in-guards / unknown-hook-ref) is a lint concern
+  // (lintHookComposition), not a load-time throw — a load-time throw here
+  // would make it impossible to even SURFACE the wrong-field lint finding for
+  // an otherwise well-formed agent def.
   const composition: AgentComposition = {
     skills: stringArray(comp, 'skills', skillMdPath),
     tools: stringArray(comp, 'tools', skillMdPath),
     mcps: stringArray(comp, 'mcps', skillMdPath),
     guards: stringArray(comp, 'guards', skillMdPath),
+    hooks: stringArray(comp, 'hooks', skillMdPath),
   };
 
   const rawRuntime = reqObject(d, 'runtime', skillMdPath);

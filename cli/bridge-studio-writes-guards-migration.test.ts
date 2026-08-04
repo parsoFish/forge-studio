@@ -29,18 +29,49 @@
  *
  * Fixed: the seed SKILL.md now carries `composition.guards` (the true
  * post-migration on-disk shape). E1a is the real subject — a round-trip PUT
- * with `composition.guards` in the body preserves it exactly. E1b is new
- * (see below): a legacy-hooks on-disk file makes the PUT fail loud (500),
- * proving the bridge's OWN load path inherits the loud-failure contract —
- * this is NOT redundant with A3's lint-surface case
- * (`cli/studio-lint-guards-migration.test.ts`), because it drives a
- * DIFFERENT real entry point: `runStudioLint` is a read-only SCAN that
- * catches the throw and turns it into a `Finding` (never crashes the scan);
- * the PUT route's `existing = loadAgentDefinition(...)` call is wrapped in
- * its own try/catch (`bridge-studio-writes.ts`) that turns the SAME throw
- * into an HTTP 500 response — a distinct product surface with its own
- * contract (does the operator's save request fail loud, not just does the
- * lint report drift), so it gets its own pin.
+ * with `composition.guards` in the body preserves it exactly.
+ *
+ * === E1b SUPERSEDED (2026-08-04, R3-03 landed) — retired by DESIGN, not a
+ * rollback ===
+ *
+ * WHAT E1b PROTECTED: for the same transitional window as A3 (see
+ * `cli/studio-lint-guards-migration.test.ts`'s "A3 SUPERSEDED" paragraph —
+ * same root cause, this file's own product surface), a legacy on-disk
+ * `hooks:` key made `loadAgentDefinition` throw; the bridge PUT route wraps
+ * that same load call in its own try/catch and turned it into an HTTP 500.
+ * E1b pinned that the SAVE surface inherited the loud failure, not just the
+ * read-only lint scan.
+ *
+ * WHY THE RULE ENDED: identical reason to A3 — `composition.hooks` is valid
+ * data again, so `loadAgentDefinition` no longer throws, so the PUT no
+ * longer 500s. Confirmed empirically after the migration landed: the same
+ * legacy fixture now returns 200, not 500.
+ *
+ * WHICH RULE CARRIES THE GUARANTEE NOW — HONEST GAP, NOT A CLEAN STORY:
+ * unlike A3, this is NOT a case of "a more precise rule took over". I
+ * checked `cli/bridge-studio-writes.ts`'s PUT handler directly (lines
+ * ~370-445): its composition-merge block reads `skills`/`tools`/`mcps`/
+ * `guards` from the request body but was NOT updated in this PR to read or
+ * preserve a `hooks` field at all, and the `validateAgent(merged, ...)` call
+ * it runs before writing does NOT include `lintHookComposition`'s
+ * `hook-library/guard-in-hooks` check (that check only runs inside
+ * `runStudioLint`, cli/studio-lint.ts, a separate read-only entry point).
+ * The observable, verified consequence: a PUT against ANY agent — legacy-
+ * hooks-shaped or not — silently DROPS `composition.hooks` from the written
+ * file, and returns 200 with no finding naming the loss. This is a REAL,
+ * separate gap this retirement surfaced, not something E1b's original scope
+ * covered (E1b only ever seeded a legacy fixture; it never asserted
+ * anything about a WELL-FORMED hooks composition surviving a save) — flagged
+ * to the operator/implementer in the T3 report rather than silently
+ * "fixed" by a test-writer inventing bridge behaviour. E1b below is
+ * rewritten to pin the REAL, current, verified behaviour (200 + silent
+ * field loss) honestly, plus the guarantee that DOES still hold at the
+ * correct surface: running the real `runStudioLint` entry point against the
+ * same forgeRoot (bypassing the bridge to seed the true on-disk state, since
+ * the bridge itself cannot currently produce a persisted `hooks:` key) still
+ * catches a colliding legacy id as `hook-library/guard-in-hooks` — the same
+ * replacement rule A3 now carries, proven here from this file's own surface
+ * rather than re-asserted redundantly.
  */
 
 import { test, before, after } from 'node:test';
@@ -50,6 +81,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
+import { runStudioLint } from './studio-lint.ts';
 import { loadAgentDefinition } from '../orchestrator/studio/registry.ts';
 
 const SLUG = 'write-agent-guards';
@@ -157,7 +189,7 @@ test('E1a: PUT /api/studio/agents/:slug with composition.guards round-trips thro
   );
 });
 
-test('E1b: PUT /api/studio/agents/:slug against a legacy-hooks on-disk SKILL.md fails loud (500), never a silent 200 or a silent rewrite', async () => {
+test('E1b (part 1) SUPERSEDED: PUT against a legacy-hooks on-disk SKILL.md now succeeds (200) and SILENTLY DROPS composition.hooks — a real, honestly-pinned gap, not a fix I invented', async () => {
   const putBody = {
     name: 'Write Agent Legacy Hooks',
     purpose: 'Prove the bridge PUT path fails loud on a legacy on-disk file.',
@@ -169,14 +201,61 @@ test('E1b: PUT /api/studio/agents/:slug against a legacy-hooks on-disk SKILL.md 
   };
 
   const res = await putJson(`${bridgeUrl}/api/studio/agents/${LEGACY_SLUG}`, putBody);
-  const body = (await res.json().catch(() => null)) as { error?: string } | null;
+  const body = (await res.json().catch(() => null)) as { ok?: boolean; findings?: unknown[] } | null;
+
+  // The transitional 500 is GONE by design — composition.hooks is valid data
+  // again (see the file header's "E1b SUPERSEDED" paragraph).
   assert.equal(
     res.status,
-    500,
-    `expected the PUT against a legacy composition.hooks on-disk file to fail loud (500) — got ${res.status}: ${JSON.stringify(body)}`,
+    200,
+    `expected the PUT to now succeed (200) — composition.hooks is valid data again — got ${res.status}: ${JSON.stringify(body)}`,
   );
-  assert.ok(
-    body?.error?.includes('composition.hooks') && body.error.includes('composition.guards'),
-    `expected the 500 error to name both composition.hooks and composition.guards — got: ${JSON.stringify(body)}`,
+
+  // HONEST GAP (verified by reading cli/bridge-studio-writes.ts directly,
+  // not assumed): the PUT handler's composition-merge block was not updated
+  // in this PR to read/preserve a `hooks` field, and its own validateAgent
+  // call does not include lintHookComposition's guard-in-hooks check. The
+  // written file therefore has NO composition.hooks key at all afterward —
+  // pin that explicitly so a future fix (making the bridge round-trip
+  // hooks like it already does guards) is a visible, deliberate change to
+  // THIS assertion, not a silent regression discovered later.
+  const reloaded = loadAgentDefinition(join(forgeRoot, 'skills', LEGACY_SLUG, 'SKILL.md'));
+  const reloadedHooks = (reloaded.composition as unknown as { hooks?: string[] }).hooks;
+  assert.deepEqual(
+    reloadedHooks ?? [],
+    [],
+    'CURRENT REAL BEHAVIOUR: the bridge PUT path silently drops composition.hooks on every save (not wired into the merge, unlike guards) — ' +
+      'this is a genuine product gap this retirement surfaced, flagged in the T3 report, not something a test-writer should silently paper over',
   );
+});
+
+test('E1b (part 2): the surviving guarantee — forge studio lint on the TRUE on-disk legacy state still catches hook-library/guard-in-hooks (same replacement rule as A3, proven from this file\'s own surface)', () => {
+  // Self-contained fixture, independent of the shared bridge/forgeRoot above
+  // (whose file part 1 will have already mutated) — seeds the true,
+  // never-PUT-through on-disk legacy shape directly, since the bridge itself
+  // cannot currently produce a persisted `hooks:` key (see part 1).
+  const root = mkdtempSync(join(tmpdir(), 'bridge-guards-migration-lint-check-'));
+  try {
+    const skillDir = join(root, 'skills', LEGACY_SLUG);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), makeLegacyHooksSeedSkillMd());
+    mkdirSync(join(root, 'studio', 'flows'), { recursive: true });
+    mkdirSync(join(root, 'projects', 'lint-check-project', '.forge'), { recursive: true });
+    writeFileSync(
+      join(root, 'projects', 'lint-check-project', '.forge', 'project.json'),
+      JSON.stringify({ name: 'lint-check-project' }),
+      'utf8',
+    );
+
+    const result = runStudioLint(root);
+    const hit = result.findings.find(
+      (f) => f.level === 'error' && f.object === `agent:${LEGACY_SLUG}` && f.check === 'hook-library/guard-in-hooks',
+    );
+    assert.ok(
+      hit,
+      `expected forge studio lint to catch the true on-disk legacy shape as hook-library/guard-in-hooks — got: ${JSON.stringify(result.findings)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });

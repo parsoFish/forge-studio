@@ -90,8 +90,8 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
-import { loadAgentDefinition } from './registry.ts';
-import { resolveBandGuard } from '../agent-bands.ts';
+import { loadAgentDefinition, loadCatalog } from './registry.ts';
+import { resolveBandGuard, PLATFORM_GUARD_IDS } from '../agent-bands.ts';
 import type { AgentDefinition } from './types.ts';
 import type { Finding } from './validate.ts';
 
@@ -228,7 +228,7 @@ function makeAgentDef(slug: string, guards: string[]): AgentDefinition {
     name: slug,
     description: `Agent ${slug}.`,
     purpose: 'Test purpose.',
-    composition: { skills: [], tools: [], mcps: [], guards },
+    composition: { skills: [], tools: [], mcps: [], hooks: [], guards },
     runtime: { sdk: 'claude', strategy: 'fixed' },
     brainAccess: 'none',
     interactivity: 'Fully autonomous.',
@@ -352,6 +352,11 @@ describe('loadHookDefinition: script must resolve INSIDE the hook dir (security 
     const root = makeForgeRoot();
     // Write a real file the traversal would land on, so the probe can't
     // accidentally pass on a benign ENOENT instead of the intended guard.
+    // studio/hooks/ must exist BEFORE this write, or writeFileSync itself
+    // throws ENOENT before the probe ever reaches loadHookDefinition — a
+    // traversal probe that dies in its own setup proves nothing (bug found in
+    // peer review, 2026-08-04).
+    mkdirSync(join(root, 'studio', 'hooks'), { recursive: true });
     writeFileSync(join(root, 'studio', 'hooks', 'outside.sh'), '#!/usr/bin/env bash\necho leaked\n', 'utf8');
     writeHookPackage(root, 'traversal-hook', { script: '../outside.sh' });
     assert.throws(() => loadHookDefinition('traversal-hook', root));
@@ -359,6 +364,7 @@ describe('loadHookDefinition: script must resolve INSIDE the hook dir (security 
 
   it('rejects a URL-encoded traversal ("%2e%2e/outside.sh")', () => {
     const root = makeForgeRoot();
+    mkdirSync(join(root, 'studio', 'hooks'), { recursive: true });
     writeFileSync(join(root, 'studio', 'hooks', 'outside.sh'), '#!/usr/bin/env bash\necho leaked\n', 'utf8');
     writeHookPackage(root, 'encoded-traversal-hook', { script: '%2e%2e/outside.sh' });
     assert.throws(() => loadHookDefinition('encoded-traversal-hook', root));
@@ -431,6 +437,66 @@ describe('lintHookDefinitions', () => {
     assert.equal(findings.length, 1);
     assert.equal(findings[0]!.level, 'error');
     assert.equal(findings[0]!.object, 'hook:bad-on-hook');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listHookLibrary: a malformed entry carries NO INVENTED field values
+// (2026-08-04 peer-review JOB 5b — the R3-01 fabrication-shape lesson: a
+// plausible-looking value the file never contained, e.g. R3-01's invented
+// `usedBy: []` for an id with none, is worse than an honest absence).
+//
+// SHAPE CHOSEN (mine to pick, documented per the T3 contract — implementer's
+// one target): `HookLibraryEntry` becomes a DISCRIMINATED UNION on `ok`:
+//   - `{ ok: true } & HookDefinition & { carriedBy, carriedByDerivation }`
+//     for a successfully-loaded hook — every field is REAL, read off disk.
+//   - `{ ok: false; id; carriedBy; carriedByDerivation; error }` for a
+//     malformed one — structurally NO `on`/`script`/`permissions`/`name`/
+//     `description` key exists on this branch at all, so a consumer cannot
+//     accidentally read a fabricated value even by mistake; TypeScript's own
+//     narrowing forces a check of `ok` before touching hook-shaped fields.
+// Rejected alternative: an optional `error?: string` bolted onto the full
+// shape (mirrors SkillLibraryEntry.error) — that is the EXACT shape that
+// currently permits fabrication (nothing stops the malformed branch from
+// still populating `on`/`script`/permissions with placeholders alongside
+// `error`), so it does not close the defect class, only documents it.
+// ---------------------------------------------------------------------------
+
+describe('listHookLibrary: a malformed entry carries no fabricated field values', () => {
+  it('a malformed hook.yaml (bad `on`) yields ok:false with NO on/script/permissions/name/description keys — not fabricated placeholders', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'malformed-hook', { on: 'NotARealEvent' });
+
+    const entries = listHookLibrary(root);
+    const entry = entries.find((e) => e.id === 'malformed-hook');
+    assert.ok(entry, 'a malformed hook must still be LISTED (never silently dropped, AT-7 precedent) — just not fabricated');
+
+    // The structural assertion: on:'PreToolUse' must never appear as a
+    // GUESSED value for an entry whose real `on:` was invalid. Checking
+    // `'ok' in entry && entry.ok === false` first (discriminated-union
+    // narrowing) — then NONE of the hook-shaped keys may be present at all.
+    assert.equal((entry as unknown as { ok: boolean }).ok, false, 'a malformed entry must be discriminated ok:false, not merely carry an error alongside fabricated data');
+    assert.equal('error' in entry && typeof (entry as unknown as { error: unknown }).error === 'string', true, 'the failure reason must still be surfaced');
+    for (const forbiddenKey of ['on', 'script', 'permissions', 'name', 'description']) {
+      assert.equal(
+        forbiddenKey in entry,
+        false,
+        `a malformed entry must not carry a "${forbiddenKey}" key at all — a placeholder value here (e.g. on:'PreToolUse') is a fabrication the file never actually contained`,
+      );
+    }
+  });
+
+  it('a well-formed hook yields ok:true with every real HookDefinition field populated from disk', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'well-formed-hook', { on: 'SessionEnd', matcher: 'Bash(gh pr create)' });
+
+    const entries = listHookLibrary(root);
+    const entry = entries.find((e) => e.id === 'well-formed-hook');
+    assert.ok(entry);
+    assert.equal((entry as unknown as { ok: boolean }).ok, true);
+    assert.equal('error' in entry, false, 'a well-formed entry must not carry an error key at all');
+    assert.equal((entry as unknown as { on: string }).on, 'SessionEnd', 'real, disk-read value — not a placeholder');
+    assert.equal((entry as unknown as { matcher: string }).matcher, 'Bash(gh pr create)');
   });
 });
 
@@ -516,6 +582,54 @@ describe('OOTB seed hooks (mockup data.jsx HOOKS_LOCAL, provenance: OOTB)', () =
 
   it('exactly these two OOTB seeds exist under studio/hooks/ at this stage of the roadmap', () => {
     assert.deepEqual([...listHookIds(REPO_ROOT)].sort(), ['post-merge-brain-ingest', 'pre-pr-security-review']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// PLATFORM_GUARD_IDS / studio/catalog.yaml guards: id-set PARITY
+// (2026-08-04 peer-review JOB 5a). `lintHookComposition` sources its "is this
+// id platform machinery" ground truth from `PLATFORM_GUARD_IDS`
+// (orchestrator/agent-bands.ts) — a fixed constant, deliberately NOT
+// re-derived from studio/catalog.yaml (catalog.yaml is a display surface, a
+// lint fixture root may not seed one at all). Ratified: that choice is
+// correct. But two representations that must agree, with nothing checking
+// it, is exactly how they drift — a guard added to the catalog (for display)
+// without also being added to PLATFORM_GUARD_IDS would be invisible to this
+// lint; the reverse drift (added to the constant, forgotten in the catalog)
+// would silently stop showing an operator that guard in the palette. Mirrors
+// R3-06's flow-artifact-catalog parity device
+// (template-library.test.ts's AT-10 "real repo lints clean" pattern) —
+// pinned bidirectionally here, against the REAL repo (REPO_ROOT), not a
+// fixture, since a fixture parity check could never catch real drift.
+// ---------------------------------------------------------------------------
+
+describe('PLATFORM_GUARD_IDS / studio/catalog.yaml guards: id-set parity (bidirectional)', () => {
+  it('every PLATFORM_GUARD_IDS entry has a matching studio/catalog.yaml guards: row', () => {
+    const catalog = loadCatalog(join(REPO_ROOT, 'studio', 'catalog.yaml'));
+    const catalogIds = new Set(catalog.guards.map((g) => g.id));
+    const missingFromCatalog = PLATFORM_GUARD_IDS.filter((id) => !catalogIds.has(id));
+    assert.deepEqual(
+      missingFromCatalog,
+      [],
+      `PLATFORM_GUARD_IDS entries with no studio/catalog.yaml guards: row (would be invisible to the palette): ${JSON.stringify(missingFromCatalog)}`,
+    );
+  });
+
+  it('every studio/catalog.yaml guards: row has a matching PLATFORM_GUARD_IDS entry', () => {
+    const catalog = loadCatalog(join(REPO_ROOT, 'studio', 'catalog.yaml'));
+    const platformIds = new Set<string>(PLATFORM_GUARD_IDS);
+    const missingFromConstant = catalog.guards.map((g) => g.id).filter((id) => !platformIds.has(id));
+    assert.deepEqual(
+      missingFromConstant,
+      [],
+      `studio/catalog.yaml guards: rows with no PLATFORM_GUARD_IDS entry (invisible to lintHookComposition's guard-in-hooks/hook-in-guards checks): ${JSON.stringify(missingFromConstant)}`,
+    );
+  });
+
+  it('sanity: both sides are exactly the known nine ids (catches a silent count-only false pass)', () => {
+    assert.strictEqual(PLATFORM_GUARD_IDS.length, 9);
+    const catalog = loadCatalog(join(REPO_ROOT, 'studio', 'catalog.yaml'));
+    assert.strictEqual(catalog.guards.length, 9);
   });
 });
 
