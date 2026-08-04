@@ -389,8 +389,17 @@ export default function AgentBuilderPage() {
     ...state.tools.map((id) => ({ id, kind: 'tool' as const })),
     ...state.mcps.map((id) => ({ id, kind: 'mcp' as const })),
   ];
+  // The connections check is appended ONLY for an agent that actually binds a
+  // tool or MCP. An agent that binds none has nothing to be ready about, and a
+  // seventh check that always passes is noise that would also silently redefine
+  // the six-check contract every other agent surface (and the agents journey)
+  // relies on. Absent while the fetch is unresolved, too — omitted, never
+  // fabricated as ready; the Run control carries the "not known yet" block in
+  // that window.
   const connectionsUnready =
-    connectionsStatus === 'ready' ? unreadyBoundConnections(boundConnections, connections) : undefined;
+    boundConnections.length > 0 && connectionsStatus === 'ready'
+      ? unreadyBoundConnections(boundConnections, connections)
+      : undefined;
   // While the connections fetch is unresolved we do NOT know whether a bound
   // connection is ready — so an agent that binds one must not read as runnable
   // in that window. Saying "unknown" is honest; saying "ready" is an overclaim

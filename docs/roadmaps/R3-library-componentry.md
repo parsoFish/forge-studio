@@ -301,9 +301,10 @@ suppression early-return, so a suppressed rehearsal is never blocked by an
 environment fact about a spawn that never happens), the bridge run route
 (`cli/ui-bridge.ts`) refuses with the component named, and the Agent Builder
 UI (`forge-ui/app/agents/[id]/page.tsx`) gains a 7th, conditional readiness
-check (`[data-check="connections"]`) plus `[data-run-blocked]` on the Run
-panel — both name the unready component and its state, never a generic
-"not ready". **F4:** every installable entry pins an EXACT version (D14);
+check (`[data-check="connections"]`, appended only for an agent that binds
+at least one tool/MCP — an agent binding none has nothing to be ready about)
+plus `[data-run-blocked]` on the Run panel — both name the unready component
+and its state, never a generic "not ready". **F4:** every installable entry pins an EXACT version (D14);
 provenance is the real upstream URL. **Bridge + client:** `cli/bridge-studio-
 connections.ts` owns every `/api/studio/connections*` route (list/detail/
 probe/install — no write-verb-named export exists, `cli/connections-no-

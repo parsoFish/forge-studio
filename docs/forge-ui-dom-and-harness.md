@@ -214,11 +214,15 @@ inventory rather than one shared page-level contract:
   checks — purpose/skill/guard/process/interactivity content-completeness plus
   a `runtime` check sourced from the server-computed F1 capability descriptor,
   never re-derived client-side — **plus a 7th, conditional `connections`
-  check** (R3-04-F3): once the independently-fetched connections library
-  resolves, `[data-check="connections"]` reads NOT ready whenever any bound
-  tool/MCP's REAL probe state isn't `available`, its `title` naming the
-  component and state (e.g. `mcp "memory" (not-installed)`) rather than a
-  generic "not ready"; `[data-ready-count]` excludes it while unready). The
+  check** (R3-04-F3): appended ONLY for an agent that binds at least one
+  tool/MCP (an agent binding none has nothing to be ready about, and a 7th
+  check that always passes would silently redefine the six-check contract
+  every other agent surface relies on) once the independently-fetched
+  connections library resolves. `[data-check="connections"]` reads NOT ready
+  whenever any bound tool/MCP's REAL probe state isn't `available`, its
+  `title` naming the component and state (e.g. `mcp "memory"
+  (not-installed)`) rather than a generic "not ready";
+  `[data-ready-count]` excludes it while unready. The
   descriptor's `interactive` fact also surfaces as its own informational
   (non-gating) chip,
   `[data-capability-interactive]`. A saved **non-interactive** agent gets a run
