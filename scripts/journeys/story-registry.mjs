@@ -186,6 +186,35 @@ export const STORY_REGISTRY = [
     batch: 'A',
     port: null,
     excluded: null,
+    note:
+      'R3-04 (this initiative) shipped the connections pillar (/connections, ' +
+      '/connections/[id], install/probe against the environment, the F3 ' +
+      'readiness/run-block) and the new `connections` journey makes 3 of the ' +
+      "mockup's 12 steps real (mockup 1-indexed, journeys-data.jsx): step 1 " +
+      "(goto '#/library/connections') is the real /connections shelf with " +
+      "REAL per-entry probe states (connections-library beat — cross-checked " +
+      "against this journey's own independent disk/exec reads, never a " +
+      're-read of the product\'s own claim); step 11 ("Both land in the ' +
+      'local shelves, health-checked, provenance kept") and step 12 ' +
+      '("Agents reference them by name in their specs — nothing else to ' +
+      'wire") are real too — the connections-detail-tool/connections-' +
+      'detail-mcp beats show the real detail page (install method + exact ' +
+      'pin + provenance kept, MCP capabilities labelled curated, a REAL ' +
+      "re-probe) and the derived used-by section (agents referencing a " +
+      'connection by composition.tools/composition.mcps, never a declared ' +
+      "list). Steps 2-10 (`add-connection-btn` through `install-stripe-cli` " +
+      "— hover the hub strip, filter by kind, a community row's own detail " +
+      'page, install from there, switch to CLIs) are the cross-kind ' +
+      'COMMUNITY browser the mockup walks through — a unified ' +
+      'skills+hooks+connections browse/hub/filter/pre-install-detail ' +
+      "surface — which is R3-07's job and does not exist yet; per D2 the " +
+      "install action those steps end on would route into THIS initiative's " +
+      'real install pipeline unchanged once R3-07 builds the browse/detail ' +
+      'surface in front of it (the same relationship install-skills-hooks\' ' +
+      'own note describes for its analogous steps 3-7). Net: 3 of 12 mockup ' +
+      'steps are genuinely backed by a real beat id; port stays null — ' +
+      'claiming ported would misrepresent the other 9 as real, the exact ' +
+      "defect class this campaign's first initiative exists to prevent.",
   },
   {
     story: 'create-kb-project',

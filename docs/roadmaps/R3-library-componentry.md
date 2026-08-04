@@ -41,9 +41,13 @@ guards** — 5 toggles (`event-log`, `cost-guard`, `stall-watchdog`,
 `merge-gate`, `scratch-strip`) and 4 bands (`wi-contract`,
 `reflection-close`, `demo-band`, `review-band`); the section was named
 `hooks:` until R3-03 renamed it 2026-08-04 — **3 tools** (`git`, `node`, `gh`), **6 MCPs**
-(`filesystem`, `github`, `playwright`, `fetch`, `memory`, `sqlite`) — MCPs
-explicitly "reference metadata only — operators wire real servers in their
-env". Catalog entries surface as draggable chips in the agent builder's
+(`filesystem`, `github`, `playwright`, `fetch`, `memory`, `sqlite`). **This
+pillar's "reference-only" framing is superseded 2026-08-04 by R3-04/R3-B10**
+below: every tool/MCP entry now carries install/probe/provenance/config
+metadata, and readiness is a REAL per-entry probe result, not a declared
+label — an MCP chip in the builder is a working, verifiable binding, not
+just reference metadata. Catalog entries surface as draggable chips in the
+agent builder's
 palette ([`forge-ui/components/studio/agent-builder/CatalogPalette.tsx`](../../forge-ui/components/studio/agent-builder/CatalogPalette.tsx),
 routes `/agents/new` + `/agents/[id]`, drop zones
 `[data-accepts="skill"|"tool"|"mcp"|"hook"]`).
@@ -251,6 +255,75 @@ surfaces it through the same generic `project-scaffold` category path as the
 other two scaffolds — no `template-library.ts` change was needed either. The
 templates library's own journey stays deliberately browse→detail only (no
 create-project action added from `/templates` itself).
+
+### R3-B10 Connections library — registry + probe/install runtime + run-block + library/detail view (R3-04 F1-F4)
+
+Landed 2026-08-04 (branch `feat/r3-04-connections-library`). A "connection" is
+a curated tool or MCP server an agent can be given, read from `studio/
+catalog.yaml`'s `tools:`/`mcps:` sections — there is **no writable definition
+store, no per-connection file package, no create/update/delete route
+anywhere** (D1); curation is a PR to `catalog.yaml`. **F1:**
+`orchestrator/studio/connection-library.ts` composes each catalog entry with
+facts that are DERIVED, never declared — `kind` (`'tool'`/`'mcp'`, structural
+from which catalog section the entry came from, D2), `installable`
+(`install.method === 'npm'` only — `system-provided` and `external` both have
+no forge-driven install path, D13), and `usedBy`/`usedByDerivation` (scanned
+from every real agent's `composition.tools`/`composition.mcps`, so an empty
+list reads "scanned N, found none", never "unknown"). `install` is a
+discriminated union of three methods (`system-provided`/`npm`/`external`) —
+`external` is a first-class honest answer for `github`/`fetch`/`sqlite`, none
+of which have a working npm install path (one deprecated in favour of a
+different-language implementation, one npm name is a security-research
+typosquat canary, one upstream is archived — see D13's research table).
+`forge studio lint` (`validateConnections`, `validate.ts`) rejects a missing/
+empty/range/`latest` pin (D14) and a probe kind incoherent with its install
+method (D15). **F2:** `orchestrator/studio/connection-probe.ts`'s
+`probeConnection` is the REAL runner (D3/D4) — the only three states are
+`not-installed`/`available`/`misconfigured`, always EXECUTED per entry in its
+own child process, never declared or shared between two entries that happen
+to use the same probe binary. Probe kind is a discriminated union (D15):
+`command` (spawns the real argv), `command-presence` (resolves on PATH,
+NEVER executes — for entries with no upstream-verified `--version` flag),
+`npm-package` (reads the pinned package's own `package.json` under the
+`_connections/` install root and requires the version to match the pin
+EXACTLY — never spawns anything, since neither shipped npm entry's upstream
+provides a non-server invocation). The probe child runs on a stripped,
+credential-free environment (`HOOK_ENV_BASE_ALLOWLIST`, D11) — a probe can
+verify presence + configuration-NAME presence, never that a credential
+actually works. `orchestrator/studio/connection-install.ts`'s
+`installArgvFor`/`installConnection` derive the install argv ONLY from the
+catalog pin (D6) — `npm install --prefix <connectionsRoot> --ignore-scripts
+--no-audit --no-fund --save-exact <pkg>@<version>` — a request body can never
+influence it. **F3:** `orchestrator/studio/connection-readiness.ts`'s
+`connectionsReadinessFor` is consumed at three real enforcement points (D9):
+`orchestrator/run-agent.ts` blocks pre-spawn (after the dry-bridge/no-spawn
+suppression early-return, so a suppressed rehearsal is never blocked by an
+environment fact about a spawn that never happens), the bridge run route
+(`cli/ui-bridge.ts`) refuses with the component named, and the Agent Builder
+UI (`forge-ui/app/agents/[id]/page.tsx`) gains a 7th, conditional readiness
+check (`[data-check="connections"]`) plus `[data-run-blocked]` on the Run
+panel — both name the unready component and its state, never a generic
+"not ready". **F4:** every installable entry pins an EXACT version (D14);
+provenance is the real upstream URL. **Bridge + client:** `cli/bridge-studio-
+connections.ts` owns every `/api/studio/connections*` route (list/detail/
+probe/install — no write-verb-named export exists, `cli/connections-no-
+authoring.test.ts` asserts the export surface directly);
+`forge-ui/lib/connection-client.ts`'s parsers REFUSE a malformed payload
+rather than coerce it. **UI:** `/connections` (`forge-ui/app/connections/
+page.tsx`, `[data-page="connection-library"]`) and `/connections/[id]`
+(`forge-ui/app/connections/[id]/page.tsx`, `[data-page="connection-detail"]`)
+— full `data-*` contract in `docs/forge-ui-dom-and-harness.md`. Demoed by the
+new `connections` journey (`scripts/journeys/connections.mjs`, wired into
+`RUN_ORDER`): `connections-library` (real probe states, disk/exec
+cross-checked against the journey's own independent reads), `connections-
+detail-tool` (git — no install action, real captured probe output, derived
+used-by), `connections-detail-mcp` (memory — curated capabilities, a
+SUPPRESSED install with byte-exact argv shown, a real re-probe), and
+`connections-readiness-block` (a scratch agent binds the still-not-installed
+memory MCP; the readiness panel and Run control both block, naming it). Two
+real kinds not three, curated-not-probed MCP capabilities, and an npm-package
+probe that verifies presence-at-pin not "the server runs" are stated limits,
+not silent gaps (D2/D8/D15 above).
 
 ## Planned initiatives
 
@@ -563,15 +636,16 @@ create-project action added from `/templates` itself).
 
 ### R3-04 Tools/MCPs/CLIs library ("Connections")
 
-- **Status:** planned (amended 2026-08-03, wave-5 cut — see the wave-5 note
-  below)  ·  **Wave:** 5 (module: library-connections)
+- **Status:** implemented (2026-08-04, branch `feat/r3-04-connections-library`;
+  baseline **R3-B10**)  ·  **Wave:** 5 (module: library-connections)
 - **Depends on:** R3-01 (soft — reuses the unified-registry + library-view
   patterns).
 - **Context:** Operator diagram (verbatim intent): *"Tools/MCPs/CLIs =
-  similar but NO create-your-own (larger components)."* Baseline (R3-B2):
-  `studio/catalog.yaml` ships 3 tools and 6 MCPs as reference-only metadata —
-  "operators wire real servers in their env" — so today an MCP chip in the
-  builder is a label, not a working binding. This initiative makes the curated
+  similar but NO create-your-own (larger components)."* Baseline as of
+  kickoff (R3-B2, since superseded for this pillar by R3-B10): `studio/
+  catalog.yaml` shipped 3 tools and 6 MCPs as reference-only metadata —
+  "operators wire real servers in their env" — so an MCP chip in the builder
+  was a label, not a working binding. This initiative made the curated
   entries *installable and verifiable* without ever becoming an authoring
   surface. Also the realization substrate the R2-06 runtime-adapter work can
   present through (SDK/runtime picks are `[data-sdk]` in the agent builder).
@@ -591,10 +665,14 @@ create-project action added from `/templates` itself).
     listing tools/MCPs/CLIs with provenance + availability status
     (probe result: `available | not-installed | misconfigured`), and an
     install action for installable entries (runs the pinned install method,
-    then the probe). Acceptance: `sqlite` MCP round-trips
-    not-installed→install→available; `git` shows system-provided/available
-    with no install action; a misconfigured entry surfaces the failing probe
-    output, not a generic error.
+    then the probe). Acceptance: `memory` MCP round-trips
+    not-installed→install→available (**corrected 2026-08-04, D16** — the AC
+    as originally written named `sqlite`; a curation research pass found
+    `sqlite` has no npm distribution and its PyPI package is archived, making
+    the AC unsatisfiable against reality, so the round-trip AC moved to
+    `memory`, actively maintained and npm-distributed); `git` shows
+    system-provided/available with no install action; a misconfigured entry
+    surfaces the failing probe output, not a generic error.
   - **R3-04-F3 — Agent-builder binding with readiness.** The
     `[data-accepts="tool"|"mcp"]` drop zones and the `[data-ready-count]`
     readiness panel consume real probe state: composing an unavailable MCP
@@ -625,8 +703,23 @@ create-project action added from `/templates` itself).
   (browse hub → capability list → install → probe → available; the mockup's
   connection rows carry per-hub signals); surfaces `views-library.jsx` /
   `views-library-detail.jsx` (`CONNECTIONS` in `data.jsx`). **As-built
-  baseline:** R3-B2 + `as-built-inventory.md` §7 (reference-only metadata,
-  no install/probe, no detail pages).
+  baseline:** R3-B10 (this initiative's landing; supersedes R3-B2 for this
+  pillar). `docs/product/as-built-inventory.md` does not exist in this repo
+  checkout — the §7 reference in the original spec is stale; grepped and
+  confirmed absent 2026-08-04, no substitute doc found to link instead.
+- **Honest limits, stated not hidden (curation research pass, 2026-08-04):**
+  the surface presents **two** real connection kinds (`tool`, `mcp`), not the
+  mockup's three (MCPs · CLIs · tools) — forge has two catalog sections, and
+  introducing a `clis:` section is a separate, out-of-scope catalog-section
+  migration (D2). An MCP's capability list is **curated** catalog data,
+  labelled `capabilitiesSource: 'curated'` on every payload and in the UI —
+  never presented as a verified live capability list of a running server,
+  because enumerating one for real needs an MCP client handshake forge does
+  not have and adding one is an ask-first new dependency (D8). For an `npm`
+  entry the probe verifies the **pinned artifact is present on disk at the
+  pinned version** — it does not verify the server runs, because neither
+  shipped npm entry's upstream provides a non-server invocation to check
+  against (verified by reading `dist/index.js` for both; D15).
 - **Session sizing:** ~2 operator-run agent sessions — (1) F1+F4 registry
   metadata + lint; (2) F2+F3 surfaces + readiness wiring + journey-sync.
 - **Out of scope:** create-your-own for this category (operator-excluded,
@@ -1042,3 +1135,40 @@ rather than deferred within it:
   string-concatenation obfuscation gap is documented by a test rather than
   hidden. Marketplace install remains **R3-07's** entry point, routed through
   this feature's scan + approval unchanged.
+- **2026-08-04 (R3-04, connections library PR).** F1-F4 landed
+  (baseline **R3-B10**). **F1:** `studio/catalog.yaml`'s 3 tools + 6 MCPs
+  gained install/config/probe/provenance/capabilities metadata; `kind` is
+  derived structurally (`tool`|`mcp`, D2 — no third invented kind); `install`
+  is a 3-method discriminated union with `external` as a first-class honest
+  answer (D13 — a curation research pass found `github`'s npm package
+  deprecated, `fetch`'s npm name a security-research typosquat canary, and
+  `sqlite`'s upstream archived, none reachable by a working npm install path).
+  `forge studio lint` rejects an unpinned/range/`latest` version (D14) and a
+  probe kind incoherent with its install method (D15). **F2:** a REAL
+  per-entry prober (`not-installed`/`available`/`misconfigured`, D3/D4) run in
+  its own child process on a stripped, credential-free environment (D11); an
+  installer whose argv is derived ONLY from the catalog pin (D6) — a request
+  body cannot influence it. **F3:** the run-block enforced at three real
+  points — `orchestrator/run-agent.ts` pre-spawn, the bridge run route, and
+  the Agent Builder's readiness panel (`[data-check="connections"]`) + Run
+  control (`[data-run-blocked]`) — every enforcement point NAMES the unready
+  component and its state. **F4:** exact version pins, real upstream
+  provenance. Bridge (`cli/bridge-studio-connections.ts`) + client
+  (`forge-ui/lib/connection-client.ts`) + UI (`/connections`,
+  `/connections/[id]`) round out the surface; **D1's negative AC holds
+  structurally** — no create/update/delete route exists anywhere, asserted
+  against the real bridge dispatcher. New `connections` journey (4 beats).
+  **F2's AC corrected (D16):** the `sqlite` round-trip example named at
+  kickoff is unsatisfiable (no npm distribution, archived upstream) — moved
+  to `memory`, evidence in the F2 bullet above. **Stated limits, not
+  overclaimed:** two real kinds, not the mockup's three (D2); an MCP's
+  capability list is curated catalog data, labelled as such, never a verified
+  live list of a running server — forge has no MCP client to introspect one,
+  and adding one is an ask-first dependency (D8); an `npm` entry's probe
+  verifies the pinned artifact is present at the pinned version, not that the
+  server runs (D15). Deletions: the falsified "reference-only" framing this
+  PR's own baseline supersedes was already corrected in `studio/catalog.yaml`
+  by WI-1's landing; this PR's own doc pass corrected the remaining stale
+  claims in this file (R3-B2's connections clause, F2's AC, the wave-5
+  amendment's `as-built-inventory.md` reference — that doc does not exist in
+  this repo checkout, confirmed by grep).

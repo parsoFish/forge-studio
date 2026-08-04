@@ -5,9 +5,9 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving): skills → hooks → templates → stand-up-onboard →
- * stand-up-create → knowledge → agents → flows-author → flows-run → roadmap
- * → demo-builder.
+ * interleaving): skills → hooks → templates → connections → stand-up-onboard
+ * → stand-up-create → knowledge → agents → flows-author → flows-run →
+ * roadmap → demo-builder.
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -21,8 +21,8 @@
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
  *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
  *     flows-run journey itself) has completed.
- * Every other journey (skills, hooks, templates, agents, knowledge,
- * demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
+ * Every other journey (skills, hooks, templates, connections, agents,
+ * knowledge, demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
  * skills-detail-package's own read-only precedent (R3-01-F3/F4)); skills-edit
  * restores the real shipped skill it edits,
@@ -71,10 +71,34 @@
  * CatalogPalette itself, so the clip needs the pre-bind bytes back to drag
  * the same chip again) and once more, alongside cleanHookCreateArtifacts(),
  * in its own finally.
+ *
+ * connections (R3-04) is READ-MOSTLY: connections-library / connections-
+ * detail-tool / connections-detail-mcp create and destroy nothing on disk —
+ * every count/state they assert is cross-checked against a fresh disk
+ * read/real exec this journey performs itself (studio/catalog.yaml, `git
+ * --version`, the `_connections/` root), mirroring templates.mjs's own
+ * read-only precedent, and connections-detail-mcp's "install" click is a
+ * SUPPRESSED no-op under this harness's FORGE_ARCHITECT_NO_SPAWN=1 (D7: no
+ * journey may ever perform a real network install) so it leaves no residue
+ * either. connections-readiness-block is the one beat with a seed: a
+ * brand-new scratch agent (CONN_SCRATCH_SLUG, local to connections.mjs —
+ * never an SK_ / HK_ id, nor agents.mjs's own 'journey-scratch-agent') that binds the
+ * still-not-installed `memory` MCP purely to prove the readiness panel + Run
+ * control block on it; created and swept inside that one beat's own
+ * try/finally (plus a leading stale-state sweep, crash-safe, mirroring
+ * hooks-create/hooks-security). This shape — create-and-destroy-its-own-
+ * throwaway-agent — was chosen over hooks-bind's stash/restore-a-real-
+ * shipped-SKILL.md precedent deliberately: developer-ralph (hooks-bind's
+ * own stash target) is read here too (connections-detail-tool's used-by
+ * cross-check reads its real, UNTOUCHED composition.tools), and connections
+ * runs strictly after hooks completes in RUN_ORDER, so never stashing it
+ * here avoids a second write path onto a file another journey already owns
+ * stashing.
  */
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
+import { journey as connections } from './connections.mjs';
 import { journey as standUpOnboard } from './stand-up-onboard.mjs';
 import { journey as standUpCreate } from './stand-up-create.mjs';
 import { journey as knowledge } from './knowledge.mjs';
@@ -88,6 +112,7 @@ export const JOURNEYS = [
   skills,
   hooks,
   templates,
+  connections,
   standUpOnboard,
   standUpCreate,
   knowledge,
@@ -117,6 +142,11 @@ export const RUN_ORDER = [
   ['templates', 'templates-search'],
   ['templates', 'templates-detail-planning'],
   ['templates', 'templates-detail-scaffold'],
+
+  ['connections', 'connections-library'],
+  ['connections', 'connections-detail-tool'],
+  ['connections', 'connections-detail-mcp'],
+  ['connections', 'connections-readiness-block'],
 
   ['stand-up-onboard', 'su-onboard-project'],
   ['stand-up-onboard', 'su-onboard-preflight'],
