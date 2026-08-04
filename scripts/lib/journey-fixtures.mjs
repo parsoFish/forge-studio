@@ -1219,19 +1219,28 @@ export function cleanSkillArtifacts() {
 }
 
 // ── HOOKS-PILLAR HELPERS (R3-03-F4) ─────────────────────────────────────────
-// Two hooks the journey authors through the REAL /hooks/new form (mirrors the
-// skills-pillar SK_* fixtures above): HK_NEW (a benign PreToolUse guard,
-// created unbound then bound to a real agent) and HK_SECURITY (a script that
-// reads a secret-shaped env var and curls it out, both left undeclared —
-// exists purely to demonstrate the scan's blocked verdict + the override
-// discipline; never bound to anything). Both names are ALREADY valid
-// lowercase-kebab slugs so the bridge's create-route slugify
+// Three hooks the journey authors through the REAL /hooks/new form (mirrors
+// the skills-pillar SK_* fixtures above): HK_NEW (a benign PreToolUse guard,
+// created unbound then bound to a real agent), HK_SECURITY (2026-08-04
+// BLOCKER 2, a32a8305 — a script that DECLARES a secret-shaped env grant +
+// network egress and curls the secret out; this is the shape that could
+// actually leak, since only a manifest-granted var reaches the child at spawn
+// time (hook-runtime.ts's buildHookChildEnv) — and the fix that closed the
+// vulnerability was making a declared secret-shaped grant score `critical`
+// exactly like an undeclared one, never downgraded), and HK_UNDECLARED (the
+// contrast case — the same shape with nothing declared: it still scores
+// `blocked` on the scan, but it is the INERT one, since the undeclared var
+// never reaches the child even if approved and run). None of these three are
+// ever bound to anything. All three names are ALREADY valid lowercase-kebab
+// slugs so the bridge's create-route slugify
 // (`name.toLowerCase().replace(/\s+/g,'-')...`) is a no-op — no need to
 // re-derive the id from a human-readable name.
 export const HK_NEW_ID = 'journey-stack-base-guard';
 export const HK_NEW_DIR = join(FORGE_ROOT, 'studio', 'hooks', HK_NEW_ID);
 export const HK_SECURITY_ID = 'journey-exfil-probe';
 export const HK_SECURITY_DIR = join(FORGE_ROOT, 'studio', 'hooks', HK_SECURITY_ID);
+export const HK_UNDECLARED_ID = 'journey-undeclared-probe';
+export const HK_UNDECLARED_DIR = join(FORGE_ROOT, 'studio', 'hooks', HK_UNDECLARED_ID);
 
 // The real agent HK_NEW is bound into — a low-risk pick no other journey
 // module stashes (project-manager: agents.mjs's own local PM_SKILL_PATH
@@ -1270,16 +1279,19 @@ function restoreHookApprovalLedger() {
   }
 }
 
-/** Narrow sweep for the hooks-security beat's OWN artifact only — its
- *  studio/hooks/<id>/ package + the approval ledger, restored to their exact
- *  prior state. Idempotent + best-effort: safe to call at the beat's start
- *  (stale-state sweep), between its main pass and its clip (the clip reuses
- *  the SAME id sequentially rather than a second scratch id, since this
- *  artifact is never a throughline past this one beat — a POST to an
+/** Narrow sweep for the hooks-security beat's OWN artifacts only — both its
+ *  studio/hooks/<id>/ packages (HK_SECURITY, the declared-exfil flagship, AND
+ *  HK_UNDECLARED, the inert contrast) + the approval ledger, restored to its
+ *  exact prior state. Idempotent + best-effort: safe to call at the beat's
+ *  start (stale-state sweep), between its main pass and its clip (the clip
+ *  reuses HK_SECURITY's id sequentially rather than a second scratch id,
+ *  since neither artifact is a throughline past this one beat — a POST to an
  *  already-existing id 409s, so the id must be fully cleared first), and at
  *  the beat's own end. */
 export function cleanHookSecurityArtifacts() {
-  try { rmSync(HK_SECURITY_DIR, { recursive: true, force: true }); } catch { /* */ }
+  for (const dir of [HK_SECURITY_DIR, HK_UNDECLARED_DIR]) {
+    try { rmSync(dir, { recursive: true, force: true }); } catch { /* */ }
+  }
   restoreHookApprovalLedger();
 }
 
