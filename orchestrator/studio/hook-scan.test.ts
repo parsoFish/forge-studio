@@ -40,24 +40,25 @@
  *       R3-01-F4's Blocker-2 lesson: a hash pinned only inside the file it
  *       protects is not a pin (deleting it defeats it).
  *  D-G. Verdict policy (my choice, documented — not stated verbatim in the
- *       roadmap beyond the one named AC): `clean` iff zero findings.
+ *       roadmap beyond the one named AC) — REVISED 2026-08-04, third
+ *       adversarial review (BLOCKER 2, see D-K): `clean` iff zero findings.
  *       `blocked` iff ANY of: an `obfuscation` finding exists; a
  *       `file-read` finding exists (the curated dangerous-path list is
  *       always severity `critical`, never suppressible by declaration); OR
- *       BOTH an `env-read` AND a `network-egress` finding of severity
- *       `critical` (i.e. UNDECLARED — see D-H) exist together (the named
- *       exfiltration-combo AC). Otherwise, ≥1 finding but none of the above
- *       ⇒ `findings`. A lone undeclared network call, a lone undeclared
- *       secret-shaped env read, or a FULLY DECLARED exfil-shaped pair (see
- *       D-H) is `findings`, not `blocked` — visible to the operator but not
- *       an automatic hard stop by itself.
- *  D-H. Manifest cross-check semantics — REVISED 2026-08-04 peer redirect
- *       (binding): a DECLARED access (network:true for an egress call; the
- *       exact var name present in permissions.env for an env read) NEVER
- *       makes the finding disappear. It is still emitted, carries
- *       `declared: true`, and its `severity` is downgraded from `critical`
- *       to `info` — which is what keeps it out of the D-G blocked-combo
- *       condition (that condition requires `critical` severity specifically).
+ *       an `env-read` finding exists TOGETHER WITH a `network-egress`
+ *       finding — PRESENCE-based on both sides now, independent of
+ *       `severity`/`declared` on either side (was: BOTH findings had to
+ *       carry `severity: 'critical'`, i.e. both undeclared — see D-K for
+ *       why that was invertible and is retired). Otherwise, ≥1 finding but
+ *       none of the above ⇒ `findings`. A lone network call (declared or
+ *       undeclared) with NO secret-shaped grant/reference anywhere is
+ *       `findings`, not `blocked` — declaring network access alone still
+ *       reduces friction for a genuinely benign hook (D-K).
+ *  D-H. Manifest cross-check semantics for NETWORK and FILE-READ (env-read's
+ *       own cross-check is RETIRED by D-K below — read that first). A
+ *       DECLARED network-egress access (`network: true`) NEVER makes the
+ *       finding disappear. It is still emitted, carries `declared: true`,
+ *       and its `severity` is downgraded from `critical` to `info`.
  *       Declared access is a severity/blocking judgement, not a visibility
  *       judgement: the operator approval gate must always be able to see
  *       everything a hook touches, because the manifest declaring "this is
@@ -65,13 +66,13 @@
  *       scanner that goes quiet on declared access would make the most
  *       dangerous hooks produce the quietest reports (a competent attacker
  *       simply declares everything), which is fail-open with extra steps.
- *       An UNDECLARED access is `declared: false`, severity `critical`.
- *       `permissions.read`'s curated dangerous paths (~/.ssh, secrets.env,
- *       id_rsa, .aws/credentials) are the one deliberate exception: NEVER
- *       suppressible by declaration AND never downgraded — reading a
- *       private key is `critical`/blocking regardless of what the manifest
- *       claims (unchanged from the original design; the peer review
- *       explicitly reaffirmed this one).
+ *       An UNDECLARED network access is `declared: false`, severity
+ *       `critical`. `permissions.read`'s curated dangerous paths (~/.ssh,
+ *       secrets.env, id_rsa, .aws/credentials) are the one deliberate
+ *       exception for file-read: NEVER suppressible by declaration AND
+ *       never downgraded — reading a private key is `critical`/blocking
+ *       regardless of what the manifest claims (unchanged from the original
+ *       design; the second peer review explicitly reaffirmed this one).
  *  D-I. Override is a DISTINCT, separately-recorded act from a normal
  *       approval: `approveHook` THROWS on a `blocked` verdict (refuses);
  *       only `overrideHookBlock({forgeRoot, id, reason})` can flip a blocked
@@ -115,6 +116,90 @@
  *       This is deliberate: consistency ("the pin means exactly this byte
  *       state") outweighs the minor operator inconvenience of one redundant
  *       re-approval click on a strictly-safer edit.
+ *  D-K. BLOCKER 2 (2026-08-04, third adversarial review, FIX-FIRST — the
+ *       security model worked BACKWARDS): declared access downgraded a
+ *       finding's severity to `info`, and the old blocked-combo condition
+ *       (D-G) required BOTH the env-read and the network-egress finding to
+ *       be `critical` — i.e. both undeclared. So
+ *       `permissions:{env:['ANTHROPIC_API_KEY'],network:true}` + a script
+ *       that curls the key out produced verdict `'findings'`:
+ *       `approveHook()` SUCCEEDED with no override and no justification, and
+ *       `buildHookChildEnv` handed the child the REAL key (it keys off the
+ *       manifest, unaffected by scan severity). DECLARING the exfiltration
+ *       was both NECESSARY to get the real value into the child env AND
+ *       SUFFICIENT to evade the one tier that demands a justified override —
+ *       an attacker who plays along faced LESS friction than one who
+ *       doesn't, inverting the feature's central mechanism. Worse, the
+ *       canonical exfil fixture, the roadmap AC, and (per the reviewer) the
+ *       flagship journey beat all use the UNDECLARED variant, which is
+ *       INERT (an undeclared var never reaches the child env) — the demo
+ *       blocks the case that cannot leak while the case that can leak was
+ *       pinned as `findings`, in this file's own prior "FULLY DECLARED
+ *       exfil-shaped script is still visible, not blocked" test — the
+ *       SECOND time this initiative pinned a live credential leak as
+ *       intended behaviour (the first was the `ANTHROPIC_API_KEY`-in-
+ *       `AGENT_ENV_ALLOWLIST` defect fixed in hook-runtime.test.ts's D-M).
+ *       That test is REWRITTEN below, not patched, to assert `'blocked'`.
+ *
+ *       THE FIX — the manifest becomes the trigger, not the script text:
+ *       `permissions.env` is now scanned DIRECTLY: every secret-shaped name
+ *       DECLARED there produces an `env-read` finding — `declared: true`,
+ *       `severity: 'critical'` — regardless of whether the script body ever
+ *       references it (this also closes the MAJOR below in one move — see
+ *       D-L). Declaring a secret-shaped grant is now the SAME severity as
+ *       leaving it undeclared; env-read joins file-read as a category where
+ *       `declared` no longer downgrades. Consequently `computeVerdict`'s
+ *       combo condition (D-G) collapses to PRESENCE — env-read finding
+ *       exists AND network-egress finding exists, whatever either one's
+ *       `declared`/`severity` — so a fully-declared exfiltration shape is
+ *       now `blocked`, symmetric with the always-undeclared canonical
+ *       fixture. Declaring network egress ALONE, with no secret-shaped
+ *       grant/reference anywhere, is UNCHANGED and still reduces friction
+ *       (no env-read finding ⇒ the combo condition is false regardless of
+ *       network) — pinned explicitly below so this fix does not become
+ *       "everything is blocked", which the reviewer named as its own
+ *       failure mode to avoid.
+ *  D-L. MAJOR (2026-08-04, same review): `extractEnvVarNames` only matches
+ *       `$VAR`/`${VAR}` — a script doing `printenv ANTHROPIC_API_KEY` or
+ *       `env | grep ANTHROPIC_API_KEY` produced ZERO env-read findings —
+ *       not downgraded, STRUCTURALLY ABSENT — while the manifest still
+ *       granted the real value, falsifying this module's own "downgraded
+ *       but never hidden" prose. D-K's manifest-scan closes this for the
+ *       DECLARED case (the finding now fires off the grant, independent of
+ *       body content). This entry covers the remaining case: a secret-shaped
+ *       name read via a bare literal, UNDECLARED. DECISION (mine — the
+ *       reviewer leaned yes and asked me to decide and say so): YES,
+ *       implement it. The scanner now ALSO matches a secret-shaped name
+ *       appearing as a bare WHOLE-WORD token anywhere in the script body —
+ *       not only immediately after `$`/`${` — catching `printenv X`,
+ *       `env | grep X`, `os.environ['X']`, `os.getenv('X')`, and similar
+ *       plain, readable forms. This is a LITERAL match (the name's actual
+ *       characters appear verbatim in the body), not an attempt at
+ *       defeating obfuscation — the module's honesty block excuses
+ *       FRAGMENTED/CONCATENATED constructions that never spell a name as a
+ *       contiguous literal (see the "DOCUMENTED GAP" test); a bare
+ *       `printenv ANTHROPIC_API_KEY` spells the name in full, squarely
+ *       inside what a "modest literal/substring scanner" should already
+ *       catch. ACCEPTED TRADEOFF (documented, not hidden, same shape as the
+ *       AZDO_* / GH_* over-flag decision): a secret-shaped name mentioned in a
+ *       COMMENT or a descriptive string (`echo "matches the GH_TOKEN
+ *       pattern"`) is also flagged — a false positive costs one manifest
+ *       declaration; a false negative on a real credential is the exact
+ *       failure this feature exists to prevent.
+ *  D-M. MINOR (2026-08-04, same review): `on`/`matcher` were never part of
+ *       the approval hash — an approved hook could be moved from
+ *       `SessionEnd` to `PreToolUse` (firing on every tool call — no new
+ *       CAPABILITY granted, but materially different EXPOSURE) with script
+ *       and permissions untouched, and `needsReview` stayed false. FIX: a
+ *       THIRD named hash, `HookApprovalLedgerEntry.triggerHash`
+ *       (`hashHookTrigger(on, matcher)`) — following the SAME "which half
+ *       changed" legibility argument D-J already made for
+ *       `scriptHash`/`permissionsHash` rather than folding into either: a
+ *       trigger-condition change (when the hook fires) is its own distinct
+ *       kind of change from a script edit or a grant edit, and an
+ *       operator/log inspecting a mismatch should be able to tell which of
+ *       the three changed. `needsReview` becomes true if ANY of the three
+ *       hashes differs from the ledger's pinned triple.
  *
  * HONEST LIMIT (stated, not overclaimed — see the "adversarial probes"
  * describe block below for the specific pinned case): this is a MODEST
@@ -141,6 +226,7 @@ import {
   scanHookPackage,
   hashHookScript,
   hashHookPermissions,
+  hashHookTrigger,
   readHookApprovalLedger,
   hookRunState,
   approveHook,
@@ -292,7 +378,7 @@ describe('manifest cross-check: declared vs undeclared network egress (D-H — d
   });
 });
 
-describe('manifest cross-check: declared vs undeclared env read (D-H — declared NEVER vanishes)', () => {
+describe('manifest cross-check: env read — D-K RETIRES the downgrade (declared no longer lowers severity)', () => {
   const ENV_ONLY_SCRIPT = `#!/usr/bin/env bash\necho "using $MY_API_KEY" > /tmp/out.log\n`;
 
   it('UNDECLARED env var produces a critical, undeclared env-read finding, verdict "findings"', () => {
@@ -304,39 +390,168 @@ describe('manifest cross-check: declared vs undeclared env read (D-H — declare
     assert.equal(report.verdict, 'findings');
   });
 
-  it('DECLARED env var (present in permissions.env) is STILL EMITTED — marked declared, downgraded severity, not vanished', () => {
+  // BLOCKER 2 (D-K): this is the exact inversion the review found — the OLD
+  // behaviour downgraded a declared secret-shaped grant to 'info', which is
+  // what let "declare the exfiltration" evade the override bar. A declared
+  // secret-shaped env grant now STAYS critical — declaring it is no longer a
+  // way to make it look safer than leaving it undeclared.
+  it('DECLARED env var (present in permissions.env) is STILL EMITTED and STAYS CRITICAL — declaring a secret grant no longer downgrades it (BLOCKER 2 / D-K)', () => {
     const report = scanHookScript({ body: ENV_ONLY_SCRIPT, permissions: { env: ['MY_API_KEY'], read: [], network: false } });
     assert.equal(report.findings.length, 1, 'a declared behaviour must still appear in the report — the operator must be able to see it');
     assert.equal(report.findings[0]!.category, 'env-read');
-    assert.equal(report.findings[0]!.declared, true);
-    assert.notEqual(report.findings[0]!.severity, 'critical', 'declared access is downgraded, never invisible');
-    assert.equal(report.verdict, 'findings');
+    assert.equal(report.findings[0]!.declared, true, 'declared is still recorded as a fact — it just no longer buys a lower severity');
+    assert.equal(
+      report.findings[0]!.severity,
+      'critical',
+      'THE BLOCKER 2 FIX: a declared secret-shaped grant must stay critical, exactly like an undeclared one — this is what makes declaring the exfiltration NOT a way to dodge the override bar',
+    );
+    assert.equal(report.verdict, 'findings', 'a LONE env-read finding, with no accompanying network-egress finding, is still "findings" not "blocked" — the combo needs both categories (D-G)');
   });
 });
 
-describe('manifest cross-check: a FULLY DECLARED exfil-shaped script is still visible, not blocked (explicit peer-redirect AC)', () => {
-  it('reading a declared secret var and curling it to a declared network destination still lists BOTH findings, verdict "findings" not "blocked"', () => {
+// ---------------------------------------------------------------------------
+// BLOCKER 2 (2026-08-04, third adversarial review, FIX-FIRST — see D-K):
+// this describe block REPLACES the prior "FULLY DECLARED exfil-shaped
+// script is still visible, not blocked" test, which the reviewer identified
+// by name as pinning a LIVE CREDENTIAL LEAK as intended behaviour — the
+// second time this initiative did that (the first was the
+// ANTHROPIC_API_KEY/AGENT_ENV_ALLOWLIST defect, fixed in
+// hook-runtime.test.ts's D-M). Declaring the exfiltration shape must now be
+// `blocked`, not `findings` — this is the core assertion the whole fix
+// exists to flip.
+// ---------------------------------------------------------------------------
+
+describe('BLOCKER 2: the FULLY DECLARED exfiltration shape is now BLOCKED (was the live leak)', () => {
+  it('reading a declared secret var and curling it to a declared network destination is now BLOCKED — the exact case that was previously "findings"', () => {
     const fullyDeclaredPermissions: HookPermissionManifest = { env: ['GH_TOKEN'], read: [], network: true };
     const report = scanHookScript({ body: EXFIL_SCRIPT, permissions: fullyDeclaredPermissions });
 
     const categories = report.findings.map((f: HookScanFinding) => f.category).sort();
-    assert.deepEqual(
-      categories,
-      ['env-read', 'network-egress'],
-      'declaring everything must not make the exfil-shaped pattern disappear from the report',
-    );
+    assert.deepEqual(categories, ['env-read', 'network-egress'], 'declaring everything must not make the exfil-shaped pattern disappear from the report');
     assert.ok(
       report.findings.every((f: HookScanFinding) => f.declared === true),
-      'every finding in a fully-declared script must be marked declared',
+      'every finding in a fully-declared script is still marked declared — declared is a fact, not a verdict lever any more',
     );
-    assert.ok(
-      report.findings.every((f: HookScanFinding) => f.severity !== 'critical'),
-      'declared findings must not carry critical severity',
-    );
+
+    const envFinding = report.findings.find((f: HookScanFinding) => f.category === 'env-read')!;
+    assert.equal(envFinding.severity, 'critical', 'BLOCKER 2: a declared secret-shaped grant STAYS critical (D-K) — this is what makes the combo below trigger');
+
     assert.equal(
       report.verdict,
-      'findings',
-      'declaring the exfil-shaped combo downgrades it out of the blocked-combo condition — it is visible, not a hard stop, by design (operator judgement, not an automatic block)',
+      'blocked',
+      'THE FIX: declared-secret-grant + declared-egress = the exfiltration shape = blocked. Declaring it must never drop below the override bar.',
+    );
+  });
+
+  it('a blocked, fully-declared exfil hook is NOT approvable without an explicit override — same hard stop as the undeclared canonical fixture', () => {
+    const root = makeForgeRoot();
+    const fullyDeclaredPermissions: HookPermissionManifest = { env: ['GH_TOKEN'], read: [], network: true };
+    writeHookPackage(root, 'declared-exfil-hook', EXFIL_SCRIPT, fullyDeclaredPermissions);
+
+    assert.equal(isHookRunnable(root, 'declared-exfil-hook'), false);
+    assert.throws(
+      () => approveHook({ forgeRoot: root, id: 'declared-exfil-hook' }),
+      /blocked/i,
+      'approveHook must refuse a fully-declared exfil hook exactly as it refuses the undeclared one — declaring it buys NO free pass',
+    );
+    assert.equal(isHookRunnable(root, 'declared-exfil-hook'), false);
+
+    overrideHookBlock({ forgeRoot: root, id: 'declared-exfil-hook', reason: 'operator manually reviewed and accepted the risk' });
+    assert.equal(isHookRunnable(root, 'declared-exfil-hook'), true, 'an explicit, reasoned override is still the only route through — exactly like the undeclared case');
+  });
+
+  // Manifest-AS-TRIGGER, proven independent of body content (D-K + D-L): the
+  // secret-shaped grant fires purely from the MANIFEST — the script never
+  // references the var by name at all (no $VAR, no bare literal) — combined
+  // with declared network egress, this is still the exfiltration shape.
+  it('a secret-shaped grant declared but NEVER referenced in the script body still trips the combo when network egress is also present', () => {
+    const scriptThatNeverMentionsTheGrant = `#!/usr/bin/env bash\ncurl -s https://example.com/health > /dev/null\n`;
+    const report = scanHookScript({
+      body: scriptThatNeverMentionsTheGrant,
+      permissions: { env: ['ANTHROPIC_API_KEY'], read: [], network: true },
+    });
+
+    const envFinding = report.findings.find((f: HookScanFinding) => f.category === 'env-read');
+    assert.ok(envFinding, 'a secret-shaped MANIFEST grant must produce a finding even with zero body references');
+    assert.equal(envFinding!.match, 'ANTHROPIC_API_KEY');
+    assert.equal(envFinding!.severity, 'critical');
+    assert.equal(report.verdict, 'blocked', 'the grant + egress combination blocks even though the script text never spells the secret name');
+  });
+
+  // The reviewer's explicit "do not become 'everything is blocked'" guard:
+  // declared network with NO secret-shaped grant anywhere must still reduce
+  // friction exactly as before the fix.
+  it('declared network egress with NO secret-shaped grant anywhere stays "findings", not "blocked" — the fix must not over-block benign hooks', () => {
+    const benignNetworkScript = `#!/usr/bin/env bash\ncurl -s https://api.example.com/health\n`;
+    const report = scanHookScript({ body: benignNetworkScript, permissions: { env: [], read: [], network: true } });
+
+    assert.equal(
+      report.findings.some((f: HookScanFinding) => f.category === 'env-read'),
+      false,
+      'sanity: no secret-shaped grant/reference exists in this fixture at all',
+    );
+    assert.equal(report.verdict, 'findings', 'a genuinely benign declared-network hook must NOT be swept into "blocked" by the fix');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// MAJOR (2026-08-04, third adversarial review — see D-L): a secret-shaped
+// name read via a BARE LITERAL (printenv X / env | grep X / os.environ['X'])
+// previously produced ZERO findings — structurally invisible, not merely
+// downgraded — while the real value still reached the child if declared.
+// DECISION (mine, documented in D-L): implement bare-whole-word matching.
+// These are positive "now caught" pins, not another documented gap.
+// ---------------------------------------------------------------------------
+
+describe('MAJOR fix: bare-literal secret-shaped names (printenv/env/os.environ) are now caught, not structurally invisible (D-L)', () => {
+  it('`printenv ANTHROPIC_API_KEY` (undeclared, no $-prefix at all) is flagged', () => {
+    const script = `#!/usr/bin/env bash\nprintenv ANTHROPIC_API_KEY > /tmp/out\n`;
+    const report = scanHookScript({ body: script, permissions: DENY_ALL });
+    const finding = report.findings.find((f: HookScanFinding) => f.category === 'env-read');
+    assert.ok(finding, 'a bare printenv argument naming a secret-shaped var must be caught, not structurally invisible');
+    assert.equal(finding!.match, 'ANTHROPIC_API_KEY');
+    assert.equal(finding!.severity, 'critical');
+    assert.equal(finding!.declared, false);
+  });
+
+  it('`env | grep GH_TOKEN` (undeclared) is flagged', () => {
+    const script = `#!/usr/bin/env bash\nenv | grep GH_TOKEN\n`;
+    const report = scanHookScript({ body: script, permissions: DENY_ALL });
+    const finding = report.findings.find((f: HookScanFinding) => f.category === 'env-read');
+    assert.ok(finding, '`env | grep <secret-shaped-name>` must be caught');
+    assert.match(finding!.match, /GH_TOKEN/);
+  });
+
+  it('Python-style `os.environ[\'ANTHROPIC_API_KEY\']` (a quoted bare literal, no shell $-syntax) is flagged', () => {
+    const script = `#!/usr/bin/env python3\nimport os\nkey = os.environ['ANTHROPIC_API_KEY']\n`;
+    const report = scanHookScript({ body: script, permissions: DENY_ALL });
+    const finding = report.findings.find((f: HookScanFinding) => f.category === 'env-read');
+    assert.ok(finding, 'a quoted bare literal inside os.environ[...] must be caught — the name is spelled in full, not obfuscated');
+  });
+
+  it('a bare-literal secret grant that IS declared still stays critical, per BLOCKER 2 (D-K) — not re-downgraded through a different code path', () => {
+    const script = `#!/usr/bin/env bash\nprintenv ANTHROPIC_API_KEY > /tmp/out\n`;
+    const report = scanHookScript({ body: script, permissions: { env: ['ANTHROPIC_API_KEY'], read: [], network: false } });
+    const finding = report.findings.find((f: HookScanFinding) => f.category === 'env-read');
+    assert.ok(finding);
+    assert.equal(finding!.declared, true);
+    assert.equal(finding!.severity, 'critical');
+  });
+
+  it('a bare-literal reference AND a $VAR reference to the SAME name still produce exactly ONE finding, not two', () => {
+    const script = `#!/usr/bin/env bash\nprintenv ANTHROPIC_API_KEY\necho "$ANTHROPIC_API_KEY"\n`;
+    const report = scanHookScript({ body: script, permissions: DENY_ALL });
+    const envFindings = report.findings.filter((f: HookScanFinding) => f.category === 'env-read');
+    assert.equal(envFindings.length, 1, 'the two reference forms for the same name must be deduplicated into one finding');
+  });
+
+  it('accepted tradeoff, pinned honestly (D-L): a secret-shaped name mentioned in a COMMENT is also flagged (a documented false positive, not a silent one)', () => {
+    const script = `#!/usr/bin/env bash\n# this script intentionally never touches ANTHROPIC_API_KEY\necho ok\n`;
+    const report = scanHookScript({ body: script, permissions: DENY_ALL });
+    assert.equal(
+      report.findings.some((f: HookScanFinding) => f.category === 'env-read'),
+      true,
+      'ACCEPTED TRADEOFF: a bare-word scanner cannot distinguish a real reference from a comment mentioning the same literal name — over-flagging here is the deliberate, documented cost of closing the MAJOR (D-L), not an oversight',
     );
   });
 });
@@ -498,6 +713,102 @@ describe('JOB B: approval pins the manifest as well as the script (D-J)', () => 
 });
 
 // ---------------------------------------------------------------------------
+// MINOR (2026-08-04, third adversarial review — see D-M): `on`/`matcher`
+// were never part of the approval hash. Moving a hook from SessionEnd to
+// PreToolUse (firing on every tool call) with script + permissions
+// untouched left `needsReview` false. THIRD named hash: `triggerHash`.
+// ---------------------------------------------------------------------------
+
+/** Rewrite ONLY `on`/`matcher` on an existing hook.yaml, leaving the script
+ *  and `permissions:` block byte-identical — isolates a trigger-condition
+ *  edit from a script or manifest edit. Mirrors patchHookPermissions. */
+function patchHookTrigger(root: string, id: string, on: string, matcher?: string): void {
+  const hookYamlPath = join(root, 'studio', 'hooks', id, 'hook.yaml');
+  const doc = yaml.load(readFileSync(hookYamlPath, 'utf8')) as Record<string, unknown>;
+  doc['on'] = on;
+  if (matcher !== undefined) doc['matcher'] = matcher;
+  else delete doc['matcher'];
+  writeFileSync(hookYamlPath, yaml.dump(doc), 'utf8');
+}
+
+describe('MINOR: approval pins the TRIGGER (on/matcher) too, not only script + permissions (D-M)', () => {
+  it('moving `on` from SessionEnd to PreToolUse — script and permissions untouched — falls back to needing review', () => {
+    const root = makeForgeRoot();
+    const dir = join(root, 'studio', 'hooks', 'retrigger-hook');
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(join(dir, 'scripts', 'run.sh'), BENIGN_SCRIPT, 'utf8');
+    writeFileSync(
+      join(dir, 'hook.yaml'),
+      yaml.dump({ id: 'retrigger-hook', name: 'retrigger-hook', description: 'x', on: 'SessionEnd', script: 'scripts/run.sh', permissions: DENY_ALL }),
+      'utf8',
+    );
+    approveHook({ forgeRoot: root, id: 'retrigger-hook' });
+    assert.equal(isHookRunnable(root, 'retrigger-hook'), true);
+
+    patchHookTrigger(root, 'retrigger-hook', 'PreToolUse');
+
+    const state = hookRunState(root, 'retrigger-hook');
+    assert.equal(
+      state.needsReview,
+      true,
+      'moving the trigger from SessionEnd (fires once) to PreToolUse (fires on every tool call) grants no new capability but materially changes exposure — must re-enter review',
+    );
+    assert.equal(isHookRunnable(root, 'retrigger-hook'), false);
+  });
+
+  it('adding/changing a `matcher` — on/script/permissions untouched — also forces re-review', () => {
+    const root = makeForgeRoot();
+    const dir = join(root, 'studio', 'hooks', 'rematcher-hook');
+    mkdirSync(join(dir, 'scripts'), { recursive: true });
+    writeFileSync(join(dir, 'scripts', 'run.sh'), BENIGN_SCRIPT, 'utf8');
+    writeFileSync(
+      join(dir, 'hook.yaml'),
+      yaml.dump({
+        id: 'rematcher-hook',
+        name: 'rematcher-hook',
+        description: 'x',
+        on: 'PreToolUse',
+        matcher: 'Bash(git status)',
+        script: 'scripts/run.sh',
+        permissions: DENY_ALL,
+      }),
+      'utf8',
+    );
+    approveHook({ forgeRoot: root, id: 'rematcher-hook' });
+
+    patchHookTrigger(root, 'rematcher-hook', 'PreToolUse', 'Bash(gh pr merge)');
+
+    const state = hookRunState(root, 'rematcher-hook');
+    assert.equal(state.needsReview, true, 'widening the matcher (a narrow git-status trigger to a merge command) must re-enter review');
+  });
+
+  it('the ledger records a THIRD distinct hash (triggerHash) after approval', () => {
+    const root = makeForgeRoot();
+    writeHookPackage(root, 'three-hash-hook', BENIGN_SCRIPT, { env: ['GRANTED'], read: [], network: false });
+    approveHook({ forgeRoot: root, id: 'three-hash-hook' });
+
+    const entry = readHookApprovalLedger(root).get('three-hash-hook');
+    assert.ok(entry);
+    const e = entry as unknown as { scriptHash: string; permissionsHash: string; triggerHash: string };
+    assert.equal(typeof e.triggerHash, 'string');
+    assert.notEqual(e.triggerHash, e.scriptHash, 'sanity: the trigger hash must not coincide with the script hash');
+    assert.notEqual(e.triggerHash, e.permissionsHash, 'sanity: the trigger hash must not coincide with the permissions hash');
+  });
+
+  it('hashHookTrigger is pure and content-addressed: same on/matcher → same hash; a real change → a different hash', () => {
+    const a = hashHookTrigger('SessionEnd', undefined);
+    const b = hashHookTrigger('SessionEnd', undefined);
+    assert.equal(a, b, 'identical trigger inputs must hash identically');
+
+    const c = hashHookTrigger('PreToolUse', undefined);
+    assert.notEqual(a, c, 'a real `on` change must change the hash');
+
+    const d = hashHookTrigger('SessionEnd', 'Bash(gh pr create)');
+    assert.notEqual(a, d, 'adding a matcher must change the hash even when `on` is unchanged');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // scanHookPackage — the disk-reading wrapper over the pure scanner
 // ---------------------------------------------------------------------------
 
@@ -613,12 +924,16 @@ describe('env-read: AZDO_*/GH_* PREFIX rule (roadmap-named, previously unimpleme
     assert.equal(envFindings.length, 1, 'a var matching both rules must still produce ONE finding, not two');
   });
 
-  it('a GH_/AZDO_-prefixed var declared in permissions.env is downgraded (declared), not blocking, per the existing D-H rule', () => {
+  // BLOCKER 2 (D-K) revision: GH_REPO is secret-shaped via the prefix rule,
+  // so declaring it no longer downgrades it either — same carve-out as the
+  // suffix-matched case in the "env read — D-K RETIRES the downgrade"
+  // describe block above.
+  it('a GH_/AZDO_-prefixed var declared in permissions.env STAYS CRITICAL (BLOCKER 2 / D-K) — prefix-matched names get the same treatment as suffix-matched ones', () => {
     const report = scanHookScript({ body: scriptReferencing('GH_REPO'), permissions: { env: ['GH_REPO'], read: [], network: false } });
     const finding = report.findings.find((f: HookScanFinding) => f.category === 'env-read');
-    assert.ok(finding, 'still emitted — D-H never removes a finding for declared access');
+    assert.ok(finding, 'still emitted — declared access never removes a finding');
     assert.equal(finding!.declared, true);
-    assert.notEqual(finding!.severity, 'critical');
+    assert.equal(finding!.severity, 'critical', 'a declared prefix-matched secret-shaped name stays critical, exactly like a declared suffix-matched one');
   });
 
   it('an unrelated var name (MY_GRANTED_VAR — no prefix, no suffix) is NOT flagged', () => {

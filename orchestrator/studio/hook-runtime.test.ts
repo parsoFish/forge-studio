@@ -117,6 +117,26 @@
  *       instead, or a script referencing `$ANTHROPIC_API_KEY` without
  *       declaring it is silently reported as fine while the child actually
  *       gets an empty value. Also pinned below.
+ *  D-N. BLOCKER 1 (2026-08-04, third adversarial review, FIX-FIRST):
+ *       `runHookScript`'s spawn gate is currently `if (state.verdict ===
+ *       'blocked' && !state.runnable) throw` — for a `clean`/`findings`
+ *       verdict, `runnable`/`needsReview` are never consulted at all, so a
+ *       hook that has NEVER been approved (no ledger entry — `runnable:
+ *       false, needsReview: true`) still spawns and runs to completion as
+ *       long as its scan verdict isn't `blocked`. `isHookRunnable` — the
+ *       function whose name says it is the approval gate — has zero
+ *       production callers today. Reproduced by the reviewer with a real
+ *       planted-key exfiltration before this file was touched.
+ *       THE FIX (observable behaviour pinned below, implementer's choice of
+ *       exact code shape): the gate must be `if (!state.runnable) throw` —
+ *       equivalently, `runHookScript` must refuse to spawn UNLESS
+ *       `isHookRunnable(forgeRoot, id)` is true, for every verdict, not only
+ *       `blocked`. The existing blocked-hook-refused / overridden-hook-runs
+ *       tests above remain valid (a `blocked`-and-overridden hook is exactly
+ *       one of the states where `runnable` is legitimately true) — this is
+ *       strictly a widening of the SAME check to the two verdicts it never
+ *       covered, not a new mechanism. New describe block: "BLOCKER 1: an
+ *       UNAPPROVED hook must not spawn, whatever its verdict".
  */
 
 import { describe, it, after } from 'node:test';
@@ -128,7 +148,7 @@ import yaml from 'js-yaml';
 
 import { AGENT_ENV_ALLOWLIST, HOOK_ENV_BASE_ALLOWLIST, MAX_ENV_OVERRIDE_KEYS, buildChildEnv } from '../spawn-env.ts';
 import { createLogger, type EventLogEntry } from '../logging.ts';
-import { overrideHookBlock } from './hook-scan.ts';
+import { approveHook, overrideHookBlock, scanHookPackage } from './hook-scan.ts';
 import type { HookPermissionManifest } from './hook-library.ts';
 
 import {
@@ -499,6 +519,119 @@ describe('runHookScript: a blocked, unapproved hook is refused — actual preven
       }),
     );
     assert.equal(existsSync(markerPath), true, 'an overridden hook must actually run');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// BLOCKER 1 (2026-08-04 third adversarial review, FIX-FIRST): `runHookScript`'s
+// gate today is `if (state.verdict === 'blocked' && !state.runnable) throw` —
+// for ANY OTHER verdict (`clean`/`findings`), `runnable`/`needsReview` are
+// never consulted at all. `isHookRunnable` — the function whose name says it
+// is THE gate — has zero production callers. Reproduced live by the reviewer:
+// a hook with NO approval ledger entry at all (`runnable: false, needsReview:
+// true`) still ran and exfiltrated a planted key, because its verdict simply
+// wasn't `blocked`. Deny-by-default approval is decorative for every verdict
+// except the one that already had a separate hard stop.
+//
+// THE PIN: the gate must be `if (!state.runnable) throw` — an unapproved hook
+// must not spawn, WHATEVER its verdict (clean, findings, or blocked-and-
+// overridden are the only runnable states; clean/findings-but-never-approved
+// must refuse exactly like blocked-but-never-overridden already does).
+// Proven against a REAL spawned child producing an OBSERVABLE side effect (a
+// marker file), so refusal is provable by the effect's absence — not by an
+// exception type alone, mirroring the existing blocked-hook pattern above.
+// The over-refusal direction is pinned too: an APPROVED clean/findings hook
+// must still run — over-refusal would make the whole feature inert exactly
+// as under-refusal does, just in the opposite direction.
+// ---------------------------------------------------------------------------
+
+describe('BLOCKER 1: an UNAPPROVED hook must not spawn, whatever its verdict', () => {
+  // Deliberately verdict-'clean' (no findings at all: MY_GRANTED_VAR/
+  // MARKER_PATH are not secret-shaped, network is false, nothing else
+  // matches) — isolates BLOCKER 1 from the BLOCKER 2 severity/verdict fix
+  // elsewhere; this hook would have been runnable-after-approval under BOTH
+  // the old and the fixed scanner, so a failure here can only be the
+  // approval-gate bug, not a verdict-computation one.
+  const CLEAN_VERDICT_SCRIPT = `#!/usr/bin/env bash\necho "$MY_GRANTED_VAR" > "$MARKER_PATH"\n`;
+  const CLEAN_VERDICT_PERMISSIONS: HookPermissionManifest = { env: ['MY_GRANTED_VAR', 'MARKER_PATH'], read: [], network: false };
+
+  it('reproduces the reviewer\'s finding: NO approval ledger entry at all, verdict "clean" — must NOT spawn (real child, observable side effect)', () => {
+    const root = makeForgeRoot();
+    const markerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-blocker1-marker-'));
+    createdDirs.push(markerDir);
+    const markerPath = join(markerDir, 'leaked.marker');
+
+    writeHookPackage(root, 'never-approved-clean-hook', CLEAN_VERDICT_SCRIPT, CLEAN_VERDICT_PERMISSIONS);
+    const logger = createLogger('blocker1-clean-cycle', makeLogsDir());
+
+    // Sanity: this hook really is verdict 'clean', not 'blocked' — proves the
+    // refusal below cannot be coming from the pre-existing blocked-verdict
+    // hard stop; it has to come from the (currently missing) runnable check.
+    assert.equal(scanHookPackage(root, 'never-approved-clean-hook').verdict, 'clean');
+
+    assert.throws(
+      () =>
+        runHookScript({
+          forgeRoot: root,
+          id: 'never-approved-clean-hook',
+          logger,
+          initiativeId: 'INIT-test',
+          parentEnv: { ...process.env, MY_GRANTED_VAR: 'planted-secret-value', MARKER_PATH: markerPath },
+        }),
+      /not runnable|not approved|needsReview|blocked/i,
+    );
+    assert.equal(
+      existsSync(markerPath),
+      false,
+      'REPRODUCTION: an unapproved hook with verdict "clean" must never actually spawn — the marker file (planted secret written to it) must never appear',
+    );
+  });
+
+  it('the SAME shape but verdict "findings" (declared network egress, no secret) is ALSO refused unapproved', () => {
+    const root = makeForgeRoot();
+    const markerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-blocker1-marker-2-'));
+    createdDirs.push(markerDir);
+    const markerPath = join(markerDir, 'leaked.marker');
+
+    const findingsScript = `#!/usr/bin/env bash\ncurl -s https://example.com/health > /dev/null\necho ran > "$MARKER_PATH"\n`;
+    const findingsPermissions: HookPermissionManifest = { env: ['MARKER_PATH'], read: [], network: true };
+    writeHookPackage(root, 'never-approved-findings-hook', findingsScript, findingsPermissions);
+    const logger = createLogger('blocker1-findings-cycle', makeLogsDir());
+
+    assert.equal(scanHookPackage(root, 'never-approved-findings-hook').verdict, 'findings');
+
+    assert.throws(() =>
+      runHookScript({
+        forgeRoot: root,
+        id: 'never-approved-findings-hook',
+        logger,
+        initiativeId: 'INIT-test',
+        parentEnv: { ...process.env, MARKER_PATH: markerPath },
+      }),
+    );
+    assert.equal(existsSync(markerPath), false, 'an unapproved "findings"-verdict hook must not spawn either');
+  });
+
+  it('over-refusal guard: the SAME clean-verdict hook, once properly APPROVED, actually runs', () => {
+    const root = makeForgeRoot();
+    const markerDir = mkdtempSync(join(tmpdir(), 'hook-runtime-blocker1-marker-3-'));
+    createdDirs.push(markerDir);
+    const markerPath = join(markerDir, 'leaked.marker');
+
+    writeHookPackage(root, 'approved-clean-hook', CLEAN_VERDICT_SCRIPT, CLEAN_VERDICT_PERMISSIONS);
+    approveHook({ forgeRoot: root, id: 'approved-clean-hook' });
+    const logger = createLogger('blocker1-approved-cycle', makeLogsDir());
+
+    assert.doesNotThrow(() =>
+      runHookScript({
+        forgeRoot: root,
+        id: 'approved-clean-hook',
+        logger,
+        initiativeId: 'INIT-test',
+        parentEnv: { ...process.env, MY_GRANTED_VAR: 'granted-value', MARKER_PATH: markerPath },
+      }),
+    );
+    assert.equal(existsSync(markerPath), true, 'an explicitly approved hook must still actually run — over-refusal would make the feature inert');
   });
 });
 
