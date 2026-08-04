@@ -107,6 +107,7 @@ import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
 import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
+import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
   readSessionStatus,
   writeSessionStatus,
@@ -1119,10 +1120,23 @@ async function handleHttp(
     try {
       const body = (await readJson(req)) as { project?: unknown; inputs?: unknown };
       // Resolve + validate against the live roster (unknown/interactive → 400).
+      let def: ReturnType<typeof resolveDispatchableAgent>;
       try {
-        resolveDispatchableAgent(slug, listAgentDefinitions(skillsDir(ctx.forgeRoot)));
+        def = resolveDispatchableAgent(slug, listAgentDefinitions(skillsDir(ctx.forgeRoot)));
       } catch (err) {
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
+        return;
+      }
+      // R3-04 D9.2 — pre-spawn connection-readiness refusal, BEFORE
+      // spawnAgentDispatch is ever called: same shared derivation
+      // (`unreadyConnectionsFor`/`formatUnreadyConnections`,
+      // `orchestrator/studio/connection-run-gate.ts`) as run-agent.ts's own
+      // D9.1 gate — one vocabulary, not a second one open-coded here. A
+      // blocked response carries neither `ok` nor `runId`: nothing was
+      // dispatched.
+      const unready = unreadyConnectionsFor(ctx.forgeRoot, def);
+      if (unready.length > 0) {
+        sendJson(res, 409, { error: formatUnreadyConnections(def, unready) }, origin);
         return;
       }
       let project: string | undefined;

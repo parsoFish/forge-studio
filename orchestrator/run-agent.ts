@@ -53,6 +53,8 @@ import { withIdleDeadline } from './stream-deadline.ts';
 import type { AgentBudgets, AgentDefinition } from './studio/types.ts';
 import { getAdapter, resolveSdkId } from '../loops/_adapters/registry.ts';
 import type { QueryFn } from '../loops/_adapters/types.ts';
+import { unreadyConnectionsFor, formatUnreadyConnections } from './studio/connection-run-gate.ts';
+import type { ProbeResult } from './studio/connection-probe.ts';
 
 /**
  * A `runId` is used verbatim as the log directory name — `createLogger`
@@ -81,6 +83,22 @@ export function isSafeRunId(runId: string): boolean {
 function assertSafeRunId(runId: string): void {
   if (!isSafeRunId(runId)) {
     throw new Error(`runAgent: unsafe runId (path-traversal risk): ${JSON.stringify(runId)}`);
+  }
+}
+
+/**
+ * R3-04 D9.1 — pre-spawn connection-readiness gate. Throws (naming every
+ * unready bound component + its state) if `def` binds a tool/mcp connection
+ * that is not `available`. Shares `unreadyConnectionsFor`/
+ * `formatUnreadyConnections` (`./studio/connection-run-gate.ts`) with the
+ * bridge's D9.2 refusal — one derivation, one vocabulary. `ctx.probeConnection`
+ * is test-injection only; production falls through to the real default
+ * prober scoped to `FORGE_ROOT`.
+ */
+function assertConnectionsReady(def: AgentDefinition, ctx: RunContext): void {
+  const unready = unreadyConnectionsFor(FORGE_ROOT, def, ctx.probeConnection);
+  if (unready.length > 0) {
+    throw new Error(formatUnreadyConnections(def, unready));
   }
 }
 
@@ -176,6 +194,16 @@ export type RunContext = {
    * the raw SDK `query` anywhere under orchestrator/, loops/, cli/.
    */
   queryFn?: StreamQueryFn;
+  /**
+   * Pre-spawn connection-readiness gate (R3-04 D9.1) — TEST-INJECTION ONLY,
+   * mirrors `queryFn`'s seam exactly. Production omits this: the default is
+   * the REAL per-connection prober (`defaultProbeConnection`,
+   * `./studio/connection-run-gate.ts`) against `FORGE_ROOT`'s curated
+   * catalog. `runAgent` calls this once per id `def` actually binds
+   * (`composition.tools` + `composition.mcps`) — an agent binding nothing
+   * never calls it at all, real or injected (cost discipline).
+   */
+  probeConnection?: (id: string) => ProbeResult;
 };
 
 export type RunAgentResult = {
@@ -245,6 +273,18 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
         `runAgent: lifecycle 'caller' requires loopStrategy 'one-shot' (agent "${def.slug}" declares ${JSON.stringify(loopStrategy)}) — the legacy invocation path has no caller-owned event shape`,
       );
     }
+    // D9.1 (caller lifecycle, T2 ruling: uniform "no real spawn ⇒ no
+    // environment gate"): the SAME connection-readiness gate applies here,
+    // at the top of the branch — skipped under either suppression env var,
+    // exactly mirroring the 'self' path's own dry-bridge/no-spawn check
+    // below. Skipping the GATE does not change whether the underlying
+    // one-shot spawn proceeds: caller lifecycle has always unconditionally
+    // invoked queryFn regardless of these env vars — the phase pipelines own
+    // their own suppression at their own level (module doc, "In caller mode
+    // the caller also owns harness-safety").
+    const callerSuppressed =
+      process.env[FORGE_DRY_BRIDGE_ENV] === '1' || process.env[FORGE_ARCHITECT_NO_SPAWN_ENV] === '1';
+    if (!callerSuppressed) assertConnectionsReady(def, ctx);
     return runOneShotSpawn(def, ctx, spec);
   }
 
@@ -285,6 +325,12 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     });
     return { costUsd: 0, outputRefs: [], tokensIn: 0, tokensOut: 0, suppressed: true };
   }
+
+  // D9.1 — pre-spawn connection-readiness gate, placed AFTER the
+  // dry-bridge/no-spawn suppression early-return above: a suppressed
+  // rehearsal must not be blocked by an environment fact about a spawn that
+  // never happens. "Pre-spawn" is exact — immediately before the real spawn.
+  assertConnectionsReady(def, ctx);
 
   const spawned =
     loopStrategy === 'one-shot'
