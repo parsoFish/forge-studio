@@ -272,7 +272,7 @@ id. All nine ids currently in `composition.hooks` are neither: they name
 platform machinery whose implementation stays in `orchestrator/`.
 
 Two disjoint vocabularies must not silently share one field. Concretely:
-`resolveBandHook` (`orchestrator/agent-bands.ts`) scans the array and routes
+`resolveBandGuard` (`orchestrator/agent-bands.ts`) scans the array and routes
 the node to another agent's canonical pipeline. If a user-authorable hook id
 landed in the same array, an operator (or an installed community package)
 choosing the id `wi-contract` would **hijack flow dispatch** — the
@@ -301,7 +301,7 @@ data (the R3-06 `every`-vs-`some` lesson).
 4. **`studio/catalog.yaml`'s `hooks:` section is deleted and replaced by
    `guards:`** with the same nine entries. Whether an entry is a *band*
    (selects a pipeline) or a *toggle* (switches one behaviour) is **DERIVED**
-   from `BAND_HOOK_IDS`, not declared — no new declared field is introduced.
+   from `BAND_GUARD_IDS`, not declared — no new declared field is introduced.
    Guards remain read-only/locked in the palette: they are composable onto an
    agent, never editable from Studio.
 5. **The rename is provably behaviour-free.** `orchestrator/test-fixtures/
@@ -324,5 +324,5 @@ field name changes, corrected in place with a pointer here.
 **Stated limit, not overclaimed.** This split removes the *id-collision*
 hijack path. It does not make band selection safe against an operator editing
 `composition.guards` directly — that remains guarded by the existing
-`composition/band-hook` lint plus `execAgent`'s runtime slug backstop, which
+`composition/band-guard` lint plus `execAgent`'s runtime slug backstop, which
 are unchanged by this amendment.

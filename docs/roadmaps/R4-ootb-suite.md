@@ -173,7 +173,8 @@ R4-01 F1–F3 landed 2026-07-24 (wave-4 session 1, branch `feat/r4-01-artifact-m
   `onMessage` observer (telemetry stays caller-side, ADR-036), scratch
   `.forge/agent-run/PROMPT.md` on the legacy path. Shared `StreamQueryFn` seam in
   `orchestrator/pinned-sdk-query.ts` (`pinnedStreamQuery`, the one structural cast).
-- **`orchestrator/agent-bands.ts`** — band-hook registry (`wi-contract`, `reflection-close`);
+- **`orchestrator/agent-bands.ts`** — band-guard registry (`wi-contract`, `reflection-close`;
+  named band-*hook* until R3-03 renamed the vocabulary, 2026-08-04);
   flow-runner's `AGENT_BAND_EXECUTORS` maps them onto the unchanged `execPm`/`execReflect`
   bands; `execAgent` routes band hooks first, then `loopStrategy: 'ralph'` → the dev-loop
   pipeline (lint + runtime-guard restricted to `developer-ralph`).
@@ -257,7 +258,7 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
   interactive runner (ADR-039 §5); its residual TS prompt prose is R4-04
   material. The whole-branch review hardened the seam post-build: band
   hooks + ralph got matching lint/runtime canonical-slug guards, budget
-  caps fail loud (pipelines + `budgets/range`/`composition/band-hook`
+  caps fail loud (pipelines + `budgets/range`/`composition/band-guard`
   lints), `execAgent` threads the initiative cost budget so declared
   share caps resolve, and the builder renders `loopStrategy` honestly.
 - **Depends on:** R2-01 (runnable primitive), R2-02 (def-driven builder
@@ -1029,7 +1030,7 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
   `dev→demo→adversarial-review→verdict` (v2). The two successor agents are wired
   via **band hooks** (not new executor kinds): `agent-bands.ts` gains
   `demo-band`/`review-band` + a single-source `BAND_CANONICAL_SLUG` map consumed by
-  both `execAgent`'s runtime backstop and `validate.ts`'s band-hook lint;
+  both `execAgent`'s runtime backstop and `validate.ts`'s band-guard lint;
   `demo-agent`/`adversarial-review` SKILL.md declare the hooks. **`execDemo`** wraps
   `runDemoAgentPipeline` and carries the RELOCATED unifier residual — the demo agent
   authors `.forge/pr-description.md` alongside `demo.json` (hard-required by

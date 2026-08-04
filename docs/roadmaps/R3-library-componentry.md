@@ -955,7 +955,7 @@ rather than deferred within it:
   `composition/guard-unknown` lint error threaded through the **real** lint
   entry point so the rule is not inert; and the agent builder's drop zone,
   palette, YAML preview and `readiness/guard` check. band-vs-toggle is
-  **DERIVED** from `BAND_HOOK_IDS` — a `kind:` declared in the catalog file is
+  **DERIVED** from `BAND_GUARD_IDS` — a `kind:` declared in the catalog file is
   ignored, pinned by a test that declares a wrong one. **Dispatch is
   byte-identical**, proven by an extended golden spawn-capture suite (2 of 4
   band pipelines before, now all four plus the generic one-shot option shape
