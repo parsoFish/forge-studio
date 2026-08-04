@@ -20,16 +20,18 @@
  * mkdtempSync, mirroring community-index.test.ts / hook-scan.test.ts.
  *
  * ---------------------------------------------------------------------------
- * ESCALATION (restated in the T3 final report): `routeCommunityInstall`'s
- * behaviour for a WELL-FORMED-SLUG id that resolves to NO item at all (not a
- * traversal/non-slug shape — D9 pins that one THROWS — but a plain unknown
- * id) is left UNTESTED here. Two defensible designs exist: throw (treat "no
- * such item" as a caller-input problem, same bucket as a bad slug) or return
- * `{pipeline:'none', reason:'unknown item'}` (treat "no route" as covering
- * "nothing to route to"). This file does not guess; see the T3 report.
- * `cli/bridge-studio-community.test.ts` DOES pin the observable HTTP
- * behaviour (`POST .../:kind/<unknown>/install` → 404), independent of which
- * internal shape `routeCommunityInstall` itself takes for that case.
+ * T2 ROUND 2 RULING (escalation #3): `routeCommunityInstall` for a
+ * WELL-FORMED-SLUG id that resolves to NO item at all returns
+ * `{pipeline:'none', reason}` — it does NOT throw. A throw is reserved for
+ * MALFORMED input (traversal-shaped, non-slug, over-length — D9, unchanged
+ * below): that is an attack or a programming error. A well-formed slug
+ * matching no item is an ordinary not-found, the SAME bucket as "known item,
+ * no vendored package" — both are legitimately "no route" outcomes. The two
+ * `reason` strings must be TEXTUALLY DISTINGUISHABLE (pinned below) so a
+ * caller (the bridge) can map "unknown item" → 404 and "known but not
+ * vendored" → 400 without guessing — collapsing them into one indistinguishable
+ * `none` would be the "declared-data-fails-open inside the enforcement
+ * mechanism" shape this campaign keeps hitting.
  */
 
 import { describe, it, after } from 'node:test';
@@ -170,6 +172,50 @@ describe('routeCommunityInstall — D9: id validation', () => {
   it('an over-length id THROWS (mirrors assertSkillSlug\'s MAX_SKILL_ID_LENGTH guard)', () => {
     const root = makeForgeRoot();
     assert.throws(() => routeCommunityInstall(root, 'hook', 'x'.repeat(200)));
+  });
+});
+
+// ===========================================================================
+// routeCommunityInstall — T2 ruling #3: a well-formed slug matching NO item
+// returns {pipeline:'none', reason}, distinguishable from "known but not
+// vendored". Never throws — only a malformed id throws (D9, above).
+// ===========================================================================
+
+describe('routeCommunityInstall — unknown item (T2 ruling #3)', () => {
+  it('a well-formed slug matching NO item anywhere → {pipeline:"none", reason} — never a throw', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    const route = routeCommunityInstall(root, 'skill', 'totally-unknown-item-nowhere');
+    assert.equal(route.pipeline, 'none');
+    if (route.pipeline !== 'none') return;
+    assert.ok(route.reason.length > 0);
+  });
+
+  it('the "unknown item" reason is TEXTUALLY DISTINGUISHABLE from the "known, no vendored package" reason', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, { communitySkills: [{ id: 'known-but-not-vendored' }] });
+
+    const unknownRoute = routeCommunityInstall(root, 'skill', 'genuinely-unknown-item');
+    const knownNoVendorRoute = routeCommunityInstall(root, 'skill', 'known-but-not-vendored');
+
+    assert.equal(unknownRoute.pipeline, 'none');
+    assert.equal(knownNoVendorRoute.pipeline, 'none');
+    if (unknownRoute.pipeline !== 'none' || knownNoVendorRoute.pipeline !== 'none') return;
+
+    assert.notEqual(unknownRoute.reason, knownNoVendorRoute.reason, 'the two reasons must not collapse into the same indistinguishable string — a caller (the bridge) must be able to tell "unknown" from "no vendored package" apart WITHOUT guessing');
+    assert.match(unknownRoute.reason, /unknown|no such|not found|does not exist/i, `expected the unknown-item reason to name itself as such; got: "${unknownRoute.reason}"`);
+    assert.doesNotMatch(unknownRoute.reason, /vendor/i, 'the unknown-item reason must not read as "no vendored package" — that would collapse the two cases');
+    assert.match(knownNoVendorRoute.reason, /vendor/i, `expected the known-but-not-vendored reason to name the real cause; got: "${knownNoVendorRoute.reason}"`);
+    assert.doesNotMatch(knownNoVendorRoute.reason, /unknown|no such|not found|does not exist/i, 'the known-but-not-vendored reason must not read as "unknown" — the item genuinely exists in the catalog');
+  });
+
+  it('an unknown hook id and an unknown connection id ALSO return {pipeline:"none"}, never a throw', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, {});
+    const hookRoute = routeCommunityInstall(root, 'hook', 'no-such-hook-anywhere');
+    const mcpRoute = routeCommunityInstall(root, 'mcp', 'no-such-mcp-anywhere');
+    assert.equal(hookRoute.pipeline, 'none');
+    assert.equal(mcpRoute.pipeline, 'none');
   });
 });
 

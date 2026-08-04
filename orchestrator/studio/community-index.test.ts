@@ -486,6 +486,47 @@ describe('listCommunityIndex — D5: signals are never invented', () => {
     assert.equal(items.find((i) => i.id === 'no-signal-skill')!.signals, null);
     assert.equal(items.find((i) => i.id === 'no-signal-hook')!.signals, null);
   });
+
+  // T2 round 2, escalation #2 mandatory addition: "a signals block that
+  // cannot name who published the number is worse than no signals block."
+  // reqString('provenance') only rejects a truly EMPTY string, not a
+  // whitespace-only one — so a whitespace-only provenance is a real,
+  // loader-reachable edge case, not a hypothetical.
+  it('a catalog entry with stars but a WHITESPACE-ONLY provenance renders signals:null, not a signals block with a blank attributedTo', () => {
+    const root = makeForgeRoot();
+    writeCatalog(root, { communitySkills: [{ id: 'blank-provenance-skill', stars: '99', provenance: '   ' }] });
+    const items = listCommunityIndex(root);
+    const entry = items.find((i) => i.id === 'blank-provenance-skill');
+    assert.ok(entry);
+    assert.equal(entry!.signals, null, 'a signals block whose attributedTo would be blank/whitespace must not be emitted at all — fall back to null');
+  });
+});
+
+// T2 round 2, MANDATORY M4: a negative sweep over the REAL repo's full index
+// — no item anywhere may carry a fabricated/degenerate signal.
+describe('listCommunityIndex — M4: full-repo negative sweep for a fabricated zero', () => {
+  it('no item in the REAL committed index has signals non-null with a degenerate stars value ("", "0", "0k", or null)', () => {
+    const items = listCommunityIndex(REPO_ROOT);
+    const degenerate = new Set(['', '0', '0k', 'null']);
+    for (const item of items) {
+      if (item.signals === null) continue;
+      assert.ok(item.signals!.stars !== null, `item "${item.kind}:${item.id}" has signals but a null stars value — should have been signals:null instead`);
+      assert.ok(
+        !degenerate.has((item.signals!.stars ?? '').trim().toLowerCase()),
+        `item "${item.kind}:${item.id}" has a degenerate stars value "${item.signals!.stars}" — a non-null signals block must always carry a REAL published value`,
+      );
+      assert.ok(item.signals!.attributedTo.trim().length > 0, `item "${item.kind}:${item.id}" has a signals block with a blank attributedTo`);
+    }
+  });
+
+  it('every vendored item and every connection (tool/mcp) in the REAL index carries signals === null EXACTLY, never an empty object', () => {
+    const items = listCommunityIndex(REPO_ROOT);
+    for (const item of items) {
+      if (item.vendored || item.kind === 'tool' || item.kind === 'mcp') {
+        assert.equal(item.signals, null, `item "${item.kind}:${item.id}" (vendored:${item.vendored}) must carry signals === null exactly`);
+      }
+    }
+  });
 });
 
 describe('listCommunityIndex — D13: item identity is the (kind, id) PAIR', () => {
