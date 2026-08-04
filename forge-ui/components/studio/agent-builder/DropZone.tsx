@@ -22,6 +22,7 @@ const ZONE_LABELS: Record<Kind, string> = {
   tool:  'Tools & CLIs',
   mcp:   'MCP Servers',
   guard: 'Guards',
+  hook:  'Hooks',
 };
 
 const ZONE_HINTS: Record<Kind, string> = {
@@ -29,6 +30,10 @@ const ZONE_HINTS: Record<Kind, string> = {
   tool:  'drag tools here — CLIs and runtimes it can invoke',
   mcp:   'drag MCP servers here — structured data & action channels',
   guard: 'drag guards here — at minimum attach event-log for observability',
+  // Distinct vocabulary from guards on purpose (ADR-027 R3-03 amendment):
+  // composition.hooks holds library hook ids, composition.guards holds the
+  // fixed platform dispatch-key set — they must never merge here either.
+  hook:  'drag hooks here — lifecycle scripts this agent carries',
 };
 
 const ZONE_IDS: Record<Kind, string> = {
@@ -36,6 +41,7 @@ const ZONE_IDS: Record<Kind, string> = {
   tool:  'zone-tools',
   mcp:   'zone-mcps',
   guard: 'zone-guards',
+  hook:  'zone-hooks',
 };
 
 function kindOf(id: string): Kind | null {
@@ -43,6 +49,7 @@ function kindOf(id: string): Kind | null {
   if (id.startsWith('tl-') || id.startsWith('tool-')) return 'tool';
   if (id.startsWith('mcp-')) return 'mcp';
   if (id.startsWith('gd-') || id.startsWith('guard-')) return 'guard';
+  if (id.startsWith('hk-') || id.startsWith('hook-')) return 'hook';
   return null;
 }
 
@@ -52,6 +59,7 @@ function catalogName(catalog: Catalog, id: string): string {
     ...(catalog.tools ?? []),
     ...(catalog.mcps ?? []),
     ...(catalog.guards ?? []),
+    ...(catalog.hooks ?? []),
   ];
   return all.find((i) => i.id === id)?.name as string ?? id;
 }

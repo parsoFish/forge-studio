@@ -8,14 +8,18 @@ import type { Catalog, CatalogItem } from '@/lib/studio-client';
 // Search + collapsible groups + draggable chips + used-dimming
 // ---------------------------------------------------------------------------
 
-type Group = { key: keyof Pick<Catalog, 'skills' | 'tools' | 'mcps' | 'guards'>; kind: Kind; label: string };
-export type Kind = 'skill' | 'tool' | 'mcp' | 'guard';
+type Group = { key: keyof Pick<Catalog, 'skills' | 'tools' | 'mcps' | 'guards' | 'hooks'>; kind: Kind; label: string };
+export type Kind = 'skill' | 'tool' | 'mcp' | 'guard' | 'hook';
 
 const GROUPS: Group[] = [
   { key: 'skills', kind: 'skill', label: 'Skills' },
   { key: 'tools',  kind: 'tool',  label: 'Tools / CLIs' },
   { key: 'mcps',   kind: 'mcp',   label: 'MCP Servers' },
   { key: 'guards', kind: 'guard', label: 'Guards' },
+  // Real library hooks (studio/hooks/<id>/) — a DISTINCT vocabulary from
+  // guards (composition.hooks vs composition.guards, ADR-027 R3-03
+  // amendment); the two must never merge in this palette either.
+  { key: 'hooks',  kind: 'hook',  label: 'Hooks' },
 ];
 
 type Props = {
