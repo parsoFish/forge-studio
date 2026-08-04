@@ -49,11 +49,26 @@
  *    mounted; the dedicated test below just names this proof explicitly
  *    rather than leaving it implicit in every other test's incidental
  *    success.
+ *
+ * ---------------------------------------------------------------------------
+ * T2 ROUND 5, AT GROUP 2 (probe-call budget): reviewer repro found THREE
+ * independent real probe spawns per connection on `GET /api/studio/community`
+ * (hubsWithCounts → listCommunityIndex, the route's own listCommunityIndex
+ * call, and toWireItem's probeStateFor — three passes over the same
+ * connection) and a scope leak on the detail route (`communityItem` builds
+ * the WHOLE index — probing every OTHER connection too — just to find one).
+ * The tests below pin a probe-call BUDGET using a counter-script fixture (a
+ * real `command`-kind probe that appends one line to a counter file per
+ * real invocation) — the same technique the reviewer used to reproduce it.
+ * AT GROUP 1 (the connection-install `ok` field lying about a real failure)
+ * is covered in the SEPARATE file
+ * `cli/bridge-studio-community-connection-install.test.ts` — see that
+ * file's own header for why it needs its own environment.
  */
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, existsSync, readFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -447,6 +462,101 @@ test('no /approve or /override sub-route exists anywhere under /api/studio/commu
     const res = await postJson(`${bridgeUrl}/api/studio/community/tool/no-approve-tool/${suffix}`, {});
     assert.ok(res.status === 404 || res.status === 405, `POST .../${suffix} must be refused, got ${res.status}`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// T2 round 5, AT GROUP 2: probe-call BUDGET, using a real counter-script
+// probe. `writeCounterProbeScript` creates a real executable that appends
+// one line to a real counter file on EVERY invocation — a genuine spawned
+// side effect, not an in-process spy (this route has no exec-injection seam
+// to spy through, unlike connection-probe.test.ts's own per-target-reality
+// precedent, which this section otherwise mirrors).
+// ---------------------------------------------------------------------------
+
+function writeCounterProbeScript(id: string): { scriptPath: string; counterPath: string } {
+  const dir = join(forgeRoot, 'probe-scripts');
+  mkdirSync(dir, { recursive: true });
+  const scriptPath = join(dir, `counter-${id}.sh`);
+  const counterPath = join(dir, `counter-${id}.txt`);
+  writeFileSync(scriptPath, `#!/usr/bin/env bash\necho "hit" >> "${counterPath}"\nexit 0\n`, 'utf8');
+  chmodSync(scriptPath, 0o755);
+  return { scriptPath, counterPath };
+}
+
+function countHits(counterPath: string): number {
+  if (!existsSync(counterPath)) return 0;
+  return readFileSync(counterPath, 'utf8').split('\n').filter((l) => l.length > 0).length;
+}
+
+test('BUDGET: GET /api/studio/community executes EXACTLY ONE real probe per connection item — not three', async () => {
+  const { scriptPath, counterPath } = writeCounterProbeScript('list-budget');
+  writeCatalog({ tools: [{ id: 'budget-tool', install: { method: 'system-provided' }, probe: { kind: 'command', command: scriptPath, args: [] } }] });
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+
+  assert.equal(
+    countHits(counterPath),
+    1,
+    `expected EXACTLY 1 real probe execution for one connection on one list request — got ${countHits(counterPath)}. hubsWithCounts→listCommunityIndex, the route's own listCommunityIndex call, and toWireItem's probeStateFor must not each independently re-probe the same connection.`,
+  );
+});
+
+test('BUDGET: GET /api/studio/community/:kind/:id probes the REQUESTED item and executes ZERO probes for an unrelated connection', async () => {
+  const requested = writeCounterProbeScript('detail-requested');
+  const unrelated = writeCounterProbeScript('detail-unrelated');
+  writeCatalog({
+    tools: [
+      { id: 'requested-tool', install: { method: 'system-provided' }, probe: { kind: 'command', command: requested.scriptPath, args: [] } },
+      { id: 'unrelated-tool', install: { method: 'system-provided' }, probe: { kind: 'command', command: unrelated.scriptPath, args: [] } },
+    ],
+  });
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community/tool/requested-tool`);
+  assert.equal(res.status, 200);
+
+  assert.ok(countHits(requested.counterPath) >= 1, 'the requested item must have been probed at least once');
+  assert.equal(
+    countHits(unrelated.counterPath),
+    0,
+    `an UNRELATED connection must receive ZERO probe executions from a single-item detail request — got ${countHits(unrelated.counterPath)}. communityItem() must not build the whole index by probing every connection just to find one.`,
+  );
+});
+
+test('BUDGET + per-target reality: two connections sharing the IDENTICAL probe command each get their OWN execution — never memoized/shared into one shared count', async () => {
+  const shared = writeCounterProbeScript('shared-command');
+  writeCatalog({
+    tools: [
+      { id: 'shared-probe-tool-x', install: { method: 'system-provided' }, probe: { kind: 'command', command: shared.scriptPath, args: [] } },
+      { id: 'shared-probe-tool-y', install: { method: 'system-provided' }, probe: { kind: 'command', command: shared.scriptPath, args: [] } },
+    ],
+  });
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  assert.equal(res.status, 200);
+
+  assert.equal(
+    countHits(shared.counterPath),
+    2,
+    `two connections sharing the identical probe command must each be probed independently exactly once (2 total) — got ${countHits(shared.counterPath)}. A count of 1 would mean the two connections shared/memoized a single execution (worse than the original defect); a count above 2 would mean the per-item budget above was not honoured for this pair either.`,
+  );
+});
+
+test('per-target reality: two connections never cross-contaminate state — a real present command and a real absent command in the SAME list response report their own genuine states', async () => {
+  writeCatalog({
+    tools: [
+      { id: 'reality-present', install: { method: 'system-provided' }, probe: { kind: 'command', command: 'node', args: ['--version'] } },
+      { id: 'reality-absent', install: { method: 'system-provided' }, probe: { kind: 'command', command: 'definitely-absent-binary-community-budget-xyz', args: [] } },
+    ],
+  });
+
+  const res = await fetch(`${bridgeUrl}/api/studio/community`);
+  const body = (await res.json()) as { items: Array<Record<string, unknown>> };
+  const present = body.items.find((i) => i['id'] === 'reality-present');
+  const absent = body.items.find((i) => i['id'] === 'reality-absent');
+
+  assert.equal((present!['probeState'] as string | null), 'available', 'the present connection must report its own real state');
+  assert.equal((absent!['probeState'] as string | null), 'not-installed', 'the absent connection must NOT inherit the present one\'s state — no cross-contamination');
 });
 
 // ---------------------------------------------------------------------------
