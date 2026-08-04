@@ -1,8 +1,15 @@
 /**
- * Acceptance tests for orchestrator/studio/connection-probe.ts (R3-04-F2/F3/
- * F4, D3/D4/D6/D11/D13-D16 of `_wave5/specs/R3-04.md`) — DOES NOT EXIST YET.
- * This file is RED at branch base (`Cannot find module './connection-probe.ts'`)
- * — the expected, deliberate red. Do not stub the module into existence.
+ * Acceptance tests for orchestrator/studio/connection-probe.ts +
+ * connection-install.ts + connection-readiness.ts (R3-04-F2/F3/F4, D3/D4/D6/
+ * D9/D11/D13-D16 of `_wave5/specs/R3-04.md`) — WI-2 has now landed
+ * (`1205be16`). This file imports each name from its REAL home (round 5: WI-2
+ * split the runtime across three modules to stay under the house 400-line
+ * preference; `connection-probe.ts` ships `deriveProbeState`/`probeConnection`/
+ * `ProbeResult` etc., `connection-install.ts` ships `installArgvFor`/
+ * `installConnection`, `connection-readiness.ts` ships
+ * `connectionsReadinessFor`/`UnreadyConnection` — the re-export facade that
+ * previously kept this file resolving against `connection-probe.ts` alone has
+ * been removed on the production side; do not re-add it here).
  *
  * ROUND 3 SCHEMA CHANGE (D15): `probe:` is a KIND-tagged discriminated union
  * (`command` | `command-presence` | `npm-package`), each with fundamentally
@@ -50,8 +57,8 @@
  *           real — no injection needed, a test just writes/omits the real
  *           fixture file.
  *  D-D. `connectionsReadinessFor(def, probeResults)` (WI-3's shared
- *       combinator) is CO-LOCATED here rather than in a new module — a
- *       light, pure function over `ProbeState`/`ProbeResult`, kind-agnostic
+ *       combinator) landed in its own module (`connection-readiness.ts`) —
+ *       a light, pure function over `ProbeState`/`ProbeResult`, kind-agnostic
  *       (it only ever looks at `.state`, never `.kind`).
  *  D-E. Install (D6): `installArgvFor(connection, connectionsRoot)` returns
  *       `{ command: 'npm', args: string[] }`. Throws for BOTH
@@ -64,6 +71,13 @@
  *       into the real (temp) connections root — so the REAL post-install
  *       `probeConnection` re-probe runs genuinely, reading real disk state,
  *       rather than being itself re-injected a second time.
+ *  D-F. T2-mandated (round 5, item 3): the real-timeout AT below calls
+ *       `probeConnection(cwd, conn, { timeoutMs: <short> })` — an option
+ *       `ProbeConnectionOptions` does not carry YET. This is a forward
+ *       declaration of the seam, not an assumption it already exists: the
+ *       AT is RED (an excess-property/runtime no-op until WI-2 wires
+ *       `timeoutMs` through to the real `spawnSync({ timeout })` call,
+ *       overriding the module constant `PROBE_TIMEOUT_MS`) until that lands.
  * ---------------------------------------------------------------------------
  */
 
@@ -78,11 +92,10 @@ import type { AgentDefinition } from './types.ts';
 import {
   deriveProbeState,
   probeConnection,
-  installArgvFor,
-  installConnection,
-  connectionsReadinessFor,
   type ProbeResult,
 } from './connection-probe.ts';
+import { installArgvFor, installConnection } from './connection-install.ts';
+import { connectionsReadinessFor } from './connection-readiness.ts';
 import type { ConnectionDefinition } from './connection-library.ts';
 
 // ---------------------------------------------------------------------------
@@ -267,6 +280,40 @@ describe('probeConnection — kind:"command": REAL runner against real commands 
     });
     const result = probeConnection(process.cwd(), conn);
     assert.equal(result.state, 'available');
+  });
+
+  // T2-mandated AT (round 5, item 3): the real spawnSync timeout branch is
+  // implemented but was exercised by NO committed test — only the fake-exec
+  // state machine covered `timedOut: true`. A real, genuinely long-running
+  // command proves the ACTUAL `spawnSync({ timeout })` path fires, not just
+  // that `deriveProbeState` can be handed a `timedOut: true` input by hand.
+  // `opts.timeoutMs` (D-F above) overrides the module's `PROBE_TIMEOUT_MS`
+  // constant so this test's wall-clock cost stays well under 2 seconds
+  // rather than waiting out the real 10s default.
+  it('a REAL command that outlives a short opts.timeoutMs → misconfigured, timedOut: true, with real (possibly empty) evidence attached', () => {
+    const conn = makeConnection({
+      id: 'real-timeout-conn',
+      probe: {
+        kind: 'command',
+        command: process.execPath,
+        // Genuinely long-running relative to the timeout below (60s vs
+        // 200ms) — this process WILL still be running when spawnSync's own
+        // timeout fires and kills it; it is not racing a fast exit.
+        args: ['-e', 'setTimeout(() => {}, 60000)'],
+      },
+    });
+    const startedAt = Date.now();
+    const result = probeConnection(process.cwd(), conn, { timeoutMs: 200 } as Parameters<typeof probeConnection>[2]);
+    const elapsedMs = Date.now() - startedAt;
+
+    assert.equal(result.state, 'misconfigured', `expected misconfigured (timed out), got ${result.state}`);
+    assert.equal(result.timedOut, true, 'the REAL spawnSync timeout path must set timedOut:true — this is what would ship unproven without this AT');
+    // Real evidence fields must be PRESENT (possibly empty strings — a killed
+    // process may have produced no output — but never absent/undefined,
+    // mirroring the fake-exec timeout AT's "never a generic string" rule).
+    assert.equal(typeof result.stdout, 'string');
+    assert.equal(typeof result.stderr, 'string');
+    assert.ok(elapsedMs < 2_000, `this AT must stay fast (<2s) via opts.timeoutMs — took ${elapsedMs}ms (is timeoutMs actually wired to spawnSync's own timeout option?)`);
   });
 });
 

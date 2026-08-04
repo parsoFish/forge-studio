@@ -159,7 +159,7 @@ test('runAgent pre-spawn block: refuses when a bound tool connection is not-inst
           prompt: 'p',
           logsRoot,
           queryFn: capturingQueryFn(calls),
-          probeConnection: (id) => (id === 'git' ? NOT_INSTALLED : AVAILABLE),
+          probeConnection: (id: string) => (id === 'git' ? NOT_INSTALLED : AVAILABLE),
         } as Parameters<typeof runAgent>[1]),
       (err: Error) => {
         assert.match(err.message, /git/, 'the thrown error must NAME the unready component');
