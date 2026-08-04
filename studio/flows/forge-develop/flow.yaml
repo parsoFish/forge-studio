@@ -47,7 +47,7 @@ edges:
 # merge signal is async + post-run: orchestrator/finalize-merged.ts reads THIS
 # declaration and dispatches the standalone reflect agent once the merged PR is
 # confirmed. R4-09-F1: the target is the reflect AGENT (resolved via its
-# `reflection-close` band hook), not the single-node forge-reflect flow wrapper
+# `reflection-close` band guard), not the single-node forge-reflect flow wrapper
 # — the shipped shape is a standalone agent (the flow form stays authorable).
 # Single source of "merge fires reflect" = this line (no hardcoded runReflector).
 triggers:
