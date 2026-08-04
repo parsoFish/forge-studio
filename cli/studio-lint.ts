@@ -39,6 +39,7 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import { lintTemplateLibrary } from '../orchestrator/studio/template-library.ts';
 import { lintHookComposition, lintHookDefinitions } from '../orchestrator/studio/hook-library.ts';
+import { lintCommunityIndex } from '../orchestrator/studio/community-index.ts';
 import {
   validateAgent,
   validateArtifactRef,
@@ -518,6 +519,14 @@ export function runStudioLint(root: string): StudioLintResult {
 
   findings.push(...lintHookDefinitions(root));
   findings.push(...lintHookComposition(root));
+
+  // ------------------------------------------------------------------
+  // 9. Community index (R3-07) — a vendored community skill package id must
+  //    never collide with a studio/catalog.yaml community-skills id. See
+  //    orchestrator/studio/community-index.ts.
+  // ------------------------------------------------------------------
+
+  findings.push(...lintCommunityIndex(root));
 
   // ------------------------------------------------------------------
   // Tally
