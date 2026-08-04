@@ -38,6 +38,11 @@ _queue/done/*
 _queue/failed/*
 !_queue/failed/.gitkeep
 
+# R3-04 connections install root — installed npm packages for curated
+# tools/MCPs (probeConnection/installConnection, orchestrator/studio/
+# connection-probe.ts), created on demand. Not source, never committed.
+_connections/
+
 # Managed projects are auto-discovered, not committed to forge
 projects/*
 !projects/README.md
