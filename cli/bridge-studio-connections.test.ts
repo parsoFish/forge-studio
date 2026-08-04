@@ -72,8 +72,8 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, chmodSync, existsSync, readFileSync } from 'node:fs';
+import { join, delimiter } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 
@@ -402,6 +402,87 @@ test('POST /api/studio/connections/<installable>/install (suppressed): a SUBSEQU
     'not-installed',
     'a suppressed (never-executed) install must not fabricate an "available" state on the next real probe — nothing on disk actually changed',
   );
+});
+
+// ---------------------------------------------------------------------------
+// Round 6 (adversarial-review FIX FIRST, item 2): the REAL, non-suppressed
+// install path calls spawnSync('npm', argv) with NO env override at all —
+// the child inherits the operator's FULL environment, sentinel
+// ANTHROPIC_API_KEY included. Its sibling probe child (connection-probe.ts)
+// is stripped for exactly this threat model (D11); install runs MORE
+// untrusted code than a probe does (arbitrary npm lifecycle-adjacent
+// third-party code vs. a `--version` flag), so it needs the SAME protection,
+// not less. Driven against a REAL spawned child (a fake `npm` shadowed onto
+// PATH that dumps its own env to a marker file) — not by reading a constant,
+// mirroring connection-probe.test.ts's own D11 env-leak AT exactly. This is
+// also the FIRST coverage of the non-suppressed install branch at all — the
+// implementer flagged it untested, and the reviewer proved that gap was
+// hiding a real defect.
+// ---------------------------------------------------------------------------
+
+test('POST /api/studio/connections/<installable>/install (REAL, non-suppressed): the spawned npm child must NOT see ANTHROPIC_API_KEY — proven against a real child, not a constant (round-6 FIX-FIRST)', async () => {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'bridge-install-env-leak-'));
+  const markerPath = join(scratchRoot, 'env-dump.txt');
+  const fakeNpmPath = join(scratchRoot, 'npm');
+  // A fake `npm` that performs NO real install — it only records what its
+  // own env actually contained, then exits 0 so the install "succeeds" and
+  // nothing downstream (the post-install re-probe) throws on a nonzero exit.
+  writeFileSync(
+    fakeNpmPath,
+    [
+      '#!/usr/bin/env bash',
+      `{`,
+      `  echo "ANTHROPIC_API_KEY:\${ANTHROPIC_API_KEY-<absent>}"`,
+      `  echo "PATH:\${PATH:+present}"`,
+      `  echo "HOME:\${HOME:+present}"`,
+      `} > "${markerPath}"`,
+      'exit 0',
+    ].join('\n'),
+    'utf8',
+  );
+  chmodSync(fakeNpmPath, 0o755);
+
+  const priorPath = process.env.PATH;
+  const priorAnthropicKey = process.env.ANTHROPIC_API_KEY;
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  try {
+    // Drive the REAL, non-suppressed path — this file's before() sets
+    // FORGE_ARCHITECT_NO_SPAWN=1 globally to keep every OTHER test hermetic;
+    // this is the one test that deliberately turns real execution back on.
+    delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    delete process.env.FORGE_DRY_BRIDGE;
+    // Shadow the real npm: our fake one MUST resolve first.
+    process.env.PATH = `${scratchRoot}${process.env.PATH ? delimiter + process.env.PATH : ''}`;
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-test-sentinel-must-never-leak-into-install-child';
+
+    writeCatalog({
+      mcps: [{ id: 'env-leak-install-mcp', install: { method: 'npm', package: '@forge-test/env-leak-install-mcp', version: '1.0.0' } }],
+    });
+    const res = await postJson(`${bridgeUrl}/api/studio/connections/env-leak-install-mcp/install`, {});
+    const body = (await res.json()) as { suppressed?: boolean; error?: string };
+    assert.equal(res.status, 200, `expected the real (fake-npm) install to report success, got ${res.status}: ${JSON.stringify(body)}`);
+    assert.notEqual(body.suppressed, true, 'sanity: this test\'s whole premise is that the install is REAL, not suppressed — a suppressed response here means the env vars above did not actually take effect');
+
+    assert.ok(existsSync(markerPath), 'the fake npm must have actually run and written its env dump — if this is missing, the real spawnSync call never fired at all');
+    const dump = readFileSync(markerPath, 'utf8');
+    const fields = Object.fromEntries(
+      dump.trim().split('\n').map((line) => {
+        const idx = line.indexOf(':');
+        return [line.slice(0, idx), line.slice(idx + 1)];
+      }),
+    );
+
+    assert.equal(fields['ANTHROPIC_API_KEY'], '<absent>', `the real install child must NOT receive ANTHROPIC_API_KEY — the sibling probe child is stripped for exactly this threat model (D11); install runs MORE untrusted code, not less. Got: ${JSON.stringify(fields)}`);
+    assert.equal(fields['PATH'], 'present', 'npm needs PATH to resolve anything it shells out to — base hygiene, not stripped to nothing');
+    assert.equal(fields['HOME'], 'present', 'npm needs HOME for its own config/cache resolution');
+  } finally {
+    if (priorPath === undefined) delete process.env.PATH; else process.env.PATH = priorPath;
+    if (priorAnthropicKey === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = priorAnthropicKey;
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN; else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE; else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
 });
 
 // ---------------------------------------------------------------------------

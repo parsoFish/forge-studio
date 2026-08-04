@@ -314,11 +314,28 @@ test('runAgent pre-spawn block (self lifecycle): a FORGE_DRY_BRIDGE=1 SUPPRESSED
 
 // ---------------------------------------------------------------------------
 // T2 ruling round 2, item 4 (REJECTED as scoped): the gate covers BOTH
-// lifecycles. lifecycle:'caller' gets the SAME connection-readiness gate at
-// the top of its branch, skipped only under either suppression env var.
+// lifecycles. lifecycle:'caller' gets the SAME connection-readiness gate.
+//
+// AMENDED round 6, item 1 — T2's own round-2/round-4 ruling was WRONG, and
+// this file used to pin the wrong behaviour as correct (the campaign's
+// `AT-pins-the-defect` pattern, caught by adversarial review): the premise
+// "no real spawn ⇒ no environment gate" does NOT hold for the 'caller'
+// lifecycle. On that branch `runOneShotSpawn` is called UNCONDITIONALLY —
+// `FORGE_DRY_BRIDGE`/`FORGE_ARCHITECT_NO_SPAWN` never suppress it there (the
+// module's own doc: "In caller mode the caller also owns harness-safety" —
+// runAgent never suppresses FOR that path; the phase pipelines that use
+// 'caller' lifecycle are responsible for their own suppression, at their own
+// level, before ever calling runAgent). So on 'caller', unlike 'self',
+// nothing is ever actually suppressed by these env vars — which means the
+// readiness gate must apply UNCONDITIONALLY on 'caller': skipping it under
+// an env var that does not actually stop the spawn would let a REAL spawn
+// through with an unready bound connection, silently. The correct, uniform
+// rule (restated so nobody re-derives the round-2/4 mistake): **the gate is
+// skipped exactly when the spawn is actually suppressed — and on the caller
+// branch, it never is.**
 // ---------------------------------------------------------------------------
 
-test('runAgent pre-spawn block (caller lifecycle): refuses when a bound connection is not ready, naming the component and its state', async () => {
+test('runAgent pre-spawn block (caller lifecycle): refuses when a bound connection is not ready, naming the component and its state (no suppression env set)', async () => {
   const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-conn-caller-block-'));
   try {
@@ -350,11 +367,53 @@ test('runAgent pre-spawn block (caller lifecycle): refuses when a bound connecti
   }
 });
 
-async function assertCallerLifecycleSuppressedNotBlocked(envVar: 'FORGE_ARCHITECT_NO_SPAWN' | 'FORGE_DRY_BRIDGE'): Promise<void> {
-  const scratchRoot = mkdtempSync(join(tmpdir(), `forge-run-agent-conn-caller-suppressed-${envVar}-`));
+async function assertCallerLifecycleStillBlockedUnderEnv(envVar: 'FORGE_ARCHITECT_NO_SPAWN' | 'FORGE_DRY_BRIDGE'): Promise<void> {
+  const scratchRoot = mkdtempSync(join(tmpdir(), `forge-run-agent-conn-caller-still-blocked-${envVar}-`));
   const prior = process.env[envVar];
   try {
     process.env[envVar] = '1';
+    const defs = listAgentDefinitions(join(ROOT, 'skills'));
+    const def = oneShotCloneWithConnections(getFixtureDef(defs, 'project-scoped-review'), { mcps: ['sqlite'] });
+    const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
+
+    const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
+    await assert.rejects(
+      () =>
+        runAgent(def, {
+          runId: '',
+          workdir,
+          prompt: 'p',
+          lifecycle: 'caller',
+          queryFn: capturingQueryFn(calls),
+          probeConnection: () => NOT_INSTALLED,
+        } as Parameters<typeof runAgent>[1]),
+      (err: Error) => {
+        assert.match(err.message, /sqlite/, 'the caller-lifecycle refusal must still name the component even under a suppression env var');
+        assert.match(err.message, /not-installed/);
+        return true;
+      },
+      `${envVar}=1 must NOT skip the caller-lifecycle gate — that env var does not actually suppress anything on this branch (runOneShotSpawn is unconditional here), so skipping the gate would let a real spawn through unready`,
+    );
+    assert.equal(calls.length, 0, `the SDK must never be invoked — ${envVar}=1 does not suppress the caller-lifecycle spawn, so the gate must still catch it PRE-spawn`);
+  } finally {
+    if (prior === undefined) delete process.env[envVar];
+    else process.env[envVar] = prior;
+    rmSync(scratchRoot, { recursive: true, force: true });
+  }
+}
+
+test('runAgent pre-spawn block (caller lifecycle): STILL BLOCKED under FORGE_ARCHITECT_NO_SPAWN=1 — nothing is actually suppressed on this branch (round-6 fix: round-2/4 had this backwards)', async () => {
+  await assertCallerLifecycleStillBlockedUnderEnv('FORGE_ARCHITECT_NO_SPAWN');
+});
+
+test('runAgent pre-spawn block (caller lifecycle): STILL BLOCKED under FORGE_DRY_BRIDGE=1 — nothing is actually suppressed on this branch (round-6 fix: round-2/4 had this backwards)', async () => {
+  await assertCallerLifecycleStillBlockedUnderEnv('FORGE_DRY_BRIDGE');
+});
+
+test('runAgent pre-spawn block (caller lifecycle): a READY agent (all bound connections available) is NOT blocked — still spawns for real', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'forge-run-agent-conn-caller-ready-'));
+  try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
     const def = oneShotCloneWithConnections(getFixtureDef(defs, 'project-scoped-review'), { mcps: ['sqlite'] });
     const workdir = mkdtempSync(join(scratchRoot, 'wd-'));
@@ -366,33 +425,15 @@ async function assertCallerLifecycleSuppressedNotBlocked(envVar: 'FORGE_ARCHITEC
       prompt: 'p',
       lifecycle: 'caller',
       queryFn: capturingQueryFn(calls),
-      // Deliberately unready — proving the gate is SKIPPED under suppression,
-      // not merely that this particular connection happens to be ready.
-      probeConnection: () => NOT_INSTALLED,
+      probeConnection: () => AVAILABLE,
     } as Parameters<typeof runAgent>[1]);
 
-    // D-B: caller lifecycle has ALWAYS unconditionally invoked queryFn
-    // regardless of these env vars (pre-existing, separate design) — this
-    // ruling adds only the connection gate's own suppression-awareness, so
-    // the spawn itself is still expected to proceed here. See D-B's note on
-    // a stronger implementation also short-circuiting the spawn.
-    assert.doesNotThrow(() => {
-      if (result.suppressed === undefined) throw new Error('runAgent must resolve, not throw');
-    });
-    assert.equal(calls.length, 1, `under ${envVar}=1 the connection gate must be SKIPPED (never throw) — the underlying one-shot spawn still proceeds per caller lifecycle's existing unconditional-call contract`);
+    assert.equal(calls.length, 1, 'a ready caller-lifecycle agent must still spawn — the gate must never produce a false positive');
+    assert.equal(result.suppressed, false);
   } finally {
-    if (prior === undefined) delete process.env[envVar];
-    else process.env[envVar] = prior;
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
-}
-
-test('runAgent pre-spawn block (caller lifecycle): NOT blocked under FORGE_ARCHITECT_NO_SPAWN=1, even with an unready bound connection', async () => {
-  await assertCallerLifecycleSuppressedNotBlocked('FORGE_ARCHITECT_NO_SPAWN');
-});
-
-test('runAgent pre-spawn block (caller lifecycle): NOT blocked under FORGE_DRY_BRIDGE=1, even with an unready bound connection', async () => {
-  await assertCallerLifecycleSuppressedNotBlocked('FORGE_DRY_BRIDGE');
 });
 
 // ---------------------------------------------------------------------------
