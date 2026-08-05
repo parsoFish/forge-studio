@@ -428,3 +428,147 @@ test('".."-normalization: raw and percent-encoded ".." ids are rejected (400) on
   const brainListingAfter = readdirSync(join(forgeRoot, 'brain')).sort();
   assert.deepEqual(brainListingAfter, brainListingBefore, 'brain/ top-level listing must be unchanged');
 });
+
+// ---------------------------------------------------------------------------
+// ROUND 3 (2026-08-06, guard-attack round, Finding 1, MAJOR, live content
+// disclosure): GET /api/studio/kbs (the LIST route) leaks through a
+// symlinked/hardlinked kb.yaml LEAF.
+//
+// cli/bridge-studio-kbs.ts:87-116 — `loadKbDescriptors()`/`pushFrom()` does
+// `existsSync(kbYamlPath)` + `loadKbDescriptor(kbYamlPath)` with NO guard at
+// all. This function was never touched by the `resolveKbBrainDir` fix (which
+// only covers the single-kb GET/:id, DELETE, guidance, and bootstrap routes,
+// via `resolveGuardedPath`) — the LIST route walks brain/ independently and
+// reads straight through a symlinked/hardlinked kb.yaml.
+//
+// Each test below plants its OWN `forgeRoot/brain/<id>/` directory — a
+// genuinely real directory, NOT itself a symlink, so the dirent-type-filter
+// accident that hides a whole-dir symlink from this same list route (see
+// shape (a) above) does NOT apply here — with a kb.yaml LEAF that is a
+// symlink/hardlink to an outside file. Self-contained (own tmp dirs, cleaned
+// up in a `finally`) — no dependency on the shared before()/after() fixture
+// above, so these are safe to run in isolation with `--test-name-pattern`.
+// ---------------------------------------------------------------------------
+
+test('(e) RED [Finding 1]: GET /api/studio/kbs leaks a secret through a SYMLINKED kb.yaml LEAF under brain/<id>', async (t) => {
+  const outside = tmp('kb-list-leafyaml-outside-');
+  const kbDir = join(forgeRoot, 'brain', 'leafyamlkb');
+  try {
+    writeFileSync(
+      join(outside, 'kb.yaml'),
+      'id: leafyamlkb\nname: "SECRET-MARKER-LEAFYAMLKB-d41e9"\nbinding: { kind: unique }\ndesc: "SECRET-DESC-LEAFYAMLKB-7a2f0"\n',
+    );
+    mkdirSync(kbDir, { recursive: true });
+    try {
+      symlinkSync(join(outside, 'kb.yaml'), join(kbDir, 'kb.yaml'));
+    } catch {
+      t.skip('symlink creation unavailable in this environment');
+      return;
+    }
+
+    const { status, text } = await get('/api/studio/kbs');
+    assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
+    assert.ok(
+      !text.includes('SECRET-MARKER-LEAFYAMLKB-d41e9'),
+      `the kb LIST response must NOT contain the outside kb.yaml's "name" field — got: ${text}. brain/leafyamlkb/ is a genuinely real directory; only the kb.yaml LEAF is symlinked, and loadKbDescriptors()'s pushFrom() reads straight through it with no guard.`,
+    );
+    assert.ok(
+      !text.includes('SECRET-DESC-LEAFYAMLKB-7a2f0'),
+      `the kb LIST response must NOT contain the outside kb.yaml's "desc" field — got: ${text}`,
+    );
+  } finally {
+    rmSync(kbDir, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('(f) RED [Finding 1]: GET /api/studio/kbs leaks a secret through a HARDLINKED kb.yaml LEAF under brain/<id>', async (t) => {
+  const outside = tmp('kb-list-hlyaml-outside-');
+  const kbDir = join(forgeRoot, 'brain', 'hlyamlkb');
+  try {
+    writeFileSync(
+      join(outside, 'outside-kb.yaml'),
+      'id: hlyamlkb\nname: "SECRET-MARKER-HLYAMLKB-3c9d1"\nbinding: { kind: unique }\ndesc: "SECRET-DESC-HLYAMLKB-06b4e"\n',
+    );
+    mkdirSync(kbDir, { recursive: true });
+    try {
+      linkSync(join(outside, 'outside-kb.yaml'), join(kbDir, 'kb.yaml'));
+    } catch {
+      t.skip('hardlink creation (linkSync) unavailable in this environment (EXDEV or unsupported)');
+      return;
+    }
+
+    const { status, text } = await get('/api/studio/kbs');
+    assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
+    assert.ok(
+      !text.includes('SECRET-MARKER-HLYAMLKB-3c9d1'),
+      `the kb LIST response must NOT leak through a hardlinked kb.yaml — got: ${text}. realpathSync is structurally blind to hardlinks (nothing to resolve); loadKbDescriptors() has no realpath/nlink check at all here.`,
+    );
+    assert.ok(
+      !text.includes('SECRET-DESC-HLYAMLKB-06b4e'),
+      `the kb LIST response must NOT leak the outside "desc" via the hardlink — got: ${text}`,
+    );
+  } finally {
+    rmSync(kbDir, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('(g) RED [Finding 1]: GET /api/studio/kbs leaks a secret through a symlinked kb.yaml LEAF under the brain/projects/<id> FALLBACK root', async (t) => {
+  const outside = tmp('kb-list-leafproj-outside-');
+  const kbDir = join(forgeRoot, 'brain', 'projects', 'leafprojkb');
+  try {
+    writeFileSync(
+      join(outside, 'kb.yaml'),
+      'id: leafprojkb\nname: "SECRET-MARKER-LEAFPROJKB-9e21b"\nbinding: { kind: unique }\ndesc: "SECRET-DESC-LEAFPROJKB-4f7a3"\n',
+    );
+    mkdirSync(kbDir, { recursive: true });
+    try {
+      symlinkSync(join(outside, 'kb.yaml'), join(kbDir, 'kb.yaml'));
+    } catch {
+      t.skip('symlink creation unavailable in this environment');
+      return;
+    }
+
+    const { status, text } = await get('/api/studio/kbs');
+    assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
+    assert.ok(
+      !text.includes('SECRET-MARKER-LEAFPROJKB-9e21b'),
+      `the kb LIST response must NOT leak through brain/projects/<id>/kb.yaml — the SECOND containment root (ADR 035 per-project brains) — got: ${text}. A fix that only guards the brain/<id> loop and forgets the brain/projects/<id> loop leaves this hole open.`,
+    );
+    assert.ok(
+      !text.includes('SECRET-DESC-LEAFPROJKB-4f7a3'),
+      `the kb LIST response must NOT leak the outside "desc" via brain/projects/<id> — got: ${text}`,
+    );
+  } finally {
+    rmSync(kbDir, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('(h) non-regression [Finding 1]: a legitimate, fully-real KB still appears in GET /api/studio/kbs with correct layer counts', async () => {
+  const kbDir = join(forgeRoot, 'brain', 'goodkb');
+  try {
+    mkdirSync(join(kbDir, 'themes'), { recursive: true });
+    mkdirSync(join(kbDir, '_raw'), { recursive: true });
+    writeFileSync(join(kbDir, 'kb.yaml'), 'id: goodkb\nname: Good KB\nbinding: { kind: unique }\ndesc: a genuinely real kb\n');
+    writeFileSync(join(kbDir, 'INDEX.md'), '# Good KB Index\n');
+    writeFileSync(join(kbDir, 'themes', 'theme-one.md'), '# Theme One\n');
+    writeFileSync(join(kbDir, 'themes', 'theme-two.md'), '# Theme Two\n');
+    writeFileSync(join(kbDir, '_raw', 'raw-one.md'), '# Raw One\n');
+
+    const { status, text } = await get('/api/studio/kbs');
+    assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
+    const body = JSON.parse(text) as { kbs: Array<{ id: string; name: string; counts: { index: number; themes: number; raw: number } }> };
+    const goodkb = body.kbs.find((k) => k.id === 'goodkb');
+    assert.ok(goodkb, `expected "goodkb" to appear in the kb list — got ids: ${body.kbs.map((k) => k.id).join(', ')}`);
+    assert.equal(goodkb!.name, 'Good KB', "the real kb's name must round-trip correctly");
+    assert.deepEqual(
+      goodkb!.counts,
+      { index: 1, themes: 2, raw: 1 },
+      `the fix must not break layer counts for a genuinely real KB — got ${JSON.stringify(goodkb!.counts)}`,
+    );
+  } finally {
+    rmSync(kbDir, { recursive: true, force: true });
+  }
+});

@@ -407,3 +407,133 @@ test('non-regression: an ordinary real flow still GETs fine (no symlink involved
   const { status, text } = await get('/api/studio/flows/plain-flow');
   assert.equal(status, 200, text);
 });
+
+// ---------------------------------------------------------------------------
+// ROUND 3 (2026-08-06, guard-attack round, Finding 3, MINOR, functional
+// regression introduced by the containment fix): GET /api/studio/hooks/:id
+// 404s a perfectly valid hook whose `script:` is "scripts//run.sh" (double
+// slash).
+//
+// cli/bridge-studio-hooks.ts:375 —
+//   resolveGuardedPath(hooksDir(forgeRoot), [id, ...entry.script.split('/')])
+// A hook.yaml declaring `script: "scripts//run.sh"` loads FINE everywhere
+// else: `loadHookDefinition`'s own `resolveHookScriptPath`
+// (orchestrator/studio/hook-library.ts) resolves it via `path.resolve()`,
+// which silently collapses the double slash, so `entry.ok === true`, the
+// LIST route (which never calls resolveGuardedPath at all) reports it
+// correctly, and `scanHookPackage`/`hookRunState` (which read the script via
+// a plain `path.join()`, ALSO collapsing the double slash) score it `clean`.
+// But `entry.script.split('/')` on `"scripts//run.sh"` yields `['scripts',
+// '', 'run.sh']` — the middle EMPTY segment fails `isSafeSegment` (its first
+// check is `seg.length > 0`), so the detail route's OWN guard rejects an
+// object every other code path already treats as valid, and 404s it.
+//
+// Every fixture below is planted directly under the shared `forgeRoot` — no
+// separate cleanup is needed, since the whole forgeRoot is removed by this
+// file's `after()` — and each uses a unique id so it cannot collide with any
+// other test in this file.
+// ---------------------------------------------------------------------------
+
+function plantDoubleSlashHook(root: string, id: string, marker: string): void {
+  const dir = join(root, 'studio', 'hooks', id);
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  writeFileSync(join(dir, 'hook.yaml'), [
+    `name: ${id}`,
+    'description: exercises a double-slash script path',
+    'on: SessionEnd',
+    'script: scripts//run.sh',
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+  writeFileSync(join(dir, 'scripts', 'run.sh'), `#!/bin/sh\necho ${marker}\n`);
+}
+
+test('non-regression [Finding 3]: a hook with a double-slash script path ("scripts//run.sh") is ok:true and scans clean in the LIST route', async () => {
+  plantDoubleSlashHook(forgeRoot, 'dblslash-hook-list', 'DBLSLASH-HOOK-LIST-MARKER-4e1a9');
+
+  const { status, text } = await get('/api/studio/hooks');
+  assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
+  const body = JSON.parse(text) as { hooks: Array<{ id: string; ok: boolean; scanVerdict?: string }> };
+  const entry = body.hooks.find((h) => h.id === 'dblslash-hook-list');
+  assert.ok(entry, `expected "dblslash-hook-list" to appear in the list — got ids: ${body.hooks.map((h) => h.id).join(', ')}`);
+  assert.equal(entry!.ok, true, `expected the double-slash hook to load fine in the LIST route (loadHookDefinition tolerates it via path.resolve normalization) — got ${JSON.stringify(entry)}`);
+  assert.equal(entry!.scanVerdict, 'clean', `expected a benign echo script to scan clean — got ${JSON.stringify(entry)}`);
+});
+
+test('(RED) [Finding 3]: GET /api/studio/hooks/:id 404s a valid hook whose script path is "scripts//run.sh" (double slash)', async () => {
+  plantDoubleSlashHook(forgeRoot, 'dblslash-hook-detail', 'DBLSLASH-HOOK-DETAIL-MARKER-71cd0');
+
+  const { status, text } = await get('/api/studio/hooks/dblslash-hook-detail');
+  assert.equal(
+    status,
+    200,
+    `expected the detail route to load this ALREADY-VALID hook (ok:true + scanVerdict clean in the list route, proven by the sibling test above) — got ${status}: ${text}. entry.script.split('/') on "scripts//run.sh" produces an EMPTY middle segment that fails isSafeSegment (length===0), so resolveGuardedPath rejects a path that was never actually unsafe — the empty segment normalizes away harmlessly under plain path.resolve()/path.join(), exactly how resolveHookScriptPath (hook-library.ts) and hookRunState's own script read already tolerate it.`,
+  );
+  const detail = JSON.parse(text) as { files?: Array<{ path: string; body: string }> };
+  const scriptFile = detail.files?.find((f) => f.path === 'scripts//run.sh');
+  assert.ok(scriptFile, `expected a files[] entry for the declared script path "scripts//run.sh" — got ${text}`);
+  assert.ok(
+    scriptFile!.body.includes('DBLSLASH-HOOK-DETAIL-MARKER-71cd0'),
+    `expected the detail route to return the real script body — got ${text}`,
+  );
+});
+
+test('security companion [Finding 3]: a hook with a ".."-escaping script path is STILL rejected — the double-slash fix must normalise away only empty/"." segments, never ".."', async () => {
+  const dir = join(forgeRoot, 'studio', 'hooks', 'traversal-hook');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'hook.yaml'), [
+    'name: traversal-hook',
+    'description: attempts to escape via a ".."-bearing script path',
+    'on: SessionEnd',
+    'script: ../../../etc/passwd',
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+
+  const { status, text } = await get('/api/studio/hooks/traversal-hook');
+  assert.equal(
+    status,
+    404,
+    `a ".."-escaping script path must NEVER be served — got ${status}: ${text}. Whether caught by loadHookDefinition's own boundary check (resolveHookScriptPath, which is why this hook is ok:false in the list route today) or by a future change to the bridge's resolveGuardedPath call, a fix for the double-slash defect must not loosen this by e.g. blanket-filtering every falsy/short segment instead of specifically excluding empty and "." segments.`,
+  );
+  assert.ok(!text.includes('root:'), 'sanity: no /etc/passwd-shaped content ever appears in the response');
+});
+
+test('security companion [Finding 3]: a hook script path that re-enters a DIFFERENT sibling hook via "nonexistent/../../other-hook/hook.yaml" is STILL rejected', async () => {
+  // Plant the sibling target first so a wrongly-permissive fix would have a
+  // real file to actually read through.
+  const otherDir = join(forgeRoot, 'studio', 'hooks', 'other-hook');
+  mkdirSync(join(otherDir, 'scripts'), { recursive: true });
+  writeFileSync(join(otherDir, 'hook.yaml'), [
+    'name: other-hook',
+    'description: SECRET-MARKER-OTHERHOOK-3d81c — must never be read through the traversal hook',
+    'on: SessionEnd',
+    'script: scripts/run.sh',
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+  writeFileSync(join(otherDir, 'scripts', 'run.sh'), '#!/bin/sh\necho other-hook\n');
+
+  const dir = join(forgeRoot, 'studio', 'hooks', 'cross-hook-traversal');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'hook.yaml'), [
+    'name: cross-hook-traversal',
+    'description: attempts to re-enter a sibling hook dir via nested ".."',
+    'on: SessionEnd',
+    'script: nonexistent/../../other-hook/hook.yaml',
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+
+  const { status, text } = await get('/api/studio/hooks/cross-hook-traversal');
+  assert.equal(status, 404, `a cross-sibling ".."-escaping script path must be rejected — got ${status}: ${text}`);
+  assert.ok(!text.includes('SECRET-MARKER-OTHERHOOK-3d81c'), `the response must NOT contain the other hook's description — got: ${text}`);
+});
