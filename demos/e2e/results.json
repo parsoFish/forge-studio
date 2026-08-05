@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-04T21:04:17.635Z",
+  "generatedAt": "2026-08-05T02:41:08.595Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -187,7 +187,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 5M (got 1768271)",
+              "msg": "clip skill-edit.webm under 5M (got 1785207)",
               "pass": true
             },
             {
@@ -206,7 +206,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 1768271
+              "sizeBytes": 1785207
             }
           ],
           "pass": true
@@ -232,7 +232,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 5M (got 774499)",
+              "msg": "clip sk-create.webm under 5M (got 954329)",
               "pass": true
             },
             {
@@ -255,7 +255,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 774499
+              "sizeBytes": 954329
             },
             {
               "kind": "frame",
@@ -390,7 +390,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-04T20-50-17)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-05T02-28-33)",
               "pass": true
             },
             {
@@ -406,7 +406,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 5M (got 1689429)",
+              "msg": "clip skill-agentic.webm under 5M (got 1718526)",
               "pass": true
             },
             {
@@ -436,7 +436,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 1689429
+              "sizeBytes": 1718526
             }
           ],
           "pass": true
@@ -706,7 +706,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-blocked.webm under 5M (got 700180)",
+              "msg": "clip hook-blocked.webm under 5M (got 713169)",
               "pass": true
             },
             {
@@ -747,7 +747,7 @@
               "kind": "clip",
               "file": "clips/hook-blocked.webm",
               "caption": "Declaring the exfiltration doesn't excuse it: still blocked, approval refused, then an explicit, recorded override — the verdict never clears",
-              "sizeBytes": 700180
+              "sizeBytes": 713169
             }
           ],
           "pass": true
@@ -813,7 +813,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-bind.webm under 5M (got 515185)",
+              "msg": "clip hook-bind.webm under 5M (got 880008)",
               "pass": true
             },
             {
@@ -848,7 +848,7 @@
               "kind": "clip",
               "file": "clips/hook-bind.webm",
               "caption": "Binding a hook lives only in the Agent Builder — drag it into the dedicated hook zone and save",
-              "sizeBytes": 515185
+              "sizeBytes": 880008
             }
           ],
           "pass": true
@@ -1206,7 +1206,7 @@
               "pass": true
             },
             {
-              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge-gate-R2-10-PR2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge-gate-R2-10-PR2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -1385,15 +1385,15 @@
               "pass": true
             },
             {
-              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-04T20-51-16-504-dbwn\") — same runner as the agent page",
+              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-05T02-29-27-648-2qnu\") — same runner as the agent page",
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 5M (got 1886354)",
+              "msg": "clip onboard-form.webm under 5M (got 1570553)",
               "pass": true
             },
             {
-              "msg": "J4: onboarding adds exactly one project to the library (5→6, journey-demo-project listed=true)",
+              "msg": "J4: onboarding adds exactly one project to the library (1→2, journey-demo-project listed=true)",
               "pass": true
             },
             {
@@ -1421,7 +1421,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1886354
+              "sizeBytes": 1570553
             }
           ],
           "pass": true
@@ -1443,7 +1443,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 5M (got 1439692)",
+              "msg": "clip onboard-resolve.webm under 5M (got 1425127)",
               "pass": true
             },
             {
@@ -1455,7 +1455,11 @@
               "pass": true
             },
             {
-              "msg": "SU: \"Resolve with agent\" routes to a real instructions session (spawn suppressed)",
+              "msg": "SU: \"Resolve with agent\" routes to a real instructions session on the shared shell ([data-page=\"session\"][data-session-kind=\"instructions\"])",
+              "pass": true
+            },
+            {
+              "msg": "SU: the fresh instructions session starts at phase=\"briefing\" (got \"briefing\")",
               "pass": true
             },
             {
@@ -1477,7 +1481,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1439692
+              "sizeBytes": 1425127
             },
             {
               "kind": "frame",
@@ -1494,7 +1498,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 23,
+      "checksTotal": 24,
       "checksFailed": 0
     },
     "stand-up-create": {
@@ -1530,7 +1534,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 5M (got 882073)",
+              "msg": "clip project-create.webm under 5M (got 879095)",
               "pass": true
             },
             {
@@ -1553,7 +1557,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 882073
+              "sizeBytes": 879095
             },
             {
               "kind": "frame",
@@ -1639,7 +1643,7 @@
               "pass": true
             },
             {
-              "msg": "library: ≥1 project card in projects section (found 7, want ≥1)",
+              "msg": "library: ≥1 project card in projects section (found 3, want ≥1)",
               "pass": true
             },
             {
@@ -1655,7 +1659,7 @@
               "pass": true
             },
             {
-              "msg": "library: projects section data-count ≥1 (got 7)",
+              "msg": "library: projects section data-count ≥1 (got 3)",
               "pass": true
             },
             {
@@ -1671,11 +1675,11 @@
               "pass": true
             },
             {
-              "msg": "library: ≥1 [data-attention-item] in the attention strip (found 7, want ≥1)",
+              "msg": "library: ≥1 [data-attention-item] in the attention strip (found 3, want ≥1)",
               "pass": true
             },
             {
-              "msg": "library: attention item links through to its owning project surface (got \"/projects/demo-project\")",
+              "msg": "library: attention item links through to its owning project surface (got \"/projects/journey-demo-project\")",
               "pass": true
             }
           ],
@@ -1721,7 +1725,7 @@
           "narration": "The operator launches the instructions-creator agent, answers its two clarifying questions, and approves the AGENTS.md it drafts — a new project gets its onboarding contract written for it, with a human still signing off.",
           "checks": [
             {
-              "msg": "AI-1: instructions screen renders ([data-page=\"instructions-interview\"])",
+              "msg": "AI-1: instructions screen renders on the shared shell ([data-page=\"session\"][data-session-kind=\"instructions\"])",
               "pass": true
             },
             {
@@ -1733,11 +1737,27 @@
               "pass": true
             },
             {
+              "msg": "AI-1: transcript derives a real turn from questions.json (got {\"role\":\"agent\",\"source\":\"questions.json\"})",
+              "pass": true
+            },
+            {
               "msg": "AI-1: drafted AGENTS.md awaits the operator verdict",
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 5M (got 1093722)",
+              "msg": "AI-1: session artifact pane renders the markdown-draft renderer for the instructions kind",
+              "pass": true
+            },
+            {
+              "msg": "AI-1: the drafted AGENTS.md renders as real content in the artifact pane",
+              "pass": true
+            },
+            {
+              "msg": "AI-1: artifact pane carries a non-empty data-artifact-label (got \"AGENTS.md draft\")",
+              "pass": true
+            },
+            {
+              "msg": "clip instr-generate.webm under 5M (got 1532186)",
               "pass": true
             },
             {
@@ -1760,7 +1780,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1093722
+              "sizeBytes": 1532186
             },
             {
               "kind": "frame",
@@ -1775,7 +1795,7 @@
           "narration": "The project-brain-builder analyses the new project and stages three seed themes for review; approving commits nothing but a pointer — the project's own knowledge base starts here and grows as cycles run.",
           "checks": [
             {
-              "msg": "AI-2: project-brain screen renders ([data-page=\"project-brain\"])",
+              "msg": "AI-2: project-brain screen renders on the shared shell ([data-page=\"session\"][data-session-kind=\"project-brain\"])",
               "pass": true
             },
             {
@@ -1787,7 +1807,19 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 5M (got 820556)",
+              "msg": "AI-2: session artifact pane renders the brain-structure renderer for the project-brain kind",
+              "pass": true
+            },
+            {
+              "msg": "AI-2: brain-structure artifact renders through the SHARED FilePackage component (reused, not forked)",
+              "pass": true
+            },
+            {
+              "msg": "AI-2: artifact pane carries a non-empty data-artifact-label (got \"Seeded structure\")",
+              "pass": true
+            },
+            {
+              "msg": "clip pbrain-generate.webm under 5M (got 1067205)",
               "pass": true
             },
             {
@@ -1810,7 +1842,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 820556
+              "sizeBytes": 1067205
             },
             {
               "kind": "frame",
@@ -1885,7 +1917,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 58,
+      "checksTotal": 65,
       "checksFailed": 0
     },
     "knowledge": {
@@ -2039,7 +2071,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 5M (got 949392)",
+              "msg": "clip kb-ingest.webm under 5M (got 834216)",
               "pass": true
             },
             {
@@ -2073,7 +2105,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 949392
+              "sizeBytes": 834216
             },
             {
               "kind": "frame",
@@ -2110,7 +2142,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 5M (got 1618029)",
+              "msg": "clip kb-lint.webm under 5M (got 1619845)",
               "pass": true
             }
           ],
@@ -2129,7 +2161,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1618029
+              "sizeBytes": 1619845
             }
           ],
           "pass": true
@@ -2268,7 +2300,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 5M (got 1193700)",
+              "msg": "clip agent-scratch-build.webm under 5M (got 1146060)",
               "pass": true
             }
           ],
@@ -2307,7 +2339,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 1193700
+              "sizeBytes": 1146060
             }
           ],
           "pass": true
@@ -2373,7 +2405,7 @@
               "pass": true
             },
             {
-              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-04T20-55-10-004-dj3e\")",
+              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-05T02-33-01-067-xume\")",
               "pass": true
             },
             {
@@ -2421,7 +2453,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 5M (got 892967)",
+              "msg": "clip agent-build.webm under 5M (got 907080)",
               "pass": true
             }
           ],
@@ -2445,7 +2477,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 892967
+              "sizeBytes": 907080
             }
           ],
           "pass": true
@@ -2564,7 +2596,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msf50t0l, fn-msf50t0w, fn-msf50t15, fn-msf50t1g)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msfh30xr, fn-msfh30y1, fn-msfh30ya, fn-msfh30yj)",
               "pass": true
             },
             {
@@ -2656,7 +2688,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 5M (got 3836504)",
+              "msg": "clip flow-scratch-build.webm under 5M (got 3837054)",
               "pass": true
             }
           ],
@@ -2710,7 +2742,7 @@
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate",
-              "sizeBytes": 3836504
+              "sizeBytes": 3837054
             }
           ],
           "pass": true
@@ -2775,7 +2807,7 @@
               "pass": true
             },
             {
-              "msg": "[data-action=\"start-architect\"] navigates to /architect/<sid>/interview",
+              "msg": "[data-action=\"start-architect\"] navigates to /sessions/architect/<sid>",
               "pass": true
             }
           ],
@@ -2792,6 +2824,10 @@
           "title": "Architect grounds itself — P3 activity panel",
           "narration": "Before asking a single question, the architect reads the CLI source and the brain — every tool call and reasoning line streams live into the activity panel, so the operator watches it ground itself in the real codebase rather than guess.",
           "checks": [
+            {
+              "msg": "R2-10: session shell reflects the real phase (data-session-phase, got \"interviewing\")",
+              "pass": true
+            },
             {
               "msg": "P3: [data-section=\"architect-activity\"] rendered",
               "pass": true
@@ -2830,6 +2866,22 @@
             {
               "msg": "architect returned ≥2 questions (found 2, want ≥2)",
               "pass": true
+            },
+            {
+              "msg": "R2-10: turn 0 is the operator's own idea, derived from idea.md (got {\"index\":\"0\",\"role\":\"operator\",\"source\":\"idea.md\"})",
+              "pass": true
+            },
+            {
+              "msg": "R2-10: the pending interview round is an AGENT turn derived from questions.json (got {\"index\":\"1\",\"role\":\"agent\",\"source\":\"questions.json\"}; all: [\"idea.md\",\"questions.json\"])",
+              "pass": true
+            },
+            {
+              "msg": "R2-10: session artifact pane renders the roadmap-draft renderer for the architect kind",
+              "pass": true
+            },
+            {
+              "msg": "R2-10: artifact pane carries a non-empty data-artifact-label (got \"Roadmap draft\")",
+              "pass": true
             }
           ],
           "captures": [
@@ -2854,11 +2906,11 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 5M (got 1455975)",
+              "msg": "clip run-idea-interview.webm under 5M (got 1729616)",
               "pass": true
             },
             {
-              "msg": "R1: the exploring stage is visible in the interview UI (data-architect-phase, got \"exploring\")",
+              "msg": "R1: the exploring stage is visible in the interview UI (data-session-phase, got \"exploring\")",
               "pass": true
             }
           ],
@@ -2873,7 +2925,7 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1455975
+              "sizeBytes": 1729616
             },
             {
               "kind": "frame",
@@ -2941,7 +2993,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 5M (got 1537329)",
+              "msg": "clip run-plan-gate.webm under 5M (got 1194231)",
               "pass": true
             }
           ],
@@ -2956,7 +3008,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1537329
+              "sizeBytes": 1194231
             }
           ],
           "pass": true
@@ -3140,7 +3192,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 5M (got 1728392)",
+              "msg": "clip run-build-monitor.webm under 5M (got 1418151)",
               "pass": true
             }
           ],
@@ -3155,7 +3207,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing",
-              "sizeBytes": 1728392
+              "sizeBytes": 1418151
             }
           ],
           "pass": true
@@ -3321,7 +3373,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 5M (got 1484258)",
+              "msg": "clip run-verdict-gate.webm under 5M (got 1325397)",
               "pass": true
             }
           ],
@@ -3336,7 +3388,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1484258
+              "sizeBytes": 1325397
             }
           ],
           "pass": true
@@ -3428,7 +3480,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 5M (got 1776991)",
+              "msg": "clip run-reflect-complete.webm under 5M (got 1748822)",
               "pass": true
             }
           ],
@@ -3454,7 +3506,7 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1776991
+              "sizeBytes": 1748822
             }
           ],
           "pass": true
@@ -3503,7 +3555,7 @@
               "pass": true
             },
             {
-              "msg": "monitor: run rail shows ≥1 [data-run-id] (found 35, want ≥1)",
+              "msg": "monitor: run rail shows ≥1 [data-run-id] (found 2, want ≥1)",
               "pass": true
             },
             {
@@ -3531,7 +3583,7 @@
               "pass": true
             },
             {
-              "msg": "monitor: [data-tail-count] attribute present (got 0)",
+              "msg": "monitor: [data-tail-count] attribute present (got 42)",
               "pass": true
             }
           ],
@@ -3603,7 +3655,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 85,
+      "checksTotal": 90,
       "checksFailed": 0
     },
     "roadmap": {
@@ -3705,7 +3757,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 5M (got 671381)",
+              "msg": "clip roadmap-drive.webm under 5M (got 735853)",
               "pass": true
             },
             {
@@ -3730,7 +3782,7 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the roadmap, pops a finished initiative’s card, then eyes the \"Start development\" trigger on the one queued up next",
-              "sizeBytes": 671381
+              "sizeBytes": 735853
             },
             {
               "kind": "frame",
@@ -3859,7 +3911,7 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 5M (got 1659844)",
+              "msg": "clip demo-generate.webm under 5M (got 1617827)",
               "pass": true
             }
           ],
@@ -3879,7 +3931,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1659844
+              "sizeBytes": 1617827
             }
           ],
           "pass": true
@@ -4542,11 +4594,11 @@
               "pass": true
             },
             {
-              "msg": "CM-19: the outcome reads \"Suppressed — no network call was made.\" (got \"Suppressed — no network call was made.npm install --prefix /home/parso/forge/_co\")",
+              "msg": "CM-19: the outcome reads \"Suppressed — no network call was made.\" (got \"Suppressed — no network call was made.npm install --prefix /home/parso/forge-gat\")",
               "pass": true
             },
             {
-              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge-gate-R2-10-PR2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge-gate-R2-10-PR2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -4656,7 +4708,7 @@
     "captures": []
   },
   "totals": {
-    "checksTotal": 658,
+    "checksTotal": 671,
     "checksFailed": 0,
     "framesTotal": 166,
     "clipsTotal": 22
