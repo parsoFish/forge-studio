@@ -537,3 +537,355 @@ test('security companion [Finding 3]: a hook script path that re-enters a DIFFER
   assert.equal(status, 404, `a cross-sibling ".."-escaping script path must be rejected — got ${status}: ${text}`);
   assert.ok(!text.includes('SECRET-MARKER-OTHERHOOK-3d81c'), `the response must NOT contain the other hook's description — got: ${text}`);
 });
+
+// ---------------------------------------------------------------------------
+// ROUND 4 (2026-08-06, test-writer T3): two findings from the adversarial
+// review that need red ATs before the fix. NEITHER is a content-disclosure
+// escape — `loadHookDefinition` already validates `def.script` through
+// `resolveHookScriptPath` (orchestrator/studio/hook-library.ts — lexical +
+// percent-decoded + conditional-realpath), so a script that genuinely
+// escapes the hook dir is rejected AT LOAD, before any read. What is NOT
+// closed is what happens on the THROW path once a script path resolves
+// INSIDE the hook dir at load time but faults at read time (Finding A), or
+// once a load-time throw happens inside a route that already 404s the same
+// fixture on ITS sibling GET route (Finding B).
+// ---------------------------------------------------------------------------
+
+// ---- FINDING A: one malformed hook blanks the ENTIRE library list ---------
+//
+// cli/bridge-studio-hooks.ts:191 —
+//   listHookLibrary(forgeRoot).map(entry => toClientListEntry(forgeRoot, entry))
+// `toClientListEntry` (same file, ~L119) calls `hookRunState(forgeRoot,
+// entry.id)` with NO per-entry try/catch. `hookRunState` -> `scanHookPackage`
+// -> `readHookScriptBody` (orchestrator/studio/hook-scan.ts:364-367) ->
+// `readFileSync(join(hookDir(id, forgeRoot), def.script))`.
+//
+// `listHookLibrary` itself ALREADY isolates a per-id LOAD failure (a hook
+// whose script escapes the boundary at load time degrades to `ok:false` +
+// `error`, never crashing the whole scan — see `loadHookDefinition`'s own
+// try/catch inside `listHookLibrary`). But the bridge route throws that
+// isolation away: a hook whose `script:` field resolves INSIDE the hook dir
+// at LOAD time (so `resolveHookScriptPath` is satisfied, `entry.ok ===
+// true`) and then throws at `readFileSync` time is not caught anywhere on
+// this path. `Array.prototype.map` propagates that ONE entry's throw out of
+// the WHOLE call, landing in the route's outer catch -> 500 for every hook
+// in the library, not just the malformed one.
+//
+// Three variants, EACH confirmed empirically (via a standalone script
+// exercising the real `loadHookDefinition`/`hookRunState` against a real
+// fixture, before this test was written) to satisfy both halves —
+// `resolveHookScriptPath` tolerates the path at load time (`entry.ok ===
+// true`), but the SEPARATE `path.join()` + `readFileSync` in
+// `readHookScriptBody` throws:
+//   1. `scripts/.` — `path.join` collapses the trailing "/." to the
+//      "scripts" DIRECTORY itself -> `readFileSync` throws EISDIR. (At load
+//      time, `resolveHookScriptPath` uses `path.resolve`, which ALSO
+//      collapses "/." the same way, and the resulting "scripts" dir exists
+//      — no symlink involved — so load-time never throws.)
+//   2. `scripts/run.sh/` (trailing slash) — `path.resolve` (load time)
+//      strips the trailing slash, sees the real file, passes; `path.join`
+//      (read time) PRESERVES the trailing slash, so `readFileSync` opens
+//      ".../run.sh/" against a REGULAR FILE -> ENOTDIR.
+//   3. `scripts\run.sh` (ONE literal backslash character — Linux has no
+//      concept of "\" as a path separator, so this is a single filename
+//      component, never split into "scripts" + "run.sh" the way a real "/"
+//      would) — resolves to a path that does not exist (there IS no file
+//      literally named "scripts\run.sh") -> ENOENT. Load time never throws
+//      either, because `resolveHookScriptPath` only runs its realpath/
+//      symlink check when the resolved path `existsSync` — and this one
+//      doesn't exist, so it silently returns the (non-existent) resolved
+//      path without complaint.
+//
+// For each variant the malformed hook is planted ALONGSIDE two genuinely
+// valid hooks — the point of the test is that THOSE survive, not merely that
+// the malformed one is flagged.
+// ---------------------------------------------------------------------------
+
+function plantValidHook(root: string, id: string, marker: string): void {
+  const dir = join(root, 'studio', 'hooks', id);
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  writeFileSync(join(dir, 'hook.yaml'), [
+    `name: ${id}`,
+    `description: ${marker}`,
+    'on: SessionEnd',
+    'script: scripts/run.sh',
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+  writeFileSync(join(dir, 'scripts', 'run.sh'), `#!/bin/sh\necho ${marker}\n`);
+}
+
+/** Plants a hook whose `script:` field is exactly `scriptField` — YAML-quoted
+ *  via `JSON.stringify` so a literal backslash round-trips as exactly one
+ *  backslash character (JSON's string-escaping rules are a strict subset of
+ *  YAML's double-quoted-scalar escaping; confirmed by reading the written
+ *  file back through js-yaml before this test was written). Passes
+ *  `resolveHookScriptPath` (load time) but faults inside `readHookScriptBody`
+ *  (read time) — see the three variants above. */
+function plantScriptPathFaultHook(root: string, id: string, scriptField: string): void {
+  const dir = join(root, 'studio', 'hooks', id);
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  writeFileSync(join(dir, 'hook.yaml'), [
+    `name: ${id}`,
+    'description: script path resolves inside the hook dir at load time but faults at read time',
+    'on: SessionEnd',
+    `script: ${JSON.stringify(scriptField)}`,
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+  writeFileSync(join(dir, 'scripts', 'run.sh'), '#!/bin/sh\necho benign\n');
+}
+
+interface HooksListEntry {
+  id: string;
+  ok: boolean;
+  name?: string;
+  on?: string;
+  scanVerdict?: string;
+  runnable?: boolean;
+  error?: string;
+}
+
+function assertValidHookEntrySurvives(hooks: HooksListEntry[], id: string, context: string): void {
+  const entry = hooks.find((h) => h.id === id);
+  assert.ok(entry, `${context}: expected valid hook "${id}" to still be present in the list — got ids: ${hooks.map((h) => h.id).join(', ')}`);
+  assert.equal(entry!.ok, true, `${context}: expected valid hook "${id}" to still load ok:true — got ${JSON.stringify(entry)}`);
+  assert.equal(entry!.name, id, `${context}: expected valid hook "${id}"'s name field intact — got ${JSON.stringify(entry)}`);
+  assert.equal(entry!.on, 'SessionEnd', `${context}: expected valid hook "${id}"'s on field intact — got ${JSON.stringify(entry)}`);
+  assert.equal(entry!.scanVerdict, 'clean', `${context}: expected valid hook "${id}" to scan clean (a benign echo script) — got ${JSON.stringify(entry)}`);
+  assert.equal(entry!.runnable, false, `${context}: expected valid hook "${id}" runnable:false (not yet approved) — got ${JSON.stringify(entry)}`);
+}
+
+test('(RED) [Finding A, variant 1/3 — EISDIR]: a hook whose script is "scripts/." must not blank the whole /api/studio/hooks list', async () => {
+  const badId = 'red4-hook-eisdir';
+  const canaryA = 'red4-eisdir-canary-a';
+  const canaryB = 'red4-eisdir-canary-b';
+  plantValidHook(forgeRoot, canaryA, 'RED4-EISDIR-CANARY-A-MARKER-3a91f');
+  plantValidHook(forgeRoot, canaryB, 'RED4-EISDIR-CANARY-B-MARKER-6c02d');
+  plantScriptPathFaultHook(forgeRoot, badId, 'scripts/.');
+
+  // Cleanup runs in `finally` — NOT after the assertions — because
+  // Array.prototype.map short-circuits at the FIRST throwing entry
+  // (alphabetically), so leaving this fixture behind after a FAILING
+  // assertion (which throws, skipping any code after it) would make a
+  // later variant's crash misattribute itself to THIS one's errno instead of
+  // its own (confirmed empirically while writing these tests: an earlier
+  // draft that cleaned up only after a passing run left all three variants
+  // reporting the SAME EISDIR body once run.sh, not each one's own).
+  try {
+    const { status, text } = await get('/api/studio/hooks');
+    assert.equal(
+      status,
+      200,
+      `expected 200 (the whole list must survive one malformed hook) — got ${status}: ${text}. cli/bridge-studio-hooks.ts:191's listHookLibrary(...).map(entry => toClientListEntry(...)) has no per-entry try/catch around the hookRunState call, so this ONE hook's EISDIR at readFileSync time (path.join collapses "scripts/." to the "scripts" DIRECTORY) throws out of the whole .map(), and the route's outer catch turns that into a 500 for every hook in the library, not just this one.`,
+    );
+    const body = JSON.parse(text) as { hooks: HooksListEntry[] };
+    assertValidHookEntrySurvives(body.hooks, canaryA, 'EISDIR variant');
+    assertValidHookEntrySurvives(body.hooks, canaryB, 'EISDIR variant');
+    const bad = body.hooks.find((h) => h.id === badId);
+    assert.ok(bad, `expected the malformed hook "${badId}" to still appear as an entry (not vanish) — got ids: ${body.hooks.map((h) => h.id).join(', ')}`);
+    assert.equal(bad!.ok, false, `expected the malformed hook to surface as ok:false rather than crash the whole route — got ${JSON.stringify(bad)}`);
+  } finally {
+    rmSync(join(forgeRoot, 'studio', 'hooks', badId), { recursive: true, force: true });
+  }
+});
+
+test('(RED) [Finding A, variant 2/3 — ENOTDIR]: a hook whose script is "scripts/run.sh/" (trailing slash) must not blank the whole /api/studio/hooks list', async () => {
+  const badId = 'red4-hook-enotdir';
+  const canaryA = 'red4-enotdir-canary-a';
+  const canaryB = 'red4-enotdir-canary-b';
+  plantValidHook(forgeRoot, canaryA, 'RED4-ENOTDIR-CANARY-A-MARKER-8b13e');
+  plantValidHook(forgeRoot, canaryB, 'RED4-ENOTDIR-CANARY-B-MARKER-2f90d');
+  plantScriptPathFaultHook(forgeRoot, badId, 'scripts/run.sh/');
+
+  try {
+    const { status, text } = await get('/api/studio/hooks');
+    assert.equal(
+      status,
+      200,
+      `expected 200 (the whole list must survive one malformed hook) — got ${status}: ${text}. path.resolve (load time, resolveHookScriptPath) strips the trailing slash and sees the real file, so entry.ok===true; path.join (read time, readHookScriptBody) PRESERVES the trailing slash, so readFileSync opens ".../run.sh/" against a regular file and throws ENOTDIR, crashing the whole .map() and turning it into a 500 for every hook.`,
+    );
+    const body = JSON.parse(text) as { hooks: HooksListEntry[] };
+    assertValidHookEntrySurvives(body.hooks, canaryA, 'ENOTDIR variant');
+    assertValidHookEntrySurvives(body.hooks, canaryB, 'ENOTDIR variant');
+    const bad = body.hooks.find((h) => h.id === badId);
+    assert.ok(bad, `expected the malformed hook "${badId}" to still appear as an entry (not vanish) — got ids: ${body.hooks.map((h) => h.id).join(', ')}`);
+    assert.equal(bad!.ok, false, `expected the malformed hook to surface as ok:false rather than crash the whole route — got ${JSON.stringify(bad)}`);
+  } finally {
+    rmSync(join(forgeRoot, 'studio', 'hooks', badId), { recursive: true, force: true }); // isolate from variant 3/3, see variant 1/3's comment
+  }
+});
+
+test('(RED) [Finding A, variant 3/3 — ENOENT]: a hook whose script is "scripts\\run.sh" (one literal backslash) must not blank the whole /api/studio/hooks list', async () => {
+  const badId = 'red4-hook-enoent';
+  const canaryA = 'red4-enoent-canary-a';
+  const canaryB = 'red4-enoent-canary-b';
+  plantValidHook(forgeRoot, canaryA, 'RED4-ENOENT-CANARY-A-MARKER-5d24c');
+  plantValidHook(forgeRoot, canaryB, 'RED4-ENOENT-CANARY-B-MARKER-9e60f');
+  // Exactly ONE literal backslash character — confirmed via .length (14) in
+  // the standalone verification script before this test was written; not
+  // two backslashes, not an escape sequence artifact.
+  const backslashScript = 'scripts\\run.sh';
+  assert.equal(backslashScript.length, 14, 'sanity: the script field literal is exactly "scripts" + one backslash + "run.sh"');
+  plantScriptPathFaultHook(forgeRoot, badId, backslashScript);
+
+  try {
+    const { status, text } = await get('/api/studio/hooks');
+    assert.equal(
+      status,
+      200,
+      `expected 200 (the whole list must survive one malformed hook) — got ${status}: ${text}. Neither path.resolve (load time) nor path.join (read time) ever splits on a literal backslash on Linux, so both treat "scripts\\\\run.sh" as a single nonexistent filename component — load time never throws (resolveHookScriptPath's realpath/symlink check only runs when the resolved path existsSync, and it doesn't), but readFileSync at read time throws ENOENT, crashing the whole .map() into a 500 for every hook.`,
+    );
+    const body = JSON.parse(text) as { hooks: HooksListEntry[] };
+    assertValidHookEntrySurvives(body.hooks, canaryA, 'ENOENT variant');
+    assertValidHookEntrySurvives(body.hooks, canaryB, 'ENOENT variant');
+    const bad = body.hooks.find((h) => h.id === badId);
+    assert.ok(bad, `expected the malformed hook "${badId}" to still appear as an entry (not vanish) — got ids: ${body.hooks.map((h) => h.id).join(', ')}`);
+    assert.equal(bad!.ok, false, `expected the malformed hook to surface as ok:false rather than crash the whole route — got ${JSON.stringify(bad)}`);
+  } finally {
+    rmSync(join(forgeRoot, 'studio', 'hooks', badId), { recursive: true, force: true }); // isolate from any later test in this file
+  }
+});
+
+// ---- FINDING B: approve/override leak a distinguishable 500 where every ---
+// ---- other route in this PR returns 404 -----------------------------------
+//
+// cli/bridge-studio-hooks.ts:303-314 (approve) and :335-347 (override). Both
+// guard `hook.yaml` via `resolveGuardedPath` and correctly collapse THAT
+// rejection into 404 — but they then call `hookRunState(...)` (approve) /
+// `overrideHookBlock(...)` (override), which internally call
+// `loadHookDefinition`, which THROWS for a hook whose `hook.yaml` is
+// genuinely real (so the `resolveGuardedPath` check on `hook.yaml` PASSES)
+// but whose `scripts/run.sh` is a LEAF SYMLINK escaping the hook directory
+// (`resolveHookScriptPath`'s realpath check, confirmed live before this test
+// was written). That throw lands in the route's generic `catch -> 500` —
+// while `GET /api/studio/hooks/:id` correctly 404s the SAME fixture, via its
+// own `entry.ok !== true` check on the identical load failure. An attacker
+// can therefore distinguish "no such hook" (404, everywhere else in this
+// file) from "a hook exists here and its script escapes containment" (500,
+// ONLY on these two routes) — a working status-code oracle. This is NOT a
+// content-disclosure leak: `sanitizeError` redacts absolute paths (verified
+// below), so neither the outside file's bytes nor its real path ever appear
+// in the 500 body.
+// ---------------------------------------------------------------------------
+
+function plantLeakLeafSymlinkHook(root: string, id: string, outsideScriptPath: string): void {
+  const dir = join(root, 'studio', 'hooks', id);
+  mkdirSync(join(dir, 'scripts'), { recursive: true });
+  writeFileSync(join(dir, 'hook.yaml'), [
+    `name: ${id}`,
+    'description: hook.yaml is genuinely real; scripts/run.sh is a LEAF symlink escaping the hook dir',
+    'on: SessionEnd',
+    'script: scripts/run.sh',
+    'permissions:',
+    '  env: []',
+    '  read: []',
+    '  network: false',
+  ].join('\n'));
+  symlinkSync(outsideScriptPath, join(dir, 'scripts', 'run.sh'));
+}
+
+test('(RED) [Finding B]: POST /api/studio/hooks/:id/approve on a hook.yaml-real/script-symlink-escape fixture must read the SAME as a genuinely nonexistent hook, same as GET-detail already does', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'red4-approve-leak';
+  const outside = newOutsideDir('red4-approve-leak-outside-');
+  const outsideScript = join(outside, 'secret.sh');
+  writeFileSync(outsideScript, '#!/bin/sh\necho SECRET-MARKER-APPROVELEAK-2f81a\n');
+  plantLeakLeafSymlinkHook(forgeRoot, id, outsideScript);
+
+  const detail = await get(`/api/studio/hooks/${id}`);
+  assert.equal(detail.status, 404, `sanity: GET detail already correctly 404s this fixture (entry.ok===false from the same load failure) — got ${detail.status}: ${detail.text}`);
+
+  const neverExistedId = 'totally-unplanted-hook-findingb-approve-xyz';
+  const escaped = await post(`/api/studio/hooks/${id}/approve`, {});
+  const neverExisted = await post(`/api/studio/hooks/${neverExistedId}/approve`, {});
+
+  assert.equal(
+    escaped.status,
+    neverExisted.status,
+    `expected approve on the script-symlink-escape fixture to read as "no such hook" (${neverExisted.status}), same as a genuinely unplanted id — got ${escaped.status}: ${escaped.text}. hookRunState (called AFTER the resolveGuardedPath hook.yaml guard already passed, since hook.yaml itself is real) throws from loadHookDefinition's realpath check on the symlinked script leaf, landing in the route's generic catch -> 500 — a status-code oracle distinguishing this fixture from a truly-nonexistent id.`,
+  );
+  const normalize = (text: string, rawId: string): string => text.split(rawId).join('<id>');
+  assert.equal(
+    normalize(escaped.text, id),
+    normalize(neverExisted.text, neverExistedId),
+    `expected the SAME body template (modulo the echoed id) — got escaped=${escaped.text} neverExisted=${neverExisted.text}`,
+  );
+
+  assert.ok(!escaped.text.includes('SECRET-MARKER-APPROVELEAK-2f81a'), 'sanity: the outside script content never leaks either way');
+  assert.ok(!escaped.text.includes(outside), `sanitizeError must redact the outside dir's absolute path — got: ${escaped.text}`);
+  assert.ok(!escaped.text.includes(forgeRoot), `sanitizeError must redact forgeRoot's absolute path too — got: ${escaped.text}`);
+
+  const ledgerAfter = readHookApprovalLedger(forgeRoot).has(id);
+  assert.equal(ledgerAfter, false, `no approval-ledger entry may be recorded for "${id}" — got status ${escaped.status}: ${escaped.text}`);
+});
+
+test('(RED) [Finding B]: POST /api/studio/hooks/:id/override on the SAME shape of fixture must read the SAME as a genuinely nonexistent hook, same as GET-detail already does', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'red4-override-leak';
+  const outside = newOutsideDir('red4-override-leak-outside-');
+  const outsideScript = join(outside, 'secret.sh');
+  writeFileSync(outsideScript, '#!/bin/sh\necho SECRET-MARKER-OVERRIDELEAK-7b03e\n');
+  plantLeakLeafSymlinkHook(forgeRoot, id, outsideScript);
+
+  const detail = await get(`/api/studio/hooks/${id}`);
+  assert.equal(detail.status, 404, `sanity: GET detail already correctly 404s this fixture — got ${detail.status}: ${detail.text}`);
+
+  const neverExistedId = 'totally-unplanted-hook-findingb-override-xyz';
+  const escaped = await post(`/api/studio/hooks/${id}/override`, { reason: 'operator accepts the risk' });
+  const neverExisted = await post(`/api/studio/hooks/${neverExistedId}/override`, { reason: 'operator accepts the risk' });
+
+  assert.equal(
+    escaped.status,
+    neverExisted.status,
+    `expected override on the script-symlink-escape fixture to read as "no such hook" (${neverExisted.status}), same as a genuinely unplanted id — got ${escaped.status}: ${escaped.text}. overrideHookBlock (called AFTER the resolveGuardedPath hook.yaml guard already passed) calls loadHookDefinition directly, which throws from the same realpath check on the symlinked script leaf, landing in the route's generic catch -> 500.`,
+  );
+  const normalize = (text: string, rawId: string): string => text.split(rawId).join('<id>');
+  assert.equal(
+    normalize(escaped.text, id),
+    normalize(neverExisted.text, neverExistedId),
+    `expected the SAME body template (modulo the echoed id) — got escaped=${escaped.text} neverExisted=${neverExisted.text}`,
+  );
+
+  assert.ok(!escaped.text.includes('SECRET-MARKER-OVERRIDELEAK-7b03e'), 'sanity: the outside script content never leaks either way');
+  assert.ok(!escaped.text.includes(outside), `sanitizeError must redact the outside dir's absolute path — got: ${escaped.text}`);
+  assert.ok(!escaped.text.includes(forgeRoot), `sanitizeError must redact forgeRoot's absolute path too — got: ${escaped.text}`);
+
+  const ledgerAfter = readHookApprovalLedger(forgeRoot).has(id);
+  assert.equal(ledgerAfter, false, `no approval-ledger entry may be recorded for "${id}" — got status ${escaped.status}: ${escaped.text}`);
+});
+
+test('non-regression [Finding B]: a normal, valid hook still approves successfully (200) and IS recorded in the ledger', async () => {
+  const id = 'red4-approve-plain';
+  plantValidHook(forgeRoot, id, 'RED4-APPROVE-PLAIN-MARKER-9d41c');
+
+  const before_ = readHookApprovalLedger(forgeRoot).has(id);
+  assert.equal(before_, false, 'sanity: no pre-existing ledger entry');
+
+  const { status, text } = await post(`/api/studio/hooks/${id}/approve`, {});
+  assert.equal(status, 200, `expected a normal, valid hook to approve fine — got ${status}: ${text}`);
+
+  const ledgerEntry = readHookApprovalLedger(forgeRoot).get(id);
+  assert.ok(ledgerEntry, `expected "${id}" to be recorded in the approval ledger — got none`);
+  assert.equal(ledgerEntry!.overridden, false, `expected a plain approval to record overridden:false — got ${JSON.stringify(ledgerEntry)}`);
+});
+
+test('non-regression [Finding B]: a normal, valid hook still overrides successfully (200) and IS recorded in the ledger with overridden:true', async () => {
+  const id = 'red4-override-plain';
+  plantValidHook(forgeRoot, id, 'RED4-OVERRIDE-PLAIN-MARKER-1e77a');
+
+  const before_ = readHookApprovalLedger(forgeRoot).has(id);
+  assert.equal(before_, false, 'sanity: no pre-existing ledger entry');
+
+  const { status, text } = await post(`/api/studio/hooks/${id}/override`, { reason: 'operator accepts the risk' });
+  assert.equal(status, 200, `expected a normal, valid hook to override fine — got ${status}: ${text}`);
+
+  const ledgerEntry = readHookApprovalLedger(forgeRoot).get(id);
+  assert.ok(ledgerEntry, `expected "${id}" to be recorded in the approval ledger — got none`);
+  assert.equal(ledgerEntry!.overridden, true, `expected an override to record overridden:true — got ${JSON.stringify(ledgerEntry)}`);
+  assert.equal(ledgerEntry!.reason, 'operator accepts the risk', `expected the reason to be recorded — got ${JSON.stringify(ledgerEntry)}`);
+});
