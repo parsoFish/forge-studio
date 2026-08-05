@@ -61,6 +61,16 @@
  * parsed-row field as of session-client.test.ts's AT-98..101) — no existing
  * assertion's behaviour changes.
  * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * Adversarial-review round 2 (2026-08-06), Amendment A — AT-99, a
+ * REGRESSION GUARD (green today, not a defect pin — see its own comment for
+ * why it still earns its place): `dependencyDagView` emits exactly one node
+ * per input row, positionally, even when two rows share an `initiativeId` —
+ * the invariant `SessionArtifactPane.tsx`'s positional-zip fix now depends
+ * on, replacing an earlier id-keyed Map lookup that cross-contaminated two
+ * same-id rows' dependency lists.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -454,4 +464,56 @@ test('AT-97: sessionArtifactView: the dispatcher still returns "dag" for kind:"r
       (r) => r.dependsOn,
     ),
   );
+});
+
+// ===========================================================================
+// Adversarial-review round 2 (2026-08-06), Amendment A — REGRESSION GUARD,
+// green today, not a defect pin. `SessionArtifactPane.tsx`'s table used to
+// zip its "depends on" column onto `view.dag.nodes` through an id-keyed Map,
+// which is last-write-wins: two roadmap-draft rows sharing an `initiativeId`
+// (legitimately reachable — `deriveRoadmapDraft` reads `initiative_id` from
+// each manifest's FRONTMATTER, not its filename, so two files under one
+// session's manifests/ can declare the same id) cross-contaminated, one
+// initiative's dependency list rendering as another's. The fix zips
+// `view.rows` and `view.dag.nodes` POSITIONALLY instead. That positional fix
+// depends on exactly one property of `dependencyDagView`, pinned here: it
+// emits ONE node per INPUT ROW, in input order, even when two rows share an
+// id — it must never collapse/dedupe rows by id. This is a characterization
+// pin of already-correct behaviour (the implementation already iterates
+// `for (const item of items) { ... nodes.push(...) }` with no id-based
+// dedup or Map lookup anywhere in `dependencyDagView` — verified by reading
+// it), not a defect pin — it earns its place because it guards the EXACT
+// invariant the component fix now structurally depends on: a "helpful"
+// future change that dedupes-by-id INSIDE `dependencyDagView` (e.g. to
+// "clean up" duplicate ids before leveling) would silently re-introduce the
+// cross-contamination the positional-zip fix just removed, one layer away
+// from where anyone would think to look for it. — AT-99
+// ===========================================================================
+
+test('AT-99 (regression guard, green today): roadmapDraftView: two rows sharing the SAME initiativeId with DIFFERENT dependsOn produce TWO distinct dag nodes, positionally aligned with the rows — never collapsed/deduped by id, and never cross-contaminated', () => {
+  const duplicateIdArtifact: RoadmapDraftArtifact = {
+    kind: 'roadmap-draft',
+    label: 'Roadmap draft',
+    rows: [
+      { initiativeId: 'DUP-1', project: 'gitpulse', phase: 'planned', origin: 'manifests/a.md', dependsOn: ['SOMETHING-A'] },
+      { initiativeId: 'DUP-1', project: 'gitpulse', phase: 'in-flight', origin: 'manifests/b.md', dependsOn: ['SOMETHING-B'] },
+    ],
+    sourcesScanned: ['manifests/*.md (2 file(s) found)'],
+  };
+
+  const view = roadmapDraftView(duplicateIdArtifact);
+
+  // Never collapsed: exactly one node per row, both carrying the SAME id.
+  expect(view.dag.nodes.length).toBe(2);
+  expect(view.dag.nodes[0].id).toBe('DUP-1');
+  expect(view.dag.nodes[1].id).toBe('DUP-1');
+
+  // Positionally aligned with rows — node[i] IS row[i]'s node.
+  expect(view.dag.nodes[0].item).toEqual(duplicateIdArtifact.rows[0]);
+  expect(view.dag.nodes[1].item).toEqual(duplicateIdArtifact.rows[1]);
+
+  // Never cross-contaminated: each node's own deps, not the other row's.
+  expect(view.dag.nodes[0].deps).toEqual(['SOMETHING-A']);
+  expect(view.dag.nodes[1].deps).toEqual(['SOMETHING-B']);
+  expect(view.dag.nodes[0].deps).not.toEqual(view.dag.nodes[1].deps);
 });

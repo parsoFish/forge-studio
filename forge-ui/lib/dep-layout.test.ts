@@ -6,32 +6,59 @@
  * repo (confirmed: no `dep-layout.test.ts` existed before this round, and
  * no other test file imports `topoLevels`).
  *
- * Two purposes:
+ * `topoLevels` had ZERO tests before this round despite four consumers. The
+ * ATs below fall into THREE distinct categories, corrected here (adversarial
+ * review round 2, 2026-08-06) after an earlier draft of this header lumped
+ * AT-1..AT-8 together as one undifferentiated "characterization" bucket —
+ * that blanket claim only half held, and this campaign treats an overstated
+ * comment as seriously as an overstated implementation claim:
  *
- * 1. REGRESSION GUARD (AT-1..AT-8): `topoLevels` is recursive (depth-first,
- *    one stack frame per edge walked) and the review's fix converts that
- *    recursion to an explicit worklist, "behaviour-identical". A worklist
- *    rewrite is exactly the kind of change likely to silently perturb
- *    subtleties nobody intended as part of the "contract" but that real
- *    consumers currently observe: the EXACT (non-obvious, an accident of
- *    recursion + iteration order) level numbers a dependency CYCLE produces
- *    (AT-5/AT-6), and `byLevel`'s bucket-insertion order, which is NOT
- *    numerically ascending in general despite the type's own doc comment
- *    implying it is (AT-7 — a real, verified discrepancy between the type
- *    comment and the actual code, called out here rather than silently
- *    "corrected"). These are characterization pins, not defect pins — each
- *    one's per-AT note below states plainly why it still earns its place
- *    (a plausible alternative worklist implementation would very likely
- *    produce a DIFFERENT, equally-"reasonable"-looking value here).
+ * 1. ACCEPTANCE (AT-1, AT-2, AT-3, AT-4, AT-8): spec-determined, unambiguous
+ *    values that ANY correct implementation of the documented rule ("level 0
+ *    = no resolvable deps; level n = 1 + max(level of resolvable deps)") must
+ *    produce — a linear chain, a diamond, multiple independent roots, an
+ *    orphan (unresolvable) dep never raising a level, and empty input's
+ *    empty `levelById`/`byLevel` with `maxLevel:0`. These are not
+ *    implementation-specific accidents; a from-scratch reimplementation with
+ *    no knowledge of this one would still have to produce these exact
+ *    numbers to be correct. Undersold by an earlier draft's blanket
+ *    "characterization pins" label — they are acceptance tests.
  *
- * 2. DEFECT PIN (AT-9, AT-10): `topoLevels` is UNBOUNDED recursion — a
- *    ~2500+-node reversed-order chain or cycle throws `RangeError: Maximum
+ * 2. CHARACTERIZATION (AT-5, AT-6): the EXACT level numbers a dependency
+ *    CYCLE folds to (2-node: B=1,A=2; 3-node: C=1,B=2,A=3) are genuinely an
+ *    ACCIDENT of THIS implementation's traversal order (which member's
+ *    back-edge fires first, `items`' iteration order) — the documented rule
+ *    above says nothing about what a cycle "should" produce, so a
+ *    differently-ordered but equally correct (never throws, folds a
+ *    back-edge to 0, total) worklist could legitimately produce DIFFERENT
+ *    numbers, e.g. both members at level 0. Pinned anyway because three real
+ *    consumers currently render THESE specific numbers and the review's fix
+ *    must reproduce them byte-identically — but that is a "don't silently
+ *    change what ships today" reason, not a "the spec demands this" reason.
+ *    This is the one pair of ATs the "characterization" label genuinely fits.
+ *
+ * 3. ACCEPTANCE against a now-corrected doc, NOT a rewrite regression guard
+ *    (AT-7): `byLevel`'s bucket-insertion order (ITEMS-scan order, not
+ *    ascending level number) is now accurately documented on
+ *    `TopoLevelResult.byLevel` itself (dep-layout.ts, corrected by the fix
+ *    round) — AT-7 pins that corrected, now-unambiguous doc claim, so it is
+ *    acceptance-grade. Its purpose is NOT "survive the recursion→worklist
+ *    rewrite", though an earlier draft of this header implied that: the
+ *    bucket-building loop AT-7 exercises (`topoLevels`'s final
+ *    `for (const it of items) { ... byLevel.set(...) }` pass) is BYTE-
+ *    IDENTICAL before and after that rewrite — only `computeLevelsFrom` (the
+ *    level-computation itself) changed — so this loop was never at risk from
+ *    it. AT-7 exists because the behaviour had zero coverage before this
+ *    round, not because the rewrite threatened it.
+ *
+ * 4. DEFECT PIN (AT-9, AT-10): `topoLevels` was UNBOUNDED recursion — a
+ *    ~2500+-node reversed-order chain or cycle threw `RangeError: Maximum
  *    call stack size exceeded` (independently reproduced while writing this
  *    file: plain Node throws at n=2500 for both shapes, confirmed via the
  *    REAL `topoLevels` import at n=10000 too — see this session's report for
- *    the raw numbers). AT-9/AT-10 are genuinely RED against current head:
- *    a 10,000-node chain/cycle, well within what a real roadmap or WI graph
- *    could reach over a project's lifetime, crashes the render path today.
+ *    the raw numbers). AT-9/AT-10 were genuinely RED when written: a
+ *    10,000-node chain/cycle, well within what a real roadmap or WI graph
+ *    could reach over a project's lifetime, crashed the render path.
  *
  * All fixture values below were VERIFIED by running the real, current
  * `topoLevels` (not hand-derived/guessed) — see this session's report for
@@ -156,8 +183,10 @@ test('AT-6: topoLevels: a 3-node cycle (A depends on B, B depends on C, C depend
 
 // ===========================================================================
 // byLevel bucket ordering + maxLevel — insertion order is INPUT-scan order,
-// NOT numerically ascending (a real discrepancy vs. the type's own doc
-// comment) (AT-7); empty input (AT-8)
+// NOT numerically ascending, matching TopoLevelResult.byLevel's own
+// (corrected) doc comment (AT-7, acceptance-grade against that doc — NOT a
+// guard against the recursion→worklist rewrite, which never touched this
+// bucket-building loop); empty input (AT-8, acceptance — spec-determined)
 // ===========================================================================
 
 test('AT-7: topoLevels: byLevel\'s bucket-insertion order follows the ITEMS scan order, not ascending level number — a scrambled input (C first, depends on B, depends on A) yields byLevel key order [2,1,0], the REVERSE of ascending, and maxLevel is the true max across ALL items regardless of input position', () => {
@@ -182,12 +211,14 @@ test('AT-8: topoLevels: empty input yields an EMPTY levelById and EMPTY byLevel 
 });
 
 // ===========================================================================
-// THE DEFECT — unbounded recursion crashes on a deep graph (AT-9, AT-10).
-// RED against current head: both currently throw `RangeError: Maximum call
-// stack size exceeded` (independently reproduced before writing these ATs).
-// Each must complete well under a couple of seconds once fixed — wall-clock
-// is logged, not just pass/fail, per the review's instruction (a hang is
-// its own defect, distinct from a crash).
+// THE DEFECT — unbounded recursion crashed on a deep graph (AT-9, AT-10).
+// Were RED when written: both threw `RangeError: Maximum call stack size
+// exceeded` against the pre-fix, purely-recursive `topoLevels` (independently
+// reproduced before writing these ATs). Now green post-fix (worklist
+// rewrite) — kept as acceptance tests against the crash going forward. Each
+// completes well under a couple of seconds — wall-clock is logged, not just
+// pass/fail, per the review's instruction (a hang is its own defect,
+// distinct from a crash).
 // ===========================================================================
 
 test('AT-9: topoLevels: a 10,000-node chain declared in REVERSE order (item i depends on item i+1, so recursion must walk the FULL depth before any level is cached) does NOT throw, and produces the CORRECT levels — maxLevel:9999, level(item[0]):9999, level(item[9999]):0', () => {
