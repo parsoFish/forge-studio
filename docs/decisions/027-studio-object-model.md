@@ -451,3 +451,18 @@ body mangling is deleted — a body containing `---` (including as its first lin
 round-trips with byte-identical content and unchanged frontmatter data, which is
 pinned by a test rather than assumed. The one-canonical-serializer rule is
 unchanged: the choice lives *inside* the serializer, not at its call sites.
+
+**"Semantically unchanged" has one precise rule, and it is load-bearing:** for
+the purpose of that comparison only, **an absent optional array key and an empty
+array are the same state** — `composition.*`, `materials`, `runtime.range`,
+`allowed-tools`, `disallowed-tools`. This is not a convenience. The loader and
+the bridge merge both turn an absent optional array into a concrete `[]`, and
+the builder sends every such field on every save, so without this rule the
+projected data diverges from a file that simply omits the key and the
+byte-faithful path never fires at all — which is exactly what happened on the
+real UI path until a live journey beat caught it (`materials: []` and
+`runtime.range: []`, neither declared by any roster agent). The rule governs
+only what is **compared**, never what is **written**: a genuine change in either
+direction still forces the full re-serialize and still persists. **Any future
+optional array field added to this object model must be added to that rule**, or
+it silently re-breaks the guarantee for every agent that does not declare it.
