@@ -24,12 +24,16 @@ import { startBridge } from './ui-bridge.ts';
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeManifest(worktreePath: string, initiativeId: string): string {
+// SEC-02: project_repo_path must be genuinely contained under
+// <forgeRoot>/projects/ — real production values look like
+// /home/parso/forge/projects/gitpulse (forgeRoot is passed explicitly since
+// worktreePath alone doesn't always share its forgeRoot with the caller).
+function makeManifest(forgeRoot: string, worktreePath: string, initiativeId: string): string {
   return [
     '---',
     `initiative_id: ${initiativeId}`,
     'project: test-project',
-    'project_repo_path: /tmp/test-project',
+    `project_repo_path: ${join(forgeRoot, 'projects', 'test-project')}`,
     `worktree_path: ${worktreePath}`,
     'created_at: 2026-01-01T00:00:00.000Z',
     'iteration_budget: 5',
@@ -102,7 +106,7 @@ test('approve: 200, calls mergePr once with worktreePath, fires finalizeAfterMer
   const initiativeId = 'INIT-2026-01-01-test-approve';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
-  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(worktreePath, initiativeId));
+  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(forgeRoot, worktreePath, initiativeId));
 
   const { url, close } = await startBridge({
     forgeRoot,
@@ -140,9 +144,16 @@ test('approve with missing worktree: 409 worktree-gone, mergePr not called', asy
   const initiativeId = 'INIT-2026-01-01-test-missing-wt';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
+  // SEC-02: "worktree already cleaned up" must be a LEGITIMATE but
+  // never-created path — an out-of-bounds path now fails containment first
+  // ("worktree_path outside allowed root"), masking the worktree-gone check
+  // this test actually exercises. The projects/ containment root must exist
+  // even though the worktree itself deliberately does not.
+  mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
+  const missingWorktreePath = join(forgeRoot, 'projects', 'test-project', 'worktrees', 'test-missing-wt');
   writeFileSync(
     join(rfr, `${initiativeId}.md`),
-    makeManifest('/nonexistent/does/not/exist', initiativeId),
+    makeManifest(forgeRoot, missingWorktreePath, initiativeId),
   );
 
   const { url, close } = await startBridge({
@@ -182,7 +193,7 @@ test('approve when mergePr returns false: 409 gh-pr-merge-failed, finalize not c
   const initiativeId = 'INIT-2026-01-01-test-merge-fail';
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
-  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(worktreePath, initiativeId));
+  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(forgeRoot, worktreePath, initiativeId));
 
   const { url, close } = await startBridge({
     forgeRoot,
@@ -254,7 +265,7 @@ function seedApprovableCycle(forgeRoot: string, initiativeId: string): { worktre
   mkdirSync(worktreePath, { recursive: true });
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
-  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(worktreePath, initiativeId));
+  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(forgeRoot, worktreePath, initiativeId));
   return { worktreePath };
 }
 

@@ -21,7 +21,7 @@
  * deleted, and reflection becomes available in the UI.
  */
 import { existsSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { parseManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
@@ -32,6 +32,7 @@ import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
+import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from '../cli/manifest-path-guard.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { loadFlowDefinition, loadAgentDefinition } from './studio/registry.ts';
 import { flowPathForId } from './flow-runner.ts';
@@ -283,6 +284,38 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       initiativeId = m.initiative_id || initiativeId;
       const worktreePath = m.worktree_path ?? '';
       const projectRepoPath = m.project_repo_path ?? '';
+      // SEC-02 round 3: `cycle_id` is validated further down, but these two
+      // siblings are read off the SAME unvalidated manifest and were left
+      // unguarded — `worktreePath` flows into `confirmMerge` and
+      // `pendingFixWorkItems` (both below) and both flow into `CycleInput`,
+      // so the check must precede the `existsSync` probe, not follow it.
+      // Absent (`''`) stays absent: the `no-worktree` branch below owns that
+      // case, and a manifest may legitimately carry no repo path.
+      // Throwing lands in this loop's own per-manifest try/catch
+      // (`status:'error'`), so ONE poisoned manifest never aborts the sweep
+      // for its legitimate siblings.
+      const forgeRoot = dirname(resolve(paths.root));
+      if (worktreePath && !isContainedWorktreePath(worktreePath, { forgeRoot, initiativeId })) {
+        throw new Error(`unsafe worktree_path on manifest ${manifestPath}`);
+      }
+      if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot })) {
+        throw new Error(`unsafe project_repo_path on manifest ${manifestPath}`);
+      }
+      // SEC-02: this sweep reads `cycle_id` straight off a ready-for-review
+      // manifest that never necessarily passed through ingest validation (the
+      // same manifest-poisoning threat model `cli/forge-requeue-containment.test.ts`
+      // covers for `runRequeue`) — an entry point independent of
+      // `applyReviewVerdict`. `createLogger` and `writeVerdictJson` further
+      // down both do `resolve(logsRoot, cycleId)`, so validate before either
+      // write site. Resolved and checked HERE, above the `renameSync` claim,
+      // for symmetry with `drain-fix-loop.ts`: rejecting a manifest AFTER
+      // claiming it strands it mid-claim in `in-flight/` (and in the drain's
+      // case leaked a live heartbeat timer). A guard belongs before the side
+      // effects it protects, not after them.
+      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
+      if (!isSafeCycleId(cycleId)) {
+        throw new Error(`unsafe cycle_id on manifest ${manifestPath}`);
+      }
       if (!worktreePath || !existsSync(worktreePath)) {
         out.push({ initiativeId, status: 'no-worktree' });
         continue;
@@ -312,7 +345,6 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       // anchor written at first claim) so finalize appends to the SAME `_logs`
       // dir the cycle used; fall back to the latest matching dir for legacy
       // manifests that never persisted one.
-      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
       const logger = createLogger(cycleId, logsRoot);
       const input: CycleInput = { initiativeId, manifestPath: inFlightPath, projectRepoPath, worktreePath, cycleId };
 

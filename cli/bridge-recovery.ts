@@ -29,6 +29,11 @@ import { runRequeue } from './forge-requeue.ts';
 import { sendJson, readJson, pathOnly, allowedOrigin, sanitizeError } from './bridge-studio.ts';
 import { INIT_ID_RE } from './bridge-studio-runs.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import {
+  validateManifestPathFields,
+  isContainedWorktreePath,
+  isContainedProjectRepoPath,
+} from './manifest-path-guard.ts';
 
 export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
 
@@ -87,7 +92,14 @@ export function recoveryInspect(initiativeId: string, ctx: RecoveryContext): Rec
   const wt = (m as { worktree_path?: string }).worktree_path ?? null;
   const branch = `forge/${initiativeId}`;
   const out: RecoveryInspect = { found: true, initiativeId, state: located.state, worktree: wt, branch };
-  if (wt && existsSync(wt)) {
+  // SEC-02 (forge-d1f): a worktree_path that fails containment must not be
+  // treated as a live worktree — `git -C <wt> log/diff` would turn this
+  // read-only inspect route into an arbitrary-directory git-log oracle, and
+  // reading `<wt>/.forge/pr-description.md` would leak an arbitrary file's
+  // length (prDraftChars). Falls into the SAME existing shape the "no
+  // worktree" case already uses (worktreeExists:false) rather than a new one.
+  const wtContained = wt !== null && isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, initiativeId });
+  if (wt && wtContained && existsSync(wt)) {
     out.worktreeExists = true;
     out.commits = git(wt, ['log', '--no-color', '--format=%h %s', '-n', '20', 'main..HEAD'])
       .split('\n').filter((l) => l.length > 0);
@@ -107,6 +119,17 @@ export function recoveryAbandon(initiativeId: string, ctx: RecoveryContext): { o
   const m = parseManifest(readFileSync(located.path, 'utf8'));
   const wt = (m as { worktree_path?: string }).worktree_path;
   const projectRepoPath = m.project_repo_path;
+  // SEC-02 (forge-d1f): refuse the whole abandon — no git op, no queue move —
+  // rather than run `git -C <projectRepoPath> worktree remove/branch -D/push
+  // --delete` against an out-of-bounds path. Reuses the SAME error shape this
+  // function already returns for "no manifest found" rather than inventing a
+  // new one, and never echoes the offending path back to the caller.
+  if (wt && !isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, initiativeId })) {
+    return { ok: false, detail: 'no manifest found' };
+  }
+  if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot: ctx.forgeRoot })) {
+    return { ok: false, detail: 'no manifest found' };
+  }
   const branch = `forge/${initiativeId}`;
   if (projectRepoPath && existsSync(projectRepoPath)) {
     if (wt && existsSync(wt)) {
@@ -204,6 +227,12 @@ export async function handleRecoveryRoutes(
       catch (err) { sendJson(res, 400, { error: `unparseable manifest: ${sanitizeError(err)}` }, origin); return true; }
       const errors = validateManifest(manifest);
       if (errors.length > 0) { sendJson(res, 400, { error: 'invalid manifest', detail: errors }, origin); return true; }
+      // SEC-02 (forge-d1f): reject an out-of-bounds worktree_path /
+      // project_repo_path / cycle_id / project BEFORE writeManifest ever
+      // runs, so the ingest route reports a clean 400 instead of the
+      // writeManifest guard's throw surfacing as a 500.
+      const pathErrors = validateManifestPathFields(manifest, { forgeRoot: ctx.forgeRoot });
+      if (pathErrors.length > 0) { sendJson(res, 400, { error: 'invalid manifest', detail: pathErrors }, origin); return true; }
       const paths = getPaths(ctx.queueRoot);
       const filename = `${manifest.initiative_id}.md`;
       if (existsSync(join(paths.inFlight, filename)) || existsSync(join(paths.pending, filename))) {

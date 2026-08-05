@@ -18,17 +18,29 @@ function setupForgeRoot(): string {
   for (const d of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
     mkdirSync(join(root, '_queue', d), { recursive: true });
   }
+  // SEC-02: both containment roots the manifest path guard checks against
+  // must exist on disk — a real forge root always has both (orchestrator/
+  // init.ts layoutDirs + the daemon's ensureLayout create them at boot).
+  mkdirSync(join(root, '_worktrees'), { recursive: true });
+  mkdirSync(join(root, 'projects'), { recursive: true });
   return root;
 }
 
-const MANIFEST = (overrides: { worktreePath?: string } = {}): string => `---
+// SEC-02: project_repo_path must be genuinely contained under
+// <forgeRoot>/projects/, and worktree_path must be EITHER identity-bound to
+// <forgeRoot>/_worktrees/<initiative_id> OR contained under
+// <forgeRoot>/projects/ — so both need `root` to build a legitimate value.
+// The default worktree_path is deliberately the identity-bound path left
+// UNCREATED (a legitimate-but-absent worktree), matching the "worktree
+// already cleaned up" shape most of these fixtures exercise.
+const MANIFEST = (root: string, overrides: { worktreePath?: string } = {}): string => `---
 initiative_id: INIT-2026-05-24-rq-test
 project: testproj
-project_repo_path: /tmp/nonexistent-repo
+project_repo_path: ${join(root, 'projects', 'testproj')}
 created_at: '2026-05-24T00:00:00.000Z'
 iteration_budget: 5
 cost_budget_usd: 1.0
-worktree_path: ${overrides.worktreePath ?? '/tmp/nonexistent-worktree'}
+worktree_path: ${overrides.worktreePath ?? join(root, '_worktrees', 'INIT-2026-05-24-rq-test')}
 retry_count: 2
 previous_failure_modes:
   - pm-hidden-coupling
@@ -41,7 +53,7 @@ test('runRequeue: moves manifest from failed/ → pending/ + appends marker', ()
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
-    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST());
+    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST(root));
 
     const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root });
     assert.equal(r.initiativeId, 'INIT-2026-05-24-rq-test');
@@ -65,7 +77,7 @@ test('runRequeue: moves manifest from failed/ → pending/ + appends marker', ()
 test('runRequeue: --reset-retries zeros retry_count', () => {
   const root = setupForgeRoot();
   try {
-    writeFileSync(join(root, '_queue', 'failed', 'INIT-2026-05-24-rq-test.md'), MANIFEST());
+    writeFileSync(join(root, '_queue', 'failed', 'INIT-2026-05-24-rq-test.md'), MANIFEST(root));
     const r = runRequeue('INIT-2026-05-24-rq-test', { forgeRoot: root, resetRetries: true });
     assert.equal(r.retryCountAfter, 0);
     // serializeManifest omits retry_count when 0 (manifest.ts:181) —
@@ -81,7 +93,7 @@ test('runRequeue: removes stranded verdict files in every queue dir', () => {
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
-    writeFileSync(join(root, '_queue', 'ready-for-review', file), MANIFEST());
+    writeFileSync(join(root, '_queue', 'ready-for-review', file), MANIFEST(root));
     writeFileSync(join(root, '_queue', 'ready-for-review', 'INIT-2026-05-24-rq-test.verdict-response.md'), '---\nverdict: approve\n---');
     writeFileSync(join(root, '_queue', 'in-flight', 'INIT-2026-05-24-rq-test.verdict-prompt.md'), 'stale prompt');
 
@@ -98,7 +110,7 @@ test('runRequeue: removes orphan worktree dir if present', () => {
   const root = setupForgeRoot();
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
-    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST({ worktreePath: join(root, '_worktrees', 'INIT-2026-05-24-rq-test') }));
+    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST(root, { worktreePath: join(root, '_worktrees', 'INIT-2026-05-24-rq-test') }));
     mkdirSync(join(root, '_worktrees', 'INIT-2026-05-24-rq-test'), { recursive: true });
     writeFileSync(join(root, '_worktrees', 'INIT-2026-05-24-rq-test', 'leftover.txt'), 'from a prior cycle');
 
@@ -115,7 +127,7 @@ test('runRequeue --resume-from=demo: stamps resume_from AND preserves the worktr
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
     const wt = join(root, '_worktrees', 'INIT-2026-05-24-rq-test');
-    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST({ worktreePath: wt }));
+    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST(root, { worktreePath: wt }));
     mkdirSync(wt, { recursive: true });
     writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
 
@@ -137,7 +149,7 @@ test('runRequeue --resume-from=demo: preserves worktree + branch, stamps resume_
   try {
     const file = 'INIT-2026-05-24-rq-test.md';
     const wt = join(root, '_worktrees', 'INIT-2026-05-24-rq-test');
-    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST({ worktreePath: wt }));
+    writeFileSync(join(root, '_queue', 'failed', file), MANIFEST(root, { worktreePath: wt }));
     mkdirSync(wt, { recursive: true });
     writeFileSync(join(wt, 'wi-work.txt'), 'salvageable per-WI commits live here');
     // A legacy pr-feedback.md (ADR 026 retired the thread) must now be cleared.
@@ -194,7 +206,7 @@ test('runRequeue: a full (non-resume) requeue CLEARS a stamped resume_from (ADR 
   try {
     const id = 'INIT-2026-05-24-rq-test';
     // A manifest a crash-recovery requeue stamped with resume_from: demo.
-    const withResume = MANIFEST().replace(/^---$/m, '---\nresume_from: demo');
+    const withResume = MANIFEST(root).replace(/^---$/m, '---\nresume_from: demo');
     writeFileSync(join(root, '_queue', 'failed', `${id}.md`), withResume);
 
     runRequeue(id, { forgeRoot: root }); // full re-run, no --resume-from
@@ -209,7 +221,7 @@ test('runRequeue: non-resume requeue REMOVES stale <id>.pr-feedback.md', () => {
   const root = setupForgeRoot();
   try {
     const id = 'INIT-2026-05-24-rq-test';
-    writeFileSync(join(root, '_queue', 'failed', `${id}.md`), MANIFEST());
+    writeFileSync(join(root, '_queue', 'failed', `${id}.md`), MANIFEST(root));
     const feedback = join(root, '_queue', 'failed', `${id}.pr-feedback.md`);
     writeFileSync(feedback, 'stale feedback\n');
 
@@ -236,7 +248,10 @@ function n7Git(cwd: string, args: string[]): void {
 
 /** Real project repo with main + a forge/<init> branch carrying one commit. */
 function n7ProjectRepo(root: string, withBranchCommit: boolean): string {
-  const repo = join(root, 'project-repo');
+  // SEC-02: project_repo_path must be genuinely contained under
+  // <forgeRoot>/projects/ — nest the fixture repo there instead of directly
+  // under root (which used to sit outside the allowed containment root).
+  const repo = join(root, 'projects', 'project-repo');
   mkdirSync(repo, { recursive: true });
   n7Git(repo, ['init', '-q', '-b', 'main']);
   n7Git(repo, ['config', 'user.email', 'test@forge.local']);

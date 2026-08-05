@@ -9,8 +9,10 @@
  */
 
 import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import matter from 'gray-matter';
+
+import { assertManifestPathFields } from '../cli/manifest-path-guard.ts';
 
 // R4-11-F1: `merged` mirrors the QueueState directory of the same name (a
 // transient pass-through promoted to `done/` in the same sweep) — distinct
@@ -382,6 +384,16 @@ export function writeManifest(m: InitiativeManifest, opts: WriteOptions = {}): s
     throw new Error(`invalid manifest:\n  - ${errors.join('\n  - ')}`);
   }
   const queueRoot = resolve(opts.queueRoot ?? '_queue');
+  // SEC-02 (forge-d1f): `_queue` always lives at `<forgeRoot>/_queue` (every
+  // caller's queueRoot IS that directory, per the WriteOptions doc above), so
+  // its parent is the one trusted anchor this choke point can derive without
+  // a new parameter. writeManifest is the single write choke point for a
+  // manifest's path-shaped fields (worktree_path / project_repo_path /
+  // cycle_id / project) — see cli/manifest-path-guard.ts's module docstring
+  // for why validation belongs HERE rather than at the dozen downstream read
+  // sites. Throws (fails closed) rather than writing an unsafe manifest.
+  const forgeRoot = dirname(queueRoot);
+  assertManifestPathFields(m, { forgeRoot });
   const pending = join(queueRoot, 'pending');
   if (!existsSync(pending)) mkdirSync(pending, { recursive: true });
   const out = join(pending, `${m.initiative_id}.md`);

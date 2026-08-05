@@ -18,7 +18,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { join, resolve, sep } from 'node:path';
+import { join } from 'node:path';
 import lockfile from 'proper-lockfile';
 
 import { parseManifest, persistManifestSendBack, persistManifestSpecs, serializeManifest } from '../orchestrator/manifest.ts';
@@ -41,6 +41,7 @@ import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
+import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
@@ -182,24 +183,45 @@ export async function applyReviewVerdict(
   if (kind === 'approve') {
     const approveManifest = parseManifest(readFileSync(manifestPath, 'utf8'));
     const approveWorktreePath = approveManifest.worktree_path ?? '';
-    if (!approveWorktreePath || !existsSync(approveWorktreePath)) {
+    if (!approveWorktreePath) {
       sendJson(res, 409, {
         error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
         initiativeId,
       }, origin);
       return;
     }
-    // H2: bounds-check manifest-supplied worktree_path to prevent a tampered
-    // manifest from directing mergePr at an arbitrary path. Two legitimate roots:
-    // in-place worktrees under projectsRoot, AND forge-managed worktrees under
-    // <forgeRoot>/_worktrees/ (forgeRoot is projectsRoot's parent). The original
-    // check only allowed projectsRoot, so it 409'd every forge-managed worktree
-    // (the default) — blocking the harness auto-approve (2026-06-16).
-    const resolvedWt = resolve(approveWorktreePath);
-    const projectsRoot = resolve(ctx.projectsRoot);
-    const worktreesRoot = resolve(projectsRoot, '..', '_worktrees');
-    if (!resolvedWt.startsWith(projectsRoot + sep) && !resolvedWt.startsWith(worktreesRoot + sep)) {
+    // H2 (SEC-02, forge-d1f): bounds-check manifest-supplied worktree_path to
+    // prevent a tampered manifest from directing mergePr at an arbitrary path.
+    // REAL per-segment containment (isContainedWorktreePath), not a lexical
+    // resolve().startsWith() on an unresolved path — resolve() normalises ".."
+    // before the comparison ever runs and never follows symlinks, so that
+    // shape is worthless against a symlinked escape. Two legitimate roots:
+    // in-place worktrees under <forgeRoot>/projects/, AND forge-managed
+    // worktrees identity-bound to THIS initiative under <forgeRoot>/_worktrees/.
+    // Deliberately moved AHEAD of the existsSync probe below (was previously
+    // checked first) — an out-of-bounds path must never even be stat'd through
+    // this route.
+    if (!isContainedWorktreePath(approveWorktreePath, { forgeRoot: ctx.forgeRoot, initiativeId })) {
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
+      return;
+    }
+    if (!existsSync(approveWorktreePath)) {
+      sendJson(res, 409, {
+        error: 'worktree gone — merge the PR on GitHub; the sweep will detect it in ≤5 min',
+        initiativeId,
+      }, origin);
+      return;
+    }
+    // SEC-02 round 2 (Finding 1, guard-symmetry hole): project_repo_path feeds
+    // ctx.runReleaseFinalize -> loadProjectConfig(projectRepoPath) below — the
+    // send-back branch already containment-checks this identical field for the
+    // identical sink; the approve branch never did. Mirrored here, BEFORE any
+    // use of the value, using the same "outside allowed root" 409 shape.
+    if (
+      approveManifest.project_repo_path &&
+      !isContainedProjectRepoPath(approveManifest.project_repo_path, { forgeRoot: ctx.forgeRoot })
+    ) {
+      sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
       return;
     }
     // R5-01-F1: dry-bridge — the incident (2026-07-16, self-merge with the
@@ -212,6 +234,18 @@ export async function applyReviewVerdict(
     const dryBridgeActive = isDryBridge();
     const skipped: DryBridgeStubAction[] = [];
     const approveCycleId = approveManifest.cycle_id ?? initiativeId;
+    // SEC-02 round 2 (Finding 2, headline): cycle_id feeds
+    // resolve(logsRoot, cycleId) at TWO write sites downstream — the
+    // dry-bridge createLogger call immediately below (the EARLIEST
+    // cycleId-derived path in this branch) and writeVerdictJson further down.
+    // Validate the SAME derived value used at both, before either is reached.
+    // The `?? initiativeId` fallback is already safe (INIT_ID_RE-gated,
+    // checked above) — checking the post-fallback value covers both cases in
+    // one place and means no unvalidated value can ever reach a path.
+    if (!isSafeCycleId(approveCycleId)) {
+      sendJson(res, 409, { error: 'cycle_id outside allowed root', initiativeId }, origin);
+      return;
+    }
     // Task A-finalfix FIX 5: mirror send-back's best-effort logging pattern
     // (see the try/catch around the reviewer.verdict.send-back emit below) —
     // createLogger touches the filesystem (creates/opens the cycle's
@@ -324,20 +358,57 @@ export async function applyReviewVerdict(
   // send-back path
   const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
   const worktreePath = manifest.worktree_path ?? '';
-  if (!worktreePath || !existsSync(worktreePath)) {
+  // SEC-02 round 5 — ORDERING IS THE FIX, not the check itself. This branch
+  // used to read `if (!worktreePath || !existsSync(worktreePath))`, so an
+  // OUT-OF-BOUNDS path was stat'd before containment ever ran and the reply
+  // then differed by whether it existed ('no live worktree…' when absent vs
+  // 'worktree_path outside allowed root' when present) — a one-bit existence
+  // probe for ANY absolute path on the server, which is exactly the oracle
+  // class `forge-b2k` exists to close. The approve branch above was already
+  // ordered correctly; this is the symmetry fix. Empty-check only here; the
+  // existence probe moves BELOW containment, mirroring approve exactly.
+  if (!worktreePath) {
     sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
     return;
   }
-  // H2 (guard symmetry with the approve branch): the send-back path writes fix
-  // work items + the cap-exhausted marker under manifest-supplied worktree_path
-  // — bounds-check it against the two legitimate roots (in-place worktrees
-  // under projectsRoot, forge-managed worktrees under <forgeRoot>/_worktrees/)
-  // so a tampered manifest can't direct those writes at an arbitrary path.
-  const resolvedSbWt = resolve(worktreePath);
-  const sbProjectsRoot = resolve(ctx.projectsRoot);
-  const sbWorktreesRoot = resolve(sbProjectsRoot, '..', '_worktrees');
-  if (!resolvedSbWt.startsWith(sbProjectsRoot + sep) && !resolvedSbWt.startsWith(sbWorktreesRoot + sep)) {
+  // H2 (SEC-02, forge-d1f; guard symmetry with the approve branch): the
+  // send-back path writes fix work items + the cap-exhausted marker under
+  // manifest-supplied worktree_path — REAL per-segment containment
+  // (isContainedWorktreePath), not a lexical resolve().startsWith() check on
+  // an unresolved path, against the two legitimate roots (in-place worktrees
+  // under <forgeRoot>/projects/, forge-managed worktrees identity-bound to
+  // THIS initiative under <forgeRoot>/_worktrees/).
+  if (!isContainedWorktreePath(worktreePath, { forgeRoot: ctx.forgeRoot, initiativeId })) {
     sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
+    return;
+  }
+  // SEC-02: project_repo_path previously had ZERO bounds check here even
+  // though it feeds loadProjectConfig below — an out-of-bounds path would
+  // read an arbitrary project.json off the filesystem through this route.
+  if (
+    manifest.project_repo_path &&
+    !isContainedProjectRepoPath(manifest.project_repo_path, { forgeRoot: ctx.forgeRoot })
+  ) {
+    sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
+    return;
+  }
+  // SEC-02 round 5: the existence probe, now strictly AFTER containment — a
+  // legitimately-contained worktree that has been cleaned up still reports the
+  // ordinary 'no live worktree' 409, so the fix does not collapse that signal
+  // into the containment rejection (pinned by its own positive control).
+  if (!existsSync(worktreePath)) {
+    sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
+    return;
+  }
+  // SEC-02 round 2 (Finding 2, headline): cycle_id feeds
+  // resolve(logsRoot, cycleId) at THREE write sites downstream (the two
+  // createLogger calls + writeVerdictJson, all below) — validate the SAME
+  // derived value used at all three, before any is reached, and reuse it at
+  // each call site rather than re-deriving `manifest.cycle_id ?? initiativeId`
+  // unchecked each time.
+  const sendBackCycleId = manifest.cycle_id ?? initiativeId;
+  if (!isSafeCycleId(sendBackCycleId)) {
+    sendJson(res, 409, { error: 'cycle_id outside allowed root', initiativeId }, origin);
     return;
   }
   let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
@@ -403,7 +474,7 @@ export async function applyReviewVerdict(
     // run page its hex + drawer spec for each fix WI before dispatch
     // (run-model-derive matches that exact message).
     try {
-      const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
+      const logger = createLogger(sendBackCycleId, ctx.logsRoot);
       logger.emit({
         initiative_id: initiativeId,
         phase: 'review-loop',
@@ -448,7 +519,7 @@ export async function applyReviewVerdict(
       {
         kind: 'send-back',
         initiative_id: initiativeId,
-        cycleId: manifest.cycle_id ?? initiativeId,
+        cycleId: sendBackCycleId,
         decidedBy: 'operator',
         rationale,
         acceptanceCriteria: acs,
@@ -473,7 +544,7 @@ export async function applyReviewVerdict(
       const capMsg = (appendErr as Error).message;
       try { writeReviewCapExhaustedMarker(worktreePath, capMsg); } catch { /* best-effort */ }
       try {
-        const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
+        const logger = createLogger(sendBackCycleId, ctx.logsRoot);
         logger.emit({
           initiative_id: initiativeId,
           phase: 'review-loop',

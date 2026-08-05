@@ -23,7 +23,7 @@
  */
 import { existsSync, readdirSync, readFileSync, renameSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import lockfile from 'proper-lockfile';
 
 import { parseManifest } from './manifest.ts';
@@ -32,6 +32,7 @@ import { confirmPrMerged } from './pr.ts';
 import { runCycle } from './cycle.ts';
 import { latestCycleId } from './finalize-merged.ts';
 import { createLogger } from './logging.ts';
+import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from '../cli/manifest-path-guard.ts';
 import { resolveReviewLoopCaps } from './config.ts';
 import {
   fixWorkItemCount,
@@ -115,6 +116,46 @@ export async function drainPendingFixWorkItems(
       initiativeId = m.initiative_id || initiativeId;
       const worktreePath = m.worktree_path ?? '';
       const projectRepoPath = m.project_repo_path ?? '';
+      // SEC-02 round 4: the sibling of `finalize-merged`'s round-3 guard, and
+      // the highest-consequence instance in this WI — an UNATTENDED daemon
+      // sweep that builds a full `CycleInput` and re-enters an entire cycle
+      // (`runCycle({resumeFrom:'develop'})`: dev-loop, PM, demo,
+      // adversarial-review) against these two values, plus `spawnSync('git',
+      // …, {cwd: worktreePath})`. The check must precede the `existsSync`
+      // probe below, because every later use — `hasReviewCapExhaustedMarker`,
+      // `hasFailedFixWorkItem`, `pendingFixWorkItems`, `confirmMerge`,
+      // `fixWorkItemCount`, `worktreeHeadSha` — takes the raw value.
+      // Absent (`''`) stays absent: the `no-worktree` branch owns that case.
+      // Throwing lands in this loop's own per-manifest try/catch, so ONE
+      // poisoned manifest degrades to `status:'error'` without aborting the
+      // sweep for its legitimate siblings (pinned by its own AT).
+      const forgeRoot = dirname(resolve(paths.root));
+      if (worktreePath && !isContainedWorktreePath(worktreePath, { forgeRoot, initiativeId })) {
+        throw new Error(`unsafe worktree_path on manifest ${manifestPath}`);
+      }
+      if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot })) {
+        throw new Error(`unsafe project_repo_path on manifest ${manifestPath}`);
+      }
+      // Mechanism B (carried over from ADR 026): reuse the SAME cycle_id so the
+      // loop appends to the original `_logs` dir. resumeFrom 'develop' makes PM
+      // rebase-skip while the dev-loop RUNS — prior WIs fast-exit, fix WIs build.
+      // Resolved and validated HERE, at the top, deliberately: `createLogger`
+      // further down does `resolve(logsRoot, cycleId)` + `mkdirSync(recursive)`
+      // + a write, so a traversing id lands the cycle's whole event log outside
+      // `_logs`. The first placement of this check was AFTER the manifest had
+      // been renamed into `in-flight/` and after the heartbeat `setInterval` —
+      // whose `clearInterval` lives in a `finally` that had not been entered
+      // yet. Throwing there leaked a live timer on every poisoned manifest AND
+      // stranded the manifest mid-claim. Rejecting BEFORE any side effect is
+      // the only placement that is both safe and clean; a guard that has to
+      // unwind state it already mutated is a guard in the wrong place.
+      // Both fallbacks are provably safe (`latestCycleId` returns real `_logs`
+      // dirnames; `initiativeId` is pattern-gated) — the check sits on the
+      // RESOLVED value anyway so no future fallback can skip it.
+      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
+      if (!isSafeCycleId(cycleId)) {
+        throw new Error(`unsafe cycle_id on manifest ${manifestPath}`);
+      }
       if (!worktreePath || !existsSync(worktreePath)) {
         out.push({ initiativeId, status: 'no-worktree' });
         continue;
@@ -193,10 +234,6 @@ export async function drainPendingFixWorkItems(
       writeHeartbeat(file, paths);
       const heartbeat = setInterval(() => { try { writeHeartbeat(file, paths); } catch { /* best-effort */ } }, DRAIN_HEARTBEAT_MS);
 
-      // Mechanism B (carried over from ADR 026): reuse the SAME cycle_id so the
-      // loop appends to the original `_logs` dir. resumeFrom 'develop' makes PM
-      // rebase-skip while the dev-loop RUNS — prior WIs fast-exit, fix WIs build.
-      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
       const input: CycleInput = {
         initiativeId,
         manifestPath: inFlightPath,

@@ -67,7 +67,12 @@ function setupSession(overrides?: Partial<ArchitectStatus>): {
   sessionDir: string;
 } {
   const root = mkdtempSync(join(tmpdir(), 'arch-runner-'));
-  const projectRoot = join(root, 'project');
+  // SEC-02: project_repo_path must be genuinely contained under
+  // <forgeRoot>/projects/ (forgeRoot here is `root`, the queue root's
+  // parent) — mirrors production's `join(ctx.projectsRoot, body.project)`
+  // default (cli/ui-bridge.ts). This also makes `join(projectRoot, '..')`
+  // below a genuine `projects/` dir, not just `root` itself.
+  const projectRoot = join(root, 'projects', 'project');
   const logsRoot = join(root, '_logs');
   const queueRoot = join(root, '_queue');
   const sessionId = '2026-05-29T10-00-00';

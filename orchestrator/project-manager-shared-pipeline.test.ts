@@ -42,10 +42,18 @@ import { getPaths } from './queue.ts';
 
 const INITIATIVE_ID = 'INIT-2026-07-18-shared-pipeline';
 
-const DRAFT_BODY = `---
+// SEC-02: project_repo_path must be an ABSOLUTE path genuinely contained
+// under <forgeRoot>/projects/ — the old `./projects/testproj` was both
+// relative (rejected outright by the guard) AND, even resolved, not under
+// any of this file's actual forgeRoots. `root` here is whichever forgeRoot
+// (the queue root's parent) the manifest is about to be written under —
+// different tests use different roots, so this is templated rather than a
+// static constant.
+function draftBody(root: string): string {
+  return `---
 initiative_id: ${INITIATIVE_ID}
 project: testproj
-project_repo_path: ./projects/testproj
+project_repo_path: ${join(root, 'projects', 'testproj')}
 created_at: 2026-07-18T00:00:00Z
 iteration_budget: 5
 cost_budget_usd: 3
@@ -60,6 +68,7 @@ flow_id: forge-architect
 
 Given the resource, when applied, then it persists.
 `;
+}
 
 /** A single, fully deterministic canned PM session — same content every call. */
 function makeStubQueryFn(initiativeId: string): PmQueryFn {
@@ -109,11 +118,17 @@ test('F5: enqueuePlanRun and promoteManifests write state-equivalent decompose-t
   const rootA = mkdtempSync(join(tmpdir(), 'forge-shared-pipeline-state-a-'));
   const rootB = mkdtempSync(join(tmpdir(), 'forge-shared-pipeline-state-b-'));
   try {
+    // SEC-02: the manifest path guard's containment root must exist before
+    // any manifest referencing it is validated — a real forge root always
+    // has `projects/` (orchestrator/init.ts layoutDirs / ensureLayout).
+    mkdirSync(join(rootA, 'projects'), { recursive: true });
+    mkdirSync(join(rootB, 'projects'), { recursive: true });
+
     // Entry path 1 (batch): an architect draft manifest promoted via
     // promoteManifests — exactly what runFinalizeStep does on PLAN-gate approve.
     const manifestsDir = join(rootA, 'manifests');
     mkdirSync(manifestsDir, { recursive: true });
-    writeFileSync(join(manifestsDir, `${INITIATIVE_ID}.md`), DRAFT_BODY);
+    writeFileSync(join(manifestsDir, `${INITIATIVE_ID}.md`), draftBody(rootA));
     const queueRootA = join(rootA, '_queue');
     promoteManifests(manifestsDir, { queueRoot: queueRootA });
     const manifestA = parseManifest(
@@ -124,7 +139,7 @@ test('F5: enqueuePlanRun and promoteManifests write state-equivalent decompose-t
     // re-planned through the per-initiative "Plan" trigger.
     const queueRootB = join(rootB, '_queue');
     mkdirSync(join(queueRootB, 'done'), { recursive: true });
-    const doneManifest: InitiativeManifest = parseManifest(DRAFT_BODY);
+    const doneManifest: InitiativeManifest = parseManifest(draftBody(rootB));
     writeFileSync(
       join(queueRootB, 'done', `${INITIATIVE_ID}.md`),
       serializeManifest({ ...doneManifest, flow_id: 'forge-develop', phase: 'done' }),
@@ -170,7 +185,7 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
     // Entry path 1 (batch): promoteManifests.
     const manifestsDir = join(root, 'manifests');
     mkdirSync(manifestsDir, { recursive: true });
-    writeFileSync(join(manifestsDir, `${INITIATIVE_ID}.md`), DRAFT_BODY);
+    writeFileSync(join(manifestsDir, `${INITIATIVE_ID}.md`), draftBody(root));
     const queueRootA = join(root, '_queue-a');
     promoteManifests(manifestsDir, { queueRoot: queueRootA });
     const manifestPathA = join(getPaths(queueRootA).pending, `${INITIATIVE_ID}.md`);
@@ -191,7 +206,7 @@ test('F5: the SAME runProjectManager pass over each entry path\'s manifest produ
     // Entry path 2 (standalone F4): enqueuePlanRun, re-planning a done initiative.
     const queueRootB = join(root, '_queue-b');
     mkdirSync(join(queueRootB, 'done'), { recursive: true });
-    const doneManifest: InitiativeManifest = parseManifest(DRAFT_BODY);
+    const doneManifest: InitiativeManifest = parseManifest(draftBody(root));
     writeFileSync(
       join(queueRootB, 'done', `${INITIATIVE_ID}.md`),
       serializeManifest({ ...doneManifest, flow_id: 'forge-develop', phase: 'done' }),

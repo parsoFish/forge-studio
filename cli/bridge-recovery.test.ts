@@ -43,6 +43,10 @@ function seed(queueRoot: string, state: string, initiativeId: string, extra: Rec
 
 function withTmp(fn: (root: string, queueRoot: string) => void): void {
   const root = mkdtempSync(join(tmpdir(), 'forge-recovery-'));
+  // SEC-02: `<forgeRoot>/projects` is the containment root for manifest
+  // `project_repo_path` / in-place `worktree_path`. It must exist for
+  // containment to be verifiable at all (a missing root fails CLOSED).
+  mkdirSync(join(root, 'projects'), { recursive: true });
   try { fn(root, join(root, '_queue')); }
   finally { rmSync(root, { recursive: true, force: true }); }
 }
@@ -68,7 +72,7 @@ function mockRes() {
 test('recoveryInspect: a manifest with a preserved worktree reports its branch + commits', () => {
   withTmp((root, queueRoot) => {
     // Real throwaway repo + worktree so the git reads run.
-    const repo = join(root, 'repo');
+    const repo = join(root, 'projects', 'gitpulse');
     mkdirSync(repo, { recursive: true });
     execFileSync('git', ['-C', repo, 'init', '-q', '-b', 'main']);
     execFileSync('git', ['-C', repo, 'config', 'user.email', 't@t']);
@@ -76,7 +80,7 @@ test('recoveryInspect: a manifest with a preserved worktree reports its branch +
     writeFileSync(join(repo, 'README.md'), '# r\n');
     execFileSync('git', ['-C', repo, 'add', '-A']);
     execFileSync('git', ['-C', repo, 'commit', '-q', '-m', 'init']);
-    const wt = join(root, 'wt');
+    const wt = join(root, '_worktrees', ID);
     execFileSync('git', ['-C', repo, 'worktree', 'add', '-b', `forge/${ID}`, wt]);
     writeFileSync(join(wt, 'feature.txt'), 'work\n');
     execFileSync('git', ['-C', wt, 'add', '-A']);
@@ -103,7 +107,7 @@ test('recoveryInspect: an unknown initiative returns found:false', () => {
 
 test('recoveryAbandon: moves the manifest to failed/', () => {
   withTmp((root, queueRoot) => {
-    seed(queueRoot, 'ready-for-review', ID);
+    seed(queueRoot, 'ready-for-review', ID, { project_repo_path: join(root, 'projects', 'gitpulse') });
     const got = recoveryAbandon(ID, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') });
     assert.equal(got.ok, true);
     assert.ok(existsSync(join(queueRoot, 'failed', `${ID}.md`)), 'manifest now in failed/');
@@ -132,7 +136,7 @@ test('handleRecoveryRoutes: POST /api/initiatives with an invalid manifest → 4
 test('handleRecoveryRoutes: POST /api/initiatives with a valid manifest → 201 + writes pending', async () => {
   await withTmpAsync(async (root, queueRoot) => {
     const { res, captured } = mockRes();
-    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: manifestText(ID) }), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }, '/api/initiatives', 'POST');
+    const handled = await handleRecoveryRoutes(mockReq('POST', '/api/initiatives', { manifest: manifestText(ID, { project_repo_path: join(root, 'projects', 'gitpulse') }) }), res, { forgeRoot: root, queueRoot, logsRoot: join(root, '_logs') }, '/api/initiatives', 'POST');
     assert.equal(handled, true);
     assert.equal(captured.status, 201);
     assert.ok(existsSync(join(queueRoot, 'pending', `${ID}.md`)), 'manifest written to pending/');
@@ -183,6 +187,8 @@ test('R5-01-F1: FORGE_DRY_BRIDGE=1 refuses recovery abandon/requeue with the typ
 
 async function withTmpAsync(fn: (root: string, queueRoot: string) => Promise<void>): Promise<void> {
   const root = mkdtempSync(join(tmpdir(), 'forge-recovery-'));
+  // SEC-02: see withTmp — the projects containment root must exist.
+  mkdirSync(join(root, 'projects'), { recursive: true });
   try { await fn(root, join(root, '_queue')); }
   finally { rmSync(root, { recursive: true, force: true }); }
 }

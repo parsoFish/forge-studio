@@ -34,12 +34,16 @@ process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
 // Helpers
 // ---------------------------------------------------------------------------
 
+// SEC-02: project_repo_path must be genuinely contained under
+// <forgeRoot>/projects/ — real production values look like
+// /home/parso/forge/projects/gitpulse. Reads the shared module-level
+// `forgeRoot` (set in `before()`, in scope by the time any test calls this).
 function makeManifest(worktreePath: string, initiativeId: string): string {
   return [
     '---',
     `initiative_id: ${initiativeId}`,
     'project: test-project',
-    'project_repo_path: /tmp/test-project',
+    `project_repo_path: ${join(forgeRoot, 'projects', 'test-project')}`,
     `worktree_path: ${worktreePath}`,
     'created_at: 2026-01-01T00:00:00.000Z',
     'iteration_budget: 5',
@@ -106,6 +110,12 @@ before(async () => {
   for (const d of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
     mkdirSync(join(forgeRoot, '_queue', d), { recursive: true });
   }
+  // SEC-02: both containment roots the manifest path guard checks against
+  // must exist on disk before any manifest referencing them is validated — a
+  // real forge root always has both (orchestrator/init.ts layoutDirs + the
+  // daemon's ensureLayout create them at boot).
+  mkdirSync(join(forgeRoot, '_worktrees'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
 
   const s = makeStubs();
   stubs = s.stubs;
@@ -196,7 +206,12 @@ test('POST /api/runs with initiativeId in-flight → 409', async () => {
 
 test('POST /api/runs/:id/resume with manifest in failed → 200', async () => {
   const id = 'INIT-2026-01-01-resume-ok';
-  writeFileSync(join(forgeRoot, '_queue', 'failed', `${id}.md`), makeManifest('/nonexistent', id));
+  // SEC-02: "worktree already cleaned up" must be a LEGITIMATE but
+  // never-created path (the forge-managed, identity-bound shape under
+  // _worktrees/), not an out-of-bounds one — an out-of-bounds path now fails
+  // containment before runRequeue ever gets to its normal no-op-on-absent
+  // handling, turning this into a 500 instead of the 200 this test expects.
+  writeFileSync(join(forgeRoot, '_queue', 'failed', `${id}.md`), makeManifest(join(forgeRoot, '_worktrees', id), id));
 
   const { status, json } = await post(bridgeUrl, `/api/runs/${id}/resume`);
   assert.equal(status, 200);

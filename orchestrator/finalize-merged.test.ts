@@ -7,7 +7,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { finalizeMergedReadyForReview } from './finalize-merged.ts';
 import { runClosure as realRunClosure } from './phases/closure.ts';
@@ -27,15 +27,27 @@ function setup(): { root: string; queueRoot: string } {
   for (const d of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
     mkdirSync(join(queueRoot, d), { recursive: true });
   }
+  // SEC-02 round 3: the two containment roots the sweep checks against.
+  // `forge init` creates both on a real install (orchestrator/init.ts
+  // `layoutDirs`), and a containment root that does not exist fails CLOSED —
+  // so a fixture without them would report `error` for every manifest.
+  mkdirSync(join(root, '_worktrees'), { recursive: true });
+  mkdirSync(join(root, 'projects', 'demo'), { recursive: true });
   return { root, queueRoot };
 }
 
+// SEC-02 round 3: the sweep now containment-checks `worktree_path` AND
+// `project_repo_path` against their own distinct roots, so this helper no longer
+// writes one value into both. `project_repo_path` gets the real repo shape
+// (`<forgeRoot>/projects/demo`); `worktree_path` stays the caller's, which the
+// fixtures now site under a legitimate root instead of a bare `<root>/wt`.
 function writeManifest(queueRoot: string, state: string, id: string, worktreePath: string): void {
+  const projectRepoPath = join(dirname(queueRoot), 'projects', 'demo');
   const body = [
     '---',
     `initiative_id: ${id}`,
     'project: demo',
-    `project_repo_path: ${worktreePath}`,
+    `project_repo_path: ${projectRepoPath}`,
     "created_at: '2026-05-30T00:00:00.000Z'",
     'iteration_budget: 2',
     'cost_budget_usd: 1',
@@ -52,7 +64,7 @@ function writeManifest(queueRoot: string, state: string, id: string, worktreePat
 test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → finalized', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-merged', wt);
     const calls: string[] = [];
@@ -80,7 +92,7 @@ test('finalize: merged PR → re-claimed to in-flight + finalizeOne run → fina
 test('finalize: merged → fires reflect once from the agent-target declaration (band-hook resolved)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-decl', wt);
     const reflectCalls: string[] = [];
@@ -112,7 +124,7 @@ test('finalize: merged → fires reflect once from the agent-target declaration 
 test('finalize: merged → non-reflect agent-target is unhandled, reflect does NOT fire', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-notreflect', wt);
     let reflected = false;
@@ -136,7 +148,7 @@ test('finalize: merged → non-reflect agent-target is unhandled, reflect does N
 test('finalize: merged but NO declared merge-trigger → reflect does NOT fire (declaration-driven)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nodecl', wt);
     let reflected = false;
@@ -158,7 +170,7 @@ test('finalize: merged but NO declared merge-trigger → reflect does NOT fire (
 test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 026 lineage)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-lineage';
     // Manifest carries an explicit cycle_id (the one runCycle persisted at first claim).
@@ -195,7 +207,7 @@ test('finalize: threads the manifest-persisted cycle_id into finalizeOne (ADR 02
 test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-open', wt);
     let called = false;
@@ -215,7 +227,7 @@ test('finalize: open PR → left in ready-for-review, finalizeOne NOT called', a
 test('finalize: merged with pending fix work-items still finalizes, but surfaces the drop (B2, non-silent)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-merged-pending';
     // A post-send-back worktree (ADR 040): a review-fix work item compiled by
@@ -258,7 +270,12 @@ test('finalize: merged with pending fix work-items still finalizes, but surfaces
 test('finalize: worktree gone → no-worktree, skipped (no re-claim)', async () => {
   const { root, queueRoot } = setup();
   try {
-    writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nowt', join(root, 'gone'));
+    // SEC-02 round 3: "gone" must be a LEGITIMATE-but-absent worktree location
+    // (the real shape: `<forgeRoot>/_worktrees/<initiative_id>`, deleted after
+    // the cycle). A bare `<root>/gone` is out of bounds, which the guard now
+    // correctly reports as `error` — a different case from "it was cleaned up",
+    // which is what this test is about.
+    writeManifest(queueRoot, 'ready-for-review', 'INIT-2026-05-30-nowt', join(root, '_worktrees', 'INIT-2026-05-30-nowt'));
     const results = await finalizeMergedReadyForReview({
       queueRoot,
       confirmMerge: () => true,
@@ -278,7 +295,7 @@ test('finalize: worktree gone → no-worktree, skipped (no re-claim)', async () 
 test('finalize: reflector throw after confirmed merge → cycle.reflection-lost recorded, finalize still completes', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-lost';
     const cycleId = `2026-05-30T01-02-03_${id}`;
@@ -352,7 +369,7 @@ test('finalize: reflector throw after confirmed merge → cycle.reflection-lost 
 test('finalize: real runClosure + promoteMergedToDone round-trip ready-for-review → merged → done in one sweep (integration, no closure/queue mocks)', async () => {
   const { root, queueRoot } = setup();
   try {
-    const wt = join(root, 'wt');
+    const wt = join(root, 'projects', 'demo', 'wt');
     mkdirSync(wt, { recursive: true });
     const id = 'INIT-2026-05-30-real-closure';
     writeManifest(queueRoot, 'ready-for-review', id, wt);
@@ -382,5 +399,232 @@ test('finalize: real runClosure + promoteMergedToDone round-trip ready-for-revie
     assert.equal(existsSync(join(queueRoot, 'done', `${id}.md`)), true, 'landed in done/ via the real merged→done promotion');
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SEC-02 round 3 — a THIRD entry point into the manifest-poisoning threat
+// model neither round 1 (`cli/bridge-recovery.ts` ingest + `cli/forge-
+// requeue.ts`) nor round 2 (`cli/bridge-studio-runs.ts`'s `applyReviewVerdict`)
+// could reach: this periodic sweep, driven by a TIMER, not an HTTP route.
+// `cycle_id` is already guarded (`isSafeCycleId`, line ~330 above), but its two
+// siblings on the SAME manifest read are not:
+//   worktreePath = m.worktree_path ?? ''       (line ~285)
+//   projectRepoPath = m.project_repo_path ?? '' (line ~286)
+// `worktreePath` flows straight into `confirmMerge(worktreePath)` with NO
+// containment check at all; `projectRepoPath` flows into `CycleInput` and on
+// into `finalizeOne` (the real closure/reflect chain in production). Both
+// confirmed live (manual repro, before these tests were written): a poisoned
+// `worktree_path` reaches `confirmMerge` directly, and a poisoned
+// `project_repo_path` reaches `finalizeOne`'s `CycleInput` directly — status
+// 'finalized' either way, no error, no containment at all.
+// ---------------------------------------------------------------------------
+
+/** Like the file's own `writeManifest`, but with independently-settable
+ *  worktree_path / project_repo_path / cycle_id — the existing helper hard-
+ *  codes the SAME value for both path fields, which cannot isolate one
+ *  field's escape from the other. */
+function writeManifestFields(
+  queueRoot: string,
+  state: string,
+  id: string,
+  fields: { worktreePath: string; projectRepoPath: string; cycleId: string },
+): void {
+  const body = [
+    '---',
+    `initiative_id: ${id}`,
+    'project: demo',
+    `project_repo_path: ${fields.projectRepoPath}`,
+    "created_at: '2026-05-30T00:00:00.000Z'",
+    'iteration_budget: 2',
+    'cost_budget_usd: 1',
+    'phase: pending',
+    'origin: architect',
+    `worktree_path: ${fields.worktreePath}`,
+    `cycle_id: ${fields.cycleId}`,
+    '---',
+    `# ${id}`,
+    '',
+  ].join('\n');
+  writeFileSync(join(queueRoot, state, `${id}.md`), body);
+}
+
+test('(RED) [SEC-02 round 3] worktree_path outside the forge root: sweep does not crash, the manifest degrades to status:error, and confirmMerge is NEVER invoked with the poisoned path', async () => {
+  const { root, queueRoot } = setup();
+  const outside = mkdtempSync(join(tmpdir(), 'finalize-r3-wt-outside-'));
+  try {
+    const nestedDir = join(outside, 'nested');
+    mkdirSync(nestedDir, { recursive: true });
+    const sentinelFile = join(nestedDir, 'secret.txt');
+    const sentinelBytes = 'SENTINEL-R3-WT-BYTES-9d31c7a2\n';
+    writeFileSync(sentinelFile, sentinelBytes);
+
+    const id = 'INIT-2026-05-30-r3-wt-escape';
+    // A LEGITIMATE project_repo_path — isolates the escape to worktree_path only.
+    const repo = join(root, 'projects', 'demo');
+    mkdirSync(repo, { recursive: true });
+    writeManifestFields(queueRoot, 'ready-for-review', id, {
+      worktreePath: outside, // THE ATTACK
+      projectRepoPath: repo,
+      cycleId: `2026-05-30T01-02-03_${id}`,
+    });
+
+    const confirmCalls: string[] = [];
+    const finalizeCalls: unknown[] = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: (wt: string) => { confirmCalls.push(wt); return true; },
+      finalizeOne: async (input) => { finalizeCalls.push(input); return true; },
+    });
+
+    // PRIMARY: the pre-existing outside directory must survive untouched.
+    assert.equal(existsSync(outside), true, 'sentinel directory must still exist');
+    assert.equal(existsSync(sentinelFile), true, 'nested sentinel file must still exist');
+    assert.equal(readFileSync(sentinelFile, 'utf8'), sentinelBytes, 'sentinel bytes must be BYTE-IDENTICAL');
+
+    // The pin: assert on the stub's call record, not a status string alone.
+    assert.ok(
+      !confirmCalls.includes(outside),
+      `confirmMerge must NEVER be invoked with the poisoned worktree_path — got calls: ${JSON.stringify(confirmCalls)}`,
+    );
+
+    // The sweep itself must not crash: it degrades to this ONE manifest's
+    // existing per-manifest error path.
+    const result = results.find((r) => r.initiativeId === id);
+    assert.ok(result, `expected a result entry for ${id} — got ${JSON.stringify(results)}`);
+    assert.equal(
+      result!.status,
+      'error',
+      `expected the poisoned manifest to degrade to status:'error' (the sweep's existing per-manifest error path) — got ${JSON.stringify(result)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('(RED) [SEC-02 round 3] project_repo_path outside <forgeRoot>/projects: sweep does not crash, the manifest degrades to status:error, and nothing downstream (finalizeOne) receives the poisoned path', async () => {
+  const { root, queueRoot } = setup();
+  const outsideRepo = mkdtempSync(join(tmpdir(), 'finalize-r3-repo-outside-'));
+  try {
+    const id = 'INIT-2026-05-30-r3-repo-escape';
+    // A LEGITIMATE worktree_path — isolates the escape to project_repo_path only.
+    const wt = join(root, '_worktrees', id);
+    mkdirSync(wt, { recursive: true });
+    writeManifestFields(queueRoot, 'ready-for-review', id, {
+      worktreePath: wt,
+      projectRepoPath: outsideRepo, // THE ATTACK
+      cycleId: `2026-05-30T01-02-03_${id}`,
+    });
+
+    const finalizeCalls: Array<{ projectRepoPath: string }> = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: () => true,
+      finalizeOne: async (input) => { finalizeCalls.push(input as { projectRepoPath: string }); return true; },
+    });
+
+    // The pin: nothing downstream may ever see the poisoned projectRepoPath.
+    assert.ok(
+      !finalizeCalls.some((c) => c.projectRepoPath === outsideRepo),
+      `finalizeOne (the downstream closure/reflect chain) must NEVER be invoked with the poisoned project_repo_path — got calls: ${JSON.stringify(finalizeCalls)}`,
+    );
+
+    const result = results.find((r) => r.initiativeId === id);
+    assert.ok(result, `expected a result entry for ${id} — got ${JSON.stringify(results)}`);
+    assert.equal(
+      result!.status,
+      'error',
+      `expected the poisoned manifest to degrade to status:'error' (the sweep's existing per-manifest error path) — got ${JSON.stringify(result)}`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outsideRepo, { recursive: true, force: true });
+  }
+});
+
+// MANDATORY positive control: without this the suite would pass against a
+// guard that rejects everything, which is not a guard.
+test('non-regression [SEC-02 round 3]: a legitimate worktree_path + project_repo_path still finalizes exactly as before, confirmMerge invoked once with the real path', async () => {
+  const { root, queueRoot } = setup();
+  try {
+    const id = 'INIT-2026-05-30-r3-legit';
+    const wt = join(root, '_worktrees', id);
+    mkdirSync(wt, { recursive: true });
+    const repo = join(root, 'projects', 'demo');
+    mkdirSync(repo, { recursive: true });
+    writeManifestFields(queueRoot, 'ready-for-review', id, {
+      worktreePath: wt,
+      projectRepoPath: repo,
+      cycleId: `2026-05-30T01-02-03_${id}`,
+    });
+
+    const confirmCalls: string[] = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: (w: string) => { confirmCalls.push(w); return true; },
+      finalizeOne: async () => true,
+    });
+
+    assert.deepEqual(results.map((r) => r.status), ['finalized'], `expected the legitimate manifest to still finalize — got ${JSON.stringify(results)}`);
+    assert.deepEqual(confirmCalls, [wt], `expected confirmMerge invoked exactly once with the real worktree path — got ${JSON.stringify(confirmCalls)}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('(RED) [SEC-02 round 3] mixed sweep: a poisoned manifest degrades to status:error while its LEGITIMATE sibling in the SAME sweep still finalizes (per-manifest fault isolation)', async () => {
+  const { root, queueRoot } = setup();
+  const outside = mkdtempSync(join(tmpdir(), 'finalize-r3-mixed-outside-'));
+  try {
+    const repo = join(root, 'projects', 'demo');
+    mkdirSync(repo, { recursive: true });
+
+    const badId = 'INIT-2026-05-30-r3-mixed-bad';
+    writeManifestFields(queueRoot, 'ready-for-review', badId, {
+      worktreePath: outside, // THE ATTACK
+      projectRepoPath: repo,
+      cycleId: `2026-05-30T01-02-03_${badId}`,
+    });
+
+    const goodId = 'INIT-2026-05-30-r3-mixed-good';
+    const goodWt = join(root, '_worktrees', goodId);
+    mkdirSync(goodWt, { recursive: true });
+    writeManifestFields(queueRoot, 'ready-for-review', goodId, {
+      worktreePath: goodWt,
+      projectRepoPath: repo,
+      cycleId: `2026-05-30T01-02-04_${goodId}`,
+    });
+
+    const confirmCalls: string[] = [];
+    const results = await finalizeMergedReadyForReview({
+      queueRoot,
+      logsRoot: join(root, '_logs'),
+      confirmMerge: (w: string) => { confirmCalls.push(w); return true; },
+      finalizeOne: async () => true,
+    });
+
+    const badResult = results.find((r) => r.initiativeId === badId);
+    const goodResult = results.find((r) => r.initiativeId === goodId);
+    assert.ok(badResult, `expected a result entry for the poisoned manifest — got ${JSON.stringify(results)}`);
+    assert.ok(goodResult, `expected a result entry for the legitimate manifest — got ${JSON.stringify(results)}`);
+    assert.equal(
+      badResult!.status,
+      'error',
+      `expected the poisoned manifest to degrade to status:'error' (an element fault, not a collection failure) — got ${JSON.stringify(badResult)}`,
+    );
+    assert.equal(
+      goodResult!.status,
+      'finalized',
+      `expected the sibling LEGITIMATE manifest to still finalize in the SAME sweep — got ${JSON.stringify(goodResult)}`,
+    );
+    assert.ok(!confirmCalls.includes(outside), `confirmMerge must never be invoked with the poisoned path — got ${JSON.stringify(confirmCalls)}`);
+    assert.ok(confirmCalls.includes(goodWt), `confirmMerge must still be invoked with the legitimate sibling's real path — got ${JSON.stringify(confirmCalls)}`);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
   }
 });

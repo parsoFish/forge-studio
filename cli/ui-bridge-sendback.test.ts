@@ -29,13 +29,16 @@ import { parseManifest } from '../orchestrator/manifest.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import { reviewCapExhaustedPath, writeReviewCapExhaustedMarker } from '../orchestrator/fix-work-items.ts';
 
-function makeManifest(worktreePath: string, initiativeId: string, cycleId: string): string {
+function makeManifest(forgeRoot: string, worktreePath: string, initiativeId: string, cycleId: string): string {
   return [
     '---',
     `initiative_id: ${initiativeId}`,
     `cycle_id: ${cycleId}`,
     'project: test-project',
-    'project_repo_path: /tmp/test-project',
+    // SEC-02: manifest path fields are containment-validated against
+    // `<forgeRoot>/projects` — a hardcoded `/tmp/test-project` is exactly the
+    // out-of-root shape the guard now rejects at ingest and at the requeue site.
+    `project_repo_path: ${join(forgeRoot, 'projects', 'test-project')}`,
     `worktree_path: ${worktreePath}`,
     'created_at: 2026-01-01T00:00:00.000Z',
     'iteration_budget: 5',
@@ -67,7 +70,7 @@ function setup(slug: string): { forgeRoot: string; worktreePath: string; initiat
   const cycleId = `${initiativeId}-20260101T000000`;
   const rfr = join(forgeRoot, '_queue', 'ready-for-review');
   mkdirSync(rfr, { recursive: true });
-  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(worktreePath, initiativeId, cycleId));
+  writeFileSync(join(rfr, `${initiativeId}.md`), makeManifest(forgeRoot, worktreePath, initiativeId, cycleId));
   return { forgeRoot, worktreePath, initiativeId, cycleId };
 }
 
