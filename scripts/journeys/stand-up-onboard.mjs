@@ -320,6 +320,12 @@ export const journey = defineJourney({
                   const instrLanded = await page.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 10000 }).then(() => true).catch(() => false);
                   check(instrLanded, 'SU: "Resolve with agent" routes to a real instructions session on the shared shell ([data-page="session"][data-session-kind="instructions"])');
                   if (instrLanded) {
+                    // The shell publishes data-session-phase only once its fetch
+                    // settles — data-page-ready is the readiness discriminator
+                    // (identical to the retired page's session?.phase ?? '').
+                    // Waiting on it is what makes a still-empty phase a REAL
+                    // failure rather than a race.
+                    await page.waitForSelector('main[data-page="session"][data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
                     const instrPhase = await page.evaluate(
                       () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') ?? null);
                     check(instrPhase === 'briefing', `SU: the fresh instructions session starts at phase="briefing" (got "${instrPhase}")`);

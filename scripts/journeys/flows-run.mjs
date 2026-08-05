@@ -144,20 +144,31 @@ export const journey = defineJourney({
               check(await page.locator('[data-section="architect-interview"]').count() > 0,
                 '[data-section="architect-interview"] rendered with questions');
               await countAtLeast(page, '[data-question-index]', 2, 'architect returned ≥2 questions');
-              // R2-10: at least one turn, derived from a REAL checkpoint file —
-              // questions.json contributes a pending AGENT turn while phase is
-              // exactly 'awaiting-answers' (never invented; see
-              // orchestrator/studio/session-transcript.ts's derivation contract).
+              // R2-10: every turn is DERIVED from a real checkpoint file and names
+              // it. For the architect kind that is idea.md first (the operator's
+              // own idea, written by POST /api/architect/start), then a pending
+              // AGENT turn from questions.json while phase is exactly
+              // 'awaiting-answers'. Assert BOTH — the ordering is the derivation
+              // contract in orchestrator/studio/session-transcript.ts, and an
+              // index-blind "some turn exists" check would not catch a
+              // regression that reordered them.
               await page.waitForFunction(
-                () => document.querySelector('[data-turn-index="0"]')?.getAttribute('data-turn-source') === 'questions.json',
+                () => Array.from(document.querySelectorAll('[data-turn-source]'))
+                  .some((el) => el.getAttribute('data-turn-source') === 'questions.json'),
                 null, { timeout: 8000 },
               ).catch(() => {});
-              const questionsTurn = await page.evaluate(() => {
-                const el = document.querySelector('[data-turn-index="0"]');
-                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source') } : null;
-              });
-              check(questionsTurn !== null && questionsTurn.role === 'agent' && questionsTurn.source === 'questions.json',
-                `R2-10: transcript derives a real turn from questions.json (got ${JSON.stringify(questionsTurn)})`);
+              const derivedTurns = await page.evaluate(() =>
+                Array.from(document.querySelectorAll('[data-turn-index]')).map((el) => ({
+                  index: el.getAttribute('data-turn-index'),
+                  role: el.getAttribute('data-turn-role'),
+                  source: el.getAttribute('data-turn-source'),
+                })));
+              const ideaTurn = derivedTurns.find((t) => t.index === '0');
+              check(ideaTurn !== undefined && ideaTurn.role === 'operator' && ideaTurn.source === 'idea.md',
+                `R2-10: turn 0 is the operator's own idea, derived from idea.md (got ${JSON.stringify(ideaTurn ?? null)})`);
+              const questionsTurn = derivedTurns.find((t) => t.source === 'questions.json');
+              check(questionsTurn !== undefined && questionsTurn.role === 'agent',
+                `R2-10: the pending interview round is an AGENT turn derived from questions.json (got ${JSON.stringify(questionsTurn ?? null)}; all: ${JSON.stringify(derivedTurns.map((t) => t.source))})`);
               // R2-10: the artifact pane — architect's declared renderer is
               // roadmap-draft, with a non-empty label sourced from
               // studio/session-kinds.yaml over the wire (never a client lookup).
