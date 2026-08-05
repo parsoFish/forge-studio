@@ -56,8 +56,13 @@
  * is); literal `..` segments in the raw string (not pre-collapsed by
  * `path.join` before the guard ever sees them); dangling symlinks; a
  * candidate whose FIRST segment under the root is a symlink escaping
- * outside (the root-folding shape). Two shapes are deliberately NOT
- * escapes and MUST be accepted: "escape-and-return"
+ * outside (the root-folding shape); a non-absolute candidate (SEC-02 round
+ * 2, Finding 3 — see `containedUnder`'s INVARIANT note: a relative candidate
+ * would otherwise resolve against `process.cwd()`, not `forgeRoot`).
+ * Every candidate handed to `isContainedWorktreePath` /
+ * `isContainedProjectRepoPath` MUST therefore be absolute — every production
+ * writer already emits absolute paths, so nothing legitimate regresses. Two
+ * shapes are deliberately NOT escapes and MUST be accepted: "escape-and-return"
  * (`<root>/../projects/legit`, which `resolve()` normalises to a genuinely
  * contained path before comparison), and a directory literally named
  * `..foo` (not `..`, so it never leaves the root).
@@ -75,7 +80,7 @@
  *     can verify that a future caller upholds that.
  */
 
-import { join, relative, resolve, sep } from 'node:path';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 
 export type ManifestPathFields = {
@@ -97,12 +102,24 @@ const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
  * section for why folding it into `root` instead would bypass containment
  * entirely.
  *
+ * INVARIANT (SEC-02 round 2, Finding 3): `candidate` MUST be absolute.
+ * `resolve()` resolves a relative path against `process.cwd()`, not `root` —
+ * a bare `resolve(candidate)` on a relative candidate therefore depends on
+ * where the CALLING PROCESS happens to be running from, not on `forgeRoot`.
+ * Every production writer emits absolute paths, so this is never hit in
+ * practice, but it is an unstated (and, with `cwd` pointed at `forgeRoot`,
+ * genuinely exploitable — a relative candidate then resolves to a real
+ * contained path and is wrongly accepted) invariant. Rejecting any
+ * non-absolute candidate outright, before any resolution, removes the `cwd
+ * === forgeRoot` dependence entirely rather than merely relying on it.
+ *
  * `resolve()` normalises `..` before `relative()` ever runs, so a surviving
  * literal `..` segment in the result can only mean the candidate resolves to
  * somewhere above `root` — that is the lexical pre-filter; `resolveGuardedPath`
  * is the real (identity) containment check on whatever segments remain.
  */
 function containedUnder(root: string, candidate: string): { ok: boolean; segments: string[] } {
+  if (!isAbsolute(candidate)) return { ok: false, segments: [] };
   const rel = relative(resolve(root), resolve(candidate));
   if (rel === '') return { ok: false, segments: [] }; // the root itself is not a valid target
   const segments = rel.split(sep);

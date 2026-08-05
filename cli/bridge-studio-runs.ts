@@ -41,7 +41,7 @@ import { getPaths } from '../orchestrator/queue.ts';
 import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
-import { isContainedWorktreePath, isContainedProjectRepoPath } from './manifest-path-guard.ts';
+import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
@@ -212,6 +212,18 @@ export async function applyReviewVerdict(
       }, origin);
       return;
     }
+    // SEC-02 round 2 (Finding 1, guard-symmetry hole): project_repo_path feeds
+    // ctx.runReleaseFinalize -> loadProjectConfig(projectRepoPath) below — the
+    // send-back branch already containment-checks this identical field for the
+    // identical sink; the approve branch never did. Mirrored here, BEFORE any
+    // use of the value, using the same "outside allowed root" 409 shape.
+    if (
+      approveManifest.project_repo_path &&
+      !isContainedProjectRepoPath(approveManifest.project_repo_path, { forgeRoot: ctx.forgeRoot })
+    ) {
+      sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
+      return;
+    }
     // R5-01-F1: dry-bridge — the incident (2026-07-16, self-merge with the
     // operator's real gh token) was exactly these three real-acting steps.
     // In dry mode the verdict application itself (state transition, artifact
@@ -222,6 +234,18 @@ export async function applyReviewVerdict(
     const dryBridgeActive = isDryBridge();
     const skipped: DryBridgeStubAction[] = [];
     const approveCycleId = approveManifest.cycle_id ?? initiativeId;
+    // SEC-02 round 2 (Finding 2, headline): cycle_id feeds
+    // resolve(logsRoot, cycleId) at TWO write sites downstream — the
+    // dry-bridge createLogger call immediately below (the EARLIEST
+    // cycleId-derived path in this branch) and writeVerdictJson further down.
+    // Validate the SAME derived value used at both, before either is reached.
+    // The `?? initiativeId` fallback is already safe (INIT_ID_RE-gated,
+    // checked above) — checking the post-fallback value covers both cases in
+    // one place and means no unvalidated value can ever reach a path.
+    if (!isSafeCycleId(approveCycleId)) {
+      sendJson(res, 409, { error: 'cycle_id outside allowed root', initiativeId }, origin);
+      return;
+    }
     // Task A-finalfix FIX 5: mirror send-back's best-effort logging pattern
     // (see the try/catch around the reviewer.verdict.send-back emit below) —
     // createLogger touches the filesystem (creates/opens the cycle's
@@ -359,6 +383,17 @@ export async function applyReviewVerdict(
     sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
     return;
   }
+  // SEC-02 round 2 (Finding 2, headline): cycle_id feeds
+  // resolve(logsRoot, cycleId) at THREE write sites downstream (the two
+  // createLogger calls + writeVerdictJson, all below) — validate the SAME
+  // derived value used at all three, before any is reached, and reuse it at
+  // each call site rather than re-deriving `manifest.cycle_id ?? initiativeId`
+  // unchecked each time.
+  const sendBackCycleId = manifest.cycle_id ?? initiativeId;
+  if (!isSafeCycleId(sendBackCycleId)) {
+    sendJson(res, 409, { error: 'cycle_id outside allowed root', initiativeId }, origin);
+    return;
+  }
   let projectGateCmd: string[] = manifest.quality_gate_cmd && manifest.quality_gate_cmd.length > 0 ? manifest.quality_gate_cmd : [];
   try {
     const cfg = loadProjectConfig(manifest.project_repo_path);
@@ -422,7 +457,7 @@ export async function applyReviewVerdict(
     // run page its hex + drawer spec for each fix WI before dispatch
     // (run-model-derive matches that exact message).
     try {
-      const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
+      const logger = createLogger(sendBackCycleId, ctx.logsRoot);
       logger.emit({
         initiative_id: initiativeId,
         phase: 'review-loop',
@@ -467,7 +502,7 @@ export async function applyReviewVerdict(
       {
         kind: 'send-back',
         initiative_id: initiativeId,
-        cycleId: manifest.cycle_id ?? initiativeId,
+        cycleId: sendBackCycleId,
         decidedBy: 'operator',
         rationale,
         acceptanceCriteria: acs,
@@ -492,7 +527,7 @@ export async function applyReviewVerdict(
       const capMsg = (appendErr as Error).message;
       try { writeReviewCapExhaustedMarker(worktreePath, capMsg); } catch { /* best-effort */ }
       try {
-        const logger = createLogger(manifest.cycle_id ?? initiativeId, ctx.logsRoot);
+        const logger = createLogger(sendBackCycleId, ctx.logsRoot);
         logger.emit({
           initiative_id: initiativeId,
           phase: 'review-loop',
