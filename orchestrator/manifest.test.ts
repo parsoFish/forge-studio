@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, existsSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -104,7 +104,13 @@ test('writeManifest: writes a parseable file under _queue/pending/', () => {
   const dir = mkdtempSync(join(tmpdir(), 'forge-manifest-'));
   try {
     const queueRoot = join(dir, '_queue');
-    const m = fixture();
+    // SEC-02: writeManifest is the ingest choke point — it containment-checks
+    // the manifest's path fields against `<forgeRoot>/projects` (forgeRoot =
+    // the queue root's parent). The fixture's stock `/tmp/demo` is genuinely
+    // outside that root and is now correctly refused, so this test states a
+    // real, contained repo path.
+    mkdirSync(join(dir, 'projects'), { recursive: true });
+    const m = { ...fixture(), project_repo_path: join(dir, 'projects', 'demo') };
     const out = writeManifest(m, { queueRoot });
     assert.ok(existsSync(out), `expected file at ${out}`);
     assert.ok(out.includes('pending'), `expected pending/, got ${out}`);

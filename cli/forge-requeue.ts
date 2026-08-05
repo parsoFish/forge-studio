@@ -38,6 +38,7 @@ import { getPaths } from '../orchestrator/queue.ts';
 import { resolveInitiativeId } from '../orchestrator/initiative-id.ts';
 import { parseManifest, serializeManifest } from '../orchestrator/manifest.ts';
 import { inferRequeueResume, type RequeueResumeDecision } from '../orchestrator/requeue-resume.ts';
+import { assertManifestPathFields } from './manifest-path-guard.ts';
 
 export type RequeueOptions = {
   /** Forge root (parent of _queue/). Defaults to cwd. */
@@ -128,6 +129,30 @@ export function runRequeue(
 
   const worktreePath = (manifest.worktree_path as string | undefined) ?? join(forgeRoot, '_worktrees', initiativeId);
   const projectRepoPath = (manifest.project_repo_path as string | undefined) ?? '';
+
+  // SEC-02 (forge-d1f): defence in depth AT the destructive call site itself.
+  // writeManifest's ingest-time guard (orchestrator/manifest.ts) is the primary
+  // choke point, but runRequeue re-serialises this manifest via
+  // serializeManifest WITHOUT re-validating anything — a manifest that reached
+  // disk through some OTHER path (a future ingest route that forgets to call
+  // writeManifest, or direct corruption) would otherwise sail straight through
+  // to the rmSync(recursive) below. Placement BEFORE inferRequeueResume matters:
+  // that call threads cycleId/worktreePath/projectRepoPath straight into
+  // orchestrator/requeue-resume.ts, which does
+  // join(forgeRoot,'_logs',cycleId,'events.jsonl') reads and
+  // `git -C projectRepoPath` — this one assertion covers every requeue-resume
+  // read too, not just the rmSync path below. Throws (fails closed) rather
+  // than proceeding to delete anything.
+  assertManifestPathFields(
+    {
+      initiative_id: initiativeId,
+      project: manifest.project,
+      worktree_path: worktreePath,
+      project_repo_path: projectRepoPath || undefined,
+      cycle_id: manifest.cycle_id,
+    },
+    { forgeRoot },
+  );
 
   // ADR 019 + N7: decide the resume position. An explicit
   // `--resume-from=demo` is the operator's override; otherwise infer from

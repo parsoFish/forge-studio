@@ -29,7 +29,6 @@ import {
   mkdirSync,
   mkdtempSync,
   existsSync,
-  writeFileSync,
   rmSync,
   symlinkSync,
 } from 'node:fs';
@@ -43,7 +42,6 @@ import {
   isContainedProjectRepoPath,
   isSafeCycleId,
   isSafeProjectName,
-  type ManifestPathFields,
 } from '../cli/manifest-path-guard.ts';
 import {
   writeManifest,

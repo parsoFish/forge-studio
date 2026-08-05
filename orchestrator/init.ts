@@ -32,6 +32,13 @@ export function layoutDirs(forgeRoot: string): string[] {
     ...QUEUE_SUBDIRS.map((s) => join(queue, s)),
     join(root, '_worktrees'),
     join(root, '_logs'),
+    // SEC-02: `defaultConfigJson` has always named `projectsDir: './projects'`,
+    // but init never created it. That latent gap became load-bearing once
+    // manifest path fields are containment-checked against `<root>/projects`:
+    // a containment root that does not exist fails CLOSED, so a fresh install
+    // without this directory would refuse every manifest carrying a
+    // `project_repo_path`.
+    join(root, 'projects'),
   ];
 }
 
