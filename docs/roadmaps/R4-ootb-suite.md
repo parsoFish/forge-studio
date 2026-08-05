@@ -1348,7 +1348,7 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
 
 ### R4-15 Architect/Planning session alignment
 
-- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent —
+- **Status:** in-progress  ·  **Wave:** 5 (module: per-OOTB-agent —
   architect/planning)
 - **Depends on:** R2-10 (session shell + artifact renderers).
 - **Context:** Wave-5 cut. The mockup's `architect-planning` agent runs
@@ -1369,6 +1369,26 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
     council, gate hand-off) unchanged. ACs: `run-agent-architect` journey
     shape reproduced against the real session; roadmap-draft renderer
     shared with R4-13's DAG components; existing architect journeys green.
+    **F1 as-built (2026-08-06, branch `feat/r4-15-architect-session`).** The
+    shell, the `architect` session-kind descriptor and the `roadmap-draft` LIVE
+    artifact row all shipped in R2-10, so F1 is not a re-landing — the three
+    real gaps it closed were: (a) `deriveRoadmapDraft`
+    (`orchestrator/studio/session-transcript.ts`) parsed
+    `depends_on_initiatives` and dropped it, so the mockup artifact's
+    load-bearing `depends on` column had no data — `RoadmapDraftRow.dependsOn`
+    now carries it verbatim through the route and the client parse
+    (`forge-ui/lib/session-client.ts`, the second sink); (b) no shared
+    dependency-DAG renderer existed for R4-13 to inherit —
+    `forge-ui/lib/dependency-dag.ts` (pure, generic, levels delegated to the
+    existing `topoLevels`, unresolved edges and cycles surfaced) +
+    `forge-ui/components/studio/DependencyDag.tsx`, the R3-01 `FilePackage`
+    shape; the artifact pane now renders DAG + initiative table, which IS
+    R4-13-F1's stated roadmap-tab layout; (c) the project page had no architect
+    entry at all — `forge-ui/components/studio/ProjectArchitectEntry.tsx`
+    mounts the one shipped start-a-session path (`NewIdeaBox` →
+    `POST /api/architect/start`). Architect behaviour unchanged; the flow is
+    not retired. Journey: `flows-run-roadmap-dag` + the `roadmap-tab`
+    additions; DOM contract in `docs/forge-ui-dom-and-harness.md`.
   - **R4-15-F2 ⚑ Merger decision brief.** A short operator brief (in-session
     artifact of the FIRST implementation session, not a doc initiative):
     what the mockup's merged architect-planning implies vs R4-05's plan
@@ -1669,3 +1689,12 @@ free R4 ID's features.
   status-colors claim fixed (STATUS_COLOR tones + R4-11-F2 lock affordance)
   + retirement collateral named (roadmap journey rewrite, DOM-reference doc
   rows, full gallery regen); reverse edges added on R4-02/R4-09/R4-11.
+- 2026-08-06 — **R4-15 → in-progress (F1 landed).** The architect planning
+  session now renders its roadmap draft as a dependency DAG on the R2-10 shell:
+  `dependsOn` carried end-to-end (deriver → route → client parse → view → DOM),
+  a shared `dependency-dag` view model + component built for R4-13-F1's roadmap
+  tab to reuse, and a project-page entry into the session (the mockup's
+  "trigger: manual, from a project page"). Architect behaviour unchanged; R4-D1
+  untouched. **F2 ⚑ (the architect+PM merger brief) is parked with the
+  operator** — its outcome updates R4-D1's note with a date + outcome, and the
+  initiative flips to `implemented` then.

@@ -194,6 +194,46 @@ export const journey = defineJourney({
                   document.querySelector(`[data-roadmap-node][data-initiative-id="${id}"]`)?.getAttribute('data-initiative-status') ?? null,
                   INIT_MERGED);
                 check(mergedStatus === 'merged', `roadmap: seeded merged/ initiative renders [data-initiative-status="merged"] (got ${mergedStatus})`);
+                // R4-15-F1: the mockup's "trigger: manual, from a project page" entry into
+                // an architect planning session. It must be a real control, not a label —
+                // clicking it reveals the ONE shipped start-a-session surface (NewIdeaBox),
+                // pre-seeded with THIS project, so the operator never retypes it.
+                const entryState = await page.evaluate(() => {
+                  const el = document.querySelector('[data-component="project-architect-entry"]');
+                  return el === null ? null : el.getAttribute('data-architect-entry-open');
+                });
+                check(entryState === 'false',
+                  `R4-15: the project page offers a collapsed architect-session entry (got ${entryState === null ? 'no [data-component="project-architect-entry"]' : `data-architect-entry-open="${entryState}"`})`);
+                // The resume probe must actually SETTLE — a permanently-'pending'
+                // attribute would make "still loading" indistinguishable from "no
+                // in-flight session", which is the whole reason it exists.
+                await page.waitForSelector('[data-architect-resume-probe="settled"]', { timeout: 8000 }).catch(() => {});
+                const probe = await page.evaluate(() =>
+                  document.querySelector('[data-component="project-architect-entry"]')?.getAttribute('data-architect-resume-probe') ?? null);
+                check(probe === 'settled', `R4-15: the in-flight-session probe settles (got ${probe})`);
+                await page.locator('[data-action="plan-with-architect"]').first().click().catch(() => {});
+                await page.waitForSelector('[data-component="project-architect-entry"] [data-section="new-idea"]', { timeout: 8000 }).catch(() => {});
+                const revealed = await page.evaluate((project) => {
+                  const root = document.querySelector('[data-component="project-architect-entry"]');
+                  if (!root) return null;
+                  const projectField = root.querySelector('[data-section="new-idea"] [data-field="project"]');
+                  return {
+                    open: root.getAttribute('data-architect-entry-open'),
+                    hasIdeaBox: root.querySelector('[data-section="new-idea"]') !== null,
+                    projectValue: projectField ? projectField.value : null,
+                    matchesProject: projectField ? projectField.value === project : false,
+                  };
+                }, PROJECT);
+                check(revealed !== null && revealed.open === 'true' && revealed.hasIdeaBox,
+                  `R4-15: "Plan with Architect" reveals the real start-a-session surface (got ${JSON.stringify(revealed)})`);
+                check(revealed !== null && revealed.matchesProject,
+                  `R4-15: the revealed idea box is pre-seeded with this project (expected "${PROJECT}", got "${revealed ? revealed.projectValue : 'none'}")`);
+                // The revealed form must be dismissible — an affordance that opens with no
+                // way back is a dead end, and the beats after this one drive the same page.
+                await page.locator('[data-action="cancel-plan-with-architect"]').first().click().catch(() => {});
+                const collapsed = await page.evaluate(() =>
+                  document.querySelector('[data-component="project-architect-entry"]')?.getAttribute('data-architect-entry-open') ?? null);
+                check(collapsed === 'false', `R4-15: the revealed idea box collapses again (got ${collapsed})`);
                 if (roadmapSeeded) {
                   // The detail card pops OFF the dot now — click the seeded initiative's
                   // node, then assert its card (with WIs) appears in the popover.

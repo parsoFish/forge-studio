@@ -6,8 +6,10 @@
  * phase-node deduplication) is unit-testable without a React tree. The
  * component is now a thin renderer over `buildMonitorLayout`.
  *
- * Pure + synchronous: no DOM, no React, no network. Same testability
- * convention as `lib/dep-layout.ts` ↔ `orchestrator/dep-levels.ts`.
+ * Pure + synchronous: no DOM, no React, no network. Reuses the shared,
+ * server-counterpart-free `topoLevels` from `lib/dep-layout.ts` for level
+ * assignment (see that module's header — `orchestrator/dep-levels.ts` does
+ * not exist).
  *
  * Contract notes (M7-1, ADR-031):
  *  - Each hex carries `hexKind` ('phase' | 'wi') so the harness can count a

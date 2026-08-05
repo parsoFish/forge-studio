@@ -45,6 +45,14 @@
  * causes); AT-73/74 pin the second (2 distinct causes) and explicitly assert
  * neither claims the file was "unreadable".
  *
+ * R4-15 addition (AT-77): `RoadmapDraftRow` gains a fifth field, `dependsOn:
+ * string[]` (session-transcript.test.ts's AT-75/76 pin the unit-level
+ * derivation). AT-77 here drives the REAL route against a REAL on-disk
+ * session dir with REAL `serializeManifest`'d manifests — the only way to
+ * observe a field the route's own JSON serialization might drop, which a
+ * unit test constructing its own row object cannot see (standing rule from
+ * R2-09).
+ *
  * Design decisions this file pins:
  *
  *   - `sessionId` is validated with SAFE_ID_RE (cli/bridge-studio.ts), NOT
@@ -80,6 +88,7 @@ import yaml from 'js-yaml';
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import type { StudioContext } from './bridge-studio.ts';
+import { serializeManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -98,6 +107,8 @@ const SECRET_MARKER = 'TOP-SECRET-BRIDGE-ESCAPE-MARKER-4471';
 const STATUS_ESCAPE_SESSION = '2026-08-06T15-00-00';
 const STATUS_SECRET_MARKER = 'LEAKED-STATUS-PHASE-MARKER-6602';
 const REASK_SESSION = '2026-08-07T16-00-00';
+// R4-15 (AT-77) — cross-initiative dependsOn over the REAL wire.
+const DEPS_SESSION = '2026-08-09T18-00-00';
 // AT-amendment-3, A3 — the five distinct status.json failure shapes.
 const MISSING_STATUS_SESSION = '2026-08-08T17-00-00';
 const INVALID_JSON_STATUS_SESSION = '2026-08-08T17-01-00';
@@ -171,6 +182,56 @@ function writeArchitectSession(projectsRoot: string, project: string, sessionId:
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-verdict' }), 'utf8');
 }
 
+// R4-15 (AT-77) — a REAL manifest, built the same way session-transcript.
+// test.ts's `realManifest` does, so `serializeManifest` produces genuine
+// on-disk frontmatter this route's real read path (deriveSessionArtifact →
+// parseManifest) has to survive.
+function realManifest(overrides: Partial<InitiativeManifest> = {}): InitiativeManifest {
+  return {
+    initiative_id: 'INIT-2026-01-01-fixture-a',
+    project: 'depsproj',
+    project_repo_path: '/tmp/depsproj',
+    created_at: '2026-01-01T00:00:00.000Z',
+    iteration_budget: 10,
+    cost_budget_usd: 5,
+    phase: 'pending',
+    origin: 'architect',
+    body: '# Fixture initiative\n\nDo the thing.\n',
+    ...overrides,
+  } as InitiativeManifest;
+}
+
+// R4-15 (AT-77) — a real architect session whose manifests/ dir carries two
+// REAL serializeManifest'd manifests: one with no depends_on_initiatives,
+// one whose depends_on_initiatives names BOTH a sibling in this same session
+// (INIT-2026-01-01-fixture-a) AND an initiative NOT present under this
+// session's manifests/ at all (INIT-2025-06-01-already-merged) — an
+// architect draft may legitimately depend on an already-merged initiative
+// outside the draft set. This is the "REAL on-disk session dir with REAL
+// serialized manifests" fixture the wire-level AT needs (a unit test that
+// constructs its own row object cannot observe a field dropped by the
+// route's serialization — standing rule from R2-09).
+function writeArchitectSessionWithDeps(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_architect', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'idea.md'), 'Build a deps fixture thing.\n', 'utf8');
+  const manifestsDir = join(dir, 'manifests');
+  mkdirSync(manifestsDir, { recursive: true });
+  writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest({ project })), 'utf8');
+  writeFileSync(
+    join(manifestsDir, 'INIT-2026-01-02-fixture-b.md'),
+    serializeManifest(
+      realManifest({
+        project,
+        initiative_id: 'INIT-2026-01-02-fixture-b',
+        depends_on_initiatives: ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
+      }),
+    ),
+    'utf8',
+  );
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-verdict' }), 'utf8');
+}
+
 function writeInstructionsSession(projectsRoot: string, project: string, sessionId: string): void {
   const dir = join(projectsRoot, project, '_instructions', sessionId);
   mkdirSync(dir, { recursive: true });
@@ -208,6 +269,7 @@ before(async () => {
   writeArchitectSession(projectsRoot, 'demoproj', REAL_ARCHITECT_SESSION);
   writeInstructionsSession(projectsRoot, 'demoproj', REAL_INSTRUCTIONS_SESSION);
   writeProjectBrainSession(projectsRoot, 'demoproj', REAL_PROJECT_BRAIN_SESSION);
+  writeArchitectSessionWithDeps(projectsRoot, 'depsproj', DEPS_SESSION);
 
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
@@ -643,4 +705,34 @@ test('AT-74: status.json\'s "phase" is present but NOT a string (a number) → 4
   const body = (await res.json()) as { error: string };
   assert.equal(body.error, STATUS_NO_PHASE_MESSAGE);
   assert.ok(!body.error.toLowerCase().includes('unreadable'), `a valid, readable status.json with a non-string phase must NOT be described as unreadable, got: ${body.error}`);
+});
+
+// ---------------------------------------------------------------------------
+// R4-15 (AT-77) — roadmap-draft rows carry cross-initiative dependsOn edges
+// over the REAL wire. This drives the REAL route against a REAL on-disk
+// session dir with REAL serializeManifest'd manifests — a unit test that
+// constructs its own row object cannot observe a field dropped by the
+// route's JSON serialization (standing rule from R2-09: any claim about a
+// value surviving a round trip needs at least one AT on the real client
+// path).
+// ---------------------------------------------------------------------------
+
+test('AT-77: GET /api/studio/sessions/architect/<id>?project=<p> carries "dependsOn" on each roadmap-draft row, verbatim, over the REAL route + REAL serialized manifests', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${DEPS_SESSION}?project=depsproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+
+  const artifact = body.artifact as { kind: string; rows: Array<{ initiativeId: string; dependsOn: unknown }> };
+  assert.equal(artifact.kind, 'roadmap-draft');
+  const rowA = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-01-fixture-a');
+  const rowB = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-02-fixture-b');
+  assert.ok(rowA, `expected row A in the wire response, got: ${JSON.stringify(artifact.rows)}`);
+  assert.ok(rowB, `expected row B in the wire response, got: ${JSON.stringify(artifact.rows)}`);
+  assert.deepEqual(rowA!.dependsOn, [], 'row A declares no deps — must serialize as [] over the wire, never dropped/undefined');
+  assert.deepEqual(
+    rowB!.dependsOn,
+    ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
+    'row B\'s dependsOn must survive the REAL route\'s JSON serialization verbatim, including the entry pointing outside this session\'s own manifest set',
+  );
 });

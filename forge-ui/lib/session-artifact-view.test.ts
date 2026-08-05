@@ -50,6 +50,27 @@
  * while the OUTPUT for a stage-unaware live kind stays byte-identical — the
  * exact seam R4-17 needs, pinned without a fake renderer.
  * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * R4-15 (2026-08-06) — `RoadmapDraftView` gains `dag: DependencyDagView<
+ * RoadmapDraftRow>`, built via the SHARED `dependencyDagView` (forge-ui/lib/
+ * dependency-dag.ts, new module, its own test file). AT-95..97 pin the
+ * reuse (not a bespoke reimplementation), that the 4 pre-existing fields are
+ * unchanged, and that the dispatcher still surfaces it. Mechanical-only
+ * elsewhere: `NONEMPTY_ROADMAP`'s rows now carry `dependsOn: []` (a required
+ * parsed-row field as of session-client.test.ts's AT-98..101) — no existing
+ * assertion's behaviour changes.
+ * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * Adversarial-review round 2 (2026-08-06), Amendment A — AT-99, a
+ * REGRESSION GUARD (green today, not a defect pin — see its own comment for
+ * why it still earns its place): `dependencyDagView` emits exactly one node
+ * per input row, positionally, even when two rows share an `initiativeId` —
+ * the invariant `SessionArtifactPane.tsx`'s positional-zip fix now depends
+ * on, replacing an earlier id-keyed Map lookup that cross-contaminated two
+ * same-id rows' dependency lists.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -63,17 +84,29 @@ import { filePackageTabs, selectFile } from './file-package.ts';
 import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact } from './session-client.ts';
 import { sessionShellState, selectStage } from './session-shell-view.ts';
 import type { SessionShellPayload } from './session-client.ts';
+// R4-15: the SHARED dependency-DAG view model roadmapDraftView's new "dag"
+// field is built through — imported here so AT-95..97 can assert against the
+// REAL, shared function rather than a hand-rolled expected shape (proving
+// reuse, mirroring AT-79's `filePackageTabs` reuse pin). This module does
+// not exist yet — module-not-found is the expected red for this whole file
+// until it lands (see this file's own header + dependency-dag.test.ts's).
+import { dependencyDagView } from './dependency-dag.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// R4-15 mechanical fixture plumbing: `dependsOn` is now a required field on
+// a parsed RoadmapDraftRow (session-client.test.ts AT-98..101) — set to []
+// here since this fixture's row ordering/reuse behaviour (AT-70..73, AT-84,
+// AT-91) is not about dependency edges; see ROADMAP_WITH_DEPS below for the
+// fixture dedicated to exercising real edges.
 const NONEMPTY_ROADMAP: RoadmapDraftArtifact = {
   kind: 'roadmap-draft',
   label: 'Roadmap draft',
   rows: [
-    { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md' },
-    { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' },
+    { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md', dependsOn: [] },
+    { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md', dependsOn: [] },
   ],
   sourcesScanned: ['manifests/*.md (2 file(s) found)'],
 };
@@ -374,4 +407,113 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
   // exactly the invariance AT-91 pins, now proven through the real state
   // machinery rather than a hand-built stage string.
   expect(viewAfterSwitch).toEqual(viewAtInitial);
+});
+
+// ===========================================================================
+// R4-15 — roadmapDraftView gains "dag", a SHARED dependency-DAG view model
+// built via the REAL, imported `dependencyDagView` (forge-ui/lib/dependency-
+// dag.ts) — mirrors AT-79's REUSE pin (brainStructureView/filePackageTabs)
+// exactly: no bespoke DAG-building logic is written in session-artifact-
+// view.ts itself. — AT-95..97
+// ===========================================================================
+
+const ROADMAP_WITH_DEPS: RoadmapDraftArtifact = {
+  kind: 'roadmap-draft',
+  label: 'Roadmap draft',
+  rows: [
+    { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md', dependsOn: ['R9-01'] },
+    { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md', dependsOn: [] },
+  ],
+  sourcesScanned: ['manifests/*.md (2 file(s) found)'],
+};
+
+test('AT-95: roadmapDraftView: "dag" is built via the SHARED dependencyDagView(artifact.rows, r => r.initiativeId, r => r.dependsOn) — matches calling it directly, proving reuse rather than a bespoke reimplementation', () => {
+  const view = roadmapDraftView(ROADMAP_WITH_DEPS) as unknown as { dag: unknown };
+  const expectedDag = dependencyDagView(
+    ROADMAP_WITH_DEPS.rows,
+    (r) => r.initiativeId,
+    (r) => r.dependsOn,
+  );
+  expect(view.dag).toEqual(expectedDag);
+  // Concretely: R9-02 declares dependsOn:['R9-01'] — the edge must exist,
+  // "R9-01 must complete before R9-02" (dependency-dag.test.ts's AT-1 edge-
+  // direction rule, exercised end-to-end through this view).
+  expect((view.dag as { edges: unknown }).edges).toEqual([{ from: 'R9-01', to: 'R9-02', resolved: true }]);
+});
+
+test('AT-96: roadmapDraftView: adding "dag" leaves the EXISTING fields (kind, rows, isEmpty, emptyMessage) byte-for-byte UNCHANGED — a regression guard against the dag feature silently altering the pre-existing contract', () => {
+  const view = roadmapDraftView(ROADMAP_WITH_DEPS);
+  expect(view.kind).toBe('roadmap-draft');
+  expect(view.rows).toEqual(ROADMAP_WITH_DEPS.rows);
+  expect(view.isEmpty).toBe(false);
+  expect(view.emptyMessage).toBeNull();
+
+  const emptyView = roadmapDraftView(EMPTY_ROADMAP);
+  expect(emptyView.isEmpty).toBe(true);
+  expect(emptyView.rows).toEqual([]);
+  expect(emptyView.emptyMessage).toContain('manifests/*.md (0 file(s) found)');
+});
+
+test('AT-97: sessionArtifactView: the dispatcher still returns "dag" for kind:"roadmap-draft" — the shared view model reaches the SAME dispatch boundary every other artifact kind goes through', () => {
+  const dispatched = sessionArtifactView(ROADMAP_WITH_DEPS) as unknown as { kind: string; dag: unknown };
+  expect(dispatched.kind).toBe('roadmap-draft');
+  expect(dispatched.dag).toEqual(
+    dependencyDagView(
+      ROADMAP_WITH_DEPS.rows,
+      (r) => r.initiativeId,
+      (r) => r.dependsOn,
+    ),
+  );
+});
+
+// ===========================================================================
+// Adversarial-review round 2 (2026-08-06), Amendment A — REGRESSION GUARD,
+// green today, not a defect pin. `SessionArtifactPane.tsx`'s table used to
+// zip its "depends on" column onto `view.dag.nodes` through an id-keyed Map,
+// which is last-write-wins: two roadmap-draft rows sharing an `initiativeId`
+// (legitimately reachable — `deriveRoadmapDraft` reads `initiative_id` from
+// each manifest's FRONTMATTER, not its filename, so two files under one
+// session's manifests/ can declare the same id) cross-contaminated, one
+// initiative's dependency list rendering as another's. The fix zips
+// `view.rows` and `view.dag.nodes` POSITIONALLY instead. That positional fix
+// depends on exactly one property of `dependencyDagView`, pinned here: it
+// emits ONE node per INPUT ROW, in input order, even when two rows share an
+// id — it must never collapse/dedupe rows by id. This is a characterization
+// pin of already-correct behaviour (the implementation already iterates
+// `for (const item of items) { ... nodes.push(...) }` with no id-based
+// dedup or Map lookup anywhere in `dependencyDagView` — verified by reading
+// it), not a defect pin — it earns its place because it guards the EXACT
+// invariant the component fix now structurally depends on: a "helpful"
+// future change that dedupes-by-id INSIDE `dependencyDagView` (e.g. to
+// "clean up" duplicate ids before leveling) would silently re-introduce the
+// cross-contamination the positional-zip fix just removed, one layer away
+// from where anyone would think to look for it. — AT-99
+// ===========================================================================
+
+test('AT-99 (regression guard, green today): roadmapDraftView: two rows sharing the SAME initiativeId with DIFFERENT dependsOn produce TWO distinct dag nodes, positionally aligned with the rows — never collapsed/deduped by id, and never cross-contaminated', () => {
+  const duplicateIdArtifact: RoadmapDraftArtifact = {
+    kind: 'roadmap-draft',
+    label: 'Roadmap draft',
+    rows: [
+      { initiativeId: 'DUP-1', project: 'gitpulse', phase: 'planned', origin: 'manifests/a.md', dependsOn: ['SOMETHING-A'] },
+      { initiativeId: 'DUP-1', project: 'gitpulse', phase: 'in-flight', origin: 'manifests/b.md', dependsOn: ['SOMETHING-B'] },
+    ],
+    sourcesScanned: ['manifests/*.md (2 file(s) found)'],
+  };
+
+  const view = roadmapDraftView(duplicateIdArtifact);
+
+  // Never collapsed: exactly one node per row, both carrying the SAME id.
+  expect(view.dag.nodes.length).toBe(2);
+  expect(view.dag.nodes[0].id).toBe('DUP-1');
+  expect(view.dag.nodes[1].id).toBe('DUP-1');
+
+  // Positionally aligned with rows — node[i] IS row[i]'s node.
+  expect(view.dag.nodes[0].item).toEqual(duplicateIdArtifact.rows[0]);
+  expect(view.dag.nodes[1].item).toEqual(duplicateIdArtifact.rows[1]);
+
+  // Never cross-contaminated: each node's own deps, not the other row's.
+  expect(view.dag.nodes[0].deps).toEqual(['SOMETHING-A']);
+  expect(view.dag.nodes[1].deps).toEqual(['SOMETHING-B']);
+  expect(view.dag.nodes[0].deps).not.toEqual(view.dag.nodes[1].deps);
 });

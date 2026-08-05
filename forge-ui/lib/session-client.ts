@@ -140,6 +140,14 @@ export type RoadmapDraftRow = {
   project: string;
   phase: string;
   origin: string;
+  /** Cross-initiative dependency edges (orchestrator/manifest.ts's
+   *  `depends_on_initiatives`, threaded verbatim through
+   *  `deriveSessionArtifact`). Absent on the wire is TOLERATED (parses to
+   *  `[]`, matching the server's own absent-key default) — but a present,
+   *  malformed shape (non-array, or an array containing a non-string) is
+   *  REJECTED, naming the field, via the same `requireStringArray` helper
+   *  `sourcesScanned` already uses. */
+  dependsOn: string[];
 };
 
 export type RoadmapDraftArtifact = {
@@ -178,11 +186,16 @@ function parseRoadmapDraftRow(raw: unknown, index: number): RoadmapDraftRow {
   if (!isPlainObject(raw)) {
     throw new Error(`malformed roadmap-draft row[${index}]: expected an object, got ${JSON.stringify(raw)}`);
   }
+  const dependsOnRaw = raw['dependsOn'];
   return {
     initiativeId: requireString(raw, 'initiativeId'),
     project: requireString(raw, 'project'),
     phase: requireString(raw, 'phase'),
     origin: requireString(raw, 'origin'),
+    // Absent ⇒ [] (tolerated, matches the server's own default); present
+    // but malformed ⇒ throws naming "dependsOn" via the shared
+    // requireStringArray helper (never a hand-rolled second validator).
+    dependsOn: dependsOnRaw === undefined ? [] : requireStringArray(dependsOnRaw, 'dependsOn'),
   };
 }
 

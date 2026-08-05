@@ -92,6 +92,15 @@
  * with no precedent anywhere in this file set — presence + type is what
  * every sibling field checks, nothing more.
  * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * R4-15 (2026-08-06): roadmap-draft rows gain a fifth field, `dependsOn:
+ * string[]` — cross-initiative dependency edges threaded from the manifest's
+ * `depends_on_initiatives` (orchestrator side: session-transcript.test.ts's
+ * AT-75/76; wire side: bridge-studio-sessions.test.ts's AT-77). AT-98..101
+ * pin this file's own sink: `parseRoadmapDraftRow` currently whitelists only
+ * 4 fields and silently drops a 5th one the server sends.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -121,10 +130,17 @@ const WELL_FORMED_TURN = {
 // shipped YAML: architect→roadmap-draft="Roadmap draft", instructions→
 // markdown-draft="AGENTS.md draft", project-brain→brain-structure="Seeded
 // structure".
+// R4-15 mechanical fixture plumbing: `dependsOn` is a REQUIRED field on the
+// parsed row as of this round (see AT-98..101 below) — every row literal
+// used in a round-trip `toEqual` must carry it, or the parser's own
+// tolerant default (`[]` for a missing wire value) would make the parsed
+// result diverge from the literal fixture. No existing assertion's
+// behaviour changes: `[]` is exactly what an absent wire value already
+// parses to (AT-99).
 const WELL_FORMED_ROADMAP_ARTIFACT = {
   kind: 'roadmap-draft',
   label: 'Roadmap draft',
-  rows: [{ initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' }],
+  rows: [{ initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md', dependsOn: [] }],
   sourcesScanned: ['manifests/*.md (1 file(s) found)'],
 };
 
@@ -226,8 +242,10 @@ test('AT-8: parseSessionArtifact: a well-formed roadmap-draft artifact round-tri
     kind: 'roadmap-draft',
     label: 'Roadmap draft',
     rows: [
-      { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md' },
-      { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' },
+      // R4-15 mechanical fixture plumbing: dependsOn is now a required
+      // parsed-row field (see WELL_FORMED_ROADMAP_ARTIFACT's header note).
+      { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md', dependsOn: [] },
+      { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md', dependsOn: [] },
     ],
     sourcesScanned: ['manifests/*.md (2 file(s) found)'],
   };
@@ -601,4 +619,44 @@ test('AT-97: parseSessionShellPayload: an EMPTY-STRING "title" is legitimately A
   // Distinct from AT-95's missing-title rejection: an explicit "" is a
   // different, legitimate case from an absent key.
   expect(() => parseSessionShellPayload(WELL_FORMED_PAYLOAD)).not.toThrow();
+});
+
+// ===========================================================================
+// R4-15 — roadmap-draft row "dependsOn" (AT-98..AT-101). `parseRoadmapDraftRow`
+// (session-client.ts:177..187) is the SECOND sink for this field: the server
+// (cli/bridge-studio-sessions.test.ts's AT-77) now sends it, but this
+// client-side whitelist of 4 fields still drops it silently on arrival —
+// that fail-open loss is exactly what AT-98 exists to refuse. Missing is
+// TOLERATED (parses to []), matching the server's own default (session-
+// transcript.test.ts AT-75) — but a malformed shape (non-array, or an array
+// containing a non-string) is REJECTED, naming the field, matching this
+// file's `requireStringArray` fail-closed convention exactly (the same
+// helper `sourcesScanned` already uses).
+// ===========================================================================
+
+test('AT-98: parseSessionArtifact: roadmap-draft row "dependsOn" round-trips verbatim — present, non-empty, declared order preserved (a whitelist that still drops the field would leave this undefined)', () => {
+  const withDeps = {
+    ...WELL_FORMED_ROADMAP_ARTIFACT,
+    rows: [{ initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md', dependsOn: ['R9-01', 'R8-03'] }],
+  };
+  const parsed = parseSessionArtifact(withDeps) as { rows: Array<{ dependsOn: string[] }> };
+  expect(parsed.rows[0].dependsOn).toEqual(['R9-01', 'R8-03']);
+});
+
+test('AT-99: parseSessionArtifact: roadmap-draft row with a MISSING "dependsOn" on the wire is TOLERATED — parses to [], never thrown (mirrors the server\'s own absent-key default; the client stays defensive rather than assuming the server always sends it)', () => {
+  const { dependsOn: _drop, ...rowWithoutDeps } = WELL_FORMED_ROADMAP_ARTIFACT.rows[0];
+  const missingDeps = { ...WELL_FORMED_ROADMAP_ARTIFACT, rows: [rowWithoutDeps] };
+  expect(() => parseSessionArtifact(missingDeps)).not.toThrow();
+  const parsed = parseSessionArtifact(missingDeps) as { rows: Array<{ dependsOn: string[] }> };
+  expect(parsed.rows[0].dependsOn).toEqual([]);
+});
+
+test('AT-100: parseSessionArtifact: roadmap-draft row "dependsOn" that is a non-array (a string) THROWS naming the field — matches requireStringArray\'s fail-closed style, never silently coerced to []', () => {
+  const badRow = { ...WELL_FORMED_ROADMAP_ARTIFACT, rows: [{ ...WELL_FORMED_ROADMAP_ARTIFACT.rows[0], dependsOn: 'INIT-2026-01-01-fixture-a' }] };
+  expect(() => parseSessionArtifact(badRow)).toThrow(/dependsOn/);
+});
+
+test('AT-101: parseSessionArtifact: roadmap-draft row "dependsOn" containing a non-string element THROWS naming the field — matches requireStringArray\'s per-element check, never silently dropped/stringified', () => {
+  const badRow = { ...WELL_FORMED_ROADMAP_ARTIFACT, rows: [{ ...WELL_FORMED_ROADMAP_ARTIFACT.rows[0], dependsOn: ['INIT-2026-01-01-fixture-a', 42] }] };
+  expect(() => parseSessionArtifact(badRow)).toThrow(/dependsOn/);
 });

@@ -32,6 +32,7 @@ import { ContractReadiness } from '@/components/studio/project-builder/ContractR
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
+import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
 
 // useSearchParams (below) requires a Suspense boundary in Next.js 14 (see
 // app/artifact/page.tsx's ArtifactPageInner/ArtifactPage split for the
@@ -908,9 +909,10 @@ function RoadmapView({
       <div
         data-section="project-roadmap"
         data-project-id={projectId}
-        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13 }}
+        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'flex-start' }}
       >
-        No roadmap data yet — run an architect session to generate initiatives.
+        No roadmap data yet — plan with the architect to generate initiatives.
+        <ProjectArchitectEntry projectId={projectId} />
       </div>
     );
   }
@@ -954,21 +956,24 @@ function RoadmapView({
               click a dot for detail
             </span>
           </div>
-          <button
-            data-action="kickoff-eligible"
-            data-eligible-count={eligible.length}
-            disabled={eligible.length === 0 || batchStarting}
-            onClick={() => void startEligible()}
-            style={{
-              fontSize: 11, fontWeight: 600, color: '#fff',
-              background: eligible.length === 0 ? 'var(--faint)' : '#238636',
-              border: '1px solid var(--line)', borderRadius: 6, padding: '4px 12px',
-              cursor: eligible.length === 0 || batchStarting ? 'default' : 'pointer',
-              opacity: batchStarting ? 0.6 : 1,
-            }}
-          >
-            {batchStarting ? 'starting…' : `Start eligible (${eligible.length}) →`}
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <ProjectArchitectEntry projectId={projectId} />
+            <button
+              data-action="kickoff-eligible"
+              data-eligible-count={eligible.length}
+              disabled={eligible.length === 0 || batchStarting}
+              onClick={() => void startEligible()}
+              style={{
+                fontSize: 11, fontWeight: 600, color: '#fff',
+                background: eligible.length === 0 ? 'var(--faint)' : '#238636',
+                border: '1px solid var(--line)', borderRadius: 6, padding: '4px 12px',
+                cursor: eligible.length === 0 || batchStarting ? 'default' : 'pointer',
+                opacity: batchStarting ? 0.6 : 1,
+              }}
+            >
+              {batchStarting ? 'starting…' : `Start eligible (${eligible.length}) →`}
+            </button>
+          </div>
         </div>
         <SerpentineTimeline
           initiatives={initiatives}

@@ -390,8 +390,21 @@ export const journey = defineJourney({
               // sourced from studio/session-kinds.yaml over the wire.
               check(await page.locator('[data-section="session-artifact"][data-artifact-kind="markdown-draft"]').count() > 0,
                 'AI-1: session artifact pane renders the markdown-draft renderer for the instructions kind');
+              // The artifact pane is LIVE: the shell refetches on its own 3s poll
+              // (SHELL_POLL_MS, app/sessions/[kind]/[sessionId]/page.tsx), which is a
+              // SEPARATE cycle from the summary poll that renders the verdict panel
+              // above. Sampling the pane the instant the verdict appears therefore
+              // races the shell's next refetch by up to one poll interval. WAIT for
+              // the state instead of sampling it — a pane still empty after several
+              // poll intervals is then a REAL failure (the artifact is not living),
+              // not a coin flip. Same fix R2-10 applied to the onboard beat that read
+              // data-session-phase before the shell's first fetch had settled; this
+              // beat is the one that had been "flaky", and it was this race.
+              await page
+                .waitForSelector('[data-section="session-artifact"] [data-markdown-draft-state="has-content"]', { timeout: 20000 })
+                .catch(() => {});
               check(await page.locator('[data-section="session-artifact"] [data-markdown-draft-state="has-content"]').count() > 0,
-                'AI-1: the drafted AGENTS.md renders as real content in the artifact pane');
+                'AI-1: the drafted AGENTS.md renders as real content in the artifact pane (after the shell poll refetches)');
               const instrArtifactLabel = await page.evaluate(
                 () => document.querySelector('[data-section="session-artifact"]')?.getAttribute('data-artifact-label') ?? '');
               check(instrArtifactLabel.length > 0, `AI-1: artifact pane carries a non-empty data-artifact-label (got "${instrArtifactLabel}")`);

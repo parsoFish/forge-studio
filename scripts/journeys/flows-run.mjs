@@ -7,6 +7,7 @@ import {
   caption, runningTimer,
   archDir, writeStatus, archEvent, archReasoning, burst, paced, writeQuestions,
   EMULATED_ARCHITECT_COST_USD, EMULATED_ARCHITECT_DURATION_MS, writePlan,
+  DAG_SESSION_INITIATIVES, DAG_SESSION_UNRESOLVED_DEP, writeRoadmapDagSession, cleanRoadmapDagSession,
   cycleEvent, unifierEvent, demoAgentEvent, adversarialReviewEvent, writePrDescription, moveManifest, seedReviewWorktree, writeDemoJson, writeReviewFindings, writeReflectionQuestions,
   writeAutomatedReflection, writeReflectionArtifacts, writeReleaseArtifact,
   openStudioMonitor,
@@ -392,6 +393,92 @@ export const journey = defineJourney({
                 cycleEvent('architect', 'end', 'architect.end', { cost_usd: archCost, duration_ms: archDur });
               }
               await frame(page, 'r1-5-architect-cost', 'R1 — P4: architect hex greens ($0.00 — real cycles meter it out-of-cycle)');
+
+        },
+      },
+      {
+        id: 'flows-run-roadmap-dag',
+        title: 'The roadmap draft is a DAG, not a list',
+        narration: 'A roadmap is its dependency edges. The architect session\'s artifact pane renders the draft as a dependency DAG — levels, edges, and the one edge that points at an initiative outside this draft, surfaced rather than quietly dropped.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── R1.6: R4-15 — the roadmap-draft artifact renders its edges ────────────
+              console.log('\n[R1.6] R4-15 — roadmap draft as a dependency DAG');
+              // A dedicated seeded session: the canonical sid's manifests are PROMOTED on
+              // approve, so its draft deliberately stays one initiative. This one carries
+              // three real manifests with real depends_on_initiatives edges (one pointing
+              // outside the draft set) and is removed again below — it never reaches a gate.
+              const dagSid = `${sid}-dag`;
+              writeRoadmapDagSession(dagSid);
+              try {
+                await page.goto(watch.uiUrl + `/sessions/architect/${encodeURIComponent(dagSid)}`, { waitUntil: 'domcontentloaded' });
+                await page.waitForSelector('main[data-page="session"][data-page-ready="true"]', { timeout: 20000 });
+                await page.waitForSelector('[data-component="dependency-dag"]', { timeout: 15000 });
+                await caption(page, 'The draft is a DAG — levels, edges, and the dependency that lives outside it.');
+
+                // The WHOLE chain on real data: manifest on disk → parseManifest →
+                // deriveRoadmapDraft → the bridge route's JSON → the client parse →
+                // the view model → the DOM. A unit test that builds its own row
+                // cannot observe a field any one of those hops drops.
+                const dag = await page.evaluate(() => {
+                  const root = document.querySelector('[data-component="dependency-dag"]');
+                  if (!root) return null;
+                  return {
+                    nodeCount: root.getAttribute('data-dag-node-count'),
+                    levelCount: root.getAttribute('data-dag-level-count'),
+                    edgeCount: root.getAttribute('data-dag-edge-count'),
+                    cycle: root.getAttribute('data-dag-cycle'),
+                    unresolvedCount: root.getAttribute('data-dag-unresolved-count'),
+                    nodes: Array.from(root.querySelectorAll('[data-dag-node]')).map((el) => ({
+                      id: el.getAttribute('data-dag-node'),
+                      level: el.getAttribute('data-dag-node-level'),
+                      status: el.getAttribute('data-dag-node-status'),
+                      dependsOn: el.getAttribute('data-dag-depends-on'),
+                      unresolved: el.getAttribute('data-dag-unresolved'),
+                      text: (el.textContent || '').trim(),
+                    })),
+                    rows: Array.from(document.querySelectorAll('[data-roadmap-row]')).map((el) => ({
+                      id: el.getAttribute('data-roadmap-row'),
+                      dependsOn: el.getAttribute('data-roadmap-depends-on'),
+                    })),
+                  };
+                });
+                check(dag !== null, 'R4-15: the roadmap-draft artifact renders the shared dependency-dag component');
+                check(dag.nodeCount === String(DAG_SESSION_INITIATIVES.length),
+                  `R4-15: every drafted manifest is a DAG node (expected ${DAG_SESSION_INITIATIVES.length}, got ${dag.nodeCount})`);
+                check(dag.levelCount === '3',
+                  `R4-15: the root→mid→leaf chain lays out as 3 dependency levels (got ${dag.levelCount})`);
+                for (const expected of DAG_SESSION_INITIATIVES) {
+                  const node = dag.nodes.find((n) => n.id === expected.id);
+                  check(node !== undefined, `R4-15: DAG node present for ${expected.id} (got ${JSON.stringify(dag.nodes.map((n) => n.id))})`);
+                  if (node) {
+                    check(node.dependsOn === expected.deps.join(','),
+                      `R4-15: ${expected.id} carries its manifest's depends_on_initiatives to the DOM verbatim (expected "${expected.deps.join(',')}", got "${node.dependsOn}")`);
+                  }
+                }
+                // The declared-data test: the edge onto an initiative outside the draft
+                // set must be VISIBLE, not merely stamped on an attribute nobody renders.
+                const leaf = dag.nodes.find((n) => n.id === DAG_SESSION_INITIATIVES[2].id);
+                check(leaf !== undefined && leaf.unresolved === DAG_SESSION_UNRESOLVED_DEP,
+                  `R4-15: the out-of-draft dependency is classified unresolved (expected "${DAG_SESSION_UNRESOLVED_DEP}", got "${leaf ? leaf.unresolved : 'no leaf node'}")`);
+                check(leaf !== undefined && leaf.text.includes(DAG_SESSION_UNRESOLVED_DEP),
+                  'R4-15: the unresolved dependency is rendered as readable text on the node, not only as a data-* attribute');
+                check(dag.unresolvedCount === '1',
+                  `R4-15: exactly one unresolved edge is reported (got ${dag.unresolvedCount})`);
+                check(dag.cycle === 'false',
+                  `R4-15: an acyclic draft reports data-dag-cycle="false" — the guard reports honestly in both directions (got ${dag.cycle})`);
+                // Table and DAG read the same de-duplicated value, so they cannot drift.
+                check(dag.rows.length === DAG_SESSION_INITIATIVES.length,
+                  `R4-15: the initiative table beside the DAG lists every drafted initiative (got ${dag.rows.length})`);
+                for (const expected of DAG_SESSION_INITIATIVES) {
+                  const row = dag.rows.find((r) => r.id === expected.id);
+                  check(row !== undefined && row.dependsOn === expected.deps.join(','),
+                    `R4-15: table row ${expected.id} shows the SAME dependency list as its DAG node (expected "${expected.deps.join(',')}", got "${row ? row.dependsOn : 'no row'}")`);
+                }
+                await frame(page, 'r1-6-roadmap-dag', 'R1 — R4-15: the roadmap draft renders as a dependency DAG with its out-of-draft edge surfaced', { key: true });
+              } finally {
+                cleanRoadmapDagSession(dagSid);
+              }
 
         },
       },
