@@ -69,7 +69,18 @@ roster agent declares `materials:` yet. **Byte-faithful SKILL.md round-trip**
 `serializeAgentDefinition` per ADR-027, not at call sites): when the projected
 frontmatter deep-equals the original file's parsed frontmatter, the original
 frontmatter block's **bytes** are kept verbatim (comments, key order,
-whitespace, delimiters) and only the body region is replaced. This is a
+whitespace, delimiters) and only the body region is replaced. That comparison
+carries **one general rule**, learned the hard way: *for comparison purposes
+only, an absent optional array key and an empty array are the same state*
+(`composition.*`, `materials`, `runtime.range`, `allowed-tools`,
+`disallowed-tools`). Without it the fast path never fired through the product's
+own UI at all — the builder always sends `materials: []` and `runtime.range:
+[]`, which no roster agent declares on disk, so every real save diverged and
+fully re-serialized. Unit tests missed it (they construct definitions directly,
+where those keys are simply absent); the **live journey beat caught it**. The
+rule changes only what is compared, never what is written — ATs pin that a
+genuine absent → non-empty change, and a non-empty → `[]` change, both still
+force the re-serialize and both still persist. This is a
 **prompt**-fidelity fix, not file churn — five phase bindings plus the release
 finalizer `readFileSync` whole SKILL.md files verbatim into their system
 prompts. The `^-{3,}` → en-dash body mutation is **deleted** (proven
@@ -573,7 +584,16 @@ prior-art research) demonstrably bottlenecks the linear flow.
   the projected data is unchanged, the `^-{3,}` → en-dash body mutation is
   deleted, and `fanout:` stopped being silently dropped. That is a **prompt**
   fix: five phase bindings + the release finalizer read whole SKILL.md files
-  verbatim into their system prompts. F3 parity sweep — 6 items closed, 7
+  verbatim into their system prompts. **The gate journey caught the headline
+  fix dead on arrival** — F1's own `materials: []`, always sent by the builder
+  and declared by no roster agent, made every save diverge from disk so the
+  byte-faithful path never fired through the real UI; `runtime.range` had the
+  identical shape and was worse (it fired on every save regardless of
+  materials), and `allowed-tools`/`disallowed-tools` were the same shape,
+  latent. Closed as a CLASS with one rule — absent optional array key ≡ empty
+  array, for comparison only — rather than three patches. Unit tests missed all
+  of it because they construct definitions directly; this is the standing
+  argument for keeping a real-surface journey in the gate block. F3 parity sweep — 6 items closed, 7
   rejected with named owners; `[data-ready-count]` deliberately stays 6 (two
   mockup readiness rows can never read false, and a readiness row that cannot
   fail is decoration); `page.tsx` (947 lines, over the 800 hard cap) was
