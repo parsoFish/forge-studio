@@ -44,6 +44,10 @@ Agents are true runnable primitives. **F1** `runAgent(def, RunContext)` (`orches
 
 The flow/agent builders read a server-computed capability descriptor instead of client heuristics. **F1** `agentCapabilityDescriptor(def)` (`orchestrator/studio/derive.ts`) — a typed per-agent descriptor `{interactive, runtimeSdks}` computed **server-side** from the F5-validated `surface` (via `executionPathForSurface`) + declared `runtime.sdk`; threaded onto the wire as the `capability` field of `GET /api/studio/agents` **and** `/api/studio/starters` (`cli/bridge-studio.ts`), parsed verbatim client-side (`parseCapability`, `forge-ui/lib/studio-client.ts`) — no capability fact re-derived in UI code (AC). The `node-executor` lint (`validate.ts`) was rerouted through `agentCapabilityDescriptor(def).interactive` (DRY — one derivation, behaviour-identical). **F3** the BUILD tab (`/flows/[id]`) gates interactive-agent placement from the descriptor: `AgentPalette` chips carry `data-chip-placeable` (interactive agents greyed/undraggable), `FlowBuilderCanvas` onDrop rejects an interactive agent with `[data-component="canvas-drop-reject"][data-drop-reject-message]`; the server-side `node-executor` save-lint (R2-01-F2) remains the enforcement backstop. **F4** `/agents/[id]` `[data-ready-count]`'s runtime check is descriptor-sourced (`capability.runtimeSdks.length > 0`, `forge-ui/lib/agent-readiness.ts`, replacing the client `runtimeConfigured` heuristic); the `interactive` fact surfaces as an informational (non-gating) `[data-capability-interactive]` chip; content-completeness checks retained (skill-resolvability not-ready deferred — F4 note). `journey-sync` run: flows-author (F3 interactive-placement beat, honest capability-injection fixture — no shipped agent is interactive) + agents (readyCount re-derived + descriptor assertion). **F2 (composition-single-source) split to R2-07** — `composition.tools` and `allowed-tools` are disjoint vocabularies, an ADR-027 object-model change, not a rename. Unit coverage: `agent-readiness.test.ts`, `studio-client.test.ts` (`parseCapability`), a starters-descriptor test.
 
+### R2-B10 Interactive-session shell + session-kind registry (R2-10, 2026-08-05)
+
+The **session kind** is a first-class studio object, declared as git-tracked data in `studio/session-kinds.yaml` (three descriptors: `architect` · `instructions` · `project-brain`, each naming its agent, its legacy routes, an ordered `stages` subset, its `defaultStage` and its artifact renderer) — minted by the **ADR-027 R2-10 amendment**. `orchestrator/studio/session-kinds.ts` holds two CLOSED vocabularies: stages `contract | instructions | secrets | demo | roadmap | brain`, and artifact renderer kinds `roadmap-draft | markdown-draft | brain-structure` **live** plus `file-package | contract-buildout | generation-gallery` **reserved** (parse ok, `forge studio lint` error on use, zero stubs — the `TRIGGER_KINDS`/ADR-041 precedent). `loadSessionKinds` is purely structural; `validateSessionKinds` (wired into `runStudioLint`, `cli/studio-lint.ts`) holds every semantic rule, and each closed-enum rejection names the offending value AND the allowed set. `orchestrator/studio/session-transcript.ts` **DERIVES** the chat transcript and the artifact payload from the runners' existing checkpoint files — every turn carries the `source` it came from (`idea.md`, `prompt.md`, `answers.json#round-N`, `questions.json`, `feedback.md`) and the result carries `sourcesScanned`, so an empty transcript reads "scanned N sources, none found"; pending-question detection is driven by the real `phase === 'awaiting-answers'`, not by text matching. All file and directory reads pass one `realpathSync` choke point. `cli/bridge-studio-sessions.ts` exposes it as `GET /api/studio/sessions/:kind/:sessionId?project=<p>` (409 fail-closed on an undeclared stage). UI: `forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` + `forge-ui/components/studio/session/*`, over the pure modules `forge-ui/lib/session-client.ts`, `session-shell-view.ts`, `session-artifact-view.ts`; `brain-structure`'s file tabs compose the SHARED `forge-ui/components/studio/FilePackage.tsx`. The three bespoke session pages are deleted, their routes kept as redirects. Journeys: `flows-run`, `stand-up-create`, `stand-up-onboard`. Phase machines untouched — this is the UI half of the convergence R2-01-F3 deferred.
+
 ## Planned initiatives
 
 ### R2-01 Agent-as-runnable primitive
@@ -306,7 +310,7 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 
 ### R2-10 Interactive sessions surface (progressive staged-artifact host)
 
-- **Status:** in-progress  ·  **Wave:** 5 (module: sessions-surface)
+- **Status:** implemented  ·  **Wave:** 5 (module: sessions-surface)
 - **Depends on:** R2-01-F3 (the generic `forge agent run` CLI path + `spawnAgentTurn`, landed; the DEEP per-runner convergence stays deferred — this initiative re-opens only the **UI half**). **Depended on by:** R4-15/R4-16/R4-17/R4-19 (sessions render through this surface), R6-06 (monitor session-links target it).
 - **Context:** Wave-5 cut. The mockup's sessions (`SESSIONS` in `data.jsx`; `views-session.jsx`) are ONE shared surface for every interactive agent: **chat left, living artifact right**, progressive turn-by-turn rendering, and **staged artifacts** — turns carry stage markers (`contract → instructions → secrets → demo → roadmap` in the onboarding/create-project sessions) and the artifact pane switches/accumulates per stage (roadmap draft, generation gallery 1→3, contract build-out, seeded brain structure, hook/skill package tabs). As-built (corrected 2026-08-03 review pass): **three** bespoke session pages — the architect interview, `/instructions/[sid]`, `/project-brain/[sid]` (`as-built-inventory.md` §1/§9); the **demo-builder is NOT a session page** — R1-03-F2 (landed 2026-07-24, operator-approved) folded it into the per-project page as the inline `DemoBuilderPanel`, and this initiative does not reverse that: its entry stays the project page, and its gallery surface is owned by R4-16 (which must render via this shell *in place* or record a reasoned exception — never silently re-detach the route). No stage vocabulary or shared artifact pane exists anywhere. This is the UI-side convergence R2-01-F3 deliberately did not attempt server-side — the phase-machines stay bespoke; the PAGES converge.
 - **Features:**
@@ -443,3 +447,35 @@ prior-art research) demonstrably bottlenecks the linear flow.
   descriptors, **not** by a shipped multi-stage session — the multi-stage
   product instance is R4-17's onboarding session. F1/F2/F3 all stay `planned`
   until PR2 lands the shell.
+- 2026-08-05 — **R2-10 implemented** (branch `feat/r2-10-session-shell`, PR2 of
+  two independent base-main PRs; PR1 landed the contract at `db13421b`). F1 the
+  shared session shell — `/sessions/[kind]/[sessionId]`, chat transcript left,
+  living artifact right, driven by the existing per-runner checkpoint files with
+  **no phase-machine rewrites**; the three bespoke session page implementations
+  (`/architect/[sid]/interview`, `/instructions/[sid]`, `/project-brain/[sid]`)
+  are DELETED and their route paths survive as permanent server-side redirects
+  (the project-brain redirect forwards its `?project=` query), so no external
+  link, doc reference or ADR citation breaks. Every operator affordance is
+  carried over with its `data-action`/`data-section`/`data-component` name
+  byte-identical, and the two duplicated interview forms converged into one.
+  The demo-builder's inline panel is untouched (R1-03-F2 not reversed). F2 the
+  staged-artifact contract — the typed stage vocabulary is enforced at three
+  points (lint · derivation · shell) and the selected stage is threaded into the
+  artifact dispatch, the seam a stage-aware renderer plugs into. F3 the artifact
+  renderers — roadmap draft, markdown draft, and seeded brain structure, whose
+  file tabs render through the **shared** `FilePackage` component (its fifth
+  consumer — reused, not forked, pinned by a test that compares against calling
+  the shared state module directly). `journey-sync`: `flows-run`,
+  `stand-up-create`, `stand-up-onboard` re-pointed at the shell; DOM contract
+  rewritten in `docs/forge-ui-dom-and-harness.md`.
+  **Honest limits, carried forward from PR1 and unchanged:** all three shipped
+  session kinds are single-stage (`architect → roadmap`,
+  `instructions → instructions`, `project-brain → brain`), so multi-stage
+  artifact switching is proven by unit + view-state tests over a multi-stage
+  fixture and by lint over the shipped descriptors, **not** by a shipped
+  multi-stage session — that is R4-17's onboarding session. The renderer
+  vocabulary keeps three RESERVED rows (`file-package`, `contract-buildout`,
+  `generation-gallery`) that parse but lint-error on use, with zero stubs, for
+  R4-16/R4-17 to light up. Traversal containment blocks symlink escapes but not
+  hardlinks, and the realpath/read TOCTOU window is disclosed rather than
+  closed — both accepted residuals, documented in the modules themselves.
