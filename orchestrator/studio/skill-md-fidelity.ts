@@ -132,6 +132,31 @@ function normalizeOriginalDataForComparison(originalData: unknown): unknown {
 }
 
 /**
+ * D2 fast-path fix (registry.test.ts "materials vs byte-fidelity (R2-09
+ * defect)"): D2 declares an absent `materials:` key and a declared-empty
+ * `materials: []` semantically IDENTICAL — both mean "accepts nothing", by
+ * design, with no "undeclared ⇒ allow all" reading anywhere. The real UI
+ * save path (forge-ui/app/agents/[id]/page.tsx) always sends
+ * `materials: state.materials`, defaulting to `[]`, so saving any of the 16
+ * roster agents that has never declared materials makes the freshly
+ * projected data disagree with the on-disk parse under a plain deep-equal,
+ * defeating the byte-faithful fast path and destroying comments/key order —
+ * exactly the bug this normalizes away. Canonicalize "materials key absent"
+ * to an explicit `[]` on BOTH sides before the comparison, so [] and absent
+ * compare equal; a genuinely non-empty array on either side is left alone
+ * and still forces the full re-serialize (do not "simplify" this into
+ * ignoring materials in the comparison — that would silently drop a real
+ * declaration or a real deselection-to-empty, see the round-4 tests pinning
+ * both directions).
+ */
+function normalizeMaterialsForComparison(value: unknown): unknown {
+  if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
+  const d = value as Record<string, unknown>;
+  if ('materials' in d) return d;
+  return { ...d, materials: [] };
+}
+
+/**
  * Serialize an AgentDefinition back to SKILL.md text (ADR-027; consumed by
  * the M2 bridge PUT routes, no production call site until then).
  *
@@ -151,7 +176,9 @@ export function serializeAgentDefinition(def: AgentDefinition, originalRaw?: str
 
   if (originalRaw !== undefined) {
     const { data: originalData, content: originalContent } = matter(originalRaw);
-    if (deepValueEqual(data, normalizeOriginalDataForComparison(originalData))) {
+    const comparableFresh = normalizeMaterialsForComparison(data);
+    const comparableOriginal = normalizeMaterialsForComparison(normalizeOriginalDataForComparison(originalData));
+    if (deepValueEqual(comparableFresh, comparableOriginal)) {
       const bodyStart = originalRaw.length - originalContent.length;
       return originalRaw.slice(0, bodyStart) + def.body;
     }
