@@ -242,7 +242,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
 }
 
 // Agent SKILL.md byte-fidelity serialization (projectAgentFrontmatter,
-// deepValueEqual, normalizeOriginalDataForComparison, serializeAgentDefinition)
+// deepValueEqual, normalizeAbsentOptionalArrays, serializeAgentDefinition)
 // lives in ./skill-md-fidelity.ts (extracted to keep this file under the
 // 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
 // importers keep resolving `serializeAgentDefinition` from './registry.ts';

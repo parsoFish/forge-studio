@@ -99,61 +99,84 @@ function deepValueEqual(a: unknown, b: unknown): boolean {
   return false;
 }
 
-const COMPOSITION_ARRAY_KEYS = ['skills', 'tools', 'mcps', 'guards', 'hooks'] as const;
-
 /**
- * D5 fast-path support: `composition`'s five vocabulary arrays all default to
- * `[]` on load when absent (`stringArray` in yaml-fields.ts) — a real
- * `SKILL.md` written before the `hooks:` field existed omits that key
- * entirely, exactly like `skills: []` written out explicitly. Normalize the
- * ORIGINAL parsed data the same way the loader itself already does before
- * comparing it against the freshly projected data, so an omitted key never
- * masquerades as a substantive frontmatter difference — this mirrors the
- * loader's own default, it does not invent new leniency (no other field
- * needs this: fanout/materials/library/phase/surface/executor are already
- * conditionally-omitted on both sides, and budgets sub-keys have no
- * non-omitted default).
+ * D5/D2 general fast-path normalization rule (R2-09) — ONE mechanism, not a
+ * growing per-field list. The defect class: several optional fields are
+ * ARRAY-valued and the loader (or the bridge merge, sourced from the UI's
+ * always-concrete default) treats an absent key and a declared-`[]` key as
+ * the same state — "nothing declared". The freshly projected frontmatter
+ * always carries the loader/merge's own default shape, but the ORIGINAL
+ * file on disk may predate the field, or a hand-authored/legacy file may
+ * omit it entirely; a plain deep-equal then sees `key: []` on one side and no
+ * `key` at all on the other and (wrongly) treats that as a substantive
+ * frontmatter change, defeating the byte-faithful fast path and destroying
+ * comments/key order for a save that changed NOTHING semantically.
+ *
+ * For the purpose of THIS COMPARISON ONLY (never for what gets WRITTEN —
+ * `projectAgentFrontmatter` above is untouched and still emits/omits each key
+ * by its own rule): backfill every path in OPTIONAL_ARRAY_PATHS to an
+ * explicit `[]` when the key is absent, applied identically to BOTH the
+ * freshly projected data and the original parsed data, so an absent key and a
+ * declared-empty array always compare equal. A genuinely NON-empty array on
+ * either side is left untouched by this and still forces the full
+ * re-serialize — this is "absent ≡ empty", never "ignore this field" (see the
+ * per-field real-change / reverse-asymmetry tests in registry.test.ts pinning
+ * both directions for every path below).
+ *
+ * D2 (registry.test.ts "materials vs byte-fidelity") is the `materials`
+ * instance of this class — the real UI save path
+ * (forge-ui/app/agents/[id]/page.tsx) always sends `materials: state.materials`
+ * defaulting to `[]`, so saving any of the 16 roster agents that has never
+ * declared materials hit exactly this. `composition.*`'s five vocabulary
+ * arrays are the same shape (a real `SKILL.md` written before `hooks:`
+ * existed omits that key, exactly like `tools: []` written out explicitly —
+ * `stringArray` in yaml-fields.ts is the loader default this mirrors).
+ * `runtime.range` (LIVE — every roster agent declares `strategy: fixed` with
+ * no `range:` key, while the builder always sends `runtime.range: []`) and
+ * `allowed-tools`/`disallowed-tools` (latent — `stringArray` defaults both
+ * unconditionally) are the same class again. A future optional array field
+ * just adds its path here — do not add another bespoke normalizer function.
  */
-function normalizeOriginalDataForComparison(originalData: unknown): unknown {
-  if (originalData === null || typeof originalData !== 'object' || Array.isArray(originalData)) {
-    return originalData;
+const OPTIONAL_ARRAY_PATHS: readonly (readonly string[])[] = [
+  ['composition', 'skills'],
+  ['composition', 'tools'],
+  ['composition', 'mcps'],
+  ['composition', 'guards'],
+  ['composition', 'hooks'],
+  ['materials'],
+  ['runtime', 'range'],
+  ['allowed-tools'],
+  ['disallowed-tools'],
+];
+
+function backfillAbsentArrayAtPath(
+  container: Record<string, unknown>,
+  path: readonly string[],
+): Record<string, unknown> {
+  const [key, ...rest] = path;
+  if (key === undefined) return container;
+  if (rest.length === 0) {
+    return key in container ? container : { ...container, [key]: [] };
   }
-  const d = originalData as Record<string, unknown>;
-  const rawComposition = d['composition'];
-  if (rawComposition === null || typeof rawComposition !== 'object' || Array.isArray(rawComposition)) {
-    return d;
+  const nested = container[key];
+  if (nested === null || typeof nested !== 'object' || Array.isArray(nested)) {
+    // The parent container (e.g. `composition`, `runtime`) is itself absent
+    // or not a plain object — there is nothing to backfill INTO, so leave
+    // the outer object as-is. (A file that omits `composition:`/`runtime:`
+    // entirely is a bigger structural difference than one missing array key
+    // and is correctly left to force the full re-serialize, same as before
+    // this rule existed.)
+    return container;
   }
-  const comp = rawComposition as Record<string, unknown>;
-  const normalizedComposition: Record<string, unknown> = { ...comp };
-  for (const key of COMPOSITION_ARRAY_KEYS) {
-    if (!(key in normalizedComposition)) normalizedComposition[key] = [];
-  }
-  return { ...d, composition: normalizedComposition };
+  return { ...container, [key]: backfillAbsentArrayAtPath(nested as Record<string, unknown>, rest) };
 }
 
-/**
- * D2 fast-path fix (registry.test.ts "materials vs byte-fidelity (R2-09
- * defect)"): D2 declares an absent `materials:` key and a declared-empty
- * `materials: []` semantically IDENTICAL — both mean "accepts nothing", by
- * design, with no "undeclared ⇒ allow all" reading anywhere. The real UI
- * save path (forge-ui/app/agents/[id]/page.tsx) always sends
- * `materials: state.materials`, defaulting to `[]`, so saving any of the 16
- * roster agents that has never declared materials makes the freshly
- * projected data disagree with the on-disk parse under a plain deep-equal,
- * defeating the byte-faithful fast path and destroying comments/key order —
- * exactly the bug this normalizes away. Canonicalize "materials key absent"
- * to an explicit `[]` on BOTH sides before the comparison, so [] and absent
- * compare equal; a genuinely non-empty array on either side is left alone
- * and still forces the full re-serialize (do not "simplify" this into
- * ignoring materials in the comparison — that would silently drop a real
- * declaration or a real deselection-to-empty, see the round-4 tests pinning
- * both directions).
- */
-function normalizeMaterialsForComparison(value: unknown): unknown {
+function normalizeAbsentOptionalArrays(value: unknown): unknown {
   if (value === null || typeof value !== 'object' || Array.isArray(value)) return value;
-  const d = value as Record<string, unknown>;
-  if ('materials' in d) return d;
-  return { ...d, materials: [] };
+  return OPTIONAL_ARRAY_PATHS.reduce(
+    (acc, path) => backfillAbsentArrayAtPath(acc, path),
+    value as Record<string, unknown>,
+  );
 }
 
 /**
@@ -176,8 +199,8 @@ export function serializeAgentDefinition(def: AgentDefinition, originalRaw?: str
 
   if (originalRaw !== undefined) {
     const { data: originalData, content: originalContent } = matter(originalRaw);
-    const comparableFresh = normalizeMaterialsForComparison(data);
-    const comparableOriginal = normalizeMaterialsForComparison(normalizeOriginalDataForComparison(originalData));
+    const comparableFresh = normalizeAbsentOptionalArrays(data);
+    const comparableOriginal = normalizeAbsentOptionalArrays(originalData);
     if (deepValueEqual(comparableFresh, comparableOriginal)) {
       const bodyStart = originalRaw.length - originalContent.length;
       return originalRaw.slice(0, bodyStart) + def.body;
