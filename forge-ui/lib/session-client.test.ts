@@ -68,6 +68,30 @@
  * remit (test files only). Until that lands, `session-client.ts`'s real
  * implementation and the real route will disagree on this one field.
  * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * AMENDMENT (T2 ruling, 2026-08-05): `title` (the session-kind descriptor's
+ * declared heading, studio/session-kinds.yaml) is a REQUIRED, hard-parsed
+ * field on `SessionShellPayload` — same treatment as `kind`/`sessionId`/
+ * `project`/`phase` (AT-30's style: missing or non-string throws, naming the
+ * field). The real route always sends it. A prior implementation pass made
+ * `title` OPTIONAL with a silent `typeof === 'string' ? … : undefined` parse
+ * specifically because these pinned fixtures had no `title` field — T2 ruled
+ * that reasoning invalid: a wire-contract decision must never be driven by a
+ * test fixture's gaps, and a caller falling back to the raw `kind` slug is a
+ * fabricated heading, exactly the fail-open shape this file exists to
+ * refuse. All payload fixtures below now carry a real `title` (the literal
+ * value from `studio/session-kinds.yaml` wherever the fixture models a real
+ * kind), and AT-95..97 pin the corrected required/hard-parsed contract,
+ * including this file's explicit ruling on an EMPTY-STRING title: ALLOWED —
+ * mirrors every other required string field in this payload (`kind`,
+ * `sessionId`, `project`, `phase` — none of which reject `''` either, per
+ * `requireString`'s existing, consistent behaviour across every client
+ * parser in this codebase, e.g. template-client.ts / hook-client.ts).
+ * Special-casing `title` alone to reject `''` would be an asymmetric rule
+ * with no precedent anywhere in this file set — presence + type is what
+ * every sibling field checks, nothing more.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -123,9 +147,14 @@ const WELL_FORMED_BRAIN_ARTIFACT = {
   ],
 };
 
+// `title` is the session kind's declared heading (studio/session-kinds.yaml's
+// `title`) — required, hard-parsed as of the AT-95..99 amendment below. Real
+// literal value from the shipped YAML: the 'architect' kind's title is
+// "Planning session".
 const WELL_FORMED_PAYLOAD = {
   ok: true,
   kind: 'architect',
+  title: 'Planning session',
   sessionId: '2026-08-05T10-00-00',
   project: 'gitpulse',
   phase: 'awaiting-verdict',
@@ -380,6 +409,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
   const instructionsPayload = {
     ok: true,
     kind: 'instructions',
+    title: 'Instructions session', // real literal, studio/session-kinds.yaml
     sessionId: '2026-08-05T11-00-00',
     project: 'gitpulse',
     phase: 'drafting',
@@ -393,6 +423,7 @@ test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and pro
   const brainPayload = {
     ok: true,
     kind: 'project-brain',
+    title: 'Brain creation session', // real literal, studio/session-kinds.yaml
     sessionId: '2026-08-05T12-00-00',
     project: 'gitpulse',
     phase: 'analyzing',
@@ -535,4 +566,39 @@ test('AT-90: parseSessionArtifact: "label" missing or non-string THROWS on every
   // A well-formed label round-trips verbatim (not just "any truthy string" —
   // the ACTUAL declared value, never re-derived from `kind`).
   expect(parseSessionArtifact(WELL_FORMED_ROADMAP_ARTIFACT).label).toBe('Roadmap draft');
+});
+
+// ===========================================================================
+// AT-amendment (T2 ruling, 2026-08-05) — "title" is REQUIRED and hard-parsed,
+// exactly like kind/sessionId/project/phase — never optional-with-a-fallback.
+// — AT-95..AT-97
+// ===========================================================================
+
+test('AT-95: parseSessionShellPayload: a missing "title" THROWS, naming the field — never silently optional, never a caller-side fallback to the raw kind slug', () => {
+  const { title: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  try {
+    parseSessionShellPayload(missing);
+    throw new Error('expected parseSessionShellPayload to throw');
+  } catch (err) {
+    expect(String(err)).toContain('title');
+  }
+});
+
+test('AT-96: parseSessionShellPayload: a non-string "title" (number, null, array, object) THROWS — same treatment as every sibling required string field, never coerced', () => {
+  for (const badTitle of [7, null, ['Planning session'], { text: 'Planning session' }]) {
+    expect(
+      () => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, title: badTitle }),
+      `title=${JSON.stringify(badTitle)} must throw`,
+    ).toThrow();
+  }
+});
+
+test('AT-97: parseSessionShellPayload: an EMPTY-STRING "title" is legitimately ACCEPTED — the explicit ruling (T2, 2026-08-05): title gets the SAME treatment as every other required string field in this payload (kind/sessionId/project/phase), none of which reject "" either; special-casing title alone would be an asymmetric rule with no precedent in this file', () => {
+  const emptyTitle = { ...WELL_FORMED_PAYLOAD, title: '' };
+  expect(() => parseSessionShellPayload(emptyTitle)).not.toThrow();
+  const parsed = parseSessionShellPayload(emptyTitle);
+  expect(parsed.title).toBe('');
+  // Distinct from AT-95's missing-title rejection: an explicit "" is a
+  // different, legitimate case from an absent key.
+  expect(() => parseSessionShellPayload(WELL_FORMED_PAYLOAD)).not.toThrow();
 });

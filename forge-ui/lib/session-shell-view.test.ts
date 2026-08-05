@@ -74,6 +74,22 @@
  *    against the CORRECTED payload shape per T2's instruction; the route
  *    needs a small companion change before real traffic satisfies it.
  * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * AMENDMENT (T2 ruling, 2026-08-05): `title` — same story as `artifact.label`
+ * above, one layer up. It is now REQUIRED on `SessionShellPayload`
+ * (session-client.test.ts's AT-95..97) and threaded verbatim onto the ready
+ * state here — never a client-side fallback to the raw `kind` slug (a shipped
+ * implementation pass had done exactly that, reasoning from this file's own
+ * pre-existing fixtures lacking `title`; T2 ruled a wire-contract decision
+ * must never be driven by a fixture gap). Both fixtures now carry a `title`
+ * — `SINGLE_STAGE_PAYLOAD` the real YAML value ("Planning session"),
+ * `MULTI_STAGE_PAYLOAD` a clearly-synthetic one (that kind is hypothetical).
+ * AT-98/99 pin `state.title` threading through verbatim and the same
+ * anti-hardcode bite AT-61 pins for `artifactLabel`: two payloads sharing
+ * every other field but a different `title` must produce different ready
+ * states — the test a reintroduced local heading map would fail.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -90,6 +106,7 @@ import type { SessionShellPayload, SessionShellFetchResult } from './session-cli
 const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
   ok: true,
   kind: 'architect',
+  title: 'Planning session', // real literal, studio/session-kinds.yaml
   sessionId: '2026-08-05T10-00-00',
   project: 'gitpulse',
   phase: 'awaiting-verdict',
@@ -112,6 +129,7 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
 const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
   ok: true,
   kind: 'future-multi-stage-kind',
+  title: 'Future multi-stage session', // synthetic — this kind is hypothetical (R4-17), no real YAML entry exists yet
   sessionId: '2026-08-05T13-00-00',
   project: 'gitpulse',
   phase: 'in-progress',
@@ -425,4 +443,45 @@ test('AT-69: deriveSessionShellViewState: a "no-session" state carries NO stray 
   const state = deriveSessionShellViewState(result);
   expect('turnsForStage' in state).toBe(false);
   expect('artifact' in state).toBe(false);
+});
+
+// ===========================================================================
+// AT-amendment (T2 ruling, 2026-08-05) — state.title threads through
+// verbatim from the payload; never a fallback to the raw kind slug, never a
+// client-side heading lookup. — AT-98..AT-99
+// ===========================================================================
+
+test('AT-98: sessionShellState: the ready state\'s "title" is the payload\'s "title", verbatim — never the raw "kind" slug, never invented', () => {
+  const state = sessionShellState(SINGLE_STAGE_PAYLOAD);
+  expect(state.title).toBe('Planning session');
+  expect(state.title).toBe(SINGLE_STAGE_PAYLOAD.title);
+  expect(state.title).not.toBe(state.kind); // 'Planning session' !== 'architect' — proves it's not a kind-slug fallback
+
+  const multiState = sessionShellState(MULTI_STAGE_PAYLOAD);
+  expect(multiState.title).toBe('Future multi-stage session');
+  expect(multiState.title).not.toBe(multiState.kind);
+});
+
+test('AT-99: sessionShellState: two payloads sharing EVERY OTHER field but a DIFFERENT "title" produce DIFFERENT state.title — the same anti-hardcode bite AT-61 pins for artifactLabel; this is exactly the test a reintroduced local kind→heading map would fail. "title" also survives a selectStage switch unchanged, same as artifactLabel (AT-55).', () => {
+  const payloadA: SessionShellPayload = { ...SINGLE_STAGE_PAYLOAD, title: 'Planning session' };
+  const payloadB: SessionShellPayload = { ...SINGLE_STAGE_PAYLOAD, title: 'A future kind reusing "architect" with its own title' };
+
+  const stateA = sessionShellState(payloadA);
+  const stateB = sessionShellState(payloadB);
+
+  // SAME kind on both...
+  expect(stateA.kind).toBe('architect');
+  expect(stateB.kind).toBe('architect');
+  // ...but the title follows the PAYLOAD, not the kind — a hardcoded
+  // kind→title map could never produce this divergence.
+  expect(stateA.title).toBe('Planning session');
+  expect(stateB.title).toBe('A future kind reusing "architect" with its own title');
+  expect(stateA.title).not.toBe(stateB.title);
+
+  // title survives a stage switch unchanged (mirrors AT-55's artifactLabel pin).
+  const switched = selectStage(sessionShellState(MULTI_STAGE_PAYLOAD), 'demo');
+  expect(switched.ok).toBe(true);
+  if (switched.ok) {
+    expect(switched.state.title).toBe('Future multi-stage session');
+  }
 });

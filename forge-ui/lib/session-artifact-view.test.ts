@@ -346,6 +346,7 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
   const payload: SessionShellPayload = {
     ok: true,
     kind: 'future-multi-stage-kind',
+    title: 'Future multi-stage session', // synthetic — this kind is hypothetical (R4-17)
     sessionId: '2026-08-05T14-00-00',
     project: 'gitpulse',
     phase: 'in-progress',
