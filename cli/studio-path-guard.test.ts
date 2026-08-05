@@ -74,6 +74,76 @@
  * /tmp for every later cleanup that touches it.
  */
 
+/**
+ * ROUND 2 (2026-08-06, adversarial-review MINOR) — the final lexical
+ * backstop in `resolveGuardedPath`'s create-mode branch is a false-positive
+ * generator, not just a "belt and suspenders" no-op.
+ *
+ * Root cause: `cli/studio-path-guard.ts` L296-297:
+ *
+ *   const rel = relative(realRoot, realPath);
+ *   if (rel === '' || rel.startsWith('..')) {
+ *
+ * `rel.startsWith('..')` is a bare STRING-PREFIX test, not a path-traversal
+ * test. `isSafeSegment` (L177-179) correctly allows any segment NAME that is
+ * merely not exactly `.` or `..` and contains no separator — so a real,
+ * legally-named directory entry like `..foo` passes it. When that segment is
+ * part of the not-yet-created tail, `realPath` is built as
+ * `join(verified, '..foo', 'SKILL.md')`, and `relative(realRoot, realPath)`
+ * correctly returns the literal string `"..foo/SKILL.md"` (path.relative only
+ * treats a component that is EXACTLY `..` as a traversal token during
+ * resolution; `..foo` is one opaque segment, never split). The subsequent
+ * `.startsWith('..')` then fires on the first two characters of that string,
+ * which happen to be dots — with zero relationship to actual containment.
+ * The guard rejects a path that never left `root` at all: a false positive.
+ *
+ * The comment directly above the check (L293-295: "If this check ever
+ * fires, treat it as a BUG IN THIS MODULE ... not as a routine
+ * input-rejection path") is itself wrong for this input class — it CAN fire
+ * on legitimate, fully-contained input, so "just a defensive unreachable
+ * assert" is not an accurate description of the check's current behavior.
+ *
+ * HONEST SCOPE (do not overclaim): unreachable through all five current call
+ * sites today. Every untrusted id arriving here is pre-validated by the
+ * caller against `SLUG_RE` (`orchestrator/skill-path.ts:43`,
+ * `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/` — MUST start with a lowercase letter,
+ * so it can never begin with `.`), and every fixed literal segment this
+ * module also receives (`SKILL.md`, `.forge`, `flow.yaml`, `project.json`)
+ * is safe by construction. This is a correctness defect in the shared
+ * module's OWN contract (and a false claim in its own doc comment), not a
+ * live escape at any current route.
+ *
+ * Tests in this round:
+ *   D1 (RED): create-mode arm — `..foo` is a genuine, real, pre-existing
+ *     directory (so it passes the per-segment identity walk fine); only the
+ *     leaf (`SKILL.md`) is absent, landing in the reassembly-then-lexical-
+ *     backstop code path. Correct: `{ok:true, exists:false}`. Today:
+ *     `{ok:false, reason:"reassembled path escapes the containment root"}` —
+ *     empirically confirmed before writing this test.
+ *   D2 (GREEN, already correct — locks it so the fix cannot regress it): the
+ *     exists arm — leaf also a real regular file. This one does NOT reach
+ *     the buggy line at all (a fully-existing chain returns early via the
+ *     per-segment realpath identity walk, L250-266, before the create-mode
+ *     lexical backstop ever runs) — empirically confirmed already `ok:true`
+ *     today. Included per the fix-author's request so a future fix attempt
+ *     that reshuffles the exists/create branches is caught if it regresses.
+ *   E (GREEN, non-regression pin): a segment that IS exactly `..` must still
+ *     be rejected — by `isSafeSegment`, a DIFFERENT, correct check, not the
+ *     buggy lexical backstop. Pins that the fix cannot be "delete the
+ *     `rel.startsWith('..')` check" — that would also have to not weaken
+ *     `isSafeSegment`, and this test is the reachable place to prove real
+ *     traversal segments are still refused after the fix lands.
+ *
+ * Self-check: D1 is an acceptance test, not characterization — if the
+ * lexical backstop were STILL wrong in this exact way after a fix attempt,
+ * D1 would report `ok:false` identically to today; only a genuine fix (e.g.
+ * checking `rel !== '..' && !rel.startsWith('..' + sep)`, or comparing
+ * `path.sep`-aware segments instead of a raw string prefix) makes D1 report
+ * `ok:true`. E does not exercise the buggy line — it only proves the fix
+ * cannot be "delete the check" by pinning the invariant on the one code path
+ * that actually reaches real inputs.
+ */
+
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, lstatSync, realpathSync } from 'node:fs';
@@ -192,6 +262,95 @@ test('C (GREEN, non-regression): genuine ENOENT still returns create-mode {ok:tr
         join(realRoot, 'nonexistent-agent', 'SKILL.md'),
         'the reassembled realPath must literally join the verified root with the not-yet-created segments',
       );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('D1 (RED): a real ".."-prefixed directory name in create-mode is a false-positive escape rejection — must accept', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-dotfoo-create-'));
+  const dotFooDir = join(root, '..foo');
+
+  try {
+    // `..foo` is a genuine, real (non-symlink) directory — a legal
+    // directory-entry name: `isSafeSegment` correctly allows it (it is
+    // neither `.` nor `..`, has no separator). Only the leaf (`SKILL.md`)
+    // is absent, so this exercises the create-mode reassembly + lexical
+    // backstop at L268-301.
+    mkdirSync(dotFooDir);
+
+    const result = resolveGuardedPath(root, ['..foo', 'SKILL.md']);
+
+    assert.equal(
+      result.ok,
+      true,
+      `expected the guard to ACCEPT — "..foo" is a real, fully-contained directory name, not a parent-directory traversal; containment is not violated. Got ${JSON.stringify(result)}. This is the pinned defect: the lexical backstop's bare \`rel.startsWith('..')\` string check misfires on any segment NAME that merely begins with two dots.`,
+    );
+    if (result.ok) {
+      assert.equal(result.exists, false, 'the leaf does not exist yet — this is a create-mode save, not an edit');
+      const realRoot = realpathSync(root);
+      assert.equal(
+        result.realPath,
+        join(realRoot, '..foo', 'SKILL.md'),
+        'the reassembled realPath must literally join the verified root with the not-yet-created leaf',
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('D2 (GREEN, already correct — locks it so the fix cannot regress it): a real ".."-prefixed dir with an existing leaf still accepts', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-dotfoo-exists-'));
+  const dotFooDir = join(root, '..foo');
+
+  try {
+    // Same real, non-symlink "..foo" directory, but here the leaf ALSO
+    // already exists as a real regular file — the full chain is present, so
+    // this returns via the per-segment realpath identity walk (L250-266)
+    // and never reaches the buggy lexical backstop at all. Confirmed
+    // empirically ok:true today (not a red case) — included per the
+    // fix-author's request as a non-regression companion so a future
+    // reshuffle of the exists/create branches doesn't silently break this
+    // arm while "fixing" D1.
+    mkdirSync(dotFooDir);
+    writeFileSync(join(dotFooDir, 'SKILL.md'), 'purpose: existing agent\n');
+
+    const result = resolveGuardedPath(root, ['..foo', 'SKILL.md']);
+
+    assert.equal(result.ok, true, `expected the guard to ACCEPT an existing, fully-contained "..foo/SKILL.md" — got ${JSON.stringify(result)}`);
+    if (result.ok) {
+      assert.equal(result.exists, true, 'both segments already exist on disk — this is an edit of an existing agent');
+      const realRoot = realpathSync(root);
+      assert.equal(result.realPath, join(realRoot, '..foo', 'SKILL.md'), 'realPath must be the verified, identity-checked existing path');
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('E (GREEN, non-regression pin): a segment that IS exactly ".." is still rejected — the fix cannot be "delete the check"', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-dotdot-segment-'));
+
+  try {
+    // This does NOT exercise the buggy lexical backstop (L296-297) — a
+    // literal ".." segment is refused earlier, by `isSafeSegment` (L177-179),
+    // a correct and unrelated check. It is included because it is the
+    // reachable place (through the exported function, not a call site) to
+    // pin that real parent-directory traversal is still refused after the
+    // D1/D2 fix lands — the fix must distinguish "a name starting with two
+    // dots" (D1: legitimate) from "a component that IS two dots" (E: a real
+    // traversal token), not simply delete the backstop wholesale.
+    const result = resolveGuardedPath(root, ['..', 'SKILL.md']);
+
+    assert.equal(
+      result.ok,
+      false,
+      `expected a literal ".." segment to still be rejected as unsafe — got ${JSON.stringify(result)}`,
+    );
+    if (!result.ok) {
+      assert.match(result.reason, /unsafe path segment/i, `expected the rejection reason to name it as an unsafe segment — got "${result.reason}"`);
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
