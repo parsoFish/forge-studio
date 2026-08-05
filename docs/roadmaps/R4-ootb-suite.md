@@ -222,6 +222,39 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
 `demo-design`/`research` parallel-intake agents are parked with **R2-D2**
 (operator decision 2).
 
+### R4-B14 Architect planning session as a dependency DAG (implemented)
+
+R4-15-F1 landed 2026-08-06 (wave 5, batch B, **PR #86**, merge commit
+`cdefbf8c`). The architect session already rode R2-10's shared shell; what F1
+added is the roadmap draft's **dependency edges** and a **shared** DAG renderer:
+
+- **Edges end-to-end.** `RoadmapDraftRow.dependsOn`
+  (`orchestrator/studio/session-transcript.ts`) carries the manifest's
+  `depends_on_initiatives` **verbatim** — unsorted, undeduplicated; resolving an
+  edge against the draft set is the view's job, not the deriver's. The client
+  mirror (`forge-ui/lib/session-client.ts`, `parseRoadmapDraftRow`) was a second
+  sink and carries it too, fail-closed on a malformed value.
+- **The shared renderer** (built for R4-13-F1's roadmap tab to reuse, the R3-01
+  `FilePackage` shape): `forge-ui/lib/dependency-dag.ts` — pure, generic over
+  `T`, levels delegated to the existing `topoLevels`
+  (`forge-ui/lib/dep-layout.ts`), edges directed "from must complete before to",
+  unresolved targets and cycles reported — plus
+  `forge-ui/components/studio/DependencyDag.tsx`, which takes an
+  already-computed view so every surface beside it reads ONE value.
+  `SessionArtifactPane` renders **DAG + initiative table**, which IS R4-13-F1's
+  stated roadmap-tab layout.
+- **Entry from the project page:**
+  `forge-ui/components/studio/ProjectArchitectEntry.tsx` mounts the one shipped
+  start-a-session path (`NewIdeaBox` → `POST /api/architect/start` →
+  `/sessions/architect/<sid>`).
+- **Contract + journeys:** `data-*` rows in
+  [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beats
+  `flows-run/flows-run-roadmap-dag` (real manifests, real route, real DOM,
+  including an out-of-draft edge) and the `roadmap/roadmap-tab` entry
+  assertions.
+- **Not** a redesign: architect behaviour is unchanged and the architect flow is
+  not retired (R4-D1).
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -1348,8 +1381,8 @@ ride R3-06-F3 scaffolds + R4-03 creation when those land; the
 
 ### R4-15 Architect/Planning session alignment
 
-- **Status:** in-progress  ·  **Wave:** 5 (module: per-OOTB-agent —
-  architect/planning)
+- **Status:** implemented  ·  **Wave:** 5 (module: per-OOTB-agent —
+  architect/planning)  ·  As-built: [R4-B14](#r4-b14-architect-planning-session-as-a-dependency-dag-implemented)
 - **Depends on:** R2-10 (session shell + artifact renderers).
 - **Context:** Wave-5 cut. The mockup's `architect-planning` agent runs
   interactive **planning sessions**: chat + a living roadmap-draft artifact
@@ -1568,6 +1601,34 @@ then retirement lands as kickoff-surface changes (ADR-031/033 amendments), a
 flow-seed removal, and journey rewrites, entering as `planned` with the next
 free R4 ID's features.
 
+**Note — 2026-08-06 (R4-15-F2 ⚑ merger brief, operator-ratified). Outcome: R4-D1
+STAYS DEFERRED, condition unchanged; the runtimes are NOT merged and no merger
+initiative is opened.** The wave-5 mockup's roster describes `architect-planning`
+as *"Combines today's Architect and PM"* and contains no plan agent at all, which
+raised the merger question. Reviewed against the mockup itself, **it does not
+contain the merger it proposes**: `views-flows.jsx:64` types that agent
+`out: 'roadmap'`, and the mockup's `forge-develop` opens with
+`{ id: 'intake', kind: 'queue', sub: 'roadmap → work items' }` — a queue node, not
+an agent. So the roster deletes decomposition as an agent rather than merging it,
+stranding ADR-037's compiled WI contracts, ADR-015's spec back-refs, and the
+`plan.completeness` signal R4-11-F4's attention strip consumes. Ratified
+alongside: the two differ on every axis that matters (roadmap scale vs single
+initiative, interactive vs unattended, manifests+PLAN vs work items+specs); the
+PM is where ADR-037 lives, so any merger must re-home it; an interactive session
+on the develop critical path costs unattended operation; and answering an
+evidence-based re-entry condition with a design opinion substitutes argument for
+the evidence it demands.
+**Next step, so this deferral carries its own:** the re-entry evidence is a
+MEASUREMENT, adopted as a **batch-F exit rider** rather than a separate exercise
+— during the wave-exit Scope-3 chunk driven end-to-end through forge, count
+operator turns required during decomposition via the already-live
+`POST /api/initiatives/:id/plan` path (R4-05-F4; proven byte-identical to the
+architect-accept path by `orchestrator/project-manager-shared-pipeline.test.ts`).
+Materially non-zero ⇒ the interactive-decomposition case is real and earns an
+initiative; zero ⇒ it was a naming question. Brief (committed, not in the
+gitignored campaign dir):
+[`docs/architect-pm-merger-brief.md`](../architect-pm-merger-brief.md).
+
 ## Change log
 
 - 2026-07-17 — Roadmap created (initial forge-dev roadmap planning session).
@@ -1698,3 +1759,13 @@ free R4 ID's features.
   untouched. **F2 ⚑ (the architect+PM merger brief) is parked with the
   operator** — its outcome updates R4-D1's note with a date + outcome, and the
   initiative flips to `implemented` then.
+- 2026-08-06 — **R4-15 → implemented; R4-D1 note updated (⚑ F2 ratified).**
+  F2's architect+PM merger brief was reviewed and approved as recommended: the
+  runtimes are NOT merged, no merger initiative is opened, and R4-D1 stays
+  deferred with its condition unchanged — because the mockup does not contain
+  the merger it proposes (its merged agent declares `out: 'roadmap'` and
+  decomposition survives only as an unowned `kind:'queue'` label). The re-entry
+  evidence is now a named next step rather than an open question: an
+  operator-turn count during decomposition via `POST /api/initiatives/:id/plan`,
+  adopted as a **batch-F exit rider** on the wave-exit Scope-3 chunk. F1's
+  as-built facts absorbed into new baseline entry **R4-B14**.
