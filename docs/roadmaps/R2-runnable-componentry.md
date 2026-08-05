@@ -91,7 +91,7 @@ rejected with owners (templates zone → R2-05-F2/R2-07; triggers block → R2-0
 R6-04; Monitor and Run header buttons → R6 one-Run-button rule; conversational
 drafting → R4-15/R4-17 on the R2-10 shell, the shipped alternative being the
 curated `StarterPicker`; two readiness rows that can never read false —
-`[data-ready-count]` stays **6**). `forge-ui/app/agents/[id]/page.tsx` was 948
+`[data-ready-count]` stays **6**). `forge-ui/app/agents/[id]/page.tsx` was 947
 lines (over the 800 hard cap) and was **extracted before being extended** into
 `forge-ui/components/studio/agent-builder/` (`RunPanel`, `StarterPicker`,
 `ReadOnlyFields`, `ZoneWrap`, `MaterialsPicker`, `InstructionsField`) over the
@@ -576,7 +576,7 @@ prior-art research) demonstrably bottlenecks the linear flow.
   verbatim into their system prompts. F3 parity sweep — 6 items closed, 7
   rejected with named owners; `[data-ready-count]` deliberately stays 6 (two
   mockup readiness rows can never read false, and a readiness row that cannot
-  fail is decoration); `page.tsx` (948 lines, over the 800 hard cap) was
+  fail is decoration); `page.tsx` (947 lines, over the 800 hard cap) was
   extracted into `components/studio/agent-builder/` **before** being extended.
   **Security:** a review round found a pre-existing **arbitrary-file-write**
   through the agent PUT (a real `skills/<slug>/` directory with a symlinked
