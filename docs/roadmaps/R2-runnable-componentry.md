@@ -48,6 +48,83 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 
 The **session kind** is a first-class studio object, declared as git-tracked data in `studio/session-kinds.yaml` (three descriptors: `architect` · `instructions` · `project-brain`, each naming its agent, its legacy routes, an ordered `stages` subset, its `defaultStage` and its artifact renderer) — minted by the **ADR-027 R2-10 amendment**. `orchestrator/studio/session-kinds.ts` holds two CLOSED vocabularies: stages `contract | instructions | secrets | demo | roadmap | brain`, and artifact renderer kinds `roadmap-draft | markdown-draft | brain-structure` **live** plus `file-package | contract-buildout | generation-gallery` **reserved** (parse ok, `forge studio lint` error on use, zero stubs — the `TRIGGER_KINDS`/ADR-041 precedent). `loadSessionKinds` is purely structural; `validateSessionKinds` (wired into `runStudioLint`, `cli/studio-lint.ts`) holds every semantic rule, and each closed-enum rejection names the offending value AND the allowed set. `orchestrator/studio/session-transcript.ts` **DERIVES** the chat transcript and the artifact payload from the runners' existing checkpoint files — every turn carries the `source` it came from (`idea.md`, `prompt.md`, `answers.json#round-N`, `questions.json`, `feedback.md`) and the result carries `sourcesScanned`, so an empty transcript reads "scanned N sources, none found"; pending-question detection is driven by the real `phase === 'awaiting-answers'`, not by text matching. All file and directory reads pass one `realpathSync` choke point. `cli/bridge-studio-sessions.ts` exposes it as `GET /api/studio/sessions/:kind/:sessionId?project=<p>` (409 fail-closed on an undeclared stage). UI: `forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` + `forge-ui/components/studio/session/*`, over the pure modules `forge-ui/lib/session-client.ts`, `session-shell-view.ts`, `session-artifact-view.ts`; `brain-structure`'s file tabs compose the SHARED `forge-ui/components/studio/FilePackage.tsx`. The three bespoke session pages are deleted, their routes kept as redirects. Journeys: `flows-run`, `stand-up-create`, `stand-up-onboard`. Phase machines untouched — this is the UI half of the convergence R2-01-F3 deferred.
 
+### R2-B11 Agent-builder definition parity + the shared write-path containment guard (R2-09, 2026-08-06)
+
+The agent definition is authored end-to-end from the builder without the save
+path corrupting it. **`materials:`** is a closed 4-kind vocabulary (`images |
+documents | audio | data-files`) owned by `orchestrator/studio/materials.ts` —
+one module holding the vocabulary, `parseMaterials` (lenient at load, so a bad
+value can never crash the loader or take `forge studio lint` down) and
+`agentAcceptsMaterial(def, kind)`, imported by all three enforcement points:
+`registry.ts` (parse into `AgentDefinition`), `validate.ts` (the
+`materials/enum` **error**-level lint, the `surface/enum` precedent) and
+`derive.ts` (`AgentCapabilityDescriptor.materials`, wire-visible on
+`GET /api/studio/agents` and `/api/studio/starters`). **Absent and empty both
+mean "accepts nothing"** — there is no undeclared-⇒-allow-all arm in either
+direction. **Honest limit:** `agentAcceptsMaterial` has **zero production
+callers** until the R6-04-F2 kickoff-upload seam calls it; it ships now
+precisely so that consumer cannot mint a permissive gate of its own, and no
+roster agent declares `materials:` yet. **Byte-faithful SKILL.md round-trip**
+(`orchestrator/studio/skill-md-fidelity.ts`, chosen inside the ONE canonical
+`serializeAgentDefinition` per ADR-027, not at call sites): when the projected
+frontmatter deep-equals the original file's parsed frontmatter, the original
+frontmatter block's **bytes** are kept verbatim (comments, key order,
+whitespace, delimiters) and only the body region is replaced. This is a
+**prompt**-fidelity fix, not file churn — five phase bindings plus the release
+finalizer `readFileSync` whole SKILL.md files verbatim into their system
+prompts. The `^-{3,}` → en-dash body mutation is **deleted** (proven
+unnecessary, with an AT pinning the no-injection property), and `fanout:` is no
+longer silently dropped on save (it was, which flipped `developer-ralph`'s
+`fanoutCapable` false). **Instructions** are surfaced and editable in
+`/agents/[id]` (`InstructionsField.tsx`) with a **deterministic** generation
+assist: `orchestrator/studio/instructions-draft.ts` +
+`POST /api/studio/agents/:slug/instructions-draft` compose a draft from the
+CURRENT (possibly unsaved) builder state and return `{draft, derivation}` — the
+derivation names its sources and which were empty. **The endpoint writes
+nothing** and the draft is never auto-saved. **Honest limit:** this is a
+composition, not an LLM generation — an LLM-backed assist needs the R2-10
+session shell plus a spawn budget and non-CI-runnable beats. **F3 parity
+sweep**: 6 items closed (`[data-agent-select]`, click-to-add catalog chips
+alongside DnD, the generation assist, materials toggles, `YamlPreview` renders
+`hooks` + `materials`, `/agents/[id]` added to the `ui:deadpaths` route set), 7
+rejected with owners (templates zone → R2-05-F2/R2-07; triggers block → R2-08 /
+R6-04; Monitor and Run header buttons → R6 one-Run-button rule; conversational
+drafting → R4-15/R4-17 on the R2-10 shell, the shipped alternative being the
+curated `StarterPicker`; two readiness rows that can never read false —
+`[data-ready-count]` stays **6**). `forge-ui/app/agents/[id]/page.tsx` was 948
+lines (over the 800 hard cap) and was **extracted before being extended** into
+`forge-ui/components/studio/agent-builder/` (`RunPanel`, `StarterPicker`,
+`ReadOnlyFields`, `ZoneWrap`, `MaterialsPicker`, `InstructionsField`) over the
+pure `forge-ui/lib/agent-builder-view.ts`. **The shared containment guard**
+`cli/studio-path-guard.ts` generalises the former SKILL.md-only guard to any
+`<root>/<segments…>` shape and is the ONE choke point for five bridge write
+routes (agent PUT, skills POST, flows PUT, projects PUT, instructions-draft
+POST). It asserts **slug identity after realpath** per segment (not a lexical
+`startsWith` and not "somewhere under root" — `evil -> legit` under the same
+root defeats both), walks EVERY segment so a nested `.forge`/`_guidance` tail
+cannot be symlinked, adds an `nlink === 1` leaf check because `realpathSync` is
+structurally blind to a hardlink, treats a dangling symlink as present rather
+than as a free creation slot, and **fails closed when it cannot determine
+existence** (only `ENOENT` means absent; `EACCES`/`ENOTDIR`/anything else is a
+rejection, never a create-mode certification of a path it never inspected). Its
+docstring states the **root-folding contract**: `root` is trusted and
+config-derived, `realpathSync(root)` performs no identity check on it, so every
+untrusted id MUST arrive as its own `segments[]` element and must never be
+folded into `root`. **Accepted residual, disclosed not closed:** the
+check-then-use TOCTOU window between the guard and the caller's write — widened
+at these routes by an attacker-paced `await readJson(req)` — which needs an
+atomic `O_NOFOLLOW` open Node does not expose ergonomically. ADR-027 carries
+the `materials:` + serializer-fidelity amendment. Journeys: the `agents`
+journey went **3 → 11** beats and `/agents/[id]` joined the `ui:deadpaths`
+route set. Parity: **`edit-agent` flipped to ported (7/7, zero exclusions)**;
+**`create-agent` attempted and deliberately left pending** — 9 of its 11
+mockup steps describe real, working surfaces, but the journey walks them
+inside composite beats (`agents-scratch-build` alone covers five of them), so
+parity rule 9's one-BeatRef-per-step cannot be met without splitting a
+currently-passing beat, and its two conversational-drafting steps are NOT
+pre-excluded because R4-15/R4-17 may make them genuinely real on the R2-10
+shell. Full reasoning is recorded on the registry entry itself.
+
 ## Planned initiatives
 
 ### R2-01 Agent-as-runnable primitive
@@ -298,7 +375,7 @@ The **session kind** is a first-class studio object, declared as git-tracked dat
 
 ### R2-09 Agent-builder definition parity (instructions + materials)
 
-- **Status:** planned  ·  **Wave:** 5 (module: agent-builder)
+- **Status:** implemented (2026-08-06 — as-built in R2-B11; F1/F2/F3 met their ACs, F2's generation assist shipped as a deterministic composition with its limit recorded)  ·  **Wave:** 5 (module: agent-builder)
 - **Depends on:** R2-02 (capability descriptor — materials ride it to kickoff surfaces). **Depended on by:** R6's kickoff initiative (consumes `materials` for upload validation).
 - **Context:** Wave-5 cut. In the mockup **every agent carries operator-visible instructions** (`AGENT_INSTRUCTIONS` in `data.jsx` — the full behavioural charter, e.g. the developer's "never read the forge brain; the planner already encoded it") and an **allowed-input-materials declaration** (`AGENT_MATERIALS`: images | documents | audio | data files) consumed by kickoff upload surfaces. As-built: an agent's instructions live as SKILL.md prose the builder does not surface or edit (the builder authors frontmatter/composition; `as-built-inventory.md` §1), and no materials concept exists anywhere. Round-4/5 mockup rounds also assert instructions *generation* in the builder (draft-from-description assist).
 - **Features:**
@@ -479,3 +556,52 @@ prior-art research) demonstrably bottlenecks the linear flow.
   R4-16/R4-17 to light up. Traversal containment blocks symlink escapes but not
   hardlinks, and the realpath/read TOCTOU window is disclosed rather than
   closed — both accepted residuals, documented in the modules themselves.
+- 2026-08-06 — **R2-09 implemented** (branch `feat/r2-09-agent-builder-parity`,
+  ONE PR per D0a — a mid-flight containment/parity split was proposed by T1,
+  declined by T2 and the decline accepted, promoting the standing rule that a
+  PR-split decision is made before decomposition or not at all). Status planned
+  → implemented, as-built in R2-B11. F1 `materials:` as a closed 4-kind
+  vocabulary with one owning module and three enforcement points (registry
+  parse · `materials/enum` lint error · capability descriptor), absent and empty
+  both meaning "accepts nothing"; the enforcement seam ships as the fail-closed
+  function `agentAcceptsMaterial` with **zero production callers** until
+  R6-04-F2's upload, so that consumer cannot mint a permissive gate of its own.
+  F2 instructions surfaced + editable with a **deterministic, non-LLM**
+  generation assist that writes nothing and is never auto-saved (limit recorded:
+  an LLM-backed assist needs the R2-10 shell + a spawn budget); the save path
+  became **byte-faithful** — the original frontmatter bytes are preserved when
+  the projected data is unchanged, the `^-{3,}` → en-dash body mutation is
+  deleted, and `fanout:` stopped being silently dropped. That is a **prompt**
+  fix: five phase bindings + the release finalizer read whole SKILL.md files
+  verbatim into their system prompts. F3 parity sweep — 6 items closed, 7
+  rejected with named owners; `[data-ready-count]` deliberately stays 6 (two
+  mockup readiness rows can never read false, and a readiness row that cannot
+  fail is decoration); `page.tsx` (948 lines, over the 800 hard cap) was
+  extracted into `components/studio/agent-builder/` **before** being extended.
+  **Security:** a review round found a pre-existing **arbitrary-file-write**
+  through the agent PUT (a real `skills/<slug>/` directory with a symlinked
+  `SKILL.md`), and the sweep it triggered reproduced escapes at three more write
+  routes; all four are now behind ONE shared guard (`cli/studio-path-guard.ts`)
+  asserting slug identity after realpath per segment, plus an `nlink` hardlink
+  check and fail-closed handling of an indeterminate `lstat`. Filed and
+  deliberately **NOT** fixed here, with the precise claim recorded: `forge-wze`
+  (P0 — a KB arbitrary-file-write in `resolveKbBrainDir`, whose fix belongs in a
+  shared `orchestrator/` resolver outside this file set) and `forge-b2k` (P1 — a
+  `flowProjectOf` existence oracle, a read not a write). ADR-027 amended
+  (`materials:` + serializer fidelity; T1-pre-ratified as mechanical/factual,
+  decision unchanged). `journey-sync`: the `agents` journey went 3 → 11 beats
+  and `/agents/[id]` joined the `ui:deadpaths` route set; the DOM contract in
+  `docs/forge-ui-dom-and-harness.md` gained the R2-09 additions. Parity was
+  attempted for both agent stories per D11: **`edit-agent` flipped to ported
+  (7/7, zero exclusions)** against a real shipped agent (`developer-ralph`, the
+  one OOTB fixture carrying both a hand-written YAML comment block and a
+  `fanout:` block, so a single beat proves the byte-faithful and
+  fanout-survives claims at once); **`create-agent` was attempted and honestly
+  left pending** — 9 of its 11 mockup steps describe surfaces that genuinely
+  work, but the journey walks them inside composite beats
+  (`agents-scratch-build` alone covers five), so parity rule 9's
+  one-BeatRef-per-step cannot be met without splitting a currently-passing
+  beat; and its two conversational-drafting steps were deliberately NOT
+  recorded as permanent exclusions, because R4-15/R4-17 may make them real on
+  the R2-10 shell and pre-excluding them would freeze a decision those
+  initiatives own. Owed work, reasoning recorded on the registry entry.

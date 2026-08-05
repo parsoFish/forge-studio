@@ -293,8 +293,23 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   //   - If this check ever fires, treat it as a BUG IN THIS MODULE (an
   //     earlier invariant — `isSafeSegment` — was violated), not as a
   //     routine input-rejection path.
+  //
+  // The comparison is SEGMENT-WISE, not a bare `startsWith('..')`. A path
+  // "steps out of root" only when the relative path's FIRST SEGMENT is
+  // exactly `..` — a directory-entry name that merely BEGINS with two dots
+  // (`..foo` is a perfectly legal, perfectly contained name that
+  // `isSafeSegment` correctly allows, since it is neither `.` nor `..` and
+  // holds no separator) yields `rel = "..foo/<leaf>"`, which a bare prefix
+  // test would reject even though the path never left the root. Rejecting a
+  // contained path is a false positive, and it would ALSO have falsified the
+  // "if this ever fires it is a bug in this module" line above. Unreachable
+  // from the five current call sites — every untrusted id is SLUG_RE-gated
+  // to start with a lowercase letter, and every fixed literal segment is
+  // safe — so this is a correctness fix in the module's own contract, not a
+  // closed escape.
   const rel = relative(realRoot, realPath);
-  if (rel === '' || rel.startsWith('..')) {
+  const relFirstSegment = rel.split(sep)[0];
+  if (rel === '' || relFirstSegment === '..') {
     return { ok: false, reason: 'reassembled path escapes the containment root' };
   }
 
