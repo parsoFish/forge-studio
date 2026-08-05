@@ -44,9 +44,45 @@
  *      (nothing to resolve), so a realpath-only containment check passes —
  *      yet writing through it mutates the shared inode. No race required;
  *      100% deterministic. Closed by the `nlink === 1` check on the leaf.
- *   6. A dangling symlink at any segment — `lexists` (lstat-based) reports it
- *      as "there", so it is routed into the realpath check (which throws)
- *      rather than mistaken for a free-to-create slot.
+ *   6. A dangling symlink at any segment — the existence probe (lstat-based)
+ *      reports it as "there", so it is routed into the realpath check (which
+ *      throws) rather than mistaken for a free-to-create slot.
+ *   7. A non-ENOENT `lstat` failure at any segment (EACCES on a
+ *      no-search-permission ancestor, ENOTDIR when a regular file occupies a
+ *      path slot expected to be a directory, or any other/missing errno)
+ *      misread as "does not exist". That inference is only valid for a
+ *      genuine ENOENT; anything else means the guard cannot determine
+ *      existence and must fail CLOSED rather than fall into create-mode for
+ *      a segment it never actually inspected (R2-09 WI-fix3).
+ *
+ * CONTRACT — the `root` parameter is TRUSTED, not another guarded segment
+ * (R2-09 WI-fix3; a follow-on security WI, bd `forge-wze`, relies on this
+ * being stated here):
+ *   - `root` MUST be a fixed, config-derived constant (e.g. `skills/`,
+ *     `studio/flows/`, a project's own root directory) — NEVER
+ *     request-derived, and never built by folding a caller-supplied id into
+ *     it before calling this function.
+ *   - `realpathSync(root)` below deliberately resolves `root` itself with NO
+ *     identity check on it at all — a legitimately symlinked checkout must
+ *     still work. That means anything folded into `root` is trusted
+ *     IMPLICITLY and bypasses every check this module makes; it never
+ *     enters the per-segment identity walk that catches everything else.
+ *   - Every untrusted id MUST arrive as its own element of `segments[]`,
+ *     never concatenated/joined into `root`. For the same malicious
+ *     `untrustedId`, compare:
+ *       WRONG (root-folding — total containment bypass):
+ *         resolveGuardedPath(join(base, untrustedId), ['kb.yaml'])
+ *       RIGHT (per-segment identity check applies):
+ *         resolveGuardedPath(base, [untrustedId, 'kb.yaml'])
+ *     These two calls look nearly identical at a glance; only the second is
+ *     safe. Proven live: with `untrustedId` a symlink pointing outside
+ *     `base`, the WRONG form still returns `{ok:true}` for a path entirely
+ *     outside containment, because `realpathSync(root)` silently folds and
+ *     resolves it before any per-segment check ever runs. Safe TODAY only
+ *     because every current call site passes a trusted, config-derived
+ *     constant for `root` — this is the "guard that cannot fail" shape (see
+ *     the escape-shapes list above) relocated to the `root` parameter
+ *     instead of a `segments[]` element.
  *
  * Create is preserved: the leaf legitimately does not exist yet for a
  * brand-new agent/flow/project (each route's scaffold-on-save path). Rather
@@ -105,16 +141,29 @@ export interface PathGuardReject {
 
 export type PathGuardResult = PathGuardOk | PathGuardReject;
 
-/** Existence test that does NOT follow the final path component — a
- *  dangling symlink (whose target is gone) still "exists" here, so it is
- *  routed into the realpath identity check below rather than mistaken for
- *  an empty creation slot. */
-function lexists(path: string): boolean {
+/** Three-way outcome of probing a segment's existence. Collapsing this to a
+ *  boolean is exactly the fail-open defect this module used to have:
+ *  `lstatSync` can fail for reasons that have nothing to do with absence
+ *  (EACCES on a no-search-permission ancestor, ENOTDIR when a file occupies a
+ *  directory's slot, ...) — those are "cannot determine", not "absent", and
+ *  must fail closed rather than be silently treated as a free creation slot. */
+type ExistenceProbe = { kind: 'exists' } | { kind: 'absent' } | { kind: 'indeterminate'; code: string };
+
+/** Existence probe that does NOT follow the final path component — a
+ *  dangling symlink (whose target is gone) still counts as "there", so it is
+ *  routed into the realpath identity check below rather than mistaken for an
+ *  empty creation slot. Only a genuine ENOENT means "absent"; every other
+ *  `lstatSync` failure (including a missing/undefined `.code`) is
+ *  "indeterminate" and must be handled as fail-closed by the caller — never
+ *  treated as absence. */
+function probeExistence(path: string): ExistenceProbe {
   try {
     lstatSync(path);
-    return true;
-  } catch {
-    return false;
+    return { kind: 'exists' };
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === 'ENOENT') return { kind: 'absent' };
+    return { kind: 'indeterminate', code: code ?? '<no error code>' };
   }
 }
 
@@ -150,6 +199,10 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
 
   let realRoot: string;
   try {
+    // See the module docstring's CONTRACT section: this deliberately
+    // performs NO identity check on `root` itself (only on `segments`
+    // below) — `root` must be trusted/config-derived, never built by
+    // folding a caller-supplied id into it.
     realRoot = realpathSync(root);
   } catch {
     return { ok: false, reason: 'containment root does not exist' };
@@ -162,7 +215,17 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     if (!isSafeSegment(seg)) return { ok: false, reason: `unsafe path segment "${seg}"` };
 
     const expected = join(verified, seg);
-    if (!lexists(expected)) break; // deepest existing ancestor is `verified` — stop, create-mode from here
+    const probe = probeExistence(expected);
+    if (probe.kind === 'indeterminate') {
+      // Cannot determine whether this segment exists — fail CLOSED. Only a
+      // genuine ENOENT means "absent"; any other errno (permission denied, a
+      // file occupying a directory's slot, an unrecognized or missing code)
+      // means this segment was never actually inspected, and certifying
+      // "safe to create" for an uninspected segment is precisely the
+      // fail-open shape this module exists to close everywhere else.
+      return { ok: false, reason: `cannot determine existence of segment "${seg}" (lstat failed: ${probe.code})` };
+    }
+    if (probe.kind === 'absent') break; // deepest existing ancestor is `verified` — stop, create-mode from here
 
     let real: string;
     try {
@@ -211,6 +274,25 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   // Defensive final assertion (belt and suspenders, should be unreachable
   // given every consumed segment is single-component with no '/' or '..'):
   // the reassembled path must still resolve as a descendant of realRoot.
+  //
+  // Scope — what this check does NOT cover; do not mistake it for the
+  // containment guarantee:
+  //   - It is a LEXICAL string check (`relative`/`startsWith`) on an
+  //     UNRESOLVED path — exactly the shape this whole module exists to
+  //     replace (see the module docstring's opening paragraph). It is a
+  //     backstop on the literal reassembly directly above, nothing more.
+  //   - It cannot and does not detect symlinks, hardlinks, cross-object
+  //     same-root aliases, or nested-segment escapes. Those are caught
+  //     ONLY by the per-segment realpath identity walk and the `nlink`
+  //     check earlier in this function — both already ran before this
+  //     line, over the segments that walk proved do not exist yet.
+  //   - It cannot protect a `root` that was itself unsafe (see the
+  //     CONTRACT section in the module docstring): `realRoot` is this
+  //     check's baseline, so anything wrong with `root` is baked into the
+  //     comparison before this line ever runs.
+  //   - If this check ever fires, treat it as a BUG IN THIS MODULE (an
+  //     earlier invariant — `isSafeSegment` — was violated), not as a
+  //     routine input-rejection path.
   const rel = relative(realRoot, realPath);
   if (rel === '' || rel.startsWith('..')) {
     return { ok: false, reason: 'reassembled path escapes the containment root' };
