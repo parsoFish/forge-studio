@@ -15,7 +15,9 @@
  * orchestrator/studio/session-transcript.test.ts (AT-19..AT-37). This file
  * covers AT-38..AT-48, plus AT-59..AT-60 added in the AT-amendment-2 round
  * (session-kinds.test.ts gained AT-49..56, session-transcript.test.ts gained
- * AT-57..58 in the same round — see those files' headers).
+ * AT-57..58 in the same round — see those files' headers), plus AT-70..AT-74
+ * added in AT-amendment-3 (session-kinds.test.ts gained AT-61..67,
+ * session-transcript.test.ts gained AT-68..69 in the same round).
  *
  * AT-amendment-2 additions in THIS file:
  *   AT-59 (A1, the review-flagged BLOCKER) — `phase` is read via
@@ -30,6 +32,18 @@
  *     status.json must be THREADED into `deriveSessionTranscript` so the
  *     phase-driven pending-turn contract (session-transcript.test.ts
  *     AT-57/58) actually reaches the wire, not just the unit level.
+ *
+ * AT-amendment-3, A3 additions in THIS file (AT-70..74) — coverage gap, not
+ * a fresh defect: the AT-amendment-2 fix already produces TWO distinct 404
+ * message buckets for a bad `status.json` (verified by reading the current
+ * route: `session not found (status.json is missing, unreadable, or not
+ * valid JSON)` for missing/malformed/non-object JSON, and `session not found
+ * (status.json has no string "phase" field)` for a valid object with a
+ * missing or non-string phase) — but nothing pinned either bucket, so a
+ * revert to the old misleading "unreadable" wording for the has-no-phase
+ * case would go uncaught. AT-70/71/72 pin the first bucket (3 distinct
+ * causes); AT-73/74 pin the second (2 distinct causes) and explicitly assert
+ * neither claims the file was "unreadable".
  *
  * Design decisions this file pins:
  *
@@ -84,6 +98,12 @@ const SECRET_MARKER = 'TOP-SECRET-BRIDGE-ESCAPE-MARKER-4471';
 const STATUS_ESCAPE_SESSION = '2026-08-06T15-00-00';
 const STATUS_SECRET_MARKER = 'LEAKED-STATUS-PHASE-MARKER-6602';
 const REASK_SESSION = '2026-08-07T16-00-00';
+// AT-amendment-3, A3 — the five distinct status.json failure shapes.
+const MISSING_STATUS_SESSION = '2026-08-08T17-00-00';
+const INVALID_JSON_STATUS_SESSION = '2026-08-08T17-01-00';
+const NON_OBJECT_STATUS_SESSION = '2026-08-08T17-02-00';
+const NO_PHASE_STATUS_SESSION = '2026-08-08T17-03-00';
+const NON_STRING_PHASE_STATUS_SESSION = '2026-08-08T17-04-00';
 
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
@@ -245,6 +265,34 @@ before(async () => {
     'utf8',
   );
   writeFileSync(join(reaskDir, 'status.json'), JSON.stringify({ session_id: REASK_SESSION, project: 'reaskproj', phase: 'awaiting-answers' }), 'utf8');
+
+  // AT-amendment-3, A3 — the five distinct status.json failure shapes, each
+  // a real, otherwise-legitimate session dir (idea.md present) differing
+  // only in status.json's shape.
+  const missingStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', MISSING_STATUS_SESSION);
+  mkdirSync(missingStatusDir, { recursive: true });
+  writeFileSync(join(missingStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
+  // No status.json written at all.
+
+  const invalidJsonStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', INVALID_JSON_STATUS_SESSION);
+  mkdirSync(invalidJsonStatusDir, { recursive: true });
+  writeFileSync(join(invalidJsonStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
+  writeFileSync(join(invalidJsonStatusDir, 'status.json'), 'not valid json {{{', 'utf8');
+
+  const nonObjectStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', NON_OBJECT_STATUS_SESSION);
+  mkdirSync(nonObjectStatusDir, { recursive: true });
+  writeFileSync(join(nonObjectStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
+  writeFileSync(join(nonObjectStatusDir, 'status.json'), JSON.stringify([1, 2, 3]), 'utf8'); // valid JSON, but an array, not an object
+
+  const noPhaseStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', NO_PHASE_STATUS_SESSION);
+  mkdirSync(noPhaseStatusDir, { recursive: true });
+  writeFileSync(join(noPhaseStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
+  writeFileSync(join(noPhaseStatusDir, 'status.json'), JSON.stringify({ session_id: NO_PHASE_STATUS_SESSION, project: 'statusbucketproj' }), 'utf8'); // valid object, no "phase" key at all
+
+  const nonStringPhaseStatusDir = join(projectsRoot, 'statusbucketproj', '_architect', NON_STRING_PHASE_STATUS_SESSION);
+  mkdirSync(nonStringPhaseStatusDir, { recursive: true });
+  writeFileSync(join(nonStringPhaseStatusDir, 'idea.md'), 'An idea.\n', 'utf8');
+  writeFileSync(join(nonStringPhaseStatusDir, 'status.json'), JSON.stringify({ session_id: NON_STRING_PHASE_STATUS_SESSION, project: 'statusbucketproj', phase: 42 }), 'utf8'); // phase present but not a string
 
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const result = await startBridge({ forgeRoot, port: 0 });
@@ -544,4 +592,55 @@ test('AT-60: a session genuinely awaiting-answers, with a VERBATIM re-asked ques
   assert.ok(pending, `expected a pending agent turn for the verbatim re-ask (phase awaiting-answers), got turns: ${JSON.stringify(body.turns)}`);
   assert.equal(pending!.role, 'agent');
   assert.equal(pending!.text, 'What is the project name?');
+});
+
+// ---------------------------------------------------------------------------
+// AT-amendment-3, A3 (AT-70..74) — the 404 message buckets for every
+// status.json failure shape. Confirmed by reading the current route (not
+// guessed): bucket 1 = "session not found (status.json is missing,
+// unreadable, or not valid JSON)" for missing/malformed-JSON/non-object;
+// bucket 2 = 'session not found (status.json has no string "phase" field)'
+// for a valid object with a missing or non-string phase. All five ATs below
+// are GREEN ON ARRIVAL — this is coverage against regression, not a fresh
+// catch; reported honestly rather than implied as a new defect.
+// ---------------------------------------------------------------------------
+
+const STATUS_MISSING_OR_MALFORMED_MESSAGE = 'session not found (status.json is missing, unreadable, or not valid JSON)';
+const STATUS_NO_PHASE_MESSAGE = 'session not found (status.json has no string "phase" field)';
+
+test('AT-70: status.json missing entirely → 404, the exact "missing/unreadable/not-JSON" bucket message', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${MISSING_STATUS_SESSION}?project=statusbucketproj`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, STATUS_MISSING_OR_MALFORMED_MESSAGE);
+});
+
+test('AT-71: status.json present but not valid JSON → 404, the exact "missing/unreadable/not-JSON" bucket message', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${INVALID_JSON_STATUS_SESSION}?project=statusbucketproj`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, STATUS_MISSING_OR_MALFORMED_MESSAGE);
+});
+
+test('AT-72: status.json is valid JSON but NOT an object (an array) → 404, the exact "missing/unreadable/not-JSON" bucket message', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${NON_OBJECT_STATUS_SESSION}?project=statusbucketproj`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, STATUS_MISSING_OR_MALFORMED_MESSAGE);
+});
+
+test('AT-73: status.json is a valid object with NO "phase" field → 404, the exact "no string phase" bucket message — must NOT claim the file was unreadable', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${NO_PHASE_STATUS_SESSION}?project=statusbucketproj`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, STATUS_NO_PHASE_MESSAGE);
+  assert.ok(!body.error.toLowerCase().includes('unreadable'), `a valid, readable status.json missing "phase" must NOT be described as unreadable, got: ${body.error}`);
+});
+
+test('AT-74: status.json\'s "phase" is present but NOT a string (a number) → 404, the exact "no string phase" bucket message — must NOT claim the file was unreadable', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${NON_STRING_PHASE_STATUS_SESSION}?project=statusbucketproj`);
+  assert.equal(res.status, 404);
+  const body = (await res.json()) as { error: string };
+  assert.equal(body.error, STATUS_NO_PHASE_MESSAGE);
+  assert.ok(!body.error.toLowerCase().includes('unreadable'), `a valid, readable status.json with a non-string phase must NOT be described as unreadable, got: ${body.error}`);
 });

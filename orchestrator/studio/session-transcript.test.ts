@@ -8,9 +8,27 @@
  *
  * AT numbers continue the flat R2-10 sequence started in
  * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18, +AT-49..AT-56 in
- * the AT-amendment-2 round). This file covers AT-19..AT-37, +AT-57..AT-58
- * (AT-amendment-2). cli/bridge-studio-sessions.test.ts covers AT-38..AT-48,
- * +AT-59..AT-60.
+ * the AT-amendment-2 round, +AT-61..AT-67 in AT-amendment-3). This file
+ * covers AT-19..AT-37, +AT-57..AT-58 (AT-amendment-2), +AT-68..AT-69
+ * (AT-amendment-3). cli/bridge-studio-sessions.test.ts covers AT-38..AT-48,
+ * +AT-59..AT-60, +AT-70..AT-74.
+ *
+ * AT-amendment-3, A2 (AT-68..69): `listDirEntries` (session-transcript.ts)
+ * calls `readdirSync` on `manifests/`/`themes/` with no realpath containment
+ * check on the SUBDIRECTORY itself — if that subdirectory is ITSELF a
+ * symlink to an outside directory, `readdirSync` follows it. Per-file
+ * content stays blocked (`safeReadFileInSession` still realpath-guards each
+ * individual read), but the module's own comment claiming this "leaks
+ * nothing" is not quite accurate: empirically verified (see the T3 report)
+ * that for `brain-structure` the outside filename genuinely never surfaces
+ * anywhere in the returned artifact today (the null-body entries are
+ * silently skipped before `files`/`themeCount` are computed — already
+ * correct), but for `roadmap-draft`, `sourcesScanned` reports
+ * `${files.length} file(s) found` computed from the UN-filtered
+ * `listDirEntries` result — which DOES reflect the escaped directory's real
+ * file count. T2's ruling: the subdirectory gets the SAME realpath
+ * containment as the files (an escaping dir-symlink is treated as absent,
+ * exactly like a missing directory) — AT-68/69 pin that end state.
  *
  * AT-amendment-2 (T2-ratified, supersedes the implementer's original design):
  * `questions.json` pending-ness is no longer exact-text set-difference
@@ -548,5 +566,83 @@ describe('deriveSessionTranscript — questions.json pending-ness is phase-drive
 
     const turns = okTurns(deriveSessionTranscript({ descriptor: architectDescriptor(), sessionDir, phase: 'drafting' }));
     assert.ok(!turns.some((t) => t.source === 'questions.json'), `expected NO pending turn when phase is not "awaiting-answers", got: ${JSON.stringify(turns)}`);
+  });
+});
+
+// ===========================================================================
+// AT-amendment-3, A2 (AT-68, AT-69) — listDirEntries has no containment
+// check on the SUBDIRECTORY itself (manifests/ or themes/ being ITSELF a
+// symlink to an outside dir). See the module header for the full contract
+// and what was empirically verified.
+// ===========================================================================
+
+describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ itself) gets realpath containment too (AT-amendment-3, A2)', () => {
+  it('AT-68: themes/ is a symlink to an outside dir containing a uniquely-named .md file → brain-structure reports themeCount:0/files:[] and the outside FILENAME never appears anywhere in the result; a real (non-symlinked) themes/ in a separate session still enumerates correctly (positive control)', () => {
+    const outsideThemesDir = makeTmpDir('brain-dirsymlink-outside-');
+    const OUTSIDE_FILENAME_MARKER = 'UNIQUELY-NAMED-OUTSIDE-THEME-FILE-4471.md';
+    writeFileSync(join(outsideThemesDir, OUTSIDE_FILENAME_MARKER), '# outside theme\n', 'utf8');
+
+    const escapedSessionDir = makeTmpDir('brain-dirsymlink-session-');
+    symlinkSync(outsideThemesDir, join(escapedSessionDir, 'themes'));
+
+    const artifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir: escapedSessionDir }) as {
+      themeCount: number;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(artifact.themeCount, 0, `an escaping themes/ dir-symlink must be treated as absent (empty), got: ${JSON.stringify(artifact)}`);
+    assert.deepEqual(artifact.files, []);
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(OUTSIDE_FILENAME_MARKER), `the outside directory's real FILENAME must never appear anywhere in the result (not just its body), got: ${serialized}`);
+
+    // Positive control: a real, non-symlinked themes/ in a SEPARATE session
+    // still enumerates correctly — proves the fix (once applied) discriminates
+    // rather than blocking every themes/ dir outright.
+    const cleanSessionDir = makeTmpDir('brain-dirsymlink-clean-');
+    mkdirSync(join(cleanSessionDir, 'themes'), { recursive: true });
+    writeFileSync(join(cleanSessionDir, 'themes', 'real-theme.md'), '# a real theme\n', 'utf8');
+    const cleanArtifact = deriveSessionArtifact({ descriptor: projectBrainDescriptor(), sessionDir: cleanSessionDir }) as {
+      themeCount: number;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(cleanArtifact.themeCount, 1, 'a real, non-symlinked themes/ dir must still enumerate correctly');
+    assert.ok(cleanArtifact.files.some((f) => f.path.includes('real-theme.md')));
+  });
+
+  it('AT-69: manifests/ is a symlink to an outside dir → roadmap-draft reports rows:[] AND sourcesScanned reports "0 file(s) found" (NOT the escaped directory\'s real file count — this is the part that currently fails); a real (non-symlinked) manifests/ in a separate session still enumerates correctly (positive control)', () => {
+    const outsideManifestsDir = makeTmpDir('roadmap-dirsymlink-outside-');
+    const OUTSIDE_MARKER = 'INIT-OUTSIDE-DIRSYMLINK-LEAK-9042';
+    writeFileSync(join(outsideManifestsDir, 'outside-manifest.md'), serializeManifest(realManifest({ initiative_id: OUTSIDE_MARKER })), 'utf8');
+
+    const escapedSessionDir = makeTmpDir('roadmap-dirsymlink-session-');
+    symlinkSync(outsideManifestsDir, join(escapedSessionDir, 'manifests'));
+
+    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir: escapedSessionDir }) as {
+      rows: unknown[];
+      sourcesScanned: string[];
+    };
+    assert.deepEqual(artifact.rows, [], 'an escaping manifests/ dir-symlink must never contribute a row');
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(OUTSIDE_MARKER), 'the escaped manifest\'s content must never surface');
+    assert.ok(!serialized.includes('outside-manifest.md'), 'the outside directory\'s real FILENAME must never appear anywhere in the result');
+    // The count leak: sourcesScanned must report the dir as EMPTY (treated as
+    // absent), not the escaped directory's real file count.
+    assert.ok(
+      artifact.sourcesScanned.some((s) => s.includes('0 file(s) found')),
+      `sourcesScanned must report "0 file(s) found" (the escaping dir treated as absent), got: ${JSON.stringify(artifact.sourcesScanned)}`,
+    );
+
+    // Positive control: a real, non-symlinked manifests/ in a SEPARATE
+    // session still enumerates correctly.
+    const cleanSessionDir = makeTmpDir('roadmap-dirsymlink-clean-');
+    const cleanManifestsDir = join(cleanSessionDir, 'manifests');
+    mkdirSync(cleanManifestsDir, { recursive: true });
+    const REAL_MARKER = 'INIT-2026-01-09-real-manifest';
+    writeFileSync(join(cleanManifestsDir, 'real.md'), serializeManifest(realManifest({ initiative_id: REAL_MARKER })), 'utf8');
+    const cleanArtifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir: cleanSessionDir }) as {
+      rows: Array<{ initiativeId: string }>;
+      sourcesScanned: string[];
+    };
+    assert.deepEqual(cleanArtifact.rows.map((r) => r.initiativeId), [REAL_MARKER]);
+    assert.ok(cleanArtifact.sourcesScanned.some((s) => s.includes('1 file(s) found')));
   });
 });

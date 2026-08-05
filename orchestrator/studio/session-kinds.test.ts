@@ -18,6 +18,17 @@
  *   AT-57 .. AT-58 — session-transcript.test.ts (A2: phase-driven pending)
  *   AT-59 .. AT-60 — bridge-studio-sessions.test.ts (A1: status.json symlink
  *                    escape blocker; A2 route-level re-ask case)
+ * AT-amendment-3 round (fresh re-review of the amendment-2 fix, `8893ffcd`)
+ * adds:
+ *   AT-61 .. AT-67 — this file (A1: legacyRouteResolves has no containment
+ *                    check — a regression the amendment-2 FIX ITSELF
+ *                    introduced while closing the original declared-data
+ *                    gap; see the AT-61..67 block below)
+ *   AT-68 .. AT-69 — session-transcript.test.ts (A2: listDirEntries can
+ *                    enumerate an outside directory when manifests/themes
+ *                    is itself a dir-level symlink)
+ *   AT-70 .. AT-74 — bridge-studio-sessions.test.ts (A3: the 404 message
+ *                    buckets for every status.json failure shape)
  *
  * A3 (this file, AT-49..52): `legacyRoutes` was parsed, typed, and echoed
  * back, but never actually checked — declared-data-fails-open. New contract:
@@ -27,6 +38,20 @@
  * literal `[sessionId]` dynamic-segment folders — e.g.
  * `/architect/[sessionId]/interview` → `forge-ui/app/architect/[sessionId]/interview`,
  * verified to exist on disk for AT-52).
+ *
+ * AT-amendment-3, A1 (this file, AT-61..67): the amendment-2 fix for A3
+ * added `legacyRouteResolves(forgeRoot, route)`, which does
+ * `existsSync(join(forgeRoot, 'forge-ui', 'app', ...segments))` with NO
+ * check that the resolved path stays under `forge-ui/app/` — `path.join`
+ * normalizes `..` segments before `existsSync` ever runs. A route entry
+ * containing enough `..` escapes to ANY real directory (including, via
+ * enough `..` segments to clamp past the filesystem root, arbitrary
+ * absolute paths like `/etc`) and is wrongly accepted as "resolved". Every
+ * AT below was empirically verified against the actual (unfixed)
+ * `legacyRouteResolves`/`validateSessionKinds` before being written — see
+ * each test's comment for whether it demonstrates a LIVE bypass (RED today)
+ * or pins an already-safe shape (GREEN today, coverage only — reported
+ * honestly per T2's brief, not disguised as a fresh catch).
  *
  * Design decisions this file pins (see the T3 report for the full rationale):
  *   - `studio/session-kinds.yaml` is a bare top-level YAML sequence of
@@ -518,5 +543,127 @@ describe('validateSessionKinds — YAML structural coverage (AT-amendment-2, A4)
     const root = makeForgeRoot();
     writeRawYaml(root, '- "just a string, not a mapping"\n- id: also-irrelevant\n');
     assertExactlyOneLoadError(root);
+  });
+});
+
+// ===========================================================================
+// AT-amendment-3, A1 (AT-61..67) — legacyRouteResolves has NO containment
+// check. `existsSync(join(forgeRoot, 'forge-ui', 'app', ...segments))` is
+// evaluated on the path.join()-NORMALIZED result — `..` segments collapse
+// BEFORE existsSync runs, so a route entry can point anywhere `existsSync`
+// can see. Every scenario below was run against the actual, unfixed
+// `legacyRouteResolves`/`validateSessionKinds` before being written (see
+// each test's comment for the empirically-verified outcome).
+// ===========================================================================
+
+describe('validateSessionKinds — legacyRouteResolves has NO containment check (AT-amendment-3, A1)', () => {
+  it('AT-61: a legacyRoutes entry escaping upward to a REAL directory OUTSIDE forge-ui/app → error (empirically verified: currently returns true, i.e. wrongly "resolves" — LIVE bypass)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]'); // negative control: the real, legitimate sibling
+    mkdirSync(join(root, 'escaped-outside-target'), { recursive: true }); // the escape target REALLY exists
+    const evilRoute = '../../escaped-outside-target'; // forge-ui/app/../.. => root; + escaped-outside-target
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', evilRoute] })]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 finding (the escape, not the real sibling), got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes(evilRoute), `message must name the offending route, got: ${routeFindings[0].message}`);
+  });
+
+  it('AT-62: a legacyRoutes entry of exactly "../../.." → error (empirically verified: normalizes ONE level above forgeRoot — not forgeRoot itself, but still a real, always-present directory — currently returns true — LIVE bypass)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    const evilRoute = '../../..';
+    // Sanity precondition (not the assertion under test): confirm the target
+    // this route actually resolves to is real, so the AT can't pass for the
+    // wrong reason (a route that resolves to nothing would be correctly
+    // rejected even by the buggy code).
+    const target = join(root, 'forge-ui', 'app', '..', '..', '..');
+    assert.ok(existsSync(target), `precondition failed: "${target}" (what "../../.." resolves to) must exist for this AT to mean anything`);
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', evilRoute] })]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 finding, got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes(evilRoute));
+  });
+
+  it('AT-63: legacyRoutes entries reaching absolute filesystem paths via excess ".." segments (clamps past the root, then descends into "/etc" and a self-controlled outside dir) → error for EACH (empirically verified: both currently return true — LIVE bypass; a literal bare "/etc" string does NOT bypass on this codebase — see AT-64\'s neighbor note — this is the actual reachable shape)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    const outsideAbsDir = makeForgeRoot('legacy-abs-outside-target-'); // a REAL, independent absolute dir
+    const manyDotDot = Array(30).fill('..').join('/'); // safely more than any real nesting depth
+    const routeToEtc = `${manyDotDot}/etc`;
+    const routeToOutsideAbsDir = manyDotDot + outsideAbsDir; // outsideAbsDir already starts with '/'
+    writeSessionKindsYaml(root, [
+      baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', routeToEtc, routeToOutsideAbsDir] }),
+    ]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 2, `expected exactly 2 findings (both absolute escapes, not the real sibling), got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings.some((f) => f.message.includes(routeToEtc)), `expected a finding naming the /etc escape, got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings.some((f) => f.message.includes(routeToOutsideAbsDir)), `expected a finding naming the outside-dir escape, got: ${JSON.stringify(routeFindings)}`);
+  });
+
+  it('AT-64: a legacyRoutes entry containing a BACKSLASH separator → error (empirically verified: this does NOT bypass containment today — POSIX treats "\\\\" as a plain filename character, not a separator, so the literal-backslash "filename" simply never exists; ALREADY correctly rejected — pinned as coverage, not a fresh catch)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    const backslashRoute = '..\\..\\escaped-outside-target';
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', backslashRoute] })]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 finding, got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes(backslashRoute));
+  });
+
+  it('AT-65: a legacyRoutes entry containing a NULL BYTE → error (empirically verified: does NOT bypass — existsSync neither throws nor matches a literal-NUL "filename"; ALREADY correctly rejected — pinned as coverage, not a fresh catch)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    mkdirSync(join(root, 'escaped-outside-target'), { recursive: true }); // real target — proves the NUL, not a missing dir, is what blocks it
+    const nullByteRoute = '../../escaped-outside-target' + String.fromCharCode(0);
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', nullByteRoute] })]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 finding, got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes('escaped-outside-target'));
+  });
+
+  it('AT-66: a legacyRoutes entry containing a URL-ENCODED traversal ("%2e%2e%2f...") → error (empirically verified: never URL-decoded anywhere in this code path — the literal percent-text is just an opaque filename that never exists; ALREADY correctly rejected — pinned as coverage, not a fresh catch)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    const encodedRoute = '%2e%2e%2fescaped-outside-target';
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', encodedRoute] })]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 finding, got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes(encodedRoute));
+  });
+
+  it('AT-67: a legacyRoutes entry that escapes and comes back down to the SAME real, legitimate directory → error (T2 ruling: a declared route is a Studio route path, not a filesystem expression — "../app/fixture-kind/[sessionId]" numerically round-trips to the real target, but the STRING contains ".." and must be rejected regardless; empirically verified: currently returns true — LIVE bypass, and the most dangerous shape since it looks harmless on inspection)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeForgeUiRoute(root, '/fixture-kind/[sessionId]');
+    const roundTripRoute = '../app/fixture-kind/[sessionId]'; // normalizes right back to the real target
+    // Sanity precondition: confirm this route really does round-trip to the
+    // legitimate target (so the AT is pinning "must reject despite being
+    // numerically legitimate", not accidentally pinning a missing-dir case).
+    const target = join(root, 'forge-ui', 'app', '..', 'app', 'fixture-kind', '[sessionId]');
+    assert.ok(existsSync(target), `precondition failed: "${target}" must exist (it's the same real dir as the legitimate route)`);
+    writeSessionKindsYaml(root, [baseDescriptor({ legacyRoutes: ['/fixture-kind/[sessionId]', roundTripRoute] })]);
+
+    const findings = validateSessionKinds(root);
+    const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
+    assert.equal(routeFindings.length, 1, `expected exactly 1 finding — a route string containing ".." must be rejected even when it numerically resolves back to a legitimate target, got: ${JSON.stringify(routeFindings)}`);
+    assert.ok(routeFindings[0].message.includes(roundTripRoute));
   });
 });
