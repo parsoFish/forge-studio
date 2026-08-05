@@ -16,6 +16,40 @@
  *
  * No DOM, no React, no network — mirrors file-package.ts's / skill-library-
  * view.ts's testability convention exactly.
+ *
+ * ---------------------------------------------------------------------------
+ * AMENDMENTS (T2 review, 2026-08-05):
+ *
+ * Correction 1 — every artifact fixture below now carries a required `label`
+ * field (see session-client.test.ts's AT-90 / header amendment for the full
+ * rationale: `label` is threaded from the wire, never a client-side lookup).
+ * Mechanical only here — no existing assertion in AT-70..89 changes.
+ *
+ * Correction 2 — `sessionArtifactView` gains an OPTIONAL second parameter,
+ * `stage?: string`: the currently-selected stage (`session-shell-view.ts`'s
+ * `state.selectedStage`), threaded to the dispatch boundary so a future
+ * stage-aware renderer (R4-17's reserved `contract-buildout` row) can be a
+ * drop-in without changing the wire, the client, or this dispatcher's
+ * signature again. Made OPTIONAL specifically so every existing AT-70..89
+ * call site is untouched (T2: "do not renumber existing ATs... do not weaken
+ * any assertion") — AT-91..94 below are strictly additive.
+ *
+ * Every real, LIVE kind today (roadmap-draft/markdown-draft/brain-structure)
+ * is stage-UNAWARE by nature — a roadmap draft or an AGENTS.md draft has no
+ * notion of "which stage" — so `stage` reaching them is a no-op (AT-91 pins
+ * this invariance explicitly, so nobody later makes them accidentally
+ * stage-sensitive). Every kind that WOULD be stage-aware (contract-buildout)
+ * is still a RESERVED row with zero renderer implementation anywhere — per
+ * the brief's "zero stubs" rule, this file does not invent one. Instead the
+ * dispatch-boundary proof rides the RESERVED/unknown-kind error paths that
+ * already exist (AT-85..89): the thrown message now names the REQUESTED
+ * stage when one was passed, which is only possible if the dispatcher
+ * genuinely received and threaded the argument through to where it builds
+ * that error (AT-92/93). AT-94 closes the loop end-to-end against
+ * session-shell-view.ts's real `selectStage`, proving the INPUT changes
+ * while the OUTPUT for a stage-unaware live kind stays byte-identical — the
+ * exact seam R4-17 needs, pinned without a fake renderer.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -27,6 +61,8 @@ import {
 } from './session-artifact-view.ts';
 import { filePackageTabs, selectFile } from './file-package.ts';
 import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact } from './session-client.ts';
+import { sessionShellState, selectStage } from './session-shell-view.ts';
+import type { SessionShellPayload } from './session-client.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -34,6 +70,7 @@ import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifac
 
 const NONEMPTY_ROADMAP: RoadmapDraftArtifact = {
   kind: 'roadmap-draft',
+  label: 'Roadmap draft',
   rows: [
     { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md' },
     { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' },
@@ -43,16 +80,18 @@ const NONEMPTY_ROADMAP: RoadmapDraftArtifact = {
 
 const EMPTY_ROADMAP: RoadmapDraftArtifact = {
   kind: 'roadmap-draft',
+  label: 'Roadmap draft',
   rows: [],
   sourcesScanned: ['manifests/*.md (0 file(s) found)'],
 };
 
-const NO_DRAFT: MarkdownDraftArtifact = { kind: 'markdown-draft', body: null, hasDraft: false };
-const EMPTY_DRAFT: MarkdownDraftArtifact = { kind: 'markdown-draft', body: '', hasDraft: true };
-const REAL_DRAFT: MarkdownDraftArtifact = { kind: 'markdown-draft', body: '# AGENTS.md\n\nDraft body.\n', hasDraft: true };
+const NO_DRAFT: MarkdownDraftArtifact = { kind: 'markdown-draft', label: 'AGENTS.md draft', body: null, hasDraft: false };
+const EMPTY_DRAFT: MarkdownDraftArtifact = { kind: 'markdown-draft', label: 'AGENTS.md draft', body: '', hasDraft: true };
+const REAL_DRAFT: MarkdownDraftArtifact = { kind: 'markdown-draft', label: 'AGENTS.md draft', body: '# AGENTS.md\n\nDraft body.\n', hasDraft: true };
 
 const BRAIN_ARTIFACT: BrainStructureArtifact = {
   kind: 'brain-structure',
+  label: 'Seeded structure',
   themeCount: 2,
   files: [
     { path: 'themes/alpha.md', body: '# Alpha' },
@@ -60,7 +99,7 @@ const BRAIN_ARTIFACT: BrainStructureArtifact = {
   ],
 };
 
-const EMPTY_BRAIN_ARTIFACT: BrainStructureArtifact = { kind: 'brain-structure', themeCount: 0, files: [] };
+const EMPTY_BRAIN_ARTIFACT: BrainStructureArtifact = { kind: 'brain-structure', label: 'Seeded structure', themeCount: 0, files: [] };
 
 // ===========================================================================
 // roadmapDraftView — AT-70..AT-73
@@ -83,14 +122,14 @@ test('AT-71: roadmapDraftView: zero rows is an HONEST empty state naming what wa
 });
 
 test('AT-72: roadmapDraftView: the empty message is derived from sourcesScanned, not a generic hardcoded string — a different scanned source is reflected verbatim', () => {
-  const differentSource: RoadmapDraftArtifact = { kind: 'roadmap-draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)', 'a-second-source (3 scanned)'] };
+  const differentSource: RoadmapDraftArtifact = { kind: 'roadmap-draft', label: 'Roadmap draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)', 'a-second-source (3 scanned)'] };
   const view = roadmapDraftView(differentSource);
   expect(view.emptyMessage).toContain('manifests/*.md (0 file(s) found)');
   expect(view.emptyMessage).toContain('a-second-source (3 scanned)'); // multiple scanned sources are never silently truncated to the first
 });
 
 test('AT-73: roadmapDraftView: a single-row artifact is never mistaken for empty', () => {
-  const oneRow: RoadmapDraftArtifact = { kind: 'roadmap-draft', rows: [NONEMPTY_ROADMAP.rows[0]!], sourcesScanned: ['manifests/*.md (1 file(s) found)'] };
+  const oneRow: RoadmapDraftArtifact = { kind: 'roadmap-draft', label: 'Roadmap draft', rows: [NONEMPTY_ROADMAP.rows[0]!], sourcesScanned: ['manifests/*.md (1 file(s) found)'] };
   const view = roadmapDraftView(oneRow);
   expect(view.isEmpty).toBe(false);
   expect(view.emptyMessage).toBeNull();
@@ -131,7 +170,7 @@ test('AT-77: markdownDraftView: the three states (no-draft, empty-draft, has-con
 // ===========================================================================
 
 test('AT-78: brainStructureView: themeCount passes through VERBATIM from the artifact — never re-derived from files.length (a legitimately divergent count, e.g. some theme files failed server-side parsing, must not be "corrected")', () => {
-  const divergent: BrainStructureArtifact = { kind: 'brain-structure', themeCount: 5, files: BRAIN_ARTIFACT.files };
+  const divergent: BrainStructureArtifact = { kind: 'brain-structure', label: 'Seeded structure', themeCount: 5, files: BRAIN_ARTIFACT.files };
   const view = brainStructureView(divergent);
   expect(view.themeCount).toBe(5);
   expect(view.themeCount).not.toBe(divergent.files.length);
@@ -235,4 +274,103 @@ test('AT-89: sessionArtifactView: all three reserved kinds produce pairwise-dist
     }
   });
   expect(new Set(messages).size).toBe(3);
+});
+
+// ===========================================================================
+// AT-amendment (T2 Correction 2, 2026-08-05) — the selected-stage seam:
+// `sessionArtifactView(artifact, stage?)` threads the currently-selected
+// stage to the dispatch boundary. Today's 3 live renderers are stage-
+// UNAWARE (invariant); the seam itself — the argument reaching dispatch — is
+// pinned via the RESERVED/unknown-kind error paths (no stub renderer
+// invented) and via an end-to-end check against session-shell-view.ts's real
+// `selectStage`. — AT-91..94
+// ===========================================================================
+
+test('AT-91: sessionArtifactView: for each of the 3 LIVE (stage-unaware) kinds, the output is IDENTICAL regardless of which stage is passed — the stage argument must never make an already-shipped renderer stage-sensitive', () => {
+  const roadmapNoStage = sessionArtifactView(NONEMPTY_ROADMAP);
+  const roadmapStageA = sessionArtifactView(NONEMPTY_ROADMAP, 'contract');
+  const roadmapStageB = sessionArtifactView(NONEMPTY_ROADMAP, 'roadmap');
+  expect(roadmapStageA).toEqual(roadmapNoStage);
+  expect(roadmapStageB).toEqual(roadmapNoStage);
+
+  const markdownNoStage = sessionArtifactView(REAL_DRAFT);
+  const markdownStageA = sessionArtifactView(REAL_DRAFT, 'instructions');
+  const markdownStageB = sessionArtifactView(REAL_DRAFT, 'demo');
+  expect(markdownStageA).toEqual(markdownNoStage);
+  expect(markdownStageB).toEqual(markdownNoStage);
+
+  const brainNoStage = sessionArtifactView(BRAIN_ARTIFACT);
+  const brainStageA = sessionArtifactView(BRAIN_ARTIFACT, 'brain');
+  const brainStageB = sessionArtifactView(BRAIN_ARTIFACT, 'secrets');
+  expect(brainStageA).toEqual(brainNoStage);
+  expect(brainStageB).toEqual(brainNoStage);
+});
+
+test('AT-92: sessionArtifactView: a RESERVED kind\'s thrown message NAMES the requested stage when one is passed — proof the stage argument genuinely reaches the dispatch boundary, not a fake/unused parameter', () => {
+  let noStageMessage = '';
+  let withStageMessage = '';
+  try {
+    sessionArtifactView({ kind: 'contract-buildout' });
+  } catch (err) {
+    noStageMessage = String(err);
+  }
+  try {
+    sessionArtifactView({ kind: 'contract-buildout' }, 'demo');
+  } catch (err) {
+    withStageMessage = String(err);
+  }
+  expect(withStageMessage).toContain('demo');
+  expect(withStageMessage).not.toBe(noStageMessage); // the two call shapes are observably different
+  expect(withStageMessage).toContain('contract-buildout'); // still names the reserved kind too
+});
+
+test('AT-93: sessionArtifactView: an UNKNOWN kind\'s thrown message also names the requested stage when one is passed, and differs per stage value (not a hardcoded suffix)', () => {
+  let stageX = '';
+  let stageY = '';
+  try {
+    sessionArtifactView({ kind: 'totally-bogus-kind' }, 'contract');
+  } catch (err) {
+    stageX = String(err);
+  }
+  try {
+    sessionArtifactView({ kind: 'totally-bogus-kind' }, 'roadmap');
+  } catch (err) {
+    stageY = String(err);
+  }
+  expect(stageX).toContain('contract');
+  expect(stageY).toContain('roadmap');
+  expect(stageX).not.toBe(stageY);
+});
+
+test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() changes state.selectedStage, and that CHANGED value is exactly what a caller threads into sessionArtifactView as its stage input — while a stage-unaware live kind\'s OUTPUT stays byte-identical across the switch. This is the drop-in seam R4-17 needs, pinned without inventing a stub renderer.', () => {
+  const payload: SessionShellPayload = {
+    ok: true,
+    kind: 'future-multi-stage-kind',
+    sessionId: '2026-08-05T14-00-00',
+    project: 'gitpulse',
+    phase: 'in-progress',
+    stages: ['contract', 'instructions', 'secrets', 'demo', 'roadmap'],
+    defaultStage: 'instructions',
+    turns: [],
+    artifact: NONEMPTY_ROADMAP, // today's live, stage-unaware kind, reused for this fixture
+  };
+
+  const initial = sessionShellState(payload);
+  expect(initial.selectedStage).toBe('instructions');
+  const viewAtInitial = sessionArtifactView(initial.artifact, initial.selectedStage);
+
+  const switched = selectStage(initial, 'demo');
+  expect(switched.ok).toBe(true);
+  if (!switched.ok) return;
+  expect(switched.state.selectedStage).toBe('demo');
+  expect(switched.state.selectedStage).not.toBe(initial.selectedStage); // the INPUT genuinely changed
+
+  const viewAfterSwitch = sessionArtifactView(switched.state.artifact, switched.state.selectedStage);
+
+  // The dispatcher received a DIFFERENT stage value on the second call...
+  expect(initial.selectedStage).not.toBe(switched.state.selectedStage);
+  // ...yet the OUTPUT is unchanged, because roadmap-draft is stage-unaware —
+  // exactly the invariance AT-91 pins, now proven through the real state
+  // machinery rather than a hand-built stage string.
+  expect(viewAfterSwitch).toEqual(viewAtInitial);
 });

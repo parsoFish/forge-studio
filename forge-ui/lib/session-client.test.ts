@@ -41,6 +41,33 @@
  * AT numbers start fresh at AT-1 for PR2 (PR1's AT-1..74 sequence, spread
  * across session-kinds.test.ts / session-transcript.test.ts / bridge-studio-
  * sessions.test.ts, is closed).
+ *
+ * ---------------------------------------------------------------------------
+ * AMENDMENT (T2 Correction 1, 2026-08-05): every artifact kind now carries a
+ * required `label: string` field, sourced from the SESSION KIND descriptor's
+ * `artifact.label` (studio/session-kinds.yaml) — never a client-side
+ * hardcoded kind→label lookup (that was this file's original design; T2
+ * overturned it as a second copy of declared data, exactly the drift this
+ * campaign keeps finding). See AT-90 below for the new required-field pin.
+ *
+ * VERIFIED GAP, flagged for T2/whoever implements PR1's wire-contract change:
+ * as of this amendment, `cli/bridge-studio-sessions.ts` (re-read verbatim;
+ * `git diff --stat HEAD -- cli/bridge-studio-sessions.ts` is empty — nothing
+ * has changed there since PR1 merged) does NOT put `label` on the `artifact`
+ * it sends. Its 200 response is built from `deriveSessionArtifact(...)`
+ * (orchestrator/studio/session-transcript.ts) alone — that function's three
+ * return types (`RoadmapDraftArtifact`/`MarkdownDraftArtifact`/
+ * `BrainStructureArtifact`) carry no `label` field, and `descriptor.artifact.
+ * label` (which DOES exist, parsed by `orchestrator/studio/session-kinds.ts`
+ * from the YAML) is never spread into the JSON `sendJson(...)` call — only
+ * `descriptor.stages`/`descriptor.defaultStage` are threaded through today.
+ * This test file pins the CORRECTED contract per T2's instruction (label
+ * lives on the artifact, not in a client lookup); making it real requires a
+ * small companion change to the route/deriveSessionArtifact to actually
+ * start sending it — a production change outside this T3 test-writer's
+ * remit (test files only). Until that lands, `session-client.ts`'s real
+ * implementation and the real route will disagree on this one field.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -64,22 +91,31 @@ const WELL_FORMED_TURN = {
   source: 'idea.md',
 };
 
+// `label` is the session kind's declared artifact label (studio/session-kinds
+// .yaml's `artifact.label`) — a required field on every artifact kind as of
+// T2 Correction 1 (see the header amendment). Literal values match the real
+// shipped YAML: architect→roadmap-draft="Roadmap draft", instructions→
+// markdown-draft="AGENTS.md draft", project-brain→brain-structure="Seeded
+// structure".
 const WELL_FORMED_ROADMAP_ARTIFACT = {
   kind: 'roadmap-draft',
+  label: 'Roadmap draft',
   rows: [{ initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' }],
   sourcesScanned: ['manifests/*.md (1 file(s) found)'],
 };
 
 const WELL_FORMED_MARKDOWN_ARTIFACT = {
   kind: 'markdown-draft',
+  label: 'AGENTS.md draft',
   body: '# AGENTS.md\n\nDraft body.\n',
   hasDraft: true,
 };
 
-const NO_DRAFT_MARKDOWN_ARTIFACT = { kind: 'markdown-draft', body: null, hasDraft: false };
+const NO_DRAFT_MARKDOWN_ARTIFACT = { kind: 'markdown-draft', label: 'AGENTS.md draft', body: null, hasDraft: false };
 
 const WELL_FORMED_BRAIN_ARTIFACT = {
   kind: 'brain-structure',
+  label: 'Seeded structure',
   themeCount: 2,
   files: [
     { path: 'themes/alpha.md', body: '# Alpha' },
@@ -159,6 +195,7 @@ test('AT-7: parseSessionTurn: a missing or non-number "index" THROWS; not a plai
 test('AT-8: parseSessionArtifact: a well-formed roadmap-draft artifact round-trips exactly, rows in server order', () => {
   const twoRows = {
     kind: 'roadmap-draft',
+    label: 'Roadmap draft',
     rows: [
       { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md' },
       { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' },
@@ -200,7 +237,7 @@ test('AT-13: parseSessionArtifact: "no draft yet" (body:null, hasDraft:false) ro
 });
 
 test('AT-14: parseSessionArtifact: "an empty draft" (body:"", hasDraft:true) round-trips distinctly from "no draft yet" — never collapsed to the same state', () => {
-  const emptyDraft = { kind: 'markdown-draft', body: '', hasDraft: true };
+  const emptyDraft = { kind: 'markdown-draft', label: 'AGENTS.md draft', body: '', hasDraft: true };
   const parsed = parseSessionArtifact(emptyDraft);
   expect(parsed).toEqual(emptyDraft);
   expect((parsed as { body: string | null }).body).toBe('');
@@ -208,8 +245,11 @@ test('AT-14: parseSessionArtifact: "an empty draft" (body:"", hasDraft:true) rou
 });
 
 test('AT-15: parseSessionArtifact: markdown-draft with hasDraft inconsistent with body\'s nullness THROWS — defense-in-depth against a malformed transport', () => {
-  expect(() => parseSessionArtifact({ kind: 'markdown-draft', body: null, hasDraft: true })).toThrow();
-  expect(() => parseSessionArtifact({ kind: 'markdown-draft', body: 'content', hasDraft: false })).toThrow();
+  // label present + well-formed on both, so the ONLY thing under test is the
+  // hasDraft/body inconsistency — never incidentally also failing on a
+  // missing label (that is AT-90's job).
+  expect(() => parseSessionArtifact({ kind: 'markdown-draft', label: 'AGENTS.md draft', body: null, hasDraft: true })).toThrow();
+  expect(() => parseSessionArtifact({ kind: 'markdown-draft', label: 'AGENTS.md draft', body: 'content', hasDraft: false })).toThrow();
 });
 
 test('AT-16: parseSessionArtifact: markdown-draft "hasDraft" missing or non-boolean THROWS', () => {
@@ -471,4 +511,28 @@ test('AT-42: interpretSessionShellOutcome: every distinct failure mode maps to a
     return !r.ok ? r.errorKind : null;
   });
   expect(new Set(errorKinds).size).toBe(errorKinds.length);
+});
+
+// ===========================================================================
+// AT-amendment (T2 Correction 1, 2026-08-05) — artifact.label is a required
+// wire field, sourced from the session-kind descriptor, never a client-side
+// closed lookup. — AT-90
+// ===========================================================================
+
+test('AT-90: parseSessionArtifact: "label" missing or non-string THROWS on every one of the 3 live kinds — never coerced to the artifact kind string, never silently omitted', () => {
+  const { label: _drop1, ...roadmapMissing } = WELL_FORMED_ROADMAP_ARTIFACT;
+  expect(() => parseSessionArtifact(roadmapMissing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_ROADMAP_ARTIFACT, label: 7 })).toThrow();
+
+  const { label: _drop2, ...markdownMissing } = WELL_FORMED_MARKDOWN_ARTIFACT;
+  expect(() => parseSessionArtifact(markdownMissing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_MARKDOWN_ARTIFACT, label: null })).toThrow();
+
+  const { label: _drop3, ...brainMissing } = WELL_FORMED_BRAIN_ARTIFACT;
+  expect(() => parseSessionArtifact(brainMissing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_BRAIN_ARTIFACT, label: [] })).toThrow();
+
+  // A well-formed label round-trips verbatim (not just "any truthy string" —
+  // the ACTUAL declared value, never re-derived from `kind`).
+  expect(parseSessionArtifact(WELL_FORMED_ROADMAP_ARTIFACT).label).toBe('Roadmap draft');
 });

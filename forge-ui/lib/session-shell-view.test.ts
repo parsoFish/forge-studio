@@ -33,19 +33,46 @@
  *    contract; a future per-stage artifact model (if R4-17 needs one) would
  *    need the ROUTE to change first, not just this view module.
  *
+ *    RATIFIED by T2 (2026-08-05, Correction 2), verified against the
+ *    acceptance reference `mockups/studio-endstate-v2/views-session.jsx`: a
+ *    session has ONE artifact kind, and a future multi-stage renderer (the
+ *    reserved `contract-buildout` row, R4-17) is a STAGE-AWARE renderer that
+ *    switches its own sub-view on the selected stage — not a different
+ *    artifact per stage. T2 additionally required the SEAM that makes R4-17
+ *    a drop-in: `state.selectedStage` (this module) must be a value a caller
+ *    can thread into the artifact-view dispatcher as an explicit second
+ *    input. That seam — and the invariance-under-stage proof for today's 3
+ *    stage-UNAWARE renderers — is pinned in session-artifact-view.test.ts's
+ *    `sessionArtifactView(artifact, stage)` ATs (AT-91..95), not here: this
+ *    module only needs to keep exposing `selectedStage` on the ready state,
+ *    which it already did (AT-54 etc.) before this correction.
+ *
  * 3. Turn grouping is computed ON SELECTION (`turnsForStage` on the current
  *    state), not precomputed into a `Record<stage, turns[]>` map up front —
  *    simpler, and `selectStage` recomputing per call is O(turns) which is
  *    trivially cheap for a session transcript.
  *
- * 4. `artifactLabelFor(kind)` is a total, closed-vocabulary function over the
- *    3 LIVE artifact kinds (mirrors template-library-view.ts's
- *    `previewClassFor`) — it does NOT read `studio/session-kinds.yaml`'s
- *    labels (this is a pure client module with zero fs/orchestrator
- *    imports). Flagged limitation: if a future session kind reuses an
- *    existing artifact kind with a DIFFERENT desired label, this static map
- *    cannot represent that — the route would need to start sending the label
- *    itself. Out of scope for PR2 (today's 3 kinds are a clean 1:1).
+ * 4. AMENDED by T2 (2026-08-05, Correction 1) — OVERTURNED: `artifactLabel`
+ *    is no longer computed via a client-side closed lookup
+ *    (`artifactLabelFor`, deleted from this module's contract). It is now
+ *    threaded straight through from `payload.artifact.label` — a required
+ *    field on the artifact itself (see session-client.test.ts's AT-90 and
+ *    its header amendment). A hardcoded kind→label map was a second copy of
+ *    declared data (the label already lives in `studio/session-kinds.yaml`
+ *    via the descriptor) — exactly the drift this campaign keeps finding,
+ *    and it could never represent a future kind reusing an existing artifact
+ *    kind with a different label. See AT-45 (amended) and AT-61 (amended,
+ *    now proves two payloads with the SAME artifact.kind but DIFFERENT
+ *    artifact.label produce different `state.artifactLabel` — exactly what
+ *    the old closed lookup could not do).
+ *
+ *    VERIFIED GAP (flagged, not silently assumed away): as of this
+ *    amendment the REAL route (cli/bridge-studio-sessions.ts, unchanged
+ *    since PR1 — `git diff --stat HEAD` on it is empty) does not yet put
+ *    `label` on the artifact it sends; see session-client.test.ts's header
+ *    amendment for the full trace. This module's contract is written
+ *    against the CORRECTED payload shape per T2's instruction; the route
+ *    needs a small companion change before real traffic satisfies it.
  * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
@@ -53,7 +80,6 @@ import {
   sessionShellState,
   selectStage,
   deriveSessionShellViewState,
-  artifactLabelFor,
 } from './session-shell-view.ts';
 import type { SessionShellPayload, SessionShellFetchResult } from './session-client.ts';
 
@@ -74,7 +100,7 @@ const SINGLE_STAGE_PAYLOAD: SessionShellPayload = {
     { index: 1, role: 'agent', stage: 'roadmap', text: 'Which repo?', source: 'answers.json#round-1' },
     { index: 2, role: 'operator', stage: 'roadmap', text: 'gitpulse', source: 'answers.json#round-1' },
   ],
-  artifact: { kind: 'roadmap-draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)'] },
+  artifact: { kind: 'roadmap-draft', label: 'Roadmap draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)'] },
 };
 
 // Mandatory multi-stage fixture — no shipped kind is multi-stage today, but
@@ -100,7 +126,7 @@ const MULTI_STAGE_PAYLOAD: SessionShellPayload = {
     { index: 2, role: 'agent', stage: 'demo', text: 'demo turn (index 2, appears AFTER index 5 above)', source: 'e.md' },
     { index: 6, role: 'operator', stage: 'roadmap', text: 'roadmap turn 1', source: 'f.md' },
   ],
-  artifact: { kind: 'markdown-draft', body: '# draft', hasDraft: true },
+  artifact: { kind: 'markdown-draft', label: 'AGENTS.md draft', body: '# draft', hasDraft: true },
 };
 
 // ===========================================================================
@@ -121,14 +147,15 @@ test('AT-44: sessionShellState: a single-stage session\'s turns still carry thei
   expect(state.turnsForStage).toEqual(SINGLE_STAGE_PAYLOAD.turns);
 });
 
-test('AT-45: sessionShellState: artifactKind/artifactLabel are derived from the payload\'s artifact.kind, never invented', () => {
+test('AT-45 (amended, T2 Correction 1): sessionShellState: artifactKind/artifactLabel are threaded straight from the payload\'s artifact.kind/artifact.label — never a client-side lookup, never invented', () => {
   const state = sessionShellState(SINGLE_STAGE_PAYLOAD);
   expect(state.artifactKind).toBe('roadmap-draft');
-  // Independent expected value (not just cross-checked against
-  // artifactLabelFor's own output — that alone would be self-referential and
-  // pass even if sessionShellState and artifactLabelFor shared the SAME bug).
+  // Independent expected value AND the fixture's own carried value — both
+  // must agree. This is no longer cross-checked against a same-module lookup
+  // function (that was the self-referential shape T2 overturned); the ground
+  // truth is now the WIRE PAYLOAD itself.
   expect(state.artifactLabel).toBe('Roadmap draft');
-  expect(state.artifactLabel).toBe(artifactLabelFor('roadmap-draft'));
+  expect(state.artifactLabel).toBe(SINGLE_STAGE_PAYLOAD.artifact.label);
   expect(state.artifact).toEqual(SINGLE_STAGE_PAYLOAD.artifact);
 });
 
@@ -300,23 +327,29 @@ test('AT-60: selectStage: selecting the ALREADY-selected stage is a no-op-shaped
 });
 
 // ===========================================================================
-// artifactLabelFor — AT-61
+// artifactLabel provenance — AT-61 (amended, T2 Correction 1)
 // ===========================================================================
 
-test('AT-61: artifactLabelFor: a total function over the 3 live artifact kinds, each mapping to the REAL label from studio/session-kinds.yaml — an unrecognised kind THROWS (never a silent default)', () => {
-  // Literal expected values (not just "distinct non-empty strings") — pinned
-  // against studio/session-kinds.yaml's real descriptor labels, verified by
-  // this T3 pass: architect→roadmap-draft="Roadmap draft",
-  // instructions→markdown-draft="AGENTS.md draft",
-  // project-brain→brain-structure="Seeded structure".
-  expect(artifactLabelFor('roadmap-draft')).toBe('Roadmap draft');
-  expect(artifactLabelFor('markdown-draft')).toBe('AGENTS.md draft');
-  expect(artifactLabelFor('brain-structure')).toBe('Seeded structure');
+test('AT-61 (amended, T2 Correction 1): sessionShellState: two payloads with the SAME artifact.kind but DIFFERENT artifact.label produce DIFFERENT state.artifactLabel — proof this is threaded from the wire, not a closed client-side lookup keyed on kind (which could never do this)', () => {
+  const payloadA: SessionShellPayload = {
+    ...SINGLE_STAGE_PAYLOAD,
+    artifact: { kind: 'roadmap-draft', label: 'Roadmap draft', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)'] },
+  };
+  const payloadB: SessionShellPayload = {
+    ...SINGLE_STAGE_PAYLOAD,
+    artifact: { kind: 'roadmap-draft', label: 'A future R4-17 kind reusing roadmap-draft with its own label', rows: [], sourcesScanned: ['manifests/*.md (0 file(s) found)'] },
+  };
 
-  const kinds = ['roadmap-draft', 'markdown-draft', 'brain-structure'] as const;
-  expect(new Set(kinds.map((k) => artifactLabelFor(k))).size).toBe(kinds.length);
-  expect(() => artifactLabelFor('file-package' as never)).toThrow(/file-package/);
-  expect(() => artifactLabelFor('not-a-real-kind' as never)).toThrow();
+  const stateA = sessionShellState(payloadA);
+  const stateB = sessionShellState(payloadB);
+
+  // SAME artifact.kind on both...
+  expect(stateA.artifactKind).toBe('roadmap-draft');
+  expect(stateB.artifactKind).toBe('roadmap-draft');
+  // ...but the label follows the PAYLOAD, not the kind.
+  expect(stateA.artifactLabel).toBe('Roadmap draft');
+  expect(stateB.artifactLabel).toBe('A future R4-17 kind reusing roadmap-draft with its own label');
+  expect(stateA.artifactLabel).not.toBe(stateB.artifactLabel);
 });
 
 // ===========================================================================
