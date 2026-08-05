@@ -204,6 +204,13 @@ export const journey = defineJourney({
                 });
                 check(entryState === 'false',
                   `R4-15: the project page offers a collapsed architect-session entry (got ${entryState === null ? 'no [data-component="project-architect-entry"]' : `data-architect-entry-open="${entryState}"`})`);
+                // The resume probe must actually SETTLE — a permanently-'pending'
+                // attribute would make "still loading" indistinguishable from "no
+                // in-flight session", which is the whole reason it exists.
+                await page.waitForSelector('[data-architect-resume-probe="settled"]', { timeout: 8000 }).catch(() => {});
+                const probe = await page.evaluate(() =>
+                  document.querySelector('[data-component="project-architect-entry"]')?.getAttribute('data-architect-resume-probe') ?? null);
+                check(probe === 'settled', `R4-15: the in-flight-session probe settles (got ${probe})`);
                 await page.locator('[data-action="plan-with-architect"]').first().click().catch(() => {});
                 await page.waitForSelector('[data-component="project-architect-entry"] [data-section="new-idea"]', { timeout: 8000 }).catch(() => {});
                 const revealed = await page.evaluate((project) => {
