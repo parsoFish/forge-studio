@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { MODEL_BY_TIER, type ModelTier, type PhaseAgentSpec } from '../phase-agent.ts';
 import { rangeTiers } from '../model-range.ts';
 import { loadAgentDefinition, loadCatalog } from './registry.ts';
+import { MATERIAL_KINDS } from './materials.ts';
 import type { AgentDefinition } from './types.ts';
 
 /**
@@ -126,6 +127,15 @@ export type AgentCapabilityDescriptor = {
    * cap) rides on the AgentDefinition itself, already spread onto the wire.
    */
   fanoutCapable: boolean;
+  /**
+   * R2-09 D4 — the materials this agent accepts, filtered to MATERIAL_KINDS.
+   * Absent AND declared-empty definitions both project to `[]` (D2 collapses
+   * on the wire, though the two stay distinguishable on the AgentDefinition
+   * itself). A value that slipped past `materials/enum` lint (declared on the
+   * def but outside the vocabulary) is filtered OUT here — a def that never
+   * ran lint must never advertise a non-vocabulary capability on the wire.
+   */
+  materials: string[];
   // Extension point (documented; added where its authoring source lands):
   //   artifactOutputs — R2-05-F2.
 };
@@ -136,5 +146,15 @@ export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapability
     interactive: executionPathForSurface(def.surface) === 'interactive',
     runtimeSdks: def.runtime.sdk ? [def.runtime.sdk] : [],
     fanoutCapable: def.fanout !== undefined,
+    // 2026-08-05 adversarial-review round 2, finding B/3: `def.materials` may
+    // be a non-array shape on any hand-built AgentDefinition that didn't go
+    // through `loadAgentDefinition` (`(def.materials ?? []).filter(...)`
+    // threw `TypeError: ....filter is not a function` on a bare string,
+    // crashing the WHOLE capability-descriptor response over one malformed
+    // agent). Guard the shape first — a non-array materials value degrades
+    // to `[]`, never a throw.
+    materials: Array.isArray(def.materials)
+      ? def.materials.filter((m) => (MATERIAL_KINDS as readonly string[]).includes(m))
+      : [],
   };
 }

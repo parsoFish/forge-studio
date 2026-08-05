@@ -18,7 +18,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import { classifyClause } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
@@ -37,9 +37,11 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
-import { skillsDir as toSkillsDir, skillDir, skillPath } from '../orchestrator/skill-path.ts';
+import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
+import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
@@ -325,12 +327,19 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 2. Resolve and prefix-guard the SKILL.md path
-      const skillMdPath = skillPath(slug, ctx.forgeRoot);
-      if (!skillMdPath.startsWith(toSkillsDir(ctx.forgeRoot) + sep)) {
+      // 2. Resolve + guard the SKILL.md path through the shared, generalized
+      // containment guard (cli/studio-path-guard.ts — see its docstring for
+      // the full writeup of every escape shape closed: symlinked leaf,
+      // symlinked slug dir, same-root cross-agent alias, hardlinked leaf,
+      // nested-segment symlink). Also used by the instructions-draft and
+      // skills-library author routes. Tolerates not-yet-created (`exists:
+      // false`) so scaffolding a brand-new agent still works.
+      const pathGuard = resolveGuardedPath(toSkillsDir(ctx.forgeRoot), [slug, 'SKILL.md']);
+      if (!pathGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const skillMdPath = pathGuard.realPath;
 
       // 3. Parse request body
       let body: unknown;
@@ -346,10 +355,23 @@ export async function handleStudioWriteRoutes(
       }
       const b = body as Record<string, unknown>;
 
-      // 4. Load existing def or scaffold minimal one
+      // 4. Load existing def or scaffold minimal one. Also capture the RAW
+      // on-disk bytes (D5 wiring): five phase bindings + the release
+      // finalizer readFileSync the WHOLE SKILL.md verbatim into the agent's
+      // system prompt (orchestrator/phases/dev-binding.ts:63, pm-binding.ts:53,
+      // reflector-binding.ts:52, adversarial-review-binding.ts:40,
+      // demo-agent-binding.ts:53, orchestrator/release-finalize-invocation.ts:51)
+      // — so a lossy re-serialize on save is a PROMPT change, not mere file
+      // churn. Handing `originalRaw` to serializeAgentDefinition below lets it
+      // take the byte-preserving fast path (comments, fanout, key order kept
+      // verbatim) whenever the frontmatter didn't actually change. Both this
+      // read and loadAgentDefinition's internal read use the same 'utf8'
+      // encoding — no double-encoding risk, just two reads of the same bytes.
       let existing: AgentDefinition | null = null;
-      if (existsSync(skillMdPath)) {
+      let originalRaw: string | undefined;
+      if (pathGuard.exists) {
         try {
+          originalRaw = readFileSync(skillMdPath, 'utf8');
           existing = loadAgentDefinition(skillMdPath);
         } catch (err) {
           sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -411,6 +433,49 @@ export async function handleStudioWriteRoutes(
         loopStrategy: typeof rtIn['loopStrategy'] === 'string' ? rtIn['loopStrategy'] : existing?.runtime.loopStrategy,
       };
 
+      // materials (R2-09 D2/D7 + 2026-08-05 adversarial-review round 2,
+      // findings C/8 and C/9): the SAME inherit-when-omitted convention as
+      // `phase`/`surface`/`executor` above — omitted from the PUT body ⇒
+      // inherited from disk (`existing?.materials`); explicitly `[]` (or any
+      // other array, up to the vocabulary-derived length cap) in the body ⇒
+      // replaces it, including clearing to empty. The presence test is now
+      // `b['materials'] !== undefined`, NOT `Array.isArray` — the previous
+      // version treated ANY non-array explicit value as "not sent" and
+      // silently fell back to the on-disk value with a 200 OK, so a caller
+      // sending `materials: null` / `{}` / `"images"` believed it saved and
+      // nothing changed (this campaign's recurring "declared data fails
+      // open" shape). An explicit, malformed shape is now REJECTED (400,
+      // file byte-unchanged) before any further processing — never
+      // downgraded to "omitted". An oversized array (longer than the
+      // vocabulary can ever legitimately need) is rejected the same way,
+      // BEFORE validateAgent's per-value materials/enum lint would otherwise
+      // fan out into one finding per element.
+      if (b['materials'] !== undefined) {
+        if (!Array.isArray(b['materials'])) {
+          sendJson(
+            res,
+            400,
+            { error: `materials must be an array of strings, got ${b['materials'] === null ? 'null' : typeof b['materials']}` },
+            origin,
+          );
+          return true;
+        }
+        if ((b['materials'] as unknown[]).length > MAX_MATERIALS_LENGTH) {
+          sendJson(
+            res,
+            400,
+            {
+              error: `materials array too long (${(b['materials'] as unknown[]).length} entries) — the vocabulary has only ${MAX_MATERIALS_LENGTH} kinds`,
+            },
+            origin,
+          );
+          return true;
+        }
+      }
+      const materials: string[] | undefined = Array.isArray(b['materials'])
+        ? (b['materials'] as string[])
+        : existing?.materials;
+
       const merged: AgentDefinition = {
         slug,
         name,
@@ -424,12 +489,39 @@ export async function handleStudioWriteRoutes(
         purpose,
         composition,
         runtime,
+        // D7 fix: this literal used to omit `fanout` entirely, so saving a
+        // fanout-capable agent (e.g. developer-ralph) through the builder
+        // silently stripped its `fanout:` block and flipped its
+        // `fanoutCapable` descriptor false. Same inherit-when-omitted
+        // convention as `phase`/`surface`/`executor` — the PUT body has no
+        // fanout-editing UI yet, so this is always inherited from disk.
+        fanout: existing?.fanout,
+        materials,
         brainAccess,
         interactivity,
         budgets: existing?.budgets ?? {},
         allowedTools: existing?.allowedTools ?? [],
         disallowedTools: existing?.disallowedTools ?? [],
         body: body_text,
+        // 2026-08-05 adversarial-review round 2, finding C/10 claimed
+        // `existing?.library ?? true` "silently flips" an agent whose on-disk
+        // `library` is explicitly `false` (e.g. instructions-creator,
+        // project-brain-builder) to `true` on a PUT that omits `library`.
+        // VERIFIED AND NOT REPRODUCIBLE: `??` (nullish coalescing) only
+        // substitutes its right operand when the left is `null`/`undefined`
+        // — `false ?? true` evaluates to `false` in JS, confirmed empirically
+        // (`node -e "console.log(false ?? true)"` → `false`). So
+        // `existing?.library ?? true` already preserves an explicit
+        // `library: false` verbatim; it only backfills `true` for (a) a
+        // genuinely new agent (`existing` is `null`) or (b) an EXISTING
+        // agent whose `library` key was never declared at all
+        // (`existing.library === undefined`) — and that backfill is inert:
+        // `isStudioAgent` (registry.ts) already treats an undeclared
+        // `library` the same as `true` (`d.library !== false`), so writing
+        // the explicit `true` changes no observable behaviour, only makes
+        // the R3-01-F2 "explicit on every shipped skill" convention hold.
+        // Kept as-is rather than "fixed" per the false claim — see the final
+        // report.
         library: existing?.library ?? true,
         path: skillMdPath,
       };
@@ -478,9 +570,16 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 7. Serialize and write
-      const serialized = serializeAgentDefinition(merged);
-      const skillDirPath = skillDir(slug, ctx.forgeRoot);
+      // 7. Serialize and write. Passing `originalRaw` lets serializeAgentDefinition
+      // take the D5 byte-preserving fast path when nothing frontmatter-relevant
+      // changed — see the comment on `originalRaw`'s read above for why a lossy
+      // save here is a PROMPT change, not mere file churn.
+      const serialized = serializeAgentDefinition(merged, originalRaw);
+      // Derive the containing dir from the ALREADY-GUARDED real path (not a
+      // fresh `skillDir(slug, ...)` lexical join) — reusing the guarded
+      // value end-to-end means there is no second, unguarded path
+      // construction for a brand-new agent to slip through.
+      const skillDirPath = dirname(skillMdPath);
       if (!existsSync(skillDirPath)) {
         mkdirSync(skillDirPath, { recursive: true });
       }
@@ -693,11 +792,18 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
         return true;
       }
-      const projectJsonPath = resolve(projectRoot, '.forge', 'project.json');
-      if (!projectJsonPath.startsWith(projectRoot + sep)) {
+      // Guard `.forge/project.json` through the shared containment guard
+      // (cli/studio-path-guard.ts) instead of a lexical
+      // `startsWith(projectRoot + sep)` check — a symlinked `.forge` dir or a
+      // hardlinked project.json both passed that trivially (verified live,
+      // BLOCKER). `exists` also replaces the separate `existsSync` calls
+      // below so both agree on the same resolved path.
+      const pathGuard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
+      if (!pathGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const projectJsonPath = pathGuard.realPath;
 
       // 4. Parse request body
       let body: unknown;
@@ -715,7 +821,7 @@ export async function handleStudioWriteRoutes(
 
       // 5. Load existing project.json (if present) and merge M2 fields over it
       let existingRaw: Record<string, unknown> = {};
-      if (existsSync(projectJsonPath)) {
+      if (pathGuard.exists) {
         try {
           existingRaw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
         } catch (err) {
@@ -763,7 +869,8 @@ export async function handleStudioWriteRoutes(
       }
 
       // 7. Write back (pretty, 2-space), committed to the project's forge-studio branch.
-      const forgeDir = resolve(projectRoot, '.forge');
+      // Derive from the ALREADY-GUARDED real path, not a fresh lexical join.
+      const forgeDir = dirname(projectJsonPath);
       if (!existsSync(forgeDir)) {
         mkdirSync(forgeDir, { recursive: true });
       }
@@ -807,13 +914,18 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 2. Resolve and prefix-guard the flow.yaml path
+      // 2. Resolve + guard the flow.yaml path through the shared containment
+      // guard (cli/studio-path-guard.ts). The former lexical
+      // `startsWith(flowsBase + sep)` check had NO dirent-type gate anywhere
+      // backing it up (unlike discoverProjects()'s isDirectory() filter for
+      // projects) — all four escape shapes were reproduced live here.
       const flowsBase = resolve(ctx.forgeRoot, 'studio', 'flows');
-      const flowYamlPath = resolve(flowsBase, id, 'flow.yaml');
-      if (!flowYamlPath.startsWith(flowsBase + sep)) {
+      const pathGuard = resolveGuardedPath(flowsBase, [id, 'flow.yaml']);
+      if (!pathGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const flowYamlPath = pathGuard.realPath;
 
       // 3. Parse request body
       let body: unknown;
@@ -831,7 +943,7 @@ export async function handleStudioWriteRoutes(
 
       // 4. Load existing flow (or scaffold for new flow)
       let existing: FlowDefinition | null = null;
-      if (existsSync(flowYamlPath)) {
+      if (pathGuard.exists) {
         try {
           existing = loadFlowDefinition(flowYamlPath);
         } catch (err) {
@@ -927,9 +1039,9 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 9. Serialize and write
+      // 9. Serialize and write. Derive from the ALREADY-GUARDED real path.
       const serialized = serializeFlowDefinition(merged);
-      const flowDir = resolve(flowsBase, id);
+      const flowDir = dirname(flowYamlPath);
       if (!existsSync(flowDir)) {
         mkdirSync(flowDir, { recursive: true });
       }

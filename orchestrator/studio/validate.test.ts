@@ -14,6 +14,7 @@ import type {
   ProjectDefinition,
 } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { MATERIAL_KINDS } from './materials.ts';
 import {
   SLUG_RE,
   validateAgent,
@@ -419,6 +420,95 @@ describe('validateAgent — fully-ready agent', () => {
     );
     assert.ok(findings.every((f) => f.level === 'flag'));
     assert.equal(findings.length, 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateAgent — materials/enum (R2-09 D1)
+// ---------------------------------------------------------------------------
+
+describe('validateAgent — materials/enum', () => {
+  it('an unknown material kind → exactly ONE error finding naming both the offending value AND the allowed set', () => {
+    const agent = makeAgent({ materials: ['holograms'] });
+    const findings = validateAgent(agent);
+    const matEnum = findings.filter((f) => f.check === 'materials/enum');
+    assert.equal(matEnum.length, 1);
+    assert.equal(matEnum[0].level, 'error');
+    assert.ok(matEnum[0].message.includes('holograms'), 'message must name the offending value');
+    for (const kind of MATERIAL_KINDS) {
+      assert.ok(
+        matEnum[0].message.includes(kind),
+        `message must list the full allowed set (missing "${kind}") — a sibling finding in this campaign named the value but not the set`,
+      );
+    }
+  });
+
+  it('all-valid kinds → zero materials/enum findings', () => {
+    const findings = validateAgent(makeAgent({ materials: ['images', 'audio'] }));
+    assert.deepEqual(findings.filter((f) => f.check === 'materials/enum'), []);
+  });
+
+  it('absent materials → zero materials/enum findings', () => {
+    const findings = validateAgent(makeAgent());
+    assert.deepEqual(findings.filter((f) => f.check === 'materials/enum'), []);
+  });
+
+  it('materials: [] → zero materials/enum findings (declared-empty is legal)', () => {
+    const findings = validateAgent(makeAgent({ materials: [] }));
+    assert.deepEqual(findings.filter((f) => f.check === 'materials/enum'), []);
+  });
+
+  it('two unknown values → two findings, one per value', () => {
+    const findings = validateAgent(makeAgent({ materials: ['holograms', 'smells'] }));
+    assert.equal(findings.filter((f) => f.check === 'materials/enum').length, 2);
+  });
+
+  // -------------------------------------------------------------------------
+  // 2026-08-05 adversarial-review round 2, finding B/5: the SAME unknown
+  // value repeated must yield ONE finding per DISTINCT value, not one per
+  // array element — a `for (const value of def.materials)` loop with no
+  // dedup emits a duplicate finding for a duplicate value.
+  // -------------------------------------------------------------------------
+
+  it('the SAME unknown value repeated twice → exactly ONE finding, not one per element', () => {
+    const findings = validateAgent(makeAgent({ materials: ['holograms', 'holograms'] }));
+    const matEnum = findings.filter((f) => f.check === 'materials/enum');
+    assert.equal(matEnum.length, 1, `expected one finding per DISTINCT unknown value, got: ${JSON.stringify(matEnum)}`);
+  });
+
+  it('the same unknown value repeated three times, mixed with a distinct unknown value → exactly TWO findings (one per distinct value)', () => {
+    const findings = validateAgent(makeAgent({ materials: ['holograms', 'holograms', 'holograms', 'smells'] }));
+    const matEnum = findings.filter((f) => f.check === 'materials/enum');
+    assert.equal(matEnum.length, 2, `expected 2 findings (holograms, smells) regardless of repeat count, got: ${JSON.stringify(matEnum)}`);
+  });
+
+  // -------------------------------------------------------------------------
+  // 2026-08-05 adversarial-review round 2, finding B/4: a non-array
+  // `materials` (e.g. a bare string) is a SHAPE problem, not a per-value
+  // enum problem. Today's `for (const value of def.materials)` iterates a
+  // STRING CHARACTER BY CHARACTER — 'images' (6 chars) currently produces 6
+  // nonsense materials/enum findings, one per character. The fix must
+  // recognise the shape is wrong up front and emit exactly ONE finding
+  // naming the shape problem, never iterate a non-array as if it already
+  // were the parsed value list.
+  // -------------------------------------------------------------------------
+
+  it('a non-array (bare string) materials value → exactly ONE finding naming the SHAPE problem, not six per-character enum findings', () => {
+    const agent = makeAgent({ materials: 'images' as unknown as string[] });
+    const findings = validateAgent(agent);
+    const materialsFindings = findings.filter((f) => f.object === 'agent:my-agent' && f.check.startsWith('materials'));
+    assert.equal(
+      materialsFindings.length,
+      1,
+      `expected exactly one shape-level finding for a non-array materials, got: ${JSON.stringify(materialsFindings)}`,
+    );
+    assert.equal(materialsFindings[0].level, 'error');
+    assert.notEqual(
+      materialsFindings[0].check,
+      'materials/enum',
+      'a SHAPE error must be a distinct check from the per-value materials/enum lint, not that same check fired once per character',
+    );
+    assert.match(materialsFindings[0].message, /array/i, 'the message must name the actual problem: materials must be an array');
   });
 });
 

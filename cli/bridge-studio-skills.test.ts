@@ -20,10 +20,13 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
@@ -281,6 +284,98 @@ test('AT-55: POST /api/studio/skills writes library: true (palette-visible + lin
   const skillMd = readFileSync(join(forgeRoot, 'skills', body.id, 'SKILL.md'), 'utf8');
   assert.ok(/^library: true$/m.test(skillMd), 'authored skill carries an explicit library: true');
   assert.ok(!/^runtime:/m.test(skillMd), 'authored skill is a plain skill (no runtime block)');
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/skills — BLOCKER, symlink escape (2026-08-05 adversarial-
+// review round 3, finding A/1-3). `cli/bridge-studio-skills.ts` still does a
+// LEXICAL `skillDirPath.startsWith(skillsDir(forgeRoot) + sep)` check on the
+// UNRESOLVED, join()-constructed path — it was never migrated to the shared
+// `resolveGuardedSkillMdPath` realpath choke point
+// (cli/skill-md-path-guard.ts) that the PUT and instructions-draft routes
+// now use. A slug whose `skills/<id>` directory is a SYMLINK to a location
+// outside the forge root passes the lexical check trivially (the
+// CONSTRUCTED path is always lexically under skills/, regardless of what it
+// actually resolves to on disk), so the route writes a brand-new SKILL.md
+// straight through the symlink to the outside location — reproduced live,
+// 200 OK. This is the sixth instance of this bug family in the campaign.
+// ---------------------------------------------------------------------------
+
+test('BLOCKER: POST /api/studio/skills rejects a symlinked skills/<id> DIRECTORY escaping the forge root — nothing is created outside', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-skills-outside-'));
+  const outsideEntriesBefore = readdirSync(outsideDir).sort();
+
+  const linkPath = join(forgeRoot, 'skills', 'escapeskill');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await postJson(`${bridgeUrl}/api/studio/skills`, {
+      id: 'escapeskill',
+      name: 'Escape Skill',
+      description: 'attacker-controlled skill authored through a symlinked directory',
+      body: 'ATTACKER BODY CONTENT',
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a POST that would author a SKILL.md through a symlinked skills/<id> directory escaping the forge root must be REJECTED (verified live: today it returns 200 and writes outside the repo)',
+    );
+    const outsideEntriesAfter = readdirSync(outsideDir).sort();
+    assert.deepEqual(
+      outsideEntriesAfter,
+      outsideEntriesBefore,
+      'nothing may be created inside the out-of-tree directory the symlink points at',
+    );
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/studio/skills rejects a symlinked skills/<id> DIRECTORY whose target already has a file at the escape destination — that file stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-skills-outside-existing-'));
+  const outsideFile = join(outsideDir, 'SKILL.md');
+  const outsideOriginal = 'name: Pre-existing Outside File\n---\n\nOriginal content that must never change.\n';
+  writeFileSync(outsideFile, outsideOriginal, 'utf8');
+
+  const linkPath = join(forgeRoot, 'skills', 'escapeskill-existing');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await postJson(`${bridgeUrl}/api/studio/skills`, {
+      id: 'escapeskill-existing',
+      name: 'Escape Skill Existing',
+      description: 'attacker-controlled overwrite attempt through a symlinked directory',
+      body: 'ATTACKER OVERWRITE CONTENT',
+    });
+    assert.notEqual(res.status, 200, 'a POST targeting an escape destination that already has a file must be REJECTED, not silently deduped to a write-avoiding 409 that still leaves containment unverified');
+    const outsideAfter = readFileSync(outsideFile, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the pre-existing out-of-tree file must be byte-unchanged');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('POST /api/studio/skills: a legitimate new skill still authors successfully (the containment fix must not break creation)', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/skills`, {
+    id: 'legit-new-skill',
+    name: 'Legit New Skill',
+    description: 'an ordinary skill authored with no traversal shape at all',
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; id: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.id, 'legit-new-skill');
+  assert.ok(existsSync(join(forgeRoot, 'skills', 'legit-new-skill', 'SKILL.md')), 'the new skill must be written inside the real forge root');
 });
 
 // ---------------------------------------------------------------------------

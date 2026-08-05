@@ -11,6 +11,7 @@ import yaml from 'js-yaml';
 
 import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
 import { skillTrustState } from './skill-library.ts';
+import { parseMaterials } from './materials.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
 import { BAND_GUARD_IDS } from '../agent-bands.ts';
 import { parseConnectionEntries } from './connection-catalog.ts';
@@ -204,6 +205,17 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   const disallowedTools = stringArray(d, 'disallowed-tools', skillMdPath);
   const library = optBool(d, 'library');
 
+  // R2-09 D1 — lenient on VALUES (an unknown material string survives; lint's
+  // job, not the loader's), strict on SHAPE (parseMaterials throws on a
+  // non-array/non-string entry). Rethrown with the file path so this loader's
+  // error messages stay consistent with every other field in this function.
+  let materials: string[] | undefined;
+  try {
+    materials = parseMaterials(d['materials']);
+  } catch (err) {
+    throw new Error(`${skillMdPath}: ${(err as Error).message}`);
+  }
+
   const slug = basename(dirname(skillMdPath));
 
   return {
@@ -218,6 +230,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     composition,
     runtime,
     ...(fanout ? { fanout } : {}),
+    ...(materials !== undefined ? { materials } : {}),
     brainAccess,
     interactivity,
     budgets,
@@ -228,62 +241,13 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   };
 }
 
-// consumed by the M2 bridge PUT routes (no production call site until then)
-export function serializeAgentDefinition(def: AgentDefinition): string {
-  // Fixed key order: name, description, library?, phase?, surface?, executor?,
-  // purpose, composition, runtime, fanout?, brainAccess, interactivity,
-  // allowed-tools, disallowed-tools, budgets
-  const data: Record<string, unknown> = {};
-  data['name'] = def.name;
-  data['description'] = def.description;
-  if (def.library !== undefined) data['library'] = def.library;
-  if (def.phase !== undefined) data['phase'] = def.phase;
-  if (def.surface !== undefined) data['surface'] = def.surface;
-  if (def.executor !== undefined) data['executor'] = def.executor;
-  data['purpose'] = def.purpose;
-  data['composition'] = def.composition;
-
-  const runtime: Record<string, unknown> = {
-    sdk: def.runtime.sdk,
-    strategy: def.runtime.strategy,
-  };
-  if (def.runtime.model !== undefined) runtime['model'] = def.runtime.model;
-  if (def.runtime.range !== undefined) runtime['range'] = def.runtime.range;
-  if (def.runtime.loopStrategy !== undefined) runtime['loopStrategy'] = def.runtime.loopStrategy;
-  data['runtime'] = runtime;
-
-  // R2-03-F2 — fanout block (only when declared; omit undefined sub-keys).
-  if (def.fanout !== undefined) {
-    const fanout: Record<string, unknown> = {
-      drivingArtifact: def.fanout.drivingArtifact,
-      isolation: def.fanout.isolation,
-    };
-    if (def.fanout.concurrencyCap !== undefined) fanout['concurrencyCap'] = def.fanout.concurrencyCap;
-    if (def.fanout.perItemGate !== undefined) fanout['perItemGate'] = def.fanout.perItemGate;
-    data['fanout'] = fanout;
-  }
-
-  data['brainAccess'] = def.brainAccess;
-  data['interactivity'] = def.interactivity;
-  data['allowed-tools'] = def.allowedTools;
-  data['disallowed-tools'] = def.disallowedTools;
-
-  // Omit budgets keys that are undefined
-  const budgets: Record<string, unknown> = {};
-  if (def.budgets.iterationFloor !== undefined) budgets['iterationFloor'] = def.budgets.iterationFloor;
-  if (def.budgets.iterationCap !== undefined) budgets['iterationCap'] = def.budgets.iterationCap;
-  if (def.budgets.maxTurnsPerIteration !== undefined)
-    budgets['maxTurnsPerIteration'] = def.budgets.maxTurnsPerIteration;
-  if (def.budgets.wedgeKillMs !== undefined) budgets['wedgeKillMs'] = def.budgets.wedgeKillMs;
-  if (def.budgets.maxTurns !== undefined) budgets['maxTurns'] = def.budgets.maxTurns;
-  if (def.budgets.maxBudgetUsd !== undefined) budgets['maxBudgetUsd'] = def.budgets.maxBudgetUsd;
-  if (def.budgets.maxBudgetUsdShare !== undefined)
-    budgets['maxBudgetUsdShare'] = def.budgets.maxBudgetUsdShare;
-  data['budgets'] = budgets;
-
-  const safeBody = def.body.replace(/^-{3,}/gm, (m) => m.replace(/-/g, '–'));
-  return matter.stringify('\n' + safeBody.replace(/^\n+/, ''), data);
-}
+// Agent SKILL.md byte-fidelity serialization (projectAgentFrontmatter,
+// deepValueEqual, normalizeAbsentOptionalArrays, serializeAgentDefinition)
+// lives in ./skill-md-fidelity.ts (extracted to keep this file under the
+// 800-line cap — 2026-08-05, finding C/11). Re-exported here so existing
+// importers keep resolving `serializeAgentDefinition` from './registry.ts';
+// it remains the ONE canonical serializer (ADR-027).
+export { serializeAgentDefinition } from './skill-md-fidelity.ts';
 
 export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {
   const defs: AgentDefinition[] = [];

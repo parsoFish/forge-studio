@@ -136,6 +136,17 @@ export type AgentDefinition = {
   runtime: AgentRuntime;
   /** R2-03-F2 — fanout capability (absent ⇒ not fanout-capable). */
   fanout?: AgentFanout;
+  /**
+   * R2-09 D1/D2 — the closed materials vocabulary (`orchestrator/studio/materials.ts`
+   * MATERIAL_KINDS) this agent accepts as operator-uploaded input. Top-level,
+   * mirrors `fanout` (NOT nested under `composition`). Parsed leniently on
+   * VALUES at load (an unknown string survives; `materials/enum` lints it) but
+   * strictly on SHAPE (non-array/non-string entry throws). Absent ⇒ not
+   * declared; `[]` ⇒ declared-empty — both mean "accepts nothing" for the
+   * `agentAcceptsMaterial` gate, but stay distinguishable here so the two
+   * on-disk shapes round-trip differently through serializeAgentDefinition.
+   */
+  materials?: string[];
   brainAccess: BrainAccess;
   interactivity: string;
   budgets: AgentBudgets;

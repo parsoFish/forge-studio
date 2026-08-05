@@ -232,12 +232,12 @@ function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDef
 
 test('agentCapabilityDescriptor: surface unattended → interactive:false', () => {
   const def = baseAgentDefFixture({ surface: 'unattended' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [] });
 });
 
 test('agentCapabilityDescriptor: surface interactive → interactive:true', () => {
   const def = baseAgentDefFixture({ surface: 'interactive' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [] });
 });
 
 test('agentCapabilityDescriptor: R2-03-F2 — fanoutCapable reflects a declared fanout: block', () => {
@@ -287,4 +287,49 @@ test('agentCapabilityDescriptor: computes for every real roster agent, interacti
     );
     assert.ok(Array.isArray(descriptor.runtimeSdks), `${def.slug}: runtimeSdks must be an array`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// agentCapabilityDescriptor — materials (R2-09 D4)
+// ---------------------------------------------------------------------------
+
+test('descriptor materials equals the declared list', () => {
+  const def = baseAgentDefFixture({ materials: ['images', 'audio'] });
+  assert.deepEqual(agentCapabilityDescriptor(def).materials, ['images', 'audio']);
+});
+
+test('descriptor materials is [] when the definition materials is undefined, and [] when it is []', () => {
+  const undeclared = baseAgentDefFixture({ materials: undefined });
+  assert.deepEqual(agentCapabilityDescriptor(undeclared).materials, []);
+  const declaredEmpty = baseAgentDefFixture({ materials: [] });
+  assert.deepEqual(agentCapabilityDescriptor(declaredEmpty).materials, []);
+});
+
+test('descriptor FILTERS OUT a value not in MATERIAL_KINDS — a def that slipped past lint must never advertise a non-vocabulary capability on the wire', () => {
+  const def = baseAgentDefFixture({ materials: ['images', 'holograms'] });
+  assert.deepEqual(agentCapabilityDescriptor(def).materials, ['images']);
+});
+
+// ---------------------------------------------------------------------------
+// agentCapabilityDescriptor — fail-CLOSED on a malformed def.materials
+// (2026-08-05 adversarial-review round 2, finding B/3). Same reachability
+// argument as materials.test.ts's agentAcceptsMaterial coverage: this
+// descriptor is computed from ANY AgentDefinition, not only one that passed
+// through loadAgentDefinition. Today `(def.materials ?? []).filter(...)`
+// throws `TypeError: (...).filter is not a function` for a non-array
+// materials value (a bare string, in particular) — a capability-descriptor
+// computation must never crash the whole GET /api/studio/agents response
+// over one malformed agent def.
+// ---------------------------------------------------------------------------
+
+test('agentCapabilityDescriptor: a non-array (bare string) materials value does not throw — descriptor.materials is []', () => {
+  const def = baseAgentDefFixture({ materials: 'images' as unknown as string[] });
+  assert.doesNotThrow(() => agentCapabilityDescriptor(def));
+  assert.deepEqual(agentCapabilityDescriptor(def).materials, []);
+});
+
+test('agentCapabilityDescriptor: materials: null does not throw — descriptor.materials is []', () => {
+  const def = baseAgentDefFixture({ materials: null as unknown as string[] });
+  assert.doesNotThrow(() => agentCapabilityDescriptor(def));
+  assert.deepEqual(agentCapabilityDescriptor(def).materials, []);
 });

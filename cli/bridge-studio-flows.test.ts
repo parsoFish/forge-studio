@@ -24,9 +24,12 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
   writeFileSync,
   existsSync,
+  linkSync,
+  symlinkSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -520,6 +523,186 @@ test('PUT /api/studio/flows/UPPERCASE → 400 (must be slug)', async () => {
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
   assert.ok(body.error.includes('invalid flow id'), `expected invalid id error, got: ${body.error}`);
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/flows/:id — symlink/hardlink containment escapes
+// (2026-08-05 adversarial-review round 4, finding A). The guard at
+// cli/bridge-studio-writes.ts (~L911-913) is a LEXICAL
+// `resolve(flowsBase, id, 'flow.yaml').startsWith(flowsBase + sep)` check on
+// an UNRESOLVED path — worse than the agents PUT route's pre-round-2 bug,
+// because this route has NO dirent-type gate anywhere in its path (no
+// `readdir`/`isDirectory()` filter of any kind), so nothing accidentally
+// saves it the way discoverProjects()'s directory filter does for projects.
+// All four shapes below were reproduced live through the real route.
+// ---------------------------------------------------------------------------
+
+test('BLOCKER: PUT rejects a symlinked studio/flows/<id> DIRECTORY escaping the forge root — nothing is created outside', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-flows-outside-'));
+  const outsideEntriesBefore = readdirSync(outsideDir).sort();
+
+  const linkPath = join(forgeRoot, 'studio', 'flows', 'escape-flow');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await putJson(`${bridgeUrl}/api/studio/flows/escape-flow`, {
+      goal: 'Attacker-controlled flow.yaml write outside the repo.',
+      nodes: [{ id: 'n', gate: 'human' }],
+      edges: [],
+      triggers: [],
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a symlinked studio/flows/<id> directory escaping the forge root must be REJECTED (verified live: today it returns 200 and creates flow.yaml outside the repo)',
+    );
+    const outsideEntriesAfter = readdirSync(outsideDir).sort();
+    assert.deepEqual(
+      outsideEntriesAfter,
+      outsideEntriesBefore,
+      'nothing may be created inside the out-of-tree directory the symlink points at',
+    );
+  } finally {
+    // Remove the SYMLINK itself, not just its target — leaving a dangling
+    // symlink under studio/flows/ pollutes every later test in this file
+    // that lists/scans the flows directory.
+    rmSync(linkPath, { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('PUT rejects a symlinked studio/flows/<id> DIRECTORY whose target already has a flow.yaml — that file stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-flows-outside-existing-'));
+  const outsideFile = join(outsideDir, 'flow.yaml');
+  const outsideOriginal = makeFlowYaml({ id: 'outside-secret', version: 1 });
+  writeFileSync(outsideFile, outsideOriginal, 'utf8');
+
+  const linkPath = join(forgeRoot, 'studio', 'flows', 'escape-flow-existing');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    // Unlike the skills POST route, this PUT route has no existsSync-then-409
+    // dedup step — `existing` is loaded and the merged result is ALWAYS
+    // written, so a pre-existing outside flow.yaml gets genuinely overwritten,
+    // not accidentally protected by a side-effect check.
+    const res = await putJson(`${bridgeUrl}/api/studio/flows/escape-flow-existing`, {
+      goal: 'Attacker-controlled overwrite of an existing outside flow.yaml.',
+      nodes: [{ id: 'n', gate: 'human' }],
+      edges: [],
+      triggers: [],
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT overwriting a pre-existing out-of-tree flow.yaml through a symlinked directory must be REJECTED',
+    );
+    const outsideAfter = readFileSync(outsideFile, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the pre-existing out-of-tree flow.yaml must be byte-unchanged');
+  } finally {
+    rmSync(linkPath, { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('PUT rejects a flow id whose directory is a symlink to a DIFFERENT real flow\'s directory — the other flow\'s file stays byte-unchanged, and the real flow still edits correctly afterwards', async () => {
+  resetTestFlow();
+  const realFlowPath = join(forgeRoot, 'studio', 'flows', 'test-flow', 'flow.yaml');
+  const originalContent = readFileSync(realFlowPath, 'utf8');
+
+  const linkPath = join(forgeRoot, 'studio', 'flows', 'alias-of-real');
+  try {
+    symlinkSync(join(forgeRoot, 'studio', 'flows', 'test-flow'), linkPath, 'dir');
+  } catch {
+    return;
+  }
+
+  try {
+    const res = await putJson(`${bridgeUrl}/api/studio/flows/alias-of-real`, {
+      goal: 'ATTACKER-CONTROLLED cross-flow overwrite via alias-of-real.',
+      nodes: [{ id: 'n', gate: 'human' }],
+      edges: [],
+      triggers: [],
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT to a flow id whose OWN directory is a symlink to a DIFFERENT real flow directory must be REJECTED — containment-under-studio/flows/ alone is not the same guarantee as "this id\'s own directory" (verified live: today it 200s reporting success for alias-of-real while test-flow\'s real file — read back as id: alias-of-real — is the one actually overwritten)',
+    );
+    const afterContent = readFileSync(realFlowPath, 'utf8');
+    assert.equal(
+      afterContent,
+      originalContent,
+      'test-flow\'s real flow.yaml must be byte-unchanged after a rejected PUT to alias-of-real',
+    );
+
+    // Bar D: the requested (real) object must still behave correctly
+    // afterwards — a guard that broke test-flow itself while rejecting
+    // alias-of-real would also fail this test.
+    const stillWorks = await putJson(`${bridgeUrl}/api/studio/flows/test-flow`, {
+      goal: 'A legitimate edit to the real flow after the rejected alias attempt.',
+      nodes: [{ id: 'architect', agent: 'test-agent' }, { id: 'review', gate: 'human' }],
+      edges: [{ from: 'architect', to: 'review', artifact: 'PLAN.md' }],
+      triggers: [],
+    });
+    const stillWorksText = await stillWorks.text();
+    assert.equal(stillWorks.status, 200, stillWorksText);
+  } finally {
+    // Remove the alias symlink AND restore test-flow's real file
+    // unconditionally — an assertion failure above must never leave
+    // test-flow corrupted (today's live bug literally overwrites it with
+    // `id: alias-of-real`) for every later test in this file that depends
+    // on test-flow's identity, e.g. the flows-list test below.
+    rmSync(linkPath, { force: true });
+    writeFileSync(realFlowPath, originalContent, 'utf8');
+  }
+});
+
+test('BLOCKER: PUT rejects a HARDLINKED flow.yaml pointing outside the forge root — the outside file stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-flows-outside-hardlink-'));
+  const outsideFile = join(outsideDir, 'secret-flow.yaml');
+  const outsideOriginal = makeFlowYaml({ id: 'hardlink-secret', version: 1 });
+  writeFileSync(outsideFile, outsideOriginal, 'utf8');
+
+  const hlinkFlowDir = join(forgeRoot, 'studio', 'flows', 'hlink-flow');
+  mkdirSync(hlinkFlowDir, { recursive: true });
+  const linkPath = join(hlinkFlowDir, 'flow.yaml');
+  try {
+    linkSync(outsideFile, linkPath);
+  } catch {
+    // Cross-filesystem hardlinks (EXDEV) can be unavailable — skip rather
+    // than false-failing the suite for an environment limitation.
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await putJson(`${bridgeUrl}/api/studio/flows/hlink-flow`, {
+      goal: 'ATTACKER-CONTROLLED overwrite via hardlink.',
+      nodes: [{ id: 'n', gate: 'human' }],
+      edges: [],
+      triggers: [],
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a hardlinked flow.yaml must be REJECTED — realpath cannot resolve a hardlink away (verified live: today it returns 200 and the outside file is overwritten)',
+    );
+    const outsideAfter = readFileSync(outsideFile, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the out-of-tree file (same inode as the hardlink) must be byte-unchanged');
+  } finally {
+    rmSync(hlinkFlowDir, { recursive: true, force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
 });
 
 test('PUT /api/studio/flows without x-forge-csrf → 403', async () => {

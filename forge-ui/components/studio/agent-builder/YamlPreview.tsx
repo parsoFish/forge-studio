@@ -14,6 +14,14 @@ type Props = {
   tools: string[];
   mcps: string[];
   guards: string[];
+  // R3-03-F4: bound library hooks — a DISTINCT vocabulary from `guards`
+  // (composition.hooks vs composition.guards). Real fidelity gap fixed here
+  // (R2-09 C5): hooks were already bound and saved, just never rendered.
+  hooks: string[];
+  // R2-09 C4/C5: declared upload-kind vocabulary. `[]` renders an explicit
+  // empty list — declared-empty is meaningful and must stay visible, never
+  // an omitted row.
+  materials: string[];
   process: string;
   interactivity: string;
   runtime: AgentRuntime;
@@ -27,6 +35,7 @@ function catalogName(catalog: Catalog, id: string): string {
     ...(catalog.tools ?? []),
     ...(catalog.mcps ?? []),
     ...(catalog.guards ?? []),
+    ...(catalog.hooks ?? []),
   ];
   return (all.find((i) => i.id === id)?.name as string) ?? id;
 }
@@ -53,7 +62,7 @@ function esc(s: string): string {
 }
 
 function buildYaml(props: Props): string {
-  const { slug, name, purpose, skills, tools, mcps, guards, process, interactivity, runtime, brainAccess, catalog } = props;
+  const { slug, name, purpose, skills, tools, mcps, guards, hooks, materials, process, interactivity, runtime, brainAccess, catalog } = props;
 
   const lines: string[] = [];
 
@@ -72,6 +81,14 @@ function buildYaml(props: Props): string {
     names.forEach((n) => lines.push(listItem(n)));
   }
 
+  // Materials are plain kebab kind ids from the closed vocabulary (see
+  // MATERIAL_KINDS, studio-client.ts) — not catalog entries, so they render
+  // as-is rather than through catalogName's lookup.
+  function listRaw(values: string[]) {
+    if (values.length === 0) { lines.push(emptyList()); return; }
+    values.forEach((v) => lines.push(listItem(v)));
+  }
+
   lines.push(kv('slug', slug || '(new)'));
   lines.push(kv('name', name || '(unnamed)'));
   lines.push(kv('purpose', purpose || '—'));
@@ -81,6 +98,13 @@ function buildYaml(props: Props): string {
   lines.push(`  ${kv('tools', '')}`); listIds(tools);
   lines.push(`  ${kv('mcps', '')}`); listIds(mcps);
   lines.push(`  ${kv('guards', '')}`); listIds(guards);
+  lines.push(`  ${kv('hooks', '')}`); listIds(hooks);
+  lines.push('');
+  // materials is a TOP-LEVEL field (mirrors `fanout`), not nested under
+  // composition (D1, orchestrator/studio/materials.ts) — rendered as its
+  // own section, not indented under composition:.
+  lines.push(sect('materials'));
+  listRaw(materials);
   lines.push('');
   lines.push(sect('process'));
   (process || '—').split('\n').forEach((l) =>

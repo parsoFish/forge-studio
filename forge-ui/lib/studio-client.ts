@@ -111,6 +111,15 @@ export type Agent = {
   // from `guards` (ADR-027 R3-03 amendment: composition.hooks holds library
   // hook ids, composition.guards holds the fixed platform dispatch-key set).
   hooks: string[];
+  /**
+   * R2-09 D1/D2 — the closed set of upload kinds (see MATERIAL_KINDS below)
+   * this agent declares it accepts. `undefined` = not declared on the wire
+   * payload (parse failure or genuinely absent — parseMaterials collapses
+   * both, see its header); `[]` = declared-empty ("accepts nothing"), a
+   * meaningful value distinct from absence. Never fabricate one from the
+   * other.
+   */
+  materials?: string[];
   interactivity?: string;
   process?: string;
   runtime?: AgentRuntime;
@@ -584,6 +593,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     disallowedTools:Array.isArray(r['disallowedTools']) ? (r['disallowedTools'] as string[]) : [],
     capability:     parseCapability(r['capability']),
     fanout:         parseFanout(r['fanout']),
+    materials:      parseMaterials(r['materials']),
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
@@ -1097,6 +1107,147 @@ export async function deleteKb(id: string): Promise<{ ok: boolean; error?: strin
     const data = (await res.json().catch(() => ({}))) as { ok?: boolean; error?: string };
     if (!res.ok) return { ok: false, error: data.error ?? `HTTP ${res.status}` };
     return { ok: data.ok !== false };
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// materials + instructions-draft (R2-09 D1/D8/D9)
+// ---------------------------------------------------------------------------
+
+/**
+ * The closed, frozen materials vocabulary (R2-09 D1-D4). Mirrors
+ * orchestrator/studio/materials.ts's `MATERIAL_KINDS` verbatim — forge-ui
+ * cannot import orchestrator TS directly (see the `SHIPPED_TRIGGER_KINDS`
+ * mirror above for the same hand-kept-mirror convention), so this is the
+ * SINGLE named constant every forge-ui consumer of the vocabulary imports;
+ * do not re-declare the list anywhere else client-side. Order is
+ * significant (surfaced verbatim in the builder's materials toggles and the
+ * YAML preview) — keep it in lockstep with the server list if it ever
+ * changes.
+ */
+export const MATERIAL_KINDS = ['images', 'documents', 'audio', 'data-files'] as const;
+export type MaterialKind = (typeof MATERIAL_KINDS)[number];
+
+/**
+ * Parse a raw `materials` field (server AgentDefinition.materials shape,
+ * orchestrator/studio/materials.ts) client-side. Mirrors the server parser's
+ * D1/D2 semantics exactly: an array of strings — including `[]` — parses
+ * as-is (D2: declared-empty is a real, meaningful value, distinct from
+ * absence); `undefined`/`null` (the field genuinely absent) parses to
+ * `undefined`; any other shape — a non-array, or an array containing a
+ * non-string entry — is a parse FAILURE and also returns `undefined`.
+ *
+ * That last case is deliberately NOT the same `undefined` as "absent" from a
+ * caller's perspective in one sense (both collapse to the same return value
+ * here, matching `parseCapability`'s "malformed degrades to absent, never
+ * throws" convention) but it must never be upgraded into a fabricated `[]` —
+ * a prior finding in this campaign was exactly a client turning a malformed/
+ * missing field into an invented default, destroying the guarantee D2 gives
+ * "declared-empty" its meaning. Never coerces a partial list.
+ */
+export function parseMaterials(raw: unknown): string[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  if (!raw.every((v) => typeof v === 'string')) return undefined;
+  return raw as string[];
+}
+
+/** Self-describing manifest of what an instructions draft was composed from
+ *  (orchestrator/studio/instructions-draft.ts `InstructionsDraftDerivation`,
+ *  re-declared client-side per this file's header convention). Carried
+ *  through verbatim — never re-derived here. */
+export type InstructionsDraftDerivation = {
+  sources: Array<{ field: string; present: boolean }>;
+};
+
+/** Result of POST /api/studio/agents/:slug/instructions-draft (R2-09 D8/D9). */
+export type InstructionsDraftResult =
+  | { ok: true; draft: string; derivation: InstructionsDraftDerivation }
+  | { ok: false; error: string };
+
+/**
+ * Pure parse of the instructions-draft response (status + parsed JSON body)
+ * into `InstructionsDraftResult`. Mirrors `parseCapability`'s
+ * carry-through-or-fail convention: a non-2xx status surfaces the server's
+ * `error` (never smoothed into an empty draft), and a malformed 200 payload
+ * — missing `draft` or `derivation` — is ALSO an error, never a fabricated
+ * empty draft (the exact "declared data must not fail open" failure class
+ * this campaign exists to close). Split out from the async fetch wrapper
+ * below (`requestInstructionsDraft`) so the parse logic is directly unit-
+ * testable without a network mock.
+ *
+ * 2026-08-05 adversarial-review round 2, finding E/12: `studioPut`/
+ * `studioPost` in this same file both respect the response BODY's own `ok`
+ * field (`typeof data.ok === 'boolean' ? data.ok : true`) — an explicit
+ * `ok:false` in a 2xx body is a real failure signal, not decoration. This
+ * function used to ignore `p['ok']` entirely and derive success purely from
+ * HTTP status + shape presence, so a 200 body carrying
+ * `{ok:false, draft:'x', ...}` was misreported as a successful draft. The
+ * body's `ok:false` is now checked BEFORE the shape check, matching the
+ * sibling parsers.
+ *
+ * 2026-08-05 adversarial-review round 3, finding D/7: `derivation` is typed
+ * `InstructionsDraftDerivation` ({sources: Array<...>}) but this parser used
+ * to only guard `undefined`/`null` before casting `p['derivation'] as
+ * InstructionsDraftDerivation` — the SHAPE was never checked, so
+ * `derivation: 42` or `{}` sailed through as a "valid" derivation. Fixed by
+ * shape-validating: `derivation` must be a plain object carrying a `sources`
+ * ARRAY. A malformed `derivation` is now a parse FAILURE, matching
+ * `parseMaterials`'s "never fabricate a substitute value" convention — a
+ * prior defect in this campaign turned a missing/malformed declared field
+ * into an invented default, destroying the exact guarantee the field's
+ * presence was supposed to provide. This function does the same for
+ * `derivation` that it already does for `draft`: absence or malformation is
+ * reported, never silently smoothed into a fabricated `{sources: []}`.
+ */
+function isValidDerivation(v: unknown): v is InstructionsDraftDerivation {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const d = v as Record<string, unknown>;
+  return Array.isArray(d['sources']);
+}
+
+export function parseInstructionsDraftResponse(status: number, payload: unknown): InstructionsDraftResult {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  if (status < 200 || status >= 300) {
+    return { ok: false, error: typeof p['error'] === 'string' ? p['error'] : `HTTP ${status}` };
+  }
+  if (p['ok'] === false) {
+    return {
+      ok: false,
+      error: typeof p['error'] === 'string' ? p['error'] : 'instructions-draft response reported ok:false',
+    };
+  }
+  if (typeof p['draft'] !== 'string' || !isValidDerivation(p['derivation'])) {
+    return { ok: false, error: 'malformed instructions-draft response: missing draft or derivation' };
+  }
+  return { ok: true, draft: p['draft'], derivation: p['derivation'] };
+}
+
+/**
+ * Request a deterministic instructions draft for the CURRENT (possibly
+ * unsaved) builder state — never auto-saved (D9). Thin, untestable-by-design
+ * I/O shell around the testable `parseInstructionsDraftResponse` core: this
+ * function itself is not directly exercised by studio-client.test.ts (it has
+ * no logic of its own beyond resolving the bridge URL and calling fetch —
+ * exactly the same shape as `studioPut`/`studioPost` above, which are
+ * likewise untested directly).
+ */
+export async function requestInstructionsDraft(
+  slug: string,
+  body: Record<string, unknown>,
+): Promise<InstructionsDraftResult> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/studio/agents/${encodeURIComponent(slug)}/instructions-draft`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => undefined);
+    return parseInstructionsDraftResponse(res.status, data);
   } catch (err) {
     return { ok: false, error: String(err) };
   }

@@ -82,12 +82,88 @@ export const STORY_REGISTRY = [
     batch: 'B',
     port: null,
     excluded: null,
+    note:
+      'R2-09 (this initiative) attempted this flip alongside edit-agent (its D11) ' +
+      'and deliberately did NOT take it. The product surfaces are real — 9 of the ' +
+      "11 mockup steps describe things that genuinely work today: the /agents " +
+      'library and /agents/new (step 1-2), the instructions field and its ' +
+      'generation assist (step 5, R2-09-F2), click-to-add on a catalog chip ' +
+      '(step 6, R2-09 C2), the matching zone plus the live YAML preview (step 7), ' +
+      'the allowed-input-materials declaration (step 8, R2-09-F1), saving a ' +
+      'from-scratch agent to a real SKILL.md (step 9), it appearing on the agents ' +
+      'home (step 10), and it being standalone-runnable (step 11, ' +
+      '[data-run-dispatchable], R2-01-F3). What blocks the flip is BEAT ' +
+      'GRANULARITY, not reality: rule 9 wants one BeatRef per mockup step and ' +
+      'rule 13 forbids citing the same beat twice, but the `agents` journey walks ' +
+      'that whole arc inside COMPOSITE beats — agents-scratch-build alone covers ' +
+      'steps 2, 6, 7, 9 and 10 in a single beat — so only 4 distinct non-edit-arc ' +
+      'beats exist (agents-starters, agents-scratch-build, agents-builder, ' +
+      'agents-materials-declare) where 9 are needed. Citing edit-arc beats to make ' +
+      'up the count, or marking covered-but-coarse steps as {excluded}, would both ' +
+      'misrepresent the state — exclusion means deliberately not built, which is ' +
+      'false here. Splitting agents-scratch-build into per-step beats is the ' +
+      'remaining work and is journey surgery on a beat that currently passes. ' +
+      'Steps 3-4 (type into draft-prompt, click "Draft it") are the ' +
+      'conversational new-agent drafting R2-09 rejected with an owner (D10 reject ' +
+      "#4): the creation AGENT SESSION is R4-15/R4-17 on R2-10's shell, and the " +
+      'shipped alternative is the curated StarterPicker (agents-starters). They ' +
+      'are therefore NOT recorded as permanent {excluded, decision} refs here — ' +
+      'R4-15/R4-17 may make them genuinely real, and pre-excluding them would ' +
+      'freeze a decision those initiatives own. Natural owner of this flip: the ' +
+      'same batch-B initiative that lands the creation session.',
   },
   {
     story: 'edit-agent',
     batch: 'B',
-    port: null,
+    port: {
+      journey: 'agents',
+      beats: [
+        'agents-edit-selector-open',
+        'agents-edit-selector-navigate',
+        'agents-edit-catalog-click-add',
+        'agents-edit-dirty',
+        'agents-edit-regenerate-instructions',
+        'agents-edit-save',
+        'agents-edit-byte-faithful',
+      ],
+    },
     excluded: null,
+    note:
+      'R2-09 (this initiative) shipped the agent-select switcher, click-to-add ' +
+      'catalog chips, the instructions-draft assist (never auto-saved), and the ' +
+      "byte-faithful save path — the `agents` journey's 7 new agents-edit-* " +
+      'beats port all 7 mockup steps to real, executed beats (mockup 1-indexed, ' +
+      'journeys-data.jsx:72-83) against a REAL shipped agent (developer-ralph, ' +
+      'the only OOTB agent carrying both a hand-written 7-line YAML comment ' +
+      'block and a fanout: block — the one fixture that can prove both the ' +
+      'byte-faithful claim and the fanout-survives-a-full-reserialize claim at ' +
+      'once; its real bytes are stashed before this arc and restored after, ' +
+      'crash-safe at the top-level finally). Step 1 (goto the builder, pick ' +
+      'from the selector) is agents-edit-selector-open — real [data-agent-' +
+      'select]/[data-agent-option]. Step 2 (select the Developer) is agents-' +
+      'edit-selector-navigate — switches through the SAME real selector and ' +
+      'asserts the route + data-agent-id actually changed (round-tripped ' +
+      'through a second real agent and back to developer-ralph, so the arc ' +
+      'continues on the intended fixture). Step 3 ("drag — or just click it") ' +
+      'is agents-edit-catalog-click-add — click-to-add is real (R2-09 C2), ' +
+      'proven idempotent by clicking the same, now-bound chip a second time ' +
+      'and asserting the count does not move (the drag path itself is already ' +
+      'covered by agents-scratch-build, not re-proven here). Step 4 (lands in ' +
+      'Skills, marks itself unsaved) is agents-edit-dirty — [data-dirty=' +
+      '"true"]. Step 5 (regenerate instructions) is agents-edit-regenerate-' +
+      'instructions — the real Generate-draft assist, with the D9 "never ' +
+      'auto-saved" guarantee independently verified (the real file on disk is ' +
+      'read back byte-unchanged at that exact moment, mid-edit). Step 6 (Save) ' +
+      'is agents-edit-save — the compound save (skill + drafted instructions) ' +
+      'lands on the real SKILL.md, and the fanout: block is asserted present, ' +
+      'not dropped, even though this particular save takes the full-reserialize ' +
+      'path (composition changed). Step 7 is caption-only in the mockup ("Edit ' +
+      'is the same surface as create — zones and instructions ARE the spec") — ' +
+      'mapped onto agents-edit-byte-faithful, the real product statement of ' +
+      'that same claim: a body-only save (no composition change) keeps the ' +
+      'ENTIRE frontmatter — the 7-line comment, the fanout: block, key order — ' +
+      'byte-for-byte outside the edited region (skill-md-fidelity.ts D5/D6). ' +
+      'Net: 7 of 7 mockup steps are genuinely backed by a real, executed beat id.',
   },
   {
     story: 'create-flow',

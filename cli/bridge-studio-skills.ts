@@ -25,7 +25,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { sep } from 'node:path';
+import { dirname } from 'node:path';
 import matter from 'gray-matter';
 
 import {
@@ -36,7 +36,8 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
-import { skillDir, skillPath, skillsDir } from '../orchestrator/skill-path.ts';
+import { skillPath, skillsDir } from '../orchestrator/skill-path.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { isStudioAgent } from '../orchestrator/studio/registry.ts';
 import {
@@ -118,10 +119,25 @@ export async function handleStudioSkillsRoutes(
         .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
       if (!SLUG_RE.test(slug)) { sendJson(res, 400, { error: 'could not derive a valid slug from the name' }, origin); return true; }
 
-      const skillDirPath = skillDir(slug, ctx.forgeRoot);
-      if (!skillDirPath.startsWith(skillsDir(ctx.forgeRoot) + sep)) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
-      const skillMdPath = skillPath(slug, ctx.forgeRoot);
-      if (existsSync(skillMdPath)) { sendJson(res, 409, { error: `skill "${slug}" already exists` }, origin); return true; }
+      // Guard through the shared containment guard (cli/studio-path-guard.ts
+      // — 2026-08-06, this route's own BLOCKER: the prior lexical
+      // `skillDirPath.startsWith(skillsDir + sep)` check on the UNRESOLVED,
+      // join()-constructed path never resolves symlinks — a `skills/<id>`
+      // directory that IS a symlink to an outside location passes it
+      // trivially, since the CONSTRUCTED path is always lexically under
+      // skills/ regardless of what it actually points at). The guard also
+      // subsumes the old `existsSync(skillMdPath)` 409 check via
+      // `pathGuard.exists` — a symlink pointing at an outside dir that
+      // happens to already contain a SKILL.md now 400s because the guard's
+      // per-segment IDENTITY check rejects it, not because `existsSync`
+      // followed the symlink and found something there (that was a side
+      // effect, not containment; the guard call runs FIRST, before the
+      // dedup check, so it fires for the right reason).
+      const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [slug, 'SKILL.md']);
+      if (!pathGuard.ok) { sendJson(res, 400, { error: 'path traversal detected' }, origin); return true; }
+      if (pathGuard.exists) { sendJson(res, 409, { error: `skill "${slug}" already exists` }, origin); return true; }
+      const skillMdPath = pathGuard.realPath;
+      const skillDirPath = dirname(skillMdPath);
 
       const md = matter.stringify(
         '\n' + (skillBody.trim() || `# ${name}\n\n${description}\n`) + '\n',

@@ -319,6 +319,30 @@ inventory rather than one shared page-level contract:
   [data-run-dispatchable="false"]` with no run button — it keeps its bespoke
   session page. `/agents/new` shows the curated starter picker first
   (`[data-section="starter-picker"]`, per-option `[data-starter-option]`).
+  **R2-09 additions.** The agent picker carries `[data-agent-select]` with a
+  per-option `[data-agent-option="<slug>"]` (`"new"` for the new-agent
+  sentinel), so a journey can switch agents by structured state instead of by
+  option text. Catalog chips are **click-to-add as well as draggable** — the
+  same `.catalog-chip[data-id][data-kind]` element, keyboard-activatable, with
+  the drag path untouched; an already-bound chip does not add twice, matching
+  the drop zone's own semantics. `[data-section="instructions"]` wraps the
+  SKILL.md prose field and carries
+  `[data-instructions-draft="true"|"false"]` — true from the moment the
+  `[data-action="generate-instructions"]` assist applies a draft until the next
+  successful save or discard, and it **persists across further manual edits**
+  because the content is still draft-derived. The draft is never auto-saved:
+  the assist marks the form dirty and only the operator's Save writes it, and a
+  failed request surfaces an error rather than leaving a stale or fabricated
+  draft in place. `[data-section="materials"]` carries `[data-materials-count]`
+  and one `[data-material="<kind>"][data-selected="true"|"false"]` toggle per
+  vocabulary kind (`images | documents | audio | data-files` — the id stays
+  kebab; "data files" is a display label only). **The materials declaration is
+  not enforced here**: the UI declares, the R6-04-F2 kickoff upload seam
+  enforces, and `agentAcceptsMaterial` is the fail-closed gate that seam must
+  call. `[data-ready-count]` is unchanged at **6** — the mockup's "Named +
+  described" and "Reachable" rows were deliberately NOT added, because neither
+  can ever read false for a loaded agent and a readiness row that cannot fail is
+  decoration.
 - **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
   just redirects to the first registered project
   (`[data-page="projects-index"]` while empty/loading). The project page is
