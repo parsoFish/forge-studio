@@ -56,11 +56,16 @@ export const journey = defineJourney({
               await page.locator('[data-action="start-architect"]').hover();
               await sleep(ACT);
               await page.locator('[data-action="start-architect"]').click();
-              await page.waitForURL(/\/architect\/[^/]+\/interview/, { timeout: 15000 });
-              sid = decodeURIComponent(page.url().split('/architect/')[1].split('/')[0]);
+              // R2-10 PR2: /architect/new pushes straight to the shared session
+              // shell (/sessions/architect/<sid>) — it never touches the retired
+              // /architect/<sid>/interview route at all (that path is now a
+              // redirect stub for stale inbound links only, never hit by a real
+              // click here).
+              await page.waitForURL(/\/sessions\/architect\/[^/]+/, { timeout: 15000 });
+              sid = decodeURIComponent(page.url().split('/sessions/architect/')[1].split('/')[0]);
               ctx.seeded.createdSid = sid; // read by the runner's finally-block cleanup
               console.log(`[e2e] architect session: ${sid}`);
-              check(!!sid, '[data-action="start-architect"] navigates to /architect/<sid>/interview');
+              check(!!sid, '[data-action="start-architect"] navigates to /sessions/architect/<sid>');
 
         },
       },
@@ -74,8 +79,15 @@ export const journey = defineJourney({
               console.log('\n[R1.1] Architect grounds itself — P3 activity panel');
               writeStatus(sid, { phase: 'interviewing', round: 1, idea: IDEA });
               archEvent(sid, 'start', 'architect turn (phase=interviewing, round=1)');
-              await page.waitForSelector('main[data-page="architect-interview"]', { timeout: 15000 });
+              // R2-10 PR2: the retired per-kind data-page is gone — the shared
+              // shell carries data-page="session" + data-session-kind="architect"
+              // on <main>, with data-session-phase mirroring the real phase.
+              await page.waitForSelector('main[data-page="session"][data-session-kind="architect"]', { timeout: 15000 });
               await page.waitForSelector('[data-component="architect-hex"]', { timeout: 15000 });
+              const groundingPhase = await page.evaluate(
+                () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') ?? null);
+              check(groundingPhase === 'interviewing',
+                `R2-10: session shell reflects the real phase (data-session-phase, got "${groundingPhase}")`);
               await caption(page, 'Forge reads the CLI source and the brain before it asks anything — every tool call, every line of reasoning.');
               await sleep(ACT);
               const groundingTools = ['Read', 'Grep', 'Glob', 'Read', 'Bash', 'Read'];
@@ -132,6 +144,28 @@ export const journey = defineJourney({
               check(await page.locator('[data-section="architect-interview"]').count() > 0,
                 '[data-section="architect-interview"] rendered with questions');
               await countAtLeast(page, '[data-question-index]', 2, 'architect returned ≥2 questions');
+              // R2-10: at least one turn, derived from a REAL checkpoint file —
+              // questions.json contributes a pending AGENT turn while phase is
+              // exactly 'awaiting-answers' (never invented; see
+              // orchestrator/studio/session-transcript.ts's derivation contract).
+              await page.waitForFunction(
+                () => document.querySelector('[data-turn-index="0"]')?.getAttribute('data-turn-source') === 'questions.json',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              const questionsTurn = await page.evaluate(() => {
+                const el = document.querySelector('[data-turn-index="0"]');
+                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source') } : null;
+              });
+              check(questionsTurn !== null && questionsTurn.role === 'agent' && questionsTurn.source === 'questions.json',
+                `R2-10: transcript derives a real turn from questions.json (got ${JSON.stringify(questionsTurn)})`);
+              // R2-10: the artifact pane — architect's declared renderer is
+              // roadmap-draft, with a non-empty label sourced from
+              // studio/session-kinds.yaml over the wire (never a client lookup).
+              check(await page.locator('[data-section="session-artifact"][data-artifact-kind="roadmap-draft"]').count() > 0,
+                'R2-10: session artifact pane renders the roadmap-draft renderer for the architect kind');
+              const archArtifactLabel = await page.evaluate(
+                () => document.querySelector('[data-section="session-artifact"]')?.getAttribute('data-artifact-label') ?? '');
+              check(archArtifactLabel.length > 0, `R2-10: artifact pane carries a non-empty data-artifact-label (got "${archArtifactLabel}")`);
 
         },
       },
@@ -210,8 +244,10 @@ export const journey = defineJourney({
                 await sleep(READ);
                 // No click on [data-action="start-architect"] — that would spawn a real
                 // second session. Instead: transition straight to the canonical sid's
-                // interview, already at the answered-question stage.
-                await p.goto(watch.uiUrl + `/architect/${encodeURIComponent(sid)}/interview`, { waitUntil: 'domcontentloaded' });
+                // interview, already at the answered-question stage. R2-10 PR2: target
+                // the shared session shell directly (/sessions/architect/<sid>) — the
+                // retired /architect/<sid>/interview route is a redirect stub only.
+                await p.goto(watch.uiUrl + `/sessions/architect/${encodeURIComponent(sid)}`, { waitUntil: 'domcontentloaded' });
                 await p.waitForSelector('[data-section="architect-interview"]', { timeout: 15000 });
                 await caption(p, "Two questions, your call — pick an option, or just say it in your own words.");
                 await p.locator('[data-question-index="1"]').scrollIntoViewIfNeeded().catch(() => {});
@@ -244,13 +280,16 @@ export const journey = defineJourney({
               // enumerated with dispositions before any initiative is drafted.
               writeStatus(sid, { phase: 'exploring', round: 2, idea: IDEA });
               archEvent(sid, 'start', 'architect turn (phase=exploring) — enumerating edge cases + brain constraints');
+              // R2-10 PR2: the per-kind data-architect-phase moved off <main> (it
+              // still lives on the architect-hex sub-component); the shell's own
+              // phase now lives at data-session-phase on <main data-page="session">.
               await page.waitForFunction(
-                () => document.querySelector('main[data-architect-phase]')?.getAttribute('data-architect-phase') === 'exploring',
+                () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'exploring',
                 null, { timeout: 8000 },
               ).catch(() => {});
               const explorePhase = await page.evaluate(
-                () => document.querySelector('main[data-architect-phase]')?.getAttribute('data-architect-phase') ?? null);
-              check(explorePhase === 'exploring', `R1: the exploring stage is visible in the interview UI (data-architect-phase, got "${explorePhase}")`);
+                () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') ?? null);
+              check(explorePhase === 'exploring', `R1: the exploring stage is visible in the interview UI (data-session-phase, got "${explorePhase}")`);
               await frame(page, 'r1-3a-exploring', 'R1 — planning: the architect explores edge cases before drafting (R4-04-F4)');
               writeStatus(sid, { phase: 'drafting', round: 2, idea: IDEA });
               archEvent(sid, 'start', 'architect turn (phase=drafting) — rolling in answers');
@@ -374,7 +413,7 @@ export const journey = defineJourney({
               // 'drafting'. Pure dwell + hover on send-back/approve — no clicks on those — so
               // the canonical sid never advances a gate the main beats own for real.
               await recordClip(browser, watch, 'run-plan-gate',
-                `/architect/${encodeURIComponent(sid)}/interview`,
+                `/sessions/architect/${encodeURIComponent(sid)}`,
                 async (p) => {
                   await p.waitForSelector('[data-action="open-plan"]', { timeout: 15000 });
                   await caption(p, 'The interview settles, and the plan opens up — click through into the gate.');

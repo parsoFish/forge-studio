@@ -36,7 +36,8 @@
  *         timeline + contract readiness (/projects/<id>). (FORGE_E2E_PROJECT overrides.)
  *
  *   ACT 2 — RUN  (the cycle as the proof case, on a real mdtoc roadmap feature)
- *     R1  Idea → architect interview (/architect/new → /architect/<sid>/interview):
+ *     R1  Idea → architect interview (/architect/new → /sessions/architect/<sid>,
+ *         the shared session shell, R2-10 PR2):
  *         live costed activity panel, clarifying questions, free-text answers, a
  *         stall cameo — the four architect observability surfaces (P1 stall / P2
  *         free-text / P3 activity / P4 cost).
