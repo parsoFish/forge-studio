@@ -582,10 +582,22 @@ test('security companion [Finding 3]: a hook script path that re-enters a DIFFER
 //      time, `resolveHookScriptPath` uses `path.resolve`, which ALSO
 //      collapses "/." the same way, and the resulting "scripts" dir exists
 //      — no symlink involved — so load-time never throws.)
-//   2. `scripts/run.sh/` (trailing slash) — `path.resolve` (load time)
-//      strips the trailing slash, sees the real file, passes; `path.join`
-//      (read time) PRESERVES the trailing slash, so `readFileSync` opens
-//      ".../run.sh/" against a REGULAR FILE -> ENOTDIR.
+//   2. `scripts/run.sh/` (trailing slash) — AS ORIGINALLY WRITTEN (pre-fix):
+//      `path.resolve` (load time) strips the trailing slash, sees the real
+//      file, passes; `path.join` (read time) PRESERVES the trailing slash,
+//      so `readFileSync` opened ".../run.sh/" against a REGULAR FILE ->
+//      ENOTDIR. AMENDED post-fix (T2 round, 2026-08-06): `readHookScriptBody`
+//      no longer uses a bare `path.join` — it now splits `script` into guard
+//      segments and drops empty/"." components, the SAME rule the
+//      double-slash fix (Finding 3) already applies, because `path.resolve`
+//      tolerates them everywhere else and rejecting them here would 404 a
+//      valid hook. `"scripts/run.sh/".split('/')` is `['scripts','run.sh','']`
+//      — the trailing empty component is dropped by that same rule, landing
+//      on the REAL file with no trailing slash. So this variant no longer
+//      throws at read time either: it is now genuinely valid and functional,
+//      not merely non-crashing. See the variant 2/3 test below, which now
+//      asserts the STRONGER, still-true property (element fault never
+//      becomes collection failure) rather than the old degradation.
 //   3. `scripts\run.sh` (ONE literal backslash character — Linux has no
 //      concept of "\" as a path separator, so this is a single filename
 //      component, never split into "scripts" + "run.sh" the way a real "/"
@@ -694,7 +706,7 @@ test('(RED) [Finding A, variant 1/3 — EISDIR]: a hook whose script is "scripts
   }
 });
 
-test('(RED) [Finding A, variant 2/3 — ENOTDIR]: a hook whose script is "scripts/run.sh/" (trailing slash) must not blank the whole /api/studio/hooks list', async () => {
+test('[Finding A, variant 2/3]: a trailing-slash script path ("scripts/run.sh/") is now genuinely functional (not merely non-crashing) — AND the list survives regardless of which outcome it is', async () => {
   const badId = 'red4-hook-enotdir';
   const canaryA = 'red4-enotdir-canary-a';
   const canaryB = 'red4-enotdir-canary-b';
@@ -707,14 +719,40 @@ test('(RED) [Finding A, variant 2/3 — ENOTDIR]: a hook whose script is "script
     assert.equal(
       status,
       200,
-      `expected 200 (the whole list must survive one malformed hook) — got ${status}: ${text}. path.resolve (load time, resolveHookScriptPath) strips the trailing slash and sees the real file, so entry.ok===true; path.join (read time, readHookScriptBody) PRESERVES the trailing slash, so readFileSync opens ".../run.sh/" against a regular file and throws ENOTDIR, crashing the whole .map() and turning it into a 500 for every hook.`,
+      `expected 200 — an element-level fault (if this entry even still has one) must never become a collection-level failure — got ${status}: ${text}.`,
     );
     const body = JSON.parse(text) as { hooks: HooksListEntry[] };
-    assertValidHookEntrySurvives(body.hooks, canaryA, 'ENOTDIR variant');
-    assertValidHookEntrySurvives(body.hooks, canaryB, 'ENOTDIR variant');
-    const bad = body.hooks.find((h) => h.id === badId);
-    assert.ok(bad, `expected the malformed hook "${badId}" to still appear as an entry (not vanish) — got ids: ${body.hooks.map((h) => h.id).join(', ')}`);
-    assert.equal(bad!.ok, false, `expected the malformed hook to surface as ok:false rather than crash the whole route — got ${JSON.stringify(bad)}`);
+    assertValidHookEntrySurvives(body.hooks, canaryA, 'trailing-slash variant');
+    assertValidHookEntrySurvives(body.hooks, canaryB, 'trailing-slash variant');
+    const entry = body.hooks.find((h) => h.id === badId);
+    assert.ok(entry, `expected "${badId}" to still appear as an entry (not vanish) — got ids: ${body.hooks.map((h) => h.id).join(', ')}`);
+
+    // AMENDED (T2 round, 2026-08-06): the read-path fix makes
+    // readHookScriptBody drop the trailing "/" as a split artifact — the
+    // SAME empty-segment rule the double-slash fix (Finding 3) already
+    // applies — so this hook now resolves to its real script and reads
+    // successfully. Asserting ok:false here would pin the OLD broken
+    // degradation as the expected outcome instead of the actual invariant
+    // this test protects (an element fault must never become a collection
+    // failure) — the same over-specification class the round-2 amendments
+    // already removed elsewhere in this file. So: accept EITHER a genuine
+    // ok:false (with a real error) OR a genuine ok:true — and if it reports
+    // ok:true, prove it is actually functional end-to-end, not just "didn't
+    // crash the list".
+    if (entry!.ok === false) {
+      assert.ok(entry!.error, `expected an ok:false entry to carry a non-empty error — got ${JSON.stringify(entry)}`);
+    } else {
+      assert.equal(entry!.scanVerdict, 'clean', `expected the trailing-slash hook, reported ok:true, to scan clean (a benign echo script) — got ${JSON.stringify(entry)}`);
+      const detail = await get(`/api/studio/hooks/${badId}`);
+      assert.equal(
+        detail.status,
+        200,
+        `expected the DETAIL route to ALSO serve this hook (proving ok:true in the list is genuine, not just "didn't crash the .map()") — got ${detail.status}: ${detail.text}`,
+      );
+      const detailBody = JSON.parse(detail.text) as { files?: Array<{ path: string; body: string }> };
+      const scriptFile = detailBody.files?.find((f) => f.body.includes('benign'));
+      assert.ok(scriptFile, `expected the detail route to return the REAL script body (containing "benign") — got ${detail.text}`);
+    }
   } finally {
     rmSync(join(forgeRoot, 'studio', 'hooks', badId), { recursive: true, force: true }); // isolate from variant 3/3, see variant 1/3's comment
   }

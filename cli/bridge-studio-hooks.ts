@@ -75,6 +75,7 @@ import {
   hooksDir,
   hookYamlPath,
   listHookLibrary,
+  loadHookDefinition,
   HOOK_LIFECYCLE_EVENTS,
   FORBIDDEN_HOOK_BINDING_KEYS,
   type HookLifecycleEvent,
@@ -116,8 +117,29 @@ function toClientListEntry(forgeRoot: string, entry: ReturnType<typeof listHookL
       error: sanitizeError(entry.error ?? 'malformed hook'),
     };
   }
-  const runState = hookRunState(forgeRoot, entry.id);
-  const ledgerEntry = readHookApprovalLedger(forgeRoot).get(entry.id);
+  // FAULT ISOLATION (SEC-01 round 4). `listHookLibrary` already degrades a
+  // malformed hook to `{ok:false, error}` per entry — and this function used
+  // to throw that isolation away, because `hookRunState` reads the script off
+  // disk and can throw (EISDIR on `script: "scripts/."`, ENOTDIR on
+  // `"scripts/run.sh/"`, ENOENT on a backslash component, or a containment
+  // rejection). Called inside the listing route's bare `.map()`, one such hook
+  // made the whole map throw and the operator's ENTIRE hook library vanished
+  // behind a 500. An element-level fault must never become a collection-level
+  // claim; degrade this one entry exactly as listHookLibrary already does.
+  let runState;
+  let ledgerEntry;
+  try {
+    runState = hookRunState(forgeRoot, entry.id);
+    ledgerEntry = readHookApprovalLedger(forgeRoot).get(entry.id);
+  } catch (err) {
+    return {
+      ok: false,
+      id: entry.id,
+      carriedBy: entry.carriedBy,
+      carriedByDerivation: entry.carriedByDerivation,
+      error: sanitizeError(err),
+    };
+  }
   return {
     ok: true,
     id: entry.id,
@@ -132,6 +154,28 @@ function toClientListEntry(forgeRoot: string, entry: ReturnType<typeof listHookL
     trust: computeTrust(runState, ledgerEntry),
     runnable: runState.runnable,
   };
+}
+
+/**
+ * Is this hook's declared `script:` genuinely contained within its own package
+ * directory, by per-segment identity rather than a lexical prefix test?
+ *
+ * Module-local on purpose (the WI's zero-new-exports bound). Empty and `.`
+ * components are dropped because `path.resolve` tolerates them everywhere else
+ * — rejecting a legitimate `scripts//run.sh` would 404 a valid hook — while a
+ * `..` is left in place so `isSafeSegment` rejects it. Any failure to load or
+ * resolve reports `false`, so the caller answers 404 rather than surfacing a
+ * distinguishable error.
+ */
+function hookScriptIsContained(forgeRoot: string, id: string): boolean {
+  try {
+    const def = loadHookDefinition(id, forgeRoot);
+    const segments = def.script.split('/').filter((seg) => seg !== '' && seg !== '.');
+    const guard = resolveGuardedPath(hooksDir(forgeRoot), [id, ...segments]);
+    return guard.ok && guard.exists;
+  } catch {
+    return false;
+  }
 }
 
 /** Decode a URL path segment; throws (never silently passes through a raw,
@@ -303,6 +347,15 @@ export async function handleStudioHooksRoutes(
       const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
       if (!yamlGuard.ok || !yamlGuard.exists) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
 
+      // The hook.yaml guard above does not cover the SCRIPT leaf. Without this,
+      // a hook whose hook.yaml is real but whose script symlinks outside its
+      // package threw out of hookRunState into the generic 500 handler — a
+      // distinguishable status where every other route in this change returns
+      // 404, i.e. a working oracle for "an id exists here and its script
+      // escapes containment". Nothing leaked (sanitizeError redacts the path),
+      // but the status code alone was the signal.
+      if (!hookScriptIsContained(ctx.forgeRoot, id)) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
+
       const runState = hookRunState(ctx.forgeRoot, id);
       if (runState.verdict === 'blocked') {
         sendJson(res, 409, {
@@ -334,6 +387,15 @@ export async function handleStudioHooksRoutes(
 
       const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
       if (!yamlGuard.ok || !yamlGuard.exists) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
+
+      // The hook.yaml guard above does not cover the SCRIPT leaf. Without this,
+      // a hook whose hook.yaml is real but whose script symlinks outside its
+      // package threw out of hookRunState into the generic 500 handler — a
+      // distinguishable status where every other route in this change returns
+      // 404, i.e. a working oracle for "an id exists here and its script
+      // escapes containment". Nothing leaked (sanitizeError redacts the path),
+      // but the status code alone was the signal.
+      if (!hookScriptIsContained(ctx.forgeRoot, id)) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
 
       let body: unknown;
       try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
