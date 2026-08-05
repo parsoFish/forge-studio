@@ -399,6 +399,49 @@ export function writePlan(sid, round) {
   writeStatus(sid, { phase: 'awaiting-verdict', round, idea: IDEA });
 }
 
+// R4-15: a SELF-CONTAINED architect session seeded with a multi-initiative
+// roadmap draft — three real `serializeManifest`-shaped manifests carrying real
+// `depends_on_initiatives` edges, one of which points OUTSIDE the draft set so
+// the unresolved-edge path is exercised on real data rather than asserted in a
+// unit test that builds its own input.
+//
+// Deliberately SEPARATE from writePlan()'s canonical session: that session's
+// manifests/ is promoted into the queue on approve, so adding initiatives there
+// would put extra work into `_queue/` and shift every downstream beat. This one
+// is created, read through the real route, and removed inside its own beat — it
+// never reaches a gate and never leaves residue in the (repo-committed)
+// projects/mdtoc tree.
+export const DAG_SESSION_INITIATIVES = [
+  { id: `INIT-${DATE}-e2e-dag-root`, deps: [] },
+  { id: `INIT-${DATE}-e2e-dag-mid`, deps: [`INIT-${DATE}-e2e-dag-root`] },
+  { id: `INIT-${DATE}-e2e-dag-leaf`, deps: [`INIT-${DATE}-e2e-dag-mid`, `INIT-${DATE}-e2e-dag-elsewhere`] },
+];
+/** The one dependency target deliberately absent from the draft set — an
+ *  already-merged initiative is the real-world case, and its edge must be
+ *  SURFACED by the renderer, never silently dropped. */
+export const DAG_SESSION_UNRESOLVED_DEP = `INIT-${DATE}-e2e-dag-elsewhere`;
+
+export function writeRoadmapDagSession(sid) {
+  const dir = archDir(sid);
+  mkdirSync(join(dir, 'manifests'), { recursive: true });
+  for (const { id, deps } of DAG_SESSION_INITIATIVES) {
+    writeFileSync(join(dir, 'manifests', `${id}.md`), [
+      '---', `initiative_id: ${id}`, `project: ${PROJECT}`, `project_repo_path: ${projectRoot}`,
+      `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 10', 'cost_budget_usd: 4',
+      'phase: pending', 'origin: architect',
+      ...(deps.length > 0 ? ['depends_on_initiatives:', ...deps.map((d) => `  - ${d}`)] : []),
+      '---', '',
+      `# ${id}`, '',
+      'Given the architect drafted a dependency-ordered roadmap, when the operator opens the session, then the draft renders as a DAG with its edges intact.',
+    ].join('\n'));
+  }
+  writeStatus(sid, { phase: 'awaiting-verdict', round: 1, idea: IDEA });
+}
+
+export function cleanRoadmapDagSession(sid) {
+  try { rmSync(archDir(sid), { recursive: true, force: true }); } catch { /* */ }
+}
+
 let cycleSeq = 0;
 // Grounded (S5, fix item 3): the real skill names are more granular than the
 // phase id (source: gitpulse/betterado events.jsonl). review-loop defaults to

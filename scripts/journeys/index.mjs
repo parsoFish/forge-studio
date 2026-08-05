@@ -226,6 +226,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-freetext'],
   ['flows-run', 'flows-run-stall'],
   ['flows-run', 'flows-run-draft-cost'],
+  ['flows-run', 'flows-run-roadmap-dag'],
   ['flows-run', 'flows-run-plan-gate'],
   ['flows-run', 'flows-run-send-back'],
   ['flows-run', 'flows-run-approve'],
