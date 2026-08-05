@@ -27,10 +27,17 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import matter from 'gray-matter';
 
 import { startBridge } from './ui-bridge.ts';
+
+// Real repo SKILL.md, located relative to THIS test file (not a hardcoded
+// absolute path) — the golden file for the byte-faithful round-trip ATs.
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const REAL_DEV_RALPH_PATH = join(REPO_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -358,6 +365,195 @@ test('PUT /api/studio/agents/UPPERCASE → 400 (slug must be lowercase)', async 
   assert.equal(res.status, 400);
   const body = (await res.json()) as { error: string };
   assert.ok(body.error.includes('invalid slug'), `expected slug error, got: ${body.error}`);
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — materials (R2-09 D1/D2)
+// ---------------------------------------------------------------------------
+
+test('PUT with materials persists it; the reloaded definition has it', async () => {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/write-agent`,
+    makePutAgentBody({ materials: ['images', 'documents'] }),
+  );
+  assert.equal(res.status, 200, await res.text());
+  const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
+  assert.deepEqual(data.materials, ['images', 'documents']);
+});
+
+test('PUT with an unknown material kind → 400 with a materials/enum finding, file byte-unchanged', async () => {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const originalContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/write-agent`,
+    makePutAgentBody({ materials: ['holograms'] }),
+  );
+  assert.equal(res.status, 400);
+  const body = (await res.json()) as { error: string; findings: Array<{ level: string; check: string }> };
+  const finding = body.findings.find((f) => f.check === 'materials/enum');
+  assert.ok(finding, 'expected a materials/enum finding');
+  assert.equal(finding!.level, 'error');
+
+  const afterContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+  assert.equal(afterContent, originalContent, 'SKILL.md must be byte-unchanged after a rejected PUT');
+});
+
+test('materials omitted from the PUT body for an agent that HAS materials on disk → preserved (inherit-when-omitted)', async () => {
+  writeFileSync(
+    join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'),
+    makeAgentSkillMd().replace(
+      'purpose: Write tests to validate the PUT routes.',
+      'purpose: Write tests to validate the PUT routes.\nmaterials: [images]',
+    ),
+  );
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody());
+  assert.equal(res.status, 200, await res.text());
+  const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
+  assert.deepEqual(data.materials, ['images'], 'omitting materials from the PUT body must preserve the on-disk value');
+});
+
+test('materials: [] explicitly in the PUT body clears it — distinguishable from omission', async () => {
+  writeFileSync(
+    join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'),
+    makeAgentSkillMd().replace(
+      'purpose: Write tests to validate the PUT routes.',
+      'purpose: Write tests to validate the PUT routes.\nmaterials: [images]',
+    ),
+  );
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody({ materials: [] }));
+  assert.equal(res.status, 200, await res.text());
+  const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
+  assert.deepEqual(data.materials, [], 'an explicit empty array must clear materials, not preserve the prior declared value');
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — fanout preservation (D7 regression)
+// ---------------------------------------------------------------------------
+
+function makeFanoutAgentSkillMd(): string {
+  return [
+    '---',
+    'name: Fanout Agent',
+    'description: An agent for fanout-preservation regression tests.',
+    'phase: developer',
+    'surface: unattended',
+    'purpose: Exercise the fanout-preservation regression (D7).',
+    'brainAccess: advisory',
+    'interactivity: none',
+    'composition:',
+    '  skills: []',
+    '  tools: []',
+    '  mcps: []',
+    '  guards:',
+    '    - event-log',
+    'runtime:',
+    '  sdk: claude-code',
+    '  strategy: fixed',
+    '  model: claude-sonnet-4-5',
+    'fanout:',
+    '  drivingArtifact: work-items',
+    '  isolation: worktree',
+    '  concurrencyCap: 1',
+    '  perItemGate: item-declared',
+    'allowed-tools:',
+    '  - Read',
+    'disallowed-tools: []',
+    'budgets: {}',
+    '---',
+    '',
+    '# Fanout Agent',
+    '',
+    'Process body text.',
+  ].join('\n');
+}
+
+test('PUT changing only process preserves an existing fanout: block byte-for-byte (D7 regression)', async () => {
+  mkdirSync(join(forgeRoot, 'skills', 'fanout-agent'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', 'fanout-agent', 'SKILL.md'), makeFanoutAgentSkillMd());
+
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/fanout-agent`, {
+    name: 'Fanout Agent',
+    purpose: 'Exercise the fanout-preservation regression (D7).',
+    process: 'Updated process body only.',
+    interactivity: 'none',
+    brainAccess: 'advisory',
+    composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] },
+    runtime: { sdk: 'claude-code', strategy: 'fixed', model: 'claude-sonnet-4-5' },
+  });
+  assert.equal(res.status, 200, await res.text());
+
+  const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'fanout-agent', 'SKILL.md'), 'utf8'));
+  assert.deepEqual(
+    data.fanout,
+    { drivingArtifact: 'work-items', isolation: 'worktree', concurrencyCap: 1, perItemGate: 'item-declared' },
+    'a PUT that only changes process must not silently strip fanout (today\'s merged object literal omits it entirely)',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — byte-faithful round-trip through the real route
+// (golden file: skills/developer-ralph/SKILL.md, seeded into the tmp forgeRoot)
+// ---------------------------------------------------------------------------
+
+test('PUT with only process changed on the seeded real developer-ralph bytes → byte-exact frontmatter prefix, verbatim body', async () => {
+  const originalRaw = readFileSync(REAL_DEV_RALPH_PATH, 'utf8');
+  const seededDir = join(forgeRoot, 'skills', 'developer-ralph');
+  mkdirSync(seededDir, { recursive: true });
+  writeFileSync(join(seededDir, 'SKILL.md'), originalRaw, 'utf8');
+
+  const { data, content } = matter(originalRaw);
+  const bodyStart = originalRaw.length - content.length;
+  const newProcess = 'Updated process only — byte-faithful round-trip probe.';
+
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/developer-ralph`, {
+    name: data.name,
+    purpose: data.purpose,
+    process: newProcess,
+    interactivity: data.interactivity,
+    brainAccess: data.brainAccess,
+    composition: data.composition,
+    runtime: data.runtime,
+  });
+  assert.equal(res.status, 200, await res.text());
+
+  const after = readFileSync(join(seededDir, 'SKILL.md'), 'utf8');
+  assert.equal(
+    after.slice(0, bodyStart),
+    originalRaw.slice(0, bodyStart),
+    'the frontmatter block (comments, fanout, key order) must be byte-identical when nothing frontmatter-relevant changed',
+  );
+  assert.equal(after.slice(bodyStart), newProcess, 'the body region must be replaced verbatim, no leading-newline normalization');
+});
+
+test('a PUT that legitimately changes a frontmatter field still reloads with the new value and a byte-exact body', async () => {
+  const originalRaw = readFileSync(REAL_DEV_RALPH_PATH, 'utf8');
+  // Reuse the "developer-ralph" slug (not a differently-named copy): the
+  // validateAgent rule restricting `loopStrategy: ralph` to the canonical
+  // developer-ralph slug would otherwise reject any other agent carrying it
+  // — re-seeding the same slug dir with fresh original bytes at the start of
+  // each test keeps this test independent of the byte-faithful-round-trip
+  // test above without tripping that unrelated rule.
+  const seededDir = join(forgeRoot, 'skills', 'developer-ralph');
+  mkdirSync(seededDir, { recursive: true });
+  writeFileSync(join(seededDir, 'SKILL.md'), originalRaw, 'utf8');
+
+  const { data, content: originalBody } = matter(originalRaw);
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/developer-ralph`, {
+    name: data.name,
+    purpose: 'A legitimately DIFFERENT purpose for this AT.',
+    interactivity: data.interactivity,
+    brainAccess: data.brainAccess,
+    composition: data.composition,
+    runtime: data.runtime,
+  });
+  assert.equal(res.status, 200, await res.text());
+
+  const after = readFileSync(join(seededDir, 'SKILL.md'), 'utf8');
+  const { data: afterData, content: afterBody } = matter(after);
+  assert.equal(afterData.purpose, 'A legitimately DIFFERENT purpose for this AT.');
+  assert.equal(afterBody, originalBody, 'the body must stay byte-exact even through the full re-serialize path');
 });
 
 // ---------------------------------------------------------------------------

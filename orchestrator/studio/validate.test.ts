@@ -14,6 +14,7 @@ import type {
   ProjectDefinition,
 } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { MATERIAL_KINDS } from './materials.ts';
 import {
   SLUG_RE,
   validateAgent,
@@ -419,6 +420,47 @@ describe('validateAgent — fully-ready agent', () => {
     );
     assert.ok(findings.every((f) => f.level === 'flag'));
     assert.equal(findings.length, 2);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateAgent — materials/enum (R2-09 D1)
+// ---------------------------------------------------------------------------
+
+describe('validateAgent — materials/enum', () => {
+  it('an unknown material kind → exactly ONE error finding naming both the offending value AND the allowed set', () => {
+    const agent = makeAgent({ materials: ['holograms'] });
+    const findings = validateAgent(agent);
+    const matEnum = findings.filter((f) => f.check === 'materials/enum');
+    assert.equal(matEnum.length, 1);
+    assert.equal(matEnum[0].level, 'error');
+    assert.ok(matEnum[0].message.includes('holograms'), 'message must name the offending value');
+    for (const kind of MATERIAL_KINDS) {
+      assert.ok(
+        matEnum[0].message.includes(kind),
+        `message must list the full allowed set (missing "${kind}") — a sibling finding in this campaign named the value but not the set`,
+      );
+    }
+  });
+
+  it('all-valid kinds → zero materials/enum findings', () => {
+    const findings = validateAgent(makeAgent({ materials: ['images', 'audio'] }));
+    assert.deepEqual(findings.filter((f) => f.check === 'materials/enum'), []);
+  });
+
+  it('absent materials → zero materials/enum findings', () => {
+    const findings = validateAgent(makeAgent());
+    assert.deepEqual(findings.filter((f) => f.check === 'materials/enum'), []);
+  });
+
+  it('materials: [] → zero materials/enum findings (declared-empty is legal)', () => {
+    const findings = validateAgent(makeAgent({ materials: [] }));
+    assert.deepEqual(findings.filter((f) => f.check === 'materials/enum'), []);
+  });
+
+  it('two unknown values → two findings, one per value', () => {
+    const findings = validateAgent(makeAgent({ materials: ['holograms', 'smells'] }));
+    assert.equal(findings.filter((f) => f.check === 'materials/enum').length, 2);
   });
 });
 

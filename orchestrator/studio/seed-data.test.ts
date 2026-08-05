@@ -14,6 +14,7 @@ import { loadFlowDefinition, listAgentDefinitions, loadCatalog, discoverProjects
 import { validateFlow, validateCatalog, validateDiscoveredProjects, validateKb, validateAgent } from './validate.ts';
 import { resolveProjectsDir } from '../config.ts';
 import { MODEL_BY_TIER } from '../phase-agent.ts';
+import { MATERIAL_KINDS } from './materials.ts';
 
 const ROOT = process.cwd();
 
@@ -245,4 +246,22 @@ test('forge-develop declares the merged→reflect-agent trigger (single source f
   // single-node forge-reflect flow wrapper. ADR-041 target shape, no schema
   // change (was {on, flow} pre-R2-04; kind:flow→kind:agent at R4-09-F1).
   assert.deepEqual(flow.triggers, [{ on: 'merged', target: { kind: 'agent', ref: 'reflector' } }]);
+});
+
+// ---------------------------------------------------------------------------
+// materials (R2-09) — on-disk roster conformance
+// ---------------------------------------------------------------------------
+
+test('every roster agent that declares materials declares only vocabulary values', () => {
+  const agents = listAgentDefinitions(join(ROOT, 'skills'));
+  const vocab = new Set<string>(MATERIAL_KINDS);
+  for (const agent of agents) {
+    if (agent.materials === undefined) continue;
+    for (const value of agent.materials) {
+      assert.ok(
+        vocab.has(value),
+        `agent "${agent.slug}" declares materials value "${value}" outside the vocabulary (${MATERIAL_KINDS.join('|')})`,
+      );
+    }
+  }
 });

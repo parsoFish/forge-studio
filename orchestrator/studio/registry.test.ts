@@ -5,9 +5,11 @@
 
 import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync, readFileSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
+import matter from 'gray-matter';
 
 import {
   isStudioAgent,
@@ -254,6 +256,190 @@ describe('serializeAgentDefinition', () => {
     const { path: _origPath, slug: _origSlug, ...origRest } = original;
     const { path: _rtPath, slug: _rtSlug, ...reloadedRest } = reloaded;
     assert.deepEqual(reloadedRest, origRest);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// materials (R2-09 D1/D2) — new optional AgentDefinition field
+// ---------------------------------------------------------------------------
+
+describe('loadAgentDefinition — materials', () => {
+  it('parses materials: [images, documents] onto def.materials, order preserved', () => {
+    const p = writeAgentFixture(
+      'materials-agent',
+      AGENT_FIXTURE.replace('purpose: Test things.', 'purpose: Test things.\nmaterials: [images, documents]'),
+    );
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.materials, ['images', 'documents']);
+  });
+
+  it('absent materials ⇒ def.materials is undefined ("not declared", distinct from [])', () => {
+    const p = writeAgentFixture('no-materials-agent', AGENT_FIXTURE);
+    const def = loadAgentDefinition(p);
+    assert.equal(def.materials, undefined);
+  });
+
+  it('an unknown material VALUE loads fine (lenient) and is preserved verbatim — lint rejects it, not load', () => {
+    const p = writeAgentFixture(
+      'unknown-materials-agent',
+      AGENT_FIXTURE.replace('purpose: Test things.', 'purpose: Test things.\nmaterials: [holograms]'),
+    );
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.materials, ['holograms']);
+  });
+
+  it('non-array materials: (a SHAPE error) throws at load', () => {
+    const p = writeAgentFixture(
+      'bad-shape-materials-agent',
+      AGENT_FIXTURE.replace('purpose: Test things.', 'purpose: Test things.\nmaterials: images'),
+    );
+    assert.throws(() => loadAgentDefinition(p));
+  });
+});
+
+describe('serializeAgentDefinition — materials', () => {
+  it('emits materials when present', () => {
+    const p = writeAgentFixture(
+      'serialize-materials-agent',
+      AGENT_FIXTURE.replace('purpose: Test things.', 'purpose: Test things.\nmaterials: [images]'),
+    );
+    const def = loadAgentDefinition(p);
+    const out = serializeAgentDefinition(def);
+    const { data } = matter(out);
+    assert.deepEqual(data.materials, ['images']);
+  });
+
+  it('omits the materials key entirely when undefined (not declared)', () => {
+    const p = writeAgentFixture('serialize-no-materials-agent', AGENT_FIXTURE);
+    const def = loadAgentDefinition(p);
+    assert.equal(def.materials, undefined);
+    const out = serializeAgentDefinition(def);
+    const { data } = matter(out);
+    assert.ok(!('materials' in data), 'materials key must be omitted, not emitted as null/[]');
+  });
+
+  it('emits an explicit empty list when materials is declared [] (declared-empty is meaningful, must survive)', () => {
+    const p = writeAgentFixture(
+      'serialize-empty-materials-agent',
+      AGENT_FIXTURE.replace('purpose: Test things.', 'purpose: Test things.\nmaterials: []'),
+    );
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.materials, []);
+    const out = serializeAgentDefinition(def);
+    const { data } = matter(out);
+    assert.ok('materials' in data, 'declared-empty materials must still be emitted, not dropped like undefined');
+    assert.deepEqual(data.materials, []);
+  });
+
+  it('serialize → load round-trip preserves materials exactly', () => {
+    const p = writeAgentFixture(
+      'roundtrip-materials-agent',
+      AGENT_FIXTURE.replace('purpose: Test things.', 'purpose: Test things.\nmaterials: [audio, data-files]'),
+    );
+    const original = loadAgentDefinition(p);
+    const serialized = serializeAgentDefinition(original);
+    const rtDir = join(tmpDir, 'roundtrip-materials-agent-rt');
+    mkdirSync(rtDir, { recursive: true });
+    const rtPath = join(rtDir, 'SKILL.md');
+    writeFileSync(rtPath, serialized, 'utf8');
+    const reloaded = loadAgentDefinition(rtPath);
+    assert.deepEqual(reloaded.materials, ['audio', 'data-files']);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// serializeAgentDefinition(def, originalRaw) — golden-file byte-fidelity
+// (D5/D6). Real repo SKILL.md files, located relative to THIS test file (not
+// a hardcoded absolute path).
+// ---------------------------------------------------------------------------
+
+const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const DEV_RALPH_PATH = join(REPO_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
+const PROJECT_MANAGER_PATH = join(REPO_ROOT, 'skills', 'project-manager', 'SKILL.md');
+
+describe('serializeAgentDefinition(def, originalRaw) — golden files', () => {
+  it('developer-ralph: changing ONLY body keeps the frontmatter block byte-identical (7-line comment, fanout:, key order)', () => {
+    const raw = readFileSync(DEV_RALPH_PATH, 'utf8');
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(raw.slice(bodyStart), content, 'sanity: content is a verbatim suffix of raw (proven fact this AT relies on)');
+
+    const def = loadAgentDefinition(DEV_RALPH_PATH);
+    const newBody = def.body + '\n\nAppended by the golden-file test.\n';
+    const updated = { ...def, body: newBody };
+
+    const output = serializeAgentDefinition(updated, raw);
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'frontmatter block (incl. the 7-line comment block at lines 17-24 and the fanout: block) must be byte-identical',
+    );
+    assert.equal(output.slice(bodyStart), newBody, 'body replaced exactly — appended verbatim, no leading-newline normalization');
+  });
+
+  it('developer-ralph: body UNCHANGED ⇒ output is byte-identical to the whole original file (the single strongest AT)', () => {
+    const raw = readFileSync(DEV_RALPH_PATH, 'utf8');
+    const def = loadAgentDefinition(DEV_RALPH_PATH);
+    const output = serializeAgentDefinition(def, raw);
+    assert.equal(output, raw, 'a no-op edit must produce a byte-identical file');
+  });
+
+  it('project-manager: frontmatter byte-identical on body-only change; mid-body --- stays ASCII (not en-dash); frontmatter data unchanged', () => {
+    const raw = readFileSync(PROJECT_MANAGER_PATH, 'utf8');
+    const { content, data: originalData } = matter(raw);
+    const bodyStart = raw.length - content.length;
+
+    const def = loadAgentDefinition(PROJECT_MANAGER_PATH);
+    const updated = { ...def, body: def.body + '\n\nAppended.\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    assert.equal(output.slice(0, bodyStart), raw.slice(0, bodyStart), 'frontmatter block byte-identical');
+    const outputBody = output.slice(bodyStart);
+    assert.ok(!outputBody.includes('–––'), 'the "---" lines inside the yaml-fenced example (lines 98/115) must stay ASCII, not be mangled to en-dashes (D6)');
+    const { data: outputData } = matter(output);
+    assert.deepEqual(outputData, originalData, 'no frontmatter injection through a body that itself contains --- lines');
+  });
+
+  it('changed-frontmatter fallback: changing purpose runs the full re-serialize path; body content stays byte-exact', () => {
+    const raw = readFileSync(DEV_RALPH_PATH, 'utf8');
+    const def = loadAgentDefinition(DEV_RALPH_PATH);
+    const updated = { ...def, purpose: 'A DIFFERENT purpose for this golden-file AT.' };
+
+    const output = serializeAgentDefinition(updated, raw);
+    const { data, content } = matter(output);
+    assert.equal(data.purpose, 'A DIFFERENT purpose for this golden-file AT.', 're-serialize path applies the changed field');
+    // Observed behaviour (2026-08, verified against today's implementation
+    // minus the en-dash mangling this AT also proves is gone): the full
+    // re-serialize path does not add or strip any leading newline for this
+    // fixture — content is byte-identical to def.body. If a future
+    // implementation legitimately needs to normalize a leading newline,
+    // update this assertion with a comment recording the new observed
+    // behaviour — the body's CONTENT must never silently diverge otherwise.
+    assert.equal(content, def.body, 'body content must be byte-exact through the full re-serialize path');
+  });
+
+  it('D6 proof: a body whose FIRST line is "---" round-trips byte-identical with no frontmatter injection (no originalRaw)', () => {
+    const def = loadAgentDefinition(DEV_RALPH_PATH);
+    const trickyBody = '---\n\nA body that opens with a literal thematic break.\n\nAnother --- mid-body break.\n';
+    const updated = { ...def, body: trickyBody };
+
+    const output = serializeAgentDefinition(updated);
+    const { data, content } = matter(output);
+    assert.equal(data.name, def.name, 'frontmatter data must be unaffected by a body starting with ---');
+    assert.equal(content, trickyBody, 'body must round-trip byte-identical, including its literal leading and mid-body --- lines');
+  });
+
+  it('serializeAgentDefinition(def) with no originalRaw still produces a loadable file with all fields intact (backward-compatible signature)', () => {
+    const def = loadAgentDefinition(DEV_RALPH_PATH);
+    const output = serializeAgentDefinition(def);
+    const rtDir = join(tmpDir, 'no-originalraw-rt');
+    mkdirSync(rtDir, { recursive: true });
+    const rtPath = join(rtDir, 'SKILL.md');
+    writeFileSync(rtPath, output, 'utf8');
+    const reloaded = loadAgentDefinition(rtPath);
+    const { path: _p1, slug: _s1, ...rest1 } = def;
+    const { path: _p2, slug: _s2, ...rest2 } = reloaded;
+    assert.deepEqual(rest2, rest1);
   });
 });
 

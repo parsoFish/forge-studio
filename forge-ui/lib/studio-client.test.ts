@@ -12,7 +12,14 @@
  */
 import { test, expect } from 'vitest';
 
-import { parseCapability, buildTriggerDeclaration, isValidCronSchedule, parseRunInputs } from './studio-client';
+import {
+  parseCapability,
+  buildTriggerDeclaration,
+  isValidCronSchedule,
+  parseRunInputs,
+  parseMaterials,
+  parseInstructionsDraftResponse,
+} from './studio-client';
 
 test('parseRunInputs: one key:value per line → inputs map; blanks ignored', () => {
   expect(parseRunInputs('repo: ./projects/foo\nnorthStar: ship X\n\n')).toEqual({
@@ -122,4 +129,56 @@ test('isValidCronSchedule: valid croner patterns pass, empty/invalid do not thro
   expect(isValidCronSchedule('   ')).toBe(false);
   expect(isValidCronSchedule('not a cron pattern')).toBe(false);
   expect(isValidCronSchedule('99 99 * * *')).toBe(false);
+});
+
+// ---------------------------------------------------------------------------
+// parseMaterials (R2-09 D1) — wire parse of AgentDefinition.materials
+// ---------------------------------------------------------------------------
+
+test('parseMaterials: an array of strings parses as-is', () => {
+  expect(parseMaterials(['images', 'audio'])).toEqual(['images', 'audio']);
+  expect(parseMaterials([])).toEqual([]);
+});
+
+test('parseMaterials: absent (undefined/null) parses to undefined', () => {
+  expect(parseMaterials(undefined)).toBeUndefined();
+  expect(parseMaterials(null)).toBeUndefined();
+});
+
+test('parseMaterials: a non-array value is a parse FAILURE (undefined) — never silently coerced to []', () => {
+  // A real finding in this campaign was a client turning a missing/malformed
+  // field into a fabricated default value instead of reporting the absence —
+  // this pins the fix: a malformed payload must never masquerade as a
+  // legitimate "declared empty" ([]), which D2 gives real meaning to.
+  expect(parseMaterials('images')).toBeUndefined();
+  expect(parseMaterials(42)).toBeUndefined();
+  expect(parseMaterials({ images: true })).toBeUndefined();
+});
+
+test('parseMaterials: a non-string entry inside the array is also a parse failure, not a partial list', () => {
+  expect(parseMaterials(['images', 42])).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// parseInstructionsDraftResponse (R2-09 D8) — pure parse boundary for the
+// POST .../instructions-draft response, mirroring parseCapability's
+// carry-through-or-undefined convention so the async fetch wrapper
+// (requestInstructionsDraft, not exercised here — see final report for why)
+// stays a thin, untestable-by-design I/O shell around a testable core.
+// ---------------------------------------------------------------------------
+
+test('parseInstructionsDraftResponse: ok path returns the draft + derivation', () => {
+  const result = parseInstructionsDraftResponse(200, { ok: true, draft: '# Draft\n', derivation: { sources: [] } });
+  expect(result).toEqual({ ok: true, draft: '# Draft\n', derivation: { sources: [] } });
+});
+
+test('parseInstructionsDraftResponse: a non-ok status surfaces the error, not an empty draft', () => {
+  const result = parseInstructionsDraftResponse(404, { error: 'unknown slug' });
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.error).toBe('unknown slug');
+});
+
+test('parseInstructionsDraftResponse: a malformed 200 payload (missing draft) is an ERROR, not an invented empty draft', () => {
+  const result = parseInstructionsDraftResponse(200, { ok: true });
+  expect(result.ok).toBe(false);
 });

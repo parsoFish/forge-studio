@@ -794,6 +794,36 @@ Internal only.
 });
 
 // ---------------------------------------------------------------------------
+// materials (R2-09): the materials/enum check must be wired into the FULL
+// runStudioLint pipeline, not just directly unit-tested against validateAgent
+// in isolation (see orchestrator/studio/validate.test.ts for the direct
+// unit-level coverage of the rule itself).
+// ---------------------------------------------------------------------------
+
+test('SKILL.md with an unknown materials value → materials/enum error surfaces through the full runStudioLint pipeline', () => {
+  const agentSlug = 'has-materials';
+  const root = buildValidRoot({ agentSlug });
+
+  const skillPath = join(root, 'skills', agentSlug, 'SKILL.md');
+  const badSkillMd = validSkillMd(agentSlug).replace(
+    'interactivity: none\n',
+    'interactivity: none\nmaterials: [holograms]\n',
+  );
+  writeFileSync(skillPath, badSkillMd);
+
+  const result = runStudioLint(root);
+  const materialsError = result.findings.find(
+    (f) => f.level === 'error' && f.object === `agent:${agentSlug}` && f.check === 'materials/enum',
+  );
+  assert.ok(
+    materialsError !== undefined,
+    `Expected a materials/enum error for agent:${agentSlug}, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
 // Section 7 — template library (R3-06): lintTemplateLibrary wired into
 // runStudioLint's aggregate output, not just callable standalone.
 // ---------------------------------------------------------------------------
