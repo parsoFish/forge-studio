@@ -372,6 +372,109 @@ test('writeManifest: refuses a manifest with an out-of-root worktree_path AND cr
 // this test names the FIRST-SEGMENT variant specifically.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// ROUND 2, Finding 3 (MINOR, cwd-dependent resolution): `containedUnder`
+// (cli/manifest-path-guard.ts) calls a bare `resolve(candidate)`, which
+// resolves a RELATIVE candidate against `process.cwd()` rather than against
+// `forgeRoot`. No live bypass was found (every production writer emits
+// absolute paths), but it is an unstated invariant. The agreed fix: reject
+// any non-absolute candidate outright (fail closed, and it removes the cwd
+// dependence entirely).
+// ---------------------------------------------------------------------------
+
+test('[Finding 3] project_repo_path: a RELATIVE candidate ("projects/<dir>") is REJECTED regardless of process.cwd() — only the absolute equivalent is accepted', () => {
+  const legitAbs = join(forgeRoot, 'projects', 'demo-relative-check');
+  mkdirSync(legitAbs, { recursive: true });
+
+  const relativeCandidate = 'projects/demo-relative-check';
+  const relErrors = validateManifestPathFields(
+    { initiative_id: 'INIT-2026-08-06-x14', project_repo_path: relativeCandidate },
+    { forgeRoot },
+  );
+  assert.ok(
+    relErrors.length > 0,
+    `a relative project_repo_path must be rejected outright (fail closed — no dependence on process.cwd()) — got ${JSON.stringify(relErrors)}`,
+  );
+  assert.equal(isContainedProjectRepoPath(relativeCandidate, { forgeRoot }), false);
+
+  const absErrors = validateManifestPathFields(
+    { initiative_id: 'INIT-2026-08-06-x14b', project_repo_path: legitAbs },
+    { forgeRoot },
+  );
+  assert.deepEqual(absErrors, [], `the absolute equivalent must remain accepted — got ${JSON.stringify(absErrors)}`);
+  assert.equal(isContainedProjectRepoPath(legitAbs, { forgeRoot }), true);
+});
+
+test('[Finding 3] worktree_path: a RELATIVE candidate ("_worktrees/<id>") is REJECTED regardless of process.cwd() — only the absolute equivalent is accepted', () => {
+  const id = 'INIT-2026-08-06-x15';
+  const wtAbs = join(forgeRoot, '_worktrees', id);
+  mkdirSync(wtAbs, { recursive: true });
+
+  const relativeCandidate = `_worktrees/${id}`;
+  const relErrors = validateManifestPathFields({ initiative_id: id, worktree_path: relativeCandidate }, { forgeRoot });
+  assert.ok(
+    relErrors.length > 0,
+    `a relative worktree_path must be rejected outright (fail closed — no dependence on process.cwd()) — got ${JSON.stringify(relErrors)}`,
+  );
+  assert.equal(isContainedWorktreePath(relativeCandidate, { forgeRoot, initiativeId: id }), false);
+
+  const absErrors = validateManifestPathFields({ initiative_id: id, worktree_path: wtAbs }, { forgeRoot });
+  assert.deepEqual(absErrors, [], `the absolute equivalent must remain accepted — got ${JSON.stringify(absErrors)}`);
+  assert.equal(isContainedWorktreePath(wtAbs, { forgeRoot, initiativeId: id }), true);
+});
+
+// The two tests above happen to pass even today — but for an ACCIDENTAL
+// reason: this test file's own process.cwd() (the forge repo checkout) is
+// structurally unrelated to the tmp `forgeRoot`, so `resolve(relativeCandidate)`
+// lands somewhere with no relation to forgeRoot at all, and the EXISTING
+// lexical ".."-segment pre-filter in `containedUnder` already rejects it —
+// not because non-absolute candidates are refused on principle. The two
+// tests below prove the cwd-dependence is a REAL, exploitable gap today (not
+// hypothetical) by pointing `process.cwd()` AT forgeRoot, where the relative
+// candidate resolves to a genuinely-contained real path and is wrongly
+// ACCEPTED — this is the actual unstated invariant the agreed fix (reject
+// any non-absolute candidate outright) closes.
+
+test('[Finding 3, proof] project_repo_path: with process.cwd() pointed AT forgeRoot, a RELATIVE candidate must still be REJECTED', () => {
+  const legitAbs = join(forgeRoot, 'projects', 'demo-relative-cwd-check');
+  mkdirSync(legitAbs, { recursive: true });
+  const relativeCandidate = 'projects/demo-relative-cwd-check';
+
+  const originalCwd = process.cwd();
+  process.chdir(forgeRoot);
+  try {
+    const errors = validateManifestPathFields(
+      { initiative_id: 'INIT-2026-08-06-x16', project_repo_path: relativeCandidate },
+      { forgeRoot },
+    );
+    assert.ok(
+      errors.length > 0,
+      `a relative candidate must be rejected regardless of process.cwd() — today, with cwd set to forgeRoot, the relative candidate resolves INSIDE forgeRoot and is wrongly ACCEPTED (errors=[]) — proving containedUnder's bare resolve(candidate) genuinely depends on process.cwd(), not a hypothetical concern.`,
+    );
+  } finally {
+    process.chdir(originalCwd);
+  }
+});
+
+test('[Finding 3, proof] worktree_path: with process.cwd() pointed AT forgeRoot, a RELATIVE candidate must still be REJECTED', () => {
+  const id = 'INIT-2026-08-06-x17';
+  const wtAbs = join(forgeRoot, '_worktrees', id);
+  mkdirSync(wtAbs, { recursive: true });
+  const relativeCandidate = `_worktrees/${id}`;
+
+  const originalCwd = process.cwd();
+  process.chdir(forgeRoot);
+  try {
+    const errors = validateManifestPathFields({ initiative_id: id, worktree_path: relativeCandidate }, { forgeRoot });
+    assert.ok(
+      errors.length > 0,
+      `a relative worktree_path must be rejected regardless of process.cwd() — today, with cwd set to forgeRoot, it resolves INSIDE forgeRoot and is wrongly ACCEPTED (errors=[]) — got ${JSON.stringify(errors)}`,
+    );
+  } finally {
+    process.chdir(originalCwd);
+  }
+});
+
 test('root-folding negative control: a candidate whose FIRST segment under the root is a symlink pointing outside is REJECTED', (t) => {
   if (skipIfNoSymlinks(t)) return;
   const outside = newOutsideDir('mpf-rootfold-outside-');
