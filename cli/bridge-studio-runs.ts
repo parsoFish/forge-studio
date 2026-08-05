@@ -358,7 +358,16 @@ export async function applyReviewVerdict(
   // send-back path
   const manifest = parseManifest(readFileSync(manifestPath, 'utf8'));
   const worktreePath = manifest.worktree_path ?? '';
-  if (!worktreePath || !existsSync(worktreePath)) {
+  // SEC-02 round 5 — ORDERING IS THE FIX, not the check itself. This branch
+  // used to read `if (!worktreePath || !existsSync(worktreePath))`, so an
+  // OUT-OF-BOUNDS path was stat'd before containment ever ran and the reply
+  // then differed by whether it existed ('no live worktree…' when absent vs
+  // 'worktree_path outside allowed root' when present) — a one-bit existence
+  // probe for ANY absolute path on the server, which is exactly the oracle
+  // class `forge-b2k` exists to close. The approve branch above was already
+  // ordered correctly; this is the symmetry fix. Empty-check only here; the
+  // existence probe moves BELOW containment, mirroring approve exactly.
+  if (!worktreePath) {
     sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
     return;
   }
@@ -381,6 +390,14 @@ export async function applyReviewVerdict(
     !isContainedProjectRepoPath(manifest.project_repo_path, { forgeRoot: ctx.forgeRoot })
   ) {
     sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
+    return;
+  }
+  // SEC-02 round 5: the existence probe, now strictly AFTER containment — a
+  // legitimately-contained worktree that has been cleaned up still reports the
+  // ordinary 'no live worktree' 409, so the fix does not collapse that signal
+  // into the containment rejection (pinned by its own positive control).
+  if (!existsSync(worktreePath)) {
+    sendJson(res, 409, { error: 'no live worktree for this cycle (already cleaned up?) — cannot append review work items', initiativeId }, origin);
     return;
   }
   // SEC-02 round 2 (Finding 2, headline): cycle_id feeds

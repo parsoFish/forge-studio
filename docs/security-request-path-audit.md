@@ -191,9 +191,30 @@ This is written down rather than left as silence so nobody later reads the absen
 a row as evidence of coverage. The condition is load-bearing: SEC-02 itself found
 THREE consumers (`runRequeue`, `applyReviewVerdict`, and the two sweeps) that read
 manifests which had **not** necessarily come through ingest, and each needed its own
-assertion. Any new writer of manifest frontmatter either routes through
-`writeManifest` or must carry its own `assertManifestPathFields` call — there is no
-third option that keeps this assumption true.
+assertion. Writers of manifest frontmatter fall into exactly three classes, and the third is
+real — the taxonomy is stated in full so it cannot be read as exhaustive when it is
+not:
+
+1. **Routes through `writeManifest`** — validated at ingest. The two production
+   ingest callers.
+2. **Carries its own assertion** — `runRequeue`, `applyReviewVerdict`,
+   `finalize-merged.ts`, `drain-fix-loop.ts`. These read manifests that did not
+   necessarily come through ingest, so each guards at its own boundary.
+3. **Writes a value that is TRUSTED AT CONSTRUCTION, and revalidates nothing** —
+   `orchestrator/scheduler.ts:749`'s
+   `annotateManifest(manifestPath, { worktree_path: wtHandle.path })`, a raw
+   frontmatter regex edit that bypasses `writeManifest` entirely. It is safe because
+   `wtHandle.path` is `resolve(worktreesRoot, initiativeId)` — computed by forge from
+   config plus an already-pattern-gated id, never client-derived — **not** because
+   anything checks it afterwards. The `persistManifest*` family in
+   `orchestrator/manifest.ts` is the same class: it round-trips an
+   already-on-disk manifest through `serializeManifest` + `writeFileSync` without
+   revalidating.
+
+Class 3 is the fragile one: its safety is a property of the *caller*, so a future
+change that lets request data reach one of those constructed values removes the
+protection with nothing in the writer to notice. A new writer must land in class 1 or
+2, or explicitly argue its way into class 3 and say why.
 
 ---
 

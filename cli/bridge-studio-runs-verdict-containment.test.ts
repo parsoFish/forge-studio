@@ -64,6 +64,14 @@ function setupForgeRoot(): string {
     mkdirSync(join(forgeRoot, '_queue', s), { recursive: true });
   }
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+  // BOTH containment roots must exist, not just `projects/`. A containment
+  // root that is missing fails CLOSED, so a fixture without `_worktrees/`
+  // makes even a legitimate, identity-bound `<forgeRoot>/_worktrees/<id>`
+  // report "outside allowed root" — which would mask the round-5 fix's real
+  // invariant (a contained-but-cleaned-up worktree keeps its ordinary "gone"
+  // message). A real forge always has both: `orchestrator/init.ts` `layoutDirs`
+  // and the daemon's own `ensureLayout` each create them.
+  mkdirSync(join(forgeRoot, '_worktrees'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
   return forgeRoot;
 }
