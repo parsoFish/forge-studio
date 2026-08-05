@@ -5,7 +5,7 @@
  * Owns the ONE route:
  *
  *   GET /api/studio/sessions/:kind/:sessionId?project=<p>
- *     → { ok, kind, sessionId, project, phase, stages, defaultStage, turns, artifact }
+ *     → { ok, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact }
  *
  * Mirrors bridge-studio-templates.ts's contract exactly: a single
  * `handleStudioSessionsRoutes(req, res, ctx, rawUrl, method): Promise<boolean>`,
@@ -294,6 +294,13 @@ export async function handleStudioSessionsRoutes(
       {
         ok: true,
         kind: descriptor.id,
+        // R2-10 PR2, WI-8: the descriptor's declared `title` (studio/session-
+        // kinds.yaml), threaded through verbatim — mirrors how `artifact.label`
+        // already flows via `deriveSessionArtifact`. Closes a declared-data-
+        // with-no-consumer gap: `title` was parsed and lint-validated but the
+        // session-shell page previously hardcoded its own local heading map
+        // instead of reading it off the wire.
+        title: descriptor.title,
         sessionId,
         project,
         phase,

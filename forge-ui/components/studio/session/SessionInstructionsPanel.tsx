@@ -2,10 +2,10 @@
 
 import Link from 'next/link';
 
-import { instructionsBrief, type InstructionsSessionSummary, type EventLogEntry } from '@/lib/bridge-client';
+import { answerInstructions, instructionsBrief, type InstructionsSessionSummary, type EventLogEntry } from '@/lib/bridge-client';
 import { StageHex } from '@/components/StageHex';
 import { SessionBriefing } from '@/components/SessionBriefing';
-import { InstructionsQuestionForm } from '@/components/InstructionsQuestionForm';
+import { ArchitectQuestionForm } from '@/components/ArchitectQuestionForm';
 import { InstructionsVerdict } from '@/components/InstructionsVerdict';
 import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
 import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/architect-hex';
@@ -17,7 +17,12 @@ import { architectHexMeta, isArchitectWorking, isSessionStale } from '@/lib/arch
 // stale-warning, the question form, the working-phase activity log, the
 // draft verdict gate, and the committed/rejected terminal states. Every
 // `data-action`/`data-section`/`data-component` name below is byte-identical
-// to the retired page's.
+// to the retired page's. The question form itself is the shared
+// `ArchitectQuestionForm` (R2-10 PR2, WI-8 absorbed the former
+// `InstructionsQuestionForm`, a verbatim copy) — parameterised here on
+// `answerInstructions` + the `instructions-interview` section/heading so the
+// rendered `data-section` value and every per-question anchor stay identical
+// to what this panel shipped with.
 // ---------------------------------------------------------------------------
 
 export function SessionInstructionsPanel({
@@ -84,11 +89,14 @@ export function SessionInstructionsPanel({
           )}
 
           {session.phase === 'awaiting-answers' && session.questions && session.questions.length > 0 ? (
-            <InstructionsQuestionForm
+            <ArchitectQuestionForm
               project={session.project}
               sessionId={session.sessionId}
               round={session.round}
               questions={session.questions}
+              onSubmitAnswers={answerInstructions}
+              sectionName="instructions-interview"
+              heading="Instructions interview"
             />
           ) : null}
 

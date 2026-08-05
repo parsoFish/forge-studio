@@ -77,7 +77,7 @@ export function ContractResolutionPanel({
     // Agent-tier clauses route to an existing builder — navigate there.
     if (r.route === 'instructions') {
       const s = await startInstructions({ project: projectId, mode: 'init' });
-      if (s.ok && s.sessionId) router.push(`/instructions/${encodeURIComponent(s.sessionId)}`);
+      if (s.ok && s.sessionId) router.push(`/sessions/instructions/${encodeURIComponent(s.sessionId)}`);
     } else if (r.route === 'demo-builder') {
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
       if (s.ok && s.sessionId) onDemoSessionStarted?.(s.sessionId);

@@ -13,8 +13,8 @@ import { fetchStudioProjects } from '@/lib/studio-client';
  * /dashboard ArchitectLauncher as the harness entry point: same NewIdeaBox
  * surface ([data-section="new-idea"] + project/idea fields + start-architect),
  * same POST /api/architect/start, but inside Studio chrome. On start, navigate
- * to the native Studio interview surface (/architect/<sid>/interview), NOT the
- * retired standalone /architect/<sid> screen.
+ * to the shared session shell (/sessions/architect/<sid>, R2-10 PR2), NOT
+ * either retired architect screen (/architect/<sid> or its /interview child).
  */
 export default function ArchitectNewPage(): JSX.Element {
   const router = useRouter();
@@ -62,7 +62,7 @@ export default function ArchitectNewPage(): JSX.Element {
           initialProject={initialProject}
           knownProjects={knownProjects}
           onStarted={(sessionId) =>
-            router.push(`/architect/${encodeURIComponent(sessionId)}/interview`)
+            router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)
           }
         />
       </div>

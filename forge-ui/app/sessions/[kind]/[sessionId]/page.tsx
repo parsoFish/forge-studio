@@ -56,6 +56,17 @@ import { SessionProjectBrainPanel } from '@/components/studio/session/SessionPro
  * session-id genuinely doesn't exist for this kind), the page fails closed
  * to the same "session not found" state the shell route's own 404 produces
  * — never an infinite loading spinner.
+ *
+ * The page-chrome `title` (the breadcrumb + heading `StudioArchitectShell`
+ * renders) is sourced from the shell route's `title` field — the session-kind
+ * descriptor's declared `title` (studio/session-kinds.yaml), threaded
+ * verbatim (R2-10 PR2, WI-8; mirrors how `artifact.label` already flowed).
+ * Previously this page hardcoded its own local kind→title map — declared
+ * data with no consumer, the same drift class the `artifact.label` fix
+ * closed. While the shell route hasn't resolved yet (loading/error/no-
+ * session), there is no wire `title` to show, so the raw `kind` slug is
+ * shown instead — self-healing the instant the fetch settles, never a
+ * fabricated or stale-cached label.
  */
 export default function SessionShellPage({
   params,
@@ -156,7 +167,7 @@ export default function SessionShellPage({
     <StudioArchitectShell
       dataPage="session"
       ready={ready}
-      title={sessionKindTitle(kind)}
+      title={viewState.status === 'ready' ? viewState.title ?? kind : kind}
       idLabel={sessionId}
       maxWidth={1320}
       mainData={{
@@ -208,19 +219,6 @@ export default function SessionShellPage({
 
 const SHELL_POLL_MS = 3000;
 const SUMMARY_POLL_MS = 3000;
-
-/** Page-chrome heading text per kind — cosmetic only (mirrors each retired
- *  page's own hardcoded `title` prop to StudioArchitectShell; NOT sourced
- *  from the wire, unlike the artifact `label`, since no business decision
- *  rides on it — see the T3 report's design-choices note). */
-const SESSION_KIND_TITLES: Record<string, string> = {
-  architect: 'Planning session',
-  instructions: 'Instructions session',
-  'project-brain': 'Brain creation session',
-};
-function sessionKindTitle(kind: string): string {
-  return SESSION_KIND_TITLES[kind] ?? kind;
-}
 
 /** Which live bridge-socket message signals "refetch the per-kind list" for
  *  a given kind — mirrors the retired architect/instructions pages'
