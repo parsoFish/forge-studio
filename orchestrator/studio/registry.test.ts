@@ -463,6 +463,137 @@ describe('serializeAgentDefinition(def, originalRaw) — golden files', () => {
 });
 
 // ---------------------------------------------------------------------------
+// serializeAgentDefinition(def, originalRaw) — materials vs D5 byte-fidelity
+// interaction (R2-09 defect). The agent builder UI
+// (forge-ui/app/agents/[id]/page.tsx) initializes `materials: []` and always
+// sends it on save, so every agent with no declared materials (all 16 roster
+// agents) round-trips through the PUT with an explicit `materials: []`
+// against an on-disk file that has NO `materials:` key at all. D2 (registry
+// tests above) establishes that absent and declared-empty are semantically
+// IDENTICAL ("accepts nothing" either way) — so this representational
+// difference alone must never defeat the D5 byte-faithful fast path and
+// destroy the original frontmatter's comments/key order. A fixture with a
+// real multi-line YAML comment is used so the assertions are about comment
+// survival, not just data equality.
+// ---------------------------------------------------------------------------
+
+const COMMENTED_AGENT_FIXTURE = `---
+name: commented-agent
+description: An agent with a real YAML comment block in its frontmatter.
+purpose: Test the byte-fidelity fast path against a real comment block.
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: []
+# This is a load-bearing YAML comment that must survive a byte-faithful save.
+# It spans multiple lines so the WHOLE block is exercised, not just one line.
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+brainAccess: none
+interactivity: Fully autonomous.
+allowed-tools: [Read]
+disallowed-tools: [Bash]
+budgets: {}
+---
+
+Body text here.
+`;
+
+const COMMENTED_AGENT_FIXTURE_WITH_MATERIALS = COMMENTED_AGENT_FIXTURE.replace(
+  'purpose: Test the byte-fidelity fast path against a real comment block.',
+  'purpose: Test the byte-fidelity fast path against a real comment block.\nmaterials: [images]',
+);
+
+const COMMENT_NEEDLE = '# This is a load-bearing YAML comment';
+
+describe('serializeAgentDefinition(def, originalRaw) — materials vs byte-fidelity (R2-09 defect)', () => {
+  it('DEFECT: materials: [] vs no materials: key on original must NOT defeat the byte-faithful fast path (frontmatter + comment must survive)', () => {
+    const p = writeAgentFixture('materials-empty-vs-absent-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.equal(def.materials, undefined, 'sanity: the original file declares no materials key at all');
+
+    // Mirrors the real UI save payload: body-only edit, materials sent as [].
+    const updated = { ...def, materials: [] as string[], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'D2: absent and declared-empty materials are semantically identical — materials: [] on save must not force a re-serialize that destroys the frontmatter block',
+    );
+    assert.ok(
+      output.slice(0, bodyStart).includes(COMMENT_NEEDLE),
+      'the YAML comment in the frontmatter must survive the byte-faithful save verbatim',
+    );
+  });
+
+  it('mirror (non-regression): materials: undefined vs no materials: key on original stays byte-faithful — a fix must not trade this working case away', () => {
+    const p = writeAgentFixture('materials-undefined-vs-absent-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.equal(def.materials, undefined);
+
+    const updated = { ...def, body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'materials left undefined (not touched by the save) must remain byte-faithful',
+    );
+    assert.ok(output.slice(0, bodyStart).includes(COMMENT_NEEDLE), 'comment must survive');
+  });
+
+  it('real change: materials: [images] vs no materials: key on original must NOT be byte-faithful — a genuine declaration must persist, not be silently dropped', () => {
+    const p = writeAgentFixture('materials-real-change-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.equal(def.materials, undefined, 'sanity: original declares no materials key');
+
+    const updated = { ...def, materials: ['images'], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'a genuine materials declaration must force the full re-serialize — a fix that ignores materials entirely in the comparison would wrongly keep this byte-faithful and silently drop the new declaration',
+    );
+    const { data } = matter(output);
+    assert.deepEqual(data.materials, ['images'], 'the real materials declaration must actually be written to the file');
+  });
+
+  it('reverse asymmetry: original declares materials: [images], saved with materials: [] must NOT be byte-faithful — deselecting all materials is a genuine change', () => {
+    const p = writeAgentFixture('materials-deselect-agent', COMMENTED_AGENT_FIXTURE_WITH_MATERIALS);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.materials, ['images'], 'sanity: the original file declares materials: [images]');
+
+    const updated = { ...def, materials: [] as string[], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'the operator clearing a previously-declared materials list is a genuine change and must not be masked as byte-faithful — a fix that treats materials as always-insignificant would wrongly pass this',
+    );
+    const { data } = matter(output);
+    assert.deepEqual(data.materials, [], 'the cleared materials list must actually be persisted as []');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // loadFlowDefinition
 // ---------------------------------------------------------------------------
 
