@@ -57,6 +57,7 @@ Perishable strategy docs (dated; not onboarding material):
 - [Serve supervision](./operations/serve-supervision.md) — running `forge serve` under a supervisor.
 - [Headroom token-efficiency trial](./operations/headroom-token-efficiency-trial.md) — runbook + decision criteria for trialling the headroom context-compression proxy against forge.
 - [Verify-cycle idea corpus](./verify-cycle-ideas/README.md) — hand-authored initiative ideas fed to `scripts/verify-cycle.mjs --idea-file` for the gitpulse reference-project harness.
+- [Request-derived filesystem path audit](./security-request-path-audit.md) — *Reference.* The finite enumeration of every fs read/write in `cli/` and `orchestrator/` whose path comes from request data, each classified `guarded` / `unguarded` / `accidentally-safe` (with the accident named), plus the escape-shape catalogue. Add a row here whenever a route turns request data into a path.
 - [Known gaps](./known-gaps.md) — the open hardening backlog (internal).
 - [UX reference](./reference/studio-first-flow-ux.md)
 

@@ -20,7 +20,8 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { join, resolve, sep } from 'node:path';
+import { basename, dirname, join, resolve, sep } from 'node:path';
+import { resolveGuardedPath, type PathGuardResult } from './studio-path-guard.ts';
 
 import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects } from '../orchestrator/studio/registry.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
@@ -88,15 +89,33 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
   if (!existsSync(brainRoot)) return [];
 
   const result: KbWithCounts[] = [];
-  const pushFrom = (kbDir: string): void => {
-    const kbYamlPath = join(kbDir, 'kb.yaml');
-    if (!existsSync(kbYamlPath)) return;
+
+  // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
+  // so a symlinked `brain/<id>` DIRECTORY never reaches here — but that
+  // accident says nothing about the LEAF. A genuinely real `brain/<id>/` whose
+  // `kb.yaml` is a symlink was confirmed live disclosing the outside file's
+  // contents verbatim in this route's 200 response, because this function read
+  // `kb.yaml` with no guard at all and every other KB route's fix went in
+  // around it. `base` is the fixed containment root and `name` is its own
+  // segment (never folded into the root — ./studio-path-guard.ts, CONTRACT).
+  const pushFrom = (base: string, name: string): void => {
+    const yamlGuard = resolveGuardedPath(base, [name, 'kb.yaml']);
+    if (!yamlGuard.ok || !yamlGuard.exists) return;
     try {
-      const kb = loadKbDescriptor(kbYamlPath);
+      const kb = loadKbDescriptor(yamlGuard.realPath);
+      // Each layer path is independently guarded — a real kb.yaml is no
+      // warrant for a symlinked `themes/` or `_raw/` beside it.
+      const layer = (tail: string): string | null => {
+        const g = resolveGuardedPath(base, [name, tail]);
+        return g.ok && g.exists ? g.realPath : null;
+      };
+      const indexPath = layer('INDEX.md');
+      const themesPath = layer('themes');
+      const rawPath = layer('_raw');
       const counts = {
-        index: existsSync(join(kbDir, 'INDEX.md')) ? 1 : 0,
-        themes: countLayerFiles(join(kbDir, 'themes')),
-        raw: countLayerFiles(join(kbDir, '_raw')),
+        index: indexPath ? 1 : 0,
+        themes: themesPath ? countLayerFiles(themesPath) : 0,
+        raw: rawPath ? countLayerFiles(rawPath) : 0,
       };
       result.push({ ...kb, counts });
     } catch {
@@ -106,10 +125,12 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
 
   // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
   // own, so it is naturally skipped here).
-  for (const d of subDirs(brainRoot)) pushFrom(join(brainRoot, d));
-  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035).
+  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
+  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
+  // a SECOND containment root and gets the identical treatment — a fix that
+  // hardens only the primary root leaves the fallback wide open.
   const projectsRoot = join(brainRoot, 'projects');
-  for (const d of subDirs(projectsRoot)) pushFrom(join(projectsRoot, d));
+  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
 
   return result;
 }
@@ -249,6 +270,27 @@ function buildKbHealth(
 
 const GUIDANCE_MAX_BYTES = 8 * 1024; // 8 KiB
 
+/**
+ * Guarded resolution of a path NESTED under a kb dir that
+ * `resolveKbBrainDir` already identity-verified (bd `forge-wze`).
+ *
+ * Every "path traversal detected" check this file used to carry was
+ * `resolve(base, id).startsWith(base + sep)` on an UNRESOLVED path — VACUOUS,
+ * structurally incapable of failing for a `SLUG_RE`-valid id, because
+ * `resolve()` normalizes `..` before the comparison and a symlink's own
+ * location is lexically inside the root even when it points elsewhere. A
+ * guard that cannot fail is not a guard; they are replaced, not supplemented.
+ *
+ * `kbDir` is split back into its trusted base + its own id rather than passed
+ * as the guard's `root`, so the id re-enters as a `segments[]` element and is
+ * identity-checked — the root-folding prohibition in the CONTRACT section of
+ * `./studio-path-guard.ts`. Returns the raw guard result because the write
+ * routes need `exists` to distinguish create-mode from edit-mode.
+ */
+function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult {
+  return resolveGuardedPath(dirname(kbDir), [basename(kbDir), ...tail]);
+}
+
 // ---------------------------------------------------------------------------
 // Unified KB route handler (GET + POST)
 // ---------------------------------------------------------------------------
@@ -343,13 +385,12 @@ export async function handleStudioKbRoutes(
         return true;
       }
 
-      // Path-guard: kbId must not escape brain/
-      const brainBase = resolve(ctx.forgeRoot, 'brain');
-      const kbDir = resolve(brainBase, kbId);
-      if (!kbDir.startsWith(brainBase + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin);
-        return true;
-      }
+      // Containment is enforced at the choke point this route actually reads
+      // through — `resolveKbBrainDir` (per-segment realpath identity walk) via
+      // getKbBackend/kb-graph. The block that stood here built a `kbDir` it
+      // then never used and compared it against its own prefix: vacuous,
+      // structurally incapable of failing for a SLUG_RE-valid id. Removed
+      // rather than left as false assurance (bd `forge-wze`).
 
       let article;
       try {
@@ -388,13 +429,12 @@ export async function handleStudioKbRoutes(
         return true;
       }
 
-      // Path-guard: kbId must not escape brain/
-      const brainBase = resolve(ctx.forgeRoot, 'brain');
-      const kbDir = resolve(brainBase, kbId);
-      if (!kbDir.startsWith(brainBase + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin);
-        return true;
-      }
+      // Containment is enforced at the choke point this route actually reads
+      // through — `resolveKbBrainDir` (per-segment realpath identity walk) via
+      // getKbBackend/kb-graph. The block that stood here built a `kbDir` it
+      // then never used and compared it against its own prefix: vacuous,
+      // structurally incapable of failing for a SLUG_RE-valid id. Removed
+      // rather than left as false assurance (bd `forge-wze`).
 
       // Resolve the kb descriptor (finds by walking brain/ for kb.yaml)
       const kbs = loadKbDescriptors(ctx.forgeRoot);
@@ -507,16 +547,22 @@ export async function handleStudioKbRoutes(
         binding = { kind: kind as 'flow' | 'project', ref };
       }
 
-      // 5. Path-guard: resolved kb dir must stay under brain/
+      // 5. Containment: `brain/` is the fixed, forgeRoot-derived root and `id`
+      // is its own segment (never folded into the root — see the CONTRACT
+      // section of ./studio-path-guard.ts). Replaces a vacuous lexical check.
       const brainBase = resolve(ctx.forgeRoot, 'brain');
-      const kbDir = resolve(brainBase, id);
-      if (!kbDir.startsWith(brainBase + sep)) {
+      const kbGuard = resolveGuardedPath(brainBase, [id]);
+      if (!kbGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const kbDir = kbGuard.realPath;
 
-      // 6. Reject if already exists (409)
-      if (existsSync(kbDir)) {
+      // 6. Reject if already exists (409). `exists` is lstat-based, so a
+      // DANGLING symlink occupying the slot is a 400 from the guard above
+      // rather than the EEXIST-500 the old `existsSync` produced — and can
+      // never become a create-through-the-link.
+      if (kbGuard.exists) {
         sendJson(res, 409, { error: `kb already exists: ${id}` }, origin);
         return true;
       }
@@ -560,11 +606,13 @@ export async function handleStudioKbRoutes(
         sendJson(res, 404, { error: `unknown kb: ${id}` }, origin);
         return true;
       }
-      const brainBase = resolve(ctx.forgeRoot, 'brain');
-      if (!resolve(dir).startsWith(brainBase + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin);
-        return true;
-      }
+      // Containment is enforced at the choke point: `resolveKbBrainDir` now
+      // runs the per-segment realpath identity walk, so `dir` is either a
+      // verified real directory under `brain/` (or `brain/projects/`) or
+      // null. The lexical `resolve(dir).startsWith(brainBase + sep)` check
+      // that stood here was vacuous — it compared a path the same function
+      // had just built against that path's own prefix — and is removed rather
+      // than kept as false assurance.
       rmSync(dir, { recursive: true, force: true });
       sendJson(res, 200, { ok: true, id }, origin);
     } catch (err) {
@@ -585,11 +633,14 @@ export async function handleStudioKbRoutes(
         return true;
       }
 
-      // 2. Path-guard: kbId must not escape brain/
-      const brainBase = resolve(ctx.forgeRoot, 'brain');
-      const kbDir = resolve(brainBase, kbId);
-      if (!kbDir.startsWith(brainBase + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+      // 2. Containment: resolve the kb dir through the guarded choke point.
+      // This replaces a vacuous `resolve(brainBase, kbId).startsWith(...)`
+      // check AND fixes a second, latent bug it was hiding — that check built
+      // `brain/<id>` unconditionally, so guidance for a per-project brain
+      // (`brain/projects/<id>`, ADR 035) was written to the wrong directory.
+      const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+      if (!kbDir) {
+        sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
         return true;
       }
 
@@ -645,29 +696,40 @@ export async function handleStudioKbRoutes(
         targetNode = targetNodeRaw;
       }
 
-      // 7. Build the _guidance dir path and guard it stays under brain/<kb>/
-      const guidanceDir = join(kbDir, '_guidance');
-      const guardedGuidanceDir = resolve(guidanceDir);
-      if (!guardedGuidanceDir.startsWith(kbDir + sep) && guardedGuidanceDir !== kbDir) {
+      // 7. Resolve `_guidance/` with a real per-segment identity check.
+      // THIS IS THE ARBITRARY-FILE-WRITE FIX (bd `forge-wze`): a genuinely
+      // real `brain/<id>/` whose `_guidance` is a SYMLINK pointing outside
+      // `brain/` was confirmed live writing an attacker-supplied payload to an
+      // attacker-chosen location, 200 OK. The two checks removed here compared
+      // a string against itself and could never fire.
+      const guidanceGuard = guardKbTail(kbDir, '_guidance');
+      if (!guidanceGuard.ok) {
+        // Fixed, generic message — the guard's own `reason` names which
+        // segment failed, which is a fingerprinting aid for an attacker
+        // iterating on it, so it is never forwarded to the client.
         sendJson(res, 400, { error: 'path traversal detected in guidance dir' }, origin);
         return true;
       }
+      const guidanceDir = guidanceGuard.realPath;
 
-      // 8. Mkdir _guidance/ if absent
-      if (!existsSync(guidanceDir)) {
+      // 8. Mkdir _guidance/ if absent (create-mode: the guard proved the tail
+      // does not exist yet, so it cannot currently be a symlink or hardlink).
+      if (!guidanceGuard.exists) {
         mkdirSync(guidanceDir, { recursive: true });
       }
 
       // 9. Build filename: ISO-timestamp slug (e.g. 2026-06-13T14-30-00-000Z.md)
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
       const filename = `${ts}.md`;
-      const filePath = join(guidanceDir, filename);
 
-      // Path-guard the resolved file path
-      if (!resolve(filePath).startsWith(guardedGuidanceDir + sep)) {
+      // Re-guard the full tail now that `_guidance/` exists — closes a planted
+      // symlink/hardlink AT the leaf, not merely at its parent.
+      const fileGuard = guardKbTail(kbDir, '_guidance', filename);
+      if (!fileGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected in guidance file' }, origin);
         return true;
       }
+      const filePath = fileGuard.realPath;
 
       // 10. Write frontmatter + body
       const frontmatterLines = [
@@ -693,9 +755,11 @@ export async function handleStudioKbRoutes(
     try {
       const kbId = decodeURIComponent(bootstrapMatch[1]);
       if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
-      const brainBase = resolve(ctx.forgeRoot, 'brain');
-      const kbDir = resolve(brainBase, kbId);
-      if (!kbDir.startsWith(brainBase + sep) || !existsSync(kbDir)) {
+      // Containment via the guarded choke point (bd `forge-wze`) — replaces a
+      // vacuous lexical check, and also reaches per-project brains
+      // (`brain/projects/<id>`) the old `brain/<id>`-only build could not.
+      const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+      if (!kbDir) {
         sendJson(res, 404, { error: 'unknown kb (create it first)' }, origin); return true;
       }
       let body: unknown;
@@ -706,8 +770,20 @@ export async function handleStudioKbRoutes(
 
       // Seed a real profile node (Brain-3 convention) so the brain isn't an empty
       // single node — a readable starting point cycles then build on.
-      const profilePath = resolve(kbDir, 'profile.md');
-      if (!existsSync(profilePath)) {
+      // The guard's existence probe is `lstat`-based, so a DANGLING symlink at
+      // `profile.md` counts as "there" and is routed into the realpath check
+      // (which rejects) rather than mistaken for a free creation slot. That is
+      // the fix for the confirmed arbitrary-file-CREATE here: `existsSync` is
+      // `stat`-based and reported a dangling symlink as absent, after which
+      // `writeFileSync`'s default `O_CREAT` (no `O_NOFOLLOW`) created the file
+      // at whatever outside path the link named. A hardlinked `profile.md` is
+      // caught by the same call's `nlink` check.
+      const profileGuard = guardKbTail(kbDir, 'profile.md');
+      if (!profileGuard.ok) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin); return true;
+      }
+      const profilePath = profileGuard.realPath;
+      if (!profileGuard.exists) {
         writeFileSync(profilePath, [
           `# ${name}`,
           '',

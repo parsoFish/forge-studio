@@ -356,3 +356,174 @@ test('E (GREEN, non-regression pin): a segment that IS exactly ".." is still rej
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+/**
+ * ROUND 3 (2026-08-06, guard-attack round, Finding 2, MAJOR) — create-mode
+ * skips `isSafeSegment` for every segment AFTER the walk's `break`.
+ *
+ * Root cause: `resolveGuardedPath`'s per-segment loop (L213-248) calls
+ * `isSafeSegment(seg)` only for segments it actually iterates BEFORE the
+ * `break` on the first absent segment (L228, "deepest existing ancestor is
+ * `verified` — stop, create-mode from here"). Once that break fires, the
+ * function falls straight to the create-mode branch:
+ *
+ *   const realPath = join(verified, ...segments.slice(i));
+ *
+ * `segments.slice(i)` — every segment from the first non-existent one onward
+ * — is joined LITERALLY, with NO re-validation. So a `'..'` (or `'.'`, or a
+ * segment carrying an embedded `/`) appearing anywhere AFTER that first
+ * absent segment is silently normalized/interpreted by `join()` instead of
+ * being rejected by `isSafeSegment` — the exact per-segment check every
+ * PRE-break segment gets. This re-opens the cross-object escape shape this
+ * whole module exists to close, through create-mode specifically: a walk
+ * that starts down one real object's directory can step back OUT via `'..'`
+ * and into a DIFFERENT real sibling object once it passes an absent segment.
+ * The final `relative()` backstop (L310-313) does not catch it either — its
+ * job is only "did the LITERAL reassembly's first segment come out as `..`",
+ * and after `join()` normalizes the embedded `..` pair away, the reassembled
+ * path's first segment is an ordinary directory name, not `..`.
+ *
+ * This is the cross-object escape shape (see the module's escape-shape #3 in
+ * its own header) re-entering through create-mode, AND the module's own
+ * inline comment directly above the create-mode reassembly line — "reassemble
+ * them literally (their names already passed isSafeSegment)" — is factually
+ * wrong for exactly this reason. Restated here for the record; T3 is
+ * tests-only, so the false comment itself is left for the production fix,
+ * not corrected in this file.
+ *
+ * Confirmed live repro: a root containing a real `idA/` and a real
+ * `idB/hook.yaml`, `resolveGuardedPath(root, ['idA', 'nonexistent', '..',
+ * '..', 'idB', 'hook.yaml'])` returns `{ok:true, exists:false,
+ * realPath:'<root>/idB/hook.yaml'}` — pointing at a DIFFERENT, genuinely
+ * existing object while falsely reporting `exists:false`.
+ *
+ * Tests in this round:
+ *   F  (RED): the confirmed repro above — pins BOTH that the call must be
+ *      REJECTED, and that `exists` must never read `false` for a realPath
+ *      that genuinely exists (the second property must hold even if some
+ *      future, different-shaped fix somehow left `ok:true` on this input).
+ *   G1 (RED): a bare `'..'` as the very LAST segment of the tail.
+ *   G2 (RED): a bare `'.'` segment appearing after the break.
+ *   G3 (RED): a segment carrying an embedded `/` appearing after the break.
+ *   H  (GREEN, non-regression): ordinary create-mode — a brand-new id whose
+ *      directory does not exist yet, with only safe, single-component tail
+ *      segments — must keep returning `{ok:true, exists:false}` with the
+ *      literally-reassembled path. This is the property every create route
+ *      (scaffold-on-save for a new agent/flow/project/hook) depends on; a fix
+ *      that re-validates the tail must not reject THIS shape.
+ */
+
+test('F (RED) [Finding 2]: create-mode reassembly skips isSafeSegment past the break — a ".." pair after a nonexistent segment walks back into a DIFFERENT REAL sibling object', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-createskip-crossobject-'));
+  try {
+    mkdirSync(join(root, 'idA'));
+    mkdirSync(join(root, 'idB'));
+    writeFileSync(join(root, 'idB', 'hook.yaml'), 'name: legit idB hook\n');
+
+    const result = resolveGuardedPath(root, ['idA', 'nonexistent', '..', '..', 'idB', 'hook.yaml']);
+
+    // Property 2 is asserted FIRST, deliberately: `assert.equal` carries an
+    // `asserts actual is T` signature, so asserting property 1 narrows
+    // `result` to PathGuardReject and makes this branch statically dead
+    // (`never`). Checking it while the type is still the union keeps BOTH
+    // properties genuinely live rather than one of them silently unreachable.
+    //
+    // Property 2 (must hold independent of how property 1 is satisfied): a
+    // path that genuinely exists on disk (idB/hook.yaml is real) must NEVER
+    // be reported exists:false — that exact combination (ok:true,
+    // exists:false, realPath pointing at a real object) is the false "safe to
+    // create" certification this defect produces.
+    if (result.ok) {
+      assert.notEqual(
+        result.exists,
+        false,
+        `a path pointing at a genuinely EXISTING file (${join(root, 'idB', 'hook.yaml')}) must never be reported exists:false — got ${JSON.stringify(result)}`,
+      );
+    }
+    // Property 1: the call must be rejected outright — a ".." segment
+    // anywhere in the input is exactly what isSafeSegment exists to catch,
+    // and it must be checked regardless of which side of the break it falls on.
+    assert.equal(
+      result.ok,
+      false,
+      `expected the guard to REJECT this create-mode walk — got ${JSON.stringify(result)}. The walk breaks at the first absent segment ("nonexistent") and reassembles the REMAINING segments with a bare join(verified, ...segments.slice(i)) — never re-running isSafeSegment on them — so the two ".." segments that follow are silently normalized away by join(), walking back OUT of idA/ and INTO idB/, a different, genuinely real sibling object.`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('G1 (RED) [Finding 2]: a bare ".." as the very LAST tail segment is never re-checked by isSafeSegment', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-createskip-trailingdotdot-'));
+  try {
+    mkdirSync(join(root, 'idA'));
+
+    const result = resolveGuardedPath(root, ['idA', 'nonexistent', 'legit', '..']);
+
+    assert.equal(
+      result.ok,
+      false,
+      `expected the guard to reject a tail containing a literal ".." segment (here, the very last one) — got ${JSON.stringify(result)}. isSafeSegment is the check that exists to catch this, and it is only applied to segments visited BEFORE the break.`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('G2 (RED) [Finding 2]: a bare "." segment after the break is never re-checked by isSafeSegment', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-createskip-dotseg-'));
+  try {
+    mkdirSync(join(root, 'idA'));
+
+    const result = resolveGuardedPath(root, ['idA', 'nonexistent', '.', 'hook.yaml']);
+
+    assert.equal(
+      result.ok,
+      false,
+      `expected the guard to reject a tail containing a literal "." segment after the break — got ${JSON.stringify(result)}. join() silently collapses "." away, so the reassembled path looks perfectly ordinary even though a segment isSafeSegment would refuse was never checked.`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('G3 (RED) [Finding 2]: a segment carrying an embedded "/" after the break is never re-checked by isSafeSegment', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-createskip-slashseg-'));
+  try {
+    mkdirSync(join(root, 'idA'));
+
+    const result = resolveGuardedPath(root, ['idA', 'nonexistent', 'sub/evil', 'hook.yaml']);
+
+    assert.equal(
+      result.ok,
+      false,
+      `expected the guard to reject a tail segment carrying an embedded "/" after the break — got ${JSON.stringify(result)}. isSafeSegment refuses any segment containing a separator (it exists precisely so a single logical segment can never inject extra path components); join() happily interprets the embedded "/" as two directory levels instead.`,
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('H (GREEN, non-regression) [Finding 2]: ordinary create-mode for a brand-new id (no break-then-tail shenanigans) still returns {ok:true, exists:false} with the literal path — the fix must not break scaffold-on-save', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-createskip-nonregression-'));
+  try {
+    // 'newid' does not exist under root at all — the break fires on the
+    // VERY FIRST segment, and both tail segments are ordinary, single-
+    // component, safe names. Every create route (new agent/flow/project/hook)
+    // depends on exactly this shape working.
+    const result = resolveGuardedPath(root, ['newid', 'SKILL.md']);
+
+    assert.equal(result.ok, true, `expected ordinary create-mode to still succeed — got ${JSON.stringify(result)}`);
+    if (result.ok) {
+      assert.equal(result.exists, false, 'a brand-new id path must report exists:false');
+      const realRoot = realpathSync(root);
+      assert.equal(
+        result.realPath,
+        join(realRoot, 'newid', 'SKILL.md'),
+        'the reassembled realPath must literally join the verified root with the not-yet-created segments',
+      );
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});

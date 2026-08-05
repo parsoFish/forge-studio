@@ -49,6 +49,7 @@ import {
 import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
 import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
@@ -614,19 +615,21 @@ export async function handleStudioRoutes(
         return true;
       }
 
+      // Guard symmetry: `PUT /api/studio/flows/:id` was hardened onto the
+      // shared realpath identity guard; this GET sibling was left on the
+      // lexical `resolve(...).startsWith(...)` shape, which cannot fail for a
+      // SLUG_RE-valid id and so let a symlinked `studio/flows/<id>` disclose
+      // an outside `flow.yaml`. Same guard, same root, id as its own segment.
       const flowsBase = resolve(ctx.forgeRoot, 'studio', 'flows');
-      const flowYamlPath = resolve(flowsBase, id, 'flow.yaml');
-      if (!flowYamlPath.startsWith(flowsBase + sep)) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin);
-        return true;
-      }
-
-      if (!existsSync(flowYamlPath)) {
+      const guarded = resolveGuardedPath(flowsBase, [id, 'flow.yaml']);
+      // A guard rejection and a genuinely absent flow return the SAME 404, so
+      // this route cannot be used to probe which ids are planted.
+      if (!guarded.ok || !guarded.exists) {
         sendJson(res, 404, { error: 'unknown flow' }, origin);
         return true;
       }
 
-      const flow = loadFlowDefinition(flowYamlPath);
+      const flow = loadFlowDefinition(guarded.realPath);
       sendJson(res, 200, { flow }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

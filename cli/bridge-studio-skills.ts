@@ -219,15 +219,29 @@ export async function handleStudioSkillsRoutes(
         return true;
       }
 
-      let mdPath: string;
+      // Guard symmetry (bd `forge-wze` sweep): `POST /api/studio/skills` was
+      // hardened onto the shared realpath identity guard, but this route still
+      // resolved through `skillPath()` — `assertSkillSlug` (charset only) plus
+      // a bare `join()`. Confirmed live: a symlinked `skills/<id>` directory
+      // was followed, and the approve route WROTE THROUGH it, mutating a
+      // SKILL.md outside the repo. Same guard, `skills/` as the fixed root,
+      // `id` as its own segment (never folded into the root — see the CONTRACT
+      // section of ./studio-path-guard.ts).
+      // Layer 1 — SHAPE. `skillPath` runs `assertSkillSlug`, which 400s a
+      // malformed id. Kept as the independent first layer (the guard below
+      // never validates slug shape, only containment), and because a
+      // malformed id is a malformed request, not a probe for planted objects.
       try {
-        mdPath = skillPath(id, ctx.forgeRoot);
+        skillPath(id, ctx.forgeRoot);
       } catch (err) {
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
         return true;
       }
-
-      if (!existsSync(mdPath)) {
+      // Layer 2 — CONTAINMENT. A guard rejection collapses into the SAME 404
+      // as a genuinely unknown skill: distinguishable responses would hand an
+      // attacker a probe for which ids are planted.
+      const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
+      if (!pathGuard.ok || !pathGuard.exists) {
         sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
         return true;
       }
@@ -258,18 +272,33 @@ export async function handleStudioSkillsRoutes(
         return true;
       }
 
-      let mdPath: string;
+      // Guard symmetry (bd `forge-wze` sweep): `POST /api/studio/skills` was
+      // hardened onto the shared realpath identity guard, but this route still
+      // resolved through `skillPath()` — `assertSkillSlug` (charset only) plus
+      // a bare `join()`. Confirmed live: a symlinked `skills/<id>` directory
+      // was followed, and the approve route WROTE THROUGH it, mutating a
+      // SKILL.md outside the repo. Same guard, `skills/` as the fixed root,
+      // `id` as its own segment (never folded into the root — see the CONTRACT
+      // section of ./studio-path-guard.ts).
+      // Layer 1 — SHAPE. `skillPath` runs `assertSkillSlug`, which 400s a
+      // malformed id. Kept as the independent first layer (the guard below
+      // never validates slug shape, only containment), and because a
+      // malformed id is a malformed request, not a probe for planted objects.
       try {
-        mdPath = skillPath(id, ctx.forgeRoot);
+        skillPath(id, ctx.forgeRoot);
       } catch (err) {
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
         return true;
       }
-
-      if (!existsSync(mdPath)) {
+      // Layer 2 — CONTAINMENT. A guard rejection collapses into the SAME 404
+      // as a genuinely unknown skill: distinguishable responses would hand an
+      // attacker a probe for which ids are planted.
+      const pathGuard = resolveGuardedPath(skillsDir(ctx.forgeRoot), [id, 'SKILL.md']);
+      if (!pathGuard.ok || !pathGuard.exists) {
         sendJson(res, 404, { error: `unknown skill "${id}"` }, origin);
         return true;
       }
+      const mdPath = pathGuard.realPath;
 
       // MAJOR 1 fix: listSkillLibrary deliberately EXCLUDES studio agents
       // (SKILL.md with a `runtime:` block, AT-5) — mirror that exclusion here

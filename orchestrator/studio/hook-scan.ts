@@ -72,7 +72,8 @@ import yaml from 'js-yaml';
 
 import { assertSkillSlug } from '../skill-path.ts';
 import { reqString, optString } from './yaml-fields.ts';
-import { hookDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { hooksDir, loadHookDefinition, type HookPermissionManifest } from './hook-library.ts';
+import { resolveGuardedPath } from '../../cli/studio-path-guard.ts';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -361,10 +362,35 @@ export function scanHookScript(input: { body: string; permissions: HookPermissio
   return { verdict: computeVerdict(findings), findings };
 }
 
+/**
+ * Read a hook's script body through the shared containment guard.
+ *
+ * `loadHookDefinition` already rejects a `script:` that escapes the hook
+ * directory (`resolveHookScriptPath` — lexical + percent-decoded + a realpath
+ * check CONDITIONAL on the entry existing). Two gaps remain, which is why the
+ * read is guarded here rather than trusting that upstream validation:
+ *   - that realpath check is skipped entirely for a DANGLING symlink, and it
+ *     has no `nlink` check, so a hardlinked script leaf is invisible to it;
+ *   - it is a `startsWith(boundary)` containment test, not a per-segment
+ *     IDENTITY test, so a script resolving to a DIFFERENT real object inside
+ *     the same hook directory passes.
+ * `hooksDir` is the fixed containment root and `id` is its own segment; the
+ * script's own relative components follow as further segments, so each is
+ * identity-checked rather than joined blind (./studio-path-guard.ts, CONTRACT).
+ *
+ * Empty and `.` components are dropped — `path.resolve` tolerates them
+ * everywhere else, so rejecting a legitimate `scripts//run.sh` here would make
+ * a valid hook unreadable. A `..` is deliberately NOT dropped: it must reach
+ * `isSafeSegment` and be rejected.
+ */
 function readHookScriptBody(forgeRoot: string, id: string): string {
   const def = loadHookDefinition(id, forgeRoot);
-  const scriptPath = join(hookDir(id, forgeRoot), def.script);
-  return readFileSync(scriptPath, 'utf8');
+  const segments = def.script.split('/').filter((seg) => seg !== '' && seg !== '.');
+  const guarded = resolveGuardedPath(hooksDir(forgeRoot), [id, ...segments]);
+  if (!guarded.ok || !guarded.exists) {
+    throw new Error(`hook "${id}" script is not readable within its own package`);
+  }
+  return readFileSync(guarded.realPath, 'utf8');
 }
 
 export function scanHookPackage(forgeRoot: string, id: string): HookScanReport {

@@ -23,7 +23,9 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { dirname, resolve } from 'node:path';
+
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 
 /** Brain 2 (cycles) — forge-level cycle-derived themes. */
 export function cyclesThemesDir(forgeRoot: string): string {
@@ -70,12 +72,42 @@ export function projectThemesDir(forgeRoot: string, projectName: string): string
  * This is what makes per-project brains (gitpulse, mdtoc, …) reachable in
  * Studio's KB graph — every KB resolver routes through here so the fallback is a
  * one-place change.
+ *
+ * CONTAINMENT (bd `forge-wze`). `kbId` arrives straight off the Studio bridge's
+ * `/api/studio/kbs/:id` routes, so this function is the choke point for the KB
+ * half of the path-containment family. It previously resolved with
+ * `resolve()` + `existsSync()`, which follows symlinks and asserts no identity
+ * — confirmed live as an arbitrary-file-READ (`brain/<id>` symlinked outside)
+ * and, through the nested tails its callers build, an arbitrary-file-WRITE.
+ *
+ * Both candidate locations are now resolved through the shared
+ * `resolveGuardedPath` (per-segment realpath IDENTITY walk + `nlink` check on
+ * the leaf). Note the call shape, which is load-bearing: each `root` is a
+ * fixed, forgeRoot-derived constant and `kbId` is passed as its OWN
+ * `segments[]` element. Folding it into `root` instead
+ * (`resolveGuardedPath(join(base, kbId), ['kb.yaml'])`) would bypass every
+ * check this guard makes — see the CONTRACT section of
+ * `cli/studio-path-guard.ts`.
+ *
+ * Returning `dirname(realPath)` rather than the unresolved `join()` is
+ * deliberate: callers append nested tails (`themes/`, `_raw/`, `_guidance/`)
+ * to whatever this returns, so it must hand back the identity-verified real
+ * directory, not a string that merely looks right.
  */
 export function resolveKbBrainDir(forgeRoot: string, kbId: string): string | null {
-  const direct = resolve(forgeRoot, 'brain', kbId);
-  if (existsSync(resolve(direct, 'kb.yaml'))) return direct;
-  const project = projectBrainDir(forgeRoot, kbId);
-  if (existsSync(resolve(project, 'kb.yaml'))) return project;
+  // Two containment roots, tried in order (top-level brain wins over a
+  // same-named project brain — unchanged). Both are fixed and
+  // forgeRoot-derived; neither is ever built from `kbId`.
+  const roots = [resolve(forgeRoot, 'brain'), resolve(forgeRoot, 'brain', 'projects')];
+  for (const root of roots) {
+    const guarded = resolveGuardedPath(root, [kbId, 'kb.yaml']);
+    // `exists: false` means the descriptor is not there — the same "no such
+    // KB" answer the old `existsSync` gave. A guard REJECTION (`ok: false`)
+    // is deliberately collapsed into the same answer so a planted symlink and
+    // an absent brain are indistinguishable to the caller; the alternative
+    // leaks a probe oracle for exactly the attacker iterating on this guard.
+    if (guarded.ok && guarded.exists) return dirname(guarded.realPath);
+  }
   return null;
 }
 

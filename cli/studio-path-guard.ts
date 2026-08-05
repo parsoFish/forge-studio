@@ -197,6 +197,23 @@ function isSafeSegment(seg: string): boolean {
 export function resolveGuardedPath(root: string, segments: readonly string[]): PathGuardResult {
   if (segments.length === 0) return { ok: false, reason: 'no path segments given' };
 
+  // Validate EVERY segment up front, before the walk — not lazily as the walk
+  // reaches each one (SEC-01 guard-attack round). The walk stops at the first
+  // segment that does not exist and reassembles the remaining tail literally;
+  // when the check lived inside the loop, every segment AFTER that break was
+  // never inspected at all, and `join()` silently normalised a later `..`
+  // away. Live repro:
+  //   resolveGuardedPath(root, ['idA','nonexistent','..','..','idB','kb.yaml'])
+  // returned `{ok:true, exists:false}` with a realPath pointing at `idB` — a
+  // DIFFERENT, genuinely existing object, additionally misreported as absent.
+  // That is escape shape 3 (cross-object) re-entering through create-mode, and
+  // it also falsified this module's own claim below that every reassembled
+  // segment "already passed isSafeSegment". Hoisting the check makes that
+  // claim true for the first time.
+  for (const seg of segments) {
+    if (!isSafeSegment(seg)) return { ok: false, reason: `unsafe path segment "${seg}"` };
+  }
+
   let realRoot: string;
   try {
     // See the module docstring's CONTRACT section: this deliberately
@@ -211,9 +228,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   let verified = realRoot; // the deepest ancestor verified identical to its expected path so far
   let i = 0;
   for (; i < segments.length; i++) {
-    const seg = segments[i];
-    if (!isSafeSegment(seg)) return { ok: false, reason: `unsafe path segment "${seg}"` };
-
+    const seg = segments[i]; // already isSafeSegment-validated above, for ALL segments
     const expected = join(verified, seg);
     const probe = probeExistence(expected);
     if (probe.kind === 'indeterminate') {
