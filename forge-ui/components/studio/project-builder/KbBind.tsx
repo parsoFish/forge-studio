@@ -34,7 +34,7 @@ export function KbBind({
       setCreateError(r.error ?? 'could not start the brain builder');
       return;
     }
-    router.push(`/project-brain/${encodeURIComponent(r.sessionId)}?project=${encodeURIComponent(projectId)}`);
+    router.push(`/sessions/project-brain/${encodeURIComponent(r.sessionId)}?project=${encodeURIComponent(projectId)}`);
   }
 
   return (

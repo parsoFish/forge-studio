@@ -15,13 +15,18 @@ import { sleep } from '../lib/journey-assertions.mjs';
 let instrSid = null;   // instructions-creator session (Part 1)
 let pbSid = null;      // project-brain-builder session (Part 1)
 
-/** Parse the real instructions session id out of a /instructions/<sid> URL (null if not there). */
+/** Parse the real instructions session id out of a /sessions/instructions/<sid>
+ *  URL (null if not there). The substring match is deliberately loose — it
+ *  matches the retired /instructions/<sid> URL too (still a live redirect
+ *  stub) — so this stays correct across both without needing to change. */
 function instrSidFromUrl(url) {
   const m = /\/instructions\/([^/?#]+)/.exec(url);
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** Parse the real project-brain session id out of a /project-brain/<sid> URL (null if not there). */
+/** Parse the real project-brain session id out of a /sessions/project-brain/<sid>
+ *  URL (null if not there). Same loose substring match as instrSidFromUrl —
+ *  correct against both the canonical route and the retired redirect stub. */
 function pbSidFromUrl(url) {
   const m = /\/project-brain\/([^/?#]+)/.exec(url);
   return m ? decodeURIComponent(m[1]) : null;
@@ -338,9 +343,11 @@ export const journey = defineJourney({
               instrSid = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-instr';
               ctx.seeded.instrSid = instrSid; // read by the runner's finally-block cleanup
               writeInstrStatus(instrSid, { phase: 'briefing', round: 1 });
-              await page.goto(watch.uiUrl + `/instructions/${encodeURIComponent(instrSid)}`, { waitUntil: 'domcontentloaded' });
-              const instrReady = await page.waitForSelector('main[data-page="instructions-interview"]', { timeout: 20000 }).then(() => true).catch(() => false);
-              check(instrReady, 'AI-1: instructions screen renders ([data-page="instructions-interview"])');
+              // R2-10 PR2: target the shared session shell directly — the retired
+              // /instructions/<sid> route is a redirect stub for stale links only.
+              await page.goto(watch.uiUrl + `/sessions/instructions/${encodeURIComponent(instrSid)}`, { waitUntil: 'domcontentloaded' });
+              const instrReady = await page.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 20000 }).then(() => true).catch(() => false);
+              check(instrReady, 'AI-1: instructions screen renders on the shared shell ([data-page="session"][data-session-kind="instructions"])');
               await caption(page, 'Forge generates AGENTS.md with you — interview → draft → approve. AI-assisted, and gated.');
               // interviewing — activity bursts + clarifying questions
               writeInstrStatus(instrSid, { phase: 'interviewing', round: 1 });
@@ -351,6 +358,19 @@ export const journey = defineJourney({
               await page.waitForSelector('[data-section="instructions-interview"]', { timeout: 15000 }).catch(() => {});
               check(await page.locator('[data-section="instructions-interview"]').count() > 0, 'AI-1: interview returns clarifying questions');
               await countAtLeast(page, '[data-question-index]', 2, 'AI-1: ≥2 instructions questions');
+              // R2-10: at least one turn, derived from a REAL checkpoint file —
+              // questions.json contributes a pending AGENT turn while phase is
+              // exactly 'awaiting-answers' (never invented).
+              await page.waitForFunction(
+                () => document.querySelector('[data-turn-index="0"]')?.getAttribute('data-turn-source') === 'questions.json',
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              const instrTurn0 = await page.evaluate(() => {
+                const el = document.querySelector('[data-turn-index="0"]');
+                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source') } : null;
+              });
+              check(instrTurn0 !== null && instrTurn0.role === 'agent' && instrTurn0.source === 'questions.json',
+                `AI-1: transcript derives a real turn from questions.json (got ${JSON.stringify(instrTurn0)})`);
               await frame(page, 'instr-0-interview', 'Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)');
               // answer → draft → verdict
               await page.locator('[data-question-index="0"] input[type="radio"]').first().check().catch(() => {});
@@ -364,6 +384,17 @@ export const journey = defineJourney({
               writeInstrStatus(instrSid, { phase: 'awaiting-verdict', round: 2 });
               await page.waitForSelector('[data-component="instructions-verdict"]', { timeout: 15000 }).catch(() => {});
               check(await page.locator('[data-component="instructions-verdict"]').count() > 0, 'AI-1: drafted AGENTS.md awaits the operator verdict');
+              // R2-10: the artifact pane — instructions' declared renderer is
+              // markdown-draft, with the drafted AGENTS.md rendering as real
+              // content (not the no-draft placeholder) and a non-empty label
+              // sourced from studio/session-kinds.yaml over the wire.
+              check(await page.locator('[data-section="session-artifact"][data-artifact-kind="markdown-draft"]').count() > 0,
+                'AI-1: session artifact pane renders the markdown-draft renderer for the instructions kind');
+              check(await page.locator('[data-section="session-artifact"] [data-markdown-draft-state="has-content"]').count() > 0,
+                'AI-1: the drafted AGENTS.md renders as real content in the artifact pane');
+              const instrArtifactLabel = await page.evaluate(
+                () => document.querySelector('[data-section="session-artifact"]')?.getAttribute('data-artifact-label') ?? '');
+              check(instrArtifactLabel.length > 0, `AI-1: artifact pane carries a non-empty data-artifact-label (got "${instrArtifactLabel}")`);
               await frame(page, 'instr-1-draft', 'Part 1 — the generated AGENTS.md draft, awaiting approval');
               // Clip: the operator's END-TO-END trigger — dwell on the project page's
               // real "Generate AGENTS.md with the instructions agent" button, CLICK it
@@ -392,15 +423,16 @@ export const journey = defineJourney({
                   instrClipSid = `${instrSid}-clip`;
                   writeInstrStatus(instrClipSid, { phase: 'briefing', round: 1 });
                   await sleep(THINK);
-                  await p.goto(watch.uiUrl + `/instructions/${encodeURIComponent(instrClipSid)}`, { waitUntil: 'domcontentloaded' });
+                  // R2-10 PR2: the fallback targets the shared shell directly.
+                  await p.goto(watch.uiUrl + `/sessions/instructions/${encodeURIComponent(instrClipSid)}`, { waitUntil: 'domcontentloaded' });
                 }
-                await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 12000 }).catch(() => {});
+                await p.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
                 writeInstrStatus(instrClipSid, { phase: 'interviewing', round: 1 });
                 instrEvent(instrClipSid, 'start', 'instructions turn (phase=interviewing, round=1)');
                 await instrBurst(instrClipSid, ['Glob', 'Read']);
                 await p.waitForFunction(
-                  () => document.querySelector('main[data-page="instructions-interview"]')?.getAttribute('data-instructions-phase') === 'interviewing',
+                  () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'interviewing',
                   null, { timeout: 10000 },
                 ).catch(() => {});
                 await sleep(WORK);
@@ -408,7 +440,7 @@ export const journey = defineJourney({
                 instrEvent(instrClipSid, 'start', 'instructions turn (phase=drafting) — rolling in answers');
                 await instrBurst(instrClipSid, ['Read', 'Write']);
                 await p.waitForFunction(
-                  () => document.querySelector('main[data-page="instructions-interview"]')?.getAttribute('data-instructions-phase') === 'drafting',
+                  () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'drafting',
                   null, { timeout: 10000 },
                 ).catch(() => {});
                 await sleep(WORK);
@@ -424,7 +456,7 @@ export const journey = defineJourney({
               writeInstrStatus(instrSid, { phase: 'committed', round: 2 });
               instrEvent(instrSid, 'log', 'instructions-committed (AGENTS.md written)');
               await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
-              await page.waitForSelector('main[data-page="instructions-interview"]', { timeout: 10000 }).catch(() => {});
+              await page.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 10000 }).catch(() => {});
               await page.waitForSelector('[data-action="back-to-project"]', { timeout: 8000 }).catch(() => {});
               check(await page.locator('[data-action="back-to-project"]').count() > 0, 'AI-1: AGENTS.md committed — back-to-project offered');
               await frame(page, 'instr-2-committed', 'Part 1 — AGENTS.md generated + approved (AI-assisted)');
@@ -442,17 +474,31 @@ export const journey = defineJourney({
               pbSid = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '-pbrain';
               ctx.seeded.pbSid = pbSid; // read by the runner's finally-block cleanup
               writePbStatus(pbSid, 'briefing', '');
-              await page.goto(watch.uiUrl + `/project-brain/${encodeURIComponent(pbSid)}?project=${encodeURIComponent(PROJECT)}`, { waitUntil: 'domcontentloaded' });
-              const pbReady = await page.waitForSelector('main[data-page="project-brain"]', { timeout: 20000 }).then(() => true).catch(() => false);
-              check(pbReady, 'AI-2: project-brain screen renders ([data-page="project-brain"])');
+              // R2-10 PR2: target the shared session shell directly — the retired
+              // /project-brain/<sid> route is a redirect stub for stale links only
+              // (it forwards ?project= for the shell's own fallback resolution).
+              await page.goto(watch.uiUrl + `/sessions/project-brain/${encodeURIComponent(pbSid)}?project=${encodeURIComponent(PROJECT)}`, { waitUntil: 'domcontentloaded' });
+              const pbReady = await page.waitForSelector('main[data-page="session"][data-session-kind="project-brain"]', { timeout: 20000 }).then(() => true).catch(() => false);
+              check(pbReady, 'AI-2: project-brain screen renders on the shared shell ([data-page="session"][data-session-kind="project-brain"])');
               await caption(page, 'Forge reads the project and drafts its seed brain — the themes a planner reads before designing.');
               // briefing → analyzing → (seed themes) → awaiting-review
               writePbStatus(pbSid, 'analyzing', 'emphasise conventions + module layout');
               await frame(page, 'pbrain-0-analyzing', 'Part 1 — project-brain-builder analyses the project (AI-assisted)');
               seedStagedBrain(pbSid);
-              await page.waitForSelector('main[data-project-brain-phase="awaiting-review"]', { timeout: 10000 }).catch(() => {});
+              await page.waitForSelector('main[data-page="session"][data-session-phase="awaiting-review"]', { timeout: 10000 }).catch(() => {});
               check(await page.locator('[data-section="brain-review"]').count() > 0, 'AI-2: staged themes presented for review');
               await countAtLeast(page, '[data-theme-name]', 3, 'AI-2: ≥3 seed themes drafted');
+              // R2-10: the artifact pane — project-brain's declared renderer is
+              // brain-structure, which renders its file tabs through the SHARED
+              // FilePackage component (never a second tab-strip) — the "reused,
+              // not forked" claim, asserted against the live product.
+              check(await page.locator('[data-section="session-artifact"][data-artifact-kind="brain-structure"]').count() > 0,
+                'AI-2: session artifact pane renders the brain-structure renderer for the project-brain kind');
+              check(await page.locator('[data-section="session-artifact"] [data-component="file-package"]').count() > 0,
+                'AI-2: brain-structure artifact renders through the SHARED FilePackage component (reused, not forked)');
+              const pbArtifactLabel = await page.evaluate(
+                () => document.querySelector('[data-section="session-artifact"]')?.getAttribute('data-artifact-label') ?? '');
+              check(pbArtifactLabel.length > 0, `AI-2: artifact pane carries a non-empty data-artifact-label (got "${pbArtifactLabel}")`);
               await frame(page, 'pbrain-1-review', 'Part 1 — the generated seed brain: themes to review + approve');
               // Clip: the operator's END-TO-END trigger — dwell on the project page's
               // real "Build project brain with the agent" button (Knowledge Base panel),
@@ -486,24 +532,25 @@ export const journey = defineJourney({
                   pbClipSid = `${pbSid}-clip`;
                   writePbStatus(pbClipSid, 'briefing', '');
                   await sleep(THINK);
-                  await p.goto(watch.uiUrl + `/project-brain/${encodeURIComponent(pbClipSid)}?project=${encodeURIComponent(PROJECT)}`, { waitUntil: 'domcontentloaded' });
+                  // R2-10 PR2: the fallback targets the shared shell directly.
+                  await p.goto(watch.uiUrl + `/sessions/project-brain/${encodeURIComponent(pbClipSid)}?project=${encodeURIComponent(PROJECT)}`, { waitUntil: 'domcontentloaded' });
                 }
-                await p.waitForSelector('main[data-page="project-brain"]', { timeout: 12000 }).catch(() => {});
+                await p.waitForSelector('main[data-page="session"][data-session-kind="project-brain"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
                 writePbStatus(pbClipSid, 'analyzing', 'emphasise conventions + module layout');
                 await p.waitForFunction(
-                  () => document.querySelector('main[data-page="project-brain"]')?.getAttribute('data-project-brain-phase') === 'analyzing',
+                  () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'analyzing',
                   null, { timeout: 10000 },
                 ).catch(() => {});
                 await sleep(WORK);
                 seedStagedBrain(pbClipSid);
-                await p.waitForSelector('main[data-project-brain-phase="awaiting-review"]', { timeout: 12000 }).catch(() => {});
+                await p.waitForSelector('main[data-page="session"][data-session-phase="awaiting-review"]', { timeout: 12000 }).catch(() => {});
                 await sleep(WORK);
               }, { readySel: 'main[data-page="projects"]', caption: 'the project page\'s "Build project brain with the agent" — briefing → analyzing → the generated seed themes, awaiting review' });
               if (pbClipSid) cleanSeededBrain(pbClipSid);
               // approve → committing → committed (flip-only; nothing written under brain/)
               await page.locator('[data-action="approve-brain"]').click().catch(() => {});
-              await page.waitForSelector('main[data-project-brain-phase="committing"]', { timeout: 8000 }).catch(() => {});
+              await page.waitForSelector('main[data-page="session"][data-session-phase="committing"]', { timeout: 8000 }).catch(() => {});
               writePbStatus(pbSid, 'committed', '');
               await page.waitForSelector('[data-section="brain-committed"]', { timeout: 8000 }).catch(() => {});
               check(await page.locator('[data-action="bind-and-return"]').count() > 0, 'AI-2: seed brain committed — bind-and-return offered');

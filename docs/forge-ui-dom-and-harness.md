@@ -370,42 +370,59 @@ inventory rather than one shared page-level contract:
   (+ `[data-recovery-commits]` when the worktree has commits, and a
   `[data-recovery-note]` result line after requeue/abandon). The recovery
   API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
-- **`/architect/new` + `/architect/[sid]/interview`.** `/architect/new` is
-  the native "start a run" entry that replaced the retired `/dashboard`
-  launcher — `[data-page="architect-new"][data-page-ready]` wrapping the
-  same idea box, `[data-section="new-idea"][data-new-idea-ready]`. The
-  interview is a dedicated Studio-chrome screen —
-  `[data-page="architect-interview"][data-page-ready][data-session-id][data-architect-phase]`
-  — with the focused architect hex (`[data-architect-phase][data-architect-active]`,
-  `[data-tool-burst]` chips) plus
-  `[data-section="architect-interview"][data-architect-round][data-questions-answered]`,
-  per-question `[data-question-index][data-question-resolved]`, per-option
-  `[data-option-label][data-option-selected]`. A stalled session's
-  StuckWarning (P1, `[data-architect-stale="true"][data-architect-stale-ms]`)
-  carries a one-click re-run affordance (F5, R4-11-T5) —
+- **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
+  (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
+  transcript left, living artifact right. The three bespoke session pages it
+  replaced (`/architect/[sid]/interview`, `/instructions/[sid]`,
+  `/project-brain/[sid]`) are **deleted as implementations and survive as
+  permanent server-side redirects** into this route — `/project-brain`'s
+  redirect forwards its `?project=` query, and `/architect/[sid]` now
+  redirects straight here rather than chaining through `/interview`.
+  Page shell:
+  `main[data-page="session"][data-page-ready][data-session-kind][data-session-id][data-session-phase][data-session-stage]`,
+  with `[data-session-turn-count]` reflecting the turns actually RENDERED
+  (i.e. the selected stage's), never a total that disagrees with the DOM.
+  Per turn:
+  `[data-turn-index][data-turn-role="agent"|"operator"][data-turn-stage][data-turn-source]`
+  — `data-turn-source` names the checkpoint file the turn was DERIVED from
+  (`idea.md`, `prompt.md`, `answers.json#round-N`, `questions.json`,
+  `feedback.md`), because no chat transcript exists on disk and none is
+  invented. Artifact pane:
+  `[data-section="session-artifact"][data-artifact-kind][data-artifact-label]`
+  (the label comes from `studio/session-kinds.yaml` over the wire, never a
+  client-side table). Fail-closed state:
+  `[data-session-error][data-session-error-kind]` — a checkpoint stage outside
+  the kind's declared `stages` surfaces the server's message naming the
+  offending value and the allowed set, never a defaulted render.
+  **Every per-kind operator affordance keeps its original `data-*` name** so
+  the harness drives it unchanged: the architect hex
+  (`[data-component="architect-hex"][data-architect-phase][data-architect-active]`,
+  `[data-tool-burst]` chips), `[data-section="architect-interview"|"architect-activity"|"architect-status"]`
+  with `[data-architect-round][data-questions-answered]`, per-question
+  `[data-question-index][data-question-resolved]`, per-option
+  `[data-option-label][data-option-selected]`; the stale warning
+  `[data-architect-stale="true"][data-architect-stale-ms]` and its re-run
   `[data-action="architect-rerun"][data-rerun-state="idle"|"rerunning"|"error"]`
-  — that POSTs `/api/architect/rerun` to re-spawn the existing session's turn
-  as-is (no answers/round mutation); the existing 3s session poll picks the
-  resumed session back up. The bare
-  `/architect/[sessionId]` route (no `/interview`) is now a permanent
-  server-side redirect into `/architect/<sid>/interview` (M7-4, ADR-031) —
-  the old standalone screen + its `design-decisions`/`escalation-id` PLAN
-  gate are gone; the PLAN gate is just
-  `/artifact?run=_architect-<sid>&type=plan&mode=gate` like any other gate.
-- **`/instructions/[sid]`** — the AI-assisted AGENTS.md/instructions
-  interview, sharing the same Studio-chrome shell and (deliberately) the
-  same round/question/option attribute names as the architect interview:
-  `[data-page="instructions-interview"][data-page-ready][data-session-id][data-instructions-phase]`,
-  `[data-section="instructions-status"]`,
-  `[data-section="instructions-interview"][data-architect-round][data-questions-answered]`.
-  Its verdict form is
+  (POSTs `/api/architect/rerun`, no answers/round mutation);
+  `[data-action="open-plan"]` into
+  `/artifact?run=_architect-<sid>&type=plan&mode=gate` (the PLAN gate is still
+  just another gate — M7-4, ADR-031) and `[data-action="watch-it-build"]`;
+  the instructions side's `[data-section="instructions-interview"|"instructions-status"]`,
+  `[data-instructions-stale][data-instructions-stale-ms]`,
   `[data-component="instructions-verdict"][data-form-state][data-form-kind]`
-  with `[data-action="approve-instructions"|"revise-instructions"|"reject-instructions"]`.
-- **`/project-brain/[sid]`** — the onboarding Brain-3 builder:
-  `[data-page="project-brain"][data-session-id][data-project-brain-phase]`
-  stepping through
+  with `[data-action="approve-instructions"|"revise-instructions"|"reject-instructions"]`
+  and `[data-action="back-to-project"]`; the project-brain side's
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
-  (`brain-review` carries `data-theme-count`).
+  (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
+  `[data-component="brain-brief-input"]`, and
+  `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"bind-and-return"]`.
+  The two question forms are now ONE component parameterised on its submit fn
+  and section name — both `data-section` values are unchanged.
+  **`/architect/new` stays** as the native "start a run" entry that replaced
+  the retired `/dashboard` launcher —
+  `[data-page="architect-new"][data-page-ready]` wrapping
+  `[data-section="new-idea"][data-new-idea-ready]` — and now pushes into
+  `/sessions/architect/<sid>`.
 - **Session-shell read contract (R2-10-F1/F2, 2026-08-05) — the API side.**
   The three session routes above converge on one shared shell. Its data comes
   from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`

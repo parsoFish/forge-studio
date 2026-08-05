@@ -4,28 +4,56 @@ import { useState } from 'react';
 
 import { postArchitectAnswers, type ArchitectQuestion } from '@/lib/bridge-client';
 
+/** The shape every kind's answer-submission endpoint shares
+ *  (`postArchitectAnswers` / `answerInstructions` in `@/lib/bridge-client`) —
+ *  parameterising `onSubmitAnswers` on this instead of a name lets this one
+ *  component drive both kinds' interview forms. */
+export type QuestionFormSubmitFn = (input: {
+  project: string;
+  sessionId: string;
+  answers: { question: string; answer: string }[];
+}) => Promise<{ ok: boolean; error?: string }>;
+
 /**
- * ADR 020 — renders the architect's file-handoff interview round
+ * ADR 020 — renders a session kind's file-handoff interview round
  * (`questions.json`, the reflector's `StructuredQuestion` shape) as one
  * option-group per question. Every question must be answered before submit;
- * answers POST back to `/api/architect/answer`, which appends the round and
- * spawns the next runner turn.
+ * answers POST back to the kind's answer endpoint, which appends the round
+ * and spawns the next runner turn.
  *
  * Free-text override: each question also shows a textarea so the operator can
  * answer in their own words. A non-empty free-text value takes precedence over
  * any selected radio option. Selecting a radio clears the free-text field for
  * that question.
+ *
+ * Shared across two session kinds (R2-10 PR2, WI-8 — absorbed the former
+ * `InstructionsQuestionForm`, a verbatim copy whose only real differences were
+ * the submit function and the outer `data-section` name): `onSubmitAnswers`
+ * defaults to the architect's `postArchitectAnswers`; the instructions kind
+ * passes `answerInstructions` instead. `sectionName`/`heading` default to the
+ * architect's values; the instructions kind overrides both. Every per-question
+ * / per-option `data-*` anchor (`data-question-index`, `data-question-resolved`,
+ * `data-option-label`, `data-option-selected`, `data-question-freetext`,
+ * `data-questions-answered`, `data-architect-round`, `data-action="submit-
+ * answers"`) is unparameterised and identical for both kinds — the journeys
+ * that drive either form by name need no change.
  */
 export function ArchitectQuestionForm({
   project,
   sessionId,
   round,
   questions,
+  onSubmitAnswers = postArchitectAnswers,
+  sectionName = 'architect-interview',
+  heading = 'Architect interview',
 }: {
   project: string;
   sessionId: string;
   round: number;
   questions: ArchitectQuestion[];
+  onSubmitAnswers?: QuestionFormSubmitFn;
+  sectionName?: string;
+  heading?: string;
 }) {
   const [choices, setChoices] = useState<Record<number, string>>({});
   const [freeText, setFreeText] = useState<Record<number, string>>({});
@@ -45,7 +73,7 @@ export function ArchitectQuestionForm({
     setSubmitting(true);
     try {
       const answers = questions.map((q, i) => ({ question: q.question, answer: resolvedAnswer(i) }));
-      const res = await postArchitectAnswers({ project, sessionId, answers });
+      const res = await onSubmitAnswers({ project, sessionId, answers });
       if (!res.ok) setError(res.error ?? 'failed to submit answers');
     } finally {
       setSubmitting(false);
@@ -54,13 +82,13 @@ export function ArchitectQuestionForm({
 
   return (
     <div
-      data-section="architect-interview"
+      data-section={sectionName}
       data-architect-round={round}
       data-questions-answered={allAnswered ? 'true' : 'false'}
       style={{ border: '1px solid #30363d', borderRadius: 10, padding: 16, background: '#0d1117' }}
     >
       <div style={{ fontSize: 13, fontWeight: 600, color: '#e6edf3', marginBottom: 12 }}>
-        Architect interview — round {round}
+        {heading} — round {round}
       </div>
       {questions.map((q, i) => {
         const answered = resolvedAnswer(i) !== '';

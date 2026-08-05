@@ -404,6 +404,10 @@ export type RoadmapDraftRow = {
 
 export type RoadmapDraftArtifact = {
   readonly kind: 'roadmap-draft';
+  /** The session-kind descriptor's declared `artifact.label`
+   *  (studio/session-kinds.yaml), threaded through verbatim — never
+   *  re-derived or defaulted here. See `deriveSessionArtifact`. */
+  readonly label: string;
   // Mutable element arrays (not `readonly T[]`) — deliberately, so a direct
   // `as { rows: Array<...>; sourcesScanned: string[] }` cast (the pinned AT
   // idiom in session-transcript.test.ts) type-checks: a `readonly T[]` is
@@ -417,6 +421,9 @@ export type RoadmapDraftArtifact = {
 
 export type MarkdownDraftArtifact = {
   readonly kind: 'markdown-draft';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
   /** null = no draft file at all; '' = an existing-but-empty draft (AT-32). */
   readonly body: string | null;
   readonly hasDraft: boolean;
@@ -424,6 +431,9 @@ export type MarkdownDraftArtifact = {
 
 export type BrainStructureArtifact = {
   readonly kind: 'brain-structure';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
   readonly themeCount: number;
   // Mutable element array — see the identical rationale on RoadmapDraftArtifact.rows.
   readonly files: PackageFile[];
@@ -431,7 +441,7 @@ export type BrainStructureArtifact = {
 
 export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact;
 
-function deriveRoadmapDraft(sessionDir: string): RoadmapDraftArtifact {
+function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
   const rows: RoadmapDraftRow[] = [];
   for (const file of files) {
@@ -447,17 +457,18 @@ function deriveRoadmapDraft(sessionDir: string): RoadmapDraftArtifact {
   }
   return {
     kind: 'roadmap-draft',
+    label,
     rows,
     sourcesScanned: [`${MANIFESTS_DIRNAME}/*.md (${files.length} file(s) found)`],
   };
 }
 
-function deriveMarkdownDraft(sessionDir: string): MarkdownDraftArtifact {
+function deriveMarkdownDraft(sessionDir: string, label: string): MarkdownDraftArtifact {
   const body = safeReadFileInSession(sessionDir, AGENTS_DRAFT_FILENAME);
-  return { kind: 'markdown-draft', body, hasDraft: body !== null };
+  return { kind: 'markdown-draft', label, body, hasDraft: body !== null };
 }
 
-function deriveBrainStructure(sessionDir: string): BrainStructureArtifact {
+function deriveBrainStructure(sessionDir: string, label: string): BrainStructureArtifact {
   const files = listDirEntries(sessionDir, THEMES_DIRNAME, '.md');
   const packageFiles: PackageFile[] = [];
   for (const file of files) {
@@ -465,17 +476,27 @@ function deriveBrainStructure(sessionDir: string): BrainStructureArtifact {
     if (body === null) continue; // missing/escaped entry — never surfaced
     packageFiles.push({ path: `${THEMES_DIRNAME}/${file}`, body });
   }
-  return { kind: 'brain-structure', themeCount: packageFiles.length, files: packageFiles };
+  return { kind: 'brain-structure', label, themeCount: packageFiles.length, files: packageFiles };
 }
 
 /**
  * Derives the artifact payload for a session's LIVE renderer kind. Throws
  * for a reserved (or otherwise unrecognised) artifact kind, naming it — zero
  * stub renderers exist anywhere for the reserved rows.
+ *
+ * `label` is sourced from `descriptor.artifact.label` (studio/session-kinds.
+ * yaml, via SessionKindDescriptor) and threaded straight into whichever
+ * artifact shape is derived — never re-derived from `kind` or defaulted.
+ * This is the single place the label is attached: the label lives on the
+ * descriptor, which every deriver already receives, so there is exactly one
+ * copy of "kind → label" (the YAML) rather than a second lookup here or at
+ * the route (cli/bridge-studio-sessions.ts), which forwards this artifact
+ * object unchanged into the 200 response.
  */
 export function deriveSessionArtifact(input: { descriptor: SessionKindDescriptor; sessionDir: string }): SessionArtifactPayload {
   const { descriptor, sessionDir } = input;
   const kind = descriptor.artifact.kind;
+  const label = descriptor.artifact.label;
   const state = sessionArtifactKindState(kind);
 
   if (state === 'reserved') {
@@ -487,11 +508,11 @@ export function deriveSessionArtifact(input: { descriptor: SessionKindDescriptor
 
   switch (kind) {
     case 'roadmap-draft':
-      return deriveRoadmapDraft(sessionDir);
+      return deriveRoadmapDraft(sessionDir, label);
     case 'markdown-draft':
-      return deriveMarkdownDraft(sessionDir);
+      return deriveMarkdownDraft(sessionDir, label);
     case 'brain-structure':
-      return deriveBrainStructure(sessionDir);
+      return deriveBrainStructure(sessionDir, label);
     default: {
       // Exhaustiveness guard: state === 'live' but the kind matched none of
       // the three known live renderers — only reachable if SESSION_ARTIFACT_KINDS

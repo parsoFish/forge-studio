@@ -44,7 +44,7 @@ export function Instructions({
         setError(res.error ?? 'failed to start the instructions agent');
         return;
       }
-      router.push(`/instructions/${encodeURIComponent(res.sessionId)}`);
+      router.push(`/sessions/instructions/${encodeURIComponent(res.sessionId)}`);
     } finally {
       setLaunching(false);
     }

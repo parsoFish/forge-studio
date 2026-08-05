@@ -65,7 +65,7 @@ function IdeaKickoff({ knownProjects, project }: { knownProjects?: string[]; pro
           key={project ?? ''}
           initialProject={project ?? ''}
           knownProjects={knownProjects}
-          onStarted={(sessionId) => router.push(`/architect/${encodeURIComponent(sessionId)}/interview`)}
+          onStarted={(sessionId) => router.push(`/sessions/architect/${encodeURIComponent(sessionId)}`)}
         />
       </div>
     </div>

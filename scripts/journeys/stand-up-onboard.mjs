@@ -267,8 +267,12 @@ export const journey = defineJourney({
                   // suppressed — the session sits at 'briefing'); the journey hand-writes the
                   // artifact a real turn would draft while the pending state is on screen.
                   await p.locator('[data-action="resolve-clause-agent"][data-resolve-clause-id="C8"]').click().catch(() => {});
+                  // The real button navigates straight to the shared session shell
+                  // (/sessions/instructions/<sid>, R2-10 PR2) — the /instructions/
+                  // substring still matches this URL (…/sessions/instructions/<sid>),
+                  // so the wait regex is left as-is; only the DOM selector changed.
                   await p.waitForURL(/\/instructions\//, { timeout: 10000 }).catch(() => {});
-                  await p.waitForSelector('main[data-page="instructions-interview"]', { timeout: 10000 }).catch(() => {});
+                  await p.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 10000 }).catch(() => {});
                   await sleep(WORK);
                   writeOnboardedAgentsMd(join(FORGE_ROOT, 'projects', clipSlug));
                   // Stage 4 — the real re-scan: back to the project page, resolved + all-green.
@@ -309,9 +313,23 @@ export const journey = defineJourney({
                 check(c8Present, 'SU: the agent-resolvable clause (C8/AGENTS.md) is present before resolution');
                 if (c8Present) {
                   await page.locator('[data-action="resolve-clause-agent"][data-resolve-clause-id="C8"]').click().catch(() => {});
+                  // The real button navigates straight to the shared session shell
+                  // (/sessions/instructions/<sid>, R2-10 PR2); the /instructions/
+                  // substring still matches that URL, so the wait regex is unchanged.
                   await page.waitForURL(/\/instructions\//, { timeout: 10000 }).catch(() => {});
-                  const instrLanded = await page.waitForSelector('main[data-page="instructions-interview"]', { timeout: 10000 }).then(() => true).catch(() => false);
-                  check(instrLanded, 'SU: "Resolve with agent" routes to a real instructions session (spawn suppressed)');
+                  const instrLanded = await page.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 10000 }).then(() => true).catch(() => false);
+                  check(instrLanded, 'SU: "Resolve with agent" routes to a real instructions session on the shared shell ([data-page="session"][data-session-kind="instructions"])');
+                  if (instrLanded) {
+                    // The shell publishes data-session-phase only once its fetch
+                    // settles — data-page-ready is the readiness discriminator
+                    // (identical to the retired page's session?.phase ?? '').
+                    // Waiting on it is what makes a still-empty phase a REAL
+                    // failure rather than a race.
+                    await page.waitForSelector('main[data-page="session"][data-page-ready="true"]', { timeout: 15000 }).catch(() => {});
+                    const instrPhase = await page.evaluate(
+                      () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') ?? null);
+                    check(instrPhase === 'briefing', `SU: the fresh instructions session starts at phase="briefing" (got "${instrPhase}")`);
+                  }
                   await sleep(WORK);
                   writeOnboardedAgentsMd(join(FORGE_ROOT, 'projects', onbSlug));
                   await page.goto(watch.uiUrl + `/projects/${onbSlug}`, { waitUntil: 'domcontentloaded' });
