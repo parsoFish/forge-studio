@@ -21,13 +21,18 @@
  * 4xx/5xx JSON body.
  *
  * Security — the SAME bar as the sibling PUT /api/studio/agents/:slug route
- * (cli/bridge-studio-writes.ts), a standing item in this campaign after three
- * consecutive initiatives shipped a lexical path check that a real escape
- * defeated:
+ * (cli/bridge-studio-writes.ts) — genuinely true as of the 2026-08-05 fix:
+ * both routes now resolve their SKILL.md path through the ONE shared choke
+ * point, `resolveGuardedSkillMdPath` (cli/skill-md-path-guard.ts). Before
+ * that fix this comment's claim was FALSE — the PUT route still ran a
+ * lexical `startsWith(skillsDir + sep)` check on the unresolved path, which
+ * a real symlink escape defeated live (verified BLOCKER). A false claim in a
+ * comment is its own defect; this paragraph now describes the actual shared
+ * implementation, not an aspiration:
  *   - `slug` is validated against the SAME `SLUG_RE` as the PUT route, before
  *     any fs call.
  *   - The SKILL.md path is resolved via `realpathSync` at the choke point
- *     (`resolveSafeSkillMdPath` below), never a lexical `startsWith(dir+sep)`
+ *     (`resolveGuardedSkillMdPath`), never a lexical `startsWith(dir+sep)`
  *     compare on the UNRESOLVED path — `join()`/`skillPath()` already
  *     normalizes `..` before a prefix check would even run, and a long
  *     repeated `../` chain can clamp past the filesystem root entirely. Both
@@ -50,12 +55,10 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { realpathSync } from 'node:fs';
-import { sep } from 'node:path';
 
-import { skillsDir as toSkillsDir, skillPath } from '../orchestrator/skill-path.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { composeInstructionsDraft } from '../orchestrator/studio/instructions-draft.ts';
+import { resolveGuardedSkillMdPath } from './skill-md-path-guard.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -68,35 +71,19 @@ import {
 const INSTRUCTIONS_DRAFT_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/instructions-draft$/;
 
 /**
- * Resolve `<forgeRoot>/skills/<slug>/SKILL.md` via `realpathSync`, verifying
- * the fully-resolved path still lives inside the fully-resolved `skills/`
- * root. Returns `null` for a missing file AND for an escaping symlink alike
- * (see header) — never distinguishable from the response.
+ * Resolve `<forgeRoot>/skills/<slug>/SKILL.md` via the shared
+ * `resolveGuardedSkillMdPath` choke point (cli/skill-md-path-guard.ts).
+ * Returns `null` for a missing file AND for an escaping symlink alike (see
+ * header) — never distinguishable from the response. This route only ever
+ * needs the EXISTING-file case (D9: it confirms the agent exists, never
+ * creates one), so a not-yet-created SKILL.md — which the shared guard
+ * otherwise tolerates for the PUT route's create flow — is treated the same
+ * as "unknown agent" here.
  */
 function resolveSafeSkillMdPath(forgeRoot: string, slug: string): string | null {
-  const skillsRoot = toSkillsDir(forgeRoot);
-  let realSkillsRoot: string;
-  try {
-    realSkillsRoot = realpathSync(skillsRoot);
-  } catch {
-    return null; // no skills/ dir at all
-  }
-  let candidate: string;
-  try {
-    candidate = skillPath(slug, forgeRoot);
-  } catch {
-    return null; // slug rejected by skillPath's own guard (defensive; SLUG_RE already ran)
-  }
-  let realCandidate: string;
-  try {
-    realCandidate = realpathSync(candidate);
-  } catch {
-    return null; // no SKILL.md at this slug
-  }
-  if (realCandidate !== realSkillsRoot && !realCandidate.startsWith(realSkillsRoot + sep)) {
-    return null; // resolves outside skills/ — a symlinked dir or a symlinked file
-  }
-  return realCandidate;
+  const guard = resolveGuardedSkillMdPath(forgeRoot, slug);
+  if (!guard.ok || !guard.exists || !guard.realPath) return null;
+  return guard.realPath;
 }
 
 export async function handleStudioInstructionsRoutes(

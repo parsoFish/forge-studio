@@ -146,6 +146,15 @@ export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapability
     interactive: executionPathForSurface(def.surface) === 'interactive',
     runtimeSdks: def.runtime.sdk ? [def.runtime.sdk] : [],
     fanoutCapable: def.fanout !== undefined,
-    materials: (def.materials ?? []).filter((m) => (MATERIAL_KINDS as readonly string[]).includes(m)),
+    // 2026-08-05 adversarial-review round 2, finding B/3: `def.materials` may
+    // be a non-array shape on any hand-built AgentDefinition that didn't go
+    // through `loadAgentDefinition` (`(def.materials ?? []).filter(...)`
+    // threw `TypeError: ....filter is not a function` on a bare string,
+    // crashing the WHOLE capability-descriptor response over one malformed
+    // agent). Guard the shape first — a non-array materials value degrades
+    // to `[]`, never a throw.
+    materials: Array.isArray(def.materials)
+      ? def.materials.filter((m) => (MATERIAL_KINDS as readonly string[]).includes(m))
+      : [],
   };
 }

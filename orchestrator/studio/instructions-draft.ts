@@ -60,9 +60,19 @@ function readTrimmedString(value: unknown): string {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+/**
+ * 2026-08-05 adversarial-review round 2, finding D/11: an empty or
+ * whitespace-only string entry used to survive this filter unchanged, so
+ * `describeCompositionSection` rendered it as a bare `- ` bullet with
+ * nothing real after it. Filtering on `v.trim().length > 0` (not just
+ * `typeof v === 'string'`) means every surviving entry has real content —
+ * and, critically, the FILTERED length is what `present` (below) reports,
+ * so a list that is entirely whitespace collapses to "not declared" instead
+ * of disagreeing with what the draft actually rendered.
+ */
 function readStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
-  return value.filter((v): v is string => typeof v === 'string');
+  return value.filter((v): v is string => typeof v === 'string' && v.trim().length > 0);
 }
 
 function readComposition(value: unknown): { skills: string[]; tools: string[]; mcps: string[]; guards: string[]; hooks: string[] } {
@@ -85,6 +95,11 @@ function readComposition(value: unknown): { skills: string[]; tools: string[]; m
 // wording so a reader of the draft (or the composed system prompt) learns the
 // ACTUAL rule, not a vague "may or may not read the brain".
 // ---------------------------------------------------------------------------
+
+/** The only three real ADR-010 brain policies — anything else has no
+ *  justified policy to state (2026-08-05 adversarial-review round 2, finding
+ *  D/10). */
+const VALID_BRAIN_ACCESS = new Set(['none', 'mandatory', 'advisory']);
 
 function describeBrainAccess(brainAccess: string): string {
   switch (brainAccess) {
@@ -154,7 +169,14 @@ export function composeInstructionsDraft(input: Record<string, unknown>): Instru
       { field: 'composition.mcps', present: composition.mcps.length > 0 },
       { field: 'composition.guards', present: composition.guards.length > 0 },
       { field: 'composition.hooks', present: composition.hooks.length > 0 },
-      { field: 'brainAccess', present: brainAccessRaw.length > 0 },
+      // 2026-08-05 adversarial-review round 2, finding D/10: `present` used
+      // to be `brainAccessRaw.length > 0`, so an INVALID value (e.g.
+      // 'bogus-not-a-real-value') reported `present: true` while
+      // `describeBrainAccess` fell through to its default "not declared"
+      // prose — the draft and the derivation disagreed about the same
+      // input. `present` now means "resolves to one of the three real
+      // ADR-010 policies", matching what the draft text actually states.
+      { field: 'brainAccess', present: VALID_BRAIN_ACCESS.has(brainAccessRaw) },
       { field: 'interactivity', present: interactivity.length > 0 },
     ],
   };

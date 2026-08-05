@@ -18,7 +18,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { execFileSync, spawn } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, openSync, closeSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import { classifyClause } from './preflight-resolve.ts';
 import { applyPreflightAutoFixes } from './preflight-fix-auto.ts';
@@ -37,9 +37,11 @@ import {
 } from '../orchestrator/studio/registry.ts';
 import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
-import { skillsDir as toSkillsDir, skillDir, skillPath } from '../orchestrator/skill-path.ts';
+import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
+import { resolveGuardedSkillMdPath } from './skill-md-path-guard.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
+import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
@@ -325,12 +327,20 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 2. Resolve and prefix-guard the SKILL.md path
-      const skillMdPath = skillPath(slug, ctx.forgeRoot);
-      if (!skillMdPath.startsWith(toSkillsDir(ctx.forgeRoot) + sep)) {
+      // 2. Resolve and realpath-guard the SKILL.md path (2026-08-05 BLOCKER
+      // fix — a lexical `startsWith(skillsDir + sep)` check on the
+      // UNRESOLVED path let a symlinked SKILL.md file (or a symlinked
+      // skills/<slug> directory) escape the forge root and get overwritten;
+      // verified live. See cli/skill-md-path-guard.ts for the full writeup —
+      // this is the SAME choke point the instructions-draft route uses. The
+      // guard also tolerates the not-yet-created case (`exists: false`) so
+      // scaffolding a brand-new agent still works.
+      const pathGuard = resolveGuardedSkillMdPath(ctx.forgeRoot, slug);
+      if (!pathGuard.ok || !pathGuard.realPath) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const skillMdPath = pathGuard.realPath;
 
       // 3. Parse request body
       let body: unknown;
@@ -360,7 +370,7 @@ export async function handleStudioWriteRoutes(
       // encoding — no double-encoding risk, just two reads of the same bytes.
       let existing: AgentDefinition | null = null;
       let originalRaw: string | undefined;
-      if (existsSync(skillMdPath)) {
+      if (pathGuard.exists) {
         try {
           originalRaw = readFileSync(skillMdPath, 'utf8');
           existing = loadAgentDefinition(skillMdPath);
@@ -424,14 +434,45 @@ export async function handleStudioWriteRoutes(
         loopStrategy: typeof rtIn['loopStrategy'] === 'string' ? rtIn['loopStrategy'] : existing?.runtime.loopStrategy,
       };
 
-      // materials (R2-09 D2/D7): the SAME inherit-when-omitted convention as
+      // materials (R2-09 D2/D7 + 2026-08-05 adversarial-review round 2,
+      // findings C/8 and C/9): the SAME inherit-when-omitted convention as
       // `phase`/`surface`/`executor` above — omitted from the PUT body ⇒
       // inherited from disk (`existing?.materials`); explicitly `[]` (or any
-      // other array) in the body ⇒ replaces it, including clearing to empty.
-      // `Array.isArray` is the presence test, not `b['materials'] !== undefined`,
-      // so a non-array stray value degrades to "omitted" (inherit) rather than
-      // silently adopting a malformed shape — validateAgent's materials/enum
-      // check is what rejects a genuinely bad VALUE inside a real array.
+      // other array, up to the vocabulary-derived length cap) in the body ⇒
+      // replaces it, including clearing to empty. The presence test is now
+      // `b['materials'] !== undefined`, NOT `Array.isArray` — the previous
+      // version treated ANY non-array explicit value as "not sent" and
+      // silently fell back to the on-disk value with a 200 OK, so a caller
+      // sending `materials: null` / `{}` / `"images"` believed it saved and
+      // nothing changed (this campaign's recurring "declared data fails
+      // open" shape). An explicit, malformed shape is now REJECTED (400,
+      // file byte-unchanged) before any further processing — never
+      // downgraded to "omitted". An oversized array (longer than the
+      // vocabulary can ever legitimately need) is rejected the same way,
+      // BEFORE validateAgent's per-value materials/enum lint would otherwise
+      // fan out into one finding per element.
+      if (b['materials'] !== undefined) {
+        if (!Array.isArray(b['materials'])) {
+          sendJson(
+            res,
+            400,
+            { error: `materials must be an array of strings, got ${b['materials'] === null ? 'null' : typeof b['materials']}` },
+            origin,
+          );
+          return true;
+        }
+        if ((b['materials'] as unknown[]).length > MAX_MATERIALS_LENGTH) {
+          sendJson(
+            res,
+            400,
+            {
+              error: `materials array too long (${(b['materials'] as unknown[]).length} entries) — the vocabulary has only ${MAX_MATERIALS_LENGTH} kinds`,
+            },
+            origin,
+          );
+          return true;
+        }
+      }
       const materials: string[] | undefined = Array.isArray(b['materials'])
         ? (b['materials'] as string[])
         : existing?.materials;
@@ -463,6 +504,25 @@ export async function handleStudioWriteRoutes(
         allowedTools: existing?.allowedTools ?? [],
         disallowedTools: existing?.disallowedTools ?? [],
         body: body_text,
+        // 2026-08-05 adversarial-review round 2, finding C/10 claimed
+        // `existing?.library ?? true` "silently flips" an agent whose on-disk
+        // `library` is explicitly `false` (e.g. instructions-creator,
+        // project-brain-builder) to `true` on a PUT that omits `library`.
+        // VERIFIED AND NOT REPRODUCIBLE: `??` (nullish coalescing) only
+        // substitutes its right operand when the left is `null`/`undefined`
+        // — `false ?? true` evaluates to `false` in JS, confirmed empirically
+        // (`node -e "console.log(false ?? true)"` → `false`). So
+        // `existing?.library ?? true` already preserves an explicit
+        // `library: false` verbatim; it only backfills `true` for (a) a
+        // genuinely new agent (`existing` is `null`) or (b) an EXISTING
+        // agent whose `library` key was never declared at all
+        // (`existing.library === undefined`) — and that backfill is inert:
+        // `isStudioAgent` (registry.ts) already treats an undeclared
+        // `library` the same as `true` (`d.library !== false`), so writing
+        // the explicit `true` changes no observable behaviour, only makes
+        // the R3-01-F2 "explicit on every shipped skill" convention hold.
+        // Kept as-is rather than "fixed" per the false claim — see the final
+        // report.
         library: existing?.library ?? true,
         path: skillMdPath,
       };
@@ -516,7 +576,11 @@ export async function handleStudioWriteRoutes(
       // changed — see the comment on `originalRaw`'s read above for why a lossy
       // save here is a PROMPT change, not mere file churn.
       const serialized = serializeAgentDefinition(merged, originalRaw);
-      const skillDirPath = skillDir(slug, ctx.forgeRoot);
+      // Derive the containing dir from the ALREADY-GUARDED real path (not a
+      // fresh `skillDir(slug, ...)` lexical join) — reusing the guarded
+      // value end-to-end means there is no second, unguarded path
+      // construction for a brand-new agent to slip through.
+      const skillDirPath = dirname(skillMdPath);
       if (!existsSync(skillDirPath)) {
         mkdirSync(skillDirPath, { recursive: true });
       }

@@ -1177,11 +1177,27 @@ export type InstructionsDraftResult =
  * this campaign exists to close). Split out from the async fetch wrapper
  * below (`requestInstructionsDraft`) so the parse logic is directly unit-
  * testable without a network mock.
+ *
+ * 2026-08-05 adversarial-review round 2, finding E/12: `studioPut`/
+ * `studioPost` in this same file both respect the response BODY's own `ok`
+ * field (`typeof data.ok === 'boolean' ? data.ok : true`) — an explicit
+ * `ok:false` in a 2xx body is a real failure signal, not decoration. This
+ * function used to ignore `p['ok']` entirely and derive success purely from
+ * HTTP status + shape presence, so a 200 body carrying
+ * `{ok:false, draft:'x', ...}` was misreported as a successful draft. The
+ * body's `ok:false` is now checked BEFORE the shape check, matching the
+ * sibling parsers.
  */
 export function parseInstructionsDraftResponse(status: number, payload: unknown): InstructionsDraftResult {
   const p = (payload ?? {}) as Record<string, unknown>;
   if (status < 200 || status >= 300) {
     return { ok: false, error: typeof p['error'] === 'string' ? p['error'] : `HTTP ${status}` };
+  }
+  if (p['ok'] === false) {
+    return {
+      ok: false,
+      error: typeof p['error'] === 'string' ? p['error'] : 'instructions-draft response reported ok:false',
+    };
   }
   if (typeof p['draft'] !== 'string' || p['derivation'] === undefined || p['derivation'] === null) {
     return { ok: false, error: 'malformed instructions-draft response: missing draft or derivation' };

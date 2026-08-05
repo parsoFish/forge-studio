@@ -35,6 +35,15 @@ import type { AgentDefinition } from './types.ts';
 export const MATERIAL_KINDS = Object.freeze(['images', 'documents', 'audio', 'data-files'] as const);
 export type MaterialKind = (typeof MATERIAL_KINDS)[number];
 
+/** Hard cap on the length of a `materials:` array. The vocabulary has only
+ *  `MATERIAL_KINDS.length` members, so a list longer than that is ALWAYS a
+ *  shape error, not a legitimately large declaration — without this cap, a
+ *  10k-element array sails through as a DoS-shaped payload (one lint finding
+ *  per element on the way to a 400 response). Kept next to the vocabulary it
+ *  is derived from rather than inlined at each call site (2026-08-05
+ *  adversarial-review round 2, finding C/9). */
+export const MAX_MATERIALS_LENGTH = MATERIAL_KINDS.length;
+
 /**
  * Parse a raw frontmatter `materials:` value. Lenient on VALUES (an unknown
  * string survives — materials/enum in validate.ts rejects it, not this
@@ -64,9 +73,23 @@ export function parseMaterials(raw: unknown): string[] | undefined {
  * vocabulary member existed, or lint simply hasn't run yet) never grants
  * acceptance: the gate answers from VOCABULARY ∩ DECLARATION, never the
  * declaration alone.
+ *
+ * Guards its inputs defensively (2026-08-05 adversarial-review round 2,
+ * finding A): `def` itself may be `null`/`undefined`, and `def.materials` —
+ * reachable from any hand-built `AgentDefinition` that never went through
+ * `loadAgentDefinition` — may be any shape at all, not just the
+ * `string[] | undefined` the type declares. A bare STRING is the sharpest
+ * case: `.includes(kind)` on a string resolves to
+ * `String.prototype.includes`, which SUBSTRING-matches
+ * (`materials: 'no-images-allowed'` + kind `'images'` → `true`, a real
+ * fail-OPEN, not merely a crash). The shape is checked with `Array.isArray`
+ * FIRST, before anything reaches `.includes`, so every non-array shape
+ * (string, plain object, Set, number, array-like) degrades to `false` —
+ * never a substring match, never a throw.
  */
-export function agentAcceptsMaterial(def: AgentDefinition, kind: string): boolean {
-  if (def.materials === undefined) return false;
+export function agentAcceptsMaterial(def: AgentDefinition | null | undefined, kind: string): boolean {
+  if (def === null || def === undefined) return false;
+  if (!Array.isArray(def.materials)) return false;
   if (!(MATERIAL_KINDS as readonly string[]).includes(kind)) return false;
   return def.materials.includes(kind);
 }

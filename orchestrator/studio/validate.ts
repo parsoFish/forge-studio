@@ -210,11 +210,31 @@ export function validateAgent(
   // VALUE is a lint error here, not a load crash — and an ERROR, not a flag
   // (unlike fanout/isolation above), because materials has no runtime
   // enforcement point yet (R6-04-F2): a silently-tolerated bad value here
-  // would be declared data nobody ever checks. One finding per offending
-  // value, and the message names BOTH the value and the full allowed set.
+  // would be declared data nobody ever checks. One finding per DISTINCT
+  // offending value (not one per array element — a repeated unknown value
+  // used to emit a duplicate finding per repeat), and the message names BOTH
+  // the value and the full allowed set.
+  //
+  // 2026-08-05 adversarial-review round 2, finding B/4: `def.materials` is
+  // reachable as a non-array (e.g. a bare string) from any hand-built
+  // AgentDefinition — `for (const value of def.materials)` over a STRING
+  // iterates it character by character, so `'images'` produced six nonsense
+  // per-character `materials/enum` findings. The shape is checked FIRST and
+  // reported as exactly ONE finding naming the shape problem, under a
+  // distinct check name — it never falls through to the per-value loop.
   if (def.materials !== undefined) {
-    for (const value of def.materials) {
-      if (!(MATERIAL_KINDS as readonly string[]).includes(value)) {
+    if (!Array.isArray(def.materials)) {
+      findings.push(
+        err(obj, 'materials/shape', 'materials must be an array of strings'),
+      );
+    } else {
+      const unknownValues = new Set<string>();
+      for (const value of def.materials) {
+        if (!(MATERIAL_KINDS as readonly string[]).includes(value)) {
+          unknownValues.add(value);
+        }
+      }
+      for (const value of unknownValues) {
         findings.push(
           err(
             obj,
