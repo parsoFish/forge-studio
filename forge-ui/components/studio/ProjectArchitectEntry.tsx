@@ -19,12 +19,23 @@ import { fetchArchitectSessions, type ArchitectPhase, type ArchitectSessionSumma
  * `/architect/new` and `FlowKickoff`'s idea-kickoff already use. This
  * component does not implement a second start-a-session code path.
  */
-/** The resume probe's own observable outcome (Fix 4, adversarial-review
- *  round, 2026-08-06) — distinct from `activeSession` being null, which is
- *  ALSO the legitimate "no in-flight session" result. Without this, "no
- *  session to resume" and "the lookup itself broke" rendered identically:
- *  no resume link, no trace. */
-type ResumeProbeState = 'pending' | 'ok' | 'failed';
+/** The resume probe's own observable outcome: has the lookup for an in-flight
+ *  session SETTLED yet, distinct from `activeSession` being null (the
+ *  legitimate "no in-flight session" result).
+ *
+ *  HONEST LIMIT, stated rather than implied away (adversarial-review round 2,
+ *  2026-08-06): there is deliberately NO `'failed'` value, because this
+ *  component cannot observe one. `fetchArchitectSessions` goes through
+ *  `bridgeGet` (`lib/bridge-client.ts`), whose whole contract is
+ *  "no-bridge / non-ok / throw → return the fallback" — every transport
+ *  failure, HTTP error and JSON parse failure resolves to `{sessions: []}`
+ *  and NOTHING ever rejects. A `'failed'` state here would be a value that
+ *  can never occur: a guard that cannot fire, and a claim in the DOM contract
+ *  that the code does not honour. Distinguishing a broken bridge from an empty
+ *  result requires the shared envelope to stop swallowing hard errors — a
+ *  change to a client with dozens of callers that depend on the benign
+ *  fallback, so it is FILED, not smuggled in here. */
+type ResumeProbeState = 'pending' | 'settled';
 
 export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX.Element {
   const router = useRouter();
@@ -39,18 +50,15 @@ export function ProjectArchitectEntry({ projectId }: { projectId: string }): JSX
       .then((sessions) => {
         if (cancelled) return;
         setActiveSession(sessions.find((s) => s.project === projectId && !ARCHITECT_TERMINAL_PHASES.has(s.phase)) ?? null);
-        setResumeProbe('ok');
+        setResumeProbe('settled');
       })
       .catch(() => {
-        // The resume link stays a convenience, never load-bearing — the
-        // start-a-session path below doesn't depend on this fetch, so a
-        // failure here still means no resume link is offered. But the
-        // FAILURE itself must be observable (data-architect-resume-probe),
-        // not silently indistinguishable from "genuinely no in-flight
-        // session" (which is also `activeSession: null`).
+        // Defensive only — `bridgeGet` never rejects (see ResumeProbeState).
+        // The resume link is a convenience, never load-bearing: the
+        // start-a-session path below does not depend on this fetch.
         if (!cancelled) {
           setActiveSession(null);
-          setResumeProbe('failed');
+          setResumeProbe('settled');
         }
       });
     return () => {

@@ -500,10 +500,14 @@ inventory rather than one shared page-level contract:
   in-flight architect session exists for the project,
   `[data-action="resume-architect-session"][data-session-id]` links straight to
   `/sessions/architect/<sid>`;
-  `[data-architect-resume-probe="pending"|"ok"|"failed"]` reports whether the
-  probe that looks for one actually succeeded, so a failed lookup is
-  observable rather than rendering identically to the equally-legitimate
-  "genuinely no in-flight session" result.
+  `[data-architect-resume-probe="pending"|"settled"]` reports whether the
+  lookup for one has finished, so "still loading" is not read as "none".
+  **There is deliberately no `failed` value** — `bridgeGet`
+  (`forge-ui/lib/bridge-client.ts`) resolves every transport error, non-2xx
+  and parse failure to its fallback and never rejects, so this component
+  genuinely cannot distinguish a broken bridge from an empty result. Claiming
+  a `failed` state it can never enter would be a DOM contract the code does
+  not honour; the swallow is filed instead.
 - **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
   per-project demo-page builder (brief → generate → lock, element-by-element)
   is an inline panel on the project page, opened by
