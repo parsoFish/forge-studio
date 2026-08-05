@@ -368,3 +368,162 @@ test('non-regression [Finding 2]: send-back with a LEGITIMATE cycle_id still wri
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// SEC-02 round 5: a guard-symmetry hole of a different KIND from rounds 1-4
+// — not a containment bypass, but an ARBITRARY-ABSOLUTE-PATH EXISTENCE
+// ORACLE on the send-back branch. The approve branch (round 1) is correctly
+// ordered:
+//   empty check (no stat) -> containment check -> existsSync (AFTER containment)
+// with its own comment stating the containment check was "deliberately moved
+// AHEAD of the existsSync probe ... an out-of-bounds path must never even be
+// stat'd through this route." The send-back branch (~L361) never got that
+// treatment — it stats FIRST:
+//   if (!worktreePath || !existsSync(worktreePath)) { 409 'no live worktree...' }
+//   if (!isContainedWorktreePath(...)) { 409 'worktree_path outside allowed root' }
+// So for an out-of-bounds worktree_path, the response TEXT differs by
+// whether the path exists on disk — a one-bit existence probe for ANY
+// absolute path on the server, the exact class `forge-b2k` exists to close.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-02 round 5] send-back: an out-of-bounds worktree_path is an existence oracle — EXISTING vs NON-EXISTING outside paths must be INDISTINGUISHABLE', async () => {
+  const forgeRoot = setupForgeRoot();
+  const outsideParent = mkdtempSync(join(tmpdir(), 'r5-sendback-outside-'));
+  try {
+    // Case A: a REAL directory outside forgeRoot.
+    const existingOutside = join(outsideParent, 'exists');
+    mkdirSync(existingOutside, { recursive: true });
+    const idA = 'INIT-2026-01-01-r5-sb-exists';
+    writeFileSync(
+      join(forgeRoot, '_queue', 'in-flight', `${idA}.md`),
+      manifestMd({ initiative_id: idA, worktree_path: existingOutside }),
+    );
+
+    // Case B: the SAME parent, a name that was never created.
+    const nonExistingOutside = join(outsideParent, 'never-created');
+    const idB = 'INIT-2026-01-01-r5-sb-absent';
+    writeFileSync(
+      join(forgeRoot, '_queue', 'in-flight', `${idB}.md`),
+      manifestMd({ initiative_id: idB, worktree_path: nonExistingOutside }),
+    );
+
+    const { url, close } = await startBridge({
+      forgeRoot,
+      port: 0,
+      mergePr: () => { throw new Error('mergePr must not be called on send-back'); },
+      finalizeAfterMerge: async () => { throw new Error('finalizeAfterMerge must not be called on send-back'); },
+    });
+    try {
+      const ac = [{ given: 'a', when: 'b', then: 'c' }];
+      const resA = await postVerdict(url, { initiativeId: idA, kind: 'send-back', rationale: 'x', acceptanceCriteria: ac });
+      const resB = await postVerdict(url, { initiativeId: idB, kind: 'send-back', rationale: 'x', acceptanceCriteria: ac });
+
+      assert.equal(
+        resA.status,
+        resB.status,
+        `existing vs non-existing out-of-bounds worktree_path must yield the SAME status — got A=${resA.status} (${JSON.stringify(resA.json)}) vs B=${resB.status} (${JSON.stringify(resB.json)})`,
+      );
+
+      // The pin: assert on the actual body, not just the status — the whole
+      // point is that the error TEXT leaks the bit today.
+      const normalize = (json: unknown, id: string): string => JSON.stringify(json).split(id).join('<id>');
+      assert.equal(
+        normalize(resA.json, idA),
+        normalize(resB.json, idB),
+        `the response body must be INDISTINGUISHABLE once the initiative id is normalized out — otherwise this is a one-bit existence oracle for any absolute path on the server. A=${JSON.stringify(resA.json)} B=${JSON.stringify(resB.json)}`,
+      );
+    } finally {
+      await close();
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(outsideParent, { recursive: true, force: true });
+  }
+});
+
+test('non-regression [SEC-02 round 5]: send-back with a LEGITIMATE (contained) but non-existent worktree_path still gets the ordinary "no live worktree" 409 — the fix must not collapse this into the containment rejection', async () => {
+  const forgeRoot = setupForgeRoot();
+  try {
+    const id = 'INIT-2026-01-01-r5-sb-legit-absent';
+    const wt = join(forgeRoot, '_worktrees', id); // identity-bound, contained — deliberately never created
+    writeFileSync(
+      join(forgeRoot, '_queue', 'in-flight', `${id}.md`),
+      manifestMd({ initiative_id: id, worktree_path: wt }),
+    );
+
+    const { url, close } = await startBridge({
+      forgeRoot,
+      port: 0,
+      mergePr: () => { throw new Error('mergePr must not be called on send-back'); },
+      finalizeAfterMerge: async () => { throw new Error('finalizeAfterMerge must not be called on send-back'); },
+    });
+    try {
+      const { status, json } = await postVerdict(url, {
+        initiativeId: id,
+        kind: 'send-back',
+        rationale: 'x',
+        acceptanceCriteria: [{ given: 'a', when: 'b', then: 'c' }],
+      });
+      assert.equal(status, 409, `expected 409 — got ${status}: ${JSON.stringify(json)}`);
+      assert.equal(
+        (json as Record<string, unknown>).error,
+        'no live worktree for this cycle (already cleaned up?) — cannot append review work items',
+        `a legitimate but cleaned-up worktree must still report the ORDINARY "gone" message, never a generic containment-rejection message (that would be "the fix is just: return one message for everything", not the real invariant) — got ${JSON.stringify(json)}`,
+      );
+    } finally {
+      await close();
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('regression lock [SEC-02 round 5]: approve — out-of-bounds worktree_path is ALREADY correctly indistinguishable (existing vs non-existing) — pins the ordering against a future silent regression', async () => {
+  const forgeRoot = setupForgeRoot();
+  const outsideParent = mkdtempSync(join(tmpdir(), 'r5-approve-outside-'));
+  try {
+    const existingOutside = join(outsideParent, 'exists');
+    mkdirSync(existingOutside, { recursive: true });
+    const idA = 'INIT-2026-01-01-r5-appr-exists';
+    writeFileSync(
+      join(forgeRoot, '_queue', 'in-flight', `${idA}.md`),
+      manifestMd({ initiative_id: idA, worktree_path: existingOutside }),
+    );
+
+    const nonExistingOutside = join(outsideParent, 'never-created');
+    const idB = 'INIT-2026-01-01-r5-appr-absent';
+    writeFileSync(
+      join(forgeRoot, '_queue', 'in-flight', `${idB}.md`),
+      manifestMd({ initiative_id: idB, worktree_path: nonExistingOutside }),
+    );
+
+    const { url, close } = await startBridge({
+      forgeRoot,
+      port: 0,
+      mergePr: () => true,
+      finalizeAfterMerge: async () => {},
+      runReleaseFinalize: async () => ({ release_status: 'skipped' }),
+    });
+    try {
+      const resA = await postVerdict(url, { initiativeId: idA, kind: 'approve', rationale: 'x' });
+      const resB = await postVerdict(url, { initiativeId: idB, kind: 'approve', rationale: 'x' });
+
+      assert.equal(
+        resA.status,
+        resB.status,
+        `existing vs non-existing out-of-bounds worktree_path must yield the SAME status on the approve branch — got A=${resA.status} vs B=${resB.status}`,
+      );
+      const normalize = (json: unknown, id: string): string => JSON.stringify(json).split(id).join('<id>');
+      assert.equal(
+        normalize(resA.json, idA),
+        normalize(resB.json, idB),
+        `regression lock: the approve branch's response body must stay INDISTINGUISHABLE between an existing and a non-existing out-of-bounds worktree_path — A=${JSON.stringify(resA.json)} B=${JSON.stringify(resB.json)}`,
+      );
+    } finally {
+      await close();
+    }
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+    rmSync(outsideParent, { recursive: true, force: true });
+  }
+});
