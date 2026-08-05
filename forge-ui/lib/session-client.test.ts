@@ -1,0 +1,474 @@
+/**
+ * Tests for forge-ui/lib/session-client.ts (R2-10, PR2) — DOES NOT EXIST YET.
+ * Vitest cannot even collect this file until it lands (module-not-found is
+ * the expected red, mirroring hook-client.test.ts / community-client.test.ts's
+ * own header note).
+ *
+ * session-client.ts is the typed client for the ONE session-shell read route
+ * (cli/bridge-studio-sessions.ts: `GET /api/studio/sessions/:kind/:sessionId
+ * ?project=<p>` → `{ok, kind, sessionId, project, phase, stages, defaultStage,
+ * turns, artifact}`) — mirroring template-client.ts's / skill-client.ts's role.
+ *
+ * Tests ONLY the pure parse + dispatch functions — no fetch, no window, no
+ * jsdom (this repo's forge-ui vitest config is `environment: 'node'`, a
+ * standing decision — `resolveBridgeUrl()` requires `window`; the
+ * over-the-wire behaviour is already pinned by cli/bridge-studio-sessions.
+ * test.ts's AT-38..48/59..74, which this file's fixtures deliberately mirror
+ * verbatim so the two layers cannot silently drift apart).
+ *
+ * DESIGN CHOICE (flagged for T2): session-client.ts splits the fetch/status-
+ * code dispatch out of `fetchSessionShell` into a separate, exported PURE
+ * function, `interpretSessionShellOutcome`, that takes a plain description of
+ * what happened over the wire (`{kind:'network-error'|'non-json'|'json', ...}`)
+ * and returns the typed `SessionShellFetchResult`. `fetchSessionShell` itself
+ * is a thin, untested-here wrapper: it calls `resolveBridgeUrl()`/`fetch()`,
+ * catches network/parse failures into that same outcome shape, and delegates.
+ * This is what makes every dispatch rule below — 400/404/409/500/network-
+ * error/non-JSON/200-but-malformed, each a DISTINCT typed result — testable
+ * without touching `window` or mocking `fetch`, matching this repo's existing
+ * convention (hook-client.test.ts / community-client.test.ts) rather than
+ * introducing the first `vi.stubGlobal('fetch', ...)` anywhere in this file
+ * set. T2: ratify this split, or fold it back into `fetchSessionShell` if a
+ * fetch-mocking convention is preferred instead.
+ *
+ * The headline requirement (per the T3 task brief) is parse hardening: every
+ * one of this campaign's repeat "fail-open" client-parse defects —
+ * `template-client.ts`'s old `Array.isArray(x) ? x : []` on `templates`,
+ * `skill-client.ts`'s still-live `usedBy: Array.isArray(x) ? x : []`, and
+ * `parseSkillTrust`'s old silent promotion of an unrecognised token to the
+ * most permissive `'ready'` — is refused here, explicitly, per field.
+ *
+ * AT numbers start fresh at AT-1 for PR2 (PR1's AT-1..74 sequence, spread
+ * across session-kinds.test.ts / session-transcript.test.ts / bridge-studio-
+ * sessions.test.ts, is closed).
+ */
+import { test, expect } from 'vitest';
+import {
+  parseSessionTurn,
+  parseSessionArtifact,
+  parseSessionShellPayload,
+  interpretSessionShellOutcome,
+} from './session-client.ts';
+
+// ---------------------------------------------------------------------------
+// Fixtures — mirror the REAL on-disk-derived shapes verified in
+// cli/bridge-studio-sessions.test.ts (AT-38/39/40) and orchestrator/studio/
+// session-transcript.ts's exported types, not invented shapes.
+// ---------------------------------------------------------------------------
+
+const WELL_FORMED_TURN = {
+  index: 0,
+  role: 'agent',
+  stage: 'roadmap',
+  text: 'What should we build?',
+  source: 'idea.md',
+};
+
+const WELL_FORMED_ROADMAP_ARTIFACT = {
+  kind: 'roadmap-draft',
+  rows: [{ initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' }],
+  sourcesScanned: ['manifests/*.md (1 file(s) found)'],
+};
+
+const WELL_FORMED_MARKDOWN_ARTIFACT = {
+  kind: 'markdown-draft',
+  body: '# AGENTS.md\n\nDraft body.\n',
+  hasDraft: true,
+};
+
+const NO_DRAFT_MARKDOWN_ARTIFACT = { kind: 'markdown-draft', body: null, hasDraft: false };
+
+const WELL_FORMED_BRAIN_ARTIFACT = {
+  kind: 'brain-structure',
+  themeCount: 2,
+  files: [
+    { path: 'themes/alpha.md', body: '# Alpha' },
+    { path: 'themes/beta.md', body: '# Beta' },
+  ],
+};
+
+const WELL_FORMED_PAYLOAD = {
+  ok: true,
+  kind: 'architect',
+  sessionId: '2026-08-05T10-00-00',
+  project: 'gitpulse',
+  phase: 'awaiting-verdict',
+  stages: ['roadmap'],
+  defaultStage: 'roadmap',
+  turns: [WELL_FORMED_TURN],
+  artifact: WELL_FORMED_ROADMAP_ARTIFACT,
+};
+
+// ===========================================================================
+// parseSessionTurn — AT-1..AT-7
+// ===========================================================================
+
+test('AT-1: parseSessionTurn: a well-formed turn round-trips every field verbatim', () => {
+  expect(parseSessionTurn(WELL_FORMED_TURN)).toEqual(WELL_FORMED_TURN);
+});
+
+test('AT-2: parseSessionTurn: role "operator" also round-trips (both closed-set members accepted)', () => {
+  const operatorTurn = { ...WELL_FORMED_TURN, role: 'operator' };
+  expect(parseSessionTurn(operatorTurn).role).toBe('operator');
+});
+
+test('AT-3: parseSessionTurn: a role outside "agent"|"operator" THROWS naming the offending value and the allowed set — never coerced to the more permissive value', () => {
+  expect(() => parseSessionTurn({ ...WELL_FORMED_TURN, role: 'system' })).toThrow(/system/);
+  try {
+    parseSessionTurn({ ...WELL_FORMED_TURN, role: 'system' });
+    throw new Error('expected parseSessionTurn to throw');
+  } catch (err) {
+    const message = String(err);
+    expect(message).toContain('system');
+    expect(message).toContain('agent');
+    expect(message).toContain('operator');
+  }
+});
+
+test('AT-4: parseSessionTurn: a missing or non-string "text" THROWS — never a turn rendered with undefined', () => {
+  const { text: _drop, ...missing } = WELL_FORMED_TURN;
+  expect(() => parseSessionTurn(missing)).toThrow();
+  expect(() => parseSessionTurn({ ...WELL_FORMED_TURN, text: 42 })).toThrow();
+});
+
+test('AT-5: parseSessionTurn: a missing or non-string "source" THROWS', () => {
+  const { source: _drop, ...missing } = WELL_FORMED_TURN;
+  expect(() => parseSessionTurn(missing)).toThrow();
+  expect(() => parseSessionTurn({ ...WELL_FORMED_TURN, source: null })).toThrow();
+});
+
+test('AT-6: parseSessionTurn: a missing or non-string "stage" THROWS', () => {
+  const { stage: _drop, ...missing } = WELL_FORMED_TURN;
+  expect(() => parseSessionTurn(missing)).toThrow();
+  expect(() => parseSessionTurn({ ...WELL_FORMED_TURN, stage: 7 })).toThrow();
+});
+
+test('AT-7: parseSessionTurn: a missing or non-number "index" THROWS; not a plain object THROWS', () => {
+  const { index: _drop, ...missing } = WELL_FORMED_TURN;
+  expect(() => parseSessionTurn(missing)).toThrow();
+  expect(() => parseSessionTurn({ ...WELL_FORMED_TURN, index: '0' })).toThrow();
+  expect(() => parseSessionTurn(null)).toThrow();
+  expect(() => parseSessionTurn([])).toThrow();
+  expect(() => parseSessionTurn('nope')).toThrow();
+});
+
+// ===========================================================================
+// parseSessionArtifact — AT-8..AT-21
+// ===========================================================================
+
+test('AT-8: parseSessionArtifact: a well-formed roadmap-draft artifact round-trips exactly, rows in server order', () => {
+  const twoRows = {
+    kind: 'roadmap-draft',
+    rows: [
+      { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md' },
+      { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' },
+    ],
+    sourcesScanned: ['manifests/*.md (2 file(s) found)'],
+  };
+  const parsed = parseSessionArtifact(twoRows);
+  expect(parsed).toEqual(twoRows);
+  expect((parsed as typeof twoRows).rows.map((r) => r.initiativeId)).toEqual(['R9-02', 'R9-01']); // never re-sorted
+});
+
+test('AT-9: parseSessionArtifact: roadmap-draft "rows" missing or non-array THROWS — never coerced to []', () => {
+  const { rows: _drop, ...missing } = WELL_FORMED_ROADMAP_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_ROADMAP_ARTIFACT, rows: 'nope' })).toThrow();
+});
+
+test('AT-10: parseSessionArtifact: roadmap-draft "sourcesScanned" missing or non-array THROWS — an empty roadmap must never be indistinguishable from "unknown"', () => {
+  const { sourcesScanned: _drop, ...missing } = WELL_FORMED_ROADMAP_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_ROADMAP_ARTIFACT, sourcesScanned: 'nope' })).toThrow();
+});
+
+test('AT-11: parseSessionArtifact: a roadmap-draft row with a missing/non-string field THROWS', () => {
+  const badRow = { ...WELL_FORMED_ROADMAP_ARTIFACT, rows: [{ initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned' /* origin missing */ }] };
+  expect(() => parseSessionArtifact(badRow)).toThrow();
+  const wrongType = { ...WELL_FORMED_ROADMAP_ARTIFACT, rows: [{ ...WELL_FORMED_ROADMAP_ARTIFACT.rows[0], phase: 7 }] };
+  expect(() => parseSessionArtifact(wrongType)).toThrow();
+});
+
+test('AT-12: parseSessionArtifact: a well-formed markdown-draft (hasDraft:true, real body) round-trips exactly', () => {
+  expect(parseSessionArtifact(WELL_FORMED_MARKDOWN_ARTIFACT)).toEqual(WELL_FORMED_MARKDOWN_ARTIFACT);
+});
+
+test('AT-13: parseSessionArtifact: "no draft yet" (body:null, hasDraft:false) round-trips honestly — never coerced to an empty string', () => {
+  const parsed = parseSessionArtifact(NO_DRAFT_MARKDOWN_ARTIFACT);
+  expect(parsed).toEqual(NO_DRAFT_MARKDOWN_ARTIFACT);
+  expect((parsed as { body: string | null }).body).toBeNull();
+});
+
+test('AT-14: parseSessionArtifact: "an empty draft" (body:"", hasDraft:true) round-trips distinctly from "no draft yet" — never collapsed to the same state', () => {
+  const emptyDraft = { kind: 'markdown-draft', body: '', hasDraft: true };
+  const parsed = parseSessionArtifact(emptyDraft);
+  expect(parsed).toEqual(emptyDraft);
+  expect((parsed as { body: string | null }).body).toBe('');
+  expect(parsed).not.toEqual(NO_DRAFT_MARKDOWN_ARTIFACT);
+});
+
+test('AT-15: parseSessionArtifact: markdown-draft with hasDraft inconsistent with body\'s nullness THROWS — defense-in-depth against a malformed transport', () => {
+  expect(() => parseSessionArtifact({ kind: 'markdown-draft', body: null, hasDraft: true })).toThrow();
+  expect(() => parseSessionArtifact({ kind: 'markdown-draft', body: 'content', hasDraft: false })).toThrow();
+});
+
+test('AT-16: parseSessionArtifact: markdown-draft "hasDraft" missing or non-boolean THROWS', () => {
+  const { hasDraft: _drop, ...missing } = WELL_FORMED_MARKDOWN_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_MARKDOWN_ARTIFACT, hasDraft: 'true' })).toThrow();
+});
+
+test('AT-17: parseSessionArtifact: a well-formed brain-structure artifact round-trips exactly', () => {
+  expect(parseSessionArtifact(WELL_FORMED_BRAIN_ARTIFACT)).toEqual(WELL_FORMED_BRAIN_ARTIFACT);
+});
+
+test('AT-18: parseSessionArtifact: brain-structure "files" missing or non-array THROWS — never coerced to []', () => {
+  const { files: _drop, ...missing } = WELL_FORMED_BRAIN_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_BRAIN_ARTIFACT, files: 'nope' })).toThrow();
+});
+
+test('AT-19: parseSessionArtifact: a brain-structure file with a missing/non-string path or body THROWS', () => {
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_BRAIN_ARTIFACT, files: [{ path: 'themes/alpha.md' }] })).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_BRAIN_ARTIFACT, files: [{ path: 7, body: 'x' }] })).toThrow();
+});
+
+test('AT-20: parseSessionArtifact: brain-structure "themeCount" missing or non-number THROWS, and is NEVER re-derived from files.length by this parser', () => {
+  const { themeCount: _drop, ...missing } = WELL_FORMED_BRAIN_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_BRAIN_ARTIFACT, themeCount: '2' })).toThrow();
+  // A themeCount that legitimately diverges from files.length (some theme files
+  // failed to parse server-side) must round-trip verbatim, not be silently
+  // "corrected" to files.length.
+  const divergent = { ...WELL_FORMED_BRAIN_ARTIFACT, themeCount: 5 };
+  expect((parseSessionArtifact(divergent) as { themeCount: number }).themeCount).toBe(5);
+});
+
+test('AT-21: parseSessionArtifact: an unrecognised OR reserved artifact kind THROWS naming it; not a plain object THROWS', () => {
+  expect(() => parseSessionArtifact({ kind: 'totally-bogus' })).toThrow(/totally-bogus/);
+  expect(() => parseSessionArtifact({ kind: 'file-package' })).toThrow(/file-package/);
+  expect(() => parseSessionArtifact({ kind: 'contract-buildout' })).toThrow(/contract-buildout/);
+  expect(() => parseSessionArtifact({ kind: 'generation-gallery' })).toThrow(/generation-gallery/);
+  expect(() => parseSessionArtifact(null)).toThrow();
+  expect(() => parseSessionArtifact([])).toThrow();
+});
+
+// ===========================================================================
+// parseSessionShellPayload — AT-22..AT-32
+// ===========================================================================
+
+test('AT-22: parseSessionShellPayload: a well-formed payload round-trips exactly', () => {
+  expect(parseSessionShellPayload(WELL_FORMED_PAYLOAD)).toEqual(WELL_FORMED_PAYLOAD);
+});
+
+test('AT-23: parseSessionShellPayload: "turns" present but NOT an array THROWS — never {ok:true, turns:[]} (the headline fail-open defect this module exists to refuse)', () => {
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, turns: 'not-an-array' })).toThrow();
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, turns: null })).toThrow();
+  const { turns: _drop, ...missingTurns } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missingTurns)).toThrow();
+});
+
+test('AT-24: parseSessionShellPayload: a GENUINELY empty "turns": [] is legitimately ok:true — distinct from AT-23\'s malformed-turns rejection', () => {
+  const emptyTurns = { ...WELL_FORMED_PAYLOAD, turns: [] };
+  const parsed = parseSessionShellPayload(emptyTurns);
+  expect(parsed.turns).toEqual([]);
+});
+
+test('AT-25: parseSessionShellPayload: a missing "artifact" THROWS — never a fabricated empty artifact', () => {
+  const { artifact: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow();
+});
+
+test('AT-26: parseSessionShellPayload: "defaultStage" not a member of "stages" THROWS naming the offending value and the allowed set', () => {
+  const bad = { ...WELL_FORMED_PAYLOAD, defaultStage: 'brain' };
+  try {
+    parseSessionShellPayload(bad);
+    throw new Error('expected parseSessionShellPayload to throw');
+  } catch (err) {
+    const message = String(err);
+    expect(message).toContain('brain');
+    expect(message).toContain('roadmap');
+  }
+});
+
+test('AT-27: parseSessionShellPayload: a turn whose "stage" is outside THIS payload\'s own "stages" THROWS naming the offending value and the allowed set — even when that stage is a real, globally-known token', () => {
+  // 'instructions' is a real member of the global SESSION_STAGES vocabulary,
+  // but this payload only declares stages:['roadmap'] — membership must be
+  // checked against the PAYLOAD's own stages, never the wider global set.
+  const badTurnStage = {
+    ...WELL_FORMED_PAYLOAD,
+    turns: [{ ...WELL_FORMED_TURN, stage: 'instructions' }],
+  };
+  try {
+    parseSessionShellPayload(badTurnStage);
+    throw new Error('expected parseSessionShellPayload to throw');
+  } catch (err) {
+    const message = String(err);
+    expect(message).toContain('instructions');
+    expect(message).toContain('roadmap');
+  }
+});
+
+test('AT-28: parseSessionShellPayload: "stages" missing or non-array THROWS', () => {
+  const { stages: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow();
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, stages: 'roadmap' })).toThrow();
+});
+
+test('AT-29: parseSessionShellPayload: a missing or non-true "ok" THROWS — the discriminator is not optional', () => {
+  const { ok: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+  expect(() => parseSessionShellPayload(missing)).toThrow();
+  expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, ok: false })).toThrow();
+});
+
+test('AT-30: parseSessionShellPayload: "kind"/"sessionId"/"project"/"phase" each missing or non-string THROWS', () => {
+  for (const field of ['kind', 'sessionId', 'project', 'phase'] as const) {
+    const { [field]: _drop, ...missing } = WELL_FORMED_PAYLOAD;
+    expect(() => parseSessionShellPayload(missing), `missing "${field}" must throw`).toThrow();
+    expect(() => parseSessionShellPayload({ ...WELL_FORMED_PAYLOAD, [field]: 7 }), `non-string "${field}" must throw`).toThrow();
+  }
+});
+
+test('AT-31: parseSessionShellPayload: not a plain object (array, null, string, number) THROWS', () => {
+  expect(() => parseSessionShellPayload(null)).toThrow();
+  expect(() => parseSessionShellPayload([])).toThrow();
+  expect(() => parseSessionShellPayload('nope')).toThrow();
+  expect(() => parseSessionShellPayload(42)).toThrow();
+});
+
+test('AT-32: parseSessionShellPayload: the instructions (markdown-draft) and project-brain (brain-structure) fixtures from the real route contract also round-trip', () => {
+  const instructionsPayload = {
+    ok: true,
+    kind: 'instructions',
+    sessionId: '2026-08-05T11-00-00',
+    project: 'gitpulse',
+    phase: 'drafting',
+    stages: ['instructions'],
+    defaultStage: 'instructions',
+    turns: [{ index: 0, role: 'operator', stage: 'instructions', text: 'Write AGENTS.md', source: 'prompt.md' }],
+    artifact: WELL_FORMED_MARKDOWN_ARTIFACT,
+  };
+  expect(parseSessionShellPayload(instructionsPayload)).toEqual(instructionsPayload);
+
+  const brainPayload = {
+    ok: true,
+    kind: 'project-brain',
+    sessionId: '2026-08-05T12-00-00',
+    project: 'gitpulse',
+    phase: 'analyzing',
+    stages: ['brain'],
+    defaultStage: 'brain',
+    turns: [{ index: 0, role: 'operator', stage: 'brain', text: 'Seed the brain', source: 'prompt.md' }],
+    artifact: WELL_FORMED_BRAIN_ARTIFACT,
+  };
+  expect(parseSessionShellPayload(brainPayload)).toEqual(brainPayload);
+});
+
+// ===========================================================================
+// interpretSessionShellOutcome — AT-33..AT-42
+//
+// Body shapes below mirror cli/bridge-studio-sessions.ts's REAL sendJson(...)
+// calls verbatim (see that module's lines ~197-309 and bridge-studio-sessions.
+// test.ts AT-42/43/44/48) — never invented shapes.
+// ===========================================================================
+
+test('AT-33: interpretSessionShellOutcome: a well-formed 200 JSON body yields {ok:true, payload:...} matching parseSessionShellPayload', () => {
+  const result = interpretSessionShellOutcome({ kind: 'json', status: 200, body: WELL_FORMED_PAYLOAD });
+  expect(result.ok).toBe(true);
+  if (result.ok) {
+    expect(result.payload).toEqual(parseSessionShellPayload(WELL_FORMED_PAYLOAD));
+  }
+});
+
+test('AT-34: interpretSessionShellOutcome: a 200 status with a MALFORMED body (fails parseSessionShellPayload) yields a typed ok:false result — never throws out of the interpreter itself', () => {
+  const { artifact: _drop, ...malformed } = WELL_FORMED_PAYLOAD;
+  let result;
+  expect(() => {
+    result = interpretSessionShellOutcome({ kind: 'json', status: 200, body: malformed });
+  }).not.toThrow();
+  expect(result!.ok).toBe(false);
+  if (!result!.ok) {
+    expect(result!.errorKind).toBe('malformed-response');
+  }
+});
+
+test('AT-35: interpretSessionShellOutcome: a 400 body ({error}) yields {ok:false, errorKind:"bad-request"}, preserving the server\'s message VERBATIM', () => {
+  const body = { error: 'invalid sessionId "../../etc" — must match /^[A-Za-z0-9_-]+$/ (alphanumeric, "_", "-"; no "/", ".", "..", whitespace, or null bytes)' };
+  const result = interpretSessionShellOutcome({ kind: 'json', status: 400, body });
+  expect(result).toEqual({ ok: false, errorKind: 'bad-request', error: body.error });
+});
+
+test('AT-36: interpretSessionShellOutcome: a 404 body ({error}) yields {ok:false, errorKind:"not-found"}, preserving the server\'s message VERBATIM — two distinct real message shapes both round-trip', () => {
+  const unknownKindBody = { error: 'unknown session kind "bogus" — must be one of: architect, instructions, project-brain' };
+  const r1 = interpretSessionShellOutcome({ kind: 'json', status: 404, body: unknownKindBody });
+  expect(r1).toEqual({ ok: false, errorKind: 'not-found', error: unknownKindBody.error });
+
+  const sessionNotFoundBody = { error: 'session not found', kind: 'architect', sessionId: 'nope', project: 'demoproj' };
+  const r2 = interpretSessionShellOutcome({ kind: 'json', status: 404, body: sessionNotFoundBody });
+  expect(r2).toEqual({ ok: false, errorKind: 'not-found', error: sessionNotFoundBody.error });
+});
+
+test('AT-37: interpretSessionShellOutcome: a 409 body ({ok:false, error}) yields {ok:false, errorKind:"stage-conflict"}, preserving the offending-value-and-allowed-set message VERBATIM — this must reach the operator, never be replaced by a generic "failed to load"', () => {
+  const body = {
+    ok: false,
+    error: 'stage "brain" is not a member of this session kind\'s declared stages [roadmap]',
+  };
+  const result = interpretSessionShellOutcome({ kind: 'json', status: 409, body });
+  expect(result).toEqual({ ok: false, errorKind: 'stage-conflict', error: body.error });
+  if (!result.ok) {
+    expect(result.error).toContain('brain');
+    expect(result.error).toContain('roadmap');
+  }
+});
+
+test('AT-38: interpretSessionShellOutcome: a 500 body ({error}) yields {ok:false, errorKind:"server-error"}, preserving the message VERBATIM', () => {
+  const body = { error: 'internal error' };
+  const result = interpretSessionShellOutcome({ kind: 'json', status: 500, body });
+  expect(result).toEqual({ ok: false, errorKind: 'server-error', error: body.error });
+});
+
+test('AT-39: interpretSessionShellOutcome: a non-200 body with NO "error" string field falls back to a generic HTTP-status message, never throws', () => {
+  expect(() => interpretSessionShellOutcome({ kind: 'json', status: 404, body: {} })).not.toThrow();
+  const result = interpretSessionShellOutcome({ kind: 'json', status: 404, body: {} });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.error.length).toBeGreaterThan(0);
+    expect(result.error).toContain('404');
+  }
+});
+
+test('AT-40: interpretSessionShellOutcome: a network-error outcome yields {ok:false, errorKind:"network-error"} — distinct from a non-JSON body', () => {
+  const result = interpretSessionShellOutcome({ kind: 'network-error', message: 'fetch failed: ECONNREFUSED' });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errorKind).toBe('network-error');
+    expect(result.error).toContain('ECONNREFUSED');
+  }
+});
+
+test('AT-41: interpretSessionShellOutcome: a non-JSON-body outcome yields {ok:false, errorKind:"non-json-response"} — distinct from network-error and from a 200-but-malformed body', () => {
+  const result = interpretSessionShellOutcome({ kind: 'non-json', status: 200, message: 'Unexpected token < in JSON at position 0' });
+  expect(result.ok).toBe(false);
+  if (!result.ok) {
+    expect(result.errorKind).toBe('non-json-response');
+    expect(result.error).toContain('Unexpected token');
+  }
+});
+
+test('AT-42: interpretSessionShellOutcome: every distinct failure mode maps to a DISTINCT errorKind token — no two real outcomes silently collapse onto the same typed result', () => {
+  const outcomes: Array<Parameters<typeof interpretSessionShellOutcome>[0]> = [
+    { kind: 'network-error', message: 'x' },
+    { kind: 'non-json', status: 200, message: 'x' },
+    { kind: 'json', status: 200, body: { ...WELL_FORMED_PAYLOAD, artifact: undefined } }, // malformed-response
+    { kind: 'json', status: 400, body: { error: 'x' } },
+    { kind: 'json', status: 404, body: { error: 'x' } },
+    { kind: 'json', status: 409, body: { ok: false, error: 'x' } },
+    { kind: 'json', status: 500, body: { error: 'x' } },
+  ];
+  const errorKinds = outcomes.map((o) => {
+    const r = interpretSessionShellOutcome(o);
+    expect(r.ok, `outcome ${JSON.stringify(o)} must not be ok:true`).toBe(false);
+    return !r.ok ? r.errorKind : null;
+  });
+  expect(new Set(errorKinds).size).toBe(errorKinds.length);
+});
