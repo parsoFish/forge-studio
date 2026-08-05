@@ -25,8 +25,28 @@ import type { KbBinding } from '../orchestrator/studio/types.ts';
 // Fixture helpers
 // ---------------------------------------------------------------------------
 
+/**
+ * Builds a fresh synthetic studio root. Every synthetic root is now a valid
+ * studio root by construction — including a minimal `studio/session-kinds.yaml`
+ * (an empty sequence: `loadSessionKinds`/`validateSessionKinds` accept `[]`
+ * with zero findings, verified empirically before choosing this shape over a
+ * fully-populated single descriptor). `validateSessionKinds` fail-closes on a
+ * MISSING registry (AT-13/AT-14, orchestrator/studio/session-kinds.test.ts) —
+ * a deliberate, T2-ratified rule (a registry that vanishes must not take the
+ * lint down silently, mirroring the campaign's standing fail-open finding) —
+ * so every OTHER test's synthetic root needs a real, valid registry file to
+ * stay a clean baseline. This lives in the shared helper (not one test) so
+ * the next required-file addition doesn't re-break a scatter of tests.
+ *
+ * The ONE exception is the "missing studio/ dir entirely" test below, which
+ * deliberately wants a genuinely bare root and calls mkdtempSync directly
+ * instead of this helper — see that test's comment.
+ */
 function tmpRoot(): string {
-  return mkdtempSync(join(tmpdir(), 'studio-lint-test-'));
+  const root = mkdtempSync(join(tmpdir(), 'studio-lint-test-'));
+  mkdirSync(join(root, 'studio'), { recursive: true });
+  writeFileSync(join(root, 'studio', 'session-kinds.yaml'), '[]\n', 'utf8');
+  return root;
 }
 
 function cleanup(dir: string): void {
@@ -250,7 +270,10 @@ test('malformed demo-element (missing phase) → errorCount > 0, finding names d
 // ---------------------------------------------------------------------------
 
 test('missing studio/ dir entirely → errorCount > 0, finding names missing path', () => {
-  const root = tmpRoot();
+  // Deliberately NOT tmpRoot(): this test's whole point is a studio/ dir
+  // that doesn't exist at all, so it can't use the shared helper (which now
+  // always seeds studio/session-kinds.yaml — see tmpRoot()'s doc comment).
+  const root = mkdtempSync(join(tmpdir(), 'studio-lint-test-'));
   // No studio/ dir, no skills/ dir — just an empty root
 
   const result = runStudioLint(root);
