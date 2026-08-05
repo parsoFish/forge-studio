@@ -21,7 +21,7 @@
  * deleted, and reflection becomes available in the UI.
  */
 import { existsSync, readdirSync, readFileSync, renameSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 
 import { parseManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
@@ -32,7 +32,7 @@ import { runReflector } from './phases/reflector.ts';
 import { writeCycleReport } from './cycle-report.ts';
 import { createLogger, type EventLogger } from './logging.ts';
 import { writeVerdictJson } from './flow-artifacts.ts';
-import { isSafeCycleId } from '../cli/manifest-path-guard.ts';
+import { isContainedProjectRepoPath, isContainedWorktreePath, isSafeCycleId } from '../cli/manifest-path-guard.ts';
 import { fireFlowTriggers } from './flow-trigger.ts';
 import { loadFlowDefinition, loadAgentDefinition } from './studio/registry.ts';
 import { flowPathForId } from './flow-runner.ts';
@@ -284,6 +284,23 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       initiativeId = m.initiative_id || initiativeId;
       const worktreePath = m.worktree_path ?? '';
       const projectRepoPath = m.project_repo_path ?? '';
+      // SEC-02 round 3: `cycle_id` is validated further down, but these two
+      // siblings are read off the SAME unvalidated manifest and were left
+      // unguarded — `worktreePath` flows into `confirmMerge` and
+      // `pendingFixWorkItems` (both below) and both flow into `CycleInput`,
+      // so the check must precede the `existsSync` probe, not follow it.
+      // Absent (`''`) stays absent: the `no-worktree` branch below owns that
+      // case, and a manifest may legitimately carry no repo path.
+      // Throwing lands in this loop's own per-manifest try/catch
+      // (`status:'error'`), so ONE poisoned manifest never aborts the sweep
+      // for its legitimate siblings.
+      const forgeRoot = dirname(resolve(paths.root));
+      if (worktreePath && !isContainedWorktreePath(worktreePath, { forgeRoot, initiativeId })) {
+        throw new Error(`unsafe worktree_path on manifest ${manifestPath}`);
+      }
+      if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot })) {
+        throw new Error(`unsafe project_repo_path on manifest ${manifestPath}`);
+      }
       if (!worktreePath || !existsSync(worktreePath)) {
         out.push({ initiativeId, status: 'no-worktree' });
         continue;
