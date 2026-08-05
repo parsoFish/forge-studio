@@ -167,7 +167,7 @@ export default function SessionShellPage({
     <StudioArchitectShell
       dataPage="session"
       ready={ready}
-      title={viewState.status === 'ready' ? viewState.title ?? kind : kind}
+      title={viewState.status === 'ready' ? viewState.title : kind}
       idLabel={sessionId}
       maxWidth={1320}
       mainData={{

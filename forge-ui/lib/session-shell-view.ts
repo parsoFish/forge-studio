@@ -79,10 +79,10 @@ export type SessionShellErrorState = {
 export type SessionShellReadyState = {
   status: 'ready';
   kind: string;
-  /** The payload's `title` (session-client.ts), threaded through unchanged.
-   *  Optional for the same back-compat reason `SessionShellPayload.title` is
-   *  — see that field's doc comment. A page falls back to `kind` when absent. */
-  title?: string;
+  /** The payload's `title` (session-client.ts), threaded through unchanged —
+   *  the session-kind descriptor's declared title, with no client-side
+   *  fallback, so it cannot drift from studio/session-kinds.yaml. */
+  title: string;
   sessionId: string;
   project: string;
   phase: string;
@@ -149,7 +149,7 @@ function buildReadyState(payload: SessionShellPayload, stage: string): SessionSh
   return {
     status: 'ready',
     kind: payload.kind,
-    ...(payload.title !== undefined ? { title: payload.title } : {}),
+    title: payload.title,
     sessionId: payload.sessionId,
     project: payload.project,
     phase: payload.phase,

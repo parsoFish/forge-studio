@@ -23,14 +23,11 @@
  * hardcoded kind→label lookup (a second copy of declared data that could
  * never represent a future kind reusing an existing artifact kind with a
  * different label). See `parseSessionArtifact`'s per-kind parsers below.
- * VERIFIED GAP (flagged, not silently assumed away): `cli/bridge-studio-
- * sessions.ts` does not yet put `label` on the artifact it sends today —
- * `deriveSessionArtifact` (orchestrator/studio/session-transcript.ts)
- * returns none of the three artifact types with a `label` field, and the
- * route never spreads `descriptor.artifact.label` into it. This module is
- * written against the CORRECTED contract per T2's instruction; the route
- * needs a small companion change (outside this T3 pass's remit — forge-ui
- * only) before real traffic satisfies it.
+ * The route side landed with it: `deriveSessionArtifact`
+ * (orchestrator/studio/session-transcript.ts) threads
+ * `descriptor.artifact.label` onto all three artifact shapes, and
+ * `cli/bridge-studio-sessions.ts` forwards the artifact verbatim. The
+ * envelope's `title` is threaded the same way, for the same reason.
  *
  * DESIGN CHOICE (flagged for T2, mirrors the note in this module's own test
  * file): the fetch/status-code dispatch is split out of `fetchSessionShell`
@@ -276,16 +273,14 @@ export type SessionShellPayload = {
   kind: string;
   /**
    * The session-kind descriptor's declared `title` (studio/session-kinds.
-   * yaml), threaded through verbatim — mirrors `artifact.label`. OPTIONAL
-   * (unlike every other field here) purely for back-compat with this
-   * module's own pre-existing pinned AT fixtures (session-client.test.ts /
-   * session-shell-view.test.ts), written before the route sent this field
-   * and not editable by this pass (R2-10 PR2, WI-8's ground rules). The real
-   * route always sends a non-empty string; a caller with no `title` (only
-   * ever a stale/synthetic fixture, never live traffic) falls back to the
-   * raw `kind` slug — see `forge-ui/app/sessions/[kind]/[sessionId]/page.tsx`.
+   * yaml), threaded through verbatim — mirrors `artifact.label`. REQUIRED and
+   * hard-parsed like every sibling: `kind → title` has exactly one source of
+   * truth, and a client-side fallback (to the raw `kind` slug, or to a local
+   * kind→title map) would be a second copy of declared data that can drift.
+   * An empty string is allowed, matching `requireString`'s convention across
+   * every client parser in this codebase — no asymmetric special case.
    */
-  title?: string;
+  title: string;
   sessionId: string;
   project: string;
   phase: string;
@@ -295,9 +290,8 @@ export type SessionShellPayload = {
   artifact: SessionArtifactPayload;
 };
 
-/** Every field is required and structurally checked (the one deliberate
- *  exception is `title` — see its own doc comment above); nothing else is
- *  coerced to a permissive default. `defaultStage` and every turn's `stage`
+/** Every field is required and structurally checked; nothing is coerced to a
+ *  permissive default. `defaultStage` and every turn's `stage`
  *  are checked against THIS payload's own `stages` (never a wider global
  *  vocabulary) — a rejection names both the offending value and the allowed
  *  set. */
@@ -309,7 +303,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
     throw new Error(`missing or invalid "ok": expected literal true, got ${JSON.stringify(raw['ok'])}`);
   }
   const kind = requireString(raw, 'kind');
-  const title = typeof raw['title'] === 'string' ? raw['title'] : undefined;
+  const title = requireString(raw, 'title');
   const sessionId = requireString(raw, 'sessionId');
   const project = requireString(raw, 'project');
   const phase = requireString(raw, 'phase');
@@ -342,7 +336,7 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const artifact = parseSessionArtifact(raw['artifact']);
 
-  return { ok: true, kind, ...(title !== undefined ? { title } : {}), sessionId, project, phase, stages, defaultStage, turns, artifact };
+  return { ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact };
 }
 
 // ---------------------------------------------------------------------------
