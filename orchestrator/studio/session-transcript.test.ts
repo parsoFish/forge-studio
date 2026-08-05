@@ -10,14 +10,17 @@
  * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18, +AT-49..AT-56 in
  * the AT-amendment-2 round, +AT-61..AT-67 in AT-amendment-3). This file
  * covers AT-19..AT-37, +AT-57..AT-58 (AT-amendment-2), +AT-68..AT-69
- * (AT-amendment-3), +AT-75..AT-76 (R4-15). cli/bridge-studio-sessions.test.ts
- * covers AT-38..AT-48, +AT-59..AT-60, +AT-70..AT-74, +AT-77 (R4-15).
+ * (AT-amendment-3), +AT-75..AT-76 (R4-15), +AT-78 (R4-15 adversarial-review
+ * amendment). cli/bridge-studio-sessions.test.ts covers AT-38..AT-48,
+ * +AT-59..AT-60, +AT-70..AT-74, +AT-77 (R4-15).
  *
- * R4-15 (AT-75..77): `RoadmapDraftRow` gains a fifth field, `dependsOn:
+ * R4-15 (AT-75..78): `RoadmapDraftRow` gains a fifth field, `dependsOn:
  * string[]`, sourced from the manifest's `depends_on_initiatives` (already
  * parsed by `parseManifest`, orchestrator/manifest.ts, but dropped on the
  * floor by `deriveRoadmapDraft` before this round). See the dedicated
- * describe block below for the full rationale.
+ * describe block below for the full rationale. AT-78 (adversarial-review
+ * amendment, 2026-08-06) is a GREEN characterization pin, not a defect pin
+ * — see its own comment for why it still earns its place.
  *
  * AT-amendment-3, A2 (AT-68..69): `listDirEntries` (session-transcript.ts)
  * calls `readdirSync` on `manifests/`/`themes/` with no realpath containment
@@ -443,6 +446,45 @@ describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)',
       'dependsOn must round-trip verbatim: declared order preserved (never sorted), and the outside-set entry ' +
         '(INIT-2025-06-01-already-merged, not present under manifests/) must never be filtered out — an ' +
         'architect draft may legitimately depend on an already-merged initiative outside the draft set',
+    );
+  });
+
+  // Adversarial-review amendment (2026-08-06), Amendment 2: the fix ruled
+  // that de-duplication happens EXACTLY ONCE, in the view model
+  // (dependency-dag.ts's DependencyDagNode.deps) — never at this layer. A
+  // manifest declaring the SAME dependency twice must still round-trip with
+  // the duplicate INTACT: this is the regression guard against the wrong
+  // fix (deduping here, at the file-parsing layer, instead of only in the
+  // view) — checked and confirmed NOT already covered by AT-75/76 above
+  // (neither uses a duplicate entry). GREEN today (session-transcript.ts:484
+  // already does a bare passthrough, `dependsOn: manifest.depends_on_initiatives
+  // ?? []`, with no dedup) — a characterization pin, not a defect pin: it
+  // earns its place because Amendment 2's fix touches a SIBLING module
+  // (dependency-dag.ts) implementing the OPPOSITE behaviour (dedup), and a
+  // careless implementer "fixing the table" by deduping at the wrong layer
+  // instead would silently break this exact invariant.
+  it('AT-78: a manifest declaring the SAME dependency twice round-trips with the duplicate INTACT — dependsOn is never de-duplicated at this layer (dedup is the view model\'s job, one layer up)', () => {
+    const sessionDir = makeTmpDir('artifact-roadmap-deps-duplicate-');
+    const manifestsDir = join(sessionDir, 'manifests');
+    mkdirSync(manifestsDir, { recursive: true });
+    writeFileSync(
+      join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'),
+      serializeManifest(
+        realManifest({
+          depends_on_initiatives: ['INIT-2025-06-01-already-merged', 'INIT-2025-06-01-already-merged'],
+        }),
+      ),
+      'utf8',
+    );
+
+    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+      rows: Array<{ initiativeId: string; dependsOn: string[] }>;
+    };
+    assert.equal(artifact.rows.length, 1);
+    assert.deepEqual(
+      artifact.rows[0].dependsOn,
+      ['INIT-2025-06-01-already-merged', 'INIT-2025-06-01-already-merged'],
+      'a duplicate entry must survive verbatim at this layer — de-duplicating here would be the WRONG fix for the table/DAG disagreement',
     );
   });
 });

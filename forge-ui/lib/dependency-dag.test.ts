@@ -34,6 +34,36 @@
  * silently treated as verified.
  *
  * AT numbers start fresh at AT-1 (new file, no prior sequence to continue).
+ *
+ * ---------------------------------------------------------------------------
+ * AMENDMENT (adversarial review, 2026-08-06), AT-16..AT-19 — two findings
+ * ratified in scope:
+ *
+ *  - Amendment 1 (AT-16/17): `topoLevels` (dep-layout.ts, see its own new
+ *    test file dep-layout.test.ts) is unbounded recursion and throws
+ *    `RangeError` on a deep chain/cycle — since `dependencyDagView` calls it
+ *    BEFORE its own cycle detection ever runs, the crash pre-empts this
+ *    module's stated "total, never throws" contract for exactly the graph
+ *    shape it exists to catch. AT-16/17 mirror dep-layout.test.ts's two
+ *    deep-graph cases through the real, shared entry point.
+ *
+ *    OBSERVATION (flagged per the task brief, not improvised on): this
+ *    module's OWN cycle detector (`detectCycles`, a recursive Tarjan SCC
+ *    pass) independently blows the stack on a deep ACYCLIC chain too, verified
+ *    by probing it in isolation at n=10,000 (n=2,500 survives, n=10,000
+ *    throws) — a strictly separate unbounded-recursion bug from `topoLevels`.
+ *    The review scoped "the coming fix" to converting `topoLevels`'
+ *    recursion to a worklist; that fix ALONE will not turn AT-16 green,
+ *    because `detectCycles` would then be the next thing to throw on the
+ *    same input. Reported here rather than silently worked around.
+ *
+ *  - Amendment 2 (AT-18/19): `DependencyDagNode<T>` gains `deps: string[]` —
+ *    declared-order, de-duplicated union of every dep id — the ONE value
+ *    both this DAG and SessionArtifactPane.tsx's roadmap-draft table must
+ *    read, so a duplicate-declaring manifest can never show `INIT-A, INIT-A`
+ *    in the table while the DAG renders one edge. AT-19 specifically proves
+ *    `deps` cannot be implemented as `[...resolvedDeps, ...unresolvedDeps]`.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import { dependencyDagView, type DependencyDagView } from './dependency-dag.ts';
@@ -269,4 +299,103 @@ test('AT-15: dependencyDagView: generic over T — a WORK-ITEM shape with entire
   expect(view.nodes[1].item).toEqual(items[1]); // the FULL original item is carried, not just id/deps
   expect(view.nodes.map((n) => n.level)).toEqual([0, 1]);
   expect(view.edges).toEqual([{ from: 'WI-1', to: 'WI-2', resolved: true }]);
+});
+
+// ===========================================================================
+// Amendment round (2026-08-06) — adversarial-review findings ratified as
+// IN SCOPE, pinned here before the fix lands.
+//
+// Amendment 1 (AT-16, AT-17) — dependencyDagView calls `topoLevels`
+// (dep-layout.ts) FIRST, before cycle detection ever runs — so
+// topoLevels' unbounded recursion (dep-layout.test.ts's AT-9/AT-10) crashes
+// the WHOLE view before the cycle detector — the module's OWN stated "total,
+// never throws" contract (this file's module header) — ever gets a chance to
+// run for exactly the graph shape it exists to catch. Mirrors dep-layout.
+// test.ts's two deep-graph cases through the real, shared `dependencyDagView`
+// entry point. RED against current head (independently reproduced via the
+// real import before writing these ATs — see this session's report).
+//
+// Amendment 2 (AT-18, AT-19) — `DependencyDagNode<T>` gains `deps: string[]`,
+// the declared-order, de-duplicated union of resolvedDeps+unresolvedDeps —
+// the ONE value both this DAG and a table rendered beside it (Session
+// ArtifactPane.tsx's roadmap-draft table) must read, so the two can never
+// disagree (today: the table renders `row.dependsOn` verbatim/undeduped
+// while the DAG already dedupes internally — confirmed by reading both
+// files). RED against current head: `DependencyDagNode<T>` carries no `deps`
+// field at all yet.
+// ===========================================================================
+
+function buildReversedChain(n: number): Item[] {
+  const items: Item[] = [];
+  for (let i = 0; i < n; i++) items.push({ id: `N${i}`, deps: i < n - 1 ? [`N${i + 1}`] : [] });
+  return items;
+}
+
+function buildRingCycle(n: number): Item[] {
+  const items: Item[] = [];
+  for (let i = 0; i < n; i++) items.push({ id: `N${i}`, deps: [`N${(i + 1) % n}`] });
+  return items;
+}
+
+test('AT-16: dependencyDagView: a 10,000-node reversed-order chain does NOT throw (kills: topoLevels\' unbounded recursion pre-empting this module\'s "total, never throws" contract) and produces the CORRECT levels through the full view — maxLevel:9999, hasCycle:false', () => {
+  const items = buildReversedChain(10_000);
+  let view: DependencyDagView<Item> | undefined;
+  const t0 = performance.now();
+  expect(() => {
+    view = dependencyDagView(items, idOf, depsOf);
+  }).not.toThrow();
+  const elapsedMs = performance.now() - t0;
+  // eslint-disable-next-line no-console
+  console.log(`AT-16 wall-clock: ${elapsedMs.toFixed(1)}ms for n=10000`);
+  expect(view!.nodes.length).toBe(10_000);
+  expect(view!.maxLevel).toBe(9_999);
+  expect(view!.hasCycle).toBe(false);
+  expect(elapsedMs).toBeLessThan(2000);
+});
+
+test('AT-17: dependencyDagView: a 10,000-node ring cycle does NOT throw and hasCycle is CORRECTLY true, with every node in cycleMembers — this is the finding\'s actual sting: the crash pre-empts the cycle detector for exactly the shape it exists to catch', () => {
+  const items = buildRingCycle(10_000);
+  let view: DependencyDagView<Item> | undefined;
+  const t0 = performance.now();
+  expect(() => {
+    view = dependencyDagView(items, idOf, depsOf);
+  }).not.toThrow();
+  const elapsedMs = performance.now() - t0;
+  // eslint-disable-next-line no-console
+  console.log(`AT-17 wall-clock: ${elapsedMs.toFixed(1)}ms for n=10000`);
+  expect(view!.nodes.length).toBe(10_000);
+  expect(view!.hasCycle).toBe(true);
+  expect(view!.cycleMembers.length).toBe(10_000); // a single full ring is one SCC of size n
+  expect(elapsedMs).toBeLessThan(2000);
+});
+
+test('AT-18: dependencyDagView: DependencyDagNode gains "deps" — the DECLARED-ORDER, DE-DUPLICATED union of every dep id (resolved or not) — kills an implementation that omits the field entirely (today), fails to dedupe, or re-sorts', () => {
+  const items: Item[] = [
+    { id: 'A', deps: [] },
+    // B declares A twice and an unresolved id once, in this order.
+    { id: 'B', deps: ['A', 'GHOST', 'A'] },
+  ];
+  const view = dependencyDagView(items, idOf, depsOf);
+  const nodeB = view.nodes.find((n) => n.id === 'B')!;
+  expect((nodeB as unknown as { deps: string[] }).deps).toEqual(['A', 'GHOST']);
+});
+
+test('AT-19: dependencyDagView: "deps" is NOT [...resolvedDeps, ...unresolvedDeps] — kills the tempting-but-wrong naive-concatenation implementation, which always puts every resolved id before every unresolved one regardless of declared order', () => {
+  // Declared order: an UNRESOLVED id first, then a RESOLVED id, then BOTH
+  // repeated (duplicates of each). True declared-order-deduped result is
+  // ['GHOST', 'A'] (GHOST declared first). A naive `[...resolvedDeps,
+  // ...unresolvedDeps]` would instead produce resolvedDeps=['A'] +
+  // unresolvedDeps=['GHOST'] = ['A', 'GHOST'] — the WRONG, reversed order —
+  // because that concatenation can never place an unresolved id before a
+  // resolved one, no matter what was actually declared first.
+  const items: Item[] = [
+    { id: 'A', deps: [] },
+    { id: 'B', deps: ['GHOST', 'A', 'GHOST', 'A'] },
+  ];
+  const view = dependencyDagView(items, idOf, depsOf);
+  const nodeB = view.nodes.find((n) => n.id === 'B')!;
+  expect((nodeB as unknown as { deps: string[] }).deps).toEqual(['GHOST', 'A']);
+  // Sanity: resolvedDeps/unresolvedDeps themselves are unaffected by this change.
+  expect(nodeB.resolvedDeps).toEqual(['A']);
+  expect(nodeB.unresolvedDeps).toEqual(['GHOST']);
 });
