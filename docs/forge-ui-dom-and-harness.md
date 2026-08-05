@@ -406,6 +406,22 @@ inventory rather than one shared page-level contract:
   stepping through
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`).
+- **Session-shell read contract (R2-10-F1/F2, 2026-08-05) — the API side.**
+  The three session routes above converge on one shared shell. Its data comes
+  from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`
+  (`cli/bridge-studio-sessions.ts`), which returns
+  `{ok, kind, sessionId, project, phase, stages, defaultStage, turns, artifact}`.
+  Session kinds are declared as data in `studio/session-kinds.yaml` and validated
+  by `forge studio lint` (`validateSessionKinds`, ADR-027's R2-10 amendment).
+  `turns` are DERIVED from the runners' existing checkpoint files — each turn
+  carries the `source` it came from (`idea.md`, `prompt.md`,
+  `answers.json#round-N`, `questions.json`, `feedback.md`) — never invented. A
+  checkpoint stage outside the kind's declared `stages` is a **409**, never a
+  defaulted 200. The `data-*` vocabulary the consuming shell attaches to this
+  payload — `data-session-kind`, `data-session-stage`, `data-session-phase`,
+  `data-turn-index`, `data-turn-role`, `data-turn-stage`, `data-artifact-kind`
+  — is named here as the contract; the surface that attaches it lands with the
+  shell route itself.
 - **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
   per-project demo-page builder (brief → generate → lock, element-by-element)
   is an inline panel on the project page, opened by

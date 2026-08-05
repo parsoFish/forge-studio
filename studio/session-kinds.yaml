@@ -1,0 +1,47 @@
+# studio/session-kinds.yaml
+#
+# The typed session-kind registry (R2-10, PR1) backing the operator-facing
+# session shell. Each entry describes one interactive session surface: which
+# agent drives it, which legacy Studio routes it replaces, which of the six
+# SESSION_STAGES (a CLOSED vocabulary — see orchestrator/studio/session-kinds.ts)
+# it can occupy, and which artifact renderer displays its output.
+#
+# Loaded by loadSessionKinds()/validateSessionKinds() — a bare top-level YAML
+# SEQUENCE of descriptors (not a mapping). R4-15/16/17 extend this registry by
+# ADDING A DESCRIPTOR here (not a new page) plus, when they ship, a renderer
+# for any new artifact.kind those descriptors need — the session shell is
+# generic over whatever is declared in this file.
+
+- id: architect
+  agent: architect
+  title: Planning session
+  legacyRoutes:
+    - /architect/[sessionId]
+    - /architect/[sessionId]/interview
+  stages: [roadmap]
+  defaultStage: roadmap
+  artifact:
+    kind: roadmap-draft
+    label: Roadmap draft
+
+- id: instructions
+  agent: instructions-creator
+  title: Instructions session
+  legacyRoutes:
+    - /instructions/[sessionId]
+  stages: [instructions]
+  defaultStage: instructions
+  artifact:
+    kind: markdown-draft
+    label: AGENTS.md draft
+
+- id: project-brain
+  agent: project-brain-builder
+  title: Brain creation session
+  legacyRoutes:
+    - /project-brain/[sessionId]
+  stages: [brain]
+  defaultStage: brain
+  artifact:
+    kind: brain-structure
+    label: Seeded structure

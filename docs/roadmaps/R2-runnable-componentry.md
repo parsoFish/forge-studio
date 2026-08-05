@@ -306,7 +306,7 @@ The flow/agent builders read a server-computed capability descriptor instead of 
 
 ### R2-10 Interactive sessions surface (progressive staged-artifact host)
 
-- **Status:** planned  ·  **Wave:** 5 (module: sessions-surface)
+- **Status:** in-progress  ·  **Wave:** 5 (module: sessions-surface)
 - **Depends on:** R2-01-F3 (the generic `forge agent run` CLI path + `spawnAgentTurn`, landed; the DEEP per-runner convergence stays deferred — this initiative re-opens only the **UI half**). **Depended on by:** R4-15/R4-16/R4-17/R4-19 (sessions render through this surface), R6-06 (monitor session-links target it).
 - **Context:** Wave-5 cut. The mockup's sessions (`SESSIONS` in `data.jsx`; `views-session.jsx`) are ONE shared surface for every interactive agent: **chat left, living artifact right**, progressive turn-by-turn rendering, and **staged artifacts** — turns carry stage markers (`contract → instructions → secrets → demo → roadmap` in the onboarding/create-project sessions) and the artifact pane switches/accumulates per stage (roadmap draft, generation gallery 1→3, contract build-out, seeded brain structure, hook/skill package tabs). As-built (corrected 2026-08-03 review pass): **three** bespoke session pages — the architect interview, `/instructions/[sid]`, `/project-brain/[sid]` (`as-built-inventory.md` §1/§9); the **demo-builder is NOT a session page** — R1-03-F2 (landed 2026-07-24, operator-approved) folded it into the per-project page as the inline `DemoBuilderPanel`, and this initiative does not reverse that: its entry stays the project page, and its gallery surface is owned by R4-16 (which must render via this shell *in place* or record a reasoned exception — never silently re-detach the route). No stage vocabulary or shared artifact pane exists anywhere. This is the UI-side convergence R2-01-F3 deliberately did not attempt server-side — the phase-machines stay bespoke; the PAGES converge.
 - **Features:**
@@ -418,3 +418,28 @@ prior-art research) demonstrably bottlenecks the linear flow.
   synchronously — an async fetch would rewrite the `flows-author` journey —
   tracked as batch-C / R2-05 follow-on). **R2-05 and R2-05-F1 both stay
   `planned`** — only part of F1 landed, not the whole feature.
+- 2026-08-05 — **R2-10 in-progress: the session-shell CONTRACT landed** (branch
+  `feat/r2-10-session-contract`, PR1 of two independent base-main PRs; the shell
+  UI, the three page deletions and the journey surgery land in PR2). Shipped:
+  `studio/session-kinds.yaml` as a git-tracked registry of session kinds
+  (architect · instructions · project-brain), each declaring its agent, its
+  legacy routes, an ordered `stages` subset and its artifact renderer;
+  `orchestrator/studio/session-kinds.ts` with two **closed** vocabularies —
+  stages `contract | instructions | secrets | demo | roadmap | brain` and
+  renderer kinds `roadmap-draft | markdown-draft | brain-structure` live plus
+  `file-package | contract-buildout | generation-gallery` **reserved** (parse ok,
+  `forge studio lint` error on use, zero stubs — the `TRIGGER_KINDS` precedent);
+  `orchestrator/studio/session-transcript.ts`, which DERIVES the chat transcript
+  and the artifact payload from the runners' existing checkpoint files, names the
+  source of every turn, and **fails closed** on a stage outside the kind's
+  declared list (naming the offending value and the allowed set); and
+  `cli/bridge-studio-sessions.ts`'s single read route
+  `GET /api/studio/sessions/:kind/:sessionId`. Enforcement is at three points
+  (lint · derivation · the shell), per **ADR-027's R2-10 amendment**. Phase
+  machines untouched — this is the UI-side convergence R2-01-F3 deferred.
+  **Honest limit recorded:** all three shipped kinds are single-stage, so
+  F2's "artifact pane switches with stage" is proven by unit + view-state tests
+  over a multi-stage fixture descriptor and by lint over the shipped
+  descriptors, **not** by a shipped multi-stage session — the multi-stage
+  product instance is R4-17's onboarding session. F1/F2/F3 all stay `planned`
+  until PR2 lands the shell.
