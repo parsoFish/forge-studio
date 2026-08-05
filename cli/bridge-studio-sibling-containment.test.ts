@@ -219,54 +219,71 @@ function skipIfNoSymlinks(t: { skip: (msg?: string) => void }): boolean {
 // GET /api/studio/flows/:id
 // ---------------------------------------------------------------------------
 
-test('RED: GET /api/studio/flows/escape-flow leaks the outside flow.yaml through a dir-symlinked studio/flows/<id>', async (t) => {
+test('FIXED (amendment round): GET /api/studio/flows/escape-flow no longer leaks — the guard rejection is byte-identical to a genuinely unknown flow', async (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const { status, text } = await get('/api/studio/flows/escape-flow');
-  assert.equal(status, 200, `expected the (buggy) lexical guard to let this through with 200, got ${status}: ${text}`);
-  assert.ok(
-    !text.includes('SECRET-MARKER-FLOWGET-a11c3'),
-    `the flow-detail response must NOT reflect the outside flow.yaml's content — got: ${text}. cli/bridge-studio.ts's GET route does \`resolve(flowsBase,id,'flow.yaml').startsWith(flowsBase+sep)\` on the UNRESOLVED path — this is always true for any slug-shaped id, symlink or not.`,
-  );
+  // cli/bridge-studio.ts's GET route now resolves through resolveGuardedPath
+  // (the same shared guard its PUT sibling already used) and folds a guard
+  // rejection into the SAME `{error:'unknown flow'}` 404 a genuinely absent
+  // flow produces — no id is echoed in this particular error message, so the
+  // two responses are expected to be BYTE-IDENTICAL, not merely
+  // same-shaped. That is the real property: the route cannot be used to
+  // probe which ids are planted-but-rejected vs. never-existed.
+  const escaped = await get('/api/studio/flows/escape-flow');
+  const neverExisted = await get('/api/studio/flows/totally-unplanted-flow-xyz');
+
+  assert.equal(escaped.status, 404, `expected the symlinked flow dir to read as "no such flow", got ${escaped.status}: ${escaped.text}`);
+  assert.ok(!escaped.text.includes('SECRET-MARKER-FLOWGET-a11c3'), `the response must NOT contain the outside flow.yaml's content — got: ${escaped.text}`);
+  assert.equal(escaped.status, neverExisted.status, 'the symlinked-dir 404 must carry the SAME status as a genuinely unknown flow');
+  assert.equal(escaped.text, neverExisted.text, 'the symlinked-dir 404 must be BYTE-IDENTICAL to a genuinely unknown flow — no side-channel distinguishing "escape rejected" from "never existed"');
 });
 
 // ---------------------------------------------------------------------------
 // GET /api/studio/skills/:id
 // ---------------------------------------------------------------------------
 
-test('accidental-pass (regression lock, NOT a containment pin): GET /api/studio/skills/escape-skill does not leak — an UNRELATED internal-consistency throw fires first', async (t) => {
+test('FIXED (amendment round): GET /api/studio/skills/escape-skill no longer leaks — a genuine containment guard now rejects it, indistinguishable from an unknown skill', async (t) => {
   if (skipIfNoSymlinks(t)) return;
-  // ACCIDENT NAMED: the route reads mdPath (skillPath(), a bare join through
-  // the symlink) FINE — isStudioAgent/skillTrustDetail/readSkillPackage all
-  // successfully read the outside content. But before assembling any
-  // response it does `listSkillLibrary(ctx.forgeRoot).find(e => e.id ===
-  // id)` and throws an "internal inconsistency" Error if that lookup misses.
-  // listSkillLibrary's discovery walk (listSkillDirs, orchestrator/skill-
-  // path.ts) does `readdirSync(dir,{withFileTypes:true}).filter(e =>
-  // e.isDirectory())` — Dirent.isDirectory() reports false for a symlinked
-  // directory ENTRY (confirmed empirically, same family as the
-  // discoverProjects()/loadKbDescriptors() accidents already documented) —
-  // so "escape-skill" is invisible to listSkillLibrary even though skillPath
-  // resolved and read it moments earlier. The route 500s on that mismatch
-  // BEFORE ever building the `detail` object, so the content it already read
-  // never reaches the response body. This is an accident of an unrelated
-  // invariant check, not a fix for skillPath()'s missing identity check —
-  // the underlying read-through-the-symlink already happened.
-  const { status, text } = await get('/api/studio/skills/escape-skill');
-  assert.equal(status, 500, `expected the accidental 500 (internal inconsistency), got ${status}: ${text}`);
-  assert.ok(!text.includes('SECRET-MARKER-SKILLGET-7cd21'), 'no leak either way — the error message is generic, not the file content');
+  // SUPERSEDES the prior "accidental-pass" framing here. cli/bridge-studio-
+  // skills.ts's detail route now resolves `id` through resolveGuardedPath
+  // (skills/ as the fixed root, id as its own segment) BEFORE ever calling
+  // isStudioAgent/skillTrustDetail/readSkillPackage — the symlinked
+  // skills/escape-skill directory fails the guard's identity check outright,
+  // so the route never reads the outside content at all (previously it DID
+  // read it, then happened to 500 on an unrelated internal-consistency
+  // check before serializing a response — that accident is gone; this is
+  // now a deliberate containment pin). A guard rejection collapses into the
+  // SAME `unknown skill "<id>"` 404 template a genuinely unknown skill
+  // produces, so the id-echo is normalized out before comparing.
+  const escapedId = 'escape-skill';
+  const neverExistedId = 'totally-unplanted-skill-xyz';
+  const escaped = await get(`/api/studio/skills/${escapedId}`);
+  const neverExisted = await get(`/api/studio/skills/${neverExistedId}`);
+
+  assert.equal(escaped.status, 404, `expected the symlinked skill dir to read as "no such skill", got ${escaped.status}: ${escaped.text}`);
+  assert.ok(!escaped.text.includes('SECRET-MARKER-SKILLGET-7cd21'), `the response must NOT contain the outside file's content — got: ${escaped.text}`);
+  assert.equal(escaped.status, neverExisted.status, 'the symlinked-dir 404 must carry the SAME status as a genuinely unknown skill');
+  const normalize = (text: string, id: string): string => text.split(id).join('<id>');
+  assert.equal(
+    normalize(escaped.text, escapedId),
+    normalize(neverExisted.text, neverExistedId),
+    'the symlinked-dir 404 must carry the SAME body TEMPLATE as a genuinely unknown skill (modulo the echoed id)',
+  );
 });
 
 // ---------------------------------------------------------------------------
 // POST /api/studio/skills/:id/approve
 // ---------------------------------------------------------------------------
 
-test('RED (headline repro): POST /api/studio/skills/escape-skill-draft/approve WRITES through the dir-symlinked skills/<id>, mutating the outside file', async (t) => {
+test('FIXED (amendment round; was the headline repro): POST /api/studio/skills/escape-skill-draft/approve no longer writes through the dir-symlinked skills/<id>', async (t) => {
   if (skipIfNoSymlinks(t)) return;
   // Unlike GET-detail, approve does NOT consult listSkillLibrary at all —
-  // skillTrustDetail reads mdPath (skillPath(), a bare join through the
-  // symlink) directly, sees `status: draft`, and approveSkillDraft then
-  // WRITES to that same mdPath (flip library:true, drop status:draft) — a
-  // genuine arbitrary-file-write via the approve route.
+  // it now resolves through the SAME resolveGuardedPath fix as GET-detail
+  // (skillPath()'s bare join was replaced there too), so the symlinked
+  // skills/escape-skill-draft directory is rejected before
+  // skillTrustDetail/approveSkillDraft ever touch it. This assertion was
+  // already property-based (outside bytes unchanged), so it required no
+  // change beyond the title — it was RED before the fix landed and is
+  // GREEN now, which is exactly what a genuine acceptance test should do.
   const skillsDraftOutside = outsideDirs.find((d) => d.includes('sibling-skills-draft-outside-'))!;
   const outsideFile = join(skillsDraftOutside, 'SKILL.md');
   const originalBytes = readFileSync(outsideFile, 'utf8');
@@ -285,8 +302,17 @@ test('RED (headline repro): POST /api/studio/skills/escape-skill-draft/approve W
 // POST /api/studio/hooks (create) — dir-symlink escape on the create route
 // ---------------------------------------------------------------------------
 
-test('RED: POST /api/studio/hooks with id "escape-hook-create" writes THROUGH the dir-symlinked studio/hooks/<id> into the outside dir', async (t) => {
+test('FIXED (amendment round): POST /api/studio/hooks with id "escape-hook-create" no longer writes through the dir-symlinked studio/hooks/<id>', async (t) => {
   if (skipIfNoSymlinks(t)) return;
+  // The create route now resolves BOTH hook.yaml and scripts/run.sh through
+  // resolveGuardedPath (studio/hooks/ as the fixed root, slug as its own
+  // segment) before any mkdirSync/writeFileSync — a symlinked
+  // studio/hooks/escape-hook-create directory fails the guard's identity
+  // check outright and the route rejects (400) before touching the
+  // filesystem at all. Asserted unconditionally, not as a branch that only
+  // runs in the vulnerable state: the outside directory must gain no new
+  // entries AND the route must not report success, regardless of which
+  // status code the rejection uses.
   const outside = outsideDirs.find((d) => d.includes('sibling-hooks-create-outside-'))!;
   const before_ = readdirSync(outside).sort();
 
@@ -299,16 +325,12 @@ test('RED: POST /api/studio/hooks with id "escape-hook-create" writes THROUGH th
   });
 
   const after_ = readdirSync(outside).sort();
-  assert.notDeepEqual(
-    after_,
-    [],
-    'sanity: if the route rejected the traversal (fixed behavior), the outside dir stays empty forever — this branch only runs to characterize what changed',
-  );
   assert.deepEqual(
     after_,
     before_,
-    `nothing may be created inside the outside directory a symlinked studio/hooks/<id> points at — status ${status}: ${text}. before=${JSON.stringify(before_)} after=${JSON.stringify(after_)}. Today: hookDir()/hook-library.ts's assertSkillSlug validates the STRING SHAPE of "escape-hook-create" only; the subsequent \`mkdirSync(join(hookDirPath,'scripts'))\` + \`writeFileSync\` follow the symlinked directory straight through to the outside location.`,
+    `nothing may be created inside the outside directory a symlinked studio/hooks/<id> points at — status ${status}: ${text}. before=${JSON.stringify(before_)} after=${JSON.stringify(after_)}`,
   );
+  assert.notEqual(status, 200, `the route must not report success for a symlinked studio/hooks/<id> — got ${status}: ${text}`);
 });
 
 // ---------------------------------------------------------------------------
@@ -335,38 +357,42 @@ test('accidental-pass (regression lock, NOT a containment pin): GET /api/studio/
 });
 
 // ---------------------------------------------------------------------------
-// POST /api/studio/hooks/:id/approve — genuinely blocked today, but by a
-// DIFFERENT, pre-existing check than the one this defect names.
+// POST /api/studio/hooks/:id/approve
 // ---------------------------------------------------------------------------
 
-test('already-guarded (NOT this defect — a different pre-existing check, wrong status code): POST /api/studio/hooks/escape-hook-read/approve never records an approval, but 500s instead of 400ing', async (t) => {
+test('FIXED (amendment round; comment supersedes a stale mechanism description): POST /api/studio/hooks/escape-hook-read/approve never records an approval, and now 404s indistinguishably from an unknown hook', async (t) => {
   if (skipIfNoSymlinks(t)) return;
-  // approve does NOT consult listHookLibrary (unlike GET-detail above) — it
-  // calls hookYamlPath()/existsSync directly (bare join through the
-  // symlink, succeeds), then hookRunState -> loadHookDefinition ->
-  // resolveHookScriptPath (orchestrator/studio/hook-library.ts ~L163-193),
-  // which realpath-checks the hook's SCRIPT path against the hook dir's
-  // LEXICAL (unresolved) path — a check built for a different purpose
-  // (script-path traversal within a hook package) that, as a side effect,
-  // also throws for ANY symlinked hook directory (the script's real
-  // location can never match the lexical, unresolved hookDirPath prefix
-  // once the directory itself is a symlink). This IS real protection — no
-  // ledger entry is ever recorded — but it throws an uncaught-shape 500
-  // (sanitizeError'd, no path leaked) rather than the conventional 400 every
-  // other guarded route in this codebase returns for a rejected path. Kept
-  // as a regression lock on "never records an approval for a symlinked hook
-  // dir", explicitly NOT claimed as the fix for the hookDir/hookYamlPath
-  // containment gap the brief names (a hook package whose id resolves to a
-  // real, readable hook.yaml but whose `script` field is absent/blank would
-  // not hit this check at all).
+  // SUPERSEDES the prior "already-guarded by a different pre-existing check,
+  // wrong status code" framing. Re-verified directly against the current
+  // build: approve now resolves `id` through resolveGuardedPath (the SAME
+  // shared guard as the create/GET-detail routes) BEFORE ever calling
+  // hookRunState/loadHookDefinition — the symlinked studio/hooks/escape-
+  // hook-read directory fails the guard's identity check outright and the
+  // route returns the conventional `unknown hook "<id>"` 404, collapsing
+  // into the SAME response a genuinely unknown hook produces. The
+  // previously-observed 500 (from an unrelated script-path realpath check
+  // deeper in loadHookDefinition) is no longer reached at all. The real
+  // invariant — no ledger entry is ever recorded — still holds and is still
+  // asserted directly, not inferred from a status code.
   const ledgerBefore = readHookApprovalLedger(forgeRoot).has('escape-hook-read');
   assert.equal(ledgerBefore, false, 'sanity: no pre-existing ledger entry');
 
-  const { status, text } = await post('/api/studio/hooks/escape-hook-read/approve', {});
-  assert.notEqual(status, 200, `approve must never SUCCEED through a symlinked hook dir — got 200: ${text}`);
+  const escapedId = 'escape-hook-read';
+  const neverExistedId = 'totally-unplanted-hook-xyz';
+  const escaped = await post(`/api/studio/hooks/${escapedId}/approve`, {});
+  const neverExisted = await post(`/api/studio/hooks/${neverExistedId}/approve`, {});
+
+  assert.equal(escaped.status, 404, `expected the symlinked hook dir to read as "no such hook", got ${escaped.status}: ${escaped.text}`);
+  assert.equal(escaped.status, neverExisted.status, 'the symlinked-dir 404 must carry the SAME status as a genuinely unknown hook');
+  const normalize = (text: string, id: string): string => text.split(id).join('<id>');
+  assert.equal(
+    normalize(escaped.text, escapedId),
+    normalize(neverExisted.text, neverExistedId),
+    'the symlinked-dir 404 must carry the SAME body TEMPLATE as a genuinely unknown hook (modulo the echoed id)',
+  );
 
   const ledgerAfter = readHookApprovalLedger(forgeRoot).has('escape-hook-read');
-  assert.equal(ledgerAfter, false, `no approval-ledger entry may be recorded for "escape-hook-read" — got status ${status}: ${text}`);
+  assert.equal(ledgerAfter, false, `no approval-ledger entry may be recorded for "escape-hook-read" — got status ${escaped.status}: ${escaped.text}`);
 });
 
 // ---------------------------------------------------------------------------

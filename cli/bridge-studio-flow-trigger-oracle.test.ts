@@ -177,7 +177,7 @@ function oracleBody(): Record<string, unknown> {
   };
 }
 
-test('RED: flowProjectOf is a file-existence oracle — the SAME PUT body produces DIFFERENT findings depending on outside filesystem state', async () => {
+test('FIXED (verified against the amended build; not touched this round — the assertion was already property-based): flowProjectOf must not be a file-existence oracle — the SAME PUT body must produce IDENTICAL findings regardless of outside filesystem state', async () => {
   // Call 1: the traversal target does not exist yet at all.
   const before1 = await putJson(oracleBody());
   assert.equal(before1.status, 400, `expected 400 (the unregistered-flow-target finding always fires), got ${before1.status}: ${JSON.stringify(before1.json)}`);

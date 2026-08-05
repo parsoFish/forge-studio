@@ -278,13 +278,37 @@ test('(c) RED (headline repro): POST /api/studio/kbs/guidkb/guidance writes THRO
 // Shape (d-file): brain/leafkb/themes/planted.md -> outside secret file
 // ---------------------------------------------------------------------------
 
-test('(d-file) RED: GET /api/studio/kbs/leafkb/nodes/planted leaks the outside file BODY through a symlinked leaf file', async (t) => {
+test('(d-file) FIXED (amendment round): GET /api/studio/kbs/leafkb/nodes/planted no longer leaks — the symlinked leaf never enters the graph, and the 404 is indistinguishable from a genuinely unknown node', async (t) => {
   if (skipIfNoSymlinks(t)) return;
-  const { status, text } = await get('/api/studio/kbs/leafkb/nodes/planted');
-  assert.equal(status, 200, `expected 200, got ${status}: ${text}`);
-  assert.ok(
-    !text.includes('SECRET-MARKER-LEAFKB-c88d2'),
-    `the node-article response body must NOT contain the outside file's content — got: ${text}. getKbNodeArticle's filePath = join(kbDir,'themes','planted.md') is read with readFileSync, which follows the symlinked leaf transparently.`,
+  // kb-graph.ts now resolves every nested file (themes/<f>, _raw/<f>,
+  // _guidance/<f>, INDEX.md) through guardedKbPath() -> resolveGuardedPath's
+  // per-segment identity check (bd `forge-wze` fix). A symlinked
+  // themes/planted.md fails that identity check, so it is silently excluded
+  // from `themeFiles` at graph-build time — the node simply never exists,
+  // rather than existing-but-then-being-read-through. The property that
+  // matters is not just "no leak" but that an attacker cannot even
+  // distinguish "a symlinked leaf was excluded" from "no such node was ever
+  // planted" — so this asserts full indistinguishability against a request
+  // for a node id that was never planted at all.
+  const plantedId = 'planted';
+  const neverExistedId = 'totally-unplanted-node-xyz';
+  const planted = await get(`/api/studio/kbs/leafkb/nodes/${plantedId}`);
+  const neverExisted = await get(`/api/studio/kbs/leafkb/nodes/${neverExistedId}`);
+
+  assert.equal(planted.status, 404, `expected the symlinked leaf to read as "no such node", got ${planted.status}: ${planted.text}`);
+  assert.ok(!planted.text.includes('SECRET-MARKER-LEAFKB-c88d2'), `the response must NOT contain the outside file's content — got: ${planted.text}`);
+  assert.equal(planted.status, neverExisted.status, 'the symlinked-leaf 404 must carry the SAME status as a genuinely unknown node');
+  // The bodies necessarily differ in the ECHOED id (both routes report
+  // "unknown node: <the id you asked for>", which is universal, expected
+  // behavior for ANY 404 route and not itself a side channel) — the
+  // indistinguishability property is that BOTH follow the exact same
+  // "unknown node: <id>" template with nothing else appended, so normalize
+  // the id out of each body before comparing.
+  const normalize = (text: string, id: string): string => text.split(id).join('<id>');
+  assert.equal(
+    normalize(planted.text, plantedId),
+    normalize(neverExisted.text, neverExistedId),
+    'the symlinked-leaf 404 must carry the SAME body TEMPLATE as a genuinely unknown node (modulo the echoed id) — no side-channel distinguishing "excluded for containment" from "never existed"',
   );
 });
 
@@ -293,7 +317,7 @@ test('(d-file) RED: GET /api/studio/kbs/leafkb/nodes/planted leaks the outside f
 // POST bootstrap only writes profile.md when ABSENT.
 // ---------------------------------------------------------------------------
 
-test('(d-hardlink) accidental-pass (regression lock, NOT a containment pin): POST bootstrap on a hardlinked profile.md leaves the outside file byte-unchanged', async (t) => {
+test('(d-hardlink) FIXED (amendment round): POST bootstrap on a hardlinked profile.md is now rejected by containment itself, not by the create-only accident', async (t) => {
   const hlkbOutside = outsideDirs.find((d) => d.includes('kb-hlkb-outside-'))!;
   const outsideFile = join(hlkbOutside, 'outside-profile.md');
   if (!existsSync(join(forgeRoot, 'brain', 'hlkb', 'profile.md'))) {
@@ -302,19 +326,18 @@ test('(d-hardlink) accidental-pass (regression lock, NOT a containment pin): POS
   }
   const originalBytes = readFileSync(outsideFile, 'utf8');
 
-  // ACCIDENT NAMED: bootstrap's route (cli/bridge-studio-kbs.ts) only writes
-  // profile.md when `!existsSync(profilePath)` — i.e. it is a create-only,
-  // never-overwrite operation BY DESIGN (seed a brand-new brain with a
-  // starting point). A hardlinked profile.md is, to `existsSync`, simply "a
-  // file that is already there" — indistinguishable from an ordinary
-  // pre-existing profile.md. The write is skipped for that reason, not
-  // because any hardlink-specific guard fired. This is NOT the same safety
-  // studio-path-guard.ts's `nlink !== 1` check provides (which rejects
-  // hardlinks explicitly, on both create AND edit); it is a coincidence of
-  // this ONE route's create-only semantics, so it is kept as a regression
-  // lock, not claimed as a fix for the hardlink escape shape in general.
-  const { status } = await post('/api/studio/kbs/hlkb/bootstrap', { name: 'HL KB', summary: 'x' });
-  assert.equal(status, 200, `expected bootstrap to 200 (it always succeeds, just skips the write)`);
+  // STALE COMMENT SUPERSEDED (amendment round): the previous comment here
+  // named an ACCIDENT — bootstrap's create-only `!existsSync(profilePath)`
+  // semantics happened to skip the write regardless of what already occupied
+  // the slot. That is no longer the operative mechanism. The bootstrap route
+  // now resolves profile.md through a guarded tail-path helper
+  // (cli/bridge-studio-kbs.ts's `guardKbTail`, wrapping
+  // cli/studio-path-guard.ts's `resolveGuardedPath`), whose leaf check
+  // rejects a hardlinked file outright (`nlink !== 1`) BEFORE the
+  // exists/create branch is even reached — the request 400s. This is now a
+  // genuine containment pin, not a coincidence of route semantics.
+  const { status, text } = await post('/api/studio/kbs/hlkb/bootstrap', { name: 'HL KB', summary: 'x' });
+  assert.equal(status, 400, `expected the hardlinked profile.md to be rejected outright (400), got ${status}: ${text}`);
 
   const afterBytes = readFileSync(outsideFile, 'utf8');
   assert.equal(afterBytes, originalBytes, 'the outside file (shared inode via hardlink) must be byte-unchanged');
@@ -326,18 +349,23 @@ test('(d-hardlink) accidental-pass (regression lock, NOT a containment pin): POS
 // O_CREAT and creates a brand-new file at the attacker-chosen outside path.
 // ---------------------------------------------------------------------------
 
-test('(d-dangling) RED: POST /api/studio/kbs/dangkb/bootstrap creates a file at an attacker-chosen outside path via a dangling symlink', async (t) => {
+test('(d-dangling) FIXED (amendment round): POST /api/studio/kbs/dangkb/bootstrap no longer creates a file at the dangling symlink\'s outside target', async (t) => {
   if (skipIfNoSymlinks(t)) return;
   const dangkbOutsideParent = outsideDirs.find((d) => d.includes('kb-dangkb-outside-parent-'))!;
   const targetPath = join(dangkbOutsideParent, 'does-not-exist-yet.md');
   assert.ok(!existsSync(targetPath), 'sanity: the dangling symlink target must not exist before the request');
 
-  const { status } = await post('/api/studio/kbs/dangkb/bootstrap', { name: 'Dang KB', summary: 'x' });
-  assert.equal(status, 200, `expected bootstrap to report 200 either way`);
+  // The bootstrap route now resolves profile.md through guardKbTail() ->
+  // resolveGuardedPath, whose existence probe is lstat-based: a dangling
+  // symlink counts as "there" and is routed into the realpath check (which
+  // throws, since the target is absent) rather than mistaken for a free
+  // creation slot — the guard rejects with 400 before writeFileSync ever runs.
+  const { status, text } = await post('/api/studio/kbs/dangkb/bootstrap', { name: 'Dang KB', summary: 'x' });
+  assert.equal(status, 400, `expected the dangling symlink to be rejected outright (400), got ${status}: ${text}`);
 
   assert.ok(
     !existsSync(targetPath),
-    `no file may be created at the dangling symlink's outside target — but it now exists: ${existsSync(targetPath) ? readFileSync(targetPath, 'utf8') : ''}. Today: \`existsSync(profilePath)\` returns false for a DANGLING symlink (the target is absent), so the route takes the create branch; \`writeFileSync\` opens with O_CREAT and the OS follows the symlink chain, creating a brand-new file at the attacker-chosen outside path.`,
+    `no file may be created at the dangling symlink's outside target — but it now exists: ${existsSync(targetPath) ? readFileSync(targetPath, 'utf8') : ''}`,
   );
 });
 

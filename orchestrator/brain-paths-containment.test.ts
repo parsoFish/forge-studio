@@ -97,7 +97,7 @@ test('B (RED): resolveKbBrainDir must reject an id whose own directory is a syml
 // it. resolveKbBrainDir has no such check on EITHER candidate root.
 // ---------------------------------------------------------------------------
 
-test('C (RED): resolveKbBrainDir must reject (or the caller must be able to detect) a hardlinked kb.yaml sharing an inode with an outside file', () => {
+test('C (FIXED, amendment round): resolveKbBrainDir must reject (or the caller must be able to detect) a hardlinked kb.yaml sharing an inode with an outside file', () => {
   const root = tmp('brain-paths-hardlink-');
   const outside = tmp('brain-paths-hardlink-outside-');
   try {
@@ -117,14 +117,27 @@ test('C (RED): resolveKbBrainDir must reject (or the caller must be able to dete
       return;
     }
 
+    // The real property is "no caller can obtain a path to a kb whose
+    // kb.yaml shares an inode with an outside file" — satisfied EITHER by
+    // resolveKbBrainDir rejecting outright (null, the now-shipped, STRICTER
+    // behavior: resolveGuardedPath's leaf check runs the nlink test on
+    // kb.yaml itself since it is the guard's segments[] leaf here) OR by a
+    // non-null result whose kb.yaml genuinely has nlink === 1. A test that
+    // required non-null as a precondition would fail on the stronger,
+    // fixed behavior for the wrong reason — this asserts the property, not
+    // a specific shape of success.
     const result = resolveKbBrainDir(root, 'hlkb');
-    assert.ok(result !== null, 'sanity: the hardlinked kb.yaml must be genuinely found (this fixture is a real, non-symlink dir)');
-    const st = lstatSync(join(result!, 'kb.yaml'));
-    assert.equal(
-      st.nlink,
-      1,
-      `resolveKbBrainDir must not certify a kb dir whose kb.yaml is HARDLINKED (nlink=${st.nlink}) to an outside file as safe to use — realpathSync structurally cannot detect this (a hardlink is a genuine, non-symlink directory entry sharing an inode). Today resolveKbBrainDir performs no nlink check at all, so a hardlinked kb.yaml is indistinguishable from an ordinary one to every caller.`,
-    );
+    if (result !== null) {
+      const st = lstatSync(join(result, 'kb.yaml'));
+      assert.equal(
+        st.nlink,
+        1,
+        `if resolveKbBrainDir returns a non-null dir, its kb.yaml must NOT be hardlinked (nlink=${st.nlink}) to an outside file — got a certified-safe dir whose kb.yaml still shares an inode with the outside file.`,
+      );
+    }
+    // result === null is also an acceptable (and, per the current build, the
+    // actual) closure of this escape — no further assertion needed in that
+    // branch.
   } finally {
     rmSync(root, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
