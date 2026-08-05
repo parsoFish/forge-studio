@@ -11,6 +11,7 @@ import yaml from 'js-yaml';
 
 import { listSkillMdDirs, listSkillDirs } from '../skill-path.ts';
 import { skillTrustState } from './skill-library.ts';
+import { parseMaterials } from './materials.ts';
 import { ARTIFACT_KINDS, DEMO_STEP_KINDS, INSTRUCTION_SEED_KINDS, INSTRUCTION_SEED_SCOPES } from './types.ts';
 import { BAND_GUARD_IDS } from '../agent-bands.ts';
 import { parseConnectionEntries } from './connection-catalog.ts';
@@ -204,6 +205,17 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   const disallowedTools = stringArray(d, 'disallowed-tools', skillMdPath);
   const library = optBool(d, 'library');
 
+  // R2-09 D1 — lenient on VALUES (an unknown material string survives; lint's
+  // job, not the loader's), strict on SHAPE (parseMaterials throws on a
+  // non-array/non-string entry). Rethrown with the file path so this loader's
+  // error messages stay consistent with every other field in this function.
+  let materials: string[] | undefined;
+  try {
+    materials = parseMaterials(d['materials']);
+  } catch (err) {
+    throw new Error(`${skillMdPath}: ${(err as Error).message}`);
+  }
+
   const slug = basename(dirname(skillMdPath));
 
   return {
@@ -218,6 +230,7 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
     composition,
     runtime,
     ...(fanout ? { fanout } : {}),
+    ...(materials !== undefined ? { materials } : {}),
     brainAccess,
     interactivity,
     budgets,
@@ -228,11 +241,15 @@ export function loadAgentDefinition(skillMdPath: string): AgentDefinition {
   };
 }
 
-// consumed by the M2 bridge PUT routes (no production call site until then)
-export function serializeAgentDefinition(def: AgentDefinition): string {
-  // Fixed key order: name, description, library?, phase?, surface?, executor?,
-  // purpose, composition, runtime, fanout?, brainAccess, interactivity,
-  // allowed-tools, disallowed-tools, budgets
+/**
+ * Build the frontmatter `data` record for an AgentDefinition (ADR-027 fixed
+ * key order: name, description, library?, phase?, surface?, executor?,
+ * purpose, composition, runtime, fanout?, materials?, brainAccess,
+ * interactivity, allowed-tools, disallowed-tools, budgets). Pure — the same
+ * projection backs both the full re-serialize path and the D5 byte-fidelity
+ * comparison in serializeAgentDefinition.
+ */
+function projectAgentFrontmatter(def: AgentDefinition): Record<string, unknown> {
   const data: Record<string, unknown> = {};
   data['name'] = def.name;
   data['description'] = def.description;
@@ -263,6 +280,11 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
     data['fanout'] = fanout;
   }
 
+  // R2-09 D2 — emitted only when DECLARED (undefined omitted entirely, like
+  // fanout above); a declared-empty [] is still meaningful and IS emitted
+  // (registry.test.ts "declared-empty materials must still be emitted").
+  if (def.materials !== undefined) data['materials'] = def.materials;
+
   data['brainAccess'] = def.brainAccess;
   data['interactivity'] = def.interactivity;
   data['allowed-tools'] = def.allowedTools;
@@ -281,8 +303,93 @@ export function serializeAgentDefinition(def: AgentDefinition): string {
     budgets['maxBudgetUsdShare'] = def.budgets.maxBudgetUsdShare;
   data['budgets'] = budgets;
 
-  const safeBody = def.body.replace(/^-{3,}/gm, (m) => m.replace(/-/g, '–'));
-  return matter.stringify('\n' + safeBody.replace(/^\n+/, ''), data);
+  return data;
+}
+
+/**
+ * Order-independent (object keys) / order-sensitive (arrays) structural
+ * equality over plain JSON-like values. A small local compare (D5) — no YAML
+ * library, no node:assert try/catch-as-boolean trick — used only to decide
+ * whether serializeAgentDefinition can take the byte-preserving fast path.
+ */
+function deepValueEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  if (Array.isArray(a) || Array.isArray(b)) {
+    if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+    return a.every((v, i) => deepValueEqual(v, b[i]));
+  }
+  if (a !== null && b !== null && typeof a === 'object' && typeof b === 'object') {
+    const ak = Object.keys(a as Record<string, unknown>).sort();
+    const bk = Object.keys(b as Record<string, unknown>).sort();
+    if (ak.length !== bk.length || ak.some((k, i) => k !== bk[i])) return false;
+    return ak.every((k) => deepValueEqual((a as Record<string, unknown>)[k], (b as Record<string, unknown>)[k]));
+  }
+  return false;
+}
+
+const COMPOSITION_ARRAY_KEYS = ['skills', 'tools', 'mcps', 'guards', 'hooks'] as const;
+
+/**
+ * D5 fast-path support: `composition`'s five vocabulary arrays all default to
+ * `[]` on load when absent (`stringArray` in yaml-fields.ts) — a real
+ * `SKILL.md` written before the `hooks:` field existed omits that key
+ * entirely, exactly like `skills: []` written out explicitly. Normalize the
+ * ORIGINAL parsed data the same way the loader itself already does before
+ * comparing it against the freshly projected data, so an omitted key never
+ * masquerades as a substantive frontmatter difference — this mirrors the
+ * loader's own default, it does not invent new leniency (no other field
+ * needs this: fanout/materials/library/phase/surface/executor are already
+ * conditionally-omitted on both sides, and budgets sub-keys have no
+ * non-omitted default).
+ */
+function normalizeOriginalDataForComparison(originalData: unknown): unknown {
+  if (originalData === null || typeof originalData !== 'object' || Array.isArray(originalData)) {
+    return originalData;
+  }
+  const d = originalData as Record<string, unknown>;
+  const rawComposition = d['composition'];
+  if (rawComposition === null || typeof rawComposition !== 'object' || Array.isArray(rawComposition)) {
+    return d;
+  }
+  const comp = rawComposition as Record<string, unknown>;
+  const normalizedComposition: Record<string, unknown> = { ...comp };
+  for (const key of COMPOSITION_ARRAY_KEYS) {
+    if (!(key in normalizedComposition)) normalizedComposition[key] = [];
+  }
+  return { ...d, composition: normalizedComposition };
+}
+
+/**
+ * Serialize an AgentDefinition back to SKILL.md text (ADR-027; consumed by
+ * the M2 bridge PUT routes, no production call site until then).
+ *
+ * D5/D6 (R2-09): when `originalRaw` is supplied and the freshly projected
+ * frontmatter data deep-equals the original file's parsed frontmatter data,
+ * the original frontmatter block is kept byte-for-byte (delimiters, `#`
+ * comments, key order, whitespace) and only the body region is replaced —
+ * `def.body` is appended VERBATIM, no leading-newline normalization.
+ * Otherwise (no `originalRaw`, or the frontmatter actually changed) this
+ * falls back to the full re-serialize below — today's behaviour, minus the
+ * `^-{3,}` → en-dash body mutation (D6, deleted: it corrupted real bodies —
+ * a ```yaml fenced example and a mid-body thematic break — because the whole
+ * SKILL.md, en-dashes included, is read verbatim into agent system prompts).
+ */
+export function serializeAgentDefinition(def: AgentDefinition, originalRaw?: string): string {
+  const data = projectAgentFrontmatter(def);
+
+  if (originalRaw !== undefined) {
+    const { data: originalData, content: originalContent } = matter(originalRaw);
+    if (deepValueEqual(data, normalizeOriginalDataForComparison(originalData))) {
+      const bodyStart = originalRaw.length - originalContent.length;
+      return originalRaw.slice(0, bodyStart) + def.body;
+    }
+  }
+
+  // Pass a `{content}` file object (not a bare string) so gray-matter's
+  // internal `matter.stringify` re-parse step never runs on `def.body` itself
+  // — a body whose FIRST line is a literal `---` would otherwise be
+  // misread as ITS OWN frontmatter delimiter (D6 proof, registry.test.ts).
+  return matter.stringify({ content: def.body }, data);
 }
 
 export function listAgentDefinitions(skillsDir: string): AgentDefinition[] {

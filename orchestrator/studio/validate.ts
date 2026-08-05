@@ -13,6 +13,7 @@ import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import { SLUG_RE } from '../skill-path.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { MATERIAL_KINDS } from './materials.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
 import { checkFlowTriggers, type TriggerCheckOpts } from './validate-triggers.ts';
 import { BAND_CANONICAL_SLUG } from '../agent-bands.ts';
@@ -201,6 +202,28 @@ export function validateAgent(
         `fanout.isolation "${def.fanout.isolation}" is not a shipped provider (${FANOUT_ISOLATION_KINDS.join('|')}) — allowed as a future/custom provider ref, but check for a typo`,
       ),
     );
+  }
+
+  // materials/enum — error (R2-09 D1). `materials` is optional — absent is
+  // legal (not declared) and `materials: []` is also legal (declared-empty;
+  // D2). Parsed leniently at load (registry.ts/materials.ts), so an unknown
+  // VALUE is a lint error here, not a load crash — and an ERROR, not a flag
+  // (unlike fanout/isolation above), because materials has no runtime
+  // enforcement point yet (R6-04-F2): a silently-tolerated bad value here
+  // would be declared data nobody ever checks. One finding per offending
+  // value, and the message names BOTH the value and the full allowed set.
+  if (def.materials !== undefined) {
+    for (const value of def.materials) {
+      if (!(MATERIAL_KINDS as readonly string[]).includes(value)) {
+        findings.push(
+          err(
+            obj,
+            'materials/enum',
+            `unknown materials value "${value}" — must be one of ${MATERIAL_KINDS.join('|')}`,
+          ),
+        );
+      }
+    }
   }
 
   // composition/band-guard — error (R4-01 whole-branch review). Band guards
