@@ -1,9 +1,9 @@
 'use client';
 
 import { FilePackage } from '@/components/studio/FilePackage';
-import { DependencyDag, type DagItem } from '@/components/studio/DependencyDag';
+import { DependencyDag } from '@/components/studio/DependencyDag';
 import { roadmapDraftView, markdownDraftView } from '@/lib/session-artifact-view';
-import type { SessionArtifactPayload } from '@/lib/session-client';
+import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-client';
 
 // ---------------------------------------------------------------------------
 // SessionArtifactPane — the RIGHT-hand "living artifact" pane of the shared
@@ -76,18 +76,18 @@ function RoadmapDraftBody({ artifact }: { artifact: Extract<SessionArtifactPaylo
   if (view.isEmpty) {
     return <EmptyNote text={view.emptyMessage ?? 'No roadmap rows yet.'} />;
   }
-  // R4-15: DAG first, then the initiative table — the same layout R4-13-F1
-  // specifies for the project-roadmap tab, which is why DependencyDag is a
-  // shared component rather than a bespoke one here.
-  const dagItems: DagItem[] = view.rows.map((row) => ({
-    id: row.initiativeId,
-    label: row.initiativeId,
-    status: row.phase,
-    dependsOn: row.dependsOn,
-  }));
+  // R4-15 (adversarial-review fix, 2026-08-06): `view.dag` is the ONE shared
+  // dependency-DAG view — already computed once by `roadmapDraftView` — read
+  // by BOTH the DAG below and the table's "depends on" column. Neither this
+  // component nor `DependencyDag` calls `dependencyDagView` a second time,
+  // and the table never falls back to `row.dependsOn` verbatim (that field
+  // stays undeduped/unsorted on the wire on purpose — only this shared view
+  // normalises it), so the two surfaces structurally cannot disagree on what
+  // a manifest declared.
+  const depsById = new Map(view.dag.nodes.map((node) => [node.id, node.deps]));
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <DependencyDag items={dagItems} />
+      <DependencyDag view={view.dag} labelOf={(row: RoadmapDraftRow) => row.initiativeId} statusOf={(row: RoadmapDraftRow) => row.phase} />
       <table data-component="roadmap-draft-table" style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12.5 }}>
         <thead>
           <tr style={{ textAlign: 'left', color: 'var(--faint)', fontSize: 11 }}>
@@ -99,20 +99,23 @@ function RoadmapDraftBody({ artifact }: { artifact: Extract<SessionArtifactPaylo
           </tr>
         </thead>
         <tbody>
-          {view.rows.map((row) => (
-            <tr
-              key={row.initiativeId}
-              data-roadmap-row={row.initiativeId}
-              data-roadmap-depends-on={row.dependsOn.join(',')}
-              style={{ borderTop: '1px solid var(--line)' }}
-            >
-              <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{row.initiativeId}</td>
-              <td style={tdStyle}>{row.project}</td>
-              <td style={tdStyle}>{row.phase}</td>
-              <td style={tdStyle}>{row.origin}</td>
-              <td style={tdStyle}>{row.dependsOn.length > 0 ? row.dependsOn.join(', ') : '—'}</td>
-            </tr>
-          ))}
+          {view.rows.map((row) => {
+            const deps = depsById.get(row.initiativeId) ?? [];
+            return (
+              <tr
+                key={row.initiativeId}
+                data-roadmap-row={row.initiativeId}
+                data-roadmap-depends-on={deps.join(',')}
+                style={{ borderTop: '1px solid var(--line)' }}
+              >
+                <td style={{ ...tdStyle, fontFamily: 'var(--font-mono)' }}>{row.initiativeId}</td>
+                <td style={tdStyle}>{row.project}</td>
+                <td style={tdStyle}>{row.phase}</td>
+                <td style={tdStyle}>{row.origin}</td>
+                <td style={tdStyle}>{deps.length > 0 ? deps.join(', ') : '—'}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
     </div>

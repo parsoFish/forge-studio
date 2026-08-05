@@ -27,11 +27,16 @@
  * Cycle detection here is a SEPARATE, own pure pass over RESOLVED edges only
  * (an unresolved target — a dep id with no matching item — cannot
  * participate in a cycle by definition). It is a standard Tarjan
- * strongly-connected-components pass: total, never throws, never recurses
- * forever — every node is visited at most once via the `indices` map, so
- * even a fully-cyclic input terminates. A node is "in a cycle" iff its SCC
- * has size > 1, or size 1 with a self-loop (a node declaring itself as a
- * dependency).
+ * strongly-connected-components pass, run over an EXPLICIT stack rather than
+ * the call stack (adversarial-review fix, 2026-08-06 — the original
+ * recursive `strongConnect` independently blew the call stack on a deep
+ * acyclic chain at the same n where `topoLevels`' own recursion did, a
+ * second, separate unbounded-recursion bug flagged by dependency-dag.test.ts's
+ * AT-16/17 header note): total, never throws, never recurses forever — every
+ * node is visited at most once via the `indices` map, so even a fully-cyclic
+ * or 10,000-deep acyclic input terminates in linear time. A node is "in a
+ * cycle" iff its SCC has size > 1, or size 1 with a self-loop (a node
+ * declaring itself as a dependency).
  *
  * Immutability: every return value is a freshly-built object/array; the
  * caller's `items` (and each item) is never mutated.
@@ -54,6 +59,14 @@ export type DependencyDagNode<T> = {
    *  never silently dropped. A draft may legitimately depend on an
    *  already-merged initiative outside the set. */
   readonly unresolvedDeps: string[];
+  /** The DECLARED-ORDER, DE-DUPLICATED union of every dependency id this
+   *  node declares, resolved or not (adversarial-review fix, 2026-08-06) —
+   *  the ONE value both this DAG and any sibling table rendered beside it
+   *  must read, so the two structurally cannot disagree on what a manifest
+   *  declared. Deliberately NOT `[...resolvedDeps, ...unresolvedDeps]` —
+   *  that concatenation always reorders (every resolved id before every
+   *  unresolved one, regardless of what was actually declared first). */
+  readonly deps: string[];
 };
 
 export type DependencyDagEdge = {
@@ -83,47 +96,69 @@ export type DependencyDagView<T> = {
 // Cycle detection — Tarjan SCC over resolved-edge adjacency only.
 // ---------------------------------------------------------------------------
 
+/** One node's simulated `strongConnect` call frame — `neighborIndex` is the
+ *  non-recursive stand-in for the recursive version's `for (const w of ...)`
+ *  cursor, so a re-entered frame resumes its neighbour scan rather than
+ *  restarting it. */
+type TarjanFrame = { readonly id: string; neighborIndex: number };
+
 function detectCycles(adjacency: ReadonlyMap<string, readonly string[]>): { hasCycle: boolean; cycleMembers: string[] } {
   let indexCounter = 0;
   const indices = new Map<string, number>();
   const lowlink = new Map<string, number>();
   const onStack = new Set<string>();
-  const stack: string[] = [];
+  const tarjanStack: string[] = []; // the algorithm's own "on this SCC path" stack
   const cycleMemberSet = new Set<string>();
 
-  function strongConnect(v: string): void {
-    indices.set(v, indexCounter);
-    lowlink.set(v, indexCounter);
+  const popComponent = (root: string): void => {
+    const component: string[] = [];
+    let w: string;
+    do {
+      w = tarjanStack.pop()!;
+      onStack.delete(w);
+      component.push(w);
+    } while (w !== root);
+    const selfLoop = component.length === 1 && (adjacency.get(component[0]) ?? []).includes(component[0]);
+    if (component.length > 1 || selfLoop) {
+      for (const id of component) cycleMemberSet.add(id);
+    }
+  };
+
+  const visit = (start: string): void => {
+    const work: TarjanFrame[] = [{ id: start, neighborIndex: 0 }];
+    indices.set(start, indexCounter);
+    lowlink.set(start, indexCounter);
     indexCounter += 1;
-    stack.push(v);
-    onStack.add(v);
+    tarjanStack.push(start);
+    onStack.add(start);
 
-    for (const w of adjacency.get(v) ?? []) {
-      if (!indices.has(w)) {
-        strongConnect(w);
-        lowlink.set(v, Math.min(lowlink.get(v)!, lowlink.get(w)!));
-      } else if (onStack.has(w)) {
-        lowlink.set(v, Math.min(lowlink.get(v)!, indices.get(w)!));
+    while (work.length > 0) {
+      const frame = work[work.length - 1];
+      const neighbors = adjacency.get(frame.id) ?? [];
+      if (frame.neighborIndex < neighbors.length) {
+        const w = neighbors[frame.neighborIndex];
+        frame.neighborIndex += 1;
+        if (!indices.has(w)) {
+          indices.set(w, indexCounter);
+          lowlink.set(w, indexCounter);
+          indexCounter += 1;
+          tarjanStack.push(w);
+          onStack.add(w);
+          work.push({ id: w, neighborIndex: 0 });
+        } else if (onStack.has(w)) {
+          lowlink.set(frame.id, Math.min(lowlink.get(frame.id)!, indices.get(w)!));
+        }
+      } else {
+        work.pop();
+        const parent = work[work.length - 1];
+        if (parent) lowlink.set(parent.id, Math.min(lowlink.get(parent.id)!, lowlink.get(frame.id)!));
+        if (lowlink.get(frame.id) === indices.get(frame.id)) popComponent(frame.id);
       }
     }
-
-    if (lowlink.get(v) === indices.get(v)) {
-      const component: string[] = [];
-      let w: string;
-      do {
-        w = stack.pop()!;
-        onStack.delete(w);
-        component.push(w);
-      } while (w !== v);
-      const selfLoop = component.length === 1 && (adjacency.get(component[0]) ?? []).includes(component[0]);
-      if (component.length > 1 || selfLoop) {
-        for (const id of component) cycleMemberSet.add(id);
-      }
-    }
-  }
+  };
 
   for (const id of adjacency.keys()) {
-    if (!indices.has(id)) strongConnect(id);
+    if (!indices.has(id)) visit(id);
   }
 
   return { hasCycle: cycleMemberSet.size > 0, cycleMembers: [...cycleMemberSet].sort((a, b) => a.localeCompare(b)) };
@@ -151,17 +186,19 @@ export function dependencyDagView<T>(
     const id = idOf(item);
     const resolvedDeps: string[] = [];
     const unresolvedDeps: string[] = [];
+    const deps: string[] = [];
     const seen = new Set<string>();
     for (const dep of depsOf(item)) {
       if (seen.has(dep)) continue;
       seen.add(dep);
+      deps.push(dep);
       const resolved = idSet.has(dep);
       if (resolved) resolvedDeps.push(dep);
       else unresolvedDeps.push(dep);
       edges.push({ from: dep, to: id, resolved });
     }
     adjacency.set(id, resolvedDeps);
-    nodes.push({ id, item, level: levelById.get(id) ?? 0, resolvedDeps, unresolvedDeps });
+    nodes.push({ id, item, level: levelById.get(id) ?? 0, resolvedDeps, unresolvedDeps, deps });
   }
 
   const columns: DependencyDagNode<T>[][] = [];

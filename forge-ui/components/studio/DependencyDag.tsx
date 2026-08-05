@@ -1,36 +1,46 @@
 'use client';
 
-import { dependencyDagView } from '@/lib/dependency-dag';
+import type { DependencyDagView } from '@/lib/dependency-dag';
 
 // ---------------------------------------------------------------------------
 // DependencyDag — reusable dependency-DAG renderer (R4-15).
 //
-// Modelled on FilePackage.tsx: one data prop, derives its view internally via
-// the pure, shared `dependencyDagView` (lib/dependency-dag.ts) — no fetching,
-// no bespoke leveling/cycle logic here. Generic over nothing here (the item
-// shape is fixed to `DagItem`), but `dependencyDagView` itself stays generic
-// over `T` so a future caller with a different item shape (e.g. R4-13's
-// project-roadmap tab, work items rather than initiatives) can map its own
-// data into `DagItem` and reuse this component unchanged.
+// Modelled on FilePackage.tsx: one data prop, renders a view — but unlike a
+// component that derives its own view internally, this one takes an
+// ALREADY-COMPUTED `DependencyDagView<T>` rather than raw items and calling
+// `dependencyDagView` itself (adversarial-review fix, 2026-08-06). The
+// original shape called `dependencyDagView` a second time inside this
+// component while a sibling table read a first computation's `row.dependsOn`
+// verbatim — two independent passes over the same data that could disagree.
+// The caller now computes the view ONCE and shares that single object with
+// every surface that renders it (this component AND, for the roadmap-draft
+// artifact, SessionArtifactPane.tsx's table) — they structurally cannot
+// drift because there is only one value to read.
+//
+// `labelOf`/`statusOf` let the caller supply its own item shape's accessors,
+// mirroring `dependencyDagView`'s own `idOf`/`depsOf` accessor pattern, so
+// this component stays generic over `T` the same way the view model is.
 //
 // `data-dag-unresolved-count` is a DESIGN DECISION not otherwise pinned by a
 // test: it counts unresolved EDGES (view.edges.filter(e => !e.resolved)),
 // mirroring the sibling `data-dag-edge-count`'s unit (edges, not nodes).
 // ---------------------------------------------------------------------------
 
-export type DagItem = { id: string; label: string; status?: string; dependsOn: string[] };
-
 function joinIds(ids: readonly string[]): string {
   return ids.length === 0 ? '' : ids.join(',');
 }
 
-export function DependencyDag({ items }: { items: DagItem[] }) {
-  const view = dependencyDagView(
-    items,
-    (i) => i.id,
-    (i) => i.dependsOn,
-  );
+export function DependencyDag<T>({
+  view,
+  labelOf,
+  statusOf,
+}: {
+  view: DependencyDagView<T>;
+  labelOf: (item: T) => string;
+  statusOf?: (item: T) => string | undefined;
+}) {
   const unresolvedEdgeCount = view.edges.filter((e) => !e.resolved).length;
+  const cycleMemberSet = new Set(view.cycleMembers);
 
   return (
     <div
@@ -66,25 +76,30 @@ export function DependencyDag({ items }: { items: DagItem[] }) {
                 Level {level}
               </div>
               {column.map((node) => {
-                const status = node.item.status ?? '';
+                const status = statusOf?.(node.item) ?? '';
+                const isCycleMember = cycleMemberSet.has(node.id);
                 return (
                   <div
                     key={node.id}
                     data-dag-node={node.id}
                     data-dag-node-level={node.level}
                     data-dag-node-status={status}
-                    data-dag-depends-on={joinIds(node.item.dependsOn)}
+                    data-dag-node-cycle={isCycleMember ? 'true' : 'false'}
+                    data-dag-depends-on={joinIds(node.deps)}
                     data-dag-unresolved={joinIds(node.unresolvedDeps)}
                     style={{
-                      border: '1px solid var(--line)',
+                      border: isCycleMember ? '2px solid var(--ember, #FF9E4A)' : '1px solid var(--line)',
                       borderRadius: 6,
                       padding: '8px 10px',
                       fontSize: 12,
                       background: 'var(--panel, transparent)',
                     }}
                   >
-                    <div style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)' }}>{node.item.label}</div>
+                    <div style={{ fontFamily: 'var(--font-mono, monospace)', color: 'var(--text)' }}>{labelOf(node.item)}</div>
                     {status && <div style={{ fontSize: 11, color: 'var(--faint)' }}>{status}</div>}
+                    {isCycleMember && (
+                      <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--ember, #FF9E4A)' }}>part of a dependency cycle</div>
+                    )}
                     {node.unresolvedDeps.length > 0 && (
                       <div style={{ fontSize: 11, color: 'var(--ember, #FF9E4A)' }}>unresolved: {node.unresolvedDeps.join(', ')}</div>
                     )}

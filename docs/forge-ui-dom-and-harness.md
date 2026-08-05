@@ -477,13 +477,18 @@ inventory rather than one shared page-level contract:
   R3-01's `FilePackage`. Contract:
   `[data-component="dependency-dag"][data-dag-node-count][data-dag-level-count][data-dag-edge-count][data-dag-cycle="true"|"false"][data-dag-unresolved-count]`,
   per column `[data-dag-level]`, per node
-  `[data-dag-node][data-dag-node-level][data-dag-node-status][data-dag-depends-on][data-dag-unresolved]`,
+  `[data-dag-node][data-dag-node-level][data-dag-node-status][data-dag-node-cycle="true"|"false"][data-dag-depends-on][data-dag-unresolved]`,
   and on the table beside it `[data-roadmap-row][data-roadmap-depends-on]`.
-  **Both surfaces read the same de-duplicated value from the one view model, so
-  they cannot drift.** A dependency naming an initiative outside the draft set
-  (an already-merged one, typically) and a detected cycle are each rendered as
+  **Both surfaces read the same de-duplicated value (`DependencyDagNode.deps`)
+  from the ONE shared view — computed once by `roadmapDraftView`, passed down
+  to `DependencyDag` and read directly for the table — so they structurally
+  cannot drift.** A dependency naming an initiative outside the draft set (an
+  already-merged one, typically) and a detected cycle are each rendered as
   **readable text**, not only stamped on an attribute — an attribute nobody
-  renders is the declared-data-fails-open shape this campaign keeps closing.
+  renders is the declared-data-fails-open shape this campaign keeps closing
+  (adversarial-review round, 2026-08-06: a cycle member now also carries
+  `data-dag-node-cycle="true"` plus a visible border/label treatment on the
+  node itself, not only the root banner).
 - **Project-page entry into a planning session (R4-15-F1, 2026-08-06).** The
   project page's roadmap section carries
   `[data-component="project-architect-entry"][data-architect-entry-open="true"|"false"][data-project-id]`,
@@ -494,9 +499,11 @@ inventory rather than one shared page-level contract:
   `[data-action="cancel-plan-with-architect"]` collapses it again. When an
   in-flight architect session exists for the project,
   `[data-action="resume-architect-session"][data-session-id]` links straight to
-  `/sessions/architect/<sid>`; `[data-architect-resume-probe="ok"|"failed"]`
-  reports whether the probe that looks for one actually succeeded, so a failed
-  lookup is observable rather than an invisibly absent link.
+  `/sessions/architect/<sid>`;
+  `[data-architect-resume-probe="pending"|"ok"|"failed"]` reports whether the
+  probe that looks for one actually succeeded, so a failed lookup is
+  observable rather than rendering identically to the equally-legitimate
+  "genuinely no in-flight session" result.
 - **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
   per-project demo-page builder (brief → generate → lock, element-by-element)
   is an inline panel on the project page, opened by
