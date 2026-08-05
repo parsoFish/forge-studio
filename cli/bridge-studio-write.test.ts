@@ -1070,6 +1070,126 @@ test('PUT /api/studio/projects/INVALID → 400 (id must be slug)', async () => {
 });
 
 // ---------------------------------------------------------------------------
+// PUT /api/studio/projects/:id — symlink/hardlink containment escapes
+// (2026-08-05 adversarial-review round 4, finding B/5-6). Guard at
+// cli/bridge-studio-writes.ts (~L797-798), root projects/<id>. A PURE
+// slug-symlink (projects/<id> itself a symlink) is blocked ACCIDENTALLY —
+// discoverProjects()'s `readdirSync(dir, {withFileTypes:true})` +
+// `dirent.isDirectory()` filter reports false for a symlink dirent (it does
+// not follow the link), so that id is never even discovered. That is kept
+// below as a regression lock, NOT claimed as a containment pin — the two
+// genuine, confirmed escapes use a REAL, genuinely-discovered project dir
+// with a symlinked/hardlinked entry ONE LEVEL DEEPER, which the
+// isDirectory() filter never sees.
+// ---------------------------------------------------------------------------
+
+test('regression lock (NOT a containment pin): a pure symlinked projects/<id> is never discovered — 404 by accident of discoverProjects()\'s isDirectory() filter', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-write-outside-pure-symlink-'));
+  mkdirSync(join(outsideDir, '.forge'), { recursive: true });
+  writeFileSync(join(outsideDir, '.forge', 'project.json'), makeProjectJson({ name: 'Outside Pure Symlink Project' }));
+
+  const linkPath = join(forgeRoot, 'projects', 'pure-symlink-project');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await putJson(`${bridgeUrl}/api/studio/projects/pure-symlink-project`, {
+      northStar: 'Should never reach the outside file — this id is never discovered at all.',
+    });
+    assert.equal(
+      res.status,
+      404,
+      'a symlinked projects/<id> must not be discovered by discoverProjects() — expected accidental 404 (do not read this as a deliberate containment guarantee)',
+    );
+  } finally {
+    rmSync(linkPath, { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('BLOCKER: PUT rejects a genuine project whose .forge is a symlinked DIRECTORY escaping the forge root — the outside project.json stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-write-outside-forge-'));
+  const outsideProjectJson = join(outsideDir, 'project.json');
+  const outsideOriginal = makeProjectJson({ name: 'Outside Secret Project (symlinked .forge)' });
+  writeFileSync(outsideProjectJson, outsideOriginal, 'utf8');
+
+  const projDir = join(forgeRoot, 'projects', 'symlink-forge-project');
+  mkdirSync(projDir, { recursive: true });
+  const forgeLinkPath = join(projDir, '.forge');
+  try {
+    symlinkSync(outsideDir, forgeLinkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    rmSync(projDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    // projects/symlink-forge-project IS a real, genuine directory — it
+    // passes discoverProjects()'s isDirectory() filter and is discovered
+    // normally. Only the NESTED .forge entry is a symlink, one level below
+    // where that filter looks.
+    const res = await putJson(`${bridgeUrl}/api/studio/projects/symlink-forge-project`, {
+      northStar: 'ATTACKER-CONTROLLED overwrite via a symlinked .forge directory.',
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a symlinked .forge directory escaping the forge root must be REJECTED (verified live: today it returns 200 and the outside project.json is replaced)',
+    );
+    const outsideAfter = readFileSync(outsideProjectJson, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the out-of-tree project.json must be byte-unchanged');
+  } finally {
+    rmSync(forgeLinkPath, { force: true });
+    rmSync(projDir, { recursive: true, force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('BLOCKER: PUT rejects a genuine project whose .forge/project.json is HARDLINKED to an outside file — the outside file stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-write-outside-projectjson-hardlink-'));
+  const outsideFile = join(outsideDir, 'secret-project.json');
+  const outsideOriginal = makeProjectJson({ name: 'Hardlink Secret Project' });
+  writeFileSync(outsideFile, outsideOriginal, 'utf8');
+
+  const projDir = join(forgeRoot, 'projects', 'hardlink-projectjson-project');
+  const forgeDir = join(projDir, '.forge');
+  mkdirSync(forgeDir, { recursive: true });
+  const linkPath = join(forgeDir, 'project.json');
+  try {
+    linkSync(outsideFile, linkPath);
+  } catch {
+    // Cross-filesystem hardlinks (EXDEV) can be unavailable — skip rather
+    // than false-failing the suite for an environment limitation.
+    rmSync(outsideDir, { recursive: true, force: true });
+    rmSync(projDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    // projects/hardlink-projectjson-project AND its .forge/ are both REAL,
+    // genuine directories — only the project.json LEAF is a hardlink.
+    const res = await putJson(`${bridgeUrl}/api/studio/projects/hardlink-projectjson-project`, {
+      northStar: 'ATTACKER-CONTROLLED overwrite via a hardlinked project.json.',
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a hardlinked project.json must be REJECTED — realpath cannot resolve a hardlink away (verified live: today it returns 200 and the outside file is overwritten)',
+    );
+    const outsideAfter = readFileSync(outsideFile, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the out-of-tree file (same inode as the hardlink) must be byte-unchanged');
+  } finally {
+    rmSync(projDir, { recursive: true, force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // GET routes still work (passthrough unaffected)
 // ---------------------------------------------------------------------------
 
