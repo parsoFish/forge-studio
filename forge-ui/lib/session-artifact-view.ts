@@ -27,6 +27,7 @@
  */
 
 import { filePackageTabs, selectFile, type FilePackageState } from './file-package';
+import { dependencyDagView, type DependencyDagView } from './dependency-dag';
 import type { BrainStructureArtifact, MarkdownDraftArtifact, RoadmapDraftArtifact, RoadmapDraftRow, SessionArtifactPayload } from './session-client';
 
 // ---------------------------------------------------------------------------
@@ -41,6 +42,11 @@ export type RoadmapDraftView = {
    *  `sourcesScanned`, never a generic hardcoded string), so an empty
    *  roadmap reads "scanned N, found none", never a bare/blank pane. */
   emptyMessage: string | null;
+  /** R4-15: the SHARED dependency-DAG view model (forge-ui/lib/
+   *  dependency-dag.ts), built from `rows`' `dependsOn` — reuse, never a
+   *  bespoke DAG-building pass written here (mirrors `brainStructureView`'s
+   *  reuse of `filePackageTabs`). */
+  dag: DependencyDagView<RoadmapDraftRow>;
 };
 
 export function roadmapDraftView(artifact: RoadmapDraftArtifact): RoadmapDraftView {
@@ -50,6 +56,11 @@ export function roadmapDraftView(artifact: RoadmapDraftArtifact): RoadmapDraftVi
     rows: artifact.rows,
     isEmpty,
     emptyMessage: isEmpty ? `No roadmap rows yet — scanned ${artifact.sourcesScanned.join(', ')}` : null,
+    dag: dependencyDagView(
+      artifact.rows,
+      (r) => r.initiativeId,
+      (r) => r.dependsOn,
+    ),
   };
 }
 

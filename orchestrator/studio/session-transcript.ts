@@ -400,6 +400,27 @@ export type RoadmapDraftRow = {
   readonly project: string;
   readonly phase: string;
   readonly origin: string;
+  // Mutable element array (not `readonly string[]`) — same rationale as
+  // RoadmapDraftArtifact.rows below: the pinned AT idiom casts the derived
+  // artifact to a plain `{ rows: Array<{ ...; dependsOn: string[] }> }`
+  // shape, and a `readonly string[]` is never assignable to a mutable
+  // `string[]` target.
+  //
+  // Sourced verbatim from the manifest's `depends_on_initiatives`
+  // (orchestrator/manifest.ts:73, already parsed by `parseManifest`) —
+  // absent on the manifest ⇒ `[]`, never undefined and never dropped from
+  // the row. This field is DERIVED, never fabricated: it is exactly what
+  // the manifest declares, in declared order, with no filtering,
+  // de-duplication, or re-sorting at this layer.
+  //
+  // Resolving an edge against this session's OWN draft row set (which
+  // dependency ids are "real" vs. dangling) is deliberately NOT this
+  // layer's job — it is the VIEW layer's (forge-ui/lib/dependency-dag.ts's
+  // `dependencyDagView`). An edge pointing at an initiative outside the
+  // draft set (e.g. one that already merged before this architect session
+  // started) is real information the operator needs to see, not noise to
+  // be silently dropped here.
+  readonly dependsOn: string[];
 };
 
 export type RoadmapDraftArtifact = {
@@ -453,7 +474,15 @@ function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArti
     } catch {
       continue; // an unparsable manifest contributes no row; never fabricated
     }
-    rows.push({ initiativeId: manifest.initiative_id, project: manifest.project, phase: manifest.phase, origin: manifest.origin });
+    rows.push({
+      initiativeId: manifest.initiative_id,
+      project: manifest.project,
+      phase: manifest.phase,
+      origin: manifest.origin,
+      // Verbatim, never filtered/sorted/de-duplicated here — see the field's
+      // doc comment on RoadmapDraftRow.
+      dependsOn: manifest.depends_on_initiatives ?? [],
+    });
   }
   return {
     kind: 'roadmap-draft',

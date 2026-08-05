@@ -1,14 +1,16 @@
 /**
- * Topological-level layout — forge-ui mirror of `orchestrator/dep-levels.ts`
- * (the server-side SSOT that `cli/architect-plan.ts`'s PLAN.html dependency
- * graph uses). forge-ui is a hard runtime boundary that cannot import orchestrator
- * code, so this is a byte-for-byte algorithm mirror — same convention as
- * `forge-ui/lib/phases.ts` ↔ `orchestrator/logging.ts`.
+ * Topological-level layout — forge-ui's own pure topological-level module.
+ * There is no server-side counterpart today: `orchestrator/dep-levels.ts`
+ * does not exist anywhere in this repo, and `cli/architect-plan.ts`'s
+ * PLAN.html dependency graph carries no level algorithm of its own (verified
+ * by reading both, not assumed) — this corrects a stale header claim that
+ * had drifted from the as-built code.
  *
- * KEEP IN SYNC WITH: `orchestrator/dep-levels.ts` — algorithm must remain
- * byte-for-byte identical. Any change there must be mirrored here immediately.
- * (A cross-boundary node --test is architecturally unsound here; the sync
- * obligation is enforced by this comment + code review.)
+ * Real, current consumers: `forge-ui/lib/monitor-layout.ts` (the run-monitor
+ * hex layout), `forge-ui/app/projects/[id]/page.tsx` (the project roadmap
+ * spine, two call sites), and `forge-ui/lib/dependency-dag.ts` (R4-15's
+ * shared dependency-DAG view model). All three reuse this module rather than
+ * reimplementing the leveling algorithm — keep it that way.
  *
  * Drives the per-project roadmap spine: the same level-by-topo
  * algorithm applied to initiatives (INIT-ids) or work items (WI-ids).
