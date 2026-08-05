@@ -382,3 +382,72 @@ multi-stage fixture descriptor and by lint over the real shipped descriptors, no
 by a shipped multi-stage session. `brain` was added to the vocabulary because the
 project-brain kind ships now and none of the onboarding five honestly describes
 seeding Brain 3; mapping it onto `contract` would have been a fabricated mapping.
+
+## Amendment (R2-09, 2026-08-05): `materials:` — the agent's allowed-input declaration
+
+**Mechanical/factual; decision unchanged.** Both halves of this amendment track
+as-built fact against decisions this ADR already took: the field below is the one
+`docs/roadmaps/R2-runnable-componentry.md` R2-09-F1 specifies, and the serializer
+section records bringing the code back to this ADR's existing
+one-canonical-serializer mandate. No decision is taken, reversed or re-opened
+here. (T1 pre-ratified on that basis, 2026-08-05.)
+
+The agent's authored frontmatter gains **one optional field**, `materials:` — a
+list drawn from a **closed four-kind vocabulary**
+(`images | documents | audio | data-files`) declaring which kinds of input a run
+of this agent may be given. It sits at the top level of the frontmatter
+alongside `fanout:`, not inside `composition:` (composition names the
+*components an agent is built from*; materials names the *inputs a run may
+attach* — different lifetimes, different authors, different consumers).
+
+Format and enforcement, following the amendments above:
+
+1. **Closed vocabulary, owned in one place.** `orchestrator/studio/materials.ts`
+   holds the kinds; the loader, `forge studio lint` and the capability
+   descriptor all import from it, so the vocabulary cannot drift into a second
+   representation.
+2. **Shape errors throw at load; value errors are lint errors.** A non-list
+   `materials:` (or a non-string entry) is unrepresentable and fails the load,
+   exactly as `composition:` does. An unknown *kind* is a
+   `materials/enum` **error** naming both the offending value and the allowed
+   set — the `surface/enum` shape — because a bad value must never take
+   `forge studio lint` itself down for that agent.
+3. **Absent and empty both mean "accepts nothing".** There is no
+   "undeclared ⇒ allow all" arm anywhere. The two states stay distinguishable on
+   the definition (undeclared vs declared-empty); only the gate collapses them.
+4. **The enforcement point is named, and the gate ships with the field.**
+   Materials enter the system at the kickoff/run upload seam, which lands with
+   **R6-04-F2**. That is a later batch, so this amendment ships the gate itself —
+   `agentAcceptsMaterial(def, kind)`, fail-closed, answering from
+   *vocabulary ∩ declaration* rather than from the declaration alone — precisely
+   so the consuming surface cannot mint a permissive gate of its own. The
+   descriptor (`AgentCapabilityDescriptor.materials`) likewise filters
+   non-vocabulary values, so a definition that somehow evaded lint still cannot
+   advertise a capability on the wire.
+
+**Stated limit, not overclaimed.** `agentAcceptsMaterial` has **zero production
+callers** until R6-04-F2 wires the upload seam to it, and **no shipped roster
+agent declares `materials:`** — declaring one today would be an unenforced
+capability claim against an upload UI that does not exist. Both are deliberate:
+the vocabulary, the lint and the fail-closed gate exist first so the consumer
+inherits a contract instead of inventing one.
+
+### The write path is now byte-faithful, and that is a prompt guarantee
+
+The same initiative corrects the canonical serializer this ADR mandates.
+`serializeAgentDefinition` re-built the whole frontmatter from a projection, so
+saving an agent through the builder destroyed YAML comments and key order, and
+it rewrote any body line beginning `---` into en-dashes. `skills/developer-ralph`
+and `skills/project-manager` both carry such lines, and **five phase bindings
+plus the release finalizer read the whole SKILL.md verbatim into the agent's
+system prompt** — so a lossy save was a *prompt* change, not file churn, and it
+also broke this repo's standing "every artifact is human-editable at any
+boundary" property.
+
+The serializer now keeps the **original frontmatter bytes verbatim whenever the
+frontmatter data is semantically unchanged**, replacing only the body region,
+and falls back to the full re-serialize only when a field actually changed. The
+body mangling is deleted — a body containing `---` (including as its first line)
+round-trips with byte-identical content and unchanged frontmatter data, which is
+pinned by a test rather than assumed. The one-canonical-serializer rule is
+unchanged: the choice lives *inside* the serializer, not at its call sites.

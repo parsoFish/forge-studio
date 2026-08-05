@@ -121,10 +121,18 @@ async function postJson(url: string, body: unknown, headers: Record<string, stri
 
 test('POST /api/studio/agents/draft-agent/instructions-draft returns {ok:true, draft, derivation}', async () => {
   const res = await postJson(`${bridgeUrl}/api/studio/agents/draft-agent/instructions-draft`, draftBody());
-  assert.equal(res.status, 200, await res.text());
-  const body = (await res.json()) as { ok: boolean; draft: string; derivation: unknown };
+  // Read the body ONCE — `res.text()`/`res.json()` each consume the stream;
+  // calling both (e.g. one as an assertion's message arg, the other for the
+  // payload) throws "Body is unusable" on the second call.
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as { ok: boolean; draft: string; derivation: unknown };
   assert.equal(body.ok, true);
   assert.ok(typeof body.draft === 'string' && body.draft.trim().length > 0, 'draft must be non-empty');
+  assert.ok(
+    body.draft.includes('Exercise the instructions-draft route.'),
+    'draft must reflect the purpose sent in the request body, not a placeholder',
+  );
   assert.ok(body.derivation !== undefined && body.derivation !== null, 'derivation must be present');
 });
 
@@ -141,7 +149,8 @@ test('writes nothing to disk: SKILL.md bytes and the skill dir listing are uncha
     `${bridgeUrl}/api/studio/agents/draft-agent/instructions-draft`,
     draftBody({ purpose: 'A different, UNSAVED purpose sent only in the request body.' }),
   );
-  assert.equal(res.status, 200, await res.text());
+  const statusText = await res.text();
+  assert.equal(res.status, 200, statusText);
 
   const bytesAfter = readFileSync(skillMdPath, 'utf8');
   assert.equal(bytesAfter, bytesBefore, 'SKILL.md must be byte-unchanged — the draft route never writes (D9)');
@@ -160,11 +169,16 @@ test('the draft reflects the REQUEST body composition (unsaved), not the on-disk
       composition: { skills: ['tdd-workflow', 'brain-query'], tools: [], mcps: [], guards: ['event-log'], hooks: [] },
     }),
   );
-  assert.equal(res.status, 200, await res.text());
-  const body = (await res.json()) as { draft: string };
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as { draft: string };
   assert.ok(
     body.draft.includes('brain-query'),
     'an extra, unsaved skill sent in the request body must appear in the draft — the route must never re-read the on-disk composition',
+  );
+  assert.ok(
+    body.draft.includes('tdd-workflow'),
+    'the skill already on disk that is ALSO present in the request body must still appear — the draft reflects the FULL unsaved composition, not just its delta from disk',
   );
 });
 
@@ -244,5 +258,6 @@ test('POST .../instructions-draft without x-forge-csrf header → 403, same guar
 
 test('POST .../instructions-draft with x-forge-csrf header reaches the route and succeeds', async () => {
   const res = await postJson(`${bridgeUrl}/api/studio/agents/draft-agent/instructions-draft`, draftBody());
-  assert.equal(res.status, 200, await res.text());
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
 });
