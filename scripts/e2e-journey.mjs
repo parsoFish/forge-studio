@@ -106,6 +106,7 @@ import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-bounda
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import { cleanCommunityArtifacts } from './journeys/community.mjs';
+import { restoreDeveloperRalphSkill } from './journeys/agents.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
   OUT, FRAMES, CLIPS,
@@ -401,6 +402,12 @@ async function main() {
         cleanCommunityArtifacts();                     // Part 2 — community pillar (R3-07)
         cleanScratchFlow();
         cleanStarterAgents();
+        // R2-09 edit-agent arc: crash-safe backstop for developer-ralph's
+        // stashed real bytes — the arc's own closing beat (agents-edit-
+        // byte-faithful) already restores on its happy path; this covers a
+        // throw partway through the arc's five mutating beats, which have no
+        // per-beat try/catch of their own (see journeys/index.mjs's header).
+        restoreDeveloperRalphSkill();
         cleanFirstFlow();
         cleanFirstProject();
         cleanFirstFlowRun();

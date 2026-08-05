@@ -25,6 +25,7 @@ const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const ROUTES = [
   { path: '/', name: 'library' },
   { path: '/agents/new', name: 'agent-builder (new)' },
+  { path: '/agents/developer-ralph', name: 'agent detail (real shipped agent)' },
   { path: '/projects', name: 'projects index' },
   { path: '/projects/new', name: 'project onboarding' },
   { path: '/flows/forge-develop', name: 'flow monitor (seed)' },

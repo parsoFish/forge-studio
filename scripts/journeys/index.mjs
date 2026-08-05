@@ -31,7 +31,8 @@
  * restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, agents-scratch-build/agents-builder each clean up their own
- * skill-dir/stashed-SKILL.md, flows-author-scratch-build cleans its own
+ * skill-dir/stashed-SKILL.md, agents-materials-declare cleans its own
+ * throwaway scratch agent, flows-author-scratch-build cleans its own
  * authored flow, roadmap-recovery cleans its own seeded failed/in-flight
  * initiatives (R4-11-T3 — moved off the retired standalone /recovery
  * journey), and demo-builder-lock cleans its own seeded state — each at
@@ -89,6 +90,24 @@
  * CatalogPalette itself, so the clip needs the pre-bind bytes back to drag
  * the same chip again) and once more, alongside cleanHookCreateArtifacts(),
  * in its own finally.
+ *
+ * agents' own edit-agent arc (R2-09: agents-edit-selector-open through
+ * agents-edit-byte-faithful) ALSO stashes/restores skills/developer-ralph/
+ * SKILL.md — the same file hooks-bind stashes above, but never concurrently:
+ * hooks-bind's own finally fully restores it before hooks completes, well
+ * before agents-starters begins, so agents-edit-selector-open's own stash
+ * (agents.mjs, module-local, disjoint from hooks.mjs's own stash variable)
+ * captures the same pristine, committed bytes either way. Unlike hooks-bind's
+ * single-beat stash/restore, this arc's mutation spans FIVE separate beats
+ * (agents-edit-catalog-click-add through agents-edit-byte-faithful, which
+ * does the arc's own closing restore) — RUN_ORDER runs each beat as an
+ * independent `await beat.drive(ctx)` with no per-beat try/catch, so a throw
+ * partway through would skip the closing beat entirely. agents.mjs therefore
+ * also exports restoreDeveloperRalphSkill() as a crash-safe backstop, called
+ * from scripts/e2e-journey.mjs's own top-level finally alongside
+ * cleanSkillArtifacts()/cleanHookArtifacts()/cleanCommunityArtifacts() — the
+ * same reason those are called there rather than trusted to their own
+ * journeys' happy path alone (see community's own paragraph below).
  *
  * connections (R3-04) is READ-MOSTLY: connections-library / connections-
  * detail-tool / connections-detail-mcp create and destroy nothing on disk —
@@ -188,6 +207,14 @@ export const RUN_ORDER = [
   ['agents', 'agents-starters'],
   ['agents', 'agents-scratch-build'],
   ['agents', 'agents-builder'],
+  ['agents', 'agents-edit-selector-open'],
+  ['agents', 'agents-edit-selector-navigate'],
+  ['agents', 'agents-edit-catalog-click-add'],
+  ['agents', 'agents-edit-dirty'],
+  ['agents', 'agents-edit-regenerate-instructions'],
+  ['agents', 'agents-edit-save'],
+  ['agents', 'agents-edit-byte-faithful'],
+  ['agents', 'agents-materials-declare'],
 
   ['flows-author', 'flows-author-new-flow'],
   ['flows-author', 'flows-author-scratch-build'],

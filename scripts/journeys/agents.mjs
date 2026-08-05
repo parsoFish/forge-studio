@@ -46,6 +46,76 @@ function restorePmSkill() {
   try { writeFileSync(PM_SKILL_PATH, pmSkillStash); } catch { /* best-effort */ }
 }
 
+// ── module-local stash/restore for the REAL developer-ralph agent (R2-09) ──
+// The edit-agent arc (agents-edit-* beats below) edits the ONE shipped agent
+// that carries BOTH a 7-line `#` YAML comment block (lines 17-24) AND a
+// `fanout:` block — the only fixture that can prove the byte-faithful save
+// path (skill-md-fidelity.ts D5/D6) and the fanout-survives-a-full-reserialize
+// claim against the SAME real file. Mirrors stashPmSkill/restorePmSkill
+// above, but the restore is ALSO exported so scripts/e2e-journey.mjs's own
+// top-level finally can call it as a crash-safe backstop — mirroring
+// community.mjs's cleanCommunityArtifacts precedent (see index.mjs's own
+// header comment: a sweep that lives several beats after the mutation needs
+// its own backstop, not just the closing beat's happy path). The edit-agent
+// arc spans FIVE separate beats that touch the file (catalog-click-add
+// through byte-faithful), not one drive() call like agents-builder, so a
+// throw in any one of them must not leave developer-ralph's real shipped
+// bytes mutated — RUN_ORDER has no per-beat try/catch (scripts/e2e-journey.mjs
+// runs `for (const [jid,bid] of RUN_ORDER) await beat.drive(ctx)` inside ONE
+// outer try/finally), so an uncaught throw in any beat aborts straight to
+// that top-level finally.
+const DR_SKILL_PATH = join(FORGE_ROOT, 'skills', 'developer-ralph', 'SKILL.md');
+let drSkillStash = null;
+function stashDrSkill() {
+  if (drSkillStash === null) drSkillStash = readFileSync(DR_SKILL_PATH, 'utf8');
+  return drSkillStash;
+}
+export function restoreDeveloperRalphSkill() {
+  if (drSkillStash === null) return;
+  try { writeFileSync(DR_SKILL_PATH, drSkillStash); } catch { /* best-effort */ }
+}
+
+/** Ensure the builder's collapsed Advanced section is open — checks state
+ *  before clicking so it never accidentally re-collapses an already-open
+ *  section (a navigation/reload always starts it collapsed again). */
+async function ensureAdvancedOpen(page) {
+  const isOpen = await page.evaluate(() =>
+    document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true');
+  if (isOpen) return;
+  await page.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
+  await page.waitForFunction(
+    () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
+    null, { timeout: 5000 },
+  ).catch(() => {});
+}
+
+/** Split SKILL.md text into { frontmatter, body } at the closing `---`
+ *  delimiter line. Used only to compare the frontmatter region independently
+ *  of the (deliberately edited) body in agents-edit-byte-faithful — since
+ *  both texts being compared share an identical byte prefix up to at least
+ *  this point (the byte-preserving fast path never touches anything before
+ *  the appended body), the exact split offset doesn't need to match
+ *  gray-matter's own `bodyStart` precisely; it only needs to fall inside
+ *  that shared, untouched prefix, which the closing `---` delimiter always
+ *  does. */
+function splitFrontmatter(text) {
+  const m = /^---\r?\n[\s\S]*?\r?\n---\r?\n/.exec(text);
+  if (!m) return { frontmatter: '', body: text };
+  return { frontmatter: m[0], body: text.slice(m[0].length) };
+}
+
+// The scratch agent agents-materials-declare creates and destroys itself
+// (self-contained, mirrors agents-scratch-build/hooks-security's own
+// create-and-destroy-its-own-throwaway-fixture precedent) — a fresh blank
+// agent rather than reusing developer-ralph, so the materials round-trip
+// never adds a third concurrent mutation onto the byte-fidelity fixture.
+const MATERIALS_AGENT_SLUG = 'journey-materials-agent';
+const MATERIALS_AGENT_NAME = 'Journey Materials Agent';
+const MATERIALS_AGENT_SKILL_PATH = join(FORGE_ROOT, 'skills', MATERIALS_AGENT_SLUG, 'SKILL.md');
+function cleanMaterialsAgent() {
+  try { rmSync(join(FORGE_ROOT, 'skills', MATERIALS_AGENT_SLUG), { recursive: true, force: true }); } catch { /* */ }
+}
+
 // ── HTML5 DataTransfer DnD helper (agent-builder catalog → skill drop zone) ─
 // Mirrors CatalogPalette.handleDragStart (sets text/plain=item.id +
 // application/x-forge-kind=kind) → DropZone's onDrop (reads text/plain,
@@ -548,6 +618,324 @@ export const journey = defineJourney({
                 restorePmSkill();
               }
 
+        },
+      },
+      {
+        id: 'agents-edit-selector-open',
+        title: 'Edit-agent arc — open the builder on a real agent, via the selector',
+        narration: 'The edit-agent arc walks a REAL shipped agent — developer-ralph, the only OOTB agent carrying both a hand-written 7-line YAML comment block and a fanout: capability — through catalog click-add, instructions regeneration, save, and the byte-faithful proof. The builder\'s agent selector ([data-agent-select], per-option [data-agent-option]) offers the whole fleet by structured state, not just by URL. developer-ralph\'s real shipped bytes are stashed here, before any edit, and restored at the arc\'s close — crash-safe, at the top-level finally, regardless of which beat throws.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — open the builder on developer-ralph');
+              stashDrSkill();
+              await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              const agentId = await page.evaluate(() =>
+                document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
+              check(agentId === 'developer-ralph',
+                `agents-edit: opened the builder on the real developer-ralph agent (data-agent-id="${agentId}")`);
+              const selectPresent = await page.evaluate(() => document.querySelector('[data-agent-select]') !== null);
+              check(selectPresent, 'agents-edit: [data-agent-select] present — the builder\'s agent switcher');
+              const optionCount = await page.evaluate(() => document.querySelectorAll('[data-agent-option]').length);
+              check(optionCount >= 5,
+                `agents-edit: the selector offers [data-agent-option] for multiple real agents (got ${optionCount})`);
+              await frame(page, 'ae-0-selector-open',
+                'Edit-agent — the builder opens on a real shipped agent (developer-ralph); the selector offers the whole fleet');
+        },
+      },
+      {
+        id: 'agents-edit-selector-navigate',
+        title: 'Edit-agent arc — switch agents through the selector',
+        narration: 'Switching agents through [data-agent-select] itself — not a direct URL edit — drives the same route + state change the operator sees clicking through the fleet, proving the selector (not just the route) is what moves the builder. Navigates forward to a second real agent and back to developer-ralph, so the arc continues on its own fixture.',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — switch agents through the selector');
+              await page.locator('[data-agent-select]').selectOption('architect');
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') === 'architect',
+                null, { timeout: 10000 },
+              ).catch(() => {});
+              const urlAfterForward = page.url();
+              const agentIdAfterForward = await page.evaluate(() =>
+                document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
+              check(urlAfterForward.includes('/agents/architect'),
+                `agents-edit: the selector navigated the route to /agents/architect (got "${urlAfterForward}")`);
+              check(agentIdAfterForward === 'architect',
+                `agents-edit: [data-agent-id] flipped to the newly-selected agent (got "${agentIdAfterForward}")`);
+              await frame(page, 'ae-1-selector-switched',
+                'Edit-agent — switching agents through the selector actually changes the route and the loaded agent');
+
+              // Switch back to developer-ralph — the arc's own fixture — through the
+              // SAME selector, so beats 3-7 continue against it.
+              await page.locator('[data-agent-select]').selectOption('developer-ralph');
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') === 'developer-ralph',
+                null, { timeout: 10000 },
+              ).catch(() => {});
+              const urlBack = page.url();
+              const agentIdBack = await page.evaluate(() =>
+                document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
+              check(urlBack.includes('/agents/developer-ralph') && agentIdBack === 'developer-ralph',
+                `agents-edit: the selector switches back to developer-ralph (route "${urlBack}", data-agent-id "${agentIdBack}")`);
+        },
+      },
+      {
+        id: 'agents-edit-catalog-click-add',
+        title: 'Edit-agent arc — click a catalog skill chip to add it (idempotent)',
+        narration: 'Catalog chips are click-to-add as well as draggable (R2-09 C2) — the SAME .catalog-chip[data-id][data-kind] element, keyboard-activatable; the drag path itself is already covered by agents-scratch-build. Clicking "brain-query" lands it in the skill zone; clicking the SAME, now-bound chip again is a no-op — an already-bound chip cannot double-bind, matching the drop zone\'s own drag guard.',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — click-to-add a catalog skill chip (idempotent)');
+              await ensureAdvancedOpen(page);
+              const chip = page.locator('.catalog-chip[data-id="brain-query"][data-kind="skill"]');
+              const chipPresent = (await chip.count()) > 0;
+              check(chipPresent,
+                'agents-edit: "brain-query" is a real catalog chip (.catalog-chip[data-id="brain-query"][data-kind="skill"])');
+              if (chipPresent) {
+                await chip.click();
+                await page.waitForFunction(
+                  () => document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') === '1',
+                  null, { timeout: 5000 },
+                ).catch(() => {});
+                const countAfterFirst = await page.evaluate(() =>
+                  document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') ?? '(absent)');
+                check(countAfterFirst === '1',
+                  `agents-edit: clicking the catalog chip adds it to [data-accepts="skill"] (data-count="${countAfterFirst}")`);
+                await frame(page, 'ae-2-catalog-click-add',
+                  'Edit-agent — click-to-add: "brain-query" lands in the skill zone from a click, not a drag');
+
+                // Idempotence: clicking the SAME (now-used) chip again must not double-bind.
+                await chip.click().catch(() => {});
+                await sleep(THINK);
+                const countAfterSecond = await page.evaluate(() =>
+                  document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') ?? '(absent)');
+                check(countAfterSecond === '1',
+                  `agents-edit: clicking the already-bound chip again does not double-bind (data-count still "${countAfterSecond}")`);
+              }
+        },
+      },
+      {
+        id: 'agents-edit-dirty',
+        title: 'Edit-agent arc — the add marks the form dirty',
+        narration: 'Binding a catalog chip is a live, in-memory edit — nothing hits disk until Save, the same "never auto-saved" discipline the instructions-draft assist honours next.',
+        drive: async (ctx) => {
+              const { page, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — dirty after the catalog add');
+              const dirty = await page.evaluate(() => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? '');
+              check(dirty === 'true', `agents-edit: [data-dirty="true"] after the catalog click-add (got "${dirty}")`);
+        },
+      },
+      {
+        id: 'agents-edit-regenerate-instructions',
+        title: 'Edit-agent arc — regenerate instructions from the updated spec (never auto-saved)',
+        narration: 'The Generate draft assist (R2-09 C3/D8) composes a deterministic charter from the CURRENT, possibly-unsaved builder state and fills the textarea — marking the form dirty and flagging [data-instructions-draft="true"] — but writes nothing to disk (D9). The single most important assertion in this arc: developer-ralph\'s real SKILL.md is still byte-identical to its stashed original at this exact moment, mid-edit, unsaved.',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — regenerate instructions (draft, unsaved)');
+              const beforeText = await page.locator('#process-input').inputValue().catch(() => '');
+              await page.locator('[data-action="generate-instructions"]').click();
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="instructions"]')?.getAttribute('data-instructions-draft') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const isDraft = await page.evaluate(() =>
+                document.querySelector('[data-section="instructions"]')?.getAttribute('data-instructions-draft') ?? '');
+              check(isDraft === 'true', `agents-edit: [data-instructions-draft="true"] after Generate draft (got "${isDraft}")`);
+              const afterText = await page.locator('#process-input').inputValue().catch(() => '');
+              check(afterText.length > 0, 'agents-edit: the generated draft is non-empty');
+              check(afterText !== beforeText, 'agents-edit: the generated draft CHANGED the textarea content');
+              await frame(page, 'ae-3-instructions-draft',
+                'Edit-agent — Generate draft fills the textarea and flags data-instructions-draft="true"');
+
+              // D9: the single most important assertion in this arc — the draft is
+              // NEVER auto-saved. developer-ralph's real SKILL.md must still be
+              // byte-identical to its stashed original at this exact moment.
+              const onDiskNow = readFileSync(DR_SKILL_PATH, 'utf8');
+              check(onDiskNow === drSkillStash,
+                'agents-edit: the real skills/developer-ralph/SKILL.md is still byte-unchanged on disk — the draft was never auto-saved');
+        },
+      },
+      {
+        id: 'agents-edit-save',
+        title: 'Edit-agent arc — Save persists the bound skill + the drafted instructions',
+        narration: 'Save writes the compound edit (the newly bound skill AND the drafted instructions) to the real skills/developer-ralph/SKILL.md. Since composition.skills genuinely changed, this save takes skill-md-fidelity.ts\'s full re-serialize path, not the byte-preserving fast path — the fanout: block is asserted PRESENT (not dropped), but this is not yet the byte-faithful proof itself; that is the next, closing beat, which isolates a body-only edit against a clean baseline.',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — Save');
+              await page.locator('[data-action="save-agent"]').click();
+              await page.waitForFunction(
+                () => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') === 'false',
+                null, { timeout: 10000 },
+              ).catch(() => {});
+              const dirtyAfterSave = await page.evaluate(() => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? '');
+              check(dirtyAfterSave === 'false', `agents-edit: [data-dirty="false"] after Save (got "${dirtyAfterSave}")`);
+              const draftAfterSave = await page.evaluate(() =>
+                document.querySelector('[data-section="instructions"]')?.getAttribute('data-instructions-draft') ?? '');
+              check(draftAfterSave === 'false',
+                `agents-edit: [data-instructions-draft="false"] after a successful save clears the unconfirmed-draft flag (got "${draftAfterSave}")`);
+
+              let savedOnDisk = false;
+              let savedText = '';
+              for (let t = 0; t < 30 && !savedOnDisk; t += 1) {
+                savedText = readFileSync(DR_SKILL_PATH, 'utf8');
+                savedOnDisk = savedText.includes('brain-query');
+                if (!savedOnDisk) await sleep(250);
+              }
+              check(savedOnDisk, 'agents-edit: the newly bound "brain-query" skill is now in the real skills/developer-ralph/SKILL.md on disk');
+              check(savedText.includes('drivingArtifact: work-items') && savedText.includes('isolation: worktree'),
+                'agents-edit: the fanout: block survives the compound save (not dropped by the composition change)');
+              await frame(page, 'ae-4-saved', 'Edit-agent — Save persists the bound skill + the drafted instructions to the real SKILL.md');
+        },
+      },
+      {
+        id: 'agents-edit-byte-faithful',
+        title: 'Edit-agent arc — the byte-faithful save (headline fix, demonstrated live)',
+        narration: 'The headline fix (skill-md-fidelity.ts D5/D6): when a save changes ONLY the instructions body — no composition change — the ENTIRE frontmatter block is kept byte-for-byte: the 7-line YAML comment, the fanout: block, and key order all survive untouched. Proven by restoring developer-ralph to its pristine, stashed bytes, reloading the builder fresh, editing ONLY the instructions field, and comparing the saved file\'s frontmatter region byte-for-byte against the pristine original.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R2-09] Edit-agent arc — the byte-faithful save (headline)');
+
+              // Isolate the claim: restore the PRISTINE bytes (undoing the prior
+              // compound save) and reload the builder fresh, so the ONLY change
+              // this beat makes is to the instructions body — no composition
+              // change rides along, the one precondition the fast path requires
+              // (registry.test.ts: "developer-ralph: changing ONLY body keeps
+              // the frontmatter block byte-identical").
+              restoreDeveloperRalphSkill();
+              await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              // Advanced starts collapsed again after a fresh navigation — open it
+              // to read + confirm the restored, pristine composition.
+              await ensureAdvancedOpen(page);
+              const skillCountAfterRestore = await page.evaluate(() =>
+                document.querySelector('[data-accepts="skill"]')?.getAttribute('data-count') ?? '(absent)');
+              check(skillCountAfterRestore === '0',
+                `agents-edit: the restored, reloaded agent is back to its pristine composition (data-count="${skillCountAfterRestore}")`);
+
+              const marker = ' (byte-faithful e2e edit)';
+              const processInput = page.locator('#process-input');
+              const beforeInstructions = await processInput.inputValue().catch(() => '');
+              await processInput.fill(beforeInstructions + marker);
+              await sleep(THINK);
+              const dirtyAfterEdit = await page.evaluate(() => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') ?? '');
+              check(dirtyAfterEdit === 'true', `agents-edit: a body-only edit marks the form dirty (got "${dirtyAfterEdit}")`);
+
+              await page.locator('[data-action="save-agent"]').click();
+              await page.waitForFunction(
+                () => document.querySelector('[data-dirty]')?.getAttribute('data-dirty') === 'false',
+                null, { timeout: 10000 },
+              ).catch(() => {});
+
+              let savedOnDisk = false;
+              let postText = '';
+              for (let t = 0; t < 30 && !savedOnDisk; t += 1) {
+                postText = readFileSync(DR_SKILL_PATH, 'utf8');
+                savedOnDisk = postText.includes(marker.trim());
+                if (!savedOnDisk) await sleep(250);
+              }
+              check(savedOnDisk, 'agents-edit: the body-only edit lands in the real skills/developer-ralph/SKILL.md on disk');
+
+              const pristine = splitFrontmatter(drSkillStash);
+              const saved = splitFrontmatter(postText);
+              check(saved.frontmatter.length > 0 && saved.frontmatter === pristine.frontmatter,
+                'agents-edit (headline): the saved file\'s frontmatter is byte-for-byte identical to the pristine original outside the edited region');
+              check(pristine.frontmatter.includes('# R2-03-F2 — declares the existing per-work-item fan-out'),
+                'agents-edit (headline): the pristine frontmatter carries the real 7-line YAML comment block (the fixture\'s whole reason for being)');
+              check(saved.frontmatter.includes('# R2-03-F2 — declares the existing per-work-item fan-out'),
+                'agents-edit (headline): the 7-line YAML comment block survives the byte-faithful save verbatim');
+              check(saved.frontmatter.includes('fanout:') && saved.frontmatter.includes('drivingArtifact: work-items'),
+                'agents-edit (headline): the fanout: block survives the byte-faithful save verbatim');
+              check(saved.body !== pristine.body && saved.body.includes(marker.trim()),
+                'agents-edit (headline): only the body (instructions) actually changed');
+
+              await frame(page, 'ae-5-byte-faithful',
+                'Edit-agent — the headline fix: a body-only save keeps the frontmatter (comments, fanout, key order) byte-for-byte');
+
+              // Restore the real shipped bytes — this beat is the arc's own
+              // closing restore point (mirrors agents-builder's own
+              // finally-style restore); e2e-journey.mjs's own top-level finally
+              // calls restoreDeveloperRalphSkill() again as a crash-safe
+              // backstop regardless of how this beat exits.
+              restoreDeveloperRalphSkill();
+        },
+      },
+      {
+        id: 'agents-materials-declare',
+        title: 'Materials — declare allowed input materials',
+        narration: 'The materials picker (R2-09 C4) is a closed, ordered vocabulary — images | documents | audio | data-files. Declaring is enforcement-free here (R6-04-F2\'s kickoff upload seam is where a declared kind actually gates an upload); this beat proves the declaration itself round-trips: toggled in the builder, saved to materials: on disk, and read back correctly on reload — on its own throwaway scratch agent, not developer-ralph.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R2-09] Materials — declare allowed input materials');
+              cleanMaterialsAgent();
+              await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              await page.locator('[data-starter-option="blank"]').click();
+              await page.waitForSelector('#purpose-input', { timeout: 10000 });
+              await page.locator('input.agent-name-input').fill(MATERIALS_AGENT_NAME);
+              await page.locator('#purpose-input').fill('Exercise the materials-declaration round-trip for the e2e journey.');
+              await page.locator('#process-input').fill('Read whatever the operator attaches at kickoff; nothing else to do for this fixture.');
+              await sleep(THINK);
+
+              const materialsCountBefore = await page.evaluate(() =>
+                document.querySelector('[data-section="materials"]')?.getAttribute('data-materials-count') ?? '(absent)');
+              check(materialsCountBefore === '0',
+                `agents-materials: a fresh blank agent declares no materials yet (data-materials-count="${materialsCountBefore}")`);
+
+              for (const kind of ['documents', 'audio']) {
+                await page.locator(`[data-material="${kind}"]`).click();
+              }
+              await sleep(ACT);
+              const countAfterToggle = await page.evaluate(() =>
+                document.querySelector('[data-section="materials"]')?.getAttribute('data-materials-count') ?? '(absent)');
+              check(countAfterToggle === '2',
+                `agents-materials: toggling documents + audio updates [data-materials-count] (got "${countAfterToggle}")`);
+              const documentsSelected = await page.evaluate(() =>
+                document.querySelector('[data-material="documents"]')?.getAttribute('data-selected') ?? '');
+              const audioSelected = await page.evaluate(() =>
+                document.querySelector('[data-material="audio"]')?.getAttribute('data-selected') ?? '');
+              const imagesSelected = await page.evaluate(() =>
+                document.querySelector('[data-material="images"]')?.getAttribute('data-selected') ?? '');
+              check(documentsSelected === 'true' && audioSelected === 'true',
+                `agents-materials: [data-material="documents"|"audio"][data-selected="true"] after toggling (got documents="${documentsSelected}", audio="${audioSelected}")`);
+              check(imagesSelected === 'false',
+                `agents-materials: an untouched kind stays [data-selected="false"] (got "${imagesSelected}")`);
+              await frame(page, 'ae-6-materials-toggled',
+                'Edit-agent — materials: documents + audio toggled on, images/data-files untouched');
+
+              await page.locator('[data-action="save-agent"]').click();
+              const landed = await waitForFile(MATERIALS_AGENT_SKILL_PATH, 12000);
+              check(landed, `agents-materials: saving writes skills/${MATERIALS_AGENT_SLUG}/SKILL.md`);
+              const savedText = landed ? readFileSync(MATERIALS_AGENT_SKILL_PATH, 'utf8') : '';
+              check(savedText.includes('materials:') && savedText.includes('- documents') && savedText.includes('- audio'),
+                'agents-materials: the saved SKILL.md carries materials: with the chosen kinds');
+              check(!savedText.includes('- images') && !savedText.includes('- data-files'),
+                'agents-materials: the saved materials: block does not carry an untouched kind');
+
+              // Reload — prove the toggles round-trip from disk, not just in-memory state.
+              await page.goto(watch.uiUrl + `/agents/${MATERIALS_AGENT_SLUG}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const documentsAfterReload = await page.evaluate(() =>
+                document.querySelector('[data-material="documents"]')?.getAttribute('data-selected') ?? '');
+              const audioAfterReload = await page.evaluate(() =>
+                document.querySelector('[data-material="audio"]')?.getAttribute('data-selected') ?? '');
+              check(documentsAfterReload === 'true' && audioAfterReload === 'true',
+                `agents-materials: [data-selected] reflects the saved materials on reload (documents="${documentsAfterReload}", audio="${audioAfterReload}")`);
+              await frame(page, 'ae-7-materials-reloaded',
+                'Edit-agent — a fresh reload reads the declared materials back from the real SKILL.md');
+
+              cleanMaterialsAgent();
         },
       },
     ],
