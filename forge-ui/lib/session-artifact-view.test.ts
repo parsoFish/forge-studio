@@ -50,6 +50,17 @@
  * while the OUTPUT for a stage-unaware live kind stays byte-identical — the
  * exact seam R4-17 needs, pinned without a fake renderer.
  * ---------------------------------------------------------------------------
+ *
+ * ---------------------------------------------------------------------------
+ * R4-15 (2026-08-06) — `RoadmapDraftView` gains `dag: DependencyDagView<
+ * RoadmapDraftRow>`, built via the SHARED `dependencyDagView` (forge-ui/lib/
+ * dependency-dag.ts, new module, its own test file). AT-95..97 pin the
+ * reuse (not a bespoke reimplementation), that the 4 pre-existing fields are
+ * unchanged, and that the dispatcher still surfaces it. Mechanical-only
+ * elsewhere: `NONEMPTY_ROADMAP`'s rows now carry `dependsOn: []` (a required
+ * parsed-row field as of session-client.test.ts's AT-98..101) — no existing
+ * assertion's behaviour changes.
+ * ---------------------------------------------------------------------------
  */
 import { test, expect } from 'vitest';
 import {
@@ -63,17 +74,29 @@ import { filePackageTabs, selectFile } from './file-package.ts';
 import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact } from './session-client.ts';
 import { sessionShellState, selectStage } from './session-shell-view.ts';
 import type { SessionShellPayload } from './session-client.ts';
+// R4-15: the SHARED dependency-DAG view model roadmapDraftView's new "dag"
+// field is built through — imported here so AT-95..97 can assert against the
+// REAL, shared function rather than a hand-rolled expected shape (proving
+// reuse, mirroring AT-79's `filePackageTabs` reuse pin). This module does
+// not exist yet — module-not-found is the expected red for this whole file
+// until it lands (see this file's own header + dependency-dag.test.ts's).
+import { dependencyDagView } from './dependency-dag.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
 // ---------------------------------------------------------------------------
 
+// R4-15 mechanical fixture plumbing: `dependsOn` is now a required field on
+// a parsed RoadmapDraftRow (session-client.test.ts AT-98..101) — set to []
+// here since this fixture's row ordering/reuse behaviour (AT-70..73, AT-84,
+// AT-91) is not about dependency edges; see ROADMAP_WITH_DEPS below for the
+// fixture dedicated to exercising real edges.
 const NONEMPTY_ROADMAP: RoadmapDraftArtifact = {
   kind: 'roadmap-draft',
   label: 'Roadmap draft',
   rows: [
-    { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md' },
-    { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md' },
+    { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md', dependsOn: [] },
+    { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md', dependsOn: [] },
   ],
   sourcesScanned: ['manifests/*.md (2 file(s) found)'],
 };
@@ -374,4 +397,61 @@ test('AT-94: END-TO-END seam: session-shell-view.ts\'s real selectStage() change
   // exactly the invariance AT-91 pins, now proven through the real state
   // machinery rather than a hand-built stage string.
   expect(viewAfterSwitch).toEqual(viewAtInitial);
+});
+
+// ===========================================================================
+// R4-15 — roadmapDraftView gains "dag", a SHARED dependency-DAG view model
+// built via the REAL, imported `dependencyDagView` (forge-ui/lib/dependency-
+// dag.ts) — mirrors AT-79's REUSE pin (brainStructureView/filePackageTabs)
+// exactly: no bespoke DAG-building logic is written in session-artifact-
+// view.ts itself. — AT-95..97
+// ===========================================================================
+
+const ROADMAP_WITH_DEPS: RoadmapDraftArtifact = {
+  kind: 'roadmap-draft',
+  label: 'Roadmap draft',
+  rows: [
+    { initiativeId: 'R9-02', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-02.md', dependsOn: ['R9-01'] },
+    { initiativeId: 'R9-01', project: 'gitpulse', phase: 'planned', origin: 'manifests/R9-01.md', dependsOn: [] },
+  ],
+  sourcesScanned: ['manifests/*.md (2 file(s) found)'],
+};
+
+test('AT-95: roadmapDraftView: "dag" is built via the SHARED dependencyDagView(artifact.rows, r => r.initiativeId, r => r.dependsOn) — matches calling it directly, proving reuse rather than a bespoke reimplementation', () => {
+  const view = roadmapDraftView(ROADMAP_WITH_DEPS) as unknown as { dag: unknown };
+  const expectedDag = dependencyDagView(
+    ROADMAP_WITH_DEPS.rows,
+    (r) => r.initiativeId,
+    (r) => r.dependsOn,
+  );
+  expect(view.dag).toEqual(expectedDag);
+  // Concretely: R9-02 declares dependsOn:['R9-01'] — the edge must exist,
+  // "R9-01 must complete before R9-02" (dependency-dag.test.ts's AT-1 edge-
+  // direction rule, exercised end-to-end through this view).
+  expect((view.dag as { edges: unknown }).edges).toEqual([{ from: 'R9-01', to: 'R9-02', resolved: true }]);
+});
+
+test('AT-96: roadmapDraftView: adding "dag" leaves the EXISTING fields (kind, rows, isEmpty, emptyMessage) byte-for-byte UNCHANGED — a regression guard against the dag feature silently altering the pre-existing contract', () => {
+  const view = roadmapDraftView(ROADMAP_WITH_DEPS);
+  expect(view.kind).toBe('roadmap-draft');
+  expect(view.rows).toEqual(ROADMAP_WITH_DEPS.rows);
+  expect(view.isEmpty).toBe(false);
+  expect(view.emptyMessage).toBeNull();
+
+  const emptyView = roadmapDraftView(EMPTY_ROADMAP);
+  expect(emptyView.isEmpty).toBe(true);
+  expect(emptyView.rows).toEqual([]);
+  expect(emptyView.emptyMessage).toContain('manifests/*.md (0 file(s) found)');
+});
+
+test('AT-97: sessionArtifactView: the dispatcher still returns "dag" for kind:"roadmap-draft" — the shared view model reaches the SAME dispatch boundary every other artifact kind goes through', () => {
+  const dispatched = sessionArtifactView(ROADMAP_WITH_DEPS) as unknown as { kind: string; dag: unknown };
+  expect(dispatched.kind).toBe('roadmap-draft');
+  expect(dispatched.dag).toEqual(
+    dependencyDagView(
+      ROADMAP_WITH_DEPS.rows,
+      (r) => r.initiativeId,
+      (r) => r.dependsOn,
+    ),
+  );
 });

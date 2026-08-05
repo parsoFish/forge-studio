@@ -10,8 +10,14 @@
  * orchestrator/studio/session-kinds.test.ts (AT-1..AT-18, +AT-49..AT-56 in
  * the AT-amendment-2 round, +AT-61..AT-67 in AT-amendment-3). This file
  * covers AT-19..AT-37, +AT-57..AT-58 (AT-amendment-2), +AT-68..AT-69
- * (AT-amendment-3). cli/bridge-studio-sessions.test.ts covers AT-38..AT-48,
- * +AT-59..AT-60, +AT-70..AT-74.
+ * (AT-amendment-3), +AT-75..AT-76 (R4-15). cli/bridge-studio-sessions.test.ts
+ * covers AT-38..AT-48, +AT-59..AT-60, +AT-70..AT-74, +AT-77 (R4-15).
+ *
+ * R4-15 (AT-75..77): `RoadmapDraftRow` gains a fifth field, `dependsOn:
+ * string[]`, sourced from the manifest's `depends_on_initiatives` (already
+ * parsed by `parseManifest`, orchestrator/manifest.ts, but dropped on the
+ * floor by `deriveRoadmapDraft` before this round). See the dedicated
+ * describe block below for the full rationale.
  *
  * AT-amendment-3, A2 (AT-68..69): `listDirEntries` (session-transcript.ts)
  * calls `readdirSync` on `manifests/`/`themes/` with no realpath containment
@@ -377,6 +383,67 @@ describe('deriveSessionArtifact — roadmap-draft (real serializeManifest fixtur
     assert.deepEqual(artifact.rows, []);
     assert.ok(Array.isArray(artifact.sourcesScanned) && artifact.sourcesScanned.length > 0);
     assert.ok(artifact.sourcesScanned.some((s) => s.includes('manifests')));
+  });
+});
+
+// ===========================================================================
+// deriveSessionArtifact — roadmap-draft rows carry cross-initiative
+// dependency edges (R4-15, AT-75, AT-76). `RoadmapDraftRow` gains a fifth
+// field, `dependsOn: string[]`, sourced from the manifest's
+// `depends_on_initiatives` (already parsed by `parseManifest`,
+// orchestrator/manifest.ts:73, but dropped on the floor by
+// `deriveRoadmapDraft` today). Absent key ⇒ []. This layer never filters
+// against the draft's own row set, never sorts, never de-duplicates — that
+// is `dependencyDagView`'s (forge-ui/lib/dependency-dag.ts) job, a layer up.
+// ===========================================================================
+
+describe('deriveSessionArtifact — roadmap-draft rows carry dependsOn (R4-15)', () => {
+  it('AT-75: a manifest with no depends_on_initiatives yields dependsOn: [] — never undefined, never dropped from the row entirely (today\'s defect)', () => {
+    const sessionDir = makeTmpDir('artifact-roadmap-deps-absent-');
+    const manifestsDir = join(sessionDir, 'manifests');
+    mkdirSync(manifestsDir, { recursive: true });
+    writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest()), 'utf8');
+
+    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+      rows: Array<{ initiativeId: string; dependsOn: string[] }>;
+    };
+    assert.equal(artifact.rows.length, 1);
+    assert.deepEqual(artifact.rows[0].dependsOn, [], 'an absent depends_on_initiatives must default to [], never undefined or dropped');
+  });
+
+  it('AT-76: depends_on_initiatives round-trips VERBATIM — declared order preserved, and an entry pointing OUTSIDE this session\'s manifest set is never filtered out', () => {
+    const sessionDir = makeTmpDir('artifact-roadmap-deps-present-');
+    const manifestsDir = join(sessionDir, 'manifests');
+    mkdirSync(manifestsDir, { recursive: true });
+    writeFileSync(join(manifestsDir, 'INIT-2026-01-01-fixture-a.md'), serializeManifest(realManifest()), 'utf8');
+    writeFileSync(
+      join(manifestsDir, 'INIT-2026-01-02-fixture-b.md'),
+      serializeManifest(
+        realManifest({
+          initiative_id: 'INIT-2026-01-02-fixture-b',
+          // Deliberately NOT alphabetically sorted (2026 before 2025) — pins
+          // that the deriver preserves DECLARED order, never re-sorts.
+          depends_on_initiatives: ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
+        }),
+      ),
+      'utf8',
+    );
+
+    const artifact = deriveSessionArtifact({ descriptor: architectDescriptor(), sessionDir }) as {
+      rows: Array<{ initiativeId: string; dependsOn: string[] }>;
+    };
+    const rowA = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-01-fixture-a')!;
+    const rowB = artifact.rows.find((r) => r.initiativeId === 'INIT-2026-01-02-fixture-b')!;
+    assert.ok(rowA, 'row A must be present');
+    assert.ok(rowB, 'row B must be present');
+    assert.deepEqual(rowA.dependsOn, []);
+    assert.deepEqual(
+      rowB.dependsOn,
+      ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
+      'dependsOn must round-trip verbatim: declared order preserved (never sorted), and the outside-set entry ' +
+        '(INIT-2025-06-01-already-merged, not present under manifests/) must never be filtered out — an ' +
+        'architect draft may legitimately depend on an already-merged initiative outside the draft set',
+    );
   });
 });
 
