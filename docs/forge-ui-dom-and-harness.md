@@ -463,6 +463,40 @@ inventory rather than one shared page-level contract:
   `data-turn-index`, `data-turn-role`, `data-turn-stage`, `data-artifact-kind`
   — is named here as the contract; the surface that attaches it lands with the
   shell route itself.
+- **Roadmap-draft artifact = a dependency DAG (R4-15-F1, 2026-08-06).** The
+  architect session's `roadmap-draft` artifact carries the initiative
+  **dependency edges** it previously parsed and dropped: each row on the wire
+  gains `dependsOn` (the manifest's `depends_on_initiatives`, verbatim —
+  unsorted, undeduplicated; resolving an edge against the draft set is the
+  view's job, not the deriver's). The artifact pane renders the DAG **plus**
+  the initiative table, which is exactly the layout R4-13-F1 specifies for the
+  project roadmap tab — hence one **shared** renderer, not a bespoke one:
+  `forge-ui/lib/dependency-dag.ts` (the pure, generic view model, levels
+  delegated to the existing `topoLevels`) + `forge-ui/components/studio/DependencyDag.tsx`
+  (the component, one data prop), the same lib-module-plus-component shape as
+  R3-01's `FilePackage`. Contract:
+  `[data-component="dependency-dag"][data-dag-node-count][data-dag-level-count][data-dag-edge-count][data-dag-cycle="true"|"false"][data-dag-unresolved-count]`,
+  per column `[data-dag-level]`, per node
+  `[data-dag-node][data-dag-node-level][data-dag-node-status][data-dag-depends-on][data-dag-unresolved]`,
+  and on the table beside it `[data-roadmap-row][data-roadmap-depends-on]`.
+  **Both surfaces read the same de-duplicated value from the one view model, so
+  they cannot drift.** A dependency naming an initiative outside the draft set
+  (an already-merged one, typically) and a detected cycle are each rendered as
+  **readable text**, not only stamped on an attribute — an attribute nobody
+  renders is the declared-data-fails-open shape this campaign keeps closing.
+- **Project-page entry into a planning session (R4-15-F1, 2026-08-06).** The
+  project page's roadmap section carries
+  `[data-component="project-architect-entry"][data-architect-entry-open="true"|"false"][data-project-id]`,
+  present in both the empty-roadmap branch (previously a dead-end sentence) and
+  the populated branch's header row. `[data-action="plan-with-architect"]`
+  reveals the ONE shipped start-a-session surface — `NewIdeaBox`, with every
+  attribute of its own unchanged — seeded with this project;
+  `[data-action="cancel-plan-with-architect"]` collapses it again. When an
+  in-flight architect session exists for the project,
+  `[data-action="resume-architect-session"][data-session-id]` links straight to
+  `/sessions/architect/<sid>`; `[data-architect-resume-probe="ok"|"failed"]`
+  reports whether the probe that looks for one actually succeeded, so a failed
+  lookup is observable rather than an invisibly absent link.
 - **Demo builder — inline on `/projects/[id]` (R1-03-F2, 2026-07-24):** the
   per-project demo-page builder (brief → generate → lock, element-by-element)
   is an inline panel on the project page, opened by

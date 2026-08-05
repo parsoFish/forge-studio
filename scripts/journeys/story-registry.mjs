@@ -110,7 +110,13 @@ export const STORY_REGISTRY = [
       'are therefore NOT recorded as permanent {excluded, decision} refs here — ' +
       'R4-15/R4-17 may make them genuinely real, and pre-excluding them would ' +
       'freeze a decision those initiatives own. Natural owner of this flip: the ' +
-      'same batch-B initiative that lands the creation session.',
+      'same batch-B initiative that lands the creation session. ' +
+      'R4-15 ASSESSED that inheritance (2026-08-06) and does NOT own it: it ' +
+      're-surfaces the ARCHITECT session, whose entry is an idea box, not an ' +
+      'agent-drafting chat — nothing in R4-15 makes steps 3-4 real. The two ' +
+      'drafting steps stay unexcluded and pass to R4-17 (create-project / the ' +
+      'creation agent), which is the batch-B initiative that actually lands a ' +
+      'creation session.',
   },
   {
     story: 'edit-agent',
@@ -486,6 +492,33 @@ export const STORY_REGISTRY = [
     batch: 'B',
     port: null,
     excluded: null,
+    note:
+      'R4-15 (the initiative that owns this story) assessed the flip against the ' +
+      'real DOM and deliberately did NOT take it. Step-by-step, 5 of the 7 mockup ' +
+      'steps are real and already driven by beats: step 3 "Run -> straight into ' +
+      'the session" (flows-run-idea lands on /sessions/architect/<sid>; R4-15 also ' +
+      'added the project-page entry the mockup\'s trigger caption points at), ' +
+      'step 4 "it read the brains and the roadmap before asking anything" ' +
+      '(flows-run-grounding, the architect activity panel), step 6 "the roadmap ' +
+      'updates live on the right" (flows-run-roadmap-dag, R4-15-F1, on a real ' +
+      'session with real manifests) and its "accept commits it" half ' +
+      '(flows-run-approve), step 7 "an updated roadmap DAG, ready for ' +
+      'forge-develop" (flows-run-roadmap-dag + flows-run-approve). What blocks ' +
+      'the flip is STRUCTURAL, not coverage. (1) port.journey is single-valued ' +
+      '(scripts/lib/story-parity.mjs), and step 1 ("for interactive agents, Run ' +
+      'IS a session") is real ONLY on the agent detail page — RunPanel\'s ' +
+      'interactive branch, [data-run-dispatchable="false"], "run it from its own ' +
+      'session page" — which belongs to the `agents` journey, while every other ' +
+      'step needs `flows-run`\'s real architect session. No single journey can ' +
+      'hold all 7. (2) Step 2 hovers an agent TRIGGERS panel that does not exist ' +
+      'anywhere in the product: grep for data-section="agent-triggers" returns ' +
+      'nothing, and trigger machinery is R2-08, explicitly out of R4-15\'s scope. ' +
+      'Recording that step as {excluded} would be honest only once R2-08 has ' +
+      'ruled it deliberately-not-built, which is R2-08\'s call and not R4-15\'s ' +
+      'to pre-empt. Padding the count with edit-arc or unrelated beats would ' +
+      'misrepresent the state. Natural owner of the flip: R2-08 (the triggers ' +
+      'surface), after which the remaining obstacle is a journey-boundary ' +
+      'question, not a product gap.',
   },
   {
     story: 'run-agent-demo-builder',
