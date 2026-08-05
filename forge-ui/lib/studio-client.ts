@@ -1187,7 +1187,27 @@ export type InstructionsDraftResult =
  * `{ok:false, draft:'x', ...}` was misreported as a successful draft. The
  * body's `ok:false` is now checked BEFORE the shape check, matching the
  * sibling parsers.
+ *
+ * 2026-08-05 adversarial-review round 3, finding D/7: `derivation` is typed
+ * `InstructionsDraftDerivation` ({sources: Array<...>}) but this parser used
+ * to only guard `undefined`/`null` before casting `p['derivation'] as
+ * InstructionsDraftDerivation` — the SHAPE was never checked, so
+ * `derivation: 42` or `{}` sailed through as a "valid" derivation. Fixed by
+ * shape-validating: `derivation` must be a plain object carrying a `sources`
+ * ARRAY. A malformed `derivation` is now a parse FAILURE, matching
+ * `parseMaterials`'s "never fabricate a substitute value" convention — a
+ * prior defect in this campaign turned a missing/malformed declared field
+ * into an invented default, destroying the exact guarantee the field's
+ * presence was supposed to provide. This function does the same for
+ * `derivation` that it already does for `draft`: absence or malformation is
+ * reported, never silently smoothed into a fabricated `{sources: []}`.
  */
+function isValidDerivation(v: unknown): v is InstructionsDraftDerivation {
+  if (v === null || typeof v !== 'object' || Array.isArray(v)) return false;
+  const d = v as Record<string, unknown>;
+  return Array.isArray(d['sources']);
+}
+
 export function parseInstructionsDraftResponse(status: number, payload: unknown): InstructionsDraftResult {
   const p = (payload ?? {}) as Record<string, unknown>;
   if (status < 200 || status >= 300) {
@@ -1199,10 +1219,10 @@ export function parseInstructionsDraftResponse(status: number, payload: unknown)
       error: typeof p['error'] === 'string' ? p['error'] : 'instructions-draft response reported ok:false',
     };
   }
-  if (typeof p['draft'] !== 'string' || p['derivation'] === undefined || p['derivation'] === null) {
+  if (typeof p['draft'] !== 'string' || !isValidDerivation(p['derivation'])) {
     return { ok: false, error: 'malformed instructions-draft response: missing draft or derivation' };
   }
-  return { ok: true, draft: p['draft'], derivation: p['derivation'] as InstructionsDraftDerivation };
+  return { ok: true, draft: p['draft'], derivation: p['derivation'] };
 }
 
 /**

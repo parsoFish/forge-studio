@@ -21,24 +21,24 @@
  * 4xx/5xx JSON body.
  *
  * Security — the SAME bar as the sibling PUT /api/studio/agents/:slug route
- * (cli/bridge-studio-writes.ts) — genuinely true as of the 2026-08-05 fix:
- * both routes now resolve their SKILL.md path through the ONE shared choke
- * point, `resolveGuardedSkillMdPath` (cli/skill-md-path-guard.ts). Before
- * that fix this comment's claim was FALSE — the PUT route still ran a
- * lexical `startsWith(skillsDir + sep)` check on the unresolved path, which
- * a real symlink escape defeated live (verified BLOCKER). A false claim in a
- * comment is its own defect; this paragraph now describes the actual shared
+ * (cli/bridge-studio-writes.ts) — both routes resolve their SKILL.md path
+ * through the ONE shared, generalized choke point, `resolveGuardedPath`
+ * (cli/studio-path-guard.ts; generalized 2026-08-06, R2-09 WI-fix2, from the
+ * SKILL.md-only `resolveGuardedSkillMdPath` this route originally called).
+ * A prior lexical `startsWith(skillsDir + sep)` check on the unresolved path
+ * was defeated live by a real symlink escape (verified BLOCKER) before the
+ * first realpath-based fix; this paragraph describes the actual shared
  * implementation, not an aspiration:
  *   - `slug` is validated against the SAME `SLUG_RE` as the PUT route, before
  *     any fs call.
  *   - The SKILL.md path is resolved via `realpathSync` at the choke point
- *     (`resolveGuardedSkillMdPath`), never a lexical `startsWith(dir+sep)`
- *     compare on the UNRESOLVED path — `join()`/`skillPath()` already
- *     normalizes `..` before a prefix check would even run, and a long
- *     repeated `../` chain can clamp past the filesystem root entirely. Both
- *     shapes are blocked upstream by `SLUG_RE` (a slug cannot contain `.` or
- *     `/`), and `realpathSync` is the second, independent layer in case that
- *     ever changes.
+ *     (`resolveGuardedPath`), never a lexical `startsWith(dir+sep)` compare
+ *     on the UNRESOLVED path — `join()`/`skillPath()` already normalizes
+ *     `..` before a prefix check would even run, and a long repeated `../`
+ *     chain can clamp past the filesystem root entirely. Both shapes are
+ *     blocked upstream by `SLUG_RE` (a slug cannot contain `.` or `/`), and
+ *     `realpathSync`-based per-segment identity is the second, independent
+ *     layer in case that ever changes.
  *   - The escape session directory can be REAL while only the `SKILL.md`
  *     FILE inside it is a symlink pointing outside the forge root — a prior
  *     finding in this campaign was exactly this shape, and a fix that only
@@ -58,7 +58,8 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { composeInstructionsDraft } from '../orchestrator/studio/instructions-draft.ts';
-import { resolveGuardedSkillMdPath } from './skill-md-path-guard.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
+import { skillsDir } from '../orchestrator/skill-path.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -72,7 +73,7 @@ const INSTRUCTIONS_DRAFT_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/instructio
 
 /**
  * Resolve `<forgeRoot>/skills/<slug>/SKILL.md` via the shared
- * `resolveGuardedSkillMdPath` choke point (cli/skill-md-path-guard.ts).
+ * `resolveGuardedPath` choke point (cli/studio-path-guard.ts).
  * Returns `null` for a missing file AND for an escaping symlink alike (see
  * header) — never distinguishable from the response. This route only ever
  * needs the EXISTING-file case (D9: it confirms the agent exists, never
@@ -81,8 +82,8 @@ const INSTRUCTIONS_DRAFT_ROUTE_RE = /^\/api\/studio\/agents\/([^/]+)\/instructio
  * as "unknown agent" here.
  */
 function resolveSafeSkillMdPath(forgeRoot: string, slug: string): string | null {
-  const guard = resolveGuardedSkillMdPath(forgeRoot, slug);
-  if (!guard.ok || !guard.exists || !guard.realPath) return null;
+  const guard = resolveGuardedPath(skillsDir(forgeRoot), [slug, 'SKILL.md']);
+  if (!guard.ok || !guard.exists) return null;
   return guard.realPath;
 }
 

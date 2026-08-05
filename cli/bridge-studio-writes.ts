@@ -38,7 +38,7 @@ import {
 import { checkHookComposition, listHookIds } from '../orchestrator/studio/hook-library.ts';
 import { PLATFORM_GUARD_IDS } from '../orchestrator/agent-bands.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedSkillMdPath } from './skill-md-path-guard.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 import type { AgentDefinition, FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/validate.ts';
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
@@ -327,16 +327,15 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 2. Resolve and realpath-guard the SKILL.md path (2026-08-05 BLOCKER
-      // fix — a lexical `startsWith(skillsDir + sep)` check on the
-      // UNRESOLVED path let a symlinked SKILL.md file (or a symlinked
-      // skills/<slug> directory) escape the forge root and get overwritten;
-      // verified live. See cli/skill-md-path-guard.ts for the full writeup —
-      // this is the SAME choke point the instructions-draft route uses. The
-      // guard also tolerates the not-yet-created case (`exists: false`) so
-      // scaffolding a brand-new agent still works.
-      const pathGuard = resolveGuardedSkillMdPath(ctx.forgeRoot, slug);
-      if (!pathGuard.ok || !pathGuard.realPath) {
+      // 2. Resolve + guard the SKILL.md path through the shared, generalized
+      // containment guard (cli/studio-path-guard.ts — see its docstring for
+      // the full writeup of every escape shape closed: symlinked leaf,
+      // symlinked slug dir, same-root cross-agent alias, hardlinked leaf,
+      // nested-segment symlink). Also used by the instructions-draft and
+      // skills-library author routes. Tolerates not-yet-created (`exists:
+      // false`) so scaffolding a brand-new agent still works.
+      const pathGuard = resolveGuardedPath(toSkillsDir(ctx.forgeRoot), [slug, 'SKILL.md']);
+      if (!pathGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
@@ -793,11 +792,18 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 400, { error: 'project path escapes forge root' }, origin);
         return true;
       }
-      const projectJsonPath = resolve(projectRoot, '.forge', 'project.json');
-      if (!projectJsonPath.startsWith(projectRoot + sep)) {
+      // Guard `.forge/project.json` through the shared containment guard
+      // (cli/studio-path-guard.ts) instead of a lexical
+      // `startsWith(projectRoot + sep)` check — a symlinked `.forge` dir or a
+      // hardlinked project.json both passed that trivially (verified live,
+      // BLOCKER). `exists` also replaces the separate `existsSync` calls
+      // below so both agree on the same resolved path.
+      const pathGuard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
+      if (!pathGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const projectJsonPath = pathGuard.realPath;
 
       // 4. Parse request body
       let body: unknown;
@@ -815,7 +821,7 @@ export async function handleStudioWriteRoutes(
 
       // 5. Load existing project.json (if present) and merge M2 fields over it
       let existingRaw: Record<string, unknown> = {};
-      if (existsSync(projectJsonPath)) {
+      if (pathGuard.exists) {
         try {
           existingRaw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
         } catch (err) {
@@ -863,7 +869,8 @@ export async function handleStudioWriteRoutes(
       }
 
       // 7. Write back (pretty, 2-space), committed to the project's forge-studio branch.
-      const forgeDir = resolve(projectRoot, '.forge');
+      // Derive from the ALREADY-GUARDED real path, not a fresh lexical join.
+      const forgeDir = dirname(projectJsonPath);
       if (!existsSync(forgeDir)) {
         mkdirSync(forgeDir, { recursive: true });
       }
@@ -907,13 +914,18 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 2. Resolve and prefix-guard the flow.yaml path
+      // 2. Resolve + guard the flow.yaml path through the shared containment
+      // guard (cli/studio-path-guard.ts). The former lexical
+      // `startsWith(flowsBase + sep)` check had NO dirent-type gate anywhere
+      // backing it up (unlike discoverProjects()'s isDirectory() filter for
+      // projects) — all four escape shapes were reproduced live here.
       const flowsBase = resolve(ctx.forgeRoot, 'studio', 'flows');
-      const flowYamlPath = resolve(flowsBase, id, 'flow.yaml');
-      if (!flowYamlPath.startsWith(flowsBase + sep)) {
+      const pathGuard = resolveGuardedPath(flowsBase, [id, 'flow.yaml']);
+      if (!pathGuard.ok) {
         sendJson(res, 400, { error: 'path traversal detected' }, origin);
         return true;
       }
+      const flowYamlPath = pathGuard.realPath;
 
       // 3. Parse request body
       let body: unknown;
@@ -931,7 +943,7 @@ export async function handleStudioWriteRoutes(
 
       // 4. Load existing flow (or scaffold for new flow)
       let existing: FlowDefinition | null = null;
-      if (existsSync(flowYamlPath)) {
+      if (pathGuard.exists) {
         try {
           existing = loadFlowDefinition(flowYamlPath);
         } catch (err) {
@@ -1027,9 +1039,9 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 9. Serialize and write
+      // 9. Serialize and write. Derive from the ALREADY-GUARDED real path.
       const serialized = serializeFlowDefinition(merged);
-      const flowDir = resolve(flowsBase, id);
+      const flowDir = dirname(flowYamlPath);
       if (!existsSync(flowDir)) {
         mkdirSync(flowDir, { recursive: true });
       }
