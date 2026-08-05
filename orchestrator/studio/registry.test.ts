@@ -594,6 +594,325 @@ describe('serializeAgentDefinition(def, originalRaw) — materials vs byte-fidel
 });
 
 // ---------------------------------------------------------------------------
+// serializeAgentDefinition(def, originalRaw) — runtime.range / allowed-tools /
+// disallowed-tools vs byte-fidelity (R2-09 defect class — same absent-vs-[]
+// shape as materials above, pinned in registry.ts + skill-md-fidelity.ts).
+//
+// Both reported instances were VERIFIED against today's implementation
+// (direct probes against serializeAgentDefinition, not assumed from the
+// report) before writing these tests:
+//
+// - runtime.range: LIVE and reachable today, MORE severe than materials.
+//   forge-ui/app/agents/[id]/page.tsx defaults `runtime.range` to `[]`
+//   (DEFAULT_RUNTIME / parseAgent) and always sends it in buildPutBody;
+//   cli/bridge-studio-writes.ts's PUT merge takes the client's array
+//   unconditionally whenever it IS an array
+//   (`Array.isArray(rtIn['range']) ? rtIn['range'] : existing?.runtime.range`
+//   — never falls back to disk for a client-supplied array). Every roster
+//   agent declares `strategy: fixed` with no `range:` key at all (verified:
+//   `grep -rl '^  range:' skills/*/SKILL.md` → zero hits across all 16
+//   studio agents). So a real UI save of ANY roster agent merges
+//   `range: []` against an original with no `range:` key.
+//   `projectAgentFrontmatter` only omits `range` when `undefined` — `[]` IS
+//   emitted — and `normalizeOriginalDataForComparison` normalizes only
+//   `composition.*`, never `runtime.*`. Confirmed defeats the fast path
+//   today (probed directly): unlike materials, this fires on EVERY save
+//   regardless of whether materials is touched.
+//
+// - allowed-tools / disallowed-tools: latent, NOT reachable today. Verified
+//   registry.ts's loader calls `stringArray(d, 'allowed-tools', ...)` /
+//   `stringArray(d, 'disallowed-tools', ...)` unconditionally — unlike
+//   `range`, there is no `!== undefined` guard — and `stringArray` (in
+//   yaml-fields.ts) defaults an absent/null key to `[]`. So
+//   `def.allowedTools`/`def.disallowedTools` are NEVER `undefined`, always
+//   concrete arrays, even when the file omits the key entirely, and
+//   `projectAgentFrontmatter` emits both keys unconditionally (no
+//   presence guard at all). Verified all 16 roster agents declare BOTH keys
+//   explicitly (scripted grep over skills/*/SKILL.md, zero misses), and the
+//   bridge PUT route never reads a client-supplied allowedTools/
+//   disallowedTools — it always uses `existing?.allowedTools ?? []` /
+//   `existing?.disallowedTools ?? []`, so today's only source is disk, and
+//   disk always already carries the key for every roster agent — hence
+//   UNREACHABLE today. But probed directly: a hand-authored SKILL.md that
+//   omits either key defeats the fast path the moment it is loaded and
+//   saved through the builder with ONLY a body change — no merge
+//   simulation needed at all, the loader's own unconditional default is
+//   enough to reproduce it.
+// ---------------------------------------------------------------------------
+
+const COMMENTED_AGENT_FIXTURE_NO_TOOLS = COMMENTED_AGENT_FIXTURE.replace(
+  'allowed-tools: [Read]\ndisallowed-tools: [Bash]\n',
+  '',
+);
+
+const COMMENTED_AGENT_FIXTURE_WITH_RANGE = COMMENTED_AGENT_FIXTURE.replace(
+  '  strategy: fixed\n  model: claude-sonnet-4-6\n',
+  '  strategy: range\n  model: claude-sonnet-4-6\n  range: [alpha, beta]\n',
+);
+
+describe('serializeAgentDefinition(def, originalRaw) — runtime.range vs byte-fidelity (R2-09 defect)', () => {
+  it('DEFECT: range: [] vs no range: key on original must NOT defeat the byte-faithful fast path (frontmatter + comment must survive)', () => {
+    const p = writeAgentFixture('range-empty-vs-absent-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.equal(def.runtime.range, undefined, 'sanity: the original file declares no range key at all');
+
+    // Mirrors the real UI save payload: body-only edit, range sent as [] (DEFAULT_RUNTIME/buildPutBody).
+    const updated = { ...def, runtime: { ...def.runtime, range: [] as string[] }, body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'absent and declared-empty range are semantically identical for a fixed-strategy agent — range: [] on save must not force a re-serialize that destroys the frontmatter block',
+    );
+    assert.ok(
+      output.slice(0, bodyStart).includes(COMMENT_NEEDLE),
+      'the YAML comment in the frontmatter must survive the byte-faithful save verbatim',
+    );
+  });
+
+  it('real change: range: [alpha, beta] vs no range: key on original must NOT be byte-faithful — a genuine declaration must persist, not be silently dropped', () => {
+    const p = writeAgentFixture('range-real-change-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.equal(def.runtime.range, undefined, 'sanity: original declares no range key');
+
+    const updated = { ...def, runtime: { ...def.runtime, range: ['alpha', 'beta'] }, body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'a genuine range declaration must force the full re-serialize — a fix that ignores range entirely in the comparison would wrongly keep this byte-faithful and silently drop the new declaration',
+    );
+    const { data } = matter(output);
+    assert.deepEqual((data.runtime as Record<string, unknown>).range, ['alpha', 'beta'], 'the real range declaration must actually be written to the file');
+  });
+
+  it('reverse asymmetry: original declares range: [alpha, beta], saved with range: [] must NOT be byte-faithful — clearing the range is a genuine change', () => {
+    const p = writeAgentFixture('range-deselect-agent', COMMENTED_AGENT_FIXTURE_WITH_RANGE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.runtime.range, ['alpha', 'beta'], 'sanity: the original file declares range: [alpha, beta]');
+
+    const updated = { ...def, runtime: { ...def.runtime, range: [] as string[] }, body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'clearing a previously-declared range is a genuine change and must not be masked as byte-faithful — a fix that treats range as always-insignificant would wrongly pass this',
+    );
+    const { data } = matter(output);
+    assert.deepEqual((data.runtime as Record<string, unknown>).range, [], 'the cleared range must actually be persisted as []');
+  });
+});
+
+describe('serializeAgentDefinition(def, originalRaw) — allowed-tools vs byte-fidelity (R2-09 defect class, latent)', () => {
+  it('DEFECT: allowed-tools: [] vs no allowed-tools: key on original must NOT defeat the byte-faithful fast path (frontmatter + comment must survive)', () => {
+    const p = writeAgentFixture('allowed-tools-empty-vs-absent-agent', COMMENTED_AGENT_FIXTURE_NO_TOOLS);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.allowedTools, [], 'sanity: the loader defaults an absent allowed-tools key to [] (never undefined)');
+
+    const updated = { ...def, allowedTools: [] as string[], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'absent and declared-empty allowed-tools are semantically identical ("no tools allow-listed") — [] on save must not force a re-serialize that destroys the frontmatter block',
+    );
+    assert.ok(
+      output.slice(0, bodyStart).includes(COMMENT_NEEDLE),
+      'the YAML comment in the frontmatter must survive the byte-faithful save verbatim',
+    );
+  });
+
+  it('real change: allowed-tools: [Read, Grep] vs no allowed-tools: key on original must NOT be byte-faithful — a genuine declaration must persist, not be silently dropped', () => {
+    const p = writeAgentFixture('allowed-tools-real-change-agent', COMMENTED_AGENT_FIXTURE_NO_TOOLS);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.allowedTools, [], 'sanity: original declares no allowed-tools key');
+
+    const updated = { ...def, allowedTools: ['Read', 'Grep'], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'a genuine allowed-tools declaration must force the full re-serialize — a fix that ignores allowed-tools entirely in the comparison would wrongly keep this byte-faithful and silently drop the new declaration',
+    );
+    const { data } = matter(output);
+    assert.deepEqual(data['allowed-tools'], ['Read', 'Grep'], 'the real allowed-tools declaration must actually be written to the file');
+  });
+
+  it('reverse asymmetry: original declares allowed-tools: [Read], saved with allowed-tools: [] must NOT be byte-faithful — clearing the allow-list is a genuine change', () => {
+    const p = writeAgentFixture('allowed-tools-deselect-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.allowedTools, ['Read'], 'sanity: the original file declares allowed-tools: [Read]');
+
+    const updated = { ...def, allowedTools: [] as string[], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'clearing a previously-declared allow-list is a genuine change and must not be masked as byte-faithful — a fix that treats allowed-tools as always-insignificant would wrongly pass this',
+    );
+    const { data } = matter(output);
+    assert.deepEqual(data['allowed-tools'], [], 'the cleared allowed-tools list must actually be persisted as []');
+  });
+});
+
+describe('serializeAgentDefinition(def, originalRaw) — disallowed-tools vs byte-fidelity (R2-09 defect class, latent)', () => {
+  it('DEFECT: disallowed-tools: [] vs no disallowed-tools: key on original must NOT defeat the byte-faithful fast path (frontmatter + comment must survive)', () => {
+    const p = writeAgentFixture('disallowed-tools-empty-vs-absent-agent', COMMENTED_AGENT_FIXTURE_NO_TOOLS);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.disallowedTools, [], 'sanity: the loader defaults an absent disallowed-tools key to [] (never undefined)');
+
+    const updated = { ...def, disallowedTools: [] as string[], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'absent and declared-empty disallowed-tools are semantically identical ("nothing block-listed") — [] on save must not force a re-serialize that destroys the frontmatter block',
+    );
+    assert.ok(
+      output.slice(0, bodyStart).includes(COMMENT_NEEDLE),
+      'the YAML comment in the frontmatter must survive the byte-faithful save verbatim',
+    );
+  });
+
+  it('real change: disallowed-tools: [Bash, Write] vs no disallowed-tools: key on original must NOT be byte-faithful — a genuine declaration must persist, not be silently dropped', () => {
+    const p = writeAgentFixture('disallowed-tools-real-change-agent', COMMENTED_AGENT_FIXTURE_NO_TOOLS);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.disallowedTools, [], 'sanity: original declares no disallowed-tools key');
+
+    const updated = { ...def, disallowedTools: ['Bash', 'Write'], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'a genuine disallowed-tools declaration must force the full re-serialize — a fix that ignores disallowed-tools entirely in the comparison would wrongly keep this byte-faithful and silently drop the new declaration',
+    );
+    const { data } = matter(output);
+    assert.deepEqual(data['disallowed-tools'], ['Bash', 'Write'], 'the real disallowed-tools declaration must actually be written to the file');
+  });
+
+  it('reverse asymmetry: original declares disallowed-tools: [Bash], saved with disallowed-tools: [] must NOT be byte-faithful — clearing the block-list is a genuine change', () => {
+    const p = writeAgentFixture('disallowed-tools-deselect-agent', COMMENTED_AGENT_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.deepEqual(def.disallowedTools, ['Bash'], 'sanity: the original file declares disallowed-tools: [Bash]');
+
+    const updated = { ...def, disallowedTools: [] as string[], body: def.body + '\n(probe)\n' };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.notEqual(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'clearing a previously-declared block-list is a genuine change and must not be masked as byte-faithful — a fix that treats disallowed-tools as always-insignificant would wrongly pass this',
+    );
+    const { data } = matter(output);
+    assert.deepEqual(data['disallowed-tools'], [], 'the cleared disallowed-tools list must actually be persisted as []');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// General-rule pin (not tied to any single field): a definition where NOTHING
+// semantically changed but the body must ALWAYS take the byte-faithful fast
+// path, even when EVERY optional array key (composition.*, materials,
+// runtime.range, allowed-tools, disallowed-tools) is absent from the
+// original and the merge produces the corresponding empty-array default for
+// each. This is deliberately NOT a per-field test: a wrong implementation
+// that fixes only some of today's known instances (e.g. materials +
+// composition, but not range or allowed/disallowed-tools) still fails this,
+// because ALL of them must be normalized at once for a genuinely untouched
+// agent to round-trip byte-faithfully. A future optional array field added
+// to AgentDefinition inherits this same obligation.
+// ---------------------------------------------------------------------------
+
+const MINIMAL_ORIGINAL_FIXTURE = `---
+name: minimal-agent
+description: Minimal agent omitting every optional array key at once.
+purpose: Pin the general absent-vs-empty-array rule, not any one field.
+composition: {}
+# a load-bearing comment on the minimal, all-keys-omitted fixture
+runtime:
+  sdk: claude
+  strategy: fixed
+brainAccess: none
+interactivity: Fully autonomous.
+budgets: {}
+---
+
+Minimal body.
+`;
+
+describe('serializeAgentDefinition(def, originalRaw) — general rule: untouched agent stays byte-faithful regardless of which optional array keys are absent', () => {
+  it('a definition with NOTHING changed but the body round-trips byte-faithful even when composition.*, materials, range, allowed-tools, disallowed-tools are all absent from the original', () => {
+    const p = writeAgentFixture('minimal-all-keys-omitted-agent', MINIMAL_ORIGINAL_FIXTURE);
+    const raw = readFileSync(p, 'utf8');
+    const def = loadAgentDefinition(p);
+    assert.equal(def.materials, undefined, 'sanity: materials absent');
+    assert.equal(def.runtime.range, undefined, 'sanity: range absent');
+    assert.deepEqual(def.allowedTools, [], 'sanity: allowed-tools defaults to [] on load');
+    assert.deepEqual(def.disallowedTools, [], 'sanity: disallowed-tools defaults to [] on load');
+    assert.deepEqual(def.composition, { skills: [], tools: [], mcps: [], guards: [], hooks: [] }, 'sanity: composition defaults to all-[] on load');
+
+    // Simulate exactly what a real, genuinely no-op UI save merges for every
+    // optional array field (each defaults to a concrete [] on the wire, per
+    // the report's own JOB context): materials and range go from undefined
+    // to [], mirroring buildPutBody/DEFAULT_RUNTIME; composition/tools stay
+    // the [] the loader already produced.
+    const updated = {
+      ...def,
+      materials: [] as string[],
+      runtime: { ...def.runtime, range: [] as string[] },
+      body: def.body + '\n(probe)\n',
+    };
+    const output = serializeAgentDefinition(updated, raw);
+
+    const { content } = matter(raw);
+    const bodyStart = raw.length - content.length;
+    assert.equal(
+      output.slice(0, bodyStart),
+      raw.slice(0, bodyStart),
+      'an untouched agent (body-only edit) must ALWAYS take the byte-faithful fast path, regardless of which optional array keys the original happens to omit',
+    );
+    assert.ok(
+      output.slice(0, bodyStart).includes('# a load-bearing comment on the minimal, all-keys-omitted fixture'),
+      'the YAML comment must survive the byte-faithful save verbatim',
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
 // loadFlowDefinition
 // ---------------------------------------------------------------------------
 
