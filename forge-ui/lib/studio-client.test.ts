@@ -200,3 +200,31 @@ test('parseInstructionsDraftResponse: a 2xx body with an explicit ok:false is a 
   expect(result.ok).toBe(false);
   if (!result.ok) expect(result.error).toBe('draft composition failed validation');
 });
+
+// 2026-08-05 adversarial-review round 3, finding D/7: `derivation` is typed
+// (`InstructionsDraftDerivation`) but the parser only guards `undefined`/
+// `null` before casting `p['derivation'] as InstructionsDraftDerivation` —
+// the SHAPE (an object carrying a `sources` ARRAY) is never checked. Inert
+// today (only `draft` is consumed downstream), but it is exactly the
+// declared-but-unvalidated-shape defect class this campaign treats as real:
+// a malformed `derivation` must make the parse report a failure, never hand
+// a consumer a garbage object dressed up as `InstructionsDraftDerivation`.
+test('parseInstructionsDraftResponse: derivation: 42 (not an object at all) is a parse FAILURE', () => {
+  const result = parseInstructionsDraftResponse(200, { ok: true, draft: '# Draft\n', derivation: 42 });
+  expect(result.ok).toBe(false);
+});
+
+test('parseInstructionsDraftResponse: derivation: {} (missing sources) is a parse FAILURE', () => {
+  const result = parseInstructionsDraftResponse(200, { ok: true, draft: '# Draft\n', derivation: {} });
+  expect(result.ok).toBe(false);
+});
+
+test('parseInstructionsDraftResponse: derivation: [] (an array, not {sources: [...]}) is a parse FAILURE', () => {
+  const result = parseInstructionsDraftResponse(200, { ok: true, draft: '# Draft\n', derivation: [] });
+  expect(result.ok).toBe(false);
+});
+
+test('parseInstructionsDraftResponse: derivation: {sources: "nope"} (sources present but not an array) is a parse FAILURE', () => {
+  const result = parseInstructionsDraftResponse(200, { ok: true, draft: '# Draft\n', derivation: { sources: 'nope' } });
+  expect(result.ok).toBe(false);
+});

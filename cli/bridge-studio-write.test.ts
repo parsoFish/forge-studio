@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 import {
   cpSync,
   existsSync,
+  linkSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -642,6 +643,100 @@ test('PUT rejects a symlinked skills/<slug> DIRECTORY escaping the forge root �
   } finally {
     rmSync(outsideDir, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — HARDLINK escape defeats the round-2 realpath fix
+// (2026-08-05 adversarial-review round 3, finding B/4-5, CLOSED not merely
+// disclosed). `realpathSync` (cli/skill-md-path-guard.ts) only resolves
+// SYMLINKS — a HARDLINKED `SKILL.md` is a genuine, non-symlink directory
+// entry that is lexically AND really inside skills/<slug>/, sharing the same
+// inode as the outside file it was linked from. `realpathSync` returns that
+// same in-tree path unchanged (nothing to resolve), so the containment check
+// passes — yet writing through it modifies the SAME inode the outside path
+// also names. No race required; 100% deterministic. This is a DIFFERENT
+// bug from the disclosed residual TOCTOU in the guard's docstring (that is a
+// check-then-use timing window on a WRITE path that starts safe; this is a
+// hardlink that is unsafe from the very first stat).
+// ---------------------------------------------------------------------------
+
+test('BLOCKER: PUT rejects a HARDLINKED SKILL.md pointing outside the forge root — the outside file stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-write-outside-hardlink-'));
+  const outsideFile = join(outsideDir, 'secret.md');
+  const outsideOriginal = makeAgentSkillMd().replace('Write Agent', 'Hardlink Secret Agent');
+  writeFileSync(outsideFile, outsideOriginal, 'utf8');
+
+  mkdirSync(join(forgeRoot, 'skills', 'hlink-agent'), { recursive: true });
+  const linkPath = join(forgeRoot, 'skills', 'hlink-agent', 'SKILL.md');
+  try {
+    linkSync(outsideFile, linkPath);
+  } catch {
+    // Hardlinks across filesystems (e.g. a tmp dir on a different mount)
+    // fail with EXDEV — skip rather than false-failing the suite for an
+    // environment limitation, mirroring the symlink-unavailable escapes.
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await putJson(
+      `${bridgeUrl}/api/studio/agents/hlink-agent`,
+      makePutAgentBody({ name: 'Hardlink Secret Agent', purpose: 'ATTACKER-CONTROLLED purpose overwrite attempt via hardlink.' }),
+    );
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a hardlinked SKILL.md must be REJECTED — realpathSync cannot resolve a hardlink away, so containment-by-realpath alone is insufficient (verified live: today it returns 200 and the shared inode is overwritten)',
+    );
+    const outsideAfter = readFileSync(outsideFile, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the out-of-tree file (same inode as the hardlink) must be byte-unchanged');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('a normal, un-hardlinked agent still saves fine (the hardlink guard must not reject ordinary files)', async () => {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody());
+  const okText4 = await res.text();
+  assert.equal(res.status, 200, okText4);
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — same-root symlink silently overwrites a DIFFERENT
+// agent (2026-08-05 adversarial-review round 3, finding C/6). Containment
+// that only checks "the resolved real path is SOMEWHERE under skills/" is
+// insufficient: slug `evil` symlinked to a REAL agent directory `legit`
+// resolves genuinely inside skills/, so the guard reports ok:true — but
+// `realPath` points at `legit/SKILL.md`, not `evil`'s own directory. A PUT
+// to `evil` then reads/writes `legit`'s file while reporting success for
+// `evil`. Containment must mean "this slug's OWN directory", not merely
+// "somewhere under skills/".
+// ---------------------------------------------------------------------------
+
+test('PUT rejects a slug whose directory is a symlink to ANOTHER agent\'s directory — the other agent\'s SKILL.md stays byte-unchanged', async () => {
+  const legitOriginal = makeAgentSkillMd().replace('Write Agent', 'Legit Agent').replace('write-agent', 'legit-agent');
+  mkdirSync(join(forgeRoot, 'skills', 'legit-agent'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', 'legit-agent', 'SKILL.md'), legitOriginal, 'utf8');
+
+  const linkPath = join(forgeRoot, 'skills', 'evil-agent');
+  try {
+    symlinkSync(join(forgeRoot, 'skills', 'legit-agent'), linkPath, 'dir');
+  } catch {
+    return;
+  }
+
+  const res = await putJson(
+    `${bridgeUrl}/api/studio/agents/evil-agent`,
+    makePutAgentBody({ name: 'Evil Agent', purpose: 'ATTACKER-CONTROLLED cross-agent overwrite via evil-agent.' }),
+  );
+  assert.notEqual(
+    res.status,
+    200,
+    'a PUT to a slug whose OWN directory is a symlink to a DIFFERENT real agent directory must be REJECTED — "somewhere under skills/" is not the same containment guarantee as "this slug\'s own directory"',
+  );
+  const legitAfter = readFileSync(join(forgeRoot, 'skills', 'legit-agent', 'SKILL.md'), 'utf8');
+  assert.equal(legitAfter, legitOriginal, "legit-agent's SKILL.md must be byte-unchanged after a rejected PUT to evil-agent");
 });
 
 // ---------------------------------------------------------------------------
