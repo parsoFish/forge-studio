@@ -422,14 +422,12 @@ test('F (RED) [Finding 2]: create-mode reassembly skips isSafeSegment past the b
 
     const result = resolveGuardedPath(root, ['idA', 'nonexistent', '..', '..', 'idB', 'hook.yaml']);
 
-    // Property 1: the call must be rejected outright — a ".." segment
-    // anywhere in the input is exactly what isSafeSegment exists to catch,
-    // and it must be checked regardless of which side of the break it falls on.
-    assert.equal(
-      result.ok,
-      false,
-      `expected the guard to REJECT this create-mode walk — got ${JSON.stringify(result)}. The walk breaks at the first absent segment ("nonexistent") and reassembles the REMAINING segments with a bare join(verified, ...segments.slice(i)) — never re-running isSafeSegment on them — so the two ".." segments that follow are silently normalized away by join(), walking back OUT of idA/ and INTO idB/, a different, genuinely real sibling object.`,
-    );
+    // Property 2 is asserted FIRST, deliberately: `assert.equal` carries an
+    // `asserts actual is T` signature, so asserting property 1 narrows
+    // `result` to PathGuardReject and makes this branch statically dead
+    // (`never`). Checking it while the type is still the union keeps BOTH
+    // properties genuinely live rather than one of them silently unreachable.
+    //
     // Property 2 (must hold independent of how property 1 is satisfied): a
     // path that genuinely exists on disk (idB/hook.yaml is real) must NEVER
     // be reported exists:false — that exact combination (ok:true,
@@ -442,6 +440,14 @@ test('F (RED) [Finding 2]: create-mode reassembly skips isSafeSegment past the b
         `a path pointing at a genuinely EXISTING file (${join(root, 'idB', 'hook.yaml')}) must never be reported exists:false — got ${JSON.stringify(result)}`,
       );
     }
+    // Property 1: the call must be rejected outright — a ".." segment
+    // anywhere in the input is exactly what isSafeSegment exists to catch,
+    // and it must be checked regardless of which side of the break it falls on.
+    assert.equal(
+      result.ok,
+      false,
+      `expected the guard to REJECT this create-mode walk — got ${JSON.stringify(result)}. The walk breaks at the first absent segment ("nonexistent") and reassembles the REMAINING segments with a bare join(verified, ...segments.slice(i)) — never re-running isSafeSegment on them — so the two ".." segments that follow are silently normalized away by join(), walking back OUT of idA/ and INTO idB/, a different, genuinely real sibling object.`,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -89,15 +89,33 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
   if (!existsSync(brainRoot)) return [];
 
   const result: KbWithCounts[] = [];
-  const pushFrom = (kbDir: string): void => {
-    const kbYamlPath = join(kbDir, 'kb.yaml');
-    if (!existsSync(kbYamlPath)) return;
+
+  // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
+  // so a symlinked `brain/<id>` DIRECTORY never reaches here — but that
+  // accident says nothing about the LEAF. A genuinely real `brain/<id>/` whose
+  // `kb.yaml` is a symlink was confirmed live disclosing the outside file's
+  // contents verbatim in this route's 200 response, because this function read
+  // `kb.yaml` with no guard at all and every other KB route's fix went in
+  // around it. `base` is the fixed containment root and `name` is its own
+  // segment (never folded into the root — ./studio-path-guard.ts, CONTRACT).
+  const pushFrom = (base: string, name: string): void => {
+    const yamlGuard = resolveGuardedPath(base, [name, 'kb.yaml']);
+    if (!yamlGuard.ok || !yamlGuard.exists) return;
     try {
-      const kb = loadKbDescriptor(kbYamlPath);
+      const kb = loadKbDescriptor(yamlGuard.realPath);
+      // Each layer path is independently guarded — a real kb.yaml is no
+      // warrant for a symlinked `themes/` or `_raw/` beside it.
+      const layer = (tail: string): string | null => {
+        const g = resolveGuardedPath(base, [name, tail]);
+        return g.ok && g.exists ? g.realPath : null;
+      };
+      const indexPath = layer('INDEX.md');
+      const themesPath = layer('themes');
+      const rawPath = layer('_raw');
       const counts = {
-        index: existsSync(join(kbDir, 'INDEX.md')) ? 1 : 0,
-        themes: countLayerFiles(join(kbDir, 'themes')),
-        raw: countLayerFiles(join(kbDir, '_raw')),
+        index: indexPath ? 1 : 0,
+        themes: themesPath ? countLayerFiles(themesPath) : 0,
+        raw: rawPath ? countLayerFiles(rawPath) : 0,
       };
       result.push({ ...kb, counts });
     } catch {
@@ -107,10 +125,12 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
 
   // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
   // own, so it is naturally skipped here).
-  for (const d of subDirs(brainRoot)) pushFrom(join(brainRoot, d));
-  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035).
+  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
+  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
+  // a SECOND containment root and gets the identical treatment — a fix that
+  // hardens only the primary root leaves the fallback wide open.
   const projectsRoot = join(brainRoot, 'projects');
-  for (const d of subDirs(projectsRoot)) pushFrom(join(projectsRoot, d));
+  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
 
   return result;
 }

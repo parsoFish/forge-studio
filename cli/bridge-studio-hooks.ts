@@ -372,7 +372,13 @@ export async function handleStudioHooksRoutes(
       // LEAF inside a real dir, and `entry.script` is a hook.yaml-supplied
       // relative path, so it is walked as segments rather than joined blind.
       const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
-      const scriptGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, ...entry.script.split('/')]);
+      // Split `script` into guard segments, dropping only the components that
+      // carry no meaning — an empty string (from `scripts//run.sh`, which
+      // `path.resolve` tolerates everywhere else, so rejecting it here would
+      // 404 a perfectly valid hook) and `.`. A `..` is deliberately NOT
+      // dropped: it must reach `isSafeSegment` and be rejected.
+      const scriptSegments = entry.script.split('/').filter((s) => s !== '' && s !== '.');
+      const scriptGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, ...scriptSegments]);
       if (!yamlGuard.ok || !yamlGuard.exists || !scriptGuard.ok || !scriptGuard.exists) {
         sendJson(res, 404, { error: `unknown hook "${id}"` }, origin);
         return true;
