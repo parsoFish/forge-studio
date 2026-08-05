@@ -346,10 +346,23 @@ export async function handleStudioWriteRoutes(
       }
       const b = body as Record<string, unknown>;
 
-      // 4. Load existing def or scaffold minimal one
+      // 4. Load existing def or scaffold minimal one. Also capture the RAW
+      // on-disk bytes (D5 wiring): five phase bindings + the release
+      // finalizer readFileSync the WHOLE SKILL.md verbatim into the agent's
+      // system prompt (orchestrator/phases/dev-binding.ts:63, pm-binding.ts:53,
+      // reflector-binding.ts:52, adversarial-review-binding.ts:40,
+      // demo-agent-binding.ts:53, orchestrator/release-finalize-invocation.ts:51)
+      // — so a lossy re-serialize on save is a PROMPT change, not mere file
+      // churn. Handing `originalRaw` to serializeAgentDefinition below lets it
+      // take the byte-preserving fast path (comments, fanout, key order kept
+      // verbatim) whenever the frontmatter didn't actually change. Both this
+      // read and loadAgentDefinition's internal read use the same 'utf8'
+      // encoding — no double-encoding risk, just two reads of the same bytes.
       let existing: AgentDefinition | null = null;
+      let originalRaw: string | undefined;
       if (existsSync(skillMdPath)) {
         try {
+          originalRaw = readFileSync(skillMdPath, 'utf8');
           existing = loadAgentDefinition(skillMdPath);
         } catch (err) {
           sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -411,6 +424,18 @@ export async function handleStudioWriteRoutes(
         loopStrategy: typeof rtIn['loopStrategy'] === 'string' ? rtIn['loopStrategy'] : existing?.runtime.loopStrategy,
       };
 
+      // materials (R2-09 D2/D7): the SAME inherit-when-omitted convention as
+      // `phase`/`surface`/`executor` above — omitted from the PUT body ⇒
+      // inherited from disk (`existing?.materials`); explicitly `[]` (or any
+      // other array) in the body ⇒ replaces it, including clearing to empty.
+      // `Array.isArray` is the presence test, not `b['materials'] !== undefined`,
+      // so a non-array stray value degrades to "omitted" (inherit) rather than
+      // silently adopting a malformed shape — validateAgent's materials/enum
+      // check is what rejects a genuinely bad VALUE inside a real array.
+      const materials: string[] | undefined = Array.isArray(b['materials'])
+        ? (b['materials'] as string[])
+        : existing?.materials;
+
       const merged: AgentDefinition = {
         slug,
         name,
@@ -424,6 +449,14 @@ export async function handleStudioWriteRoutes(
         purpose,
         composition,
         runtime,
+        // D7 fix: this literal used to omit `fanout` entirely, so saving a
+        // fanout-capable agent (e.g. developer-ralph) through the builder
+        // silently stripped its `fanout:` block and flipped its
+        // `fanoutCapable` descriptor false. Same inherit-when-omitted
+        // convention as `phase`/`surface`/`executor` — the PUT body has no
+        // fanout-editing UI yet, so this is always inherited from disk.
+        fanout: existing?.fanout,
+        materials,
         brainAccess,
         interactivity,
         budgets: existing?.budgets ?? {},
@@ -478,8 +511,11 @@ export async function handleStudioWriteRoutes(
         return true;
       }
 
-      // 7. Serialize and write
-      const serialized = serializeAgentDefinition(merged);
+      // 7. Serialize and write. Passing `originalRaw` lets serializeAgentDefinition
+      // take the D5 byte-preserving fast path when nothing frontmatter-relevant
+      // changed — see the comment on `originalRaw`'s read above for why a lossy
+      // save here is a PROMPT change, not mere file churn.
+      const serialized = serializeAgentDefinition(merged, originalRaw);
       const skillDirPath = skillDir(slug, ctx.forgeRoot);
       if (!existsSync(skillDirPath)) {
         mkdirSync(skillDirPath, { recursive: true });

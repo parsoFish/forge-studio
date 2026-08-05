@@ -1101,3 +1101,94 @@ export async function deleteKb(id: string): Promise<{ ok: boolean; error?: strin
     return { ok: false, error: String(err) };
   }
 }
+
+// ---------------------------------------------------------------------------
+// materials + instructions-draft (R2-09 D1/D8/D9)
+// ---------------------------------------------------------------------------
+
+/**
+ * Parse a raw `materials` field (server AgentDefinition.materials shape,
+ * orchestrator/studio/materials.ts) client-side. Mirrors the server parser's
+ * D1/D2 semantics exactly: an array of strings — including `[]` — parses
+ * as-is (D2: declared-empty is a real, meaningful value, distinct from
+ * absence); `undefined`/`null` (the field genuinely absent) parses to
+ * `undefined`; any other shape — a non-array, or an array containing a
+ * non-string entry — is a parse FAILURE and also returns `undefined`.
+ *
+ * That last case is deliberately NOT the same `undefined` as "absent" from a
+ * caller's perspective in one sense (both collapse to the same return value
+ * here, matching `parseCapability`'s "malformed degrades to absent, never
+ * throws" convention) but it must never be upgraded into a fabricated `[]` —
+ * a prior finding in this campaign was exactly a client turning a malformed/
+ * missing field into an invented default, destroying the guarantee D2 gives
+ * "declared-empty" its meaning. Never coerces a partial list.
+ */
+export function parseMaterials(raw: unknown): string[] | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw)) return undefined;
+  if (!raw.every((v) => typeof v === 'string')) return undefined;
+  return raw as string[];
+}
+
+/** Self-describing manifest of what an instructions draft was composed from
+ *  (orchestrator/studio/instructions-draft.ts `InstructionsDraftDerivation`,
+ *  re-declared client-side per this file's header convention). Carried
+ *  through verbatim — never re-derived here. */
+export type InstructionsDraftDerivation = {
+  sources: Array<{ field: string; present: boolean }>;
+};
+
+/** Result of POST /api/studio/agents/:slug/instructions-draft (R2-09 D8/D9). */
+export type InstructionsDraftResult =
+  | { ok: true; draft: string; derivation: InstructionsDraftDerivation }
+  | { ok: false; error: string };
+
+/**
+ * Pure parse of the instructions-draft response (status + parsed JSON body)
+ * into `InstructionsDraftResult`. Mirrors `parseCapability`'s
+ * carry-through-or-fail convention: a non-2xx status surfaces the server's
+ * `error` (never smoothed into an empty draft), and a malformed 200 payload
+ * — missing `draft` or `derivation` — is ALSO an error, never a fabricated
+ * empty draft (the exact "declared data must not fail open" failure class
+ * this campaign exists to close). Split out from the async fetch wrapper
+ * below (`requestInstructionsDraft`) so the parse logic is directly unit-
+ * testable without a network mock.
+ */
+export function parseInstructionsDraftResponse(status: number, payload: unknown): InstructionsDraftResult {
+  const p = (payload ?? {}) as Record<string, unknown>;
+  if (status < 200 || status >= 300) {
+    return { ok: false, error: typeof p['error'] === 'string' ? p['error'] : `HTTP ${status}` };
+  }
+  if (typeof p['draft'] !== 'string' || p['derivation'] === undefined || p['derivation'] === null) {
+    return { ok: false, error: 'malformed instructions-draft response: missing draft or derivation' };
+  }
+  return { ok: true, draft: p['draft'], derivation: p['derivation'] as InstructionsDraftDerivation };
+}
+
+/**
+ * Request a deterministic instructions draft for the CURRENT (possibly
+ * unsaved) builder state — never auto-saved (D9). Thin, untestable-by-design
+ * I/O shell around the testable `parseInstructionsDraftResponse` core: this
+ * function itself is not directly exercised by studio-client.test.ts (it has
+ * no logic of its own beyond resolving the bridge URL and calling fetch —
+ * exactly the same shape as `studioPut`/`studioPost` above, which are
+ * likewise untested directly).
+ */
+export async function requestInstructionsDraft(
+  slug: string,
+  body: Record<string, unknown>,
+): Promise<InstructionsDraftResult> {
+  const base = await resolveBridgeUrl();
+  if (!base) return { ok: false, error: 'no bridge configured' };
+  try {
+    const res = await fetch(`${base}/api/studio/agents/${encodeURIComponent(slug)}/instructions-draft`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => undefined);
+    return parseInstructionsDraftResponse(res.status, data);
+  } catch (err) {
+    return { ok: false, error: String(err) };
+  }
+}
