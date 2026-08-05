@@ -49,6 +49,19 @@
  * its text — text-based re-ask detection silently dropped a legitimately
  * re-asked verbatim question, which is the defect this supersedes.
  *
+ * Accepted residual (read-only, self-healing, NOT fixed): `cli/ui-bridge.ts`
+ * (~lines 1592-1596) writes `answers.json` then `status.json` as two separate
+ * writes, not one atomic transaction. A crash between them leaves
+ * `status.json` at `phase: 'awaiting-answers'` even though the round was
+ * already answered, so this phase-driven check renders the just-answered
+ * question as pending a SECOND time on the next read. Cosmetic (the operator
+ * sees a stale pending question, not corrupted data) and self-healing (the
+ * next real answer round overwrites it correctly). Deliberately not fixed
+ * here: closing it would require `deriveSessionTranscript` to grow a `round`
+ * parameter (or equivalent) purely to detect a narrow crash-window artifact,
+ * widening this module's contract for a residual with no data-integrity
+ * consequence.
+ *
  * Malformed answers.json (not an array / a round missing "answers" /
  * "answers" not an array / a non-string question or answer) fails CLOSED —
  * {ok:false}. Never a partial parse, never a skip-and-continue turn.
@@ -69,6 +82,19 @@
  * write into the session dir — an nlink check would be theatre with a real
  * false-positive surface (nlink > 1 is not inherently malicious) for
  * negligible added protection.
+ *
+ * Second honest limit, same trust tier (TOCTOU): `safeReadFileInSession` (and
+ * the matching subdirectory guard in `listDirEntries`) calls `realpathSync`
+ * and then a separate `readFileSync`/`readdirSync` — two syscalls on one
+ * path, not one atomic operation. An attacker able to swap a symlink's
+ * target in the gap between those two calls (e.g. `abs` resolves inside
+ * sessionDir at check-time, then gets re-pointed outside before the read)
+ * defeats containment. This is accepted, not fixed, on the same basis as the
+ * hardlink residual above: it requires the same local write access inside
+ * the session dir that would let an attacker write the outside content into
+ * the session directly, so closing it (e.g. `open()` + `fstat` to read via a
+ * held file descriptor instead of re-resolving the path) buys negligible
+ * additional protection for real implementation cost — disclosed, not closed.
  */
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
@@ -146,10 +172,37 @@ export function safeReadFileInSession(sessionDir: string, relPath: string): stri
 
 /** Lists a subdirectory's entries filtered by extension, sorted by filename.
  *  A missing directory yields []. Entry CONTENT safety (symlink escape) is
- *  enforced later, per-file, by safeReadFileInSession — this only lists
- *  names, which leaks nothing. */
+ *  enforced later, per-file, by safeReadFileInSession — that guard alone
+ *  does NOT cover this function: if the subdirectory itself (`manifests/` or
+ *  `themes/`) is a symlink to an outside directory, `readdirSync` follows it
+ *  and returns the OUTSIDE directory's real entry names/count — observable
+ *  even when every individual file read is later blocked, because a caller
+ *  (deriveRoadmapDraft's `sourcesScanned`) reports the raw entry COUNT before
+ *  any per-file containment check runs (AT-amendment-3, A2 / AT-68, AT-69).
+ *  This function therefore realpath-contains the subdirectory itself, at the
+ *  same choke-point pattern as `safeReadFileInSession`: a `manifests/` or
+ *  `themes/` that resolves outside `sessionDir` is treated as absent (empty
+ *  listing) rather than followed. With that guard, this function leaks
+ *  neither names nor a derived count from outside `sessionDir` — only entry
+ *  NAMES from within a directory proven to be contained; entry CONTENT
+ *  safety remains safeReadFileInSession's job when each name is later read. */
 function listDirEntries(sessionDir: string, dirRel: string, extension: string): string[] {
   const abs = join(sessionDir, dirRel);
+  let realSessionDir: string;
+  try {
+    realSessionDir = realpathSync(sessionDir);
+  } catch {
+    return []; // sessionDir itself doesn't exist / unreadable
+  }
+  let realAbs: string;
+  try {
+    realAbs = realpathSync(abs);
+  } catch {
+    return []; // missing subdirectory, broken symlink, or unreadable path segment
+  }
+  if (realAbs !== realSessionDir && !realAbs.startsWith(realSessionDir + sep)) {
+    return []; // subdirectory escapes sessionDir via a symlink — treated as absent, never followed
+  }
   let names: string[];
   try {
     names = readdirSync(abs);

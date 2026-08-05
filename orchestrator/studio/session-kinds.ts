@@ -38,7 +38,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { basename, join } from 'node:path';
+import { basename, join, sep } from 'node:path';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
 
@@ -228,11 +228,35 @@ const FORGE_UI_APP_DIRNAME = join('forge-ui', 'app');
  *  Next.js App Router directory ("forge-ui/app/architect/[sessionId]/interview")
  *  — route path segments ARE the directory names, including literal
  *  `[sessionId]` dynamic-segment folders. An entry with no non-empty segments
- *  (blank or "/") never resolves. */
+ *  (blank or "/") never resolves.
+ *
+ *  Containment (AT-amendment-3, A1 / AT-61..67): `path.join()` normalises
+ *  `..` segments BEFORE `existsSync` ever runs, so a naive
+ *  `join(appDir, ...segments)` can resolve anywhere on the filesystem —
+ *  including, with enough repeated `..`, an arbitrary absolute path once the
+ *  climb clamps past the real filesystem root. Two independent guards apply,
+ *  mirroring the `resolveSafeSessionDir` / `safeReadFileInSession`
+ *  containment pattern used elsewhere in this PR: (1) the join-normalised
+ *  candidate must equal `appDir` or start with `appDir + sep`; (2) ANY raw
+ *  segment that is literally `..` is rejected outright, even when the
+ *  resulting path would numerically round-trip back inside `appDir` — a
+ *  `legacyRoutes` value is a declared Studio route path, not a filesystem
+ *  expression to be evaluated (T2 ruling, AT-67), so an escape-and-return
+ *  string like "../app/foo/[sessionId]" is refused on its own terms rather
+ *  than accidentally accepted because it normalises back inside.
+ *
+ *  Honest limit (accepted, not fixed): this checks that the DIRECTORY
+ *  exists, not that it still hosts a live route (a `page.tsx`/`route.ts`
+ *  file). A directory left behind after its page file was deleted still
+ *  passes — see AT coverage; a follow-up, stated rather than implied away. */
 function legacyRouteResolves(forgeRoot: string, route: string): boolean {
   const segments = route.trim().replace(/^\//, '').split('/').filter((s) => s.length > 0);
   if (segments.length === 0) return false;
-  return existsSync(join(forgeRoot, FORGE_UI_APP_DIRNAME, ...segments));
+  if (segments.includes('..')) return false;
+  const appDir = join(forgeRoot, FORGE_UI_APP_DIRNAME);
+  const candidate = join(appDir, ...segments);
+  if (candidate !== appDir && !candidate.startsWith(appDir + sep)) return false;
+  return existsSync(candidate);
 }
 
 /**
