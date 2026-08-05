@@ -760,6 +760,24 @@ html { scroll-behavior: smooth; }
   color: var(--dim);
 }
 
+/* R2-09 C4 — allowed-materials toggle chips (Agent Builder). */
+.material-toggle {
+  padding: 3px 10px;
+  background: var(--panel-2);
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--faint);
+  cursor: pointer;
+  user-select: none;
+}
+.material-toggle:hover { border-color: var(--line); color: var(--dim); }
+.material-toggle.selected {
+  background: var(--panel);
+  border-color: var(--ember);
+  color: var(--text);
+}
+
 /* ---- runtime section ---- */
 .runtime-section-header { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
 .runtime-section-caption { font-size: 12px; color: var(--faint); font-style: italic; }

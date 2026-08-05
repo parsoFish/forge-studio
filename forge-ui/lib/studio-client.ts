@@ -111,6 +111,15 @@ export type Agent = {
   // from `guards` (ADR-027 R3-03 amendment: composition.hooks holds library
   // hook ids, composition.guards holds the fixed platform dispatch-key set).
   hooks: string[];
+  /**
+   * R2-09 D1/D2 — the closed set of upload kinds (see MATERIAL_KINDS below)
+   * this agent declares it accepts. `undefined` = not declared on the wire
+   * payload (parse failure or genuinely absent — parseMaterials collapses
+   * both, see its header); `[]` = declared-empty ("accepts nothing"), a
+   * meaningful value distinct from absence. Never fabricate one from the
+   * other.
+   */
+  materials?: string[];
   interactivity?: string;
   process?: string;
   runtime?: AgentRuntime;
@@ -584,6 +593,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     disallowedTools:Array.isArray(r['disallowedTools']) ? (r['disallowedTools'] as string[]) : [],
     capability:     parseCapability(r['capability']),
     fanout:         parseFanout(r['fanout']),
+    materials:      parseMaterials(r['materials']),
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
@@ -1105,6 +1115,20 @@ export async function deleteKb(id: string): Promise<{ ok: boolean; error?: strin
 // ---------------------------------------------------------------------------
 // materials + instructions-draft (R2-09 D1/D8/D9)
 // ---------------------------------------------------------------------------
+
+/**
+ * The closed, frozen materials vocabulary (R2-09 D1-D4). Mirrors
+ * orchestrator/studio/materials.ts's `MATERIAL_KINDS` verbatim — forge-ui
+ * cannot import orchestrator TS directly (see the `SHIPPED_TRIGGER_KINDS`
+ * mirror above for the same hand-kept-mirror convention), so this is the
+ * SINGLE named constant every forge-ui consumer of the vocabulary imports;
+ * do not re-declare the list anywhere else client-side. Order is
+ * significant (surfaced verbatim in the builder's materials toggles and the
+ * YAML preview) — keep it in lockstep with the server list if it ever
+ * changes.
+ */
+export const MATERIAL_KINDS = ['images', 'documents', 'audio', 'data-files'] as const;
+export type MaterialKind = (typeof MATERIAL_KINDS)[number];
 
 /**
  * Parse a raw `materials` field (server AgentDefinition.materials shape,

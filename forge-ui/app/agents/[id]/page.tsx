@@ -13,7 +13,7 @@
  *   On save: flat → PUT {composition:{...}, process, name, purpose, interactivity, brainAccess, runtime}
  */
 
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
 import { SaveStatus } from '@/components/SaveStatus';
@@ -24,24 +24,34 @@ import { RuntimePicker } from '@/components/studio/agent-builder/RuntimePicker';
 import { ReadinessPanel } from '@/components/studio/agent-builder/ReadinessPanel';
 import { YamlPreview } from '@/components/studio/agent-builder/YamlPreview';
 import { UsedInFlows } from '@/components/studio/agent-builder/UsedInFlows';
+import { RunPanel } from '@/components/studio/agent-builder/RunPanel';
+import { StarterPicker } from '@/components/studio/agent-builder/StarterPicker';
+import { ZoneWrap } from '@/components/studio/agent-builder/ZoneWrap';
+import { ReadOnlyFields } from '@/components/studio/agent-builder/ReadOnlyFields';
+import { InstructionsField } from '@/components/studio/agent-builder/InstructionsField';
+import { MaterialsPicker } from '@/components/studio/agent-builder/MaterialsPicker';
 import {
   fetchStudioAgents,
   fetchStudioCatalog,
   fetchStudioFlows,
   fetchStarters,
   saveAgent,
-  dispatchAgentRun,
-  getAgentRunStatus,
-  parseRunInputs,
+  requestInstructionsDraft,
   type Agent,
   type AgentCapabilityDescriptor,
-  type AgentRunStatus,
   type AgentRuntime,
   type Catalog,
   type Flow,
 } from '@/lib/studio-client';
 import { fetchConnections, type ConnectionWire } from '@/lib/connection-client';
 import { unreadyBoundConnections, blockedRunMessage, type BoundConnectionRef } from '@/lib/connection-library-view';
+import {
+  toggleMaterial,
+  applyInstructionsDraft,
+  clearInstructionsDraftFlag,
+  editInstructionsText,
+  addChip,
+} from '@/lib/agent-builder-view';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,6 +74,10 @@ type AgentState = {
   interactivity: string;
   runtime: AgentRuntime;
   brainAccess: string;
+  // R2-09 D1/D2/C4 — the closed upload-kind vocabulary this agent accepts
+  // (MATERIAL_KINDS). Surfaced on the agent's kickoff screen; ENFORCEMENT
+  // happens at R6-04-F2's upload seam, not here — this UI only declares.
+  materials: string[];
   // read-only (SKILL.md-authored, not editable in M2)
   allowedTools: string[];
   disallowedTools: string[];
@@ -96,6 +110,7 @@ const EMPTY_STATE: AgentState = {
   interactivity: '',
   runtime: { ...DEFAULT_RUNTIME },
   brainAccess: 'none',
+  materials: [],
   allowedTools: [],
   disallowedTools: [],
   phase: '',
@@ -143,6 +158,13 @@ function parseAgent(raw: Agent): AgentState {
       loopStrategy:  rt.loopStrategy,
     },
     brainAccess:    raw.brainAccess   ?? 'none',
+    // R2-09 C4: absent/malformed on the wire (parseMaterials's own
+    // undefined) degrades to "nothing declared yet" in the EDITABLE state —
+    // the toggle set needs a concrete array to render, and starting from
+    // empty is the honest "no material accepted" starting point, never a
+    // fabricated "accepts everything". Save always sends the concrete
+    // (possibly still-empty) array back — see buildPutBody below.
+    materials:      raw.materials ?? [],
     allowedTools:   ((raw as Record<string, unknown>).allowedTools  as string[] | undefined) ?? [],
     disallowedTools:((raw as Record<string, unknown>).disallowedTools as string[] | undefined) ?? [],
     phase:          raw.phase ?? '',
@@ -157,6 +179,7 @@ function buildPutBody(state: AgentState): Record<string, unknown> {
     process:      state.process,       // server maps process → body
     interactivity: state.interactivity,
     brainAccess:  state.brainAccess,
+    materials:    state.materials,
     composition: {
       skills: state.skills,
       tools:  state.tools,
@@ -213,6 +236,12 @@ export default function AgentBuilderPage() {
   // Advanced config (capabilities, runtime, read-only) is collapsed by default
   // (UX spec §2 — progressive disclosure). Pre-filled from the chosen starter.
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // C3/D9: true from the moment a generated instructions draft is applied
+  // until the next successful save or Discard — persists across further
+  // manual edits to the (still draft-derived) text. Ephemeral client state,
+  // never sent to the server.
+  const [instructionsIsDraft, setInstructionsIsDraft] = useState(false);
+  const [draftPending, setDraftPending] = useState(false);
 
   // track the last loaded slug so we know when slugParam changes
   const loadedSlug = useRef<string>('');
@@ -252,11 +281,10 @@ export default function AgentBuilderPage() {
   // ---- composition helpers ----
   function addToZone(kind: Kind, id: string) {
     const key = kind === 'mcp' ? 'mcps' : `${kind}s` as keyof AgentState;
-    setState((s) => {
-      const arr = s[key] as string[];
-      if (arr.includes(id)) return s;
-      return { ...s, [key]: [...arr, id] };
-    });
+    // addChip (agent-builder-view.ts) is the single-sourced idempotent-add
+    // rule — matches DropZone.tsx's drag-drop guard so click-to-add (C2) and
+    // drag-and-drop can never disagree about whether a chip is already bound.
+    setState((s) => ({ ...s, [key]: addChip(s[key] as string[], id) }));
     markDirty();
   }
 
@@ -264,6 +292,50 @@ export default function AgentBuilderPage() {
     const key = kind === 'mcp' ? 'mcps' : `${kind}s` as keyof AgentState;
     setState((s) => ({ ...s, [key]: (s[key] as string[]).filter((x) => x !== id) }));
     markDirty();
+  }
+
+  // ---- materials (C4) ----
+  function toggleMaterialInState(kind: string) {
+    setState((s) => ({ ...s, materials: toggleMaterial(s.materials, kind) }));
+    markDirty();
+  }
+
+  // ---- instructions draft assist (C3, D9: never auto-saved) ----
+  async function handleGenerateInstructions() {
+    // A brand-new, not-yet-saved agent has no SKILL.md on disk yet — the
+    // instructions-draft route 404s on an unknown slug (it only composes
+    // from the POST body, but still confirms the agent exists as a D9
+    // safety check). Fail fast with an honest, actionable message rather
+    // than firing a request known to fail.
+    if (!state.slug) {
+      pushToast('Save the agent once before generating an instructions draft.', 'err');
+      return;
+    }
+    setDraftPending(true);
+    try {
+      const result = await requestInstructionsDraft(state.slug, buildPutBody(state));
+      if (!result.ok) {
+        pushToast(result.error, 'err');
+        return;
+      }
+      const next = applyInstructionsDraft(
+        { instructions: state.process, dirty, instructionsIsDraft },
+        result.draft,
+      );
+      setState((s) => ({ ...s, process: next.instructions }));
+      setDirty(next.dirty);
+      setInstructionsIsDraft(next.instructionsIsDraft);
+    } finally {
+      setDraftPending(false);
+    }
+  }
+
+  function handleInstructionsEdit(text: string) {
+    const next = editInstructionsText({ instructions: state.process, dirty }, text);
+    setState((s) => ({ ...s, process: next.instructions }));
+    setDirty(next.dirty);
+    // instructionsIsDraft deliberately untouched — a manual edit does not
+    // clear the draft-provenance flag (see agent-builder-view.ts header).
   }
 
   // ---- data loading ----
@@ -355,6 +427,9 @@ export default function AgentBuilderPage() {
       return { ok: false, error: result.error ?? 'Save failed.' };
     }
     setDirty(false);
+    // C3/D9: a successful save confirms whatever text is in the field —
+    // draft-derived or not — so the "unconfirmed draft" flag clears here.
+    setInstructionsIsDraft((prev) => clearInstructionsDraftFlag({ instructionsIsDraft: prev }).instructionsIsDraft);
     if (isNew) router.replace(`/agents/${encodeURIComponent(slug)}`);
     return { ok: true };
   });
@@ -368,6 +443,9 @@ export default function AgentBuilderPage() {
       setState({ ...EMPTY_STATE });
     }
     setDirty(false);
+    // C3/D9: discarding replaces the instructions text with the last-loaded
+    // (or blank) value, so any pending draft's provenance no longer applies.
+    setInstructionsIsDraft((prev) => clearInstructionsDraftFlag({ instructionsIsDraft: prev }).instructionsIsDraft);
   }
 
   // ---- used ids (for palette dimming) ----
@@ -435,7 +513,7 @@ export default function AgentBuilderPage() {
       <div className="workbench">
 
         {/* ══ LEFT: Component Library ══ */}
-        <CatalogPalette catalog={catalog} usedIds={usedIds} />
+        <CatalogPalette catalog={catalog} usedIds={usedIds} onAddToZone={addToZone} />
 
         {/* ══ CENTER: Agent Definition ══ */}
         <main
@@ -452,6 +530,7 @@ export default function AgentBuilderPage() {
               <div className="agent-select-wrap">
                 <select
                   title="Switch agent"
+                  data-agent-select
                   value={isNew ? '__new__' : state.slug}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -459,9 +538,9 @@ export default function AgentBuilderPage() {
                     else handleSelectAgent(v);
                   }}
                 >
-                  <option value="__new__">— new agent —</option>
+                  <option value="__new__" data-agent-option="new">— new agent —</option>
                   {agents.map((ag) => (
-                    <option key={ag.id} value={ag.id}>{ag.name}</option>
+                    <option key={ag.id} value={ag.id} data-agent-option={ag.id}>{ag.name}</option>
                   ))}
                 </select>
               </div>
@@ -510,18 +589,15 @@ export default function AgentBuilderPage() {
               />
             </div>
 
-            {/* Instructions (required) — the agent's instruction file (A3). */}
-            <div className="field-group">
-              <label className="field-label" htmlFor="process-input">Instructions</label>
-              <textarea
-                id="process-input"
-                className="input"
-                rows={4}
-                placeholder="What this agent does, step by step — what it reads, what it decides, and the artifact it produces."
-                value={state.process}
-                onChange={(e) => patchState({ process: e.target.value })}
-              />
-            </div>
+            {/* Instructions (required) — the agent's instruction file (A3),
+                plus the generation-assist affordance (C3). */}
+            <InstructionsField
+              value={state.process}
+              isDraft={instructionsIsDraft}
+              pending={draftPending}
+              onGenerate={() => void handleGenerateInstructions()}
+              onChange={handleInstructionsEdit}
+            />
 
             {/* Interactivity (required) */}
             <div className="field-group">
@@ -535,6 +611,11 @@ export default function AgentBuilderPage() {
                 onChange={(e) => patchState({ interactivity: e.target.value })}
               />
             </div>
+
+            {/* Allowed input materials (C4) — the closed upload-kind vocabulary
+                this agent declares it accepts. Surfaced on the agent's kickoff
+                screen; ENFORCEMENT happens at R6-04-F2's upload seam, not here. */}
+            <MaterialsPicker materials={state.materials} onToggle={toggleMaterialInState} />
 
             {/* ── Advanced (progressive disclosure) ── */}
             <details
@@ -627,6 +708,8 @@ export default function AgentBuilderPage() {
             tools={state.tools}
             mcps={state.mcps}
             guards={state.guards}
+            hooks={state.hooks}
+            materials={state.materials}
             process={state.process}
             interactivity={state.interactivity}
             runtime={state.runtime}
@@ -651,297 +734,6 @@ export default function AgentBuilderPage() {
           <div key={t.id} className={`toast ${t.kind}`}>{t.msg}</div>
         ))}
       </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// RunPanel — dispatch a non-interactive agent standalone (R2-01-F3) from the
-// agent page and poll its run for live status + cost (the F1 "events/cost
-// visible" AC). Interactive agents keep their bespoke session pages — the
-// generic host refuses them here, mirroring the server-side guard.
-// ---------------------------------------------------------------------------
-
-const RUN_PANEL_STYLE: CSSProperties = {
-  border: '1px solid var(--line)',
-  borderRadius: 'var(--radius)',
-  padding: '12px 14px',
-  marginTop: 12,
-};
-
-function RunPanel({
-  slug,
-  interactive,
-  canRun,
-  blockedMessage,
-}: {
-  slug: string;
-  interactive: boolean;
-  canRun: boolean;
-  /** R3-04-F3/D9.3: non-empty iff a bound tool/mcp is not real probe-
-   *  `available` — NAMES the unready component(s) and their state
-   *  (`blockedRunMessage`, connection-library-view.ts). "Agent not ready"
-   *  alone is a documented failure of this AC, so this string is rendered
-   *  verbatim, never summarised away. */
-  blockedMessage: string;
-}) {
-  const [project, setProject] = useState('');
-  const [inputsText, setInputsText] = useState('');
-  const [runId, setRunId] = useState<string | null>(null);
-  const [status, setStatus] = useState<AgentRunStatus | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [dispatching, setDispatching] = useState(false);
-
-  // Poll the dispatched run's status until it leaves 'running' (done/failed/
-  // suppressed) or a bounded backstop trips — a run that dies without a
-  // terminal marker, or a suppressed run that writes no events, must never
-  // poll forever.
-  useEffect(() => {
-    if (!runId) return;
-    let active = true;
-    let attempts = 0;
-    const MAX_ATTEMPTS = 90; // ~3 min at 2s
-    const poll = async (): Promise<string> => {
-      const s = await getAgentRunStatus(runId);
-      if (active) setStatus(s);
-      return s.state;
-    };
-    void poll();
-    const id = setInterval(() => {
-      attempts += 1;
-      void poll().then((st) => { if (st !== 'running' || attempts >= MAX_ATTEMPTS) clearInterval(id); });
-    }, 2000);
-    return () => { active = false; clearInterval(id); };
-  }, [runId]);
-
-  if (interactive) {
-    return (
-      <section data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
-        <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
-        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-          Interactive agent — run it from its own session page.
-        </p>
-      </section>
-    );
-  }
-
-  const runState = status?.state ?? (runId ? 'running' : 'idle');
-  const effectiveCanRun = canRun && !blockedMessage;
-
-  const onRun = async () => {
-    setError(null);
-    setDispatching(true);
-    setStatus(null);
-    try {
-      const inputs = parseRunInputs(inputsText);
-      const opts: { project?: string; inputs?: Record<string, string> } = {};
-      if (project.trim()) opts.project = project.trim();
-      if (Object.keys(inputs).length > 0) opts.inputs = inputs;
-      const r = await dispatchAgentRun(slug, Object.keys(opts).length ? opts : undefined);
-      if (r.ok && r.runId) setRunId(r.runId);
-      else setError(r.error ?? 'dispatch failed');
-    } finally {
-      setDispatching(false);
-    }
-  };
-
-  return (
-    <section
-      data-section="agent-run"
-      data-run-dispatchable="true"
-      data-run-id={runId ?? ''}
-      data-run-status={runState}
-      data-run-cost={status?.costUsd ?? 0}
-      data-run-blocked={blockedMessage ? 'true' : 'false'}
-      style={RUN_PANEL_STYLE}
-    >
-      <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
-      <input
-        className="input"
-        type="text"
-        placeholder="project (optional)"
-        value={project}
-        onChange={(e) => setProject(e.target.value)}
-        disabled={!effectiveCanRun || dispatching}
-        style={{ marginBottom: 8 }}
-      />
-      <textarea
-        className="input"
-        data-run-inputs
-        rows={2}
-        placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
-        value={inputsText}
-        onChange={(e) => setInputsText(e.target.value)}
-        disabled={!effectiveCanRun || dispatching}
-        style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
-      />
-      <button
-        className="btn btn-primary"
-        data-action="run-agent"
-        onClick={() => void onRun()}
-        disabled={!effectiveCanRun || dispatching}
-        title={blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
-      >
-        {dispatching ? 'Dispatching…' : 'Run agent'}
-      </button>
-      {blockedMessage && (
-        <p data-component="connection-run-block" className="save-hint save-hint-dirty" style={{ fontSize: 12, margin: '6px 0 0' }}>
-          {blockedMessage}
-        </p>
-      )}
-      {!blockedMessage && !canRun && <p className="muted" style={{ fontSize: 12, margin: '6px 0 0' }}>Save the agent to run it.</p>}
-      {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
-      {runId && (
-        <div style={{ marginTop: 8, fontSize: 12 }}>
-          <div>run <code>{runId}</code></div>
-          <div>
-            status: <strong>{runState}</strong>
-            {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// StarterPicker — choose a curated starter (or start blank) for a new agent
-// ---------------------------------------------------------------------------
-
-function StarterPicker({
-  starters,
-  onPick,
-  onBlank,
-}: {
-  starters: Agent[];
-  onPick: (s: Agent) => void;
-  onBlank: () => void;
-}) {
-  return (
-    <div data-section="starter-picker" style={{ padding: '8px 2px' }}>
-      <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-        Start from a starter
-      </h2>
-      <p style={{ fontSize: 13, color: 'var(--dim)', maxWidth: 520, lineHeight: 1.6, margin: '0 0 18px' }}>
-        Pick a ready-made agent to begin. You can edit everything after — these just give you a
-        clean, minimal starting point.
-      </p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
-        {starters.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            data-starter-option={s.id}
-            onClick={() => onPick(s)}
-            style={{
-              textAlign: 'left',
-              background: 'var(--panel)',
-              border: '1px solid var(--line)',
-              borderRadius: 'var(--radius)',
-              padding: '16px 16px 14px',
-              cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 6,
-            }}
-          >
-            <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-              {s.name}
-            </span>
-            <span style={{ fontSize: 12.5, color: 'var(--dim)', lineHeight: 1.5 }}>
-              {s.purpose}
-            </span>
-          </button>
-        ))}
-        <button
-          type="button"
-          data-starter-option="blank"
-          onClick={onBlank}
-          style={{
-            textAlign: 'left',
-            background: 'transparent',
-            border: '1px dashed var(--line)',
-            borderRadius: 'var(--radius)',
-            padding: '16px 16px 14px',
-            cursor: 'pointer',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-          }}
-        >
-          <span style={{ fontFamily: 'var(--font-display)', fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
-            Blank agent
-          </span>
-          <span style={{ fontSize: 12.5, color: 'var(--faint)', lineHeight: 1.5 }}>
-            Start from scratch with sensible defaults.
-          </span>
-        </button>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ZoneWrap — label row + drop zone
-// ---------------------------------------------------------------------------
-
-const ZONE_META: Record<string, { dotKind: string; label: string; hint: string }> = {
-  skill: { dotKind: 'skill', label: 'Skills',       hint: 'what it knows how to do' },
-  tool:  { dotKind: 'tool',  label: 'Tools & CLIs', hint: 'external processes it can invoke' },
-  mcp:   { dotKind: 'mcp',   label: 'MCP Servers',  hint: 'structured data + action access' },
-  guard: { dotKind: 'guard', label: 'Guards',        hint: 'dispatch keys, gates & observability' },
-  hook:  { dotKind: 'hook',  label: 'Hooks',         hint: 'lifecycle scripts it carries' },
-};
-
-function ZoneWrap({ kind, children }: { kind: string; children: React.ReactNode }) {
-  const meta = ZONE_META[kind];
-  return (
-    <div className="zone-wrap">
-      <div className="zone-label-row">
-        <span className="zone-kind-dot" data-kind={meta.dotKind} />
-        <span className="field-label" style={{ margin: 0 }}>{meta.label}</span>
-        <span className="zone-label-hint">{meta.hint}</span>
-      </div>
-      {children}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ReadOnlyFields — SKILL.md-authored, not editable in M2
-// ---------------------------------------------------------------------------
-
-function ReadOnlyFields({
-  phase,
-  allowedTools,
-}: {
-  phase: string;
-  allowedTools: string[];
-  // A4: disallowed-tools are no longer surfaced — anything not allowed is
-  // implicitly disallowed, so a separate list only added confusion.
-}) {
-  if (!phase && allowedTools.length === 0) return null;
-  return (
-    <div className="field-group" style={{ opacity: 0.6 }}>
-      <div className="field-label" style={{ marginBottom: 8 }}>
-        SKILL.md fields (read-only — edit in skills/&lt;slug&gt;/SKILL.md)
-      </div>
-      {phase && (
-        <div style={{ marginBottom: 8 }}>
-          <span className="field-label" style={{ fontSize: 10 }}>Phase</span>
-          <div className="readonly-field">
-            <span className="readonly-token">{phase}</span>
-          </div>
-        </div>
-      )}
-      {allowedTools.length > 0 && (
-        <div style={{ marginBottom: 8 }}>
-          <span className="field-label" style={{ fontSize: 10 }}>Tool permissions (Claude Code tools this agent may call)</span>
-          <div className="readonly-field">
-            {allowedTools.map((t) => <span key={t} className="readonly-token">{t}</span>)}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import type { Catalog, CatalogItem } from '@/lib/studio-client';
+import { catalogAddTarget } from '@/lib/agent-builder-view';
 
 // ---------------------------------------------------------------------------
 // CatalogPalette — left column, Component Library
@@ -25,9 +26,13 @@ const GROUPS: Group[] = [
 type Props = {
   catalog: Catalog;
   usedIds: string[];
+  /** C2 — click-to-add alongside the existing HTML5 drag-and-drop. Called
+   *  with the chip's kind + id; the caller (page.tsx's `addToZone`) owns the
+   *  idempotent-add guard, matching the drag path. */
+  onAddToZone: (kind: Kind, id: string) => void;
 };
 
-export function CatalogPalette({ catalog, usedIds }: Props) {
+export function CatalogPalette({ catalog, usedIds, onAddToZone }: Props) {
   const [search, setSearch] = useState('');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -77,6 +82,17 @@ export function CatalogPalette({ catalog, usedIds }: Props) {
         <div className={`catalog-group-body${isCollapsed ? ' hidden' : ''}`}>
           {items.map((item) => {
             const isUsed = usedIds.includes(item.id);
+            // C2: click (or Enter/Space) adds the chip alongside the existing
+            // HTML5 drag-and-drop — it does not replace it. `catalogAddTarget`
+            // is the same fail-closed kind→zone mapping DropZone.tsx's drag
+            // path uses; a kind it doesn't recognise is a no-op, never a
+            // default zone. An already-bound chip is dimmed + inert here
+            // (mirrors `draggable={!isUsed}`) so click-to-add can't double-bind.
+            const handleActivate = () => {
+              if (isUsed) return;
+              if (!catalogAddTarget(g.kind)) return;
+              onAddToZone(g.kind, item.id);
+            };
             return (
               <span
                 key={item.id}
@@ -88,6 +104,11 @@ export function CatalogPalette({ catalog, usedIds }: Props) {
                 onDragStart={(e) => handleDragStart(e, item, g.kind)}
                 onDragEnd={handleDragEnd}
                 title={String(item.desc ?? '')}
+                role="button"
+                tabIndex={isUsed ? -1 : 0}
+                aria-disabled={isUsed}
+                onClick={handleActivate}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handleActivate(); } }}
               >
                 <span className="dot" />
                 {String(item.name)}
