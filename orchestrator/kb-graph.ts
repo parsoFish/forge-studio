@@ -15,13 +15,14 @@
  */
 
 import { existsSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
-import { join, resolve, basename } from 'node:path';
+import { join, resolve, basename, dirname } from 'node:path';
 import { execSync } from 'node:child_process';
 // gray-matter has no usable types; treated as any for parsing.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
 import { resolveKbBrainDir } from './brain-paths.ts';
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -83,6 +84,31 @@ function resolveKbDir(forgeRoot: string, kbId: string): string {
     );
   }
   return kbDir;
+}
+
+/**
+ * Guarded resolution of a path NESTED under an already-verified kb dir
+ * (bd `forge-wze`). Returns the identity-verified real path, or `null` when
+ * the tail does not exist or any segment fails containment.
+ *
+ * `resolveKbBrainDir` hardens `<brain-root>/<kbId>` itself, but every escape
+ * confirmed live at this site was one level DEEPER: a genuinely real
+ * `brain/<id>/` whose `themes` or `_guidance` is a symlink pointing outside
+ * `brain/`. Guarding only the kb dir would close the first shape and leave
+ * those wide open, so every nested join in this module goes through here.
+ *
+ * Note the call shape. `kbDir` is already a realpath-verified location, but it
+ * is NOT passed as the guard's `root` — that is the root-folding shape
+ * `cli/studio-path-guard.ts`'s CONTRACT section forbids, because `root`
+ * receives no identity check whatsoever. It is split back into its trusted
+ * base (`dirname`) plus its own id (`basename`), so the id re-enters as a
+ * `segments[]` element and is identity-checked again alongside the tail. That
+ * keeps the "every untrusted id is its own segment, never folded into root"
+ * invariant true at this call site by inspection, not by argument.
+ */
+function guardedKbPath(kbDir: string, ...tail: readonly string[]): string | null {
+  const guarded = resolveGuardedPath(dirname(kbDir), [basename(kbDir), ...tail]);
+  return guarded.ok && guarded.exists ? guarded.realPath : null;
 }
 
 /** Convert a filesystem path to a stable slug id. Uses the filename without .md. */
@@ -252,8 +278,8 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
   // ---- Category index nodes -----------------------------------------------
   const categoryIndexIds: string[] = [];
   for (const [filename, label] of Object.entries(CATEGORY_INDEX_FILES)) {
-    const indexPath = join(kbDir, filename);
-    if (!existsSync(indexPath)) continue;
+    const indexPath = guardedKbPath(kbDir, filename);
+    if (!indexPath) continue;
     const indexId = `${kbId}-index-${label}`;
     addNode({ id: indexId, title: label.charAt(0).toUpperCase() + label.slice(1), layer: 'index' });
     categoryIndexIds.push(indexId);
@@ -262,14 +288,17 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
   }
 
   // ---- Theme nodes --------------------------------------------------------
-  const themesDir = join(kbDir, 'themes');
+  const themesDir = guardedKbPath(kbDir, 'themes');
   const themeFiles: string[] = [];
-  if (existsSync(themesDir)) {
+  if (themesDir) {
     try {
       const entries = readdirSync(themesDir);
       for (const f of entries) {
         if (f === 'README.md' || !f.endsWith('.md')) continue;
-        themeFiles.push(join(themesDir, f));
+        // Per-FILE guard, not just the dir: a real themes/ holding a symlinked
+        // or hardlinked leaf is escape shape 1/5 from the guard's own catalog.
+        const themeFile = guardedKbPath(kbDir, 'themes', f);
+        if (themeFile) themeFiles.push(themeFile);
       }
     } catch {
       // unreadable themes dir
@@ -305,8 +334,14 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
   }
 
   // ---- Raw nodes (capped to newest RAW_NODE_CAP) --------------------------
-  const rawDir = join(kbDir, '_raw');
-  const rawFiles = walkMdFiles(rawDir);
+  // `_raw` is guarded here; the recursive walk BELOW it is contained by
+  // `walkMdFiles`'s dirent-type filter (`readdirSync(..., {withFileTypes:true})`
+  // reports `isDirectory()` AND `isFile()` false for a symlinked entry, so a
+  // symlink can never enter the result set). Residual, stated rather than
+  // implied: a HARDLINKED `.md` deep inside a real `_raw/` tree is a genuine
+  // regular file and passes that filter — see `docs/security-request-path-audit.md`.
+  const rawDir = guardedKbPath(kbDir, '_raw');
+  const rawFiles = rawDir ? walkMdFiles(rawDir) : [];
 
   // Cap to newest 80 — capped flag logged in comment above RAW_NODE_CAP const
   const cappedRawFiles = rawFiles.length > RAW_NODE_CAP ? rawFiles.slice(0, RAW_NODE_CAP) : rawFiles;
@@ -330,8 +365,8 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
   // ---- Guidance nodes from _guidance/*.md --------------------------------
   // Pending human guidance notes render as amber-diamond nodes until consumed
   // by the next brain-ingest pass (which deletes them).
-  const guidanceDir = join(kbDir, '_guidance');
-  if (existsSync(guidanceDir)) {
+  const guidanceDir = guardedKbPath(kbDir, '_guidance');
+  if (guidanceDir) {
     let guidanceEntries: string[];
     try {
       guidanceEntries = readdirSync(guidanceDir).filter((f) => f.endsWith('.md'));
@@ -339,7 +374,8 @@ export function buildKbGraph(forgeRoot: string, kbId: string): KbGraph {
       guidanceEntries = [];
     }
     for (const filename of guidanceEntries) {
-      const guidancePath = join(guidanceDir, filename);
+      const guidancePath = guardedKbPath(kbDir, '_guidance', filename);
+      if (!guidancePath) continue;
       const guidanceNodeId = `guidance-${basename(filename, '.md')}`;
       let guidanceTargetNode: string | undefined;
       try {
@@ -465,21 +501,17 @@ export function getKbNodeArticle(
   if (node.layer === 'guidance') {
     // guidance node id is 'guidance-<filename-without-.md>'
     const slug = nodeId.startsWith('guidance-') ? nodeId.slice('guidance-'.length) : nodeId;
-    const candidate = join(kbDir, '_guidance', `${slug}.md`);
-    if (existsSync(candidate)) filePath = candidate;
+    filePath = guardedKbPath(kbDir, '_guidance', `${slug}.md`);
   } else if (node.layer === 'theme') {
-    const candidate = join(kbDir, 'themes', `${nodeId}.md`);
-    if (existsSync(candidate)) filePath = candidate;
+    filePath = guardedKbPath(kbDir, 'themes', `${nodeId}.md`);
   } else if (node.layer === 'raw') {
     // raw node ids are prefixed with 'raw:'
     const slug = nodeId.startsWith('raw:') ? nodeId.slice(4) : nodeId;
-    const rawDir = join(kbDir, '_raw');
-    const candidate = join(rawDir, `${slug}.md`);
-    if (existsSync(candidate)) filePath = candidate;
+    filePath = guardedKbPath(kbDir, '_raw', `${slug}.md`);
   } else if (node.layer === 'index') {
     // Could be INDEX.md or a category index file
-    const indexMd = join(kbDir, 'INDEX.md');
-    if (existsSync(indexMd)) {
+    const indexMd = guardedKbPath(kbDir, 'INDEX.md');
+    if (indexMd) {
       filePath = indexMd;
     } else {
       // category index: id is `<kbId>-index-<label>`
@@ -488,10 +520,7 @@ export function getKbNodeArticle(
         const label = nodeId.slice(prefix.length);
         // Map label back to filename
         const filename = Object.entries(CATEGORY_INDEX_FILES).find(([, l]) => l === label)?.[0];
-        if (filename) {
-          const candidate = join(kbDir, filename);
-          if (existsSync(candidate)) filePath = candidate;
-        }
+        if (filename) filePath = guardedKbPath(kbDir, filename);
       }
     }
   }
@@ -549,8 +578,8 @@ export type PendingGuidance = {
  */
 export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGuidance[] {
   const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
-  const guidanceDir = join(kbDir, '_guidance');
-  if (!existsSync(guidanceDir)) return [];
+  const guidanceDir = guardedKbPath(kbDir, '_guidance');
+  if (!guidanceDir) return [];
 
   let entries: string[];
   try {
@@ -561,7 +590,8 @@ export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGui
 
   const result: PendingGuidance[] = [];
   for (const filename of entries) {
-    const filePath = join(guidanceDir, filename);
+    const filePath = guardedKbPath(kbDir, '_guidance', filename);
+    if (!filePath) continue;
     try {
       const raw = readFileSync(filePath, 'utf8');
       const parsed = parseMd(raw);
@@ -586,16 +616,21 @@ export function listPendingGuidance(forgeRoot: string, kbId: string): PendingGui
  */
 export function deleteGuidanceFile(forgeRoot: string, kbId: string, filePath: string): boolean {
   const kbDir = resolveKbDir(forgeRoot, kbId); // throws on unknown kbId
-  const guidanceDir = join(kbDir, '_guidance');
-  const resolvedFile = resolve(filePath);
-  const resolvedGuidanceDir = resolve(guidanceDir);
 
-  // Path-guard: the file must be inside _guidance/
-  if (!resolvedFile.startsWith(resolvedGuidanceDir + '/')) {
+  // Containment (bd `forge-wze`): the caller names the file, so re-derive it
+  // from its BASENAME under the guarded `_guidance` tail rather than trusting
+  // the supplied string. The former check was a lexical `startsWith` on a
+  // `resolve()`d path — it blocked a literal `..` (which `resolve()` had
+  // already normalized away) but not a symlinked `_guidance/` or a symlinked
+  // leaf inside it, which is precisely the shape confirmed live here.
+  const resolvedFile = guardedKbPath(kbDir, '_guidance', basename(filePath));
+  if (!resolvedFile || resolvedFile !== resolve(filePath)) {
+    // Not under this kb's real `_guidance/`, or the supplied path pointed
+    // somewhere other than where its own basename resolves to.
+    if (!existsSync(resolve(filePath))) return false;
     throw new Error(`deleteGuidanceFile: path traversal — "${filePath}" is not under _guidance/`);
   }
 
-  if (!existsSync(resolvedFile)) return false;
   rmSync(resolvedFile);
   return true;
 }

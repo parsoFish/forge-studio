@@ -1009,8 +1009,26 @@ export async function handleStudioWriteRoutes(
       // its own project is honored; other targets load from disk.
       const flowProjectOf = (id: string): string | null | undefined => {
         if (id === merged.id) return merged.project;
+        // CONTAINMENT (bd `forge-b2k`). `id` here is NOT the URL's `:id` — it
+        // is `triggers[].target.ref` out of the REQUEST BODY, and the
+        // SLUG_RE gate on this route covers the URL param only, never this
+        // path. It used to reach a bare `join()` + read, which leaked a
+        // boolean existence oracle: "is there a project-bearing,
+        // flow.yaml-shaped file at this `..`-traversed location?", surfaced as
+        // a difference in the returned validation findings.
+        //
+        // Two layers, matching the four already-fixed write routes:
+        //   1. SLUG_RE as the independent first layer (defense in depth).
+        //   2. The shared realpath identity guard, with `studio/flows` as a
+        //      fixed forgeRoot-derived root and `id` as its OWN segment.
+        // Every rejection returns `undefined` — byte-identical to "no such
+        // flow" — because an oracle closes only when the rejected and the
+        // not-found cases are indistinguishable to the caller.
+        if (!SLUG_RE.test(id)) return undefined;
+        const guarded = resolveGuardedPath(resolve(ctx.forgeRoot, 'studio', 'flows'), [id, 'flow.yaml']);
+        if (!guarded.ok || !guarded.exists) return undefined;
         try {
-          return loadFlowDefinition(join(ctx.forgeRoot, 'studio', 'flows', id, 'flow.yaml')).project;
+          return loadFlowDefinition(guarded.realPath).project;
         } catch {
           return undefined;
         }

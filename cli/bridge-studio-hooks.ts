@@ -56,8 +56,9 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 import yaml from 'js-yaml';
 
 import {
@@ -71,6 +72,7 @@ import {
 import { assertSkillSlug } from '../orchestrator/skill-path.ts';
 import {
   hookDir,
+  hooksDir,
   hookYamlPath,
   listHookLibrary,
   HOOK_LIFECYCLE_EVENTS,
@@ -234,18 +236,36 @@ export async function handleStudioHooksRoutes(
       const slug = (typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name)
         .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
 
-      let hookDirPath: string;
+      // Layer 1 — SHAPE: `hookDir` runs `assertSkillSlug` (charset only).
       try {
-        hookDirPath = hookDir(slug, ctx.forgeRoot);
+        hookDir(slug, ctx.forgeRoot);
       } catch (err) {
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
         return true;
       }
 
-      if (existsSync(join(hookDirPath, 'hook.yaml'))) {
+      // Layer 2 — CONTAINMENT (bd `forge-wze` sweep). `hookDir`/`hookYamlPath`
+      // are `assertSkillSlug` + a bare `join()`, so a pre-planted symlinked
+      // `studio/hooks/<slug>` directory was followed and this route CREATED
+      // `hook.yaml` + `scripts/run.sh` through it, outside the repo (confirmed
+      // live). `studio/hooks/` is the fixed root; `slug` is its own segment,
+      // never folded into that root (./studio-path-guard.ts, CONTRACT).
+      const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [slug, 'hook.yaml']);
+      if (!yamlGuard.ok) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+      if (yamlGuard.exists) {
         sendJson(res, 409, { error: `hook "${slug}" already exists` }, origin);
         return true;
       }
+      const scriptGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [slug, 'scripts', 'run.sh']);
+      if (!scriptGuard.ok) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin);
+        return true;
+      }
+      const hookYaml = yamlGuard.realPath;
+      const hookScript = scriptGuard.realPath;
 
       const doc: Record<string, unknown> = {
         name,
@@ -256,9 +276,9 @@ export async function handleStudioHooksRoutes(
         permissions,
       };
 
-      mkdirSync(join(hookDirPath, 'scripts'), { recursive: true });
-      writeFileSync(join(hookDirPath, 'scripts', 'run.sh'), scriptBody, 'utf8');
-      writeFileSync(join(hookDirPath, 'hook.yaml'), yaml.dump(doc), 'utf8');
+      mkdirSync(dirname(hookScript), { recursive: true });
+      writeFileSync(hookScript, scriptBody, 'utf8');
+      writeFileSync(hookYaml, yaml.dump(doc), 'utf8');
 
       sendJson(res, 200, { ok: true, id: slug }, origin);
     } catch (err) {
@@ -274,10 +294,14 @@ export async function handleStudioHooksRoutes(
       let id: string;
       try { id = decodeIdSegment(approveMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
 
-      let yamlPath: string;
-      try { yamlPath = hookYamlPath(id, ctx.forgeRoot); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
+      // Layer 1 — SHAPE (assertSkillSlug); layer 2 — CONTAINMENT via the shared
+      // realpath identity guard, closing the symlinked-`studio/hooks/<id>`
+      // write-through. A guard rejection returns the SAME 404 as a genuinely
+      // unknown hook, so this route is not a probe for planted ids.
+      try { hookYamlPath(id, ctx.forgeRoot); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
 
-      if (!existsSync(yamlPath)) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
+      const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
+      if (!yamlGuard.ok || !yamlGuard.exists) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
 
       const runState = hookRunState(ctx.forgeRoot, id);
       if (runState.verdict === 'blocked') {
@@ -302,10 +326,14 @@ export async function handleStudioHooksRoutes(
       let id: string;
       try { id = decodeIdSegment(overrideMatch[1]); } catch { sendJson(res, 400, { error: 'invalid hook id — malformed URL encoding' }, origin); return true; }
 
-      let yamlPath: string;
-      try { yamlPath = hookYamlPath(id, ctx.forgeRoot); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
+      // Layer 1 — SHAPE (assertSkillSlug); layer 2 — CONTAINMENT via the shared
+      // realpath identity guard, closing the symlinked-`studio/hooks/<id>`
+      // write-through. A guard rejection returns the SAME 404 as a genuinely
+      // unknown hook, so this route is not a probe for planted ids.
+      try { hookYamlPath(id, ctx.forgeRoot); } catch (err) { sendJson(res, 400, { error: sanitizeError(err) }, origin); return true; }
 
-      if (!existsSync(yamlPath)) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
+      const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
+      if (!yamlGuard.ok || !yamlGuard.exists) { sendJson(res, 404, { error: `unknown hook "${id}"` }, origin); return true; }
 
       let body: unknown;
       try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
@@ -338,9 +366,19 @@ export async function handleStudioHooksRoutes(
         return true;
       }
 
-      const dir = hookDir(id, ctx.forgeRoot);
-      const yamlBody = readFileSync(hookYamlPath(id, ctx.forgeRoot), 'utf8');
-      const scriptBody = readFileSync(join(dir, entry.script), 'utf8');
+      // CONTAINMENT: read only through the identity-verified real paths. The
+      // `listHookLibrary` lookup above filters on dirent type, which excludes
+      // a symlinked hook DIR by accident — but not a symlinked or hardlinked
+      // LEAF inside a real dir, and `entry.script` is a hook.yaml-supplied
+      // relative path, so it is walked as segments rather than joined blind.
+      const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, 'hook.yaml']);
+      const scriptGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [id, ...entry.script.split('/')]);
+      if (!yamlGuard.ok || !yamlGuard.exists || !scriptGuard.ok || !scriptGuard.exists) {
+        sendJson(res, 404, { error: `unknown hook "${id}"` }, origin);
+        return true;
+      }
+      const yamlBody = readFileSync(yamlGuard.realPath, 'utf8');
+      const scriptBody = readFileSync(scriptGuard.realPath, 'utf8');
       const scan = scanHookPackage(ctx.forgeRoot, id);
       const runState = hookRunState(ctx.forgeRoot, id);
       const ledgerEntry = readHookApprovalLedger(ctx.forgeRoot).get(id);
