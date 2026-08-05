@@ -309,3 +309,27 @@ test('descriptor FILTERS OUT a value not in MATERIAL_KINDS — a def that slippe
   const def = baseAgentDefFixture({ materials: ['images', 'holograms'] });
   assert.deepEqual(agentCapabilityDescriptor(def).materials, ['images']);
 });
+
+// ---------------------------------------------------------------------------
+// agentCapabilityDescriptor — fail-CLOSED on a malformed def.materials
+// (2026-08-05 adversarial-review round 2, finding B/3). Same reachability
+// argument as materials.test.ts's agentAcceptsMaterial coverage: this
+// descriptor is computed from ANY AgentDefinition, not only one that passed
+// through loadAgentDefinition. Today `(def.materials ?? []).filter(...)`
+// throws `TypeError: (...).filter is not a function` for a non-array
+// materials value (a bare string, in particular) — a capability-descriptor
+// computation must never crash the whole GET /api/studio/agents response
+// over one malformed agent def.
+// ---------------------------------------------------------------------------
+
+test('agentCapabilityDescriptor: a non-array (bare string) materials value does not throw — descriptor.materials is []', () => {
+  const def = baseAgentDefFixture({ materials: 'images' as unknown as string[] });
+  assert.doesNotThrow(() => agentCapabilityDescriptor(def));
+  assert.deepEqual(agentCapabilityDescriptor(def).materials, []);
+});
+
+test('agentCapabilityDescriptor: materials: null does not throw — descriptor.materials is []', () => {
+  const def = baseAgentDefFixture({ materials: null as unknown as string[] });
+  assert.doesNotThrow(() => agentCapabilityDescriptor(def));
+  assert.deepEqual(agentCapabilityDescriptor(def).materials, []);
+});

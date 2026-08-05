@@ -134,3 +134,67 @@ describe('agentAcceptsMaterial', () => {
     assert.equal(agentAcceptsMaterial(def, 'Images'), false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// agentAcceptsMaterial — fail-CLOSED on a malformed def.materials (2026-08-05
+// adversarial-review round 2, finding A). `loadAgentDefinition` always hands
+// back either `undefined` or a real `string[]` — but this gate is reachable
+// from ANY hand-built `AgentDefinition`, and JS does not enforce the type at
+// runtime. The bug: `def.materials.includes(kind)` — when `materials` is a
+// bare STRING, `.includes` resolves to `String.prototype.includes`, which
+// SUBSTRING-matches. `materials: 'no-images-allowed'` + kind `'images'`
+// currently returns `true` (a real fail-open, not just a crash) because the
+// substring "images" is present in the string. Every non-array shape must
+// return `false` — never substring-match, never throw.
+// ---------------------------------------------------------------------------
+
+describe('agentAcceptsMaterial — fail-closed on a malformed (non-array) def.materials', () => {
+  it('a bare string that literally IS the kind name never grants acceptance (no accidental match)', () => {
+    const def = { ...fixtureDef(undefined), materials: 'images' } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def, 'images'), false);
+  });
+
+  it('a bare string that merely CONTAINS the kind as a substring must not fail open via String.prototype.includes', () => {
+    const def1 = { ...fixtureDef(undefined), materials: 'no-images-allowed' } as unknown as AgentDefinition;
+    assert.equal(
+      agentAcceptsMaterial(def1, 'images'),
+      false,
+      'String.prototype.includes substring-matches "images" inside "no-images-allowed" — this is the exact fail-open bug',
+    );
+    const def2 = { ...fixtureDef(undefined), materials: 'documents-and-audio' } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def2, 'audio'), false);
+  });
+
+  it('materials: null → false, never throws', () => {
+    const def = { ...fixtureDef(undefined), materials: null } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def, 'images'), false);
+  });
+
+  it('materials: {} (plain object) → false, never throws', () => {
+    const def = { ...fixtureDef(undefined), materials: {} } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def, 'images'), false);
+  });
+
+  it('materials: a Set → false, never throws (Set has no .includes)', () => {
+    const def = { ...fixtureDef(undefined), materials: new Set(['images']) } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def, 'images'), false);
+  });
+
+  it('materials: a bare number → false, never throws', () => {
+    const def = { ...fixtureDef(undefined), materials: 42 } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def, 'images'), false);
+  });
+
+  it('materials: an array-LIKE object ({0:"images",length:1}, not a real Array) → false, never throws', () => {
+    const def = { ...fixtureDef(undefined), materials: { 0: 'images', length: 1 } } as unknown as AgentDefinition;
+    assert.equal(agentAcceptsMaterial(def, 'images'), false);
+  });
+
+  it('def itself is null → false, never throws', () => {
+    assert.equal(agentAcceptsMaterial(null as unknown as AgentDefinition, 'images'), false);
+  });
+
+  it('def itself is undefined → false, never throws', () => {
+    assert.equal(agentAcceptsMaterial(undefined as unknown as AgentDefinition, 'images'), false);
+  });
+});

@@ -25,6 +25,7 @@ import {
   mkdtempSync,
   readFileSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from 'node:fs';
 import { join, dirname } from 'node:path';
@@ -377,7 +378,8 @@ test('PUT with materials persists it; the reloaded definition has it', async () 
     `${bridgeUrl}/api/studio/agents/write-agent`,
     makePutAgentBody({ materials: ['images', 'documents'] }),
   );
-  assert.equal(res.status, 200, await res.text());
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
   const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
   assert.deepEqual(data.materials, ['images', 'documents']);
 });
@@ -409,7 +411,8 @@ test('materials omitted from the PUT body for an agent that HAS materials on dis
     ),
   );
   const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody());
-  assert.equal(res.status, 200, await res.text());
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
   const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
   assert.deepEqual(data.materials, ['images'], 'omitting materials from the PUT body must preserve the on-disk value');
 });
@@ -423,7 +426,8 @@ test('materials: [] explicitly in the PUT body clears it — distinguishable fro
     ),
   );
   const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody({ materials: [] }));
-  assert.equal(res.status, 200, await res.text());
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
   const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
   assert.deepEqual(data.materials, [], 'an explicit empty array must clear materials, not preserve the prior declared value');
 });
@@ -482,7 +486,8 @@ test('PUT changing only process preserves an existing fanout: block byte-for-byt
     composition: { skills: [], tools: [], mcps: [], guards: ['event-log'] },
     runtime: { sdk: 'claude-code', strategy: 'fixed', model: 'claude-sonnet-4-5' },
   });
-  assert.equal(res.status, 200, await res.text());
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
 
   const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'fanout-agent', 'SKILL.md'), 'utf8'));
   assert.deepEqual(
@@ -516,7 +521,8 @@ test('PUT with only process changed on the seeded real developer-ralph bytes →
     composition: data.composition,
     runtime: data.runtime,
   });
-  assert.equal(res.status, 200, await res.text());
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
 
   const after = readFileSync(join(seededDir, 'SKILL.md'), 'utf8');
   assert.equal(
@@ -548,12 +554,309 @@ test('a PUT that legitimately changes a frontmatter field still reloads with the
     composition: data.composition,
     runtime: data.runtime,
   });
-  assert.equal(res.status, 200, await res.text());
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
 
   const after = readFileSync(join(seededDir, 'SKILL.md'), 'utf8');
   const { data: afterData, content: afterBody } = matter(after);
   assert.equal(afterData.purpose, 'A legitimately DIFFERENT purpose for this AT.');
   assert.equal(afterBody, originalBody, 'the body must stay byte-exact even through the full re-serialize path');
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — symlink escape (2026-08-05 adversarial-review
+// round 2, finding C/6, VERIFIED BLOCKER). `skillMdPath.startsWith(skillsDir
+// + sep)` at cli/bridge-studio-writes.ts is a LEXICAL check on the
+// CONSTRUCTED path string — it never resolves symlinks. A slug that passes
+// SLUG_RE always constructs a path lexically inside skills/, so the guard
+// can never fire regardless of what that path actually points at on disk.
+// If `skills/<slug>/SKILL.md` is a symlink to a file OUTSIDE the forge root,
+// `writeFileSync` follows it and overwrites the outside file — a genuine
+// arbitrary-file-write primitive via the Studio agent editor.
+// ---------------------------------------------------------------------------
+
+test('BLOCKER: PUT rejects a symlinked SKILL.md FILE escaping the forge root — the outside file stays byte-unchanged (real dir, symlinked file)', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-write-outside-'));
+  const outsideFile = join(outsideDir, 'secret.md');
+  const outsideOriginal = makeAgentSkillMd().replace('Write Agent', 'Outside Secret Agent');
+  writeFileSync(outsideFile, outsideOriginal, 'utf8');
+
+  // The escape session DIRECTORY (skills/escape-put-agent/) is REAL — only
+  // the SKILL.md FILE inside it is a symlink. This is the shape that defeats
+  // a fix which only re-checks/canonicalises the DIRECTORY resolver: the
+  // directory itself is legitimately inside the forge root.
+  mkdirSync(join(forgeRoot, 'skills', 'escape-put-agent'), { recursive: true });
+  const linkPath = join(forgeRoot, 'skills', 'escape-put-agent', 'SKILL.md');
+  try {
+    symlinkSync(outsideFile, linkPath);
+  } catch {
+    // Symlink creation can be unavailable in some sandboxes — skip rather
+    // than false-failing the suite for an environment limitation.
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await putJson(
+      `${bridgeUrl}/api/studio/agents/escape-put-agent`,
+      makePutAgentBody({ name: 'Outside Secret Agent', purpose: 'ATTACKER-CONTROLLED purpose overwrite attempt.' }),
+    );
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a symlinked SKILL.md file escaping the forge root must be REJECTED, not written (verified live BLOCKER: today it returns 200 and overwrites the target)',
+    );
+    const outsideAfter = readFileSync(outsideFile, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the out-of-tree file must be byte-unchanged');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('PUT rejects a symlinked skills/<slug> DIRECTORY escaping the forge root — the outside file stays byte-unchanged', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-write-outside-dir-'));
+  const outsideSkillPath = join(outsideDir, 'SKILL.md');
+  const outsideOriginal = makeAgentSkillMd().replace('Write Agent', 'Outside Dir Secret Agent');
+  writeFileSync(outsideSkillPath, outsideOriginal, 'utf8');
+
+  const linkPath = join(forgeRoot, 'skills', 'escape-put-dir-agent');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+
+  try {
+    const res = await putJson(
+      `${bridgeUrl}/api/studio/agents/escape-put-dir-agent`,
+      makePutAgentBody({ name: 'Outside Dir Secret Agent', purpose: 'ATTACKER-CONTROLLED purpose overwrite attempt.' }),
+    );
+    assert.notEqual(
+      res.status,
+      200,
+      'a PUT through a symlinked skills/<slug> directory escaping the forge root must be REJECTED, not written',
+    );
+    const outsideAfter = readFileSync(outsideSkillPath, 'utf8');
+    assert.equal(outsideAfter, outsideOriginal, 'the out-of-tree file must be byte-unchanged');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — byte-preservation is defeated by composition.hooks
+// (2026-08-05 adversarial-review round 2, finding C/7). Every prior fixture
+// in this file (and the developer-ralph golden file) omits composition.hooks
+// entirely, so the byte-faithful-round-trip and fanout-survives ATs above
+// pass identically whether the D5 verbatim fast path actually engages or
+// not. These two ATs use a fixture that HAS non-empty composition.hooks AND
+// a frontmatter "#" comment block, so the fast path is genuinely exercised.
+// ---------------------------------------------------------------------------
+
+function makeHookedAgentSkillMd(): string {
+  return [
+    '---',
+    'name: Hooked Agent',
+    'description: An agent for byte-preservation + hooks tests.',
+    // Explicit `library: true` (matching the real roster's convention, e.g.
+    // developer-ralph) — WITHOUT it, `existing?.library ?? true` synthesises
+    // a `library: true` key the original never had, which alone defeats the
+    // deep-equal-against-original check and would confound this test with a
+    // second, unrelated mismatch driver. This fixture isolates hooks as the
+    // ONLY variable.
+    'library: true',
+    'phase: developer',
+    'surface: unattended',
+    'purpose: Exercise byte-preservation with composition.hooks present.',
+    'composition:',
+    '  skills: []',
+    '  tools: []',
+    '  mcps: []',
+    '  guards:',
+    '    - event-log',
+    '  hooks:',
+    '    - test-hook',
+    'runtime:',
+    '  sdk: claude-code',
+    '  strategy: fixed',
+    '  model: claude-sonnet-4-5',
+    '# A frontmatter comment block that must survive byte-for-byte when the',
+    '# verbatim fast path engages (D5) — this is the exact loss vector these',
+    '# byte-preservation ATs exist to pin.',
+    'brainAccess: advisory',
+    'interactivity: none',
+    'allowed-tools:',
+    '  - Read',
+    'disallowed-tools: []',
+    'budgets: {}',
+    '---',
+    '',
+    '# Hooked Agent',
+    '',
+    'Process body text.',
+  ].join('\n');
+}
+
+/** Register a real library hook so composition.hooks: [test-hook] passes
+ *  checkHookComposition (an unregistered hook id is an error-level finding
+ *  that would 400 every PUT in this section for an unrelated reason). */
+function seedTestHook(root: string): void {
+  const hookDir = join(root, 'studio', 'hooks', 'test-hook');
+  mkdirSync(hookDir, { recursive: true });
+  writeFileSync(
+    join(hookDir, 'hook.yaml'),
+    [
+      'id: test-hook',
+      'name: test-hook',
+      'description: A test hook for byte-preservation tests.',
+      'on: SessionEnd',
+      'script: scripts/run.sh',
+      'permissions:',
+      '  env: []',
+      '  read: []',
+      '  network: false',
+    ].join('\n'),
+  );
+}
+
+test('byte-preservation WITH hooks present: PUT changing only process while RESENDING the same hooks ⇒ frontmatter (comments, hooks, key order) byte-identical', async () => {
+  seedTestHook(forgeRoot);
+  const original = makeHookedAgentSkillMd();
+  mkdirSync(join(forgeRoot, 'skills', 'hooked-agent'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', 'hooked-agent', 'SKILL.md'), original);
+
+  const { data, content } = matter(original);
+  const bodyStart = original.length - content.length;
+
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/hooked-agent`, {
+    name: data.name,
+    purpose: data.purpose,
+    process: 'Updated process only — hooks byte-preservation probe.',
+    interactivity: data.interactivity,
+    brainAccess: data.brainAccess,
+    composition: data.composition,
+    runtime: data.runtime,
+  });
+  const okText = await res.text();
+  assert.equal(res.status, 200, okText);
+
+  const after = readFileSync(join(forgeRoot, 'skills', 'hooked-agent', 'SKILL.md'), 'utf8');
+  assert.equal(
+    after.slice(0, bodyStart),
+    original.slice(0, bodyStart),
+    'frontmatter (the # comment block, the hooks: list, key order) must be byte-identical when hooks are RESENT unchanged',
+  );
+  const { data: afterData } = matter(after);
+  assert.deepEqual(afterData.composition.hooks, ['test-hook'], 'hooks must survive intact');
+});
+
+test('byte-preservation WITH hooks present: PUT that OMITS composition.hooks clears them — the DOCUMENTED R3-03 no-fallback carve-out, not a bug (regression lock, not a fix pin)', async () => {
+  seedTestHook(forgeRoot);
+  const original = makeHookedAgentSkillMd();
+  mkdirSync(join(forgeRoot, 'skills', 'hooked-agent-2'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', 'hooked-agent-2', 'SKILL.md'), original);
+
+  const { data } = matter(original);
+  const comp = data.composition as { skills: string[]; tools: string[]; mcps: string[]; guards: string[] };
+  const compositionWithoutHooks = { skills: comp.skills, tools: comp.tools, mcps: comp.mcps, guards: comp.guards };
+
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/hooked-agent-2`, {
+    name: data.name,
+    purpose: data.purpose,
+    process: 'Updated process only.',
+    interactivity: data.interactivity,
+    brainAccess: data.brainAccess,
+    composition: compositionWithoutHooks,
+    runtime: data.runtime,
+  });
+  const okText2 = await res.text();
+  assert.equal(res.status, 200, okText2);
+
+  const after = readFileSync(join(forgeRoot, 'skills', 'hooked-agent-2', 'SKILL.md'), 'utf8');
+  const { data: afterData } = matter(after);
+  assert.deepEqual(
+    afterData.composition.hooks,
+    [],
+    'omitting composition.hooks from the PUT body must clear it to [] — the DOCUMENTED R3-03 no-fallback carve-out (bridge-studio-writes.ts:383-395); this must never silently change to an inherit-when-omitted behaviour',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — malformed materials silently no-ops (2026-08-05
+// adversarial-review round 2, finding C/8). `Array.isArray(b['materials']) ?
+// b['materials'] : existing?.materials` treats ANY non-array materials value
+// as "not sent" and silently falls back to the existing on-disk value with a
+// 200 OK — a malformed shape should be REJECTED (400), not swallowed.
+// ---------------------------------------------------------------------------
+
+async function assertMalformedMaterialsRejected(materialsValue: unknown, label: string): Promise<void> {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const originalContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody({ materials: materialsValue }));
+  assert.equal(res.status, 400, `expected 400 for materials:${label}, got ${res.status} (a malformed shape must not silently no-op)`);
+  const body = (await res.json()) as { error: string };
+  assert.ok(typeof body.error === 'string' && body.error.length > 0, `error must be surfaced for materials:${label}`);
+
+  const afterContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+  assert.equal(afterContent, originalContent, `SKILL.md must be byte-unchanged for a rejected materials:${label}`);
+}
+
+test('malformed materials in the PUT body (null) → 400 with a surfaced error, file byte-unchanged', async () => {
+  await assertMalformedMaterialsRejected(null, 'null');
+});
+
+test('malformed materials in the PUT body ({}) → 400 with a surfaced error, file byte-unchanged', async () => {
+  await assertMalformedMaterialsRejected({}, '{}');
+});
+
+test('malformed materials in the PUT body ("images", a bare string) → 400 with a surfaced error, file byte-unchanged', async () => {
+  await assertMalformedMaterialsRejected('images', '"images"');
+});
+
+// Regression lock: the two legitimate inherit-when-omitted / explicit-clear
+// paths (AT44/45, already covered above) must keep passing alongside the new
+// malformed-shape rejection — an omitted materials field is NOT malformed.
+test('materials omitted (not sent at all) still inherits from disk — NOT treated as malformed', async () => {
+  writeFileSync(
+    join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'),
+    makeAgentSkillMd().replace(
+      'purpose: Write tests to validate the PUT routes.',
+      'purpose: Write tests to validate the PUT routes.\nmaterials: [audio]',
+    ),
+  );
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody());
+  const okText3 = await res.text();
+  assert.equal(res.status, 200, okText3);
+  const { data } = matter(readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8'));
+  assert.deepEqual(data.materials, ['audio']);
+});
+
+// ---------------------------------------------------------------------------
+// PUT /api/studio/agents — materials length cap (2026-08-05 adversarial-
+// review round 2, finding C/9). Nothing today bounds the size of the
+// materials array; a 10k-entry array of unknown values would produce a
+// 10k-entry findings response in the 400 body — a DoS-shaped payload, not a
+// useful error. The fix must short-circuit to a single shape-level
+// rejection before per-value enum checking runs.
+// ---------------------------------------------------------------------------
+
+test('a materials array far longer than the vocabulary (10k entries) → 400 shape error, not a 10k-entry findings response', async () => {
+  writeFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), makeAgentSkillMd());
+  const originalContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+
+  const hugeMaterials = new Array(10000).fill('holograms');
+  const res = await putJson(`${bridgeUrl}/api/studio/agents/write-agent`, makePutAgentBody({ materials: hugeMaterials }));
+  assert.equal(res.status, 400, `expected 400 for an oversized materials array, got ${res.status}`);
+  const body = (await res.json()) as { error: string; findings?: unknown[] };
+  assert.ok(
+    !Array.isArray(body.findings) || body.findings.length < 100,
+    `expected a single shape-level rejection, not a findings-per-element explosion — got ${Array.isArray(body.findings) ? body.findings.length : 'n/a'} findings`,
+  );
+
+  const afterContent = readFileSync(join(forgeRoot, 'skills', 'write-agent', 'SKILL.md'), 'utf8');
+  assert.equal(afterContent, originalContent, 'SKILL.md must be byte-unchanged for a rejected oversized materials array');
 });
 
 // ---------------------------------------------------------------------------

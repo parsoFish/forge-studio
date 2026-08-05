@@ -182,3 +182,21 @@ test('parseInstructionsDraftResponse: a malformed 200 payload (missing draft) is
   const result = parseInstructionsDraftResponse(200, { ok: true });
   expect(result.ok).toBe(false);
 });
+
+// 2026-08-05 adversarial-review round 2, finding E/12: `studioPut`/`studioPost`
+// in this same file both respect the response BODY's own `ok` field
+// (`typeof data.ok === 'boolean' ? data.ok : true`) — an explicit `ok:false`
+// in a 2xx body is a real failure signal, not decoration. This function
+// currently ignores `p['ok']` entirely and derives success purely from HTTP
+// status + shape presence, so a 200 body carrying `{ok:false, draft:'x'}`
+// is misreported as a successful draft.
+test('parseInstructionsDraftResponse: a 2xx body with an explicit ok:false is a FAILURE, not a successful draft (matches studioPut/studioPost)', () => {
+  const result = parseInstructionsDraftResponse(200, {
+    ok: false,
+    draft: 'a draft the server itself says is not valid',
+    derivation: { sources: [] },
+    error: 'draft composition failed validation',
+  });
+  expect(result.ok).toBe(false);
+  if (!result.ok) expect(result.error).toBe('draft composition failed validation');
+});

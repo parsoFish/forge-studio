@@ -419,6 +419,21 @@ describe('serializeAgentDefinition(def, originalRaw) — golden files', () => {
   });
 
   it('D6 proof: a body whose FIRST line is "---" round-trips byte-identical with no frontmatter injection (no originalRaw)', () => {
+    // 2026-08-05 adversarial-review round 2, finding F/13 — verified this AT
+    // already pins the fix: `gray-matter`'s `matter.stringify` RE-PARSES a
+    // BARE-STRING body for its own frontmatter, so a naive
+    // `matter.stringify(body, data)` call would silently inject the body's
+    // OWN "frontmatter-shaped" lines into `data` and truncate `content` down
+    // to whatever came after the body's own second `---`. The shipped
+    // implementation avoids this by passing `{ content: def.body }` (an
+    // object, never re-parsed) — see the comment on `serializeAgentDefinition`.
+    // Reproduced directly against gray-matter outside this test file: the
+    // bare-string form for this exact `trickyBody` corrupts `content` to
+    // `''` (not `trickyBody`) and injects one numeric-string key per
+    // character of the body into `data` (`data['0']`, `data['1']`, ...) —
+    // the `content` equality assertion below already catches that reversion
+    // (it would go from equal to `false`); the numeric-key assertion is an
+    // explicit second, independent tripwire on the injection itself.
     const def = loadAgentDefinition(DEV_RALPH_PATH);
     const trickyBody = '---\n\nA body that opens with a literal thematic break.\n\nAnother --- mid-body break.\n';
     const updated = { ...def, body: trickyBody };
@@ -427,6 +442,10 @@ describe('serializeAgentDefinition(def, originalRaw) — golden files', () => {
     const { data, content } = matter(output);
     assert.equal(data.name, def.name, 'frontmatter data must be unaffected by a body starting with ---');
     assert.equal(content, trickyBody, 'body must round-trip byte-identical, including its literal leading and mid-body --- lines');
+    assert.ok(
+      Object.keys(data).every((k) => !/^\d+$/.test(k)),
+      `frontmatter data must carry no injected numeric-string keys (the bare-string-form injection signature): got keys ${JSON.stringify(Object.keys(data))}`,
+    );
   });
 
   it('serializeAgentDefinition(def) with no originalRaw still produces a loadable file with all fields intact (backward-compatible signature)', () => {
