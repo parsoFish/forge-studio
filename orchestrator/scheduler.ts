@@ -956,7 +956,17 @@ function emitClaimRefusedEvent(
 }
 
 function ensureLayout(cfg: { queueRoot: string; worktreesRoot: string }): void {
-  for (const p of [cfg.queueRoot, cfg.worktreesRoot]) {
+  // SEC-02: `<forgeRoot>/projects` is a containment root for manifest
+  // `project_repo_path` / in-place `worktree_path`, and a containment root
+  // that does not exist fails CLOSED. `forge init`'s `layoutDirs` now creates
+  // it, but the DAEMON has its own layout bootstrap and an install that
+  // predates this change never had it — so create it here too, derived the
+  // same way the guard derives it (the queue root's parent) so the directory
+  // created is provably the directory checked against. Direction matters: the
+  // gap is a FALSE-REJECTION risk (legitimate manifests refused), never a
+  // hole — a missing root can only ever reject.
+  const projectsRoot = join(dirname(resolve(cfg.queueRoot)), 'projects');
+  for (const p of [cfg.queueRoot, cfg.worktreesRoot, projectsRoot]) {
     if (!existsSync(resolve(p))) mkdirSync(resolve(p), { recursive: true });
   }
   const paths = getPaths(cfg.queueRoot);

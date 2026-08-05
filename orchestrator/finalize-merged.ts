@@ -301,6 +301,21 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot })) {
         throw new Error(`unsafe project_repo_path on manifest ${manifestPath}`);
       }
+      // SEC-02: this sweep reads `cycle_id` straight off a ready-for-review
+      // manifest that never necessarily passed through ingest validation (the
+      // same manifest-poisoning threat model `cli/forge-requeue-containment.test.ts`
+      // covers for `runRequeue`) — an entry point independent of
+      // `applyReviewVerdict`. `createLogger` and `writeVerdictJson` further
+      // down both do `resolve(logsRoot, cycleId)`, so validate before either
+      // write site. Resolved and checked HERE, above the `renameSync` claim,
+      // for symmetry with `drain-fix-loop.ts`: rejecting a manifest AFTER
+      // claiming it strands it mid-claim in `in-flight/` (and in the drain's
+      // case leaked a live heartbeat timer). A guard belongs before the side
+      // effects it protects, not after them.
+      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
+      if (!isSafeCycleId(cycleId)) {
+        throw new Error(`unsafe cycle_id on manifest ${manifestPath}`);
+      }
       if (!worktreePath || !existsSync(worktreePath)) {
         out.push({ initiativeId, status: 'no-worktree' });
         continue;
@@ -330,23 +345,6 @@ export async function finalizeMergedReadyForReview(deps: FinalizeDeps = {}): Pro
       // anchor written at first claim) so finalize appends to the SAME `_logs`
       // dir the cycle used; fall back to the latest matching dir for legacy
       // manifests that never persisted one.
-      const cycleId = m.cycle_id ?? latestCycleId(logsRoot, initiativeId) ?? initiativeId;
-      // SEC-02 round 2 (Finding 2 pattern, third path): this sweep reads
-      // cycle_id straight off a ready-for-review manifest that never
-      // necessarily passed through ingest validation (the same
-      // manifest-poisoning threat model `cli/forge-requeue-containment.test.ts`
-      // already covers for `runRequeue`) — an independent path from
-      // `applyReviewVerdict` (`cli/bridge-studio-runs.ts`) that neither the
-      // original SEC-02 fix nor its round-2 review exercised. createLogger
-      // (just below) and writeVerdictJson (just below that) both do
-      // resolve(logsRoot, cycleId) — validate before either write site. The
-      // manifest has already been renamed to in-flight/ above; throwing here
-      // is caught by this function's own per-manifest try/catch (reported as
-      // status:'error', not a crash of the whole sweep) rather than silently
-      // proceeding to write outside logsRoot.
-      if (!isSafeCycleId(cycleId)) {
-        throw new Error(`unsafe cycle_id on manifest ${manifestPath}`);
-      }
       const logger = createLogger(cycleId, logsRoot);
       const input: CycleInput = { initiativeId, manifestPath: inFlightPath, projectRepoPath, worktreePath, cycleId };
 

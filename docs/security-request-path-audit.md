@@ -170,9 +170,50 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 | `orchestrator/studio/skill-library.ts`, `community-install.ts`, `community-index.ts` | package install/read | unguarded → `forge-q80` |
 | `orchestrator/requeue-resume.ts`, `flow-artifacts.ts`, `logging.ts` | manifest-carried `worktree_path` / `cycle_id` | **fixed in SEC-02** (`forge-d1f`) |
 | `orchestrator/review-comments.ts`, `enqueue-*.ts`, `project-create.ts` | charset-gated | guarded |
-| `orchestrator/studio/connection-library.ts`, `daemon.ts`, `agent-dispatch.ts`, `finalize-merged.ts` | — | no request-derived path reaches a filesystem call |
+| `orchestrator/studio/connection-library.ts`, `daemon.ts`, `agent-dispatch.ts` | — | no request-derived path reaches a filesystem call |
+| `orchestrator/finalize-merged.ts` | manifest-carried `worktree_path` / `project_repo_path` / `cycle_id` → `confirmMerge`, `pendingFixWorkItems`, `createLogger`, `writeVerdictJson`, `CycleInput` | **fixed in SEC-02**. This row previously read "no request-derived path reaches a filesystem call" and was WRONG: the merge-confirmation sweep reads all three fields off a `ready-for-review/` manifest into the same sinks as the verdict handler, from a different entry point. |
+| `orchestrator/drain-fix-loop.ts` | manifest-carried `worktree_path` / `project_repo_path` / `cycle_id` → `spawnSync(git, {cwd})`, `pendingFixWorkItems`, `createLogger`, and a full `CycleInput` re-entering `runCycle({resumeFrom:'develop'})` | **fixed in SEC-02**. Absent from this table entirely until the entry-point sweep found it. The worst instance in the WI: an unattended daemon sweep re-running a whole cycle (dev-loop, PM, demo, adversarial-review) against an attacker-chosen worktree and repo path. |
 
 **Root-folding: zero instances.** Every `resolveGuardedPath` call site — the five from R2-09 and the nine added by this sweep — passes a fixed, config-derived `root` and puts each untrusted id in `segments[]`. This was verified call site by call site as a named review checklist line, because the two forms differ by one pair of brackets and only one is safe.
+
+---
+
+## Recorded design assumption — `CycleInput` and the ingest choke point
+
+`orchestrator/scheduler.ts` (the `resolve('projects', m.project)` fallback for a
+manifest with no `project_repo_path`) and every consumer that receives a built
+`CycleInput` are **not** individually guarded, by design. They are safe **iff every
+path by which a manifest reaches disk passes ingest validation** — `writeManifest`,
+whose only two production callers are `orchestrator/promote-manifests.ts` and
+`POST /api/initiatives`.
+
+This is written down rather than left as silence so nobody later reads the absence of
+a row as evidence of coverage. The condition is load-bearing: SEC-02 itself found
+THREE consumers (`runRequeue`, `applyReviewVerdict`, and the two sweeps) that read
+manifests which had **not** necessarily come through ingest, and each needed its own
+assertion. Any new writer of manifest frontmatter either routes through
+`writeManifest` or must carry its own `assertManifestPathFields` call — there is no
+third option that keeps this assumption true.
+
+---
+
+## Completeness rule — one sink, many entry points
+
+**For every module in this table, sweep the siblings its own documentation names.**
+
+SEC-02 was saved by this twice. The filing named ONE entry point (an HTTP ingest
+route). Adversarial review found a second (the HTTP verdict handler, which reads its
+manifest from disk and therefore never sees ingest validation at all). The
+entry-point sweep found a third and fourth: two background daemon sweeps,
+`finalize-merged.ts` and `drain-fix-loop.ts` — and `drain-fix-loop.ts`'s own docstring
+calls it "a sibling of `finalize-merged`", while this table tracked one and not the
+other.
+
+The generalisable failure: **acceptance tests pin the entry point they know about.**
+Guarding a sink is not finished when the route that discovered it goes green. Before
+closing any containment work, enumerate every caller of every sink touched and state
+each one's status individually — a caller you did not check is "not checked", never
+"covered".
 
 ---
 
