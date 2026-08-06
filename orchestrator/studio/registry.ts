@@ -399,6 +399,34 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
   // R4-09-F3: reflect mode. Preserve the raw string (do NOT coerce) so the
   // `trigger-mode` enum lint can reach + reject an invalid value.
   if (typeof t['mode'] === 'string') out.mode = t['mode'] as FlowTrigger['mode'];
+  // R2-08-F1 (ADR-027 amendment): `projects:` — fail LOUD on a malformed
+  // declaration rather than silently coercing it away, unlike the lenient
+  // per-kind blocks above. A silently-dropped/mis-shaped scope is exactly the
+  // declared-data-fails-open antipattern this field exists to prevent, so
+  // this one throws at load instead of leaving it for lint to catch later.
+  // Absent stays absent (unscoped) — never defaulted to `[]` here.
+  if ('projects' in t) {
+    const rawProjects = t['projects'];
+    if (!Array.isArray(rawProjects)) {
+      throw new Error(
+        `${file}: triggers[${index}].projects must be an array of project ids (got ${typeof rawProjects})`,
+      );
+    }
+    const projects: string[] = [];
+    for (const p of rawProjects) {
+      if (typeof p !== 'string') {
+        throw new Error(
+          `${file}: triggers[${index}].projects entries must all be strings (got ${JSON.stringify(p)})`,
+        );
+      }
+      projects.push(p);
+    }
+    out.projects = projects;
+  }
+  // agent-complete only (R2-08-F2): preserve the raw string (do NOT coerce a
+  // non-string away) so the `trigger-agent-complete` lint can reach + reject
+  // a missing/malformed value rather than it silently meaning "fires for all".
+  if (typeof t['agent'] === 'string') out.agent = t['agent'];
   if (typeof t['note'] === 'string') out.note = t['note'];
   return out;
 }

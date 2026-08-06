@@ -21,6 +21,14 @@
  *    mint a fresh initiative manifest for the target flow's project.
  *  - `target.kind: 'agent'` → throws until R4-09 wires the standalone-agent
  *    dispatch; the request is retained (surfaced every sweep, never dropped).
+ *
+ * R4-09 landed the standalone reflect dispatch as its own inline
+ * band-guarded arm in `finalize-merged.ts` — a completely different seam
+ * from this queue. This module still has no production `startAgentRun`
+ * injector: the only production caller (the scheduler) never supplies one,
+ * so an `agent`-target request still surfaces as a retained error here.
+ * `agent-complete` (R2-08-F2) targets FLOWS, which `startFlowRun` already
+ * handles — it does not touch this gap.
  */
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
@@ -33,7 +41,7 @@ import { parseManifest } from './manifest.ts';
 import type { TriggerTarget } from './studio/types.ts';
 import type { TriggerPayload } from './trigger-payload.ts';
 
-export type FlowRunRequestOrigin = 'trigger' | 'cron' | 'webhook';
+export type FlowRunRequestOrigin = 'trigger' | 'cron' | 'webhook' | 'agent-complete';
 
 export type FlowRunRequest = {
   /** What to start (ADR-041). Legacy pre-target requests are skipped loudly. */
@@ -41,7 +49,7 @@ export type FlowRunRequest = {
   origin: FlowRunRequestOrigin;
   triggeredBy: string;
   /** The initiative the source flow ran — repointed at the target by the drain.
-   *  Absent on cron/webhook origination (the drain mints a fresh one). */
+   *  Absent on cron/webhook/agent-complete origination (the drain mints a fresh one). */
   sourceInitiativeId?: string;
   /** External kinds only: the typed, extraction-validated payload (data, not prompt text). */
   payload?: TriggerPayload;
@@ -52,6 +60,21 @@ export type FlowRunRequest = {
    * `replace` is enum-reserved (lint-blocked) — treated as `forbid` here.
    */
   concurrency?: 'allow' | 'forbid' | 'replace';
+  /**
+   * R2-08-F1 (ADR-027 amendment): a snapshot of the firing trigger's OWN
+   * `projects:` declaration, carried onto the staged request — never
+   * re-derived from prose at drain time. Absent ⇒ unscoped; `[]` ⇒ scoped to
+   * nothing. The two states are never collapsed.
+   */
+  projects?: string[];
+  /**
+   * R2-08-F1: the project id THIS event resolved to. `null`/absent ⇒
+   * unresolved. Matched by strict identity against `projects` — never folded
+   * into a filesystem path (ADR-027 R2-08 amendment, rule 5).
+   */
+  eventProject?: string | null;
+  /** R2-08-F2: the completed agent slug that staged this request (agent-complete origin only). */
+  sourceAgent?: string;
   createdAt: string;
 };
 
@@ -101,6 +124,7 @@ export type FlowRunDrainStatus =
   | 'skipped-no-initiative'
   | 'skipped-malformed'
   | 'skipped-concurrency'
+  | 'skipped-out-of-scope'
   | 'error';
 export type FlowRunDrainResult = {
   target?: TriggerTarget;
@@ -146,6 +170,30 @@ export function drainFlowRunRequests(deps: DrainFlowRunDeps = {}): FlowRunDrainR
       deps.notify?.(`flow-trigger: dropped malformed request (no target): ${path}`);
       rmSync(path, { force: true });
       continue;
+    }
+    // R2-08-F1 (ADR-027 amendment) — per-project scope, enforced at the
+    // dispatch point (rule 2: "the dispatch point is the enforcement point;
+    // lint is defense in depth"). `projects === undefined` ⇒ unscoped, the
+    // pre-existing cross-project behaviour, completely unaffected. A DECLARED
+    // scope (including `[]`) requires a resolved `eventProject` that is an
+    // IDENTITY match (never prefix/substring/case-insensitive — plain
+    // Array.includes on strings) against the snapshot list; anything else —
+    // an unresolved event or a non-member id — fails closed as a typed skip,
+    // never a silent drop and never dispatched (rules 3 + 4). This is a pure
+    // identity comparison, not a path operation: an out-of-scope
+    // `eventProject` is never folded into a filesystem path (rule 5).
+    if (req.projects !== undefined) {
+      const eventProject = req.eventProject;
+      const inScope = eventProject !== undefined && eventProject !== null && req.projects.includes(eventProject);
+      if (!inScope) {
+        out.push({ target: req.target, sourceInitiativeId: req.sourceInitiativeId, status: 'skipped-out-of-scope' });
+        deps.notify?.(
+          `flow-trigger: ${req.triggeredBy} → ${req.target.kind}:${req.target.ref} SKIPPED (out of scope — event project ` +
+            `${eventProject == null ? '(unresolved)' : `"${eventProject}"`} not in [${req.projects.join(', ')}])`,
+        );
+        rmSync(path, { force: true });
+        continue;
+      }
     }
     // A CHAINING request (origin 'trigger') without a source initiative has no
     // coherent claim target — drop it so it doesn't accumulate. Only external

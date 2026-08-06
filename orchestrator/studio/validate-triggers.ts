@@ -47,6 +47,14 @@ export type TriggerCheckOpts = {
    * every flow, supplies it so the full check runs.
    */
   flowProjectOf?: (flowId: string) => string | null | undefined;
+  /**
+   * R2-08-F1: the full discovered-project id set (`discoverProjects`) —
+   * enables the `trigger-projects` check (an unknown id in `projects:` is a
+   * lint error). Mirrors `flowIds` exactly: omitted callers skip the check
+   * (a single-flow PUT that hasn't consulted the registry), studio-lint
+   * supplies it so lint reads the SAME evidence the dispatcher reads.
+   */
+  projectIds?: ReadonlySet<string>;
 };
 
 export function checkFlowTriggers(
@@ -217,6 +225,38 @@ export function checkFlowTriggers(
         }
       }
       findings.push(...checkTargetProject(obj, 'trigger-webhook', flow, trigger.target, opts));
+    }
+
+    // trigger-agent-complete (R2-08-F2, T1 ruling #1): `agent:` is REQUIRED on
+    // an `on: agent-complete` row — absent must never mean "fires for all"
+    // (the fail-open shape T1's ruling closed).
+    if (trigger.on === 'agent-complete' && !trigger.agent) {
+      findings.push(
+        err(
+          obj,
+          'trigger-agent-complete',
+          'agent-complete trigger requires a non-empty "agent" (the source agent slug whose completion fires this row) — absent never means "fires for all"',
+        ),
+      );
+    }
+
+    // trigger-projects (R2-08-F1): `projects:` is kind-independent — any
+    // declared id must be a REAL discovered project. Lint reads the SAME
+    // evidence the dispatcher reads (rule 2): the same project enumeration
+    // (`discoverProjects`) threaded in as `opts.projectIds`. Omitted opt ⇒
+    // skip, mirroring `flowIds`'s own precedent.
+    if (trigger.projects !== undefined && opts?.projectIds) {
+      for (const p of trigger.projects) {
+        if (!opts.projectIds.has(p)) {
+          findings.push(
+            err(
+              obj,
+              'trigger-projects',
+              `Trigger "projects" names "${p}", which is not a discovered project — must be one of ${[...opts.projectIds].join('|')}`,
+            ),
+          );
+        }
+      }
     }
 
     // trigger-shape: per-kind field coherence — cron/webhook fields are stray

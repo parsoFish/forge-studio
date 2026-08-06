@@ -225,6 +225,21 @@ export type FlowTrigger = {
   webhook?: WebhookTriggerConfig;
   /** R4-09-F3: reflect-agent (on:merged) only. Absent ⇒ interactive. */
   mode?: TriggerMode;
+  /**
+   * R2-08-F1 (ADR-027 amendment): kind-independent per-project scoping.
+   * Absent ⇒ unscoped (fires for any resolved project — the pre-existing
+   * behaviour). A declared `[]` ⇒ scoped to nothing. The two states are NEVER
+   * collapsed into each other — `loadFlowDefinition` preserves the
+   * distinction and `drainFlowRunRequests` enforces it.
+   */
+  projects?: string[];
+  /**
+   * agent-complete only (R2-08-F2): the source agent slug whose completion
+   * fires this row, matched by strict identity (never prefix/substring).
+   * Absent is a lint error (`trigger-agent-complete`) — it must never mean
+   * "fires for all".
+   */
+  agent?: string;
   note?: string;
 };
 
