@@ -322,9 +322,58 @@ through `resolveProjectsDir`, which honours `FORGE_PROJECTS_DIR` and
 producer and this guard resolved DIFFERENT roots, the containment check failed
 against a legitimately-created session dir, and the terminal-phase write was
 silently refused — **a finished run reading `phase:"running"` forever.** Closed
-by making `ctx.projectsRoot` resolve through `resolveProjectsDir` too, so the
-producer and the guard are ONE value rather than two independent resolutions
-that coincide only in the default configuration. **A guard that resolves its
+by making `ctx.projectsRoot` resolve through `resolveProjectsDir` too.
+
+**A previous revision of this sentence then claimed that made the producer and
+the guard "ONE value rather than two independent resolutions that coincide only
+in the default configuration". Round-4 adversarial review disproved that as
+well — the seventh consecutive round of this campaign to find a false claim in
+this document, and the fourth of those written by the orchestrator.** They were
+never one value. They were two evaluations of the same expression, at different
+times, against a mutable file on disk: `isContainedProjectRepoPath` /
+`isContainedWorktreePath` re-read `forge.config.json` on EVERY call, while
+`startBridge` evaluates it ONCE at server start and holds the result for the
+process's lifetime. Identical expressions agree only while their inputs never
+move, and a live `forge.config.json` edit against a running daemon — an ordinary
+action against a system explicitly designed to run unattended between human
+interaction points — separates them again, false-rejecting legitimate
+approve/finalize/requeue paths for the rest of that process's uptime.
+**The round-4 fix is therefore not a third attempt at making two resolutions
+agree; it removes the second resolution. The root is PASSED
+(`ProjectsRootOpt.projectsRoot`, honoured verbatim, no config read), not
+re-derived** — and it is threaded at every snapshot-holding entry point, because
+a parameter no production caller passes is dead code that leaves the defect live.
+A supplied root that is not a non-empty ABSOLUTE path is REFUSED rather than
+silently fallen back from (`resolve()` on a relative root anchors to
+`process.cwd()`, the exact dependence the round-3 fix removed); that refusal
+branch is itself pinned, by mutation, in `orchestrator/manifest-path-fields.test.ts`
+(pin 8) — round 5 found it live, correct and pinned by nothing, which is the same
+"a guard that cannot fail is not a guard" rule turned on a guard's own refusal
+path.
+
+**NOT CLOSED, disclosed rather than silently assumed away — the same divergence
+survives ACROSS PROCESSES at `writeSessionTerminalPhase` (`cli/agent-run.ts:194`),
+and the round-4 sweep did not reach it.** The bridge creates the session dir under
+its snapshot root and spawns `forge agent dispatch --session-dir <abs>` as a
+detached subprocess; that subprocess re-derives the projects root at write time
+(`:204`) and has no snapshot to be handed. **Reproduced `[exec]`** by driving the
+real `cmdAgentDispatch` against a temp forge root with a session dir at
+`<root>/projects/p/_onboarding/s`: with the default config the terminal phase is
+written (`phase:"failed"`), and with `projectsDir` pointing at a different root it
+is **silently not written at all** (`phase:"running"`) — the round-2 BLOCKER's
+exact symptom, reached by a different mechanism. Severity is MODERATE, not
+BLOCKER, on two measured grounds. First the precondition is genuinely narrow: the
+`FORGE_PROJECTS_DIR` facet does **not** diverge, because `spawnAgentDispatch`
+(`cli/ui-bridge.ts`) passes no `env` option and the child therefore inherits the
+parent's environment verbatim (verified by reading the spawn call) — so this needs
+a `forge.config.json` edit landing inside one run's window, not merely a
+configured `projectsDir`. Second, the guard fails **closed**: it refuses the
+write, so the failure direction is a false rejection and an operator-visible,
+recoverable stale `phase`, never a write outside the root. Not fixed in R4-17
+because the only fix consistent with the round-4 ruling is to PASS the bridge's
+snapshot into the subprocess (a new `--projects-root` flag on `agent dispatch`),
+which makes the guard's own root an argv input and deserves its own acceptance
+tests and review round rather than a tail-of-batch edit. **A guard that resolves its
 root differently from the producer of the thing it guards is a false-rejection
 generator** — the failure mode is invisible, because a refused write looks
 exactly like a run that has not finished. The
