@@ -802,3 +802,228 @@ test("R4-17 pin 7, item 4c (SEC-02/SEC-03 preservation — scripts/verify-cycle.
     `the same harness shape must also be ACCEPTED when projectsRoot is passed explicitly — got false for "${harnessRepoPath}"`,
   );
 });
+
+// ---------------------------------------------------------------------------
+// R4-17 pin 8 — round-5 adversarial review: pin 7's `projectsRootFor` helper
+// (cli/manifest-path-guard.ts:167-172) REFUSES (returns `null`, so the
+// containment predicate returns `false`) whenever a caller supplies a
+// `projectsRoot` that is not a non-empty ABSOLUTE string, rather than
+// silently falling back to config self-resolution — a deliberate,
+// load-bearing "FAIL CLOSED, never silently" ruling documented on
+// `ProjectsRootOpt` above `projectsRootFor`. Round 5 verified that refusal
+// holds by direct execution but found NO acceptance test pinning it — an
+// unpinned refusal branch is exactly "a guard that cannot fail is not a
+// guard": a future refactor could turn `return null;` into
+// `return resolveConfiguredProjectsRoot(opts.forgeRoot);` (the fallback
+// pin 7 itself supplies for the `undefined` case, one branch up) and no
+// test would go red.
+//
+// Every AT below plants a candidate that IS genuinely contained under the
+// DEFAULT self-resolved root (<forgeRoot>/projects, no forge.config.json on
+// disk at this point in the file — every earlier test that writes one
+// cleans it up in a `finally`). That is what makes the falsification real:
+// a fallback implementation would resolve that same default root and
+// wrongly ACCEPT, so only an actual refusal returns `false`. A test that
+// only asserts `false` for a nonsense candidate (one not contained under
+// ANY plausible root) would pass under a fallback implementation too — that
+// is characterization, not acceptance, and is deliberately avoided here.
+//
+// Covered on BOTH containment predicates: `isContainedProjectRepoPath`, and
+// `isContainedWorktreePath`'s in-place-worktree FALLBACK branch (the branch
+// pin 7 item 1b first named, manifest-path-guard.ts:228-230 — reached by a
+// candidate genuinely contained under the projects root but NOT under
+// `<forgeRoot>/_worktrees/<initiativeId>`, so it falls through the identity
+// branch into the same `projectsRootFor` call project_repo_path uses).
+// ---------------------------------------------------------------------------
+
+type WorktreeOptsWithRoot = { forgeRoot: string; initiativeId: string; projectsRoot?: string };
+
+test("R4-17 pin 8, item 1a (project_repo_path — falsifiable refusal, not mere nonsense-candidate rejection): isContainedProjectRepoPath REFUSES a supplied projectsRoot of '' and does NOT fall back to self-resolution", () => {
+  const candidate = join(forgeRoot, 'projects', 'pin8-empty-root-candidate');
+  mkdirSync(candidate, { recursive: true });
+
+  // Precondition: self-resolution (no projectsRoot passed at all) genuinely
+  // accepts this candidate today — proves the refusal below is false
+  // DESPITE a legitimate path, not merely false because the candidate is
+  // bogus.
+  assert.equal(
+    isContainedProjectRepoPath(candidate, { forgeRoot }),
+    true,
+    'precondition: candidate must be accepted under self-resolution (no projectsRoot) before testing the empty-string refusal',
+  );
+
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: '' };
+  assert.equal(
+    isContainedProjectRepoPath(candidate, opts),
+    false,
+    "a supplied projectsRoot of '' must REFUSE outright — a fallback-to-self-resolution implementation would resolve the SAME default root (<forgeRoot>/projects) as the precondition above and wrongly ACCEPT this candidate; only an actual refusal returns false here",
+  );
+});
+
+test("R4-17 pin 8, item 1b (isContainedWorktreePath in-place-worktree FALLBACK branch — falsifiable refusal): isContainedWorktreePath REFUSES a supplied projectsRoot of '' and does NOT fall back to self-resolution", () => {
+  const initiativeId = 'INIT-2026-08-06-pin8-empty-wt';
+  // Genuinely contained under projects/, NOT under _worktrees/<initiativeId>
+  // — exercises the FALLBACK branch, same as pin 7 item 1b.
+  const candidate = join(forgeRoot, 'projects', 'pin8-empty-wt-project', 'worktrees', initiativeId);
+  mkdirSync(candidate, { recursive: true });
+
+  assert.equal(
+    isContainedWorktreePath(candidate, { forgeRoot, initiativeId }),
+    true,
+    'precondition: candidate must be accepted under self-resolution (no projectsRoot) before testing the empty-string refusal — this is the in-place-worktree FALLBACK branch, not the _worktrees/<id> identity branch',
+  );
+
+  const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: '' };
+  assert.equal(
+    isContainedWorktreePath(candidate, opts),
+    false,
+    "a supplied projectsRoot of '' must REFUSE outright on the fallback branch too — a fallback-to-self-resolution implementation would resolve the SAME default root and wrongly ACCEPT this candidate",
+  );
+});
+
+test('R4-17 pin 8, item 2a (project_repo_path — falsifiable refusal): isContainedProjectRepoPath REFUSES a supplied RELATIVE projectsRoot ("projects") and does NOT fall back to self-resolution, using the same would-be-accepted-under-fallback shape as item 1a', () => {
+  const candidate = join(forgeRoot, 'projects', 'pin8-relative-root-candidate');
+  mkdirSync(candidate, { recursive: true });
+
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: 'projects' };
+  assert.equal(
+    isContainedProjectRepoPath(candidate, opts),
+    false,
+    'a supplied RELATIVE projectsRoot ("projects") must REFUSE outright, exactly like \'\' above — a fallback-to-self-resolution implementation would ignore the non-absolute value, resolve the DEFAULT root instead, and wrongly ACCEPT this candidate',
+  );
+});
+
+test("R4-17 pin 8, item 2a-proof (cwd-independence — the shape that made a relative root LOOK correct before pin 5): with process.cwd() pointed AT forgeRoot, a supplied RELATIVE projectsRoot (\"projects\") that would resolve to the CORRECT default root under a naive cwd-relative resolve() still REFUSES — refusal must not depend on an accident of process.cwd()", () => {
+  const candidate = join(forgeRoot, 'projects', 'pin8-relative-root-cwd-candidate');
+  mkdirSync(candidate, { recursive: true });
+
+  const originalCwd = process.cwd();
+  process.chdir(forgeRoot);
+  try {
+    const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: 'projects' };
+    assert.equal(
+      isContainedProjectRepoPath(candidate, opts),
+      false,
+      "with process.cwd() === forgeRoot, resolve('projects') would coincidentally equal the correct default root — a naive implementation that resolved the passed value against cwd instead of refusing on the type/shape check alone would ACCEPT here by accident; the guard must refuse before any resolution, regardless of cwd",
+    );
+  } finally {
+    process.chdir(originalCwd);
+  }
+});
+
+test('R4-17 pin 8, item 2b (isContainedWorktreePath FALLBACK branch — falsifiable refusal): isContainedWorktreePath REFUSES a supplied RELATIVE projectsRoot ("projects") on the in-place-worktree fallback branch too — the cwd-independence proof above (item 2a-proof) exercises the same projectsRootFor() call this branch shares, so it is not duplicated per-branch here', () => {
+  const initiativeId = 'INIT-2026-08-06-pin8-relative-wt';
+  const candidate = join(forgeRoot, 'projects', 'pin8-relative-wt-project', 'worktrees', initiativeId);
+  mkdirSync(candidate, { recursive: true });
+
+  const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: 'projects' };
+  assert.equal(
+    isContainedWorktreePath(candidate, opts),
+    false,
+    'a supplied RELATIVE projectsRoot must REFUSE on the fallback branch too — a fallback implementation would ignore it and wrongly ACCEPT via self-resolution',
+  );
+});
+
+test("R4-17 pin 8, item 3a (project_repo_path — runtime-reachable non-string values): isContainedProjectRepoPath REFUSES every runtime-reachable non-string projectsRoot (null, a number, an object, an array, boolean true) rather than throwing a raw TypeError or silently self-resolving — ProjectsRootOpt types projectsRoot as string | undefined, but this module compiles to plain JS at runtime and nothing enforces that boundary against a caller assembling opts from parsed JSON/request data", () => {
+  const badValues: Array<{ label: string; value: unknown }> = [
+    { label: 'null', value: null },
+    { label: 'number', value: 42 },
+    { label: 'object', value: {} },
+    { label: 'array', value: [] },
+    { label: 'boolean-true', value: true },
+  ];
+
+  for (const { label, value } of badValues) {
+    const candidate = join(forgeRoot, 'projects', `pin8-nonstring-${label}`);
+    mkdirSync(candidate, { recursive: true });
+
+    // Cast through an explicitly-typed local so tsc stays clean (structural
+    // assignability, same trick pin 7's header comment explains) while the
+    // runtime value handed to isContainedProjectRepoPath is genuinely
+    // non-string — `--experimental-strip-types` removes the annotation, not
+    // the value.
+    const badProjectsRoot = value as unknown as string;
+    const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: badProjectsRoot };
+
+    let result: boolean | undefined;
+    assert.doesNotThrow(() => {
+      result = isContainedProjectRepoPath(candidate, opts);
+    }, `a non-string projectsRoot (${label}) must not throw a raw TypeError out of isContainedProjectRepoPath`);
+    assert.equal(
+      result,
+      false,
+      `a non-string projectsRoot (${label}) must REFUSE (false), not silently self-resolve and ACCEPT this otherwise-legitimate candidate`,
+    );
+  }
+});
+
+test("R4-17 pin 8, item 3b (isContainedWorktreePath FALLBACK branch — runtime-reachable non-string values): isContainedWorktreePath REFUSES every runtime-reachable non-string projectsRoot on the in-place-worktree fallback branch too, rather than throwing or silently self-resolving", () => {
+  const badValues: Array<{ label: string; value: unknown }> = [
+    { label: 'null', value: null },
+    { label: 'number', value: 42 },
+    { label: 'object', value: {} },
+    { label: 'array', value: [] },
+    { label: 'boolean-true', value: true },
+  ];
+
+  for (const { label, value } of badValues) {
+    const initiativeId = `INIT-2026-08-06-pin8-nonstring-${label}`;
+    const candidate = join(forgeRoot, 'projects', `pin8-nonstring-wt-${label}`, 'worktrees', initiativeId);
+    mkdirSync(candidate, { recursive: true });
+
+    const badProjectsRoot = value as unknown as string;
+    const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: badProjectsRoot };
+
+    let result: boolean | undefined;
+    assert.doesNotThrow(() => {
+      result = isContainedWorktreePath(candidate, opts);
+    }, `a non-string projectsRoot (${label}) must not throw a raw TypeError out of isContainedWorktreePath's fallback branch`);
+    assert.equal(
+      result,
+      false,
+      `a non-string projectsRoot (${label}) must REFUSE (false) on the fallback branch too`,
+    );
+  }
+});
+
+// Item 4 — the back-compat control that stops a fix for items 1-3 from
+// making the parameter mandatory. Pin 7 item 3 already pins the plainest
+// shape of this for isContainedProjectRepoPath (projectsRoot KEY OMITTED
+// entirely — the `{ forgeRoot }` literal every existing call site uses) and
+// is deliberately NOT duplicated verbatim here. What is genuinely new below:
+//   (a) the `projectsRoot` key explicitly PRESENT with value `undefined` —
+//       the shape a caller assembling opts through a variable or object
+//       spread (`{ forgeRoot, projectsRoot: possiblyUndefinedVar }`)
+//       produces, distinct at the object-shape level from key-omission even
+//       though `opts.projectsRoot` reads `undefined` either way in JS; and
+//   (b) a DEDICATED control for isContainedWorktreePath's fallback branch —
+//       pin 7 item 1b only asserts this as a PRECONDITION inside a test
+//       whose real subject is the divergence defect, not as its own named
+//       back-compat control.
+
+test('R4-17 pin 8, item 4a (back-compat control, genuinely new vs pin 7 item 3 — key PRESENT with value undefined, not key-omitted): isContainedProjectRepoPath ACCEPTS when projectsRoot is explicitly present in the options object with value undefined', () => {
+  const legitUnderDefault = join(forgeRoot, 'projects', 'pin8-undefined-backcompat');
+  mkdirSync(legitUnderDefault, { recursive: true });
+
+  const explicitUndefined: string | undefined = undefined;
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: explicitUndefined };
+  assert.equal(
+    isContainedProjectRepoPath(legitUnderDefault, opts),
+    true,
+    'projectsRoot explicitly present with value undefined must still self-resolve and ACCEPT — a fix for items 1-3 that checks falsy-ness generically (rather than `passed === undefined` specifically, ahead of the type/absoluteness check) would wrongly refuse this back-compat shape',
+  );
+});
+
+test('R4-17 pin 8, item 4b (back-compat control, DEDICATED to the worktree fallback branch — no existing test names this as its own control; pin 7 item 1b only asserts it as a PRECONDITION inside a different test): isContainedWorktreePath\'s in-place-worktree fallback branch ACCEPTS when projectsRoot is explicitly present with value undefined', () => {
+  const initiativeId = 'INIT-2026-08-06-pin8-undefined-wt';
+  const legitInPlaceWt = join(forgeRoot, 'projects', 'pin8-undefined-wt-project', 'worktrees', initiativeId);
+  mkdirSync(legitInPlaceWt, { recursive: true });
+
+  const explicitUndefined: string | undefined = undefined;
+  const opts: WorktreeOptsWithRoot = { forgeRoot, initiativeId, projectsRoot: explicitUndefined };
+  assert.equal(
+    isContainedWorktreePath(legitInPlaceWt, opts),
+    true,
+    'projectsRoot explicitly present with value undefined must still self-resolve and ACCEPT on the fallback branch too',
+  );
+});
