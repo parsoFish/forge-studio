@@ -31,10 +31,11 @@ import { ReadOnlyFields } from '@/components/studio/agent-builder/ReadOnlyFields
 import { InstructionsField } from '@/components/studio/agent-builder/InstructionsField';
 import { MaterialsPicker } from '@/components/studio/agent-builder/MaterialsPicker';
 import {
-  fetchStudioAgents,
+  fetchStudioAgentsWithMeta,
   fetchStudioCatalog,
   fetchStudioFlows,
   fetchStarters,
+  fetchStudioProjects,
   saveAgent,
   requestInstructionsDraft,
   type Agent,
@@ -42,6 +43,7 @@ import {
   type AgentRuntime,
   type Catalog,
   type Flow,
+  type Project,
 } from '@/lib/studio-client';
 import { fetchConnections, type ConnectionWire } from '@/lib/connection-client';
 import { unreadyBoundConnections, blockedRunMessage, type BoundConnectionRef } from '@/lib/connection-library-view';
@@ -88,6 +90,12 @@ type AgentState = {
   // agent DOES carry a capability (applyStarter → parseAgent(starter),
   // fed by the /api/studio/starters threading).
   capability?: AgentCapabilityDescriptor;
+  // R6-04 WI-3: server-computed FACT, threaded through as-is (never
+  // re-derived client-side) — see Agent.costCeilingEnforceable's own doc
+  // comment in studio-client.ts for why it rides as its own top-level field
+  // rather than inside `capability` (parseCapability's return shape is
+  // pinned byte-for-byte by existing studio-client.test.ts assertions).
+  costCeilingEnforceable: boolean;
 };
 
 const DEFAULT_RUNTIME: AgentRuntime = {
@@ -114,6 +122,7 @@ const EMPTY_STATE: AgentState = {
   allowedTools: [],
   disallowedTools: [],
   phase: '',
+  costCeilingEnforceable: false,
 };
 
 // A "Blank" agent still ships sensible defaults so it is creatable with near-zero
@@ -131,6 +140,40 @@ const BLANK_STATE: AgentState = {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * R6-04 WI-3 — resolve an interactive agent's real session ENTRY point (a
+ * route reachable from THIS page, i.e. one that does not itself require an
+ * already-existing sessionId/cycleId — a kickoff has none yet). Measured
+ * against the actual forge-ui route tree (2026-08-07), NOT assumed uniform:
+ * of every "own session page" surface (`/architect/[sessionId]`,
+ * `/instructions/[sessionId]`, `/project-brain/[sessionId]`,
+ * `/demo/[sessionId]`, `/reflect/[cycleId]`, `/review/[cycleId]`,
+ * `/sessions/[kind]/[sessionId]`), only `architect` also ships a static
+ * "start new" page (`/architect/new`) that needs no pre-existing session id.
+ * Every other one is reachable only via a session/cycle id minted by SOME
+ * OTHER flow (onboarding start, a cycle's own lifecycle) — there is no
+ * generic "start a new one from here" page for those today, so this table
+ * has exactly one real entry. (`architect` itself is never actually
+ * `capability.interactive: true` — R2-01-F2's `executionPathForSurface`
+ * resolves it via the flow gate table, not this generic mechanism — so in
+ * the CURRENT roster this table is not yet exercised in practice; it is
+ * wired for the day a `surface: interactive` agent with `library !== false`
+ * and a `runtime` block actually joins the dispatchable roster.)
+ *
+ * Deliberately NOT a "smart" per-agent-kind heuristic: a wrong guess here
+ * would render a fabricated href to a route that doesn't exist (the exact
+ * failure mode the task brief calls out, and a dead-paths gate finding).
+ * Absent from this table (or any slug not present) ⇒ `null` ⇒ RunPanel
+ * renders the explicit `data-component="session-entry-missing"` state.
+ */
+const SESSION_ENTRY_HREF_BY_SLUG: Readonly<Record<string, string>> = Object.freeze({
+  architect: '/architect/new',
+});
+
+function sessionEntryHrefForAgent(slug: string): string | null {
+  return SESSION_ENTRY_HREF_BY_SLUG[slug] ?? null;
+}
 
 function parseAgent(raw: Agent): AgentState {
   // Server uses composition.* + body; the client Agent type already mirrors
@@ -169,6 +212,7 @@ function parseAgent(raw: Agent): AgentState {
     disallowedTools:((raw as Record<string, unknown>).disallowedTools as string[] | undefined) ?? [],
     phase:          raw.phase ?? '',
     capability:     raw.capability,
+    costCeilingEnforceable: raw.costCeilingEnforceable === true,
   };
 }
 
@@ -218,6 +262,12 @@ export default function AgentBuilderPage() {
   const [catalog, setCatalog] = useState<Catalog>({});
   const [flows,   setFlows]   = useState<Flow[]>([]);
   const [starters, setStarters] = useState<Agent[]>([]);
+  // R6-04 WI-3: the real managed-project list (drives RunPanel's project
+  // `<select>`, replacing the old free-text input) and the run-level
+  // default cost ceiling (GET /api/studio/agents' top-level sibling field,
+  // never a literal in RunPanel.tsx).
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [defaultCostCeilingUsd, setDefaultCostCeilingUsd] = useState(0);
   const [state,   setState]   = useState<AgentState>({ ...EMPTY_STATE });
   const [dirty,   setDirty]   = useState(false);
   const [ready,   setReady]   = useState(false);
@@ -344,17 +394,21 @@ export default function AgentBuilderPage() {
 
     async function load() {
       try {
-        const [a, c, f, s] = await Promise.all([
-          fetchStudioAgents(),
+        const [agentsMeta, c, f, s, p] = await Promise.all([
+          fetchStudioAgentsWithMeta(),
           fetchStudioCatalog(),
           fetchStudioFlows(),
           fetchStarters(),
+          fetchStudioProjects(),
         ]);
         if (signal.cancelled) return;
+        const a = agentsMeta.agents;
         setAgents(a);
         setCatalog(c);
         setFlows(f);
         setStarters(s);
+        setProjects(p);
+        setDefaultCostCeilingUsd(agentsMeta.defaultCostCeilingUsd);
 
         // load the agent for this slug
         if (!isNew) {
@@ -722,6 +776,11 @@ export default function AgentBuilderPage() {
             interactive={state.capability?.interactive === true}
             canRun={!isNew && !dirty && state.slug.length > 0}
             blockedMessage={runBlockMessage}
+            projects={projects}
+            declaredMaterialKinds={state.materials}
+            defaultCostCeilingUsd={defaultCostCeilingUsd}
+            costCeilingEnforceable={state.costCeilingEnforceable}
+            sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
           />
           <UsedInFlows agentSlug={state.slug} flows={flows} />
         </aside>

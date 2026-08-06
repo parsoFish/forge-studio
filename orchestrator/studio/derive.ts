@@ -136,6 +136,20 @@ export type AgentCapabilityDescriptor = {
    * ran lint must never advertise a non-vocabulary capability on the wire.
    */
   materials: string[];
+  /**
+   * R6-04 WI-3 — true iff `runtime.loopStrategy === 'one-shot'` (EXACT
+   * match; a truthy check, substring match, or case-insensitive compare all
+   * miscount here). Only the one-shot spawn path
+   * (`orchestrator/run-agent.ts` runOneShotSpawn) understands
+   * `options.maxBudgetUsd` — every other loop strategy (the legacy
+   * invocation path, `loopStrategy: 'ralph'`, or no loopStrategy declared at
+   * all) has no budget concept, so `POST /api/agents/:slug/run` already
+   * refuses an operator-supplied `costCeilingUsd` for those agents (R6-04
+   * WI-2's fail-closed guard). This FACT lets the kickoff UI disable the
+   * ceiling field up front instead of letting an operator type a value
+   * destined for a 400.
+   */
+  costCeilingEnforceable: boolean;
   // Extension point (documented; added where its authoring source lands):
   //   artifactOutputs — R2-05-F2.
 };
@@ -156,5 +170,8 @@ export function agentCapabilityDescriptor(def: AgentDefinition): AgentCapability
     materials: Array.isArray(def.materials)
       ? def.materials.filter((m) => (MATERIAL_KINDS as readonly string[]).includes(m))
       : [],
+    // Exact match only — see the field's own doc comment above for why a
+    // truthy/substring check is the wrong shape here.
+    costCeilingEnforceable: def.runtime.loopStrategy === 'one-shot',
   };
 }

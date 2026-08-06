@@ -130,6 +130,18 @@ export type Agent = {
   capability?: AgentCapabilityDescriptor;
   /** R2-03-F2 — the agent's declared fanout block (drives the node fanOut binding). */
   fanout?: AgentFanout;
+  /**
+   * R6-04 WI-3 — server-computed FACT (orchestrator/studio/derive.ts
+   * `agentCapabilityDescriptor().costCeilingEnforceable`), read directly off
+   * the wire's `capability` object rather than through `parseCapability`
+   * (whose 3-key return shape is pinned byte-for-byte by
+   * `studio-client.test.ts`'s existing `toEqual` assertions — adding a 4th
+   * key there would break those unrelated, already-green pins). Mirrors the
+   * SAME "own top-level field, parsed independently of `capability`"
+   * precedent `materials` already established above. Absent/malformed wire
+   * payload degrades to `false` — never fabricated as enforceable.
+   */
+  costCeilingEnforceable?: boolean;
 };
 
 export type FlowNode = {
@@ -576,6 +588,7 @@ function parseAgentDefinition(raw: unknown): Agent {
   const r = (raw ?? {}) as Record<string, unknown>;
   const comp = (r['composition'] ?? {}) as Record<string, unknown>;
   const rt = (r['runtime'] ?? {}) as Partial<AgentRuntime>;
+  const cap = (r['capability'] ?? {}) as Record<string, unknown>;
   return {
     id:             typeof r['slug']          === 'string' ? r['slug']          : '',
     name:           typeof r['name']          === 'string' ? r['name']          : '',
@@ -594,6 +607,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     capability:     parseCapability(r['capability']),
     fanout:         parseFanout(r['fanout']),
     materials:      parseMaterials(r['materials']),
+    costCeilingEnforceable: cap['costCeilingEnforceable'] === true,
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
@@ -606,8 +620,28 @@ function parseAgentDefinition(raw: unknown): Agent {
 
 /** Fetch all agent definitions. */
 export async function fetchStudioAgents(): Promise<Agent[]> {
-  const body = await studioGet<{ agents: unknown[] }>('/api/studio/agents', { agents: [] });
-  return (body.agents ?? []).map(parseAgentDefinition);
+  return (await fetchStudioAgentsWithMeta()).agents;
+}
+
+/**
+ * R6-04 WI-3 — `GET /api/studio/agents`'s full payload, including
+ * `defaultCostCeilingUsd` (a RUN-LEVEL policy value, `cli/bridge-studio.ts`
+ * — resolved from `forge.config.json`'s `runs.defaultCostCeilingUsd`,
+ * falling back to the server's own default constant). Never a literal in
+ * any component: RunPanel's cost-ceiling field is pre-filled from THIS
+ * value, fetched here, not guessed at client-side. A missing/malformed
+ * field on the wire degrades to `0` — an obviously-off value, never a
+ * fabricated plausible-looking default.
+ */
+export async function fetchStudioAgentsWithMeta(): Promise<{ agents: Agent[]; defaultCostCeilingUsd: number }> {
+  const body = await studioGet<{ agents: unknown[]; defaultCostCeilingUsd?: unknown }>(
+    '/api/studio/agents',
+    { agents: [] },
+  );
+  return {
+    agents: (body.agents ?? []).map(parseAgentDefinition),
+    defaultCostCeilingUsd: typeof body.defaultCostCeilingUsd === 'number' ? body.defaultCostCeilingUsd : 0,
+  };
 }
 
 /** Fetch the curated OOTB starter agents (ADR-033) for the New-Agent picker. */
@@ -813,16 +847,36 @@ export function parseRunInputs(text: string): Record<string, string> {
   return out;
 }
 
+/** One agent-kickoff upload, base64-encoded (R6-04-F2 WI-1 wire shape:
+ *  `POST /api/agents/:slug/run`'s `materials` field — `filename` +
+ *  `contentBase64`; the kind is always derived server-side, never
+ *  client-supplied). */
+export type MaterialUpload = { filename: string; contentBase64: string };
+
 /** Dispatch a non-interactive roster agent standalone (R2-01-F3). Returns the
  *  runId whose events/cost land under `_logs/<runId>/` — poll via
- *  {@link getAgentRunStatus}. */
+ *  {@link getAgentRunStatus}.
+ *
+ *  `costCeilingUsd` and `materials` (R6-04 WI-2/WI-1) are optional,
+ *  additive fields on the same route — the caller (RunPanel.tsx) is
+ *  responsible for having already gated them client-side via
+ *  `resolveCostCeilingForDispatch` / `validateMaterialsClientSide`
+ *  (./run-panel-view.ts); this function does not re-derive either — the
+ *  SERVER remains the authority and re-validates both regardless. */
 export async function dispatchAgentRun(
   slug: string,
-  opts?: { project?: string; inputs?: Record<string, string> },
+  opts?: {
+    project?: string;
+    inputs?: Record<string, string>;
+    costCeilingUsd?: number;
+    materials?: MaterialUpload[];
+  },
 ): Promise<{ ok: boolean; error?: string; runId?: string }> {
   const r = await studioPost(`/api/agents/${encodeURIComponent(slug)}/run`, {
     ...(opts?.project ? { project: opts.project } : {}),
     ...(opts?.inputs ? { inputs: opts.inputs } : {}),
+    ...(opts?.costCeilingUsd !== undefined ? { costCeilingUsd: opts.costCeilingUsd } : {}),
+    ...(opts?.materials && opts.materials.length > 0 ? { materials: opts.materials } : {}),
   });
   return { ok: r.ok, error: r.error, runId: typeof r.data?.runId === 'string' ? r.data.runId : undefined };
 }

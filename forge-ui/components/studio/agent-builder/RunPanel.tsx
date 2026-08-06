@@ -9,8 +9,32 @@
  * Extracted from app/agents/[id]/page.tsx (D12 file-size split, R2-09) — a
  * pure move, no behaviour change. Every `data-*` attribute the agents
  * journey drives (`data-section="agent-run"`, `data-run-dispatchable`,
- * `data-run-id`, `data-run-status`, `data-run-cost`, `data-run-blocked`)
- * stays byte-identical.
+ * `data-run-id`, `data-run-status`, `data-run-cost`, `data-run-blocked`,
+ * `data-run-inputs`, `data-action="run-agent"`,
+ * `data-component="connection-run-block"`) stays byte-identical — a
+ * contract other initiatives depend on.
+ *
+ * R6-04 WI-3 expands this panel IN PLACE: a project picker (was free text,
+ * now a real `<select>` driven by the `projects` prop), a materials-attach
+ * section driven by the agent's declared kinds, an editable cost-ceiling
+ * input (disabled + explained when the agent's loop strategy can't enforce
+ * one — `costCeilingEnforceable`, orchestrator/studio/derive.ts), and ONE
+ * Run affordance for every agent shape: dispatch for a non-interactive
+ * agent, or a real session-entry link (or an explicit no-entry-point state,
+ * never a fabricated href) for an interactive one.
+ *
+ * The client-side materials/cost-ceiling gates
+ * (`../../../lib/run-panel-view.ts`) are a CONVENIENCE MIRROR of the
+ * server's own checks (cli/ui-bridge.ts) — the server remains the
+ * authority and re-validates both regardless of what this component does.
+ *
+ * KNOWN GAP (documented, not closed here): this file cannot be exercised by
+ * a simulated click/file-select/change event — no jsdom or
+ * `@testing-library/react` is installed in this repo (see
+ * `lib/run-panel-render.test.ts`'s header). The wiring below is therefore
+ * verified by `tsc` + the pure-logic unit tests in `run-panel-view.test.ts`
+ * only; a real-browser journey beat (a later work item) is what proves
+ * clicking Run actually calls `dispatchAgentRun` with the chosen values.
  */
 
 import { useEffect, useState, type CSSProperties } from 'react';
@@ -19,7 +43,9 @@ import {
   getAgentRunStatus,
   parseRunInputs,
   type AgentRunStatus,
+  type MaterialUpload,
 } from '@/lib/studio-client';
+import { validateMaterialsClientSide, resolveCostCeilingForDispatch } from '@/lib/run-panel-view';
 
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
@@ -27,6 +53,8 @@ const RUN_PANEL_STYLE: CSSProperties = {
   padding: '12px 14px',
   marginTop: 12,
 };
+
+type Project = { id: string; name: string };
 
 type Props = {
   slug: string;
@@ -38,11 +66,46 @@ type Props = {
    *  alone is a documented failure of this AC, so this string is rendered
    *  verbatim, never summarised away. */
   blockedMessage: string;
+  /** The real managed-project list (GET /api/studio/projects), never a
+   *  hardcoded set — drives the project `<select>`. */
+  projects: Project[];
+  /** This agent's declared upload kinds (capability.materials /
+   *  AgentDefinition.materials, R2-09 D1-D4) — the materials-attach section
+   *  offers exactly these, never the full MATERIAL_KINDS vocabulary. */
+  declaredMaterialKinds: string[];
+  /** GET /api/studio/agents' top-level `defaultCostCeilingUsd` sibling
+   *  field (run-level policy, never a literal in this component). Seeds the
+   *  editable ceiling input's initial value. */
+  defaultCostCeilingUsd: number;
+  /** orchestrator/studio/derive.ts `agentCapabilityDescriptor().costCeilingEnforceable`
+   *  — server-computed, threaded through as-is. `false` disables the
+   *  ceiling input rather than letting an operator submit a value the
+   *  server will 400. */
+  costCeilingEnforceable: boolean;
+  /** The real route to this interactive agent's own session entry point,
+   *  resolved by the parent page (see app/agents/[id]/page.tsx's
+   *  `sessionEntryHrefForAgent` — not every interactive agent has one).
+   *  `null`/absent renders the explicit no-entry-point state, never a
+   *  fabricated link. */
+  sessionEntryHref?: string | null;
 };
 
-export function RunPanel({ slug, interactive, canRun, blockedMessage }: Props) {
+export function RunPanel({
+  slug,
+  interactive,
+  canRun,
+  blockedMessage,
+  projects,
+  declaredMaterialKinds,
+  defaultCostCeilingUsd,
+  costCeilingEnforceable,
+  sessionEntryHref = null,
+}: Props) {
   const [project, setProject] = useState('');
   const [inputsText, setInputsText] = useState('');
+  const [costCeiling, setCostCeiling] = useState(defaultCostCeilingUsd);
+  const [materials, setMaterials] = useState<MaterialUpload[]>([]);
+  const [materialsError, setMaterialsError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [status, setStatus] = useState<AgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -74,15 +137,46 @@ export function RunPanel({ slug, interactive, canRun, blockedMessage }: Props) {
     return (
       <section data-component="run-panel" data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
         <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
-        <p className="muted" style={{ fontSize: 12, margin: 0 }}>
-          Interactive agent — run it from its own session page.
-        </p>
+        {sessionEntryHref ? (
+          <a data-action="go-to-session" href={sessionEntryHref} className="btn btn-primary">
+            Go to session
+          </a>
+        ) : (
+          <p data-component="session-entry-missing" className="muted" style={{ fontSize: 12, margin: 0 }}>
+            Interactive agent — no reachable session entry point yet.
+          </p>
+        )}
       </section>
     );
   }
 
   const runState = status?.state ?? (runId ? 'running' : 'idle');
   const effectiveCanRun = canRun && !blockedMessage;
+  const controlsDisabled = !effectiveCanRun || dispatching;
+
+  const onMaterialsChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    setMaterialsError(null);
+    if (files.length === 0) {
+      setMaterials([]);
+      return;
+    }
+    const check = validateMaterialsClientSide(
+      files.map((f) => ({ filename: f.name, sizeBytes: f.size })),
+      declaredMaterialKinds,
+      slug,
+    );
+    if (!check.ok) {
+      setMaterials([]);
+      setMaterialsError(check.error);
+      return;
+    }
+    const encoded = await Promise.all(files.map(async (f) => ({
+      filename: f.name,
+      contentBase64: await fileToBase64(f),
+    })));
+    setMaterials(encoded);
+  };
 
   const onRun = async () => {
     setError(null);
@@ -90,9 +184,17 @@ export function RunPanel({ slug, interactive, canRun, blockedMessage }: Props) {
     setStatus(null);
     try {
       const inputs = parseRunInputs(inputsText);
-      const opts: { project?: string; inputs?: Record<string, string> } = {};
+      const opts: {
+        project?: string;
+        inputs?: Record<string, string>;
+        costCeilingUsd?: number;
+        materials?: MaterialUpload[];
+      } = {};
       if (project.trim()) opts.project = project.trim();
       if (Object.keys(inputs).length > 0) opts.inputs = inputs;
+      const ceilingForDispatch = resolveCostCeilingForDispatch(costCeiling, costCeilingEnforceable);
+      if (ceilingForDispatch !== undefined) opts.costCeilingUsd = ceilingForDispatch;
+      if (materials.length > 0) opts.materials = materials;
       const r = await dispatchAgentRun(slug, Object.keys(opts).length ? opts : undefined);
       if (r.ok && r.runId) setRunId(r.runId);
       else setError(r.error ?? 'dispatch failed');
@@ -113,15 +215,21 @@ export function RunPanel({ slug, interactive, canRun, blockedMessage }: Props) {
       style={RUN_PANEL_STYLE}
     >
       <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Run</h3>
-      <input
+
+      <select
         className="input"
-        type="text"
-        placeholder="project (optional)"
+        data-run-project
         value={project}
         onChange={(e) => setProject(e.target.value)}
-        disabled={!effectiveCanRun || dispatching}
+        disabled={controlsDisabled}
         style={{ marginBottom: 8 }}
-      />
+      >
+        <option value="">no project</option>
+        {projects.map((p) => (
+          <option key={p.id} value={p.id}>{p.name}</option>
+        ))}
+      </select>
+
       <textarea
         className="input"
         data-run-inputs
@@ -129,14 +237,59 @@ export function RunPanel({ slug, interactive, canRun, blockedMessage }: Props) {
         placeholder={'inputs (one per line: key: value)\ne.g. repo: ./projects/foo\nnorthStar: ship X'}
         value={inputsText}
         onChange={(e) => setInputsText(e.target.value)}
-        disabled={!effectiveCanRun || dispatching}
+        disabled={controlsDisabled}
         style={{ marginBottom: 8, fontFamily: 'var(--mono, monospace)', fontSize: 12 }}
       />
+
+      <div data-component="cost-ceiling" style={{ marginBottom: 8 }}>
+        <label className="field-label" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+          Cost ceiling (USD)
+        </label>
+        <div data-ceiling-enforceable={costCeilingEnforceable ? 'true' : 'false'}>
+          <input
+            className="input"
+            type="number"
+            data-run-cost-ceiling
+            min={0}
+            step="0.01"
+            value={costCeiling}
+            onChange={(e) => setCostCeiling(Number(e.target.value))}
+            disabled={!costCeilingEnforceable || controlsDisabled}
+          />
+          {!costCeilingEnforceable && (
+            <p data-component="ceiling-explanation" className="muted" style={{ fontSize: 11, margin: '4px 0 0' }}>
+              This agent&apos;s loop strategy can&apos;t enforce a per-run cost ceiling, so the field is disabled —
+              submitting one would be refused by the server anyway.
+            </p>
+          )}
+        </div>
+      </div>
+
+      <section
+        data-section="materials-attach"
+        data-materials-declared={declaredMaterialKinds.join(',')}
+        style={{ marginBottom: 8 }}
+      >
+        <label className="field-label" style={{ fontSize: 11, display: 'block', marginBottom: 4 }}>
+          Attach materials{declaredMaterialKinds.length > 0 ? ` (${declaredMaterialKinds.join(', ')})` : ' (none declared)'}
+        </label>
+        <input
+          type="file"
+          data-run-materials-input
+          multiple
+          onChange={(e) => void onMaterialsChange(e)}
+          disabled={controlsDisabled}
+        />
+        {materialsError && (
+          <p className="save-hint save-hint-dirty" style={{ fontSize: 11, margin: '4px 0 0' }}>{materialsError}</p>
+        )}
+      </section>
+
       <button
         className="btn btn-primary"
         data-action="run-agent"
         onClick={() => void onRun()}
-        disabled={!effectiveCanRun || dispatching}
+        disabled={controlsDisabled}
         title={blockedMessage || (canRun ? 'Dispatch this agent standalone' : 'Save the agent (no unsaved changes) to run it')}
       >
         {dispatching ? 'Dispatching…' : 'Run agent'}
@@ -159,4 +312,16 @@ export function RunPanel({ slug, interactive, canRun, blockedMessage }: Props) {
       )}
     </section>
   );
+}
+
+/** Encode a browser `File` as base64 (the `POST /api/agents/:slug/run`
+ *  `materials[].contentBase64` wire shape). Runs entirely client-side —
+ *  never called during server rendering (only from the file-input's
+ *  onChange handler above). */
+async function fileToBase64(file: File): Promise<string> {
+  const buf = await file.arrayBuffer();
+  const bytes = new Uint8Array(buf);
+  let binary = '';
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+  return btoa(binary);
 }
