@@ -34,6 +34,33 @@ Three labels, applied strictly:
 
 No row is marked safe on the strength of an argument alone. Where a site was believed safe but not tested, it is `[unver]`.
 
+**Failure-behaviour claims are `[exec]`-only** (SEC-03, adopted after three
+consecutive adversarial rounds each found a false claim in THIS document, and all
+three were about the same thing — what happens on failure). Any claim that a site
+*fails closed*, *refuses*, *does not write*, *is caught*, *rejects before the
+write*, or *is already guarded by a sibling* must carry `[exec]` and be verified
+by execution — a **pre-fix file swap** (`git show <base>:<path>`, re-run, observe
+which mechanism actually fires) or a live probe. Never `[read]`. Reading code
+tells you what a function *intends*; only execution tells you what its CALLER
+does with the throw. The three false claims were: a filed row still marked
+`unguarded` after R4-16 had fixed it; "all four now fail containment on their
+own", disproved by a pre-fix swap that showed those ATs passing byte-identically
+against the old code; and a claimed fail-before-write parity that in fact left a
+half-created project on disk while the API said 400.
+
+Applied retroactively: the `[read]` rows below that make a failure-behaviour
+claim are **`orchestrator/studio/hook-library.ts:164-198`** (rejects literal and
+percent-decoded traversal), the **`INIT_ID_RE`/`SAFE_CYCLE_ID_RE` charset rows**
+(`enqueue-flow-run`/`enqueue-plan-run`/`bridge-studio-runs`,
+`review-comments.ts`), **`cli/bridge-studio-writes.ts:199-201`** (404 before any
+fs call), and **`cli/bridge-studio-kbs.ts:788-794`** (`resolve(file) !== file`
+rejects). Each states a *rejecting input exists*, which is the classification
+bar, but **none has had its caller's handling of that rejection executed** — so
+the rejection is `[read]`-verified and the FAILURE HANDLING around it is
+explicitly **unverified**, not safe. They are listed here rather than
+individually re-marked so the omission is visible in one place instead of being
+spread across rows where a reader would have to notice its absence.
+
 ## Summary
 
 **A ROW is the auditable unit.** Where several `file:line` locations share one
