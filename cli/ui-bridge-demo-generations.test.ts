@@ -22,7 +22,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
@@ -380,4 +380,185 @@ test('R4-16 AT-42: filename=".." (raw %2E%2E, bypassing client-side dot-segment 
   writeGenerationFixture(sid, 1, { 'DEMO.html': '<html/>' });
   const res = await rawGet(`/api/demo-builder/generation/demo/${encodeURIComponent(sid)}/1/%2E%2E`);
   assert.equal(res.status, 400, `filename=".." must be structurally rejected with 400, got ${res.status}: ${res.text}`);
+});
+
+// ===========================================================================
+// R4-16 PIN 3 — round-2 adversarial findings against HEAD edb0cfcb, where the
+// round-1 fix (edb0cfcb) landed containment for the GET generation route only
+// (pin 2's Finding A). Round 2's verdict: that closed the one ROUTE round 1
+// named, not the vulnerability CLASS — the four sibling demo-builder POST
+// routes (and /start) build `demoSessionDir(join(ctx.projectsRoot,
+// body.project), body.sessionId)` from client fields validated for
+// NON-EMPTINESS ONLY, then read/write through readSessionStatus/
+// writeSessionStatus, which have no containment at all.
+//
+// Body fields (project/sessionId) are JSON payload content, not URL path
+// segments — no WHATWG URL dot-segment normalisation applies here, so a
+// plain fetch()-based POST (this file's `post()` helper) delivers ".."
+// verbatim; no raw-HTTP trick is needed for Finding A (unlike the GET route's
+// path-segment probes above).
+// ===========================================================================
+
+// Finding A (BLOCKER) — the four mutating routes (+ /start) reach the same
+// unguarded sink. `demoSessionDir(join(projectsRoot, '..'), '../OUTSIDE')`
+// resolves to `<forgeRoot>/OUTSIDE` (verified in pin 2's AT-36 against the
+// GET route; the SAME `demoSessionDir` call is used here). Reproduced live
+// per the brief: POST /lock with this body → 200 {"ok":true}, and
+// <forgeRoot>/OUTSIDE/status.json was MUTATED.
+//
+// NOTE on the spawn-marker ask: `dryBridgeAgentTurnMarker` is a no-op unless
+// `FORGE_DRY_BRIDGE=1` is set (dry-bridge.test.ts's own header) — this file
+// only sets `FORGE_ARCHITECT_NO_SPAWN=1` (which makes the real `spawnAgentTurn`
+// call itself a no-op, matching every other test in this file). Under that
+// env, `body.dryBridge` is ALWAYS absent from the response regardless of
+// whether validation passed or failed, so there is no side effect to observe
+// distinguishing "spawnAgentTurn was never reached" from "it was reached and
+// no-opped" — I could not find an observable signal for this from outside
+// the module (`spawnAgentTurn` itself is not exported), so per the brief's
+// own instruction this assertion is OMITTED rather than invented; the file
+// content assertion below is the real, observable proof of the fix.
+const DEMO_MUTATING_ROUTES: Array<{ path: string; extraBody?: Record<string, unknown> }> = [
+  { path: '/api/demo-builder/brief', extraBody: { brief: 'Malicious brief.' } },
+  { path: '/api/demo-builder/feedback', extraBody: { feedback: 'Malicious feedback.' } },
+  { path: '/api/demo-builder/lock', extraBody: { generation: 1 } },
+  { path: '/api/demo-builder/abandon' },
+];
+
+function outsideDirForTraversal(): string {
+  // demoSessionDir(join(projectsRoot, '..'), '../OUTSIDE') === join(forgeRoot, '_demo', '../OUTSIDE') === join(forgeRoot, 'OUTSIDE').
+  return join(forgeRoot, 'OUTSIDE');
+}
+
+for (const { path, extraBody } of DEMO_MUTATING_ROUTES) {
+  test(`R4-16 AT-43 (Finding A, BLOCKER): POST ${path} with project=".." + sessionId="../OUTSIDE" is rejected — 400, and a pre-existing outside status.json is left byte-for-byte UNCHANGED`, async () => {
+    const outsideDir = outsideDirForTraversal();
+    rmSync(outsideDir, { recursive: true, force: true });
+    mkdirSync(outsideDir, { recursive: true });
+    const plantedStatus = JSON.stringify(
+      { session_id: 'attacker-planted', project: 'not-a-real-project', project_repo_path: '/tmp/attacker-repo', phase: 'awaiting-review', iteration: 1, prompt: '', updated_at: '2020-01-01T00:00:00.000Z' },
+      null,
+      2,
+    );
+    writeFileSync(join(outsideDir, 'status.json'), plantedStatus);
+
+    try {
+      const { status, json } = await post(path, { project: '..', sessionId: '../OUTSIDE', ...extraBody });
+      assert.equal(status, 400, `${path} with an escaping project/sessionId must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+      assert.ok(String(json.error ?? '').length > 0, `error must be present, got: ${JSON.stringify(json)}`);
+      const after = readFileSync(join(outsideDir, 'status.json'), 'utf8');
+      assert.equal(after, plantedStatus, "the outside status.json must be left byte-for-byte UNCHANGED — a 200-with-mutation and a 400-with-no-write must be distinguishable, and today's code mutates it");
+    } finally {
+      rmSync(outsideDir, { recursive: true, force: true });
+    }
+  });
+}
+
+// /start is the CREATE-from-scratch case: it never calls readSessionStatus
+// first (no pre-planted file needed to observe the defect) — it is an
+// unconditional `mkdirSync` + `writeSessionStatus`. Only `project` is
+// attacker-controlled here (sessionId is server-generated), so the
+// reproduction shape is narrower: `demoSessionDir(join(projectsRoot, '..'),
+// <realSessionId>) === join(forgeRoot, '_demo', <realSessionId>)` — still
+// entirely outside `projectsRoot`.
+test('R4-16 AT-44 (Finding A, /start): POST /start with project=".." is rejected — 400, and no forgeRoot/_demo/ directory is ever created', async () => {
+  const outsideParent = join(forgeRoot, '_demo');
+  rmSync(outsideParent, { recursive: true, force: true });
+  const { status, json } = await post('/api/demo-builder/start', { project: '..' });
+  assert.equal(status, 400, `/start with project=".." must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+  assert.ok(!existsSync(outsideParent), 'no forgeRoot/_demo/ directory may ever be created — /start must never write outside projectsRoot');
+});
+
+test('R4-16 AT-45: charset rejection — POST /lock with project failing SLUG_RE (e.g. "Bad_Project") → 400, naming the offending value', async () => {
+  const sid = await startSession();
+  const { status, json } = await post('/api/demo-builder/lock', { project: 'Bad_Project', sessionId: sid, generation: 1 });
+  assert.equal(status, 400, `an invalid-slug project must be rejected with 400, got ${status}`);
+  assert.ok(String(json.error ?? '').includes('Bad_Project'), `error must name the offending project value, got: ${JSON.stringify(json)}`);
+});
+
+test('R4-16 AT-46: charset rejection — POST /brief with sessionId failing SAFE_ID_RE (embedded "/") → 400, naming the offending value', async () => {
+  const maliciousSessionId = 'sid/with/slashes';
+  const { status, json } = await post('/api/demo-builder/brief', { project: 'demo', sessionId: maliciousSessionId, brief: 'x' });
+  assert.equal(status, 400, `a sessionId containing "/" must be rejected with 400, got ${status}`);
+  assert.ok(String(json.error ?? '').includes(maliciousSessionId), `error must name the offending sessionId value, got: ${JSON.stringify(json)}`);
+});
+
+// Positive control — GREEN today, not a defect pin (mirrors AT-24/AT-46's
+// precedent in the sibling pins): the fix must reject the escaping/invalid
+// shapes above WITHOUT breaking the legitimate flow. Exercises all 5 routes
+// end-to-end (start → brief → feedback → lock, plus a second session for
+// abandon) with valid project/sessionId throughout.
+test('R4-16 AT-47 (positive control, green today): all 5 demo-builder routes still succeed end-to-end with a valid project + sessionId', async () => {
+  const started = await post('/api/demo-builder/start', { project: 'demo' });
+  assert.equal(started.status, 200);
+  const sid = started.json.sessionId as string;
+  assert.equal((await post('/api/demo-builder/brief', { project: 'demo', sessionId: sid, brief: 'Dark and minimal.' })).status, 200);
+  assert.equal((await post('/api/demo-builder/feedback', { project: 'demo', sessionId: sid, feedback: 'Bigger diff.' })).status, 200);
+  assert.equal((await post('/api/demo-builder/lock', { project: 'demo', sessionId: sid })).status, 200);
+
+  const started2 = await post('/api/demo-builder/start', { project: 'demo' });
+  const sid2 = started2.json.sessionId as string;
+  assert.equal((await post('/api/demo-builder/abandon', { project: 'demo', sessionId: sid2 })).status, 200);
+});
+
+// ---------------------------------------------------------------------------
+// Finding B (BLOCKER) — a symlinked SESSION DIR defeats string validation
+// (SLUG_RE/SAFE_ID_RE say nothing about what `<project>/_demo/<sessionId>`
+// resolves to) AND the realpath check in safeReadFileInSession (which
+// computes containment RELATIVE TO whatever sessionDir it is handed — if the
+// session dir itself is the symlink, containment passes trivially against
+// the attacker's own target). `cli/bridge-studio-sessions.ts`'s
+// `resolveSafeSessionDir` already solves exactly this, scoped to the
+// `<project>/_<kind>/` parent (its own AT-47) — the fix mirrors that shape,
+// not a projectsRoot-wide check (which would miss a symlink into ANOTHER
+// project's session dir).
+// ---------------------------------------------------------------------------
+
+test('R4-16 AT-48 (Finding B, BLOCKER): GET generation route — a symlinked session dir (a NAME that legitimately passes SAFE_ID_RE) pointing outside the project is rejected, and the outside content never appears in the body', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'symlinked-session-outside-'));
+  const OUTSIDE_MARKER = 'TOP-SECRET-SYMLINKED-SESSION-DIR-MARKER-6642';
+  try {
+    mkdirSync(join(outsideDir, 'generations', '1'), { recursive: true });
+    writeFileSync(join(outsideDir, 'generations', '1', 'DEMO.html'), `<html>${OUTSIDE_MARKER}</html>`, 'utf8');
+    const attackerSessionId = 'attackerSession123'; // a legitimate-looking id — passes SAFE_ID_RE
+    mkdirSync(join(repoDir(), '_demo'), { recursive: true });
+    symlinkSync(outsideDir, join(demoSessionDirFor(attackerSessionId)));
+
+    const res = await fetch(`${url}/api/demo-builder/generation/demo/${attackerSessionId}/1/DEMO.html`);
+    // Either 400 or 404 satisfies "rejected" — resolveSafeSessionDir's own
+    // sibling convention collapses "missing" and "escaping symlink" into the
+    // SAME outcome (never distinguishable to an attacker), which is 404-shaped.
+    assert.ok(res.status === 400 || res.status === 404, `a symlinked session dir must be rejected (400 or 404), got ${res.status}`);
+    const text = await res.text();
+    assert.ok(!text.includes(OUTSIDE_MARKER), `the outside content must never appear in the body, got: ${text}`);
+  } finally {
+    rmSync(demoSessionDirFor('attackerSession123'), { force: true }); // remove the symlink itself, not its target
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-16 AT-49 (Finding B, BLOCKER): POST /lock — a symlinked session dir is rejected, and a pre-existing outside status.json is left byte-for-byte UNCHANGED', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'symlinked-session-outside-post-'));
+  try {
+    const attackerSessionId = 'attackerLockSession456';
+    mkdirSync(join(repoDir(), '_demo'), { recursive: true });
+    symlinkSync(outsideDir, join(demoSessionDirFor(attackerSessionId)));
+
+    // A status.json must exist at the symlink TARGET for this AT to mean
+    // anything — otherwise readSessionStatus 404s regardless of whether the
+    // symlink escape is blocked (a false negative that proves nothing).
+    const plantedStatus = JSON.stringify(
+      { session_id: attackerSessionId, project: 'demo', project_repo_path: '/tmp/attacker-repo', phase: 'awaiting-review', iteration: 1, prompt: '', updated_at: '2020-01-01T00:00:00.000Z' },
+      null,
+      2,
+    );
+    writeFileSync(join(outsideDir, 'status.json'), plantedStatus);
+
+    const { status } = await post('/api/demo-builder/lock', { project: 'demo', sessionId: attackerSessionId, generation: 1 });
+    assert.ok(status === 400 || status === 404, `a symlinked session dir must be rejected (400 or 404), got ${status}`);
+    const after = readFileSync(join(outsideDir, 'status.json'), 'utf8');
+    assert.equal(after, plantedStatus, 'the outside status.json (reached through the symlinked session dir) must be left byte-for-byte UNCHANGED');
+  } finally {
+    rmSync(demoSessionDirFor('attackerLockSession456'), { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
 });

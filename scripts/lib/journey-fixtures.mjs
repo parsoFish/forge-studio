@@ -1140,8 +1140,16 @@ export function writeDemoGeneration(sid, n, note = '') {
   writeFileSync(join(genDir, 'SKILL.md'),
     `# demo-design (generation ${n})\n\nHarness stand-in for the generator skill the real ` +
     `demo-builder agent authors.${note ? `\n\nSteering applied: ${note}\n` : '\n'}`);
+  // Mirrors `readFeedback` (orchestrator/demo-builder-runner.ts) EXACTLY,
+  // trim and empty→null included: an empty-but-present feedback.md must
+  // produce `null`, not `''`, or the gallery's `hasFeedback` check would see a
+  // shape production never emits (round-2 review, fidelity gap — latent, fixed
+  // before it could become a lie).
   let feedback = null;
-  try { feedback = readFileSync(join(sessionDir, 'feedback.md'), 'utf8'); } catch { /* generation 1 */ }
+  try {
+    const raw = readFileSync(join(sessionDir, 'feedback.md'), 'utf8').trim();
+    feedback = raw || null;
+  } catch { /* generation 1 — no feedback file yet */ }
   writeFileSync(join(genDir, 'meta.json'), `${JSON.stringify({
     iteration: n,
     createdAt: new Date().toISOString(),
