@@ -196,7 +196,38 @@ test('project select: lists the REAL projects prop, not a hardcoded list — kil
 // ---------------------------------------------------------------------------
 // NEW — editable cost ceiling, pre-filled from defaultCostCeilingUsd
 // (never a hardcoded number in the component)
+//
+// ROUND 2 (real defect, found by the full-gate journey run): the panel seeds
+// this field with `useState(defaultCostCeilingUsd)`. That prop arrives
+// ASYNCHRONOUSLY — the parent page starts it at `0` and fills it after
+// `fetchStudioAgentsWithMeta()` resolves — and a `useState` initializer runs
+// ONLY on first mount, so the field stayed stuck at `0` forever, and `0` (an
+// invalid ceiling, `v <= 0`) was what actually reached the wire for every
+// one-shot agent. See `run-panel-view.test.ts`'s header for the full defect
+// writeup and the two required, independent fixes it pins.
+//
+// RESIDUAL GAP (disclosed): `renderToStaticMarkup` renders ONCE per call —
+// there is no persistent component instance and no reconciler (no jsdom/
+// `@testing-library/react`), so "mount with defaultCostCeilingUsd=0, THEN
+// re-render the SAME instance once it becomes 10" — the literal shape of
+// this defect — cannot be expressed as a test in this file. The test below
+// pins the one thing this harness CAN still verify (a fresh mount with the
+// exact `0` value the real bug got stuck on renders correctly); the
+// anti-staleness contract itself is pinned as a pure function in
+// `run-panel-view.test.ts` (`resolveCeilingFieldValue`), with its own
+// disclosed residual: that pure-function pin cannot prove the component
+// actually stores state in the "undefined until edited" shape needed to use
+// it, rather than keeping `useState(prop)`. Closing that last wiring gap
+// needs a real re-render harness (jsdom/testing-library, a new-dependency
+// decision) or a real-browser journey beat — neither of which this
+// test-writer pass can add.
 // ---------------------------------------------------------------------------
+
+test('cost ceiling: a fresh mount with defaultCostCeilingUsd=0 (the EXACT value the real staleness defect got stuck on) shows 0, not blank/NaN/some other silent default', () => {
+  const html = render({ costCeilingEnforceable: true, defaultCostCeilingUsd: 0 });
+  const inputTag = tagContaining(html, 'data-run-cost-ceiling');
+  expect(inputTag).toContain('value="0"');
+});
 
 test('cost ceiling: [data-run-cost-ceiling] pre-filled from the defaultCostCeilingUsd PROP — kills a hardcoded literal in the component', () => {
   const htmlSeven = render({ costCeilingEnforceable: true, defaultCostCeilingUsd: 7.5 });

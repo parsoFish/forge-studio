@@ -28,16 +28,61 @@
  *     enforceable: boolean,
  *   ): number | undefined
  *
- * WHY these two, and not a single monolithic "buildDispatchOptions": each is
+ *   export function resolveCeilingFieldValue(
+ *     defaultCostCeilingUsd: number,
+ *     manualOverride: number | undefined,
+ *   ): number
+ *
+ * WHY these three, and not a single monolithic "buildDispatchOptions": each is
  * independently the exact decision point the task brief calls out —
  * (1) "refusing an undeclared kind client-side with the SAME MESSAGE SHAPE
  * the server uses" (mirrors cli/ui-bridge.ts's `materialsNoKindMessage` /
  * `materialsUndeclaredKindMessage` / the three cap messages — message text
  * pinned CHARACTER-FOR-CHARACTER below, matching that file's own "wording is
- * pinned character-for-character... do not reword" convention), and
+ * pinned character-for-character... do not reword" convention),
  * (2) "an operator never submits a ceiling that will be refused" — the
  * function signature itself makes "just always pass the raw input through"
- * impossible to satisfy without inspecting `enforceable`.
+ * impossible to satisfy without inspecting `enforceable`, hardened below to
+ * also refuse a value the server's own bounds check would 400 on
+ * (non-finite / NaN / <= 0), and
+ * (3) THE REAL DEFECT a full-gate journey run found (round 2 of this WI's
+ * acceptance tests): `RunPanel.tsx` seeded its cost-ceiling field with
+ * `useState(defaultCostCeilingUsd)`. `defaultCostCeilingUsd` arrives
+ * ASYNCHRONOUSLY (the parent page fetches it after mount and starts it at
+ * `0`) — a `useState` initializer runs ONLY on first mount and never re-syncs
+ * when the prop later changes, so the field stayed stuck at `0` forever, and
+ * `resolveCostCeilingForDispatch(0, true)` (pre-hardening: `0` was treated as
+ * a valid value) sent `costCeilingUsd: 0` to the wire, which the server
+ * correctly 400s (`v <= 0`) — breaking dispatch outright for every one-shot
+ * agent, `project-manager` included. `resolveCeilingFieldValue` pins the FIX
+ * CONTRACT: the displayed value must be a function of the CURRENT
+ * `defaultCostCeilingUsd` argument on every call (never a value captured
+ * once), unless the operator has manually typed something — and once they
+ * have, that edit must never be silently clobbered by a later-arriving
+ * default. Fix (2)'s hardening and fix (3)'s anti-staleness contract are
+ * BOTH required and neither substitutes for the other: (3) alone, without
+ * (2), would still ship `0` to the wire in the remaining instant before the
+ * real default arrives; (2) alone, without (3), makes the journey beat pass
+ * by silently sending NO ceiling at all once `resolveCostCeilingForDispatch`
+ * starts refusing `0` — which discards the operator's real ceiling
+ * (assuming it's ever a real non-zero one) even AFTER `defaultCostCeilingUsd`
+ * has arrived, a WORSE bug than the one this round started from (a silent
+ * downgrade instead of a loud 400). Do not "simplify" (3) away because (2)
+ * alone makes the beat green.
+ *
+ * RESIDUAL GAP (disclosed, not closed): `resolveCeilingFieldValue` pins the
+ * DECISION function only. It cannot prove `RunPanel.tsx` actually stores its
+ * local state as `manualOverride: number | undefined` (undefined until the
+ * operator types) and recomputes the displayed/dispatched value from this
+ * function on every render, instead of keeping the `useState(prop)` shape
+ * that caused the defect. `renderToStaticMarkup` (run-panel-render.test.ts)
+ * renders once per call with no persistent component instance across calls —
+ * there is no React reconciler here (no jsdom/`@testing-library/react`), so
+ * a "mount with prop A, then re-render the SAME instance with prop B"
+ * scenario — the literal shape of this defect — is not expressible in this
+ * suite. Only a real-browser journey beat (or jsdom + testing-library, a
+ * new-dependency decision not this test-writer's to make) can close that
+ * wiring gap; this file closes everything reachable without one.
  *
  * The numeric caps mirrored here (8 materials / 262144 bytes per file /
  * 524288 bytes total) are orchestrator/studio/materials.ts's
@@ -58,6 +103,7 @@ import { test, expect } from 'vitest';
 import {
   validateMaterialsClientSide,
   resolveCostCeilingForDispatch,
+  resolveCeilingFieldValue,
 } from './run-panel-view';
 
 // ---------------------------------------------------------------------------
@@ -78,11 +124,92 @@ test('resolveCostCeilingForDispatch: enforceable=false -> returns undefined REGA
   expect(resolveCostCeilingForDispatch(500, false)).toBeUndefined();
 });
 
-test('resolveCostCeilingForDispatch: enforceable=true, value 0 -> still returns 0, not undefined (the ENFORCEABILITY gate, not a truthiness gate on the value)', () => {
-  // Kills an implementation that does `enforceable && value ? value :
-  // undefined` (a truthy check on the ceiling VALUE, wrongly conflated with
-  // the enforceability gate on the AGENT).
-  expect(resolveCostCeilingForDispatch(0, true)).toBe(0);
+test('resolveCostCeilingForDispatch: enforceable=true, a normal positive value -> the enforceability gate does not ALSO reject a perfectly valid value', () => {
+  expect(resolveCostCeilingForDispatch(0.01, true)).toBe(0.01);
+  expect(resolveCostCeilingForDispatch(500, true)).toBe(500);
+});
+
+// ---------------------------------------------------------------------------
+// resolveCostCeilingForDispatch — VALIDITY HARDENING (round-2 defense in
+// depth). AMENDS this file's earlier "value 0 -> still returns 0" pin, which
+// is now WRONG: the server's own bounds check (cli/ui-bridge.ts,
+// `v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD`) refuses `0` — it was never a
+// legitimate ceiling, only a truthiness-check red herring at the time that
+// test was written. `0` is exactly the value the real defect (see this
+// file's header) put on the wire, because the panel's `useState(prop)` field
+// went stale at its initial value before the real default ever arrived.
+// Kills "the client mirror only knows about enforceability, not validity" —
+// the same pattern already established for materials (a convenience mirror
+// of the server's rules, never the authority, but present so a bad value
+// degrades to "nothing sent" instead of a round-tripped 400).
+// ---------------------------------------------------------------------------
+
+test('resolveCostCeilingForDispatch: enforceable=true, value 0 -> undefined (0 is <= 0, refused by the server\'s own bounds check)', () => {
+  expect(resolveCostCeilingForDispatch(0, true)).toBeUndefined();
+});
+
+test('resolveCostCeilingForDispatch: enforceable=true, a negative value -> undefined', () => {
+  expect(resolveCostCeilingForDispatch(-5, true)).toBeUndefined();
+});
+
+test('resolveCostCeilingForDispatch: enforceable=true, NaN -> undefined (never puts a NaN literal on the wire)', () => {
+  expect(resolveCostCeilingForDispatch(NaN, true)).toBeUndefined();
+});
+
+test('resolveCostCeilingForDispatch: enforceable=true, Infinity/-Infinity -> undefined (non-finite, mirrors the server\'s Number.isFinite gate)', () => {
+  expect(resolveCostCeilingForDispatch(Infinity, true)).toBeUndefined();
+  expect(resolveCostCeilingForDispatch(-Infinity, true)).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// resolveCeilingFieldValue — THE ACTUAL DEFECT (round 2). Pins the
+// anti-staleness contract: the returned value is a function of the CURRENT
+// `defaultCostCeilingUsd` argument on every call, never a value captured
+// once — see this file's header for the full defect writeup and the
+// disclosed residual (this pins the decision function, not the component's
+// actual re-render wiring, which this harness cannot observe).
+// ---------------------------------------------------------------------------
+
+test('resolveCeilingFieldValue: no manual override -> returns defaultCostCeilingUsd verbatim', () => {
+  expect(resolveCeilingFieldValue(0, undefined)).toBe(0);
+  expect(resolveCeilingFieldValue(10, undefined)).toBe(10);
+});
+
+// THE key pin: kills `useState(defaultCostCeilingUsd)` (a value captured
+// ONCE). Calling this pure function twice with two DIFFERENT
+// defaultCostCeilingUsd arguments — mirroring "the async fetch resolved,
+// defaultCostCeilingUsd changed from 0 to 10" — and the SAME "no manual
+// override yet" state must reflect EACH call's OWN current argument, not a
+// value memoized from the first call. A `useState`-shaped implementation
+// wrapped in a same-named function could only get this right by accident;
+// this is what actually distinguishes "recomputed fresh" from "captured
+// once and stale".
+test('resolveCeilingFieldValue: reflects a LATER-arriving default, not a value frozen from an earlier call — kills "captured once at mount" (useState(prop))', () => {
+  const beforeFetchResolves = resolveCeilingFieldValue(0, undefined);
+  const afterFetchResolves = resolveCeilingFieldValue(10, undefined);
+  expect(beforeFetchResolves).toBe(0);
+  expect(afterFetchResolves).toBe(10);
+  expect(afterFetchResolves).not.toBe(beforeFetchResolves);
+});
+
+test('resolveCeilingFieldValue: a manual override wins over the default, even when the default is later than the override', () => {
+  expect(resolveCeilingFieldValue(10, 25)).toBe(25);
+});
+
+// The other half of "never discards the operator's ceiling" (this WI's
+// standing concern, also load-bearing for the fix-2-alone failure mode this
+// file's header calls out): once the operator has typed a value, a
+// LATER-arriving (or later-changing) default must never silently overwrite
+// it.
+test('resolveCeilingFieldValue: a manual override is never clobbered by a default that arrives (or changes) AFTER the override was set', () => {
+  const beforeDefaultArrives = resolveCeilingFieldValue(0, 25);
+  const afterDefaultArrives = resolveCeilingFieldValue(10, 25);
+  expect(beforeDefaultArrives).toBe(25);
+  expect(afterDefaultArrives).toBe(25);
+});
+
+test('resolveCeilingFieldValue: a manual override of exactly 0 still wins over the default (0 is a legitimate FIELD value the operator typed, even though resolveCostCeilingForDispatch will separately refuse to dispatch it) — the field-display decision and the dispatch-validity decision are deliberately separate functions', () => {
+  expect(resolveCeilingFieldValue(10, 0)).toBe(0);
 });
 
 // ---------------------------------------------------------------------------
