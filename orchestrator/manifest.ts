@@ -382,10 +382,10 @@ export type WriteOptions = {
    * the guard re-read `forge.config.json` from disk. A long-lived caller (the
    * bridge, which snapshots `ctx.projectsRoot` once at server start) must be
    * validated against the root it is actually using — see
-   * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`. Omitted by the
-   * short-lived callers (`promote-manifests`, `mint-triggered-initiative`),
-   * which resolve fresh at invocation time and have no snapshot to diverge
-   * from; the guard then self-resolves exactly as before.
+   * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`. Omitted by
+   * `promote-manifests` and `mint-triggered-initiative`, which resolve the
+   * root and validate it in the SAME synchronous call and so cache no root to
+   * diverge from; the guard then self-resolves exactly as before.
    */
   projectsRoot?: string;
 };

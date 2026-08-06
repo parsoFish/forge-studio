@@ -134,10 +134,15 @@ function resolveConfiguredProjectsRoot(forgeRoot: string): string {
  *
  * The ruling is therefore not "resolve it the same way" but **the root is
  * PASSED, not re-derived**: a caller holding a snapshot hands it in, and the
- * guard checks against the root that caller actually used. Callers WITHOUT a
- * snapshot (the short-lived orchestrator/CLI paths — `writeManifest`,
- * `runRequeue`, `drain-fix-loop`, `finalize-merged`) omit it and self-resolve
- * exactly as before, so no existing behaviour changes.
+ * guard checks against the root that caller actually used. Callers holding NO
+ * snapshot omit it and self-resolve exactly as before, so no existing
+ * behaviour changes: `writeManifest`'s short-lived callers
+ * (`promote-manifests`, `mint-triggered-initiative`), the `runRequeue` CLI,
+ * and `drain-fix-loop`/`finalize-merged`. The last two are NOT short-lived —
+ * `orchestrator/scheduler.ts:526,549` calls them on every pass of the
+ * `forge serve` forever loop — but they cache no root either: each call
+ * re-resolves, so there are never two values in play to diverge. What makes
+ * pin 7's defect possible is a SNAPSHOT, not uptime.
  *
  * FAIL CLOSED, never silently: a supplied `projectsRoot` that is not a
  * non-empty ABSOLUTE path is refused outright rather than falling back to
