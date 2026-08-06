@@ -1223,15 +1223,32 @@ async function handleHttp(
           inputs[k] = v;
         }
       }
-      // R6-04 WI-2 — the per-kickoff cost ceiling. Fail-closed: non-number,
-      // NaN/non-finite, <= 0, or above MAX_KICKOFF_COST_CEILING_USD all 400
-      // BEFORE runId is minted / spawnAgentDispatch is ever called — no run
-      // is spawned on a refused ceiling. Exactly-at-the-max is accepted
-      // (inclusive boundary); one unit over is refused.
+      // R6-04 WI-2 — the per-kickoff cost ceiling. Fail-closed, THREE ordered
+      // stages (round 8, T1 ruling on validation precedence):
+      //   1. shape/type — non-number or non-finite. Must win over everything
+      //      else: we should never reason about whether a malformed value is
+      //      "enforceable" or "in bounds".
+      //   2. enforceability — a property of the AGENT, invariant under the
+      //      value (only `runtime.loopStrategy: 'one-shot'` agents can honor
+      //      a ceiling via options.maxBudgetUsd, orchestrator/run-agent.ts's
+      //      runOneShotSpawn; the legacy invocation path, 14 of 19 real
+      //      dispatchable roster agents, has no budget concept at all). This
+      //      wins over bounds: a bounds message ("must be <= N") implies "use
+      //      a smaller number" as a remedy, but for a legacy-path agent NO
+      //      value is acceptable — a message naming an unusable remedy is
+      //      actively misleading. Mirrors the SAME guard `runAgent` itself
+      //      enforces (defense-in-depth: this route is not the only entry
+      //      point — `forge agent dispatch --cost-ceiling-usd` never passes
+      //      through it).
+      //   3. bounds — a property of the VALUE: <= 0 or above
+      //      MAX_KICKOFF_COST_CEILING_USD. Exactly-at-the-max is accepted
+      //      (inclusive boundary); one unit over is refused.
+      // All three 400 BEFORE runId is minted / spawnAgentDispatch is ever
+      // called — no run is spawned on a refused ceiling.
       let costCeilingUsd: number | undefined;
       if (body.costCeilingUsd !== undefined) {
         const v = body.costCeilingUsd;
-        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
           sendJson(
             res,
             400,
@@ -1240,18 +1257,6 @@ async function handleHttp(
           );
           return;
         }
-        costCeilingUsd = v;
-        // R6-04 WI-2, round 7 (T1 ruling) — a ceiling that cannot be
-        // enforced must be REFUSED, never silently accepted. Only agents
-        // declaring `runtime.loopStrategy: 'one-shot'` are enforceable
-        // (options.maxBudgetUsd, orchestrator/run-agent.ts's
-        // runOneShotSpawn) — the legacy invocation path (no loopStrategy
-        // declared; 14 of 19 real dispatchable roster agents) has no budget
-        // concept at all, so an accepted ceiling there would be validated,
-        // recorded, and shown in the UI while doing nothing. This mirrors
-        // the SAME guard `runAgent` itself enforces (defense-in-depth: this
-        // route is not the only entry point — `forge agent dispatch
-        // --cost-ceiling-usd` never passes through it).
         if (def.runtime.loopStrategy !== 'one-shot') {
           sendJson(
             res,
@@ -1266,6 +1271,16 @@ async function handleHttp(
           );
           return;
         }
+        if (v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return;
+        }
+        costCeilingUsd = v;
       }
       // R6-04-F2 WI-1 — materials contract enforcement, the agent-kickoff
       // upload seam. ALL validation happens here, alongside `inputs` above,
