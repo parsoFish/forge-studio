@@ -146,7 +146,27 @@ export function isContainedWorktreePath(p: string, opts: { forgeRoot: string; in
   return containedUnder(projectsRoot, p).ok;
 }
 
-/** `project_repo_path` is legitimate iff genuinely contained under `<forgeRoot>/projects/`. */
+/**
+ * `project_repo_path` is legitimate iff genuinely contained under
+ * `<forgeRoot>/projects/`.
+ *
+ * VALIDATING A ROOT DOES NOT VALIDATE WHAT YOU WRITE BENEATH IT (SEC-03
+ * Defect 5, BLOCKER — the fifth time in this campaign a containment fix
+ * shipped its own containment bug). This function answers exactly one
+ * question: *is this directory itself contained?* It says NOTHING about
+ * `<p>/anything/else`. A caller that then does
+ * `writeFileSync(join(p, '.forge', 'project.json'), …)` has an UNGUARDED
+ * write: a genuinely real, honestly-contained project directory whose
+ * NESTED `.forge` entry is a symlink writes straight through it to the
+ * link's target. Reproduced live against `POST /api/studio/projects`, which
+ * wrote the `testProcess.local.cmd` forge later EXECUTES to a directory
+ * outside the forge root while returning `200 {"ok":true}`.
+ *
+ * So: once this returns true, `p` is a TRUSTED root — hand it to
+ * `resolveGuardedPath(p, [segment, …])` with every component you intend to
+ * write as its own `segments[]` element, and write through the `realPath`
+ * it returns. Do not build a second, unguarded path for the same write.
+ */
 export function isContainedProjectRepoPath(p: string, opts: { forgeRoot: string }): boolean {
   const projectsRoot = join(opts.forgeRoot, 'projects');
   return containedUnder(projectsRoot, p).ok;
