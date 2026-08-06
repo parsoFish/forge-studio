@@ -148,13 +148,32 @@ export type GenerationGalleryView = {
   emptyMessage: string | null;
 };
 
-export function generationGalleryView(artifact: GenerationGalleryArtifact): GenerationGalleryView {
+/**
+ * R4-16 pin 2 (Finding D) — `preferredNumber` (OPTIONAL) selects the
+ * generation carrying THAT number, by VALUE, never by array position: the
+ * demo-builder poll refetches every 3s and rebuilds `artifact` as a brand-new
+ * object graph each tick (same generations, new reference) — so a
+ * poll-stable selection can only survive if it is looked up by the stable
+ * `number` field, never an index into whichever array happened to arrive
+ * this tick (AT-112). Absent, or naming a generation no longer present
+ * (AT-111 — e.g. it existed in an earlier payload but this poll's snapshot
+ * doesn't carry it), falls back to the newest generation exactly like today
+ * — never throws.
+ */
+export function generationGalleryView(
+  artifact: GenerationGalleryArtifact,
+  preferredNumber?: number,
+): GenerationGalleryView {
   const isEmpty = artifact.generations.length === 0;
+  const preferredIndex = preferredNumber === undefined
+    ? -1
+    : artifact.generations.findIndex((g) => g.number === preferredNumber);
+  const selectedIndex = isEmpty ? -1 : preferredIndex >= 0 ? preferredIndex : artifact.generations.length - 1;
   return {
     kind: 'generation-gallery',
     generations: artifact.generations,
     count: artifact.generations.length,
-    selectedIndex: isEmpty ? -1 : artifact.generations.length - 1,
+    selectedIndex,
     isEmpty,
     emptyMessage: isEmpty ? `No generations yet — scanned ${artifact.sourcesScanned.join(', ')}` : null,
   };

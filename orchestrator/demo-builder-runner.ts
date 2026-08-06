@@ -18,10 +18,29 @@
  *                        ▼
  *                     locking ──▶ locked
  *                        └ (bridge: abandon) ──▶ abandoned
+ *
+ * Accepted residual (same trust tier as the hardlink/TOCTOU notes in
+ * `orchestrator/studio/session-transcript.ts`'s header — read that first for
+ * the precedent this follows): `runLockStep`'s selected-generation restore
+ * writes `DEMO.html` then the generator skill as two separate `writeFileSync`
+ * calls, not one atomic transaction. A genuine fs failure between the two
+ * (disk full, EMFILE, a killed process) leaves a half-restore — one file
+ * holding the chosen generation's bytes, the other still holding whatever was
+ * in the repo before this lock attempt. This is disclosed, not fixed: the
+ * validation that gates this write (the `skillRelPath` allowlist + realpath
+ * containment below) runs BEFORE either write, so the residual is strictly
+ * about a mid-restore OS-level failure, never about untrusted input reaching
+ * a write it shouldn't; a true atomic pair-write would need a temp-file +
+ * rename on both files plus a way to make two renames commit together
+ * (effectively a two-phase-commit journal) for a failure mode that is
+ * self-healing regardless — the operator's next lock attempt re-runs the
+ * SAME restore from the SAME immutable `generations/<n>/` snapshot and
+ * overwrites whatever partial state was left, so no repeated attempt can
+ * observe (or worsen) the half-restored window.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve, sep } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
@@ -40,7 +59,7 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { listDemoElements } from './studio/registry.ts';
 import type { DemoStep, DemoElementDefinition } from './studio/types.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { skillPath, skillPathRelative, SLUG_RE } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)
@@ -361,6 +380,13 @@ function runLockStep(args: {
 }): RunDemoBuilderTurnResult {
   const { input, sessionDir, status, logger, initiativeId } = args;
 
+  // R4-16 pin 2 (Finding C) — set only when THIS lock actually restored a
+  // generation's snapshot; then it names the skill THAT generation recorded,
+  // never the hardcoded composer path. Left null for an unselected lock
+  // (behaviour unchanged — falls back to DEMO_SKILL_REL_PATH below, exactly
+  // as before this fix).
+  let restoredSkillRelPath: string | null = null;
+
   // R4-16 (D6) — a chosen generation is validated and restored BEFORE any
   // write happens. Fail closed: a selectedGeneration naming a missing or
   // unparsable snapshot throws, naming the requested number AND the
@@ -379,11 +405,43 @@ function runLockStep(args: {
         `${genDir}. Generations on disk: ${existing.length > 0 ? existing.join(', ') : '(none)'}.`,
       );
     }
+
+    // R4-16 pin 2 (Finding B) — `meta.skillRelPath` is a WRITE target read
+    // back off disk (a generation's own meta.json, which — per AT-43..45 — a
+    // compromised agent turn or an operator-facing bug could smuggle a
+    // malicious value into). An ALLOWLIST, never a ".." blocklist: a
+    // blocklist would still admit an absolute-shaped path with zero ".."
+    // segments (AT-44), and neither an allowlist nor a blocklist alone stops
+    // a path that LEXICALLY matches the legitimate shape but resolves
+    // through a symlinked directory (AT-45) — hence the realpath containment
+    // check right after.
+    if (!isAllowedSkillRelPath(meta.skillRelPath)) {
+      throw new Error(
+        `demo-builder runner: cannot lock — generation ${status.selectedGeneration}'s skillRelPath "${meta.skillRelPath}" ` +
+        `is not an allowed write target (must be "${DEMO_SKILL_REL_PATH}" or match ".forge/skills/demo/<slug>/SKILL.md") — refusing to write anywhere.`,
+      );
+    }
     const destSkillPath = join(status.project_repo_path, meta.skillRelPath);
+    let realRepoRoot: string;
+    try {
+      realRepoRoot = realpathSync(status.project_repo_path);
+    } catch {
+      throw new Error(
+        `demo-builder runner: cannot lock — project repo "${status.project_repo_path}" could not be resolved to verify write containment.`,
+      );
+    }
+    if (!closestExistingAncestorContained(dirname(destSkillPath), realRepoRoot)) {
+      throw new Error(
+        `demo-builder runner: cannot lock — generation ${status.selectedGeneration}'s skillRelPath "${meta.skillRelPath}" ` +
+        'resolves outside the project repo (a symlinked directory along its path) — refusing to write.',
+      );
+    }
+
     mkdirSync(dirname(destSkillPath), { recursive: true });
     mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
     writeFileSync(join(status.project_repo_path, DEMO_HTML_REL_PATH), readFileSync(snapshotDemoPath));
     writeFileSync(destSkillPath, readFileSync(snapshotSkillPath));
+    restoredSkillRelPath = meta.skillRelPath;
   }
 
   const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
@@ -392,7 +450,12 @@ function runLockStep(args: {
       `demo-builder runner: cannot lock — no ${DEMO_HTML_REL_PATH} in the repo. Generate a demo before locking.`,
     );
   }
-  const skillPath = join(status.project_repo_path, DEMO_SKILL_REL_PATH);
+  // R4-16 pin 2 (Finding C) — the generator this lock actually restored
+  // (per-element or composer), never a hardcoded composer-path check that
+  // ignores which skill this generation used. `restoredSkillRelPath` is null
+  // only when no generation was selected this lock (unchanged fallback).
+  const demoSkillRelPathForLock = restoredSkillRelPath ?? DEMO_SKILL_REL_PATH;
+  const demoSkillAbsPathForLock = join(status.project_repo_path, demoSkillRelPathForLock);
   const lockPath = join(status.project_repo_path, DEMO_LOCK_REL_PATH);
   const lock = {
     session_id: status.session_id,
@@ -401,7 +464,9 @@ function runLockStep(args: {
     iterations: status.iteration,
     // The locked, reproducible generator — future cycles run it per completed
     // initiative to render a before/after demo of that initiative's changes.
-    demo_skill: existsSync(skillPath) ? DEMO_SKILL_REL_PATH : null,
+    // null only if the generator this lock actually names genuinely is not
+    // on disk (never fabricated, never a stale/unrelated generator's path).
+    demo_skill: existsSync(demoSkillAbsPathForLock) ? demoSkillRelPathForLock : null,
     demo_html: DEMO_HTML_REL_PATH,
     // R4-16 (D6) — the CHOSEN generation, never attributed from
     // status.iteration (a field that happens to be a number is not the same
@@ -504,6 +569,52 @@ function loadDemoSteps(projectRepoPath: string): DemoStep[] {
 /** The project-side, concrete element-skill the generator authors for an element kind. */
 function elementSkillRelPath(id: string): string {
   return `.forge/skills/demo/${id}/SKILL.md`;
+}
+
+/** R4-16 pin 2 (Finding B) — the ONLY two shapes `readGenerationSnapshotMeta`'s
+ *  `skillRelPath` may ever legitimately carry, because they are the only two
+ *  shapes the runner ITSELF ever writes there (see `runGenerateStep`'s
+ *  `requiredSkillRel`): the fixed composer path, or a per-element path whose
+ *  slug matches the SAME `SLUG_RE` forge's own demo-element library ids use
+ *  (`elementSkillRelPath` above). An allowlist, not a ".." blocklist — see
+ *  `isAllowedSkillRelPath`'s call site for why a blocklist is insufficient.
+ *  `SLUG_RE.source` carries its OWN `^`/`$` anchors (it is normally matched
+ *  standalone against a whole slug) — stripped here before splicing into a
+ *  larger pattern, since an embedded mid-pattern `^`/`$` would anchor to the
+ *  position 0 / end of the ENTIRE tested string, not the slug segment, and
+ *  silently reject every legitimate input. */
+const SLUG_SEGMENT_SOURCE = SLUG_RE.source.replace(/^\^/, '').replace(/\$$/, '');
+const ELEMENT_SKILL_REL_PATH_RE = new RegExp(`^\\.forge/skills/demo/(?:${SLUG_SEGMENT_SOURCE})/SKILL\\.md$`);
+
+function isAllowedSkillRelPath(relPath: string): boolean {
+  return relPath === DEMO_SKILL_REL_PATH || ELEMENT_SKILL_REL_PATH_RE.test(relPath);
+}
+
+/** R4-16 pin 2 (Finding B) — belt-and-braces beyond the allowlist above: a
+ *  `skillRelPath` can lexically match the legitimate shape and STILL resolve
+ *  outside the repo if some directory along its path is a symlink to an
+ *  outside location (AT-45 — the allowlist only proves the path STRING's
+ *  shape, never where it resolves). Walks up from `dir` to the closest
+ *  EXISTING ancestor — the allowlist already forbids ".." and absolute paths,
+ *  so once that ancestor is verified contained, any remaining NEW segments
+ *  `mkdirSync(..., {recursive:true})` creates under it cannot escape (they
+ *  are plain literal directory names, not symlinks) — and verifies THAT
+ *  ancestor's realpath stays inside `repoRealPath`. Fails closed (false) if
+ *  no ancestor can be resolved at all. */
+function closestExistingAncestorContained(dir: string, repoRealPath: string): boolean {
+  let candidate = dir;
+  while (!existsSync(candidate)) {
+    const parent = dirname(candidate);
+    if (parent === candidate) return false;
+    candidate = parent;
+  }
+  let real: string;
+  try {
+    real = realpathSync(candidate);
+  } catch {
+    return false;
+  }
+  return real === repoRealPath || real.startsWith(repoRealPath + sep);
 }
 
 /** The generator bodies for a set of elements (the skill-creating-skill prompts). */

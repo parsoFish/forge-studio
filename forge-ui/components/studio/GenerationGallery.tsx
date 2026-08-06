@@ -1,22 +1,30 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
-import { generationGalleryView, selectGeneration, type GenerationGalleryView } from '@/lib/session-artifact-view';
+import { generationGalleryView, type GenerationGalleryView } from '@/lib/session-artifact-view';
 import type { GenerationGalleryArtifact, GenerationGalleryEntry, GenerationGalleryItem } from '@/lib/session-client';
 import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
 
 // ---------------------------------------------------------------------------
 // GenerationGallery — the demo-builder's accumulating generation selector
 // (R4-16). Modelled on DependencyDag.tsx: presentational, driven by a view
-// model — `generationGalleryView`/`selectGeneration` (lib/session-artifact-
-// view.ts) own every bit of derived state; this component owns only the
-// per-mount "which generation is selected" React state (mirrors FilePackage.
-// tsx's `useState(() => filePackageTabs(files))` idiom exactly, including
-// its re-derive-on-new-`artifact` effect — a fresh `artifact` reference
-// resets the selection to the newest generation, the same behaviour
-// FilePackage already has for a fresh `files` reference; not a new quirk
-// introduced here).
+// model — `generationGalleryView` (lib/session-artifact-view.ts) owns every
+// bit of derived state.
+//
+// R4-16 pin 2 (Finding D) — poll-stable selection: `DemoBuilderPanel` (the
+// project-page caller) refetches the session shell every 3s, so `artifact`
+// arrives as a BRAND-NEW object graph each tick even when the generations
+// haven't changed. This component therefore does NOT store the derived
+// `GenerationGalleryView` in state, and does NOT key any effect on
+// `artifact` (both of those reset on every new reference, killing the
+// operator's pick within 3 seconds — the exact bug this fixes). Instead it
+// stores only the operator's chosen generation NUMBER — a scalar that
+// survives a fresh `artifact` reference because `generationGalleryView`
+// looks it up BY VALUE, never by array position — and derives the view
+// fresh on every render. `null` means "no explicit pick yet"; the view's
+// own default (newest) takes over, exactly matching the pre-fix behaviour
+// until the operator clicks one.
 //
 // `project`/`sessionId` are OPTIONAL: this component is reachable both from
 // DemoBuilderPanel (project page, R1-03-F2 entry — always has both) and from
@@ -42,11 +50,8 @@ export function GenerationGallery({
    *  disabled — never a silently-swallowed click. */
   onFinalize?: (generationNumber: number) => void;
 }): JSX.Element {
-  const [view, setView] = useState<GenerationGalleryView>(() => generationGalleryView(artifact));
-
-  useEffect(() => {
-    setView(generationGalleryView(artifact));
-  }, [artifact]);
+  const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
+  const view: GenerationGalleryView = generationGalleryView(artifact, selectedNumber ?? undefined);
 
   const selected = view.selectedIndex >= 0 ? view.generations[view.selectedIndex] : null;
 
@@ -73,7 +78,7 @@ export function GenerationGallery({
                   data-action="select-generation"
                   data-generation-number={g.number}
                   data-generation-selected={isSelected ? 'true' : 'false'}
-                  onClick={() => setView((v) => selectGeneration(v, i))}
+                  onClick={() => setSelectedNumber(g.number)}
                   style={{
                     fontSize: 12,
                     fontWeight: 600,

@@ -24,8 +24,11 @@ import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-clie
 // `lib/session-artifact-view.ts`'s (unused-by-this-component)
 // `brainStructureView`/`selectBrainStructureFile` also wrap. generation-gallery
 // follows the SAME "hand the raw data to a self-contained component" pattern:
-// `GenerationGallery` owns its own selection state via `generationGalleryView`/
-// `selectGeneration` internally (mirrors `FilePackage`, not a state lift here).
+// `GenerationGallery` owns its own selection state internally (mirrors
+// `FilePackage`, not a state lift here) — as a poll-stable generation NUMBER
+// fed through `generationGalleryView`'s optional `preferredNumber` (R4-16 pin
+// 2, Finding D), not an index derived from whichever `artifact` object
+// reference happened to arrive on the latest 3s poll tick.
 //
 // `project`/`sessionId` are OPTIONAL passthrough, needed only by
 // generation-gallery's per-item "view" links + "finalize" action (D7: gallery

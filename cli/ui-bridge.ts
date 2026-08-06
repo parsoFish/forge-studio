@@ -59,7 +59,9 @@ import {
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
+  SAFE_ID_RE,
 } from './bridge-studio.ts';
+import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
@@ -112,7 +114,7 @@ import {
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
 import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
-import { skillsDir } from '../orchestrator/skill-path.ts';
+import { skillsDir, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
   readSessionStatus,
@@ -1378,9 +1380,48 @@ const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
  *  never negative/decimal). `filename` structurally forbids `..`, `/`, and an
  *  absolute path — a malicious segment can never even reach the realpath
  *  choke point (`safeReadFileInSession`), which is this route's actual
- *  containment guard (D11). */
+ *  containment guard (D11). The negative lookahead rejects a filename that is
+ *  EXACTLY "." or ".." — without it, correctness for those two values would
+ *  depend on `n` happening to be a digit string (so the joined
+ *  `generations/<n>/.` or `generations/<n>/..` merely resolves to a
+ *  directory and 404s for an unrelated reason) rather than the filename
+ *  actually being rejected as a structural violation (pin 2, Finding E). */
 const GENERATION_NUMBER_RE = /^[0-9]{1,6}$/;
-const GENERATION_FILENAME_RE = /^[A-Za-z0-9._-]+$/;
+const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
+
+/** R4-16 pin 2 (Finding A, BLOCKER) — `project`/`sessionId` on the
+ *  generation-serve route below are validated with the EXACT SLUG_RE/
+ *  SAFE_ID_RE + length-cap contract `cli/bridge-studio-sessions.ts` already
+ *  applies to its own session routes (imported, not re-declared): length cap
+ *  THEN charset, BEFORE any fs call. Without this, `demoSessionDir(join(
+ *  projectsRoot, project), sessionId)` — a plain `path.join`, no containment
+ *  of its own — walks an attacker-chosen `project`/`sessionId` (e.g. ".." /
+ *  "../OUTSIDE") straight out of `projectsRoot` before `safeReadFileInSession`
+ *  ever runs; that choke point only proves containment relative to whatever
+ *  `sessionDir` it is handed, so an escaping caller-supplied dir defeats it
+ *  entirely (reproduced live: AT-36). */
+const MAX_GENERATION_PROJECT_LENGTH = MAX_SKILL_ID_LENGTH;
+const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
+
+function invalidGenerationProjectReason(id: string): string | null {
+  if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
+    return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_PROJECT_LENGTH}-character length limit`;
+  }
+  if (!SLUG_RE.test(id)) {
+    return `invalid project "${id}" — must match ${SLUG_RE} (a single lowercase-kebab slug; no "/", "\\", ".", or "..")`;
+  }
+  return null;
+}
+
+function invalidGenerationSessionIdReason(id: string): string | null {
+  if (id.length > MAX_GENERATION_SESSION_ID_LENGTH) {
+    return `invalid sessionId "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_SESSION_ID_LENGTH}-character length limit`;
+  }
+  if (!SAFE_ID_RE.test(id)) {
+    return `invalid sessionId "${id}" — must match ${SAFE_ID_RE} (alphanumeric, "_", "-"; no "/", ".", "..", whitespace, or null bytes)`;
+  }
+  return null;
+}
 
 /** Timestamp stamp + short random suffix for a generated run id
  *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
@@ -2186,18 +2227,46 @@ async function handleDemoBuilder(
 
   // GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename> — serve
   // one R4-16 generation-snapshot file out of <sessionDir>/generations/<n>/.
-  // Unlike the sibling /demo/ and /fragment/ routes above (a lexical
-  // `startsWith(base)` check on a joined path), this route reads through
-  // `safeReadFileInSession` (session-transcript.ts's realpath choke point,
-  // D11) — a deliberately STRONGER guard than those pre-existing siblings,
-  // whose lexical checks are filed as an evidenced follow-up rather than
-  // fixed inside this PR (a containment change wants its own attack round).
+  // ALL FOUR path segments are validated before any fs call: `project`/
+  // `sessionId` against the same SLUG_RE/SAFE_ID_RE + length-cap contract
+  // `cli/bridge-studio-sessions.ts` applies (imported, not re-declared) so an
+  // escaping value like ".." or "../OUTSIDE" never reaches `demoSessionDir`
+  // in the first place (pin 2, Finding A); `n`/`filename` against
+  // GENERATION_NUMBER_RE/GENERATION_FILENAME_RE, structurally forbidding
+  // `..`, `/`, an absolute path, or a bare `.`/`..`. The final read then goes
+  // through `safeReadFileInSession` (session-transcript.ts's realpath choke
+  // point, D11) as belt-and-braces against a symlink escape from WITHIN an
+  // already-validated session dir. This is stricter than the sibling /demo/
+  // and /fragment/ routes above, which never validate `project`/`sessionId`
+  // at all beyond non-empty and rely solely on a lexical `startsWith(base)`
+  // check on the resolved file path — those pre-existing gaps are filed as
+  // an evidenced follow-up rather than fixed inside this PR (a containment
+  // change wants its own attack round).
   const generationMatch = url.match(/^\/api\/demo-builder\/generation\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/);
   if (method === 'GET' && generationMatch) {
-    const project = decodeURIComponent(generationMatch[1]);
-    const sessionId = decodeURIComponent(generationMatch[2]);
-    const n = decodeURIComponent(generationMatch[3]);
-    const filename = decodeURIComponent(generationMatch[4]);
+    let project: string;
+    let sessionId: string;
+    let n: string;
+    let filename: string;
+    try {
+      project = decodeURIComponent(generationMatch[1]);
+      sessionId = decodeURIComponent(generationMatch[2]);
+      n = decodeURIComponent(generationMatch[3]);
+      filename = decodeURIComponent(generationMatch[4]);
+    } catch {
+      sendJson(res, 400, { error: 'invalid generation route — malformed URL encoding' }, origin);
+      return true;
+    }
+    const projectInvalidReason = invalidGenerationProjectReason(project);
+    if (projectInvalidReason) {
+      sendJson(res, 400, { error: projectInvalidReason }, origin);
+      return true;
+    }
+    const sessionIdInvalidReason = invalidGenerationSessionIdReason(sessionId);
+    if (sessionIdInvalidReason) {
+      sendJson(res, 400, { error: sessionIdInvalidReason }, origin);
+      return true;
+    }
     if (!GENERATION_NUMBER_RE.test(n)) {
       sendJson(res, 400, { error: `invalid generation number "${n}"` }, origin);
       return true;
