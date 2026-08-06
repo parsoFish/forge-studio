@@ -72,6 +72,13 @@ const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
   /^[A-Za-z_][A-Za-z0-9_]*$/, // deriveSecretsRow — a bare declared requiresEnv NAME, verbatim (contract-stages.ts:158; D3 names-only, no template)
   /^step: (capture|verify|present)$/, // deriveDemoRow — a declared demoProcess step kind (contract-stages.ts:168)
   /^built demo skill: .+$/, // deriveDemoRow — demo.lock.json's demo_skill (contract-stages.ts:179)
+  // deriveRoadmapRow — the C4 brain-profile divergence fact (pin 2, item 3;
+  // landed round-1 fix, contract-stages.ts's deriveRoadmapRow). The id
+  // segment mirrors SLUG_RE exactly (orchestrator/skill-path.ts) rather than
+  // a loose charset, because that IS the real shape a validated projectId
+  // can take here — read off the exact emitted string, not guessed:
+  // `brain profile: absent (brain/projects/allgreenproj/profile.md)`.
+  /^brain profile: (present|absent) \(brain\/projects\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/profile\.md\)$/,
 ];
 
 // ---------------------------------------------------------------------------
