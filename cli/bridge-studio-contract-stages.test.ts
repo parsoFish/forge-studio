@@ -66,19 +66,31 @@ test('R4-17 AT-2 (real client path — percent-encoded traversal survives client
 });
 
 test('R4-17 AT-3 (RAW-request, wire-level rule): a LITERAL ".." path segment — which a real fetch() client normalizes away before the request is ever sent — is rejected by the SERVER-SIDE guard when driven directly, proving the guard does not rely on client-side normalization', async () => {
-  const mockRes = {
+  // Explicit inline type annotation (not the previous `as unknown as
+  // ServerResponse` cast on the object literal itself) so `this` inside
+  // `writeHead`'s shorthand method is typed against THIS declared shape,
+  // never inferred as `{}` — TS6133/TS2339 fix, mechanical only, no
+  // assertion changed.
+  type MockServerResponse = {
+    statusCode: number;
+    headers: Record<string, string>;
+    writeHead(code: number): MockServerResponse;
+    end(): void;
+    setHeader(): void;
+  };
+  const mockRes: MockServerResponse = {
     statusCode: 0,
-    headers: {} as Record<string, string>,
+    headers: {},
     writeHead(code: number) { this.statusCode = code; return this; },
     end() { /* no-op — we only inspect statusCode */ },
     setHeader() { /* no-op */ },
-  } as unknown as import('node:http').ServerResponse;
+  };
   const mockReq = { headers: {} } as import('node:http').IncomingMessage;
   const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
 
-  const handled = await handleStudioRoutes(mockReq, mockRes, ctx, '/api/studio/projects/../contract-stages', 'GET');
+  const handled = await handleStudioRoutes(mockReq, mockRes as unknown as import('node:http').ServerResponse, ctx, '/api/studio/projects/../contract-stages', 'GET');
   assert.equal(handled, true, 'the route must claim this URL (matching [^/]+ literally on the raw ".." segment) rather than falling through unmatched');
-  assert.equal((mockRes as unknown as { statusCode: number }).statusCode, 400, 'the raw ".." segment must be rejected by the slug check — never treated as a real project id');
+  assert.equal(mockRes.statusCode, 400, 'the raw ".." segment must be rejected by the slug check — never treated as a real project id');
 });
 
 test('R4-17 AT-4: GET /api/studio/projects/<id>/contract-stages — unknown project (valid slug, no such directory) → 404', async () => {

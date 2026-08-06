@@ -51,9 +51,28 @@ import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from './contract-stages.ts';
+import { projectBrainDir } from '../orchestrator/brain-paths.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..');
 const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] as const;
+
+/**
+ * D11 allow-list (AT-23 replacement, pin 2 — round-1 adversarial review). Every
+ * detail string `deriveContractStages` emits today, traced to its exact
+ * producing line in `cli/contract-stages.ts`. A NEW pattern must be added
+ * here deliberately, with review, the moment a genuinely new detail shape is
+ * introduced — that deliberate-addition friction IS the D11 gate; the old
+ * five-banned-word substring check (`pass|fail|clause|green|red|compliant`)
+ * had none, and a wholly new verdict sentence sailed straight through it.
+ */
+const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
+  /^gate command: .+$/, // deriveContractRow — testProcess.local.cmd tokens (contract-stages.ts:124)
+  /^a compliance report file exists at \.forge\/contract-compliance-report\.json$/, // deriveContractRow (contract-stages.ts:126)
+  /^source file: (AGENTS\.md|CLAUDE\.md)$/, // deriveInstructionsRow (contract-stages.ts:144)
+  /^[A-Za-z_][A-Za-z0-9_]*$/, // deriveSecretsRow — a bare declared requiresEnv NAME, verbatim (contract-stages.ts:158; D3 names-only, no template)
+  /^step: (capture|verify|present)$/, // deriveDemoRow — a declared demoProcess step kind (contract-stages.ts:168)
+  /^built demo skill: .+$/, // deriveDemoRow — demo.lock.json's demo_skill (contract-stages.ts:179)
+];
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -406,7 +425,37 @@ describe('deriveContractStages — malformed .forge/project.json fails closed (A
 // ===========================================================================
 
 describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)', () => {
-  it('AT-23: a project whose EVERY stage is present never has any row claiming a clause "passes" or is "green" — status is only ever present|absent, and detail never uses pass/fail/green/clause-code verdict language', () => {
+  // AT-23 was REPLACED (pin 2, round-1 adversarial review — T2 ruling:
+  // ACCEPTED, the reviewer falsified the original test by mutation). The
+  // original lowercased every detail string and checked
+  // `!text.includes(w)` for `['pass','fail','clause','green','red',
+  // 'compliant']`. The reviewer appended a genuine D11 violation to
+  // `deriveContractRow`:
+  //
+  //   detail.push('C1 requirement met — this contract stage satisfies the
+  //   onboarding gate');
+  //
+  // — and all 29 ATs, including the old AT-23, still passed (that sentence
+  // contains none of the five banned words). The old check had also forced a
+  // workaround into PRODUCTION prose: contract-stages.ts:113-114/172-173 had
+  // to avoid the ordinary English word "declared" because it contains the
+  // substring "red" ("decla-RED"), which the old AT-23 greped for literally.
+  // A test that makes production code dodge a normal word while missing an
+  // actual verdict sentence is worse than no test — replaced with an
+  // ALLOW-LIST template check (T2-ruled option (a)): every detail string
+  // this module emits today has one of the small number of static shapes in
+  // `ALLOWED_DETAIL_PATTERNS` above. A NEW, unenumerated detail string fails
+  // this test and forces a deliberate, reviewed addition to the allow-list —
+  // that friction IS the D11 gate.
+  //
+  // Verified (T3, this pin): applying the reviewer's exact mutation to
+  // `deriveContractRow` and re-running this file scoped turns THIS test RED
+  // (`stage "contract" produced a detail string matching NO enumerated
+  // allow-list pattern: "C1 requirement met — this contract stage satisfies
+  // the onboarding gate"`), while the OLD substring-ban version stayed
+  // green under the identical mutation — see the T3 report for the raw
+  // before/after run output.
+  it('AT-23 (REPLACED — allow-list template check): every detail line, across all five stages, for a project whose every stage is present, matches one of the explicitly enumerated ALLOWED_DETAIL_PATTERNS shapes', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'allgreenproj');
     writeFileSync(join(dir, 'AGENTS.md'), '# instructions\n', 'utf8');
@@ -415,14 +464,26 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
       testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['X'] } },
       demoProcess: [{ kind: 'capture', text: 'x' }],
     });
+    // Also exercise the two CONDITIONAL detail lines (compliance report,
+    // built demo skill) so the allow-list is checked against every shape
+    // this module can currently produce, not just the unconditional ones.
+    writeFileSync(join(dir, '.forge', 'contract-compliance-report.json'), JSON.stringify({ finalHardGreen: true }), 'utf8');
+    mkdirSync(join(dir, '.forge', 'demo'), { recursive: true });
+    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ demo_skill: '.forge/skills/demo-design-x/SKILL.md' }), 'utf8');
+
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'allgreenproj' }));
+    let detailLinesChecked = 0;
     for (const row of rows) {
       assert.ok(row.status === 'present' || row.status === 'absent', `status must be exactly "present" or "absent", got: ${JSON.stringify(row.status)}`);
-      const text = row.detail.join(' ').toLowerCase();
-      for (const forbidden of ['pass', 'fail', 'clause', 'green', 'red', 'compliant']) {
-        assert.ok(!text.includes(forbidden), `stage "${row.stage}" detail must never use verdict language ("${forbidden}") — presence only, per D11: only "forge preflight"'s exit code is the authoritative contract-green signal. detail: ${JSON.stringify(row.detail)}`);
+      for (const detail of row.detail) {
+        detailLinesChecked++;
+        assert.ok(
+          ALLOWED_DETAIL_PATTERNS.some((p) => p.test(detail)),
+          `stage "${row.stage}" produced a detail string matching NO enumerated allow-list pattern: ${JSON.stringify(detail)} — a new/changed detail shape must be a deliberate, reviewed addition to ALLOWED_DETAIL_PATTERNS, never silently accepted`,
+        );
       }
     }
+    assert.ok(detailLinesChecked >= 6, `expected the fixture to actually exercise every allow-listed shape at least once, only checked ${detailLinesChecked} detail lines`);
   });
 
   it('AT-24: every stage present on a real, grounded project (mdtoc) still reads as presence facts only, matching the REAL, independently-verified on-disk state', () => {
@@ -500,5 +561,100 @@ describe('deriveContractStages — containment (AT-25..29)', () => {
     assert.equal(byStage(rowsA, 'contract').status, 'absent');
     assert.equal(byStage(rowsB, 'roadmap').status, 'absent');
     assert.equal(byStage(rowsB, 'contract').status, 'present');
+  });
+});
+
+// ===========================================================================
+// AT-30..32: item 3 — the roadmap row's C4 divergence, made VISIBLE
+// (T2 ruling, binding, pin 2). `cli/preflight.ts`'s checkC4 (HARD) fails
+// closed unless BOTH roadmap.md AND brain/projects/<id>/profile.md (Brain 3,
+// ADR 035, central in the forge repo) exist — but `deriveRoadmapRow` today
+// only ever looks at roadmap.md, so a project can read `roadmap: present`
+// here while `forge preflight` fails it outright over the missing brain
+// profile, with nothing in this row hinting why.
+//
+// T2's binding ruling has three parts:
+//   - the row's `status` STAYS presence-of-roadmap.md only — folding the
+//     brain profile in would be a clause verdict (D11 forbids it; only
+//     `forge preflight`'s exit code is entitled to make that call);
+//   - folding the profile into the `roadmap` STAGE is refused on R2-10's own
+//     D3 grounds (`brain` is its own SESSION_STAGES entry precisely because
+//     Brain-3 seeding is not the roadmap — mapping one onto the other is the
+//     fabricated-mapping shape D3 already rejected once);
+//   - but the missing profile must be VISIBLE: a `detail` line reports the
+//     real presence/absence of brain/projects/<id>/profile.md (a fact,
+//     phrased as a fact, no verdict), and `source` names both files.
+//
+// RED now, deliberately: `deriveRoadmapRow(projectDir)` (contract-stages.ts)
+// takes no `forgeRoot`/`projectId` at all today and never looks at the brain
+// profile — WI-3 (not yet built) must thread both through. These three tests
+// pin the intended shape ahead of that implementation.
+//
+// Kills two wrong "fixes":
+//   (1) folding the profile check into `status` (a C4 verdict on this row)
+//       — AT-31 pins `status` staying 'present' even when the profile is
+//       absent;
+//   (2) dropping the profile fact so the divergence goes invisible again —
+//       AT-30/AT-31 both require a profile.md-naming detail line, in BOTH
+//       the present and the absent case.
+// ===========================================================================
+
+describe('deriveContractStages — roadmap C4 divergence visibility (item 3, T2 ruling, AT-30..32)', () => {
+  it('AT-30: roadmap.md present + brain/projects/<id>/profile.md present → both facts appear in detail, source names both files', () => {
+    const projectsRoot = makeProjectsRoot();
+    const fakeForgeRoot = makeProjectsRoot('contract-stages-brainroot-');
+    const dir = makeProjectDir(projectsRoot, 'bothpresentproj');
+    writeFileSync(join(dir, 'roadmap.md'), '# roadmap\n', 'utf8');
+    const brainDir = projectBrainDir(fakeForgeRoot, 'bothpresentproj');
+    mkdirSync(brainDir, { recursive: true });
+    writeFileSync(join(brainDir, 'profile.md'), '# profile\n', 'utf8');
+
+    const rows = okRows(deriveContractStages({ forgeRoot: fakeForgeRoot, projectsRoot, projectId: 'bothpresentproj' }));
+    const roadmap = byStage(rows, 'roadmap');
+    assert.equal(roadmap.status, 'present');
+    assert.ok(
+      roadmap.detail.some((d) => /profile\.md/.test(d) && /present/i.test(d)),
+      `expected a detail line reporting the brain profile as present, got: ${JSON.stringify(roadmap.detail)}`,
+    );
+    assert.ok(roadmap.source.includes('roadmap.md'), `source must still name roadmap.md, got: ${JSON.stringify(roadmap.source)}`);
+    assert.ok(roadmap.source.includes('profile.md'), `source must ALSO name the brain profile file (T2 ruling: "the row's source will name both files"), got: ${JSON.stringify(roadmap.source)}`);
+  });
+
+  it('AT-31 (the divergence itself — checkC4 in cli/preflight.ts fails HARD for this identical fixture): roadmap.md present + profile.md ABSENT → status STAYS present (never folded into a C4 verdict), AND a detail line names the absent profile so the divergence is visible', () => {
+    const projectsRoot = makeProjectsRoot();
+    const fakeForgeRoot = makeProjectsRoot('contract-stages-brainroot-');
+    const dir = makeProjectDir(projectsRoot, 'noprofileproj');
+    writeFileSync(join(dir, 'roadmap.md'), '# roadmap\n', 'utf8');
+    // Deliberately no brain/projects/noprofileproj/profile.md anywhere.
+
+    const rows = okRows(deriveContractStages({ forgeRoot: fakeForgeRoot, projectsRoot, projectId: 'noprofileproj' }));
+    const roadmap = byStage(rows, 'roadmap');
+    assert.equal(
+      roadmap.status, 'present',
+      'kills wrong-fix (1): the row must stay presence-of-roadmap.md only — folding the brain profile into THIS stage\'s status would be a clause verdict, which D11 forbids and which only forge preflight\'s exit code is entitled to make',
+    );
+    assert.ok(
+      roadmap.detail.some((d) => /profile\.md/.test(d) && /absent/i.test(d)),
+      `kills wrong-fix (2): a detail line must name the absent profile so the divergence is VISIBLE, got: ${JSON.stringify(roadmap.detail)}`,
+    );
+  });
+
+  it('AT-32: roadmap.md ABSENT → status stays "absent" regardless of the brain profile\'s presence (checked both ways)', () => {
+    for (const profilePresent of [true, false]) {
+      const projectsRoot = makeProjectsRoot();
+      const fakeForgeRoot = makeProjectsRoot('contract-stages-brainroot-');
+      const id = `noroadmap-${profilePresent ? 'withprofile' : 'noprofile'}`;
+      makeProjectDir(projectsRoot, id); // dir exists but no roadmap.md
+      if (profilePresent) {
+        const brainDir = projectBrainDir(fakeForgeRoot, id);
+        mkdirSync(brainDir, { recursive: true });
+        writeFileSync(join(brainDir, 'profile.md'), '# profile\n', 'utf8');
+      }
+      const rows = okRows(deriveContractStages({ forgeRoot: fakeForgeRoot, projectsRoot, projectId: id }));
+      assert.equal(
+        byStage(rows, 'roadmap').status, 'absent',
+        `roadmap.md absent must read as absent regardless of the brain profile's presence (profilePresent=${profilePresent})`,
+      );
+    }
   });
 });
