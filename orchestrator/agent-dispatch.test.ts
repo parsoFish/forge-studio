@@ -14,7 +14,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, chmodSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -355,6 +355,18 @@ test('dispatchAgentRun WIRING: REGRESSION — a run with NO materials directory 
       buildStandaloneRunPrompt(oneShotClone(base), {}),
       'must be byte-identical to the pure function\'s own no-materials output — proves discovery of an absent directory degrades to exactly the pre-existing behaviour, not an empty/stray section',
     );
+
+    // ROUND 6 tightening — ENOENT (this ordinary, ubiquitous case) must stay
+    // COMPLETELY SILENT: no "material-skipped" event (nothing was skipped,
+    // nothing was even listed) and, sharper, no "materials-unreadable" event
+    // either — ENOENT is not a failure, and reporting it would fire a
+    // deviation event on nearly every dispatch that has ever run, training
+    // the operator to ignore the channel. This is the contract's line in the
+    // sand between "nothing to report" and "genuinely could not read".
+    const raw = join(logsRoot, runId, 'events.jsonl');
+    const rawText = existsSync(raw) ? readFileSync(raw, 'utf8') : '';
+    assert.doesNotMatch(rawText, /agent-dispatch\.material-skipped/, 'ENOENT must never emit a per-file skip event — there was nothing to list');
+    assert.doesNotMatch(rawText, /agent-dispatch\.materials-unreadable/, 'ENOENT must never emit the unreadable-directory event — an absent directory is the ordinary case, not a failure');
   } finally {
     rmSync(dir, { recursive: true, force: true });
     restoreEnv();
@@ -395,7 +407,23 @@ test('dispatchAgentRun WIRING: REGRESSION — a run with NO materials directory 
 //     failure.
 //   - A skipped filename is a REFERENCE ONLY in the event log and must never
 //     appear in the agent's prompt (it is explicitly not usable material).
+//
+// ROUND 6 addendum — `agent-dispatch.ts:160`'s bare `catch {}` conflates
+// ENOENT (the ordinary case — no materials directory at all) with every
+// OTHER errno (EACCES, ENOTDIR, ...: a materials directory plausibly exists
+// and could not be read). Same defect shape the R2-09 guard round already
+// paid for once (`lexists` swallowing EACCES/ENOTDIR into "definitively
+// absent"). Ruling: ENOENT must stay completely silent (reporting the
+// ordinary case would fire a deviation event on nearly every dispatch and
+// train the operator to ignore the channel); any OTHER errno is a genuine,
+// reportable failure. `dispatchAgentRun` emits a SECOND, distinct message —
+// PINNED EXACTLY as `agent-dispatch.materials-unreadable` — carrying the
+// errno code string, exactly once, when `discoverStagedMaterials`'s
+// (assumed) `unreadable` field is set. The run still proceeds in this case
+// too — reported, never fatal, mirroring the skip contract above.
 // =============================================================================
+
+const MATERIALS_UNREADABLE_MESSAGE = 'agent-dispatch.materials-unreadable';
 
 const MATERIAL_SKIPPED_MESSAGE = 'agent-dispatch.material-skipped';
 
@@ -521,38 +549,96 @@ test('dispatchAgentRun WIRING: a staged directory with ONLY no-kind files — th
   }
 });
 
-test('dispatchAgentRun WIRING: an UNREADABLE materials directory does not crash the dispatch, contributes no materials to the prompt, and is reported (not silently swallowed) — the report\'s exact message is NOT pinned here (see the pure-function test\'s note on the unspecified failure-signalling shape); the assertion is a genuine BASELINE CONTRAST (log-event COUNT against an absent-directory run), not "events.jsonl is non-empty" — runAgent unconditionally emits start/end events regardless of materials, so a bare non-emptiness check would pass today for the wrong reason (confirmed: it did, before this fix)', async () => {
+/** Local twin of the sibling file's `eaccesUnenforceable` helper (small,
+ *  deliberate duplication across test files — matches this file's own
+ *  existing convention of re-declaring `withoutSpawnSuppressionEnv`/
+ *  `capturingQueryFn`/`oneShotClone` rather than importing test-only helpers
+ *  across files). True when mode-000 cannot be trusted to deny access in
+ *  this environment (root, or a permission-transparent filesystem). */
+function eaccesUnenforceableHere(dir: string): boolean {
+  const probe = join(dir, `eacces-probe-${process.pid}`);
+  mkdirSync(probe, { recursive: true });
+  try {
+    chmodSync(probe, 0o000);
+    try {
+      readFileSync(join(probe, 'anything'));
+      return true;
+    } catch (err) {
+      return (err as NodeJS.ErrnoException).code !== 'EACCES';
+    }
+  } finally {
+    chmodSync(probe, 0o700);
+    rmSync(probe, { recursive: true, force: true });
+  }
+}
+
+test('dispatchAgentRun WIRING: EACCES — an unreadable materials directory does not crash the dispatch, contributes no materials to the prompt, and emits the EXACT pinned "agent-dispatch.materials-unreadable" event carrying the errno — TIGHTENED from round 5\'s baseline-contrast-only pin now that the message is specified. Gracefully SKIPPED when mode-000 is unenforceable in this environment (root, etc.) rather than left to pass/fail for the wrong reason', async (t) => {
   const restoreEnv = withoutSpawnSuppressionEnv();
   const dir = mkdtempSync(join(tmpdir(), 'agent-dispatch-materials-unreadable-'));
-  const logsRoot = join(dir, '_logs');
-  const runId = 'MATERIALS-UNREADABLE';
-  const materialsDir = join(logsRoot, runId, 'materials');
   try {
-    const base = getDef('project-scoped-review');
+    if (eaccesUnenforceableHere(dir)) {
+      t.skip('this process/filesystem does not enforce mode-000 (running as root, or a permission-transparent filesystem) — EACCES cannot be genuinely produced here');
+      return;
+    }
 
-    // Baseline: a run with NO materials directory at all (genuinely absent,
-    // same shape as the earlier absent-directory anchor) — establishes how
-    // many 'log'-type events an ORDINARY dispatch produces with zero
-    // materials involvement, so the unreadable-directory case below can be
-    // compared against a real number, not an arbitrary "non-empty" bar.
-    const baselineRunId = 'MATERIALS-UNREADABLE-BASELINE';
-    const baselineCaptured: { value: { prompt: string; options: Record<string, unknown> } | null } = { value: null };
-    await dispatchAgentRun({
-      slug: 'project-scoped-review',
-      skillsDir: SKILLS,
-      runId: baselineRunId,
-      logsRoot,
-      loadDefs: () => [oneShotClone(base)],
-      queryFn: capturingQueryFn(baselineCaptured),
-    });
-    const baselineLogEventCount = eventsRaw(logsRoot, baselineRunId)
-      .trim().split('\n').filter(Boolean)
-      .map((l) => JSON.parse(l) as Record<string, unknown>)
-      .filter((e) => e['event_type'] === 'log').length;
+    const logsRoot = join(dir, '_logs');
+    const runId = 'MATERIALS-UNREADABLE';
+    const materialsDir = join(logsRoot, runId, 'materials');
+    const base = getDef('project-scoped-review');
 
     mkdirSync(materialsDir, { recursive: true });
     chmodSync(materialsDir, 0o000);
+    try {
+      const captured: { value: { prompt: string; options: Record<string, unknown> } | null } = { value: null };
 
+      await assert.doesNotReject(
+        dispatchAgentRun({
+          slug: 'project-scoped-review',
+          skillsDir: SKILLS,
+          runId,
+          logsRoot,
+          loadDefs: () => [oneShotClone(base)],
+          queryFn: capturingQueryFn(captured),
+        }),
+        'an unreadable materials directory must never fail the whole dispatch',
+      );
+
+      assert.ok(captured.value, 'the run must still complete');
+      assert.doesNotMatch(captured.value!.prompt, /Materials \(data/i, 'no materials can be read, so none may be rendered');
+
+      const raw = eventsRaw(logsRoot, runId);
+      assert.match(raw, new RegExp(MATERIALS_UNREADABLE_MESSAGE.replace(/\./g, '\\.')), `expected the exact pinned message "${MATERIALS_UNREADABLE_MESSAGE}"`);
+      assert.match(raw, /EACCES/, 'the event must carry the exact errno code');
+      assert.doesNotMatch(raw, /agent-dispatch\.material-skipped/, 'a directory read failure is not a per-FILENAME skip — nothing could even be listed, so the OTHER message must not fire');
+
+      const events = raw.trim().split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>);
+      const unreadableEvent = events.find((e) => e['message'] === MATERIALS_UNREADABLE_MESSAGE);
+      assert.ok(unreadableEvent, `expected a log event with message === "${MATERIALS_UNREADABLE_MESSAGE}"`);
+      assert.equal(unreadableEvent!['event_type'], 'log');
+    } finally {
+      // Restore permissions BEFORE rmSync — rmSync(recursive) cannot descend
+      // into or remove a mode-000 directory as a non-root user, and leaving
+      // one behind leaks into /tmp for every later cleanup that touches it
+      // (mirrors cli/studio-path-guard.test.ts's own established pattern).
+      chmodSync(materialsDir, 0o700);
+    }
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+    restoreEnv();
+  }
+});
+
+test('dispatchAgentRun WIRING: ENOTDIR — a regular FILE occupies the materials/ path — does not crash the dispatch, contributes no materials to the prompt, and emits "agent-dispatch.materials-unreadable" carrying "ENOTDIR"', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
+  const dir = mkdtempSync(join(tmpdir(), 'agent-dispatch-materials-enotdir-'));
+  try {
+    const logsRoot = join(dir, '_logs');
+    const runId = 'MATERIALS-ENOTDIR';
+    const runDir = join(logsRoot, runId);
+    mkdirSync(runDir, { recursive: true });
+    writeFileSync(join(runDir, 'materials'), 'a regular file, not a directory, occupying the materials/ path');
+
+    const base = getDef('project-scoped-review');
     const captured: { value: { prompt: string; options: Record<string, unknown> } | null } = { value: null };
 
     await assert.doesNotReject(
@@ -564,27 +650,16 @@ test('dispatchAgentRun WIRING: an UNREADABLE materials directory does not crash 
         loadDefs: () => [oneShotClone(base)],
         queryFn: capturingQueryFn(captured),
       }),
-      'an unreadable materials directory must never fail the whole dispatch',
+      'a file occupying the materials/ path must never fail the whole dispatch',
     );
 
     assert.ok(captured.value, 'the run must still complete');
     assert.doesNotMatch(captured.value!.prompt, /Materials \(data/i, 'no materials can be read, so none may be rendered');
 
-    const unreadableLogEventCount = eventsRaw(logsRoot, runId)
-      .trim().split('\n').filter(Boolean)
-      .map((l) => JSON.parse(l) as Record<string, unknown>)
-      .filter((e) => e['event_type'] === 'log').length;
-
-    assert.ok(
-      unreadableLogEventCount > baselineLogEventCount,
-      `expected the unreadable-directory run to log strictly MORE 'log'-type events (${unreadableLogEventCount}) than the ordinary no-materials baseline (${baselineLogEventCount}) — a genuine read failure must add a reported event, not blend in with the ordinary start/end noise every dispatch already produces`,
-    );
+    const raw = eventsRaw(logsRoot, runId);
+    assert.match(raw, new RegExp(MATERIALS_UNREADABLE_MESSAGE.replace(/\./g, '\\.')), `expected the exact pinned message "${MATERIALS_UNREADABLE_MESSAGE}"`);
+    assert.match(raw, /ENOTDIR/, 'the event must carry the exact errno code');
   } finally {
-    // Restore permissions BEFORE rmSync — rmSync(recursive) cannot descend
-    // into or remove a mode-000 directory as a non-root user, and leaving
-    // one behind leaks into /tmp for every later cleanup that touches it
-    // (mirrors cli/studio-path-guard.test.ts's own established pattern).
-    try { chmodSync(materialsDir, 0o700); } catch { /* directory may not have been created if setup failed early */ }
     rmSync(dir, { recursive: true, force: true });
     restoreEnv();
   }
