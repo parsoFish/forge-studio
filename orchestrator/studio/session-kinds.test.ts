@@ -190,13 +190,21 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
   });
 
-  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly the 3 live + 3 reserved rows, in order, frozen', () => {
+  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 4 live + 2 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live, deriveGenerationGallery ships a real renderer)', () => {
     const ids = SESSION_ARTIFACT_KINDS.map((k) => k.id);
     assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
     const live = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'live').map((k) => k.id);
     const reserved = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'reserved').map((k) => k.id);
-    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure']);
-    assert.deepEqual(reserved, ['file-package', 'contract-buildout', 'generation-gallery']);
+    // R4-16 AT-20: generation-gallery now has a real renderer
+    // (deriveGenerationGallery, orchestrator/studio/session-transcript.ts) —
+    // the row flips to live. Declaration ORDER is unchanged (still last in
+    // the vocabulary); only its status flips. This assertion is RED at
+    // branch base — today's real session-kinds.ts still lists it reserved —
+    // and is the pin for that flip (kills an implementation that ships the
+    // derivation but forgets to promote the row, leaving it a permanent
+    // lint error per validateSessionKinds's reserved-artifact-kind check).
+    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'generation-gallery']);
+    assert.deepEqual(reserved, ['file-package', 'contract-buildout']);
     assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS));
   });
 
@@ -204,7 +212,12 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     assert.equal(sessionArtifactKindState('roadmap-draft'), 'live');
     assert.equal(sessionArtifactKindState('brain-structure'), 'live');
     assert.equal(sessionArtifactKindState('file-package'), 'reserved');
-    assert.equal(sessionArtifactKindState('generation-gallery'), 'reserved');
+    // R4-16 AT-21: generation-gallery is now LIVE, not reserved — kills a
+    // vocabulary edit that flips SESSION_ARTIFACT_KINDS's declaration
+    // without also flipping this total function's answer (they read the
+    // same frozen array, so a real implementation cannot diverge here — this
+    // is the same evidence as AT-2, checked through the OTHER accessor).
+    assert.equal(sessionArtifactKindState('generation-gallery'), 'live');
     assert.equal(sessionArtifactKindState('no-such-kind-at-all'), undefined, 'an unrecognised kind must resolve to undefined, never a guess and never a throw');
   });
 });
@@ -409,9 +422,9 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
   });
 
-  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 3 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels', () => {
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 4 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo")', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 3, `expected exactly 3 real session kinds, got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 4, `expected exactly 4 real session kinds (R4-16 adds "demo"), got ids: ${descs.map((d) => d.id).join(', ')}`);
 
     const architect = byId(descs, 'architect');
     assert.equal(architect.agent, 'architect');
@@ -433,6 +446,21 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(projectBrain.stages, ['brain']);
     assert.equal(projectBrain.defaultStage, 'brain');
     assert.deepEqual(projectBrain.artifact, { kind: 'brain-structure', label: 'Seeded structure' });
+
+    // R4-16 AT-22: the new "demo" session kind. id is "demo" — NOT
+    // "demo-builder" — because the bridge derives the session dir as
+    // <projectsRoot>/<project>/_<descriptor.id>/<sessionId>, and real
+    // demo-builder sessions live under _demo/<sid> (kills an implementation
+    // that names the descriptor after the agent slug instead of the real
+    // on-disk directory prefix). legacyRoutes:[] is legal (AT-51: an empty
+    // list is never itself an error) — this is a brand-new session shell,
+    // not a replacement for a pre-existing page.
+    const demo = byId(descs, 'demo');
+    assert.equal(demo.agent, 'demo-builder');
+    assert.deepEqual(demo.legacyRoutes, []);
+    assert.deepEqual(demo.stages, ['demo']);
+    assert.equal(demo.defaultStage, 'demo');
+    assert.deepEqual(demo.artifact, { kind: 'generation-gallery', label: 'Demo generations' });
   });
 });
 

@@ -460,7 +460,41 @@ export type BrainStructureArtifact = {
   readonly files: PackageFile[];
 };
 
-export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact;
+export type GenerationGalleryItem = {
+  readonly path: string;
+  readonly kind: 'html' | 'markdown' | 'file';
+  /** The byte length of the content actually READ from disk — never a number
+   *  copied from meta.json (R4-16 AT-14: a plausible-but-wrong metadata hint
+   *  must never leak through). */
+  readonly bytes: number;
+};
+
+export type GenerationGalleryEntry = {
+  /** Sourced from the snapshot's OWN meta.json `iteration` — never array or
+   *  directory position (R4-16 AT-10). A generation whose meta.json is
+   *  missing/unreadable/unparsable/missing-or-mistyped-iteration contributes
+   *  NO entry, leaving a visible gap rather than a renumbered sequence. */
+  readonly number: number;
+  readonly createdAt: string;
+  readonly feedback: string | null;
+  readonly targetElement: string | null;
+  // Mutable element array — same rationale as RoadmapDraftArtifact.rows: the
+  // pinned AT idiom casts the derived artifact to a plain mutable-array
+  // shape, and a `readonly T[]` is never assignable to a mutable `T[]` target.
+  readonly items: GenerationGalleryItem[];
+};
+
+export type GenerationGalleryArtifact = {
+  readonly kind: 'generation-gallery';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
+  // Mutable element array — see RoadmapDraftArtifact.rows.
+  readonly generations: GenerationGalleryEntry[];
+  readonly sourcesScanned: string[];
+};
+
+export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact | GenerationGalleryArtifact;
 
 function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
@@ -508,6 +542,101 @@ function deriveBrainStructure(sessionDir: string, label: string): BrainStructure
   return { kind: 'brain-structure', label, themeCount: packageFiles.length, files: packageFiles };
 }
 
+const GENERATIONS_DIRNAME = 'generations';
+const GENERATION_META_FILENAME = 'meta.json';
+
+function kindForGalleryItemFilename(name: string): 'html' | 'markdown' | 'file' {
+  if (name.endsWith('.html')) return 'html';
+  if (name.endsWith('.md')) return 'markdown';
+  return 'file';
+}
+
+type ParsedGenerationMeta = {
+  readonly iteration: number;
+  readonly createdAt: string;
+  readonly feedback: string | null;
+  readonly targetElement: string | null;
+};
+
+/** Parses one generation's meta.json — fails CLOSED (returns null) on ANY
+ *  shape violation the R4-16 contract cares about: not JSON, or a missing /
+ *  non-numeric "iteration". A generation whose meta.json fails this parse
+ *  contributes NO row — never a fabricated one, and never a renumbered
+ *  successor (R4-16 AT-11/AT-12). `createdAt`/`feedback`/`targetElement` are
+ *  written by the runner under our own control (demo-builder-runner.ts) so
+ *  they're read defensively (coerced to a safe default on the wrong type)
+ *  rather than failing the whole generation — only `iteration` is load-bearing
+ *  for numbering/ordering. */
+function parseGenerationMeta(raw: string): ParsedGenerationMeta | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const rec = parsed as Record<string, unknown>;
+  if (typeof rec.iteration !== 'number') return null;
+  return {
+    iteration: rec.iteration,
+    createdAt: typeof rec.createdAt === 'string' ? rec.createdAt : '',
+    feedback: typeof rec.feedback === 'string' ? rec.feedback : null,
+    targetElement: typeof rec.targetElement === 'string' ? rec.targetElement : null,
+  };
+}
+
+/** `generations/<n>/` — see the module header for the shared realpath
+ *  containment contract (`safeReadFileInSession`/`listDirEntries`); this
+ *  derivation adds NO new fs call path, reusing both choke points exactly
+ *  like `deriveRoadmapDraft`/`deriveBrainStructure` do for `manifests/`/
+ *  `themes/`. `listDirEntries(sessionDir, dir, '')` lists every entry — see
+ *  that function's header for why an empty extension is universally matching. */
+function deriveGenerationGallery(sessionDir: string, label: string): GenerationGalleryArtifact {
+  const dirNames = listDirEntries(sessionDir, GENERATIONS_DIRNAME, '');
+  const generations: GenerationGalleryEntry[] = [];
+
+  for (const dirName of dirNames) {
+    const metaRel = join(GENERATIONS_DIRNAME, dirName, GENERATION_META_FILENAME);
+    const metaRaw = safeReadFileInSession(sessionDir, metaRel);
+    if (metaRaw === null) continue; // missing / unreadable / escaped — never fabricated
+    const meta = parseGenerationMeta(metaRaw);
+    if (meta === null) continue; // not JSON / missing or mistyped iteration — a visible gap
+
+    const entryNames = listDirEntries(sessionDir, join(GENERATIONS_DIRNAME, dirName), '');
+    const items: GenerationGalleryItem[] = [];
+    for (const name of entryNames) {
+      if (name === GENERATION_META_FILENAME) continue; // metadata, not gallery content
+      const body = safeReadFileInSession(sessionDir, join(GENERATIONS_DIRNAME, dirName, name));
+      if (body === null) continue; // missing/escaped entry (e.g. a symlinked item) — never surfaced
+      items.push({ path: name, kind: kindForGalleryItemFilename(name), bytes: Buffer.byteLength(body, 'utf8') });
+    }
+    // listDirEntries sorts with localeCompare (locale-aware — case-insensitive
+    // under the default locale), but the pinned contract here is plain
+    // filename (code-unit) order — re-sort explicitly rather than trust
+    // listDirEntries's sort verbatim (checked, not assumed, per the task brief).
+    items.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+
+    generations.push({
+      number: meta.iteration,
+      createdAt: meta.createdAt,
+      feedback: meta.feedback,
+      targetElement: meta.targetElement,
+      items,
+    });
+  }
+  generations.sort((a, b) => a.number - b.number);
+
+  return {
+    kind: 'generation-gallery',
+    label,
+    generations,
+    // Mirrors deriveRoadmapDraft's exact idiom: names what was scanned
+    // INCLUDING the count found, so an empty gallery reads "scanned N, found
+    // none" rather than a bare, unexplained empty pane.
+    sourcesScanned: [`${GENERATIONS_DIRNAME}/*/${GENERATION_META_FILENAME} (${dirNames.length} file(s) found)`],
+  };
+}
+
 /**
  * Derives the artifact payload for a session's LIVE renderer kind. Throws
  * for a reserved (or otherwise unrecognised) artifact kind, naming it — zero
@@ -542,6 +671,8 @@ export function deriveSessionArtifact(input: { descriptor: SessionKindDescriptor
       return deriveMarkdownDraft(sessionDir, label);
     case 'brain-structure':
       return deriveBrainStructure(sessionDir, label);
+    case 'generation-gallery':
+      return deriveGenerationGallery(sessionDir, label);
     default: {
       // Exhaustiveness guard: state === 'live' but the kind matched none of
       // the three known live renderers — only reachable if SESSION_ARTIFACT_KINDS

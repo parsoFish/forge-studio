@@ -255,6 +255,7 @@ export const RUN_ORDER = [
 
   ['demo-builder', 'demo-builder-brief'],
   ['demo-builder', 'demo-builder-generate'],
+  ['demo-builder', 'demo-builder-generations'],
   ['demo-builder', 'demo-builder-lock'],
 
   // community (R3-07) runs LAST, deliberately: it installs a real skill and a

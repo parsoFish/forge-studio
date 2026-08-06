@@ -1115,11 +1115,63 @@ export function writeDemoArtifacts() {
   writeFileSync(join(DEMO_FORGE_DIR, 'DEMO.html'), composedDemoHtml());
 }
 
-export function writeDemoLock(sid, prompt) {
+/** R4-16 — snapshot ONE demo generation into the SESSION dir, byte-mirroring
+ *  what `orchestrator/demo-builder-runner.ts` writes at the end of a real
+ *  generate turn: `generations/<n>/{DEMO.html,SKILL.md,meta.json}`.
+ *
+ *  Honest boundary (stated, not blurred): journeys run the bridge with
+ *  `FORGE_ARCHITECT_NO_SPAWN=1`, so the demo-builder agent and its runner NEVER
+ *  execute — the harness writes what the runner would have written, the same
+ *  stand-in contract `writeDemoArtifacts()` already uses for DEMO.html. The
+ *  runner's own snapshot write is pinned in the CI-enforced node --test home
+ *  (`orchestrator/demo-builder-runner.test.ts`). What the journey therefore
+ *  proves for real is everything downstream of the snapshot: the derivation,
+ *  the session route, the client parse, the view model and the DOM.
+ *
+ *  `feedback` is READ FROM THE REAL `feedback.md` the bridge's
+ *  `POST /api/demo-builder/feedback` route just wrote (exactly as the runner
+ *  reads it), never passed in — so a beat asserting the operator's typed words
+ *  in the gallery is asserting a real round-trip, not its own fixture. */
+export function writeDemoGeneration(sid, n, note = '') {
+  const sessionDir = demoDir(sid);
+  const genDir = join(sessionDir, 'generations', String(n));
+  mkdirSync(genDir, { recursive: true });
+  writeFileSync(join(genDir, 'DEMO.html'), composedDemoHtml());
+  writeFileSync(join(genDir, 'SKILL.md'),
+    `# demo-design (generation ${n})\n\nHarness stand-in for the generator skill the real ` +
+    `demo-builder agent authors.${note ? `\n\nSteering applied: ${note}\n` : '\n'}`);
+  // Mirrors `readFeedback` (orchestrator/demo-builder-runner.ts) EXACTLY,
+  // trim and empty→null included: an empty-but-present feedback.md must
+  // produce `null`, not `''`, or the gallery's `hasFeedback` check would see a
+  // shape production never emits (round-2 review, fidelity gap — latent, fixed
+  // before it could become a lie).
+  let feedback = null;
+  try {
+    const raw = readFileSync(join(sessionDir, 'feedback.md'), 'utf8').trim();
+    feedback = raw || null;
+  } catch { /* generation 1 — no feedback file yet */ }
+  writeFileSync(join(genDir, 'meta.json'), `${JSON.stringify({
+    iteration: n,
+    createdAt: new Date().toISOString(),
+    feedback,
+    targetElement: null,
+    composed: true,
+    skillRelPath: '.forge/skills/demo-design/SKILL.md',
+  }, null, 2)}\n`);
+}
+
+export function writeDemoLock(sid, prompt, generation = null) {
   mkdirSync(DEMO_FORGE_DIR, { recursive: true });
   const lock = {
     session_id: sid, project: PROJECT, prompt: prompt ?? '',
-    iterations: 1, demo_skill: null, demo_html: '.forge/demo/DEMO.html',
+    iterations: 1,
+    // R4-16: `generation` is the finalized generation number (null when the
+    // operator locked whatever was in the repo rather than choosing a
+    // snapshot) — mirrors runLockStep's lock shape, which never attributes
+    // `iteration` to it.
+    generation,
+    demo_skill: generation === null ? null : '.forge/skills/demo-design/SKILL.md',
+    demo_html: '.forge/demo/DEMO.html',
     locked_at: new Date().toISOString(),
   };
   const lockText = `${JSON.stringify(lock, null, 2)}\n`;

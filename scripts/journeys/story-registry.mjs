@@ -525,6 +525,39 @@ export const STORY_REGISTRY = [
     batch: 'B',
     port: null,
     excluded: null,
+    note:
+      'R4-16 (the initiative that owns this story) assessed the flip against the ' +
+      'real DOM and deliberately did NOT take it. Steps 3-5 — the middle of the ' +
+      'story and the part R4-16 owns — are now REAL and beat-driven on the ' +
+      'demo-builder journey: step 3 "generations iterate on your feedback" ' +
+      '(demo-builder-generations: the operator types into the real review ' +
+      'surface, the real bridge route writes feedback.md, and the gallery ' +
+      'renders generation 2 beside generation 1 showing the operator\'s own ' +
+      'words as the feedback that drove it), step 4 "Generation N. Ship it." ' +
+      '(the numbered selector, with the selection proven to survive a poll ' +
+      'tick), step 5 "the demo skill lands in the project" ' +
+      '(demo-builder-lock: [data-action="finalize-generation"] POSTs the chosen ' +
+      'generation and the real bridge persists selectedGeneration, which the ' +
+      'lock step enforces by restoring that generation\'s sample AND generator ' +
+      'skill). What blocks the flip is STRUCTURAL, and it is not R4-16\'s to ' +
+      'resolve. Steps 1-2 enter from an agent-builder detail page for ' +
+      'demo-builder (mockup: #/agents/builder/demo-builder, then Run -> ' +
+      'session). No such page exists, deliberately: skills/demo-builder/SKILL.md ' +
+      'carries `library: false`, so isStudioAgent (orchestrator/studio/' +
+      'registry.ts:117 — `runtime` in d && d.library !== false) excludes it from ' +
+      'the composable Studio roster exactly as it excludes brain-fix and the ' +
+      'other operator-dispatched setup helpers. Making those two steps real ' +
+      'means deciding that demo-builder joins the roster — a roster decision ' +
+      'with its own consequences (it becomes flow-composable), not a rendering ' +
+      'gap R4-16 can close. Additionally port.journey is single-valued ' +
+      '(scripts/lib/story-parity.mjs), so even once such a page existed, steps ' +
+      '1-2 would live on the `agents` journey while 3-5 need `demo-builder` — ' +
+      'the same single-journey obstacle recorded on run-agent-architect. ' +
+      'Padding the count with unrelated beats would misrepresent the state. ' +
+      'One further honesty note: mockup step 4 says "clips + HTML summary"; ' +
+      'forge\'s demo-builder authors an HTML demo (DEMO.html + fragments) and ' +
+      'has no clip capture, so that half of the caption describes the mockup, ' +
+      'not the product.',
   },
   {
     story: 'run-agent-onboarding',

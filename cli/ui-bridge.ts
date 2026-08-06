@@ -28,13 +28,14 @@ import {
   readFileSync,
   readSync,
   readdirSync,
+  realpathSync,
   statSync,
   watch as fsWatch,
   writeFileSync,
   type FSWatcher,
 } from 'node:fs';
 import { spawn } from 'node:child_process';
-import { join, resolve, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
@@ -59,7 +60,9 @@ import {
   sendJson,
   allowedOrigin,
   CSRF_HEADER,
+  SAFE_ID_RE,
 } from './bridge-studio.ts';
+import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
@@ -101,8 +104,10 @@ import {
 import {
   demoSessionDir,
   DEMO_HTML_REL_PATH,
+  GENERATIONS_DIRNAME,
   type DemoBuilderStatus,
 } from '../orchestrator/demo-builder-runner.ts';
+import { safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
@@ -110,7 +115,7 @@ import {
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
 import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
-import { skillsDir } from '../orchestrator/skill-path.ts';
+import { skillsDir, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
   readSessionStatus,
@@ -118,6 +123,7 @@ import {
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
+import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -1371,6 +1377,146 @@ const SAFE_PROJECT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
+/** R4-16 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>
+ *  path segments. `n` is a bounded digit string (mirrors a generation number,
+ *  never negative/decimal). `filename` structurally forbids `..`, `/`, and an
+ *  absolute path — a malicious segment can never even reach the realpath
+ *  choke point (`safeReadFileInSession`), which is this route's actual
+ *  containment guard (D11). The negative lookahead rejects a filename that is
+ *  EXACTLY "." or ".." — without it, correctness for those two values would
+ *  depend on `n` happening to be a digit string (so the joined
+ *  `generations/<n>/.` or `generations/<n>/..` merely resolves to a
+ *  directory and 404s for an unrelated reason) rather than the filename
+ *  actually being rejected as a structural violation (pin 2, Finding E). */
+const GENERATION_NUMBER_RE = /^[0-9]{1,6}$/;
+const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
+
+/** R4-16 pin 2 (Finding A, BLOCKER) — `project`/`sessionId` on the
+ *  generation-serve route below are validated with the EXACT SLUG_RE/
+ *  SAFE_ID_RE + length-cap contract `cli/bridge-studio-sessions.ts` already
+ *  applies to its own session routes (imported, not re-declared): length cap
+ *  THEN charset, BEFORE any fs call. Without this, `demoSessionDir(join(
+ *  projectsRoot, project), sessionId)` — a plain `path.join`, no containment
+ *  of its own — walks an attacker-chosen `project`/`sessionId` (e.g. ".." /
+ *  "../OUTSIDE") straight out of `projectsRoot` before `safeReadFileInSession`
+ *  ever runs; that choke point only proves containment relative to whatever
+ *  `sessionDir` it is handed, so an escaping caller-supplied dir defeats it
+ *  entirely (reproduced live: AT-36). */
+const MAX_GENERATION_PROJECT_LENGTH = MAX_SKILL_ID_LENGTH;
+const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
+
+function invalidGenerationProjectReason(id: string): string | null {
+  if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
+    return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_PROJECT_LENGTH}-character length limit`;
+  }
+  if (!SLUG_RE.test(id)) {
+    return `invalid project "${id}" — must match ${SLUG_RE} (a single lowercase-kebab slug; no "/", "\\", ".", or "..")`;
+  }
+  return null;
+}
+
+function invalidGenerationSessionIdReason(id: string): string | null {
+  if (id.length > MAX_GENERATION_SESSION_ID_LENGTH) {
+    return `invalid sessionId "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_SESSION_ID_LENGTH}-character length limit`;
+  }
+  if (!SAFE_ID_RE.test(id)) {
+    return `invalid sessionId "${id}" — must match ${SAFE_ID_RE} (alphanumeric, "_", "-"; no "/", ".", "..", whitespace, or null bytes)`;
+  }
+  return null;
+}
+
+/**
+ * R4-16 round 2 (pin 3, Findings A + B, both BLOCKER) — the ONE choke point
+ * every demo-builder route uses to turn a caller-supplied `project` +
+ * `sessionId` into a session dir. This is the ONLY place `demoSessionDir(
+ * join(ctx.projectsRoot, project), sessionId)` is called from in the
+ * demo-builder handler — round 1 validated `project`/`sessionId` on the GET
+ * generation route alone, which closed that one ROUTE, not the class: the
+ * five sibling routes (start/brief/feedback/lock/abandon) built the exact
+ * same unguarded call themselves and reached `readSessionStatus`/
+ * `writeSessionStatus` (no containment of their own) with only a
+ * non-emptiness check on the inputs (AT-43/44, reproduced live).
+ *
+ * Two escapes closed in one pass:
+ *   - Finding A: `project`/`sessionId` are validated (length cap THEN
+ *     charset, BEFORE any fs call) with the exact SLUG_RE/SAFE_ID_RE
+ *     contract `cli/bridge-studio-sessions.ts` applies to its own session
+ *     routes — reused via `invalidGenerationProjectReason`/
+ *     `invalidGenerationSessionIdReason` above (round 1 already imported the
+ *     regexes for the GET route; not re-declared here). A `".."`-shaped
+ *     value is rejected structurally and never reaches a `path.join`.
+ *   - Finding B: a NAME that legitimately PASSES SAFE_ID_RE can still be a
+ *     symlink on disk pointing outside this project — validating the STRING
+ *     says nothing about what the PATH resolves to. This function proves
+ *     containment the same way `resolveSafeSessionDir`
+ *     (cli/bridge-studio-sessions.ts) does: `realpathSync` the resolved
+ *     directory and require it to land inside THIS project's own resolved
+ *     dir (`realpathSync(<projectsRoot>/<project>)`) — scoped to the
+ *     specific project, never a `projectsRoot`-wide check, which would still
+ *     admit a symlink pointing into ANOTHER project's session dir (exactly
+ *     R2-10's own AT-47 escape shape).
+ *
+ * CREATE case (`POST /start`'s session dir does not exist yet):
+ * `realpathSync` on a path that doesn't exist throws ENOENT, which must be
+ * treated as neither an escape NOR a false pass. This walks up from the
+ * candidate session dir to the closest EXISTING ancestor (same idea as
+ * `closestExistingAncestorContained`, orchestrator/demo-builder-runner.ts —
+ * a different module boundary, so not imported across it: that helper is
+ * private to the runner's lock-step restore, this one is private to the
+ * bridge's route dispatch, and each needs a different reference boundary —
+ * a project repo root there, this project's OWN dir here) and proves THAT
+ * ancestor is contained instead. Any remaining not-yet-existing tail
+ * segments are plain literal directory names — `sessionId` already passed
+ * SAFE_ID_RE, which forbids "/" — so they cannot themselves introduce an
+ * escape between the check and the caller's later `mkdirSync`.
+ */
+type DemoSessionDirOutcome =
+  | { readonly ok: true; readonly dir: string }
+  | { readonly ok: false; readonly reason: string };
+
+function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId: string): DemoSessionDirOutcome {
+  const projectReason = invalidGenerationProjectReason(project);
+  if (projectReason) return { ok: false, reason: projectReason };
+  const sessionIdReason = invalidGenerationSessionIdReason(sessionId);
+  if (sessionIdReason) return { ok: false, reason: sessionIdReason };
+
+  const projectDir = join(projectsRoot, project);
+  let realProjectDir: string;
+  try {
+    realProjectDir = realpathSync(projectDir);
+  } catch {
+    return { ok: false, reason: `project "${project}" was not found under the projects root` };
+  }
+
+  // The candidate session dir may not exist yet (the CREATE case) — walk up
+  // to the closest EXISTING ancestor and prove THAT is contained, per the
+  // header note above.
+  const candidate = demoSessionDir(projectDir, sessionId);
+  let ancestor = candidate;
+  while (!existsSync(ancestor)) {
+    const parent = dirname(ancestor);
+    if (parent === ancestor) {
+      return { ok: false, reason: `session dir for project "${project}", sessionId "${sessionId}" could not be resolved` };
+    }
+    ancestor = parent;
+  }
+  let realAncestor: string;
+  try {
+    realAncestor = realpathSync(ancestor);
+  } catch {
+    return { ok: false, reason: `session dir for project "${project}", sessionId "${sessionId}" could not be resolved` };
+  }
+  if (realAncestor !== realProjectDir && !realAncestor.startsWith(realProjectDir + sep)) {
+    return { ok: false, reason: `sessionId "${sessionId}" for project "${project}" resolves outside the project directory` };
+  }
+
+  // Splice any not-yet-existing tail segments (plain literal names — see
+  // header note) back onto the resolved ancestor, so a fresh `/start` gets a
+  // real, fully-resolved dir it can `mkdirSync` under.
+  const tail = relative(ancestor, candidate);
+  return { ok: true, dir: tail === '' ? realAncestor : join(realAncestor, tail) };
+}
+
 /** Timestamp stamp + short random suffix for a generated run id
  *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
  *  dispatches of the same slug in the same millisecond (a programmatic driver,
@@ -1419,6 +1565,79 @@ function spawnAgentDispatch(
 
 function architectSessionDir(projectsRoot: string, project: string, sessionId: string): string {
   return join(projectsRoot, project, '_architect', sessionId);
+}
+
+/**
+ * R4-16 PIN 4/5 (SEC-02, forge-d1f) — the COMPLETE set of `/start`-family
+ * routes that accept a caller-supplied `projectRepoPath`: `/api/architect/start`,
+ * `/api/instructions/start`, `/api/demo-builder/start`, and
+ * `/api/project-brain/start`. Each persists it verbatim into the session's
+ * `status.json` as `project_repo_path`. That field becomes the agent's
+ * `cwd`, the target of real `git` branch-create + commit calls, and the base
+ * for every artifact write — reproduced live: an unvalidated field served a
+ * planted sentinel outside the forge tree and let a forged status write real
+ * artifacts into an arbitrary git repo. This comment is the complete
+ * enumeration — a future `/start`-family route accepting this field MUST
+ * wire this same guard before any read/write/status-persist, not just add
+ * itself to this list.
+ *
+ * Reuses the SHIPPED guard (`isContainedProjectRepoPath`,
+ * `cli/manifest-path-guard.ts`) rather than a new check — same choke point
+ * `cli/bridge-recovery.ts` already uses for `worktree_path` /
+ * `project_repo_path` on the recovery routes. Returns the offending value
+ * (so the caller can name it in the 400) when present-but-not-contained,
+ * `null` when absent or genuinely contained under `<forgeRoot>/projects/`.
+ *
+ * Finding B: `''` is treated as absent here, matching every call site's
+ * `body.projectRepoPath || join(ctx.projectsRoot, body.project)` default —
+ * `??` does NOT substitute for `''`, so every call site MUST use `||`, never
+ * `??`, for this field.
+ *
+ * Finding C: `candidate` is `unknown`, not `string | undefined` — the
+ * request body is untrusted JSON and the static type is a lie about what
+ * can actually arrive at runtime. A non-string value (e.g. `0`, `null`,
+ * `{}`) must fail closed with a 400 naming it, rather than falling through
+ * to `isAbsolute()` and leaking a raw Node `TypeError [ERR_INVALID_ARG_TYPE]`.
+ *
+ * PRECONDITION (load-bearing, stated because a future caller will otherwise
+ * break it silently): `candidate` is `JSON.parse` output from a request body.
+ * That is what makes the value space closed — string / number / boolean /
+ * null / array / object, never a BigInt, Symbol, circular structure or a
+ * hostile `toJSON`. This function is deliberately NOT exported; feeding it
+ * from a non-JSON source would reopen shapes `describeRejectedValue` cannot
+ * be assumed to survive.
+ */
+function invalidProjectRepoPath(candidate: unknown, forgeRoot: string): string | null {
+  if (candidate === undefined || candidate === '') return null;
+  if (typeof candidate !== 'string') return describeRejectedValue(candidate);
+  return isContainedProjectRepoPath(candidate, { forgeRoot }) ? null : candidate;
+}
+
+/** Cap on the rendered offending value interpolated into a 400 body. Two
+ *  independent reasons, both measured: (1) `JSON.stringify` THROWS
+ *  `RangeError: Maximum call stack size exceeded` on a deeply nested value —
+ *  measured boundary on this build: fine at depth 4,166, throws at 4,167,
+ *  while `JSON.parse` still succeeds at depth 100,000, so a wire body can
+ *  reach this function and blow up inside it; and (2) without a cap the
+ *  response is unbounded — measured, a 200,038-byte request produced a
+ *  300,063-byte response, LARGER than the request because re-quoting adds
+ *  overhead. Closing a `TypeError` leak while shipping a `RangeError` leak in
+ *  the same error-formatting path would be this campaign's "the fix ships its
+ *  own instance of the defect it closed" pattern, for the fourth time. */
+const MAX_REJECTED_VALUE_CHARS = 200;
+
+/** Renders an untrusted, non-string value for a 400 body: never throws, never
+ *  unbounded. The `?? String(candidate)` arm covers the values whose
+ *  `JSON.stringify` is `undefined` rather than a string. */
+function describeRejectedValue(candidate: unknown): string {
+  let rendered: string;
+  try {
+    rendered = JSON.stringify(candidate) ?? String(candidate);
+  } catch {
+    rendered = '<unrepresentable value>';
+  }
+  if (rendered.length <= MAX_REJECTED_VALUE_CHARS) return rendered;
+  return `${rendered.slice(0, MAX_REJECTED_VALUE_CHARS)}… (${rendered.length} chars, truncated)`;
 }
 
 function readJsonFile<T>(path: string): T | null {
@@ -1529,6 +1748,13 @@ async function handleArchitect(
         sendJson(res, 400, { error: 'project and idea are required' }, origin);
         return true;
       }
+      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/writeFileSync/status
+      // write. See invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
       const sessionId = newArchitectSessionId();
       const dir = architectSessionDir(ctx.projectsRoot, body.project, sessionId);
       mkdirSync(dir, { recursive: true });
@@ -1536,7 +1762,7 @@ async function handleArchitect(
       const status: ArchitectStatus = {
         session_id: sessionId,
         project: body.project,
-        project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot, body.project),
+        project_repo_path: body.projectRepoPath || join(ctx.projectsRoot, body.project),
         phase: 'interviewing',
         round: 1,
         idea: body.idea,
@@ -1805,7 +2031,16 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
       }
-      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      // SEC-02 (forge-d1f) — reject BEFORE the readAgentInstructionsFile read
+      // below (an unvalidated READ through the field, not just a write
+      // target) and before any mkdirSync/status write. See
+      // invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       // Default the mode by whether an agent-instruction file already exists.
       const mode: 'init' | 'edit' =
         body.mode ?? (readAgentInstructionsFile(repoPath) ? 'edit' : 'init');
@@ -2173,6 +2408,66 @@ async function handleDemoBuilder(
     return true;
   }
 
+  // GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename> — serve
+  // one R4-16 generation-snapshot file out of <sessionDir>/generations/<n>/.
+  // ALL FOUR path segments are validated before any fs call: `project`/
+  // `sessionId` go through `resolveDemoSessionDir` above — the ONE choke
+  // point every demo-builder route (this GET route AND the five POST routes
+  // below) resolves a session dir through, closing both the ".."-shaped
+  // escape (pin 2, Finding A) AND a symlinked session dir whose NAME
+  // legitimately passes SAFE_ID_RE (pin 3, Finding B); `n`/`filename`
+  // against GENERATION_NUMBER_RE/GENERATION_FILENAME_RE, structurally
+  // forbidding `..`, `/`, an absolute path, or a bare `.`/`..`. The final
+  // read then goes through `safeReadFileInSession` (session-transcript.ts's
+  // realpath choke point, D11) as belt-and-braces against a symlink escape
+  // from WITHIN the already-validated session dir (e.g. one generation-
+  // snapshot FILE symlinked out, rather than the session dir itself).
+  //
+  // The sibling /demo/ and /fragment/ GET routes above remain OUT OF SCOPE
+  // for this round: they still validate `project`/`sessionId` for
+  // non-emptiness only and rely solely on a lexical `startsWith(base)` check
+  // on the resolved file path — a real gap, filed as an evidenced follow-up
+  // rather than fixed here (a containment change for those two wants its own
+  // attack round). Every demo-builder POST route (start/brief/feedback/lock/
+  // abandon), by contrast, IS now covered — see their call sites below.
+  const generationMatch = url.match(/^\/api\/demo-builder\/generation\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (method === 'GET' && generationMatch) {
+    let project: string;
+    let sessionId: string;
+    let n: string;
+    let filename: string;
+    try {
+      project = decodeURIComponent(generationMatch[1]);
+      sessionId = decodeURIComponent(generationMatch[2]);
+      n = decodeURIComponent(generationMatch[3]);
+      filename = decodeURIComponent(generationMatch[4]);
+    } catch {
+      sendJson(res, 400, { error: 'invalid generation route — malformed URL encoding' }, origin);
+      return true;
+    }
+    if (!GENERATION_NUMBER_RE.test(n)) {
+      sendJson(res, 400, { error: `invalid generation number "${n}"` }, origin);
+      return true;
+    }
+    if (!GENERATION_FILENAME_RE.test(filename)) {
+      sendJson(res, 400, { error: `invalid filename "${filename}"` }, origin);
+      return true;
+    }
+    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
+    if (!dirOutcome.ok) {
+      sendJson(res, 400, { error: dirOutcome.reason }, origin);
+      return true;
+    }
+    const fileBody = safeReadFileInSession(dirOutcome.dir, join(GENERATIONS_DIRNAME, n, filename));
+    if (fileBody === null) {
+      sendJson(res, 404, { error: 'generation snapshot file not found', project, sessionId, generation: n, filename }, origin);
+      return true;
+    }
+    res.writeHead(200, { 'content-type': contentTypeFor(filename), 'access-control-allow-origin': origin, 'vary': 'origin' });
+    res.end(fileBody);
+    return true;
+  }
+
   // GET /api/demo-builder/history/<project> — list previously-locked demos
   // (snapshots under <repo>/.forge/demo/history/<id>/), newest first.
   const histListMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)$/);
@@ -2256,7 +2551,14 @@ async function handleDemoBuilder(
     try {
       const body = (await readJson(req)) as { project?: string; projectRepoPath?: string };
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
-      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
+      // invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       const sessionId = newArchitectSessionId();
       const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), sessionId);
       mkdirSync(dir, { recursive: true });
@@ -2301,6 +2603,11 @@ async function handleDemoBuilder(
     return true;
   }
 
+  // R4-16 round 2 (pin 3, Finding A) — every route below resolves its
+  // session dir through `resolveDemoSessionDir`, the ONE choke point (see
+  // its own header comment, above the GET generation route). Each rejects
+  // with a 400 naming the offending value BEFORE any read, write,
+  // `mkdirSync`, or spawn.
   if (method === 'POST' && url === '/api/demo-builder/start') {
     try {
       const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string };
@@ -2308,12 +2615,28 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: 'project is required' }, origin);
         return true;
       }
-      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through
+      // read/status write. See invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      // The CREATE case — `dirOutcome.dir` does not exist on disk yet;
+      // `resolveDemoSessionDir` proves its closest EXISTING ancestor is
+      // contained (see its header) rather than false-rejecting a brand new
+      // session.
+      const sessionId = newArchitectSessionId();
+      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, sessionId);
+      if (!dirOutcome.ok) {
+        sendJson(res, 400, { error: dirOutcome.reason }, origin);
+        return true;
+      }
+      const dir = dirOutcome.dir;
+      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       // Default the mode by whether a locked demo already exists.
       const mode: 'create' | 'update' =
         body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
-      const sessionId = newArchitectSessionId();
-      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), sessionId);
       mkdirSync(dir, { recursive: true });
       writeSessionStatus<DemoBuilderStatus>(dir, {
         session_id: sessionId,
@@ -2345,7 +2668,12 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      if (!dirOutcome.ok) {
+        sendJson(res, 400, { error: dirOutcome.reason }, origin);
+        return true;
+      }
+      const dir = dirOutcome.dir;
       const status = readSessionStatus<DemoBuilderStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
@@ -2378,7 +2706,12 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      if (!dirOutcome.ok) {
+        sendJson(res, 400, { error: dirOutcome.reason }, origin);
+        return true;
+      }
+      const dir = dirOutcome.dir;
       const status = readSessionStatus<DemoBuilderStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
@@ -2395,21 +2728,38 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/demo-builder/lock {project, sessionId} — lock the current demo in.
+  // POST /api/demo-builder/lock {project, sessionId, generation?} — lock the
+  // current demo in. R4-16: an optional `generation` names which snapshot to
+  // lock — structurally validated (integer ≥ 1) BEFORE any write, so a
+  // rejected request never mutates status.json.
   if (method === 'POST' && url === '/api/demo-builder/lock') {
     try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; generation?: unknown };
       if (!body.project || !body.sessionId) {
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      if (!dirOutcome.ok) {
+        sendJson(res, 400, { error: dirOutcome.reason }, origin);
+        return true;
+      }
+      const dir = dirOutcome.dir;
+      const hasGeneration = Object.prototype.hasOwnProperty.call(body, 'generation') && body.generation !== undefined;
+      if (hasGeneration && !(typeof body.generation === 'number' && Number.isInteger(body.generation) && body.generation >= 1)) {
+        sendJson(res, 400, { error: `generation must be an integer >= 1, got ${JSON.stringify(body.generation)}` }, origin);
+        return true;
+      }
       const status = readSessionStatus<DemoBuilderStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'locking' });
+      writeSessionStatus<DemoBuilderStatus>(dir, {
+        ...status,
+        phase: 'locking',
+        ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),
+      });
       spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
@@ -2427,7 +2777,12 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      if (!dirOutcome.ok) {
+        sendJson(res, 400, { error: dirOutcome.reason }, origin);
+        return true;
+      }
+      const dir = dirOutcome.dir;
       const status = readSessionStatus<DemoBuilderStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);

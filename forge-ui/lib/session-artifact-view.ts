@@ -1,9 +1,9 @@
 /**
  * Pure, per-renderer view-state for the session shell's artifact pane
- * (R2-10, PR2) — one module covering all three LIVE artifact kinds
- * (roadmap-draft, markdown-draft, brain-structure), rather than three
- * separate files: they are three tightly-related renderers for the SAME
- * pane of the SAME page, and the combined module stays well under this
+ * (R2-10, PR2) — one module covering all four LIVE artifact kinds
+ * (roadmap-draft, markdown-draft, brain-structure, generation-gallery),
+ * rather than one file per kind: they are tightly-related renderers for the
+ * SAME pane of the SAME page, and the combined module stays well under this
  * repo's file-size discipline. No DOM, no React, no network — mirrors
  * file-package.ts's / skill-library-view.ts's testability convention.
  *
@@ -28,7 +28,15 @@
 
 import { filePackageTabs, selectFile, type FilePackageState } from './file-package';
 import { dependencyDagView, type DependencyDagView } from './dependency-dag';
-import type { BrainStructureArtifact, MarkdownDraftArtifact, RoadmapDraftArtifact, RoadmapDraftRow, SessionArtifactPayload } from './session-client';
+import type {
+  BrainStructureArtifact,
+  GenerationGalleryArtifact,
+  GenerationGalleryEntry,
+  MarkdownDraftArtifact,
+  RoadmapDraftArtifact,
+  RoadmapDraftRow,
+  SessionArtifactPayload,
+} from './session-client';
 
 // ---------------------------------------------------------------------------
 // roadmapDraftView
@@ -119,17 +127,97 @@ export function selectBrainStructureFile(view: BrainStructureView, index: number
 }
 
 // ---------------------------------------------------------------------------
+// generationGalleryView / preferredGenerationFor — R4-16
+// ---------------------------------------------------------------------------
+
+export type GenerationGalleryView = {
+  kind: 'generation-gallery';
+  /** Passed through verbatim, server order (ascending by number) — never
+   *  re-sorted, never a fabricated entry added or dropped. */
+  generations: GenerationGalleryEntry[];
+  count: number;
+  /** Index into `generations` of the currently-selected generation; -1 iff
+   *  `isEmpty`. Defaults to the LAST entry (the newest generation), never
+   *  the first — mirrors the operator's expectation of landing on the most
+   *  recent output. */
+  selectedIndex: number;
+  isEmpty: boolean;
+  /** Non-null iff `generations` is empty — names what was scanned (derived
+   *  from `sourcesScanned`, never a generic hardcoded string), mirroring
+   *  `roadmapDraftView`'s idiom exactly. */
+  emptyMessage: string | null;
+};
+
+/**
+ * R4-16 pin 2 (Finding D) — `preferredNumber` (OPTIONAL) selects the
+ * generation carrying THAT number, by VALUE, never by array position: the
+ * demo-builder poll refetches every 3s and rebuilds `artifact` as a brand-new
+ * object graph each tick (same generations, new reference) — so a
+ * poll-stable selection can only survive if it is looked up by the stable
+ * `number` field, never an index into whichever array happened to arrive
+ * this tick (AT-112). Absent, or naming a generation no longer present
+ * (AT-111 — e.g. it existed in an earlier payload but this poll's snapshot
+ * doesn't carry it), falls back to the newest generation exactly like today
+ * — never throws.
+ */
+export function generationGalleryView(
+  artifact: GenerationGalleryArtifact,
+  preferredNumber?: number,
+): GenerationGalleryView {
+  const isEmpty = artifact.generations.length === 0;
+  const preferredIndex = preferredNumber === undefined
+    ? -1
+    : artifact.generations.findIndex((g) => g.number === preferredNumber);
+  const selectedIndex = isEmpty ? -1 : preferredIndex >= 0 ? preferredIndex : artifact.generations.length - 1;
+  return {
+    kind: 'generation-gallery',
+    generations: artifact.generations,
+    count: artifact.generations.length,
+    selectedIndex,
+    isEmpty,
+    emptyMessage: isEmpty ? `No generations yet — scanned ${artifact.sourcesScanned.join(', ')}` : null,
+  };
+}
+
+/**
+ * R4-16 round 2 (pin 3, Finding C, MAJOR) — the pure decision behind the
+ * cross-session selection-leak fix. `GenerationGallery` used to store a bare
+ * `useState<number | null>`, so a generation picked while viewing session A
+ * silently kept rendering after the panel swapped to session B (the caller
+ * swaps `sessionId` without unmounting). This function is what lets the
+ * component derive its view fresh every render, with NO artifact-identity
+ * `useEffect` (that shape was the ROUND-1 defect this replaces — an effect
+ * keyed on the artifact's object reference resets on every 3s poll tick even
+ * when nothing the operator picked actually changed, AT-112).
+ *
+ * Returns `selection.number` iff `selection.sessionId === sessionId` — the
+ * session currently on screen — else `undefined`, so `generationGalleryView`
+ * falls back to its existing, already-pinned newest-generation default
+ * (AT-101/111). `null` (nothing picked yet, in any session) also yields
+ * `undefined`.
+ */
+export function preferredGenerationFor(
+  selection: { sessionId: string; number: number } | null,
+  sessionId: string,
+): number | undefined {
+  if (selection === null) return undefined;
+  return selection.sessionId === sessionId ? selection.number : undefined;
+}
+
+// ---------------------------------------------------------------------------
 // sessionArtifactView — dispatcher + reserved/unknown kind guards
 // ---------------------------------------------------------------------------
 
-export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView;
+export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView | GenerationGalleryView;
 
 /** Vocabulary-reserved artifact kinds (mirrors orchestrator/studio/session-
  *  kinds.ts's SESSION_ARTIFACT_KINDS `reserved` rows) — a session carrying
  *  one of these reaches this dispatcher only if a future descriptor is
- *  wired before its renderer ships. Zero stub renderers exist for any of
- *  these; the error names the reserved kind explicitly. */
-const RESERVED_ARTIFACT_KINDS = ['file-package', 'contract-buildout', 'generation-gallery'] as const;
+ *  wired before its renderer ships. Zero stub renderers exist for either of
+ *  these; the error names the reserved kind explicitly. R4-16: shrinks from
+ *  3 to 2 — "generation-gallery" now has a real renderer (generationGalleryView
+ *  above) and is dispatched, not reserved. */
+const RESERVED_ARTIFACT_KINDS = ['file-package', 'contract-buildout'] as const;
 
 /** A trailing " (requested stage: "X")" clause when `stage` was passed —
  *  proof the argument genuinely reached the dispatch boundary (AT-92/93),
@@ -153,6 +241,8 @@ export function sessionArtifactView(artifact: SessionArtifactPayload | { kind: s
       return markdownDraftView(artifact as MarkdownDraftArtifact);
     case 'brain-structure':
       return brainStructureView(artifact as BrainStructureArtifact);
+    case 'generation-gallery':
+      return generationGalleryView(artifact as GenerationGalleryArtifact);
     default: {
       const kind = artifact.kind;
       if ((RESERVED_ARTIFACT_KINDS as readonly string[]).includes(kind)) {

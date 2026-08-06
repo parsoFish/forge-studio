@@ -45,3 +45,21 @@
   artifact:
     kind: brain-structure
     label: Seeded structure
+
+# R4-16: id is "demo" — NOT "demo-builder" — because the bridge derives the
+# session dir as <projectsRoot>/<project>/_<descriptor.id>/<sessionId>, and
+# real demo-builder sessions live under _demo/<sid> (demoSessionDir,
+# orchestrator/demo-builder-runner.ts). "demo-builder" would resolve
+# _demo-builder/ and 404 for every real session.
+# legacyRoutes is deliberately [] — /demo/[sessionId] exists but is a
+# redirect stub to the PROJECT PAGE (R1-03-F2), not a route the session
+# shell replaces; declaring it here would misstate R1-03-F2.
+- id: demo
+  agent: demo-builder
+  title: Demo capability session
+  legacyRoutes: []
+  stages: [demo]
+  defaultStage: demo
+  artifact:
+    kind: generation-gallery
+    label: Demo generations

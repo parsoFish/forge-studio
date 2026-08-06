@@ -82,7 +82,10 @@ export const SESSION_ARTIFACT_KINDS: readonly SessionArtifactKindRow[] = Object.
   Object.freeze({ id: 'brain-structure', status: 'live' }),
   Object.freeze({ id: 'file-package', status: 'reserved' }),
   Object.freeze({ id: 'contract-buildout', status: 'reserved' }),
-  Object.freeze({ id: 'generation-gallery', status: 'reserved' }),
+  // R4-16: deriveGenerationGallery (session-transcript.ts) ships a real
+  // renderer — flips reserved→live. Declaration order is unchanged (still
+  // last); only status flips.
+  Object.freeze({ id: 'generation-gallery', status: 'live' }),
 ] as const);
 export type SessionArtifactKind = (typeof SESSION_ARTIFACT_KINDS)[number]['id'];
 

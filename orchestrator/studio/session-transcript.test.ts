@@ -150,8 +150,66 @@ function projectBrainDescriptor(overrides: Partial<SessionKindDescriptor> = {}):
   } as SessionKindDescriptor;
 }
 
+/** R4-16: the new "demo" session kind (studio/session-kinds.yaml — not shipped
+ *  yet at branch base). id "demo" — NOT "demo-builder" — matches the real
+ *  descriptor's contract (session-kinds.test.ts AT-22). */
+function demoDescriptor(overrides: Partial<SessionKindDescriptor> = {}): SessionKindDescriptor {
+  return {
+    id: 'demo',
+    agent: 'demo-builder',
+    title: 'Demo capability session',
+    legacyRoutes: [],
+    stages: ['demo'],
+    defaultStage: 'demo',
+    artifact: { kind: 'generation-gallery', label: 'Demo generations' },
+    ...overrides,
+  } as SessionKindDescriptor;
+}
+
 function writeJson(sessionDir: string, name: string, value: unknown): void {
   writeFileSync(join(sessionDir, name), JSON.stringify(value, null, 2), 'utf8');
+}
+
+/** Writes one `generations/<n>/` snapshot fixture (demo-builder-runner.ts's
+ *  R4-16 on-disk shape) directly onto a session dir — mirrors this file's
+ *  existing `writeJson`/plain-fs fixture idiom, not a helper imported from
+ *  the runner (this module must stay a pure, fs-only derivation, per the
+ *  header's rationale for re-declaring constants rather than importing the
+ *  live runner). `metaRaw`, when given, is written VERBATIM instead of a
+ *  well-formed meta.json — for the malformed-metadata ATs. */
+function writeGeneration(
+  sessionDir: string,
+  n: number | string,
+  opts: {
+    iteration?: number | string;
+    createdAt?: string;
+    feedback?: string | null;
+    targetElement?: string | null;
+    composed?: boolean;
+    skillRelPath?: string;
+    files?: Record<string, string>;
+    metaRaw?: string;
+    extraMetaFields?: Record<string, unknown>;
+  } = {},
+): void {
+  const dir = join(sessionDir, 'generations', String(n));
+  mkdirSync(dir, { recursive: true });
+  const files = opts.files ?? { 'DEMO.html': `<html>generation ${n}</html>`, 'SKILL.md': `# skill ${n}` };
+  for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body, 'utf8');
+  if (opts.metaRaw !== undefined) {
+    writeFileSync(join(dir, 'meta.json'), opts.metaRaw, 'utf8');
+    return;
+  }
+  const meta = {
+    iteration: opts.iteration ?? n,
+    createdAt: opts.createdAt ?? '2026-08-06T10:00:00.000Z',
+    feedback: opts.feedback === undefined ? null : opts.feedback,
+    targetElement: opts.targetElement === undefined ? null : opts.targetElement,
+    composed: opts.composed ?? false,
+    skillRelPath: opts.skillRelPath ?? '.forge/skills/demo-design/SKILL.md',
+    ...(opts.extraMetaFields ?? {}),
+  };
+  writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
 }
 
 function okTurns(result: ReturnType<typeof deriveSessionTranscript>): Array<{ index: number; role: string; stage: string; text: string; source: string }> {
@@ -753,5 +811,179 @@ describe('deriveSessionArtifact — a dir-level symlink (manifests/ or themes/ i
     };
     assert.deepEqual(cleanArtifact.rows.map((r) => r.initiativeId), [REAL_MARKER]);
     assert.ok(cleanArtifact.sourcesScanned.some((s) => s.includes('1 file(s) found')));
+  });
+});
+
+// ===========================================================================
+// R4-16 — deriveSessionArtifact — generation-gallery (a new LIVE artifact
+// kind). TEST-FIRST PIN: `deriveGenerationGallery` does not exist yet, and
+// `generation-gallery` is still `reserved` in the real, unmodified
+// session-kinds.ts (SESSION_ARTIFACT_KINDS) — every test below currently
+// throws inside `deriveSessionArtifact`'s own `state === 'reserved'` gate
+// (session-kinds.ts:531), before ever reaching a derivation. That is the
+// correct RED: the reserved-kind guard IS the thing R4-16 must flip.
+// ===========================================================================
+
+describe('deriveSessionArtifact — generation-gallery (R4-16)', () => {
+  it('R4-16 AT-10: number comes from meta.json.iteration, never array/directory position — generations sort ascending by number', () => {
+    const sessionDir = makeTmpDir('gengallery-order-');
+    writeGeneration(sessionDir, 5, { iteration: 5 });
+    writeGeneration(sessionDir, 2, { iteration: 2 });
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    assert.deepEqual(
+      artifact.generations.map((g) => g.number),
+      [2, 5],
+      'kills an implementation that numbers by directory name / array position instead of reading meta.json.iteration',
+    );
+  });
+
+  it('R4-16 AT-11: a generation dir whose meta.json is missing/unreadable/not JSON contributes NO generation — a visible gap, never a renumbered sequence', () => {
+    const sessionDir = makeTmpDir('gengallery-gap-');
+    writeGeneration(sessionDir, 1, { iteration: 1 });
+    writeGeneration(sessionDir, 2, { metaRaw: 'not valid json {{{' });
+    writeGeneration(sessionDir, 3, { iteration: 3 });
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    assert.deepEqual(
+      artifact.generations.map((g) => g.number),
+      [1, 3],
+      'positional numbering would (wrongly) report [1, 2] — this pins the visible GAP, not a renumber',
+    );
+  });
+
+  it('R4-16 AT-12: a generation whose meta.json is missing "iteration" entirely (or non-numeric) also contributes no generation, same as unreadable', () => {
+    const sessionDir = makeTmpDir('gengallery-bad-iteration-');
+    writeGeneration(sessionDir, 1, { iteration: 1 });
+    writeGeneration(sessionDir, 2, {
+      metaRaw: JSON.stringify({ createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: 'x' /* no "iteration" at all */ }),
+    });
+    writeGeneration(sessionDir, 3, {
+      metaRaw: JSON.stringify({ iteration: 'three', createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: 'x' }),
+    });
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    assert.deepEqual(artifact.generations.map((g) => g.number), [1], 'a missing or non-numeric "iteration" must never fabricate a generation row');
+  });
+
+  it('R4-16 AT-13: items are the real files present in the generation dir, EXCLUDING meta.json, sorted by filename', () => {
+    const sessionDir = makeTmpDir('gengallery-items-');
+    writeGeneration(sessionDir, 1, { iteration: 1, files: { 'SKILL.md': '# s', 'DEMO.html': '<html/>', 'notes.txt': 'stray file' } });
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string; kind: string }> }> };
+    const paths = artifact.generations[0].items.map((i) => i.path);
+    assert.deepEqual(paths, ['DEMO.html', 'SKILL.md', 'notes.txt'], 'sorted by filename; a non-html/md file is still a real item (kind "file"), never dropped');
+    assert.ok(!paths.includes('meta.json'), 'meta.json must never appear as an item — it is metadata, not gallery content');
+  });
+
+  it('R4-16 AT-14 (mandatory adversarial AT — bytes-from-file-not-meta): bytes is the REAL byte length read from disk, never a number copied from meta.json — a plausible-but-wrong metadata hint must not leak through', () => {
+    const sessionDir = makeTmpDir('gengallery-bytes-');
+    const dir = join(sessionDir, 'generations', '1');
+    mkdirSync(dir, { recursive: true });
+    const demoBody = '<html>only 27 bytes here</html>'; // a real, independently-computable length
+    writeFileSync(join(dir, 'DEMO.html'), demoBody, 'utf8');
+    // A plausible-but-WRONG size-ish field smuggled onto meta.json — no such
+    // field exists in the declared meta.json contract; an implementation
+    // that trusts ANY such hint instead of the real file's length is what
+    // this kills.
+    writeFileSync(
+      join(dir, 'meta.json'),
+      JSON.stringify({ iteration: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: 'x', bytes: 999999, sizeHint: 999999 }),
+      'utf8',
+    );
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string; bytes: number }> }> };
+    const demoItem = artifact.generations[0].items.find((i) => i.path === 'DEMO.html')!;
+    const realBytes = Buffer.byteLength(demoBody, 'utf8');
+    assert.equal(demoItem.bytes, realBytes, `bytes must be the REAL file length (${realBytes}), not the fabricated metadata hint (999999)`);
+  });
+
+  it('R4-16 AT-15: an empty/absent generations/ dir yields an honest empty payload naming what was scanned (including the found count) — never a bare pane', () => {
+    const sessionDir = makeTmpDir('gengallery-empty-');
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: unknown[]; sourcesScanned: string[] };
+    assert.deepEqual(artifact.generations, []);
+    assert.ok(Array.isArray(artifact.sourcesScanned) && artifact.sourcesScanned.length > 0, 'sourcesScanned must never be silently empty');
+    assert.ok(artifact.sourcesScanned.some((s) => s.includes('generations')), 'sourcesScanned must name "generations"');
+    assert.ok(artifact.sourcesScanned.some((s) => /\b0\b/.test(s)), 'sourcesScanned must report the found count (0), so an empty gallery reads "scanned N, found none"');
+  });
+
+  it('R4-16 AT-16: deriveSessionArtifact dispatches "generation-gallery" to a real derivation carrying the descriptor\'s declared label — mirrors the label-threading contract every other live kind already honours', () => {
+    const sessionDir = makeTmpDir('gengallery-dispatch-');
+    writeGeneration(sessionDir, 1, { iteration: 1 });
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { kind: string; label: string };
+    assert.equal(artifact.kind, 'generation-gallery');
+    assert.equal(artifact.label, 'Demo generations');
+  });
+});
+
+// ===========================================================================
+// R4-16 (mandatory adversarial AT — traversal, real escape attempts) —
+// generations/ (and each generations/<n>/) must be realpath-contained the
+// SAME way manifests/ and themes/ already are (AT-36/37/68/69's pattern).
+// ===========================================================================
+
+describe('deriveSessionArtifact — generation-gallery traversal escapes (R4-16)', () => {
+  it('R4-16 AT-17: generations/ itself is a symlink to an outside dir → the gallery is empty, and nothing from outside is named or counted', () => {
+    const outsideDir = makeTmpDir('gengallery-escape-outside-');
+    const OUTSIDE_MARKER = 'OUTSIDE-GENERATIONS-DIR-MARKER-5521';
+    mkdirSync(join(outsideDir, '1'), { recursive: true });
+    writeFileSync(
+      join(outsideDir, '1', 'meta.json'),
+      JSON.stringify({ iteration: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: OUTSIDE_MARKER }),
+      'utf8',
+    );
+
+    const sessionDir = makeTmpDir('gengallery-escape-session-');
+    symlinkSync(outsideDir, join(sessionDir, 'generations'));
+
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: unknown[]; sourcesScanned: string[] };
+    assert.deepEqual(artifact.generations, [], 'an escaping generations/ dir-symlink must be treated as absent, exactly like manifests/themes (AT-68/69)');
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(OUTSIDE_MARKER), 'outside content must never surface anywhere in the result');
+  });
+
+  it('R4-16 AT-18: generations/2 is a symlink to an outside dir → that generation is absent, while a real generations/1 STILL renders (positive control — the guard must discriminate, not just refuse to read anything)', () => {
+    const outsideDir = makeTmpDir('gengallery-escape2-outside-');
+    const OUTSIDE_MARKER = 'OUTSIDE-GENERATION-2-MARKER-8834';
+    writeFileSync(
+      join(outsideDir, 'meta.json'),
+      JSON.stringify({ iteration: 2, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: OUTSIDE_MARKER }),
+      'utf8',
+    );
+    writeFileSync(join(outsideDir, 'DEMO.html'), `<html>${OUTSIDE_MARKER}</html>`, 'utf8');
+
+    const sessionDir = makeTmpDir('gengallery-escape2-session-');
+    mkdirSync(join(sessionDir, 'generations'), { recursive: true });
+    writeGeneration(sessionDir, 1, { iteration: 1 }); // real, non-symlinked sibling
+    symlinkSync(outsideDir, join(sessionDir, 'generations', '2'));
+
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ number: number }> };
+    assert.deepEqual(
+      artifact.generations.map((g) => g.number),
+      [1],
+      'the escaping generation 2 must be absent, but the real generation 1 must still render',
+    );
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(OUTSIDE_MARKER), 'outside content must never surface');
+  });
+
+  it('R4-16 AT-19: a symlinked FILE inside a real generation dir, pointing outside sessionDir → that ONE item is not surfaced, but the generation itself still renders its other real items (positive control)', () => {
+    const outsideDir = makeTmpDir('gengallery-escape3-outside-');
+    const OUTSIDE_MARKER = 'OUTSIDE-ITEM-CONTENT-MARKER-2290';
+    const secretPath = join(outsideDir, 'secret.html');
+    writeFileSync(secretPath, `<html>${OUTSIDE_MARKER}</html>`, 'utf8');
+
+    const sessionDir = makeTmpDir('gengallery-escape3-session-');
+    const gdir = join(sessionDir, 'generations', '1');
+    mkdirSync(gdir, { recursive: true });
+    writeFileSync(join(gdir, 'DEMO.html'), '<html>real demo</html>', 'utf8');
+    writeFileSync(
+      join(gdir, 'meta.json'),
+      JSON.stringify({ iteration: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, composed: false, skillRelPath: 'x' }),
+      'utf8',
+    );
+    symlinkSync(secretPath, join(gdir, 'evil.html'));
+
+    const artifact = deriveSessionArtifact({ descriptor: demoDescriptor(), sessionDir }) as { generations: Array<{ items: Array<{ path: string }> }> };
+    const paths = artifact.generations[0].items.map((i) => i.path);
+    assert.ok(paths.includes('DEMO.html'), 'a real, non-symlinked sibling item MUST still surface — the guard must discriminate, not just refuse to read the whole generation');
+    assert.ok(!paths.includes('evil.html'), 'the symlinked item must not be surfaced at all, under any name');
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(OUTSIDE_MARKER), "the escaped file's content must never appear in the result");
   });
 });

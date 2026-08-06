@@ -164,6 +164,7 @@ export function DemoReview({
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
           placeholder="What should the demo agent change before you lock it in?"
+          data-field="demo-feedback"
           style={inputStyle}
           rows={3}
         />
