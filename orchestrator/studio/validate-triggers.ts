@@ -33,8 +33,23 @@ const RESERVED_TRIGGER_KIND_IDS = new Set<string>(
 
 const WEBHOOK_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const WEBHOOK_PROVIDERS = new Set(['github', 'gitea', 'gitlab']);
-const WEBHOOK_EVENTS = new Set(['push', 'release']);
 const SECRET_ENV_RE = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * R2-08-F3: `pr-merged` / `issue-raised` reuse the SAME `webhook:` config
+ * shape `on: webhook` uses (own `on:` value, per ADR-027's amendment — never
+ * a sub-event under `on: webhook`), but each kind accepts only its OWN event
+ * name — never a shared set, or a `webhook` trigger could silently declare
+ * `events: [pull_request]` (a kind bridge-hooks.ts never resolves for it) and
+ * lint would wave it through.
+ */
+const WEBHOOK_EVENTS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
+  webhook: new Set(['push', 'release']),
+  'pr-merged': new Set(['pull_request']),
+  'issue-raised': new Set(['issues']),
+};
+/** The `on:` kinds that carry the `webhook:` config block (R2-08-F3). */
+const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']);
 
 export type TriggerCheckOpts = {
   /** The full registered flow-id set — enables the target-flow existence check. */
@@ -173,57 +188,68 @@ export function checkFlowTriggers(
       findings.push(...checkTargetProject(obj, 'trigger-cron', flow, trigger.target, opts));
     }
 
-    // trigger-webhook
-    if (trigger.on === 'webhook') {
-      if (!trigger.webhook) {
-        findings.push(err(obj, 'trigger-webhook', 'webhook trigger requires a "webhook" block'));
+    // trigger-webhook: `on: webhook` REQUIRES a "webhook" block. `on: pr-merged`
+    // / `on: issue-raised` (R2-08-F3) reuse the SAME config shape but do NOT
+    // require it at this layer — only the bridge receiver needs one to be
+    // addressable; a bare project-event trigger is not itself a lint error
+    // (mirrors the F3 acceptance pin: a minimal pr-merged/issue-raised trigger
+    // with no webhook block must produce zero findings). When a webhook block
+    // IS present on any of the three kinds, its shape is validated identically
+    // — except `events`, checked against a KIND-SPECIFIC allowed set so an
+    // `on: webhook` row can never declare `events: [pull_request]` (a header
+    // bridge-hooks.ts never resolves for that kind) and vice versa.
+    if (trigger.on === 'webhook' && !trigger.webhook) {
+      findings.push(err(obj, 'trigger-webhook', 'webhook trigger requires a "webhook" block'));
+    }
+    if (trigger.webhook && WEBHOOK_FAMILY_KIND_IDS.has(trigger.on)) {
+      const wh = trigger.webhook;
+      const allowedEvents = WEBHOOK_EVENTS_BY_KIND[trigger.on] ?? WEBHOOK_EVENTS_BY_KIND.webhook;
+      if (!WEBHOOK_ID_RE.test(wh.id)) {
+        findings.push(err(obj, 'trigger-webhook', `webhook.id "${wh.id}" does not match ${WEBHOOK_ID_RE}`));
+      }
+      if (!WEBHOOK_PROVIDERS.has(wh.provider)) {
+        findings.push(
+          err(
+            obj,
+            'trigger-webhook',
+            `webhook.provider "${wh.provider}" must be one of ${[...WEBHOOK_PROVIDERS].join('|')}`,
+          ),
+        );
+      }
+      if (!Array.isArray(wh.events) || wh.events.length === 0) {
+        findings.push(err(obj, 'trigger-webhook', 'webhook.events must be non-empty'));
       } else {
-        const wh = trigger.webhook;
-        if (!WEBHOOK_ID_RE.test(wh.id)) {
-          findings.push(err(obj, 'trigger-webhook', `webhook.id "${wh.id}" does not match ${WEBHOOK_ID_RE}`));
-        }
-        if (!WEBHOOK_PROVIDERS.has(wh.provider)) {
-          findings.push(
-            err(
-              obj,
-              'trigger-webhook',
-              `webhook.provider "${wh.provider}" must be one of ${[...WEBHOOK_PROVIDERS].join('|')}`,
-            ),
-          );
-        }
-        if (!Array.isArray(wh.events) || wh.events.length === 0) {
-          findings.push(err(obj, 'trigger-webhook', 'webhook.events must be non-empty'));
-        } else {
-          for (const ev of wh.events) {
-            if (!WEBHOOK_EVENTS.has(ev)) {
-              findings.push(
-                err(
-                  obj,
-                  'trigger-webhook',
-                  `webhook.events entry "${ev}" must be one of ${[...WEBHOOK_EVENTS].join('|')}`,
-                ),
-              );
-            }
+        for (const ev of wh.events) {
+          if (!allowedEvents.has(ev)) {
+            findings.push(
+              err(
+                obj,
+                'trigger-webhook',
+                `webhook.events entry "${ev}" must be one of ${[...allowedEvents].join('|')} for on:"${trigger.on}"`,
+              ),
+            );
           }
         }
-        if (!SECRET_ENV_RE.test(wh.secretEnv)) {
-          findings.push(
-            err(obj, 'trigger-webhook', `webhook.secretEnv "${wh.secretEnv}" does not match ${SECRET_ENV_RE}`),
-          );
-        }
-        if (wh.secretEnvPrevious !== undefined && !SECRET_ENV_RE.test(wh.secretEnvPrevious)) {
-          findings.push(
-            err(
-              obj,
-              'trigger-webhook',
-              `webhook.secretEnvPrevious "${wh.secretEnvPrevious}" does not match ${SECRET_ENV_RE}`,
-            ),
-          );
-        }
-        if (!Array.isArray(wh.sources) || wh.sources.length === 0) {
-          findings.push(err(obj, 'trigger-webhook', 'webhook.sources must be non-empty'));
-        }
       }
+      if (!SECRET_ENV_RE.test(wh.secretEnv)) {
+        findings.push(
+          err(obj, 'trigger-webhook', `webhook.secretEnv "${wh.secretEnv}" does not match ${SECRET_ENV_RE}`),
+        );
+      }
+      if (wh.secretEnvPrevious !== undefined && !SECRET_ENV_RE.test(wh.secretEnvPrevious)) {
+        findings.push(
+          err(
+            obj,
+            'trigger-webhook',
+            `webhook.secretEnvPrevious "${wh.secretEnvPrevious}" does not match ${SECRET_ENV_RE}`,
+          ),
+        );
+      }
+      if (!Array.isArray(wh.sources) || wh.sources.length === 0) {
+        findings.push(err(obj, 'trigger-webhook', 'webhook.sources must be non-empty'));
+      }
+    }
+    if (WEBHOOK_FAMILY_KIND_IDS.has(trigger.on)) {
       findings.push(...checkTargetProject(obj, 'trigger-webhook', flow, trigger.target, opts));
     }
 
@@ -288,9 +314,13 @@ export function checkFlowTriggers(
         err(obj, 'trigger-shape', `"concurrency" is only valid on cron triggers (got on:"${trigger.on}")`),
       );
     }
-    if (trigger.on !== 'webhook' && trigger.webhook !== undefined) {
+    if (!WEBHOOK_FAMILY_KIND_IDS.has(trigger.on) && trigger.webhook !== undefined) {
       findings.push(
-        err(obj, 'trigger-shape', `"webhook" block is only valid on webhook triggers (got on:"${trigger.on}")`),
+        err(
+          obj,
+          'trigger-shape',
+          `"webhook" block is only valid on webhook/pr-merged/issue-raised triggers (got on:"${trigger.on}")`,
+        ),
       );
     }
     // R4-09-F3: `mode` (reflect interactive|automated) is valid ONLY on an

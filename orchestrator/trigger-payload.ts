@@ -48,7 +48,53 @@ export type WebhookReleasePayload = {
   truncated?: boolean;
 };
 
-export type TriggerPayload = CronTriggerPayload | WebhookPushPayload | WebhookReleasePayload;
+/**
+ * R2-08-F3 (ADR-027 amendment) — a GitHub pull request was merged. GitHub
+ * only (`provider` is a literal, not the three-provider union the other
+ * webhook payloads share) — gitlab/gitea stay schema-reserved with zero
+ * stubs; there is no grounded payload shape for them yet.
+ */
+export type WebhookPullRequestPayload = {
+  kind: 'webhook';
+  provider: 'github';
+  event: 'pr-merged';
+  repo: string;
+  prNumber: number;
+  headRef: string;
+  headSha: string;
+  baseRef: string;
+  authorLogin: string;
+  /** Free text — capped + control-char-stripped, carried verbatim AS DATA. */
+  title: string;
+  /** Free text — capped + control-char-stripped, carried verbatim AS DATA. */
+  body: string;
+  truncated?: boolean;
+};
+
+/**
+ * R2-08-F3 (ADR-027 amendment) — a GitHub issue was opened. GitHub only, same
+ * rationale as {@link WebhookPullRequestPayload}.
+ */
+export type WebhookIssuePayload = {
+  kind: 'webhook';
+  provider: 'github';
+  event: 'issue-raised';
+  repo: string;
+  issueNumber: number;
+  authorLogin: string;
+  /** Free text — capped + control-char-stripped, carried verbatim AS DATA. */
+  title: string;
+  /** Free text — capped + control-char-stripped, carried verbatim AS DATA. */
+  body: string;
+  truncated?: boolean;
+};
+
+export type TriggerPayload =
+  | CronTriggerPayload
+  | WebhookPushPayload
+  | WebhookReleasePayload
+  | WebhookPullRequestPayload
+  | WebhookIssuePayload;
 
 /** Strict-charset validators for the structured fields (extraction boundary). */
 export const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
@@ -72,6 +118,14 @@ function freeText(raw: unknown): { text: string; truncated: boolean } {
 
 function reqMatch(value: unknown, re: RegExp, field: string): string {
   if (typeof value !== 'string' || !re.test(value)) {
+    throw new TriggerPayloadInvalidError(`webhook payload field "${field}" missing or malformed`);
+  }
+  return value;
+}
+
+/** A required positive integer (GitHub's `number` fields — PR/issue numbers). */
+function reqPositiveInt(value: unknown, field: string): number {
+  if (typeof value !== 'number' || !Number.isInteger(value) || value <= 0) {
     throw new TriggerPayloadInvalidError(`webhook payload field "${field}" missing or malformed`);
   }
   return value;
@@ -167,5 +221,74 @@ export function extractReleasePayload(
     publishedAt,
     body: relBody.text,
     ...(relBody.truncated || name.truncated ? { truncated: true } : {}),
+  };
+}
+
+/**
+ * R2-08-F3 — extract the typed `pr-merged` payload from a verified GitHub
+ * `pull_request` webhook body. GitHub only (the caller gates on
+ * `webhook.provider === 'github'` before calling this — see
+ * `cli/bridge-hooks.ts`). Corpus-grounded on GitHub's documented, stable
+ * `pull_request` event schema: `pull_request.{number,title,body,head:{ref,sha},
+ * base:{ref},user:{login}}`, `repository.full_name`. The caller alone decides
+ * whether `action`/`merged` mean this event actually fires `pr-merged` — this
+ * extractor only shapes the structured fields, exactly like
+ * {@link extractPushPayload} / {@link extractReleasePayload}.
+ */
+export function extractPullRequestPayload(body: Record<string, unknown>): WebhookPullRequestPayload {
+  const repo = reqMatch(repoOf(body), REPO_RE, 'repository');
+  const pr = (body['pull_request'] ?? {}) as Record<string, unknown>;
+  const prNumber = reqPositiveInt(pr['number'], 'pull_request.number');
+  const head = (pr['head'] ?? {}) as Record<string, unknown>;
+  const base = (pr['base'] ?? {}) as Record<string, unknown>;
+  const headRef = reqMatch(head['ref'], GIT_REF_RE, 'pull_request.head.ref');
+  const headSha = reqMatch(head['sha'], SHA_RE, 'pull_request.head.sha');
+  const baseRef = reqMatch(base['ref'], GIT_REF_RE, 'pull_request.base.ref');
+  const user = (pr['user'] ?? {}) as Record<string, unknown>;
+  const authorLogin = reqMatch(user['login'], LOGIN_RE, 'pull_request.user.login');
+  const title = freeText(pr['title']);
+  const prBody = freeText(pr['body']);
+  return {
+    kind: 'webhook',
+    provider: 'github',
+    event: 'pr-merged',
+    repo,
+    prNumber,
+    headRef,
+    headSha,
+    baseRef,
+    authorLogin,
+    title: title.text,
+    body: prBody.text,
+    ...(title.truncated || prBody.truncated ? { truncated: true } : {}),
+  };
+}
+
+/**
+ * R2-08-F3 — extract the typed `issue-raised` payload from a verified GitHub
+ * `issues` webhook body. GitHub only, same rationale as
+ * {@link extractPullRequestPayload}. Corpus-grounded on GitHub's documented
+ * `issues` event schema: `issue.{number,title,body,user:{login}}`,
+ * `repository.full_name`. The caller decides whether `action === 'opened'`
+ * before calling this.
+ */
+export function extractIssuePayload(body: Record<string, unknown>): WebhookIssuePayload {
+  const repo = reqMatch(repoOf(body), REPO_RE, 'repository');
+  const issue = (body['issue'] ?? {}) as Record<string, unknown>;
+  const issueNumber = reqPositiveInt(issue['number'], 'issue.number');
+  const user = (issue['user'] ?? {}) as Record<string, unknown>;
+  const authorLogin = reqMatch(user['login'], LOGIN_RE, 'issue.user.login');
+  const title = freeText(issue['title']);
+  const issueBody = freeText(issue['body']);
+  return {
+    kind: 'webhook',
+    provider: 'github',
+    event: 'issue-raised',
+    repo,
+    issueNumber,
+    authorLogin,
+    title: title.text,
+    body: issueBody.text,
+    ...(title.truncated || issueBody.truncated ? { truncated: true } : {}),
   };
 }

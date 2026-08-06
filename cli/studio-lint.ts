@@ -326,7 +326,15 @@ export function runStudioLint(root: string): StudioLintResult {
         findings.push(...validateFlow(flow, agentMap, { flowIds, flowProjectOf, projectIds }));
         findings.push(...validateArtifactRef(flow, artifactTemplateIds));
         for (const trigger of flow.triggers) {
-          if (trigger.on === 'webhook' && trigger.webhook) {
+          // R2-08-F3: `pr-merged` / `issue-raised` reuse the SAME `webhook:`
+          // id namespace (POST /api/hooks/:hookId serves all three kinds) —
+          // a hook id collision across kinds is exactly as unresolvable as
+          // one within `on: webhook` alone (findWebhookTrigger returns only
+          // the first flow it scans), so it must be caught here too.
+          if (
+            (trigger.on === 'webhook' || trigger.on === 'pr-merged' || trigger.on === 'issue-raised') &&
+            trigger.webhook
+          ) {
             const claimants = webhookIdsByFlow.get(trigger.webhook.id) ?? [];
             claimants.push(dir);
             webhookIdsByFlow.set(trigger.webhook.id, claimants);

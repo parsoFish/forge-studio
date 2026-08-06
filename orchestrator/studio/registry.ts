@@ -387,7 +387,10 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
       // invalid value; a non-string becomes '' (also lint-rejected).
       provider: (typeof w['provider'] === 'string' ? w['provider'] : '') as 'github' | 'gitea' | 'gitlab',
       events: Array.isArray(w['events'])
-        ? (w['events'] as unknown[]).filter((e): e is 'push' | 'release' => e === 'push' || e === 'release')
+        ? (w['events'] as unknown[]).filter(
+            (e): e is 'push' | 'release' | 'pull_request' | 'issues' =>
+              e === 'push' || e === 'release' || e === 'pull_request' || e === 'issues',
+          )
         : [],
       secretEnv: typeof w['secretEnv'] === 'string' ? w['secretEnv'] : '',
       ...(typeof w['secretEnvPrevious'] === 'string' ? { secretEnvPrevious: w['secretEnvPrevious'] } : {}),

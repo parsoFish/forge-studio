@@ -91,6 +91,11 @@
       "items": { "type": "string" },
       "description": "Verbatim acceptance-criterion statements forge appends to EVERY work item the PM emits, as a '## Standing acceptance criteria (project contract)' body section. Encodes project-wide testing invariants (e.g. 'proven by a live acceptance test', 'must not redden CI') as static standing ACs, removing per-WI PM judgment. Optional. See contract A2."
     },
+    "repo": {
+      "type": "string",
+      "pattern": "^[\\w.-]+/[\\w.-]+$",
+      "description": "R2-08-F3: the project's 'owner/name' GitHub full name — the repo→project mapping the pr-merged/issue-raised project-event trigger kinds resolve against (identity match only; undeclared ⇒ this project can never match one). Optional."
+    },
     "northStar": {
       "type": "string",
       "maxLength": 140,

@@ -190,7 +190,13 @@ export type WebhookTriggerConfig = {
   id: string;
   /** github/gitea share the X-Hub-Signature-256 HMAC scheme; gitlab is a static token header. */
   provider: 'github' | 'gitea' | 'gitlab';
-  events: Array<'push' | 'release'>;
+  /**
+   * `pull_request`/`issues` (R2-08-F3) back the `on: pr-merged` /
+   * `on: issue-raised` kinds and are GitHub-only in practice (the bridge
+   * never resolves either header for gitea/gitlab — no grounded payload
+   * shape); `push`/`release` back `on: webhook`.
+   */
+  events: Array<'push' | 'release' | 'pull_request' | 'issues'>;
   /** Env-var NAME holding the shared secret (^[A-Z][A-Z0-9_]*$). */
   secretEnv: string;
   /** Optional previous-secret env-var name — rotation via verifyWithFallback. */

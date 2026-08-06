@@ -37,6 +37,13 @@ import { stageFlowRunRequest } from './flow-run-requests.ts';
  *   whose `agent:` identity-matches the completed slug).
  * - `merged` — the flow's PR was merged + finalized (fired by finalize-merged,
  *   async + post-run; the flow itself terminated earlier at `ready-for-review`).
+ * - `pr-merged` — a GitHub pull request was merged (R2-08-F3: signature-verified
+ *   receipt on the bridge's EXISTING /api/hooks/:hookId route, own `on:` value
+ *   carrying its own `webhook:` config block — never a sub-event under
+ *   `on: webhook`; fire = stage). GitHub only; gitlab/gitea stay schema-reserved
+ *   with zero stub handlers until a real payload shape grounds one.
+ * - `issue-raised` — a GitHub issue was opened (R2-08-F3, same receiver + GitHub-only
+ *   scope as `pr-merged`).
  * - `manual` — reserved (kickoff-kind unification).
  * - `cron` — temporal (croner-armed in the scheduler; fire = stage a request).
  * - `webhook` — external (signature-verified receipt on the bridge; fire = stage).
@@ -46,6 +53,8 @@ export const TRIGGER_KINDS = [
   { id: 'flow-complete', origin: 'platform', status: 'shipped', fires: 'lifecycle' },
   { id: 'agent-complete', origin: 'platform', status: 'shipped', fires: 'lifecycle' },
   { id: 'merged', origin: 'ootb', status: 'shipped', fires: 'lifecycle' },
+  { id: 'pr-merged', origin: 'ootb', status: 'shipped', fires: 'external' },
+  { id: 'issue-raised', origin: 'ootb', status: 'shipped', fires: 'external' },
   { id: 'manual', origin: 'platform', status: 'reserved', fires: 'operator' },
   { id: 'cron', origin: 'platform', status: 'shipped', fires: 'temporal' },
   { id: 'webhook', origin: 'platform', status: 'shipped', fires: 'external' },
