@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runFlow, flowPathForId, resolveNodeKind, type FlowRunnerDeps, type NodeExecutor } from './flow-runner.ts';
+import { stageFlowRunRequest, listFlowRunRequests } from './flow-run-requests.ts';
 import { writeWorkItem, readWorkItemsFromDir, type WorkItem } from './work-item.ts';
 import { parseManifest } from './manifest.ts';
 import { WedgeKillError, CostCeilingError } from './flow-budgets.ts';
@@ -891,6 +892,131 @@ describe('flow-runner trigger firing', () => {
     await runFlow({ flow, input, logger, deps });
 
     assert.deepEqual(enqueueCalls.sort(), ['forge-reflect', 'other-flow'].sort());
+  });
+
+  // -------------------------------------------------------------------------
+  // ACCEPTANCE TEST (T3, R2-08-F1, round-3 real-path pin) — the REAL
+  // produce→stage path for the flow-complete firing site. T1's finding: the
+  // inline `dispatch:` closure inside `runFlow` (this module, right above
+  // where `fireFlowTriggers(flow, 'flow-complete', {...})` is called) builds
+  // `deps.enqueueFlowRun(trigger.target.ref, {origin, triggeredBy,
+  // sourceInitiativeId, targetKind})` — a literal, hardcoded object with NO
+  // slot for `trigger.projects` at all. `FlowRunnerDeps['enqueueFlowRun']`'s
+  // own type signature has no `projects` field either, so the data is lost
+  // structurally, one level before it could ever reach `stageFlowRunRequest`.
+  //
+  // Proof strategy: drive the REAL `runFlow` → REAL `fireFlowTriggers` → REAL
+  // inline dispatch closure (100% unmodified production code) to terminal
+  // success. `deps.enqueueFlowRun` is injected (exactly as every other test
+  // in this describe block already does — the established, safe seam;
+  // production's own `defaultEnqueueFlowRun` hardcodes NO `queueRoot` and
+  // would write into this worktree's real `_queue/` if invoked directly, so
+  // it cannot safely run inside a test). The injected function reproduces
+  // ONLY `defaultEnqueueFlowRun`'s exact one-line body — supplying the ONE
+  // missing parameter (`queueRoot`) it structurally lacks — through the REAL,
+  // unmodified `stageFlowRunRequest`, then reads the REAL staged file back
+  // off disk. This proves the data loss is real and happens BEFORE staging,
+  // not merely in a hand-built fixture.
+  //
+  // Three triggers separate two distinct claims so neither needs to guess at
+  // the other's semantics:
+  //  - `projects: []` (must fire for NOTHING, rule 1) vs. a genuinely
+  //    unscoped control (must always fire) — the mandatory pairing, proving
+  //    the empty-scope rule is silently ignored, no eventProject value needed.
+  //  - `projects: ['gitpulse']`, run against an initiative whose OWN project
+  //    is "gitpulse" (in scope) — pins that a MATCHING scope both fires AND
+  //    carries `projects`/`eventProject` on the staged file. eventProject's
+  //    source here (the running initiative's own project — this same file's
+  //    existing `basename(input.projectRepoPath)` precedent for the
+  //    demo-agent/adversarial-review ProjectBinding) is a confident pin, not
+  //    T1-ruled — flagged in the accompanying report.
+  // -------------------------------------------------------------------------
+
+  it('(RED) [round-3 real-path] a REAL flow-complete run silently drops every trigger\'s projects: — projects:[] (must fire for NOTHING) fires exactly like an unscoped control, and an in-scope declaration\'s staged file carries neither projects nor eventProject', async () => {
+    const flow: FlowDefinition = {
+      id: 'trigger-test',
+      name: 'Trigger Test',
+      version: 1,
+      goal: 'Test trigger firing.',
+      project: null,
+      kb: null,
+      costCeilingUsd: 0,
+      origin: 'seed',
+      disposable: true,
+      nodes: [{ id: 'pm', agent: 'project-manager' }],
+      edges: [],
+      triggers: [
+        // Declared "fires for nothing" (rule 1) — the ADR's starkest example.
+        { on: 'flow-complete', target: { kind: 'flow', ref: 'should-never-fire' }, projects: [] },
+        // Genuinely unscoped control — SHOULD always fire.
+        { on: 'flow-complete', target: { kind: 'flow', ref: 'should-always-fire' } },
+        // Scoped to the running initiative's OWN project ("gitpulse", below)
+        // — in scope, SHOULD fire AND carry projects/eventProject on disk.
+        { on: 'flow-complete', target: { kind: 'flow', ref: 'should-fire-in-scope' }, projects: ['gitpulse'] },
+      ] as unknown as FlowDefinition['triggers'],
+      path: '/fake/trigger-test.yaml',
+    };
+
+    const queueRoot = mkdtempSync(join(tmpdir(), 'flow-runner-real-path-queue-'));
+    try {
+      const deps: Partial<FlowRunnerDeps> = {
+        runProjectManager: async () => { /* no-op */ },
+        commitDevLoopBoundary: () => { /* no-op */ },
+        enforceDevLoopCloseInvariant: () => { /* no-op */ },
+        assertNonEmptyDelivery: () => { /* no-op */ },
+        enforceFinalCiGate: () => { /* no-op */ },
+        rebaseForResume: () => { /* no-op */ },
+        // Reproduces ONLY defaultEnqueueFlowRun's exact one-line body (see the
+        // block comment above) — the REAL dispatch closure computes `opts`;
+        // this adapter supplies just the missing queueRoot before handing off
+        // to the REAL stageFlowRunRequest.
+        enqueueFlowRun: (flowId, opts) => {
+          stageFlowRunRequest(
+            {
+              target: { kind: opts.targetKind ?? 'flow', ref: flowId },
+              origin: opts.origin,
+              triggeredBy: opts.triggeredBy,
+              sourceInitiativeId: opts.sourceInitiativeId,
+            },
+            { queueRoot },
+          );
+        },
+      };
+
+      const input = makeInput({ projectRepoPath: '/tmp/test/gitpulse' });
+      const logger = makeLogger();
+
+      await runFlow({ flow, input, logger, deps });
+
+      const staged = listFlowRunRequests({ queueRoot });
+      const refs = staged.map((s) => s.req.target.ref).sort();
+      // The CORRECT target behaviour: projects:[] fires for NOTHING (rule 1),
+      // the unscoped control always fires, and the in-scope declaration
+      // fires. This assertion must currently FAIL — today ALL THREE fire
+      // (scoping has zero effect at this site), including the one declared
+      // to fire for nothing.
+      assert.deepEqual(
+        refs,
+        ['should-always-fire', 'should-fire-in-scope'].sort(),
+        `expected "should-never-fire" (projects: []) to be excluded (rule 1) while the other two fire — got ${JSON.stringify(refs)}`,
+      );
+
+      const inScope = staged.find((s) => s.req.target.ref === 'should-fire-in-scope');
+      assert.ok(inScope, 'expected a staged request for the in-scope trigger');
+      const raw = inScope!.req as unknown as Record<string, unknown>;
+      assert.deepEqual(
+        raw['projects'],
+        ['gitpulse'],
+        `expected the staged request to carry the trigger's declared projects: — got ${JSON.stringify(raw)}`,
+      );
+      assert.equal(
+        raw['eventProject'],
+        'gitpulse',
+        `expected eventProject to resolve to the running initiative's own project (basename(input.projectRepoPath) = "gitpulse") — got ${JSON.stringify(raw)}`,
+      );
+    } finally {
+      rmSync(queueRoot, { recursive: true, force: true });
+    }
   });
 });
 

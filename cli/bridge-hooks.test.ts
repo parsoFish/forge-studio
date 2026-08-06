@@ -400,3 +400,84 @@ test('POST /api/hooks/:hookId — 401 on a zero-length body with x-hub-signature
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TEST (T3, R2-08-F1, round-3 real-path pin) — the REAL
+// produce→stage path for the webhook firing site. T1's finding: `bridge-hooks.ts`'s
+// `stageFlowRunRequest` call (step 8 of `processHookReceipt`) never passes
+// `projects`, so a declared scope is silently ignored on webhook's real
+// firing path — a real signed POST through the real bridge route.
+//
+// ESCALATED (not guessed): this test only pins `projects` (the declared scope
+// riding onto the staged request unmodified) — it does NOT assert a specific
+// `eventProject` value. Unlike cron (T1-ruled: the declaring flow's own
+// `project` binding) or flow-complete (the running initiative's own project),
+// a webhook payload's only project-shaped datum is `payload.repo`
+// (`owner/repo`, e.g. "acme/widgets") — there is no repo→forge-project-id
+// mapping anywhere in this codebase (grepped: no `.forge/project.json` field,
+// no registry). Forcing a guess here (e.g. "the repo's basename") would pin
+// an invented mechanism, not a fact. See this WI's report for the ruling ask.
+// ---------------------------------------------------------------------------
+
+test('(RED) [round-3 real-path] a REAL signed webhook POST through the real bridge carries the trigger\'s declared projects: onto the staged request file', async () => {
+  const scopedHookId = 'scoped-fixture-hook';
+  const scopedSecretEnv = 'TEST_BRIDGE_SCOPED_HOOK_SECRET';
+  const scopedFlowId = 'hook-fixture-flow-scoped';
+  const { forgeRoot } = setup();
+  const flowDir = join(forgeRoot, 'studio', 'flows', scopedFlowId);
+  mkdirSync(flowDir, { recursive: true });
+  writeFileSync(
+    join(flowDir, 'flow.yaml'),
+    [
+      `id: ${scopedFlowId}`,
+      'name: Hook Fixture Flow (scoped)',
+      'version: 1',
+      'goal: fixture flow declaring a SCOPED on:webhook trigger for the round-3 real-path pin',
+      'project: null',
+      'kb: null',
+      'costCeilingUsd: 5',
+      'origin: seed',
+      'nodes:',
+      '  - { id: only, agent: developer-ralph }',
+      'edges: []',
+      'triggers:',
+      '  - on: webhook',
+      `    target: { kind: flow, ref: ${TARGET_FLOW_ID} }`,
+      '    projects: [gitpulse, betterado]',
+      '    webhook:',
+      `      id: ${scopedHookId}`,
+      '      provider: github',
+      '      events: [push, release]',
+      `      secretEnv: ${scopedSecretEnv}`,
+      '      sources:',
+      `        - ${ALLOWED_REPO}`,
+      '',
+    ].join('\n'),
+  );
+
+  const saved = process.env[scopedSecretEnv];
+  process.env[scopedSecretEnv] = 'correct-secret';
+  const { url, close } = await startBridge({ forgeRoot, port: 0 });
+  try {
+    const raw = JSON.stringify(pushBody());
+    const { status } = await post(url, `/api/hooks/${scopedHookId}`, raw, {
+      'x-github-event': 'push',
+      'x-hub-signature-256': githubSig('correct-secret', raw),
+    });
+    assert.equal(status, 202, 'expected the real signed POST to stage successfully');
+
+    const files = flowRunFiles(forgeRoot);
+    assert.equal(files.length, 1, 'exactly one flow-run request staged');
+    const req = JSON.parse(readFileSync(join(forgeRoot, '_queue', 'flow-runs', files[0]), 'utf8')) as Record<string, unknown>;
+
+    assert.deepEqual(
+      req['projects'],
+      ['gitpulse', 'betterado'],
+      `expected the staged request to carry the trigger's declared projects: — got ${JSON.stringify(req)}`,
+    );
+  } finally {
+    if (saved === undefined) delete process.env[scopedSecretEnv]; else process.env[scopedSecretEnv] = saved;
+    await close();
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

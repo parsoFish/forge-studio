@@ -58,12 +58,28 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { listFlowRunRequests } from './flow-run-requests.ts';
+import { dispatchAgentRun } from './agent-dispatch.ts';
+import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { FlowTrigger } from './studio/types.ts';
+
+const ROOT = process.cwd();
+
+/** Mirrors `fakeQueryFn` in run-agent.test.ts — the canonical stub for the
+ *  locked `RunContext.queryFn` shape: a fake SDK query() yielding one
+ *  `result` message reporting the given cost, never touching the real SDK. */
+function fakeQueryFn(costUsd: number): StreamQueryFn {
+  return ((_params: { prompt: unknown; options?: unknown }) => {
+    async function* gen() {
+      yield { type: 'result', subtype: 'success', total_cost_usd: costUsd, usage: { input_tokens: 1, output_tokens: 1 } };
+    }
+    return gen();
+  }) as unknown as StreamQueryFn;
+}
 
 function setup(): string {
   return mkdtempSync(join(tmpdir(), 'agent-complete-trigger-'));
@@ -202,6 +218,139 @@ test('(RED) [F2 #11, T1 ruling #1] source-agent matching is strict IDENTITY, not
 
     const firedForExact = await fireAgentCompleteTriggers(flows, 'developer', { queueRoot: join(root, 'c') });
     assert.equal(firedForExact.length, 1, 'sanity: the exact slug must still fire');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (T3, R2-08-F2, round-3 real-path pin) — this site is
+// broken in TWO distinct, separately-provable ways. Escalated to T1 (not
+// guessed): the second (structural) finding is more severe than the
+// projects/eventProject omission T1 originally flagged for the other three
+// sites.
+// ---------------------------------------------------------------------------
+
+/**
+ * FINDING (new, round-3): `dispatchAgentRun` (orchestrator/agent-dispatch.ts)
+ * — the module's OWN doc comment names it "the generic standalone-run path
+ * for an UNATTENDED runnable roster agent", i.e. THE real production site
+ * for "a standalone agent run completes" — never calls
+ * `fireAgentCompleteTriggers` anywhere. Verified by reading the full function
+ * body and grepping the whole tree: zero non-test references to
+ * `fireAgentCompleteTriggers` exist outside orchestrator/flow-trigger.ts
+ * itself. `dispatchAgentRun`'s own signature has no `forgeRoot`/`queueRoot`/
+ * flow-roster parameter at all, so it COULD NOT call it even if it tried.
+ * This means test #11's "stages a claimable run request when a standalone
+ * agent run completes" acceptance criterion has NEVER been exercised through
+ * the real completion path — every existing passing test (including this
+ * file's own #11 tests above) calls `fireAgentCompleteTriggers` directly with
+ * a hand-built `flows` array, which is exactly the "test on the wrong
+ * surface" trap this round's ruling was about, one level deeper than the
+ * `projects` field.
+ *
+ * This is a DIFFERENT KIND of gap than the other three sites' — cron,
+ * webhook, and flow-complete all pass SOME opts to their staging call, just
+ * without `projects`. Here, the staging call is never reached at all. Given
+ * that, an `eventProject` question for this site doesn't yet have anywhere
+ * to attach — there is no wiring for it to ride on. Escalated rather than
+ * invented.
+ */
+test('(RED) [round-3 real-path, NEW FINDING] a REAL dispatchAgentRun completion of a slug with a matching on:agent-complete watcher stages NOTHING — fireAgentCompleteTriggers is never wired to the real standalone-run completion path', async () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'agent-complete-wiring-'));
+  const queueRoot = join(forgeRoot, '_queue');
+  try {
+    // A real, valid on:agent-complete watcher for the exact agent we're about
+    // to dispatch — if the wiring existed, this MUST fire.
+    const watcherDir = join(forgeRoot, 'studio', 'flows', 'watcher-flow');
+    mkdirSync(watcherDir, { recursive: true });
+    writeFileSync(
+      join(watcherDir, 'flow.yaml'),
+      [
+        'id: watcher-flow',
+        'name: watcher-flow',
+        'version: 1',
+        'goal: fixture watcher for the round-3 wiring-gap pin',
+        'project: null',
+        'kb: null',
+        'costCeilingUsd: 5',
+        'origin: seed',
+        'nodes:',
+        '  - { id: only, agent: developer-ralph }',
+        'edges: []',
+        'triggers:',
+        '  - on: agent-complete',
+        '    target: { kind: flow, ref: downstream-flow }',
+        '    agent: project-scoped-review',
+      ].join('\n'),
+    );
+
+    const runId = '_agent-complete-wiring-test';
+    const result = await dispatchAgentRun({
+      slug: 'project-scoped-review',
+      skillsDir: join(ROOT, 'skills'),
+      runId,
+      logsRoot: join(forgeRoot, '_logs'),
+      queryFn: fakeQueryFn(0.01),
+    });
+
+    assert.equal(result.result.suppressed, false, 'sanity: the dispatch actually ran (not suppressed)');
+
+    // The CORRECT target behaviour: a matching on:agent-complete watcher MUST
+    // stage exactly one claimable request once this site is wired. This
+    // assertion must currently FAIL — today `dispatchAgentRun` never calls
+    // fireAgentCompleteTriggers at all, so nothing lands in the queue no
+    // matter how many valid watchers are declared.
+    const staged = listFlowRunRequests({ queueRoot });
+    assert.equal(
+      staged.length,
+      1,
+      `expected exactly ONE staged request for "downstream-flow" (a real, valid on:agent-complete watcher exists) — got ${JSON.stringify(staged)}. fireAgentCompleteTriggers is never invoked from dispatchAgentRun's real completion path.`,
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+/**
+ * Second, narrower finding: EVEN IF `fireAgentCompleteTriggers` were wired up
+ * (test above), it would still drop `projects`/`eventProject` — the exact
+ * class of defect T1 found at the other three sites (confirmed directly at
+ * this module's `stageFlowRunRequest` call site by reading
+ * orchestrator/flow-trigger.ts). Driven through the REAL, unmocked
+ * `fireAgentCompleteTriggers` (the function itself, not a hand-built
+ * FlowRunRequest) — this is the "one real-path test per firing site"
+ * requirement's answer for the scoping-specific half of this site's defect,
+ * complementing the wiring-gap test above.
+ */
+test('(RED) [round-3 real-path] fireAgentCompleteTriggers drops a trigger\'s declared projects: onto the staged file, same class of defect as the other three sites', async () => {
+  const fireAgentCompleteTriggers = await loadFireAgentCompleteTriggers();
+  const root = setup();
+  try {
+    const flows = [
+      {
+        id: 'watcher-flow',
+        triggers: [
+          {
+            on: 'agent-complete',
+            target: { kind: 'flow', ref: 'demo-runner-flow' },
+            agent: 'doc-updater',
+            projects: ['gitpulse', 'betterado'],
+          } as unknown as FlowTrigger,
+        ],
+      },
+    ];
+
+    await fireAgentCompleteTriggers(flows, 'doc-updater', { queueRoot: root });
+
+    const staged = listFlowRunRequests({ queueRoot: root });
+    assert.equal(staged.length, 1);
+    const raw = staged[0].req as unknown as Record<string, unknown>;
+    assert.deepEqual(
+      raw['projects'],
+      ['gitpulse', 'betterado'],
+      `expected the staged request to carry the trigger's declared projects: — got ${JSON.stringify(raw)}`,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
