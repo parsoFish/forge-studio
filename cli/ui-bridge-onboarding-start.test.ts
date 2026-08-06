@@ -32,6 +32,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { cmdAgentDispatch } from './agent-run.ts';
+import { SAFE_ID_RE } from './bridge-studio.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -358,19 +359,22 @@ test('R4-17 AT-10 (BLOCKER, pin 4 item 1): POST /api/studio/onboarding/start hon
 // project (created in this file's `before()`) has no `_onboarding` directory
 // until the route creates one.
 //
-// Reachability check for a NARROWER, separate vector — a symlink planted at
-// the exact `_onboarding/<sessionId>` path itself, or at `status.json`/
-// `prompt.md` inside it: `sessionId` comes from `newArchitectSessionId()`
-// (cli/ui-bridge.ts:1681-1684), which is `new Date().toISOString()`
-// truncated to ONE-SECOND granularity, not a cryptographically random value
-// — so it is not immune to prediction in principle. But there is no seam to
-// inject a fixed `Date` into the route under test, so pinning that narrower
-// vector deterministically would mean racing wall-clock time (predict the
-// current second, plant a symlink under that exact name, fire the request
-// within the same second) — inherently flaky in CI, and not attempted here.
-// This is a real, distinct, narrower follow-up, not silently dropped: the
-// `_onboarding`-symlink vector below is the reliably-reproducible one the
-// review actually named, and the one this file pins.
+// ROUND-3 CORRECTION (pin 5): the paragraph above claimed the narrower
+// `_onboarding/<sessionId>/{status.json,prompt.md}` leaf-write vector was
+// "inherently flaky in CI, and not attempted here" for lack of a Date
+// injection seam. That claim was WRONG — round-3 adversarial review
+// reproduced it live with a 100% hit rate by pre-planting candidate
+// session-id directories spanning the request's own wall-clock window (5
+// candidates over a 4-second window), never needing to inject a fixed Date
+// at all. AT-13/AT-14/AT-15 below pin the three independent closes (T2
+// ruling): exclusive session-dir creation, exclusive ('wx') leaf-file
+// writes, and session-id entropy. See those tests' own headers for the
+// candidate-window technique and its one disclosed limitation: once entropy
+// (AT-17) makes the id genuinely unguessable, AT-13/14/15's collision can no
+// longer be engineered by ANY external caller (including this test) — they
+// remain correct (their assertions stay true) but become unable to detect a
+// future regression in the mkdir/write exclusivity alone. Disclosed, not
+// silently assumed away — see the T3 pin-5 report for the full reasoning.
 // ---------------------------------------------------------------------------
 
 test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, not a lexical string test): a project whose "_onboarding" entry is a SYMLINK to an outside directory must be refused — non-2xx, AND nothing written at the symlink target', async () => {
@@ -419,6 +423,214 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
       existsSync(join(projectDir, '_onboarding', body.sessionId, 'status.json')),
       `expected the session to land inside the REAL pre-existing "_onboarding" directory at ${join(projectDir, '_onboarding', body.sessionId)}`,
     );
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PIN 5 — round-3 adversarial review, item 1 (BLOCKER): the leaf writes
+// `<project>/_onboarding/<sessionId>/{status.json,prompt.md}` are unguarded.
+// `sessionId` (`newArchitectSessionId()`, cli/ui-bridge.ts:1693-1696) has only
+// ONE-SECOND granularity — zero entropy. A pre-planted `<sid>/` directory
+// with `status.json`/`prompt.md` as SYMLINKS to an outside target captures
+// both writes (`mkdirSync(..., {recursive:true})` silently reuses the
+// pre-existing dir; `writeFileSync` with no exclusive flag follows the
+// symlinks). Reproduced live with a 100% hit rate using 5 candidate
+// directories spanning a 4-second window (the technique `candidateSessionIds`
+// below mirrors, slightly widened for headroom).
+//
+// T2's ruling: THREE independent closes — (1) `mkdirSync(sessionDir)` with NO
+// `recursive` (a pre-existing dir is refused, never reused), (2) both leaf
+// writes use an exclusive create flag (`'wx'`, so an existing path —
+// including a symlink — fails the write instead of being followed), (3) the
+// session id gains entropy so it is not guessable at all.
+//
+// AT-13/AT-14 pin close (2) via the classic exploit shape (a pre-existing
+// dir with a symlinked leaf file) — this ALSO happens to trip close (1)
+// today (the dir pre-exists), which is fine: the assertion is OUTCOME-based
+// (the outside sentinel is byte-unchanged), true whichever of the two closes
+// is the one that actually stops the write, so the test keeps its value even
+// if a future regression removes ONE of the two but not the other. AT-15
+// pins close (1) alone via a directory that is REAL but EMPTY (no symlink at
+// all) — if close (1) alone regressed to `recursive:true` while close (2)
+// (the 'wx' flag) remained, this empty directory would be silently reused
+// and populated with FRESH, non-colliding files (no EEXIST from 'wx' — there
+// is nothing there to collide with), so this test's "stays empty" assertion
+// depends on close (1) alone, not on close (2).
+//
+// DISCLOSED LIMITATION (not silently assumed away): all three of AT-13/14/15
+// depend on being able to GUESS the upcoming session id well enough to
+// pre-plant its directory before the route creates it. Once close (3)
+// (entropy, pinned independently by AT-17 below) ships — and it ships in the
+// SAME fix as (1)/(2) — the id becomes genuinely unguessable, so none of
+// AT-13/14/15's candidate directories will ever again coincide with the
+// route's real target. Their assertions (sentinel byte-unchanged / planted
+// dirs stay empty) remain TRUE post-fix, but only VACUOUSLY — the route
+// simply never touches them, not because it was refused. They are reliable
+// RED-now proofs for this round's fix, not perpetual regression sentinels
+// for closes (1)/(2) in isolation; see the T3 pin-5 report for a suggested
+// follow-up (a unit-level test against a fixed/injected id, owned by
+// whoever implements the fix and knows its internal seam).
+// ---------------------------------------------------------------------------
+
+/**
+ * Mirrors `newArchitectSessionId()` (cli/ui-bridge.ts:1693-1696) exactly:
+ * `new Date().toISOString()`, ":" -> "-", truncated to one-second
+ * granularity. Spans a window around "now" wide enough to reliably contain
+ * whatever the server computes a few milliseconds later (the server's own
+ * `Date.now()` can only be >= this function's own `Date.now()` snapshot,
+ * never earlier, hence the asymmetric -1/+4 spread) — the same
+ * candidate-window technique the round-3 review used to get a 100% hit rate
+ * with a narrower 4-second window; this one is deliberately wider for
+ * headroom under CI load.
+ */
+function candidateOnboardingSessionIds(): string[] {
+  const now = Date.now();
+  const ids = new Set<string>();
+  for (let offsetSec = -1; offsetSec <= 4; offsetSec++) {
+    ids.add(new Date(now + offsetSec * 1000).toISOString().replace(/:/g, '-').replace(/\..+$/, ''));
+  }
+  return [...ids];
+}
+
+test('R4-17 AT-13 (BLOCKER, pin 5 item 1, REJECT — real filesystem object, never a status code): every candidate session-id directory spanning the request\'s wall-clock window is pre-planted with status.json as a SYMLINK to an outside sentinel file; the route must never write through it', async () => {
+  const project = 'symlinkstatusleafproj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  const onboardingDir = join(projectDir, '_onboarding');
+  mkdirSync(onboardingDir, { recursive: true });
+  const sentinelDir = mkdtempSync(join(tmpdir(), 'onboarding-status-sentinel-'));
+  const sentinelPath = join(sentinelDir, 'outside-status.json');
+  const sentinelContent = 'SENTINEL-STATUS-UNTOUCHED-7f3c91';
+  writeFileSync(sentinelPath, sentinelContent, 'utf8');
+  const candidates = candidateOnboardingSessionIds();
+  const plantedDirs = candidates.map((sid) => join(onboardingDir, sid));
+  try {
+    for (const dir of plantedDirs) {
+      mkdirSync(dir, { recursive: true });
+      symlinkSync(sentinelPath, join(dir, 'status.json'));
+    }
+    await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'symlinked status.json probe' } }),
+    });
+    assert.equal(
+      readFileSync(sentinelPath, 'utf8'), sentinelContent,
+      `the outside sentinel target of a planted status.json symlink must be byte-unchanged for EVERY candidate session id (${candidates.join(', ')}) — a write-through here means the route reused a pre-existing session dir and/or wrote through a pre-existing symlink instead of refusing it`,
+    );
+  } finally {
+    for (const dir of plantedDirs) rmSync(dir, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(sentinelDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 AT-14 (BLOCKER, pin 5 item 1, REJECT — real filesystem object, never a status code): every candidate session-id directory spanning the request\'s wall-clock window is pre-planted with prompt.md as a SYMLINK to an outside sentinel file; the route must never write through it', async () => {
+  const project = 'symlinkpromptleafproj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  const onboardingDir = join(projectDir, '_onboarding');
+  mkdirSync(onboardingDir, { recursive: true });
+  const sentinelDir = mkdtempSync(join(tmpdir(), 'onboarding-prompt-sentinel-'));
+  const sentinelPath = join(sentinelDir, 'outside-prompt.md');
+  const sentinelContent = 'SENTINEL-PROMPT-UNTOUCHED-a82e4d';
+  writeFileSync(sentinelPath, sentinelContent, 'utf8');
+  const candidates = candidateOnboardingSessionIds();
+  const plantedDirs = candidates.map((sid) => join(onboardingDir, sid));
+  try {
+    for (const dir of plantedDirs) {
+      mkdirSync(dir, { recursive: true });
+      symlinkSync(sentinelPath, join(dir, 'prompt.md'));
+    }
+    await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'symlinked prompt.md probe' } }),
+    });
+    assert.equal(
+      readFileSync(sentinelPath, 'utf8'), sentinelContent,
+      `the outside sentinel target of a planted prompt.md symlink must be byte-unchanged for EVERY candidate session id (${candidates.join(', ')}) — a write-through here means the route reused a pre-existing session dir and/or wrote through a pre-existing symlink instead of refusing it`,
+    );
+  } finally {
+    for (const dir of plantedDirs) rmSync(dir, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(sentinelDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 AT-15 (BLOCKER, pin 5 item 1, REJECT — pins exclusive session-dir CREATION independently of any symlink): every candidate session-id directory spanning the request\'s wall-clock window is pre-planted as a real, EMPTY directory (no symlinks, no files at all); the route must refuse rather than silently reuse and populate it', async () => {
+  const project = 'preexistingemptydirproj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  const onboardingDir = join(projectDir, '_onboarding');
+  mkdirSync(onboardingDir, { recursive: true });
+  const candidates = candidateOnboardingSessionIds();
+  const plantedDirs = candidates.map((sid) => join(onboardingDir, sid));
+  try {
+    for (const dir of plantedDirs) mkdirSync(dir, { recursive: true });
+    await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'pre-existing empty dir probe' } }),
+    });
+    for (const dir of plantedDirs) {
+      assert.deepEqual(
+        readdirSync(dir), [],
+        `pre-existing session dir ${dir} must stay EMPTY (refused, not silently reused/populated) — this is the load-bearing assertion, never the status code: a route relying only on an exclusive WRITE flag but not an exclusive directory CREATE would happily populate this pre-staked empty directory and return 200`,
+      );
+    }
+  } finally {
+    for (const dir of plantedDirs) rmSync(dir, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 AT-16 (pin 5 item 1, ACCEPT control): a project with a REAL EARLIER onboarding session already inside "_onboarding" (the shape every SECOND run has) — a fresh start must still succeed, land in its OWN distinct session dir, and leave the earlier session completely untouched', async () => {
+  const project = 'secondrunwithearliersession';
+  const projectDir = join(forgeRoot, 'projects', project);
+  const earlierSessionId = '2020-01-01T00-00-00'; // deliberately historical — never collides with "now"
+  const earlierDir = join(projectDir, '_onboarding', earlierSessionId);
+  mkdirSync(earlierDir, { recursive: true });
+  const earlierStatus = JSON.stringify(
+    { phase: 'done', project, runId: '_agent-onboarding-agent-earlier', startedAt: '2020-01-01T00:00:00.000Z' },
+    null, 2,
+  );
+  writeFileSync(join(earlierDir, 'status.json'), earlierStatus, 'utf8');
+  writeFileSync(join(earlierDir, 'prompt.md'), '# earlier prompt\n', 'utf8');
+  try {
+    const res = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'second run probe' } }),
+    });
+    const text = await res.text();
+    assert.equal(res.status, 200, `a second onboarding run on a project with an existing earlier session must succeed, got ${res.status}: ${text}`);
+    const body = JSON.parse(text) as { sessionId: string };
+    assert.notEqual(body.sessionId, earlierSessionId, 'the new session must land in its OWN distinct directory, not the earlier one');
+    const newSessionDir = join(projectDir, '_onboarding', body.sessionId);
+    assert.ok(existsSync(join(newSessionDir, 'status.json')), `expected the new session to land at ${newSessionDir}`);
+    assert.equal(
+      readFileSync(join(earlierDir, 'status.json'), 'utf8'), earlierStatus,
+      'the earlier session\'s status.json must be completely untouched by the new run — a guard that breaks the second run is worse than the hole it closes',
+    );
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 AT-17 (BLOCKER, pin 5 item 1, id-entropy): two onboarding starts fired back-to-back for the SAME project — well within the same wall-clock second — produce DIFFERENT session ids, and each id still matches SAFE_ID_RE (the id-format contract the session-shell read route, cli/bridge-studio-sessions.ts, enforces)', async () => {
+  const project = 'entropyprobeproj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(projectDir, { recursive: true });
+  try {
+    const res1 = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'entropy probe A' } }),
+    });
+    const res2 = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'entropy probe B' } }),
+    });
+    assert.equal(res1.status, 200);
+    assert.equal(res2.status, 200);
+    const body1 = (await res1.json()) as { sessionId: string };
+    const body2 = (await res2.json()) as { sessionId: string };
+    assert.notEqual(
+      body1.sessionId, body2.sessionId,
+      `two onboarding starts fired back-to-back (well within the SAME wall-clock second) must produce DIFFERENT session ids — a 1-second-granularity ISO timestamp alone is guessable/collidable; the fix must add entropy, got the SAME id "${body1.sessionId}" both times`,
+    );
+    for (const id of [body1.sessionId, body2.sessionId]) {
+      assert.ok(SAFE_ID_RE.test(id), `session id "${id}" must still match SAFE_ID_RE (${SAFE_ID_RE}) — the session-shell read route (cli/bridge-studio-sessions.ts) rejects anything outside this charset`);
+    }
   } finally {
     rmSync(projectDir, { recursive: true, force: true });
   }

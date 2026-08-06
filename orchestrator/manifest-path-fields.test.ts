@@ -31,6 +31,7 @@ import {
   existsSync,
   rmSync,
   symlinkSync,
+  writeFileSync,
 } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -490,4 +491,106 @@ test('root-folding negative control: a candidate whose FIRST segment under the r
     errors.length > 0,
     `a candidate whose FIRST segment under the root is a symlink pointing outside must be rejected — root-folding (candidate folded whole into a trusted "root" before calling resolveGuardedPath) would let realpathSync(root) silently resolve it away — got ${JSON.stringify(errors)}`,
   );
+});
+
+// ---------------------------------------------------------------------------
+// PIN 5 — round-3 adversarial review, item 2 (BLOCKER): `isContainedProjectRepoPath`
+// (cli/manifest-path-guard.ts:170-173) hardcodes `join(opts.forgeRoot,
+// 'projects')` as the projects root, never consulting `FORGE_PROJECTS_DIR` or
+// `forge.config.json`'s `projectsDir` — unlike `resolveProjectsDir`
+// (orchestrator/config.ts), which every OTHER projects-root resolution in
+// this repo (`ctx.projectsRoot` in cli/ui-bridge.ts, `writeSessionTerminalPhase`
+// in cli/agent-run.ts, etc.) already goes through. Under a configured
+// projects root this function DISAGREES with the producers that correctly
+// used `resolveProjectsDir` — reachable from the approve/finalize path
+// (cli/bridge-studio-runs.ts:222/390, orchestrator/finalize-merged.ts:301,
+// orchestrator/drain-fix-loop.ts:136, cli/bridge-recovery.ts), so a
+// configured `projectsDir` could break cycle approval entirely.
+//
+// T2's ruling: one concept, one resolution — `isContainedProjectRepoPath`
+// must resolve through `resolveProjectsDir`, and it must not depend on the
+// calling PROCESS's cwd (`loadConfig()`'s default `path = 'forge.config.json'`
+// is `resolve(path)` — cwd-relative — and fails soft to `{}` when not found
+// at that cwd-relative location, so a caller started from a different cwd
+// would silently get the DEFAULT root back even with a real
+// `forge.config.json` sitting right there in `forgeRoot`).
+//
+// AT below (1) proves the configured root is honoured at all (both directions
+// — accept under the NEW root, reject the stale hardcoded default once a
+// different root is configured), (2) proves that resolution does NOT depend
+// on process.cwd() (the finding this whole item is really about — the
+// pattern mirrors this file's own Finding-3 cwd-dependence proof above), and
+// (3) is the ACCEPT control: the DEFAULT configuration (no env, no config
+// file) must resolve byte-identically to today.
+// ---------------------------------------------------------------------------
+
+test('R4-17 pin 5, item 2 (BLOCKER): isContainedProjectRepoPath honours a CONFIGURED projects root (FORGE_PROJECTS_DIR) — accepts a path under the CONFIGURED root, and REJECTS the same-named path under the now-stale hardcoded <forgeRoot>/projects default', () => {
+  const customRoot = newOutsideDir('mpf-configured-projects-');
+  const legitUnderConfigured = join(customRoot, 'configuredproj');
+  mkdirSync(legitUnderConfigured, { recursive: true });
+  // A REAL, on-disk directory at the OLD default location for the SAME
+  // project name — not a hypothetical path.
+  const staleUnderDefault = join(forgeRoot, 'projects', 'configuredproj-stale');
+  mkdirSync(staleUnderDefault, { recursive: true });
+
+  const priorEnv = process.env.FORGE_PROJECTS_DIR;
+  process.env.FORGE_PROJECTS_DIR = customRoot;
+  try {
+    assert.equal(
+      isContainedProjectRepoPath(legitUnderConfigured, { forgeRoot }), true,
+      `a path under the CONFIGURED projects root (${customRoot}) must be accepted — isContainedProjectRepoPath hardcodes join(forgeRoot, 'projects') today and ignores FORGE_PROJECTS_DIR entirely`,
+    );
+    assert.equal(
+      isContainedProjectRepoPath(staleUnderDefault, { forgeRoot }), false,
+      `once a DIFFERENT root is configured, a path under the OLD hardcoded <forgeRoot>/projects default must be REJECTED — accepting it means this guard disagrees with every producer that correctly reads the configured root via resolveProjectsDir, reproducing the "a configured projectsDir could break cycle approval" class`,
+    );
+  } finally {
+    if (priorEnv === undefined) delete process.env.FORGE_PROJECTS_DIR;
+    else process.env.FORGE_PROJECTS_DIR = priorEnv;
+    rmSync(staleUnderDefault, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 pin 5, item 2 (BLOCKER, cwd-independence — kills a config load that silently returns {} because the process happened to be started from another directory): isContainedProjectRepoPath resolves a forge.config.json-configured projects root the SAME WAY regardless of process.cwd()', () => {
+  const customRoot = newOutsideDir('mpf-cwd-independent-projects-');
+  const legitUnderConfigured = join(customRoot, 'cwdproj');
+  mkdirSync(legitUnderConfigured, { recursive: true });
+  const configPath = join(forgeRoot, 'forge.config.json');
+  writeFileSync(configPath, JSON.stringify({ projectsDir: customRoot }), 'utf8');
+
+  const elsewhereCwd = newOutsideDir('mpf-elsewhere-cwd-');
+  const originalCwd = process.cwd();
+  try {
+    process.chdir(elsewhereCwd);
+    const resultFromElsewhere = isContainedProjectRepoPath(legitUnderConfigured, { forgeRoot });
+    process.chdir(forgeRoot);
+    const resultFromForgeRootCwd = isContainedProjectRepoPath(legitUnderConfigured, { forgeRoot });
+
+    assert.equal(
+      resultFromElsewhere, true,
+      `expected the configured root (forge.config.json inside forgeRoot, { projectsDir: "${customRoot}" }) to be honoured even when process.cwd() is somewhere else entirely (${elsewhereCwd}) — a bare loadConfig() call resolves its default 'forge.config.json' path against process.cwd(), finds nothing there, and silently falls back to {} (the untouched default root), wrongly rejecting this`,
+    );
+    assert.equal(
+      resultFromElsewhere, resultFromForgeRootCwd,
+      `isContainedProjectRepoPath must produce the SAME resolution regardless of process.cwd() — got ${resultFromElsewhere} from cwd=${elsewhereCwd} vs ${resultFromForgeRootCwd} from cwd=${forgeRoot}`,
+    );
+  } finally {
+    process.chdir(originalCwd);
+    rmSync(configPath, { force: true });
+  }
+});
+
+test('R4-17 pin 5, item 2 (ACCEPT control — default configuration must stay byte-identical to today): with no FORGE_PROJECTS_DIR and no forge.config.json, isContainedProjectRepoPath still resolves the projects root as exactly <forgeRoot>/projects', () => {
+  assert.equal(process.env.FORGE_PROJECTS_DIR, undefined, 'precondition: no FORGE_PROJECTS_DIR set for this control (a leaked env var from an earlier test would invalidate it)');
+  assert.ok(!existsSync(join(forgeRoot, 'forge.config.json')), 'precondition: no forge.config.json for this control (a leaked fixture from an earlier test would invalidate it)');
+
+  const legitDefault = join(forgeRoot, 'projects', 'default-control-proj');
+  mkdirSync(legitDefault, { recursive: true });
+  const outsideDefault = newOutsideDir('mpf-default-control-outside-');
+  try {
+    assert.equal(isContainedProjectRepoPath(legitDefault, { forgeRoot }), true);
+    assert.equal(isContainedProjectRepoPath(outsideDefault, { forgeRoot }), false);
+  } finally {
+    rmSync(legitDefault, { recursive: true, force: true });
+  }
 });

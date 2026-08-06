@@ -191,6 +191,25 @@ const FAMILIES: Array<{
       return { status, json, logDirName: `_preflight-fix-${json.runId}` };
     },
   },
+  // R4-17 pin 5, item 3 (MAJOR): cli/dry-bridge.ts:153 classifies
+  // POST /api/studio/onboarding/start as stub-actions/spawn-helper, claiming
+  // "...skipped with marker + event, exactly as the generic run host" — but
+  // the route (cli/ui-bridge.ts, POST /api/studio/onboarding/start) never
+  // calls dryBridgeAgentTurnMarker at all. RED now: json.dryBridge is
+  // undefined and no _dry-bridge/events.jsonl entry is written. Reuses
+  // spawnAgentDispatch (D6, same as the generic /api/agents/:slug/run
+  // dispatch), so its log dir is exactly `_logs/<runId>` — not the
+  // `_<family>-<sessionId>` shape the other five families use.
+  {
+    family: 'onboarding (spawnAgentDispatch via /api/studio/onboarding/start)',
+    eventRoute: '/api/studio/onboarding/start',
+    drive: async () => {
+      const { status, json } = await post('/api/studio/onboarding/start', {
+        project: PROJECT, inputs: { northStar: 'dry-bridge onboarding marker probe' },
+      });
+      return { status, json, logDirName: json.runId as string };
+    },
+  },
 ];
 
 for (const f of FAMILIES) {
@@ -201,3 +220,22 @@ for (const f of FAMILIES) {
     assertStubbed(json, f.eventRoute, logDirName);
   });
 }
+
+// R4-17 pin 5, item 3 (MAJOR, part (c) of the classification row's claim):
+// the row's own reason string says "the session dir, status.json and
+// prompt.md are REAL bookkeeping and still land; only the agent dispatch is
+// skipped" — this is the half of the claim that is ALREADY true today (the
+// route never even checks dry-bridge, so it always writes) and must STAY
+// true once the marker fix above lands. Not RED today by itself; it is the
+// control half of the item-3 fix, proven alongside the RED marker assertion
+// in the FAMILIES loop above.
+test('R4-17 pin 5, item 3: POST /api/studio/onboarding/start still performs its REAL bookkeeping under dry-bridge — session dir + status.json + prompt.md land', async () => {
+  const { status, json } = await post('/api/studio/onboarding/start', {
+    project: PROJECT, inputs: { northStar: 'dry-bridge bookkeeping probe 7f3c91' },
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+  const sessionDir = join(forgeRoot, 'projects', PROJECT, '_onboarding', json.sessionId as string);
+  assert.ok(existsSync(join(sessionDir, 'status.json')), 'status.json must still land under dry-bridge');
+  const prompt = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
+  assert.ok(prompt.includes('dry-bridge bookkeeping probe 7f3c91'), 'prompt.md must still render the real operator inputs under dry-bridge (D8 — never fabricated)');
+});
