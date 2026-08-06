@@ -25,16 +25,15 @@
  * context `renderToStaticMarkup` cannot provide. A real-browser journey
  * beat (a later work item) proves this end to end.
  *
- * `found`: the endpoint always answers 200 for any runId that passes its
- * `isSafeRunId` shape check (even one that was never dispatched — it reads
- * as `state: 'running', events: 0`), so there is no server-side "this run
- * never existed" signal to key off today. This client honestly reports
- * `found: false` only for a fetch that could not be resolved at all
- * (network failure, or the bridge rejecting the runId outright) — it does
- * NOT claim to detect "a syntactically valid but never-dispatched runId",
- * which the current API surface has no way to distinguish from "valid,
- * zero events so far". That gap is the same one `getAgentRunStatus` already
- * lives with today; this file does not attempt to close it.
+ * `found`: R6-04 D22 follow-up — `GET /api/agents/runs/:runId` now 404s for
+ * a runId with no `_logs/<runId>` directory at all (genuinely never
+ * dispatched), distinct from "directory exists, no events landed yet"
+ * (200, `state: 'running'`, `lines: []` — a real in-flight run). `found`
+ * mirrors the HTTP status, not the body: `resolveRunDetailFromResponse`
+ * below decides on `status` alone (any non-2xx, matching `fetch`'s own
+ * `res.ok` convention, not a 404-only special case) BEFORE it ever reads
+ * `body`, so a stray/cached body on an error response can never leak
+ * through as a live run.
  *
  * Typed outputs (`RunOutput[]`) — there is no wired data source for a
  * generic dispatched agent's artifact outputs yet (that lives on the
@@ -113,25 +112,43 @@ export function ceilingFromEvents(events: EventLogEntry[]): number | undefined {
   return typeof val === 'number' ? val : undefined;
 }
 
+/**
+ * Pure: turn one resolved fetch response (`status` + parsed JSON `body`)
+ * into a `RunDetail`. Extracted out of `fetchRunDetail` (R6-04 D22
+ * follow-up) so the status-vs-body precedence — status decides `found`
+ * BEFORE body is ever inspected, and any non-2xx status (not just 404)
+ * means not-found, mirroring `fetch`'s own `res.ok` — is unit-testable
+ * without a running bridge. `body` is untyped/unvalidated on purpose: a
+ * malformed or unexpected 200 body (null, a bare string, missing fields)
+ * degrades to the same honest defaults `fetchRunDetail` always used, never
+ * throws.
+ */
+export function resolveRunDetailFromResponse(status: number, body: unknown): RunDetail {
+  if (status < 200 || status >= 300) return NOT_FOUND_DETAIL;
+  const data = body && typeof body === 'object'
+    ? (body as { state?: unknown; costUsd?: unknown; lines?: unknown })
+    : {};
+  const rawLines = Array.isArray(data.lines) ? (data.lines as Record<string, unknown>[]) : [];
+  const events = rawLines.map(toEventLogEntry);
+  return {
+    found: true,
+    state: typeof data.state === 'string' ? data.state : 'unknown',
+    costUsd: typeof data.costUsd === 'number' ? data.costUsd : 0,
+    lines: events.map(deriveLogLine),
+    materials: materialsFromEvents(events),
+    ceilingUsd: ceilingFromEvents(events),
+    outputs: [],
+  };
+}
+
 /** Fetch + derive everything `RunView` needs for one runId. */
 export async function fetchRunDetail(runId: string): Promise<RunDetail> {
   const base = await resolveBridgeUrl();
   if (!base) return NOT_FOUND_DETAIL;
   try {
     const res = await fetch(`${base}/api/agents/runs/${encodeURIComponent(runId)}`);
-    if (!res.ok) return NOT_FOUND_DETAIL;
-    const data = (await res.json()) as { state?: string; costUsd?: number; lines?: unknown };
-    const rawLines = Array.isArray(data.lines) ? (data.lines as Record<string, unknown>[]) : [];
-    const events = rawLines.map(toEventLogEntry);
-    return {
-      found: true,
-      state: typeof data.state === 'string' ? data.state : 'unknown',
-      costUsd: typeof data.costUsd === 'number' ? data.costUsd : 0,
-      lines: events.map(deriveLogLine),
-      materials: materialsFromEvents(events),
-      ceilingUsd: ceilingFromEvents(events),
-      outputs: [],
-    };
+    const body = await res.json().catch(() => null);
+    return resolveRunDetailFromResponse(res.status, body);
   } catch {
     return NOT_FOUND_DETAIL;
   }

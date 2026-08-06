@@ -1128,15 +1128,29 @@ async function handleHttp(
   // uncapped) — both response call sites below (the early return when no
   // events file exists yet, and the main JSONL-parsing path) return `lines`
   // so the shape never differs between branches of this one endpoint.
+  //
+  // R6-04 D22 follow-up: a genuinely unknown runId (no `_logs/<runId>`
+  // directory at all — never dispatched) now 404s instead of fabricating
+  // `state: 'running'`, so `RunView.tsx`'s `found:false` prop actually has a
+  // real signal to key off. This check is deliberately keyed off the RUN
+  // DIRECTORY, not `events.jsonl` — a real, freshly-dispatched run's
+  // directory exists before its first event lands, and that case must keep
+  // reporting 200/`running`/`lines: []`, not 404.
   if (method === 'GET' && url.startsWith('/api/agents/runs/')) {
     const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length));
     if (!isSafeRunId(runId)) {
       sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
       return;
     }
-    const eventsPath = join(ctx.logsRoot, runId, 'events.jsonl');
+    const runDir = join(ctx.logsRoot, runId);
+    if (!existsSync(runDir)) {
+      sendJson(res, 404, { error: `no run found for id ${JSON.stringify(runId)}` }, origin);
+      return;
+    }
+    const eventsPath = join(runDir, 'events.jsonl');
     if (!existsSync(eventsPath)) {
-      // Dispatched but no event yet (or spawn suppressed with no log dir).
+      // Dispatched (the run directory exists), but no event has landed yet
+      // (or spawn was suppressed before it could write one).
       sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0, lines: [] }, origin);
       return;
     }
