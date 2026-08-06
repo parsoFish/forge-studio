@@ -304,7 +304,29 @@ export function checkFlowTriggers(
     // (it iterates CHARACTERS) — the membership loop below must never run
     // against a malformed value, or a single bad string emits one nonsense
     // finding per letter instead of one type error.
-    if (trigger.projects !== undefined) {
+    //
+    // EXCLUSION (R2-08 addendum, 2026-08-07, WI forge-f9g,
+    // docs/decisions/027-studio-object-model.md): `on: merged` is EXCLUDED
+    // from `projects:` scoping entirely — checked FIRST, before shape/
+    // membership, and exclusively (an `on:merged` row never falls through to
+    // those checks). `on: merged` dispatches INLINE from
+    // `orchestrator/finalize-merged.ts` via `resolveMergeAgentHandler` — it
+    // never stages a claimable `FlowRunRequest`, so `drainFlowRunRequests`'s
+    // scope enforcement (the ONE enforcement point every other kind reaches)
+    // never runs for it. A declared scope here — including `projects: []`,
+    // still a DECLARED scope, not an absent one — would therefore be
+    // silently unenforced, so it is made UNAUTHORABLE rather than left
+    // fail-open. Every OTHER kind (cron/webhook/pr-merged/issue-raised/
+    // agent-complete/flow-complete) all reach the drain and are unaffected.
+    if (trigger.projects !== undefined && trigger.on === 'merged') {
+      findings.push(
+        err(
+          obj,
+          'trigger-projects',
+          `"projects:" cannot be declared on an on:"merged" trigger — on:merged dispatches INLINE from finalize-merged.ts (resolveMergeAgentHandler), never staging a claimable request, so drainFlowRunRequests's "projects:" enforcement never runs for it; a declared scope (including an empty "projects: []") would be silently unenforced. Tracked as forge-f9g — remove "projects:", or use on:"pr-merged" (drain-enforced, per-project) instead.`,
+        ),
+      );
+    } else if (trigger.projects !== undefined) {
       const shapeOk = Array.isArray(trigger.projects) && trigger.projects.every((p) => typeof p === 'string');
       if (!shapeOk) {
         findings.push(
