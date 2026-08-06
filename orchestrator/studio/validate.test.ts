@@ -10,6 +10,7 @@ import type {
   AgentDefinition,
   Catalog,
   FlowDefinition,
+  FlowTrigger,
   KbDescriptor,
   ProjectDefinition,
 } from './types.ts';
@@ -942,6 +943,131 @@ describe('validateFlow — trigger-kind-reserved', () => {
     });
     const findings = validateFlow(flow, makeAgentMap(makeAgent()));
     assert.ok(!findings.some((x) => x.check === 'trigger-kind-reserved'));
+  });
+});
+
+/**
+ * ACCEPTANCE TESTS (T3, R2-08-F2) — `agent-complete` flips reserved → shipped.
+ *
+ * NOTE for whoever implements F2: the pre-existing test immediately above,
+ * "reserved kind (agent-complete) → error trigger-kind-reserved" (in the
+ * `trigger-kind-reserved` describe block), asserts the OPPOSITE of what this
+ * block pins — it is correct for TODAY's (pre-F2) registry and becomes wrong
+ * the moment `TRIGGER_KINDS`' `agent-complete` row flips `status: 'reserved'
+ * → 'shipped'` (ADR-027's R2-08 amendment, "Registry rows added" section).
+ * That is an unavoidable, intended consequence of shipping F2 correctly — per
+ * this WI's immutable-gates contract, the T3 test-writer may not edit an
+ * existing test, so it was left untouched. The IMPLEMENTER must update that
+ * one assertion (swap its "reserved" example for `manual` or `feed` — see the
+ * green-on-arrival tests below, which already use those two and must stay
+ * green) in the same change that ships F2.
+ */
+describe('validateFlow — trigger-kind-reserved after R2-08-F2 (agent-complete shipped)', () => {
+  it('(RED) agent-complete is NO LONGER reserved once its TRIGGER_KINDS row ships → no trigger-kind-reserved finding', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'agent-complete', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowIds: new Set(['my-flow', 'other-flow']) });
+    assert.ok(
+      !findings.some((x) => x.check === 'trigger-kind-reserved'),
+      `expected NO trigger-kind-reserved finding for agent-complete once F2 ships — got ${JSON.stringify(findings)}`,
+    );
+  });
+
+  it('(green-on-arrival) manual is STILL reserved after F2 ships — kills flipping the WHOLE registry to shipped instead of just the one row', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'manual', target: { kind: 'agent', ref: 'my-agent' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-kind-reserved');
+    assert.ok(f, 'expected "manual" to remain schema-reserved after F2 ships — a fix that flips the whole registry would make this finding disappear too');
+    assert.equal(f!.level, 'error');
+  });
+
+  it('(green-on-arrival) feed is STILL reserved after F2 ships — same kill as above, second reserved kind', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'feed', target: { kind: 'agent', ref: 'my-agent' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    const f = findings.find((x) => x.check === 'trigger-kind-reserved');
+    assert.ok(f, 'expected "feed" to remain schema-reserved after F2 ships');
+    assert.equal(f!.level, 'error');
+  });
+});
+
+/**
+ * ACCEPTANCE TESTS (T3, R2-08-F1) — the `trigger-projects` lint check.
+ *
+ * PINNED CONTRACT: `TriggerCheckOpts` (orchestrator/studio/validate-triggers.ts)
+ * gains an optional `projectIds?: ReadonlySet<string>` field — mirroring the
+ * existing `flowIds` opt exactly (same shape, same "omitted ⇒ skip the check"
+ * precedent already established for `flowIds`/`flowProjectOf`). `checkFlowTriggers`
+ * gains a new finding, check id `trigger-projects`, `surface/enum` shape: an
+ * error naming both the offending value and the full allowed set, exactly as
+ * `readiness`'s `surface/enum` check does for `def.surface`. `cli/studio-lint.ts`
+ * already computes the exact enumeration this needs at line ~389
+ * (`const projectIds = new Set(discoveredProjects.map((p) => p.id));`,
+ * currently used only for the KB `binding-ref` check) — F1 threads that SAME
+ * set into `validateFlow(flow, agentMap, { flowIds, flowProjectOf, projectIds })`.
+ */
+describe('validateFlow — trigger-projects (R2-08-F1)', () => {
+  it('(RED) projects: names an id absent from the project enumeration → error trigger-projects naming the offending value AND the allowed set', () => {
+    const flow = makeFlow({
+      triggers: [
+        {
+          on: 'flow-complete',
+          target: { kind: 'flow', ref: 'other-flow' },
+          projects: ['ghost-project'],
+        } as unknown as FlowTrigger,
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['betterado', 'gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    const f = findings.find((x) => x.check === 'trigger-projects');
+    assert.ok(f, `expected a trigger-projects finding — got ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.match(f!.message, /ghost-project/, 'message must name the offending value');
+    assert.match(f!.message, /betterado/, 'message must name the allowed set (surface/enum shape)');
+    assert.match(f!.message, /gitpulse/, 'message must name the allowed set (surface/enum shape)');
+  });
+
+  it('(green-on-arrival — vacuously true until the check exists, so it only becomes meaningful paired with the RED test above) a VALID project id in projects: produces no trigger-projects finding — kills a rule that errors on everything regardless of validity', () => {
+    const flow = makeFlow({
+      triggers: [
+        {
+          on: 'flow-complete',
+          target: { kind: 'flow', ref: 'other-flow' },
+          projects: ['gitpulse'],
+        } as unknown as FlowTrigger,
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['betterado', 'gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    assert.ok(
+      !findings.some((x) => x.check === 'trigger-projects'),
+      `expected no trigger-projects finding for a valid id — got ${JSON.stringify(findings)}`,
+    );
+  });
+
+  it('(green-on-arrival) omitted projectIds opt → the check is skipped, mirroring the flowIds/flowProjectOf precedent — kills a fix that throws instead of skipping for callers that have not consulted the registry', () => {
+    const flow = makeFlow({
+      triggers: [
+        {
+          on: 'flow-complete',
+          target: { kind: 'flow', ref: 'other-flow' },
+          projects: ['anything-goes-here'],
+        } as unknown as FlowTrigger,
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+    assert.ok(
+      !findings.some((x) => x.check === 'trigger-projects'),
+      `expected no trigger-projects finding when projectIds is omitted — got ${JSON.stringify(findings)}`,
+    );
   });
 });
 

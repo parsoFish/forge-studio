@@ -80,7 +80,37 @@ test('ADR-041 registry: seven kinds, reserved rows have no runtime, merged is an
     [...TRIGGER_KIND_IDS],
     ['flow-complete', 'agent-complete', 'merged', 'manual', 'cron', 'webhook', 'feed'],
   );
+  // NOTE for the R2-08-F2 implementer: this exact-array assertion pins
+  // TODAY's (pre-F2) shipped set. Flipping agent-complete's row to
+  // status:'shipped' (see the two new tests below) legitimately changes
+  // SHIPPED_TRIGGER_KIND_IDS's contents — this assertion and the one below it
+  // must be updated (insert 'agent-complete' after 'flow-complete', matching
+  // TRIGGER_KINDS' own declaration order) in the SAME change that ships F2.
+  // Per this WI's immutable-gates contract the T3 test-writer may not edit an
+  // existing test, so it was intentionally left as-is; see the two new tests
+  // below for the actual RED acceptance criteria.
   assert.deepEqual([...SHIPPED_TRIGGER_KIND_IDS], ['flow-complete', 'merged', 'cron', 'webhook']);
   const merged = TRIGGER_KINDS.find((k) => k.id === 'merged');
   assert.equal(merged?.origin, 'ootb', 'merged is a domain-event row the OOTB suite contributes, not a platform literal');
+});
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (T3, R2-08-F2) — agent-complete flips reserved → shipped.
+// ---------------------------------------------------------------------------
+
+test('(RED) [F2 #10] agent-complete TRIGGER_KINDS row is shipped, not reserved', () => {
+  const row = TRIGGER_KINDS.find((k) => k.id === 'agent-complete');
+  assert.ok(row, 'expected an agent-complete row in TRIGGER_KINDS');
+  assert.equal(
+    row!.status,
+    'shipped',
+    `expected agent-complete's status to be "shipped" (ADR-027's R2-08 amendment: "agent-complete (R2-08-F2) likewise flips status: reserved → shipped") — got "${row!.status}"`,
+  );
+});
+
+test('(RED) [F2 #10] agent-complete appears in SHIPPED_TRIGGER_KIND_IDS', () => {
+  assert.ok(
+    (SHIPPED_TRIGGER_KIND_IDS as readonly string[]).includes('agent-complete'),
+    `expected SHIPPED_TRIGGER_KIND_IDS to include "agent-complete" — got ${JSON.stringify(SHIPPED_TRIGGER_KIND_IDS)}`,
+  );
 });
