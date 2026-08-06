@@ -188,6 +188,7 @@ export const RUN_ORDER = [
   ['connections', 'connections-readiness-block'],
 
   ['stand-up-onboard', 'su-onboard-project'],
+  ['stand-up-onboard', 'su-onboard-session'],
   ['stand-up-onboard', 'su-onboard-preflight'],
 
   ['stand-up-create', 'su-create-project'],

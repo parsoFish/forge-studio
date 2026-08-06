@@ -19,6 +19,13 @@ function writeOnboardedAgentsMd(projectDir) {
     '## Conventions\n\nNever edit tests to make them pass; fail fast at the CLI boundary.\n');
 }
 
+// R4-17: the staged onboarding session id, captured by `su-onboard-project`
+// from the real dispatch response and consumed by `su-onboard-session`. Module
+// scope because beats are separate `drive` functions sharing no ctx; the
+// journey's own RUN_ORDER guarantees the producing beat runs first, and the
+// consumer checks explicitly rather than assuming it was populated.
+let j4SessionId = '';
+
 export const journey = defineJourney({
     id: 'stand-up-onboard',
     title: 'Stand up a project (onboard existing)',
@@ -132,6 +139,13 @@ export const journey = defineJourney({
               } catch { /* dispatch did not surface a runId in time */ }
               check(onbRunId.length > 0,
                 `J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got "${onbRunId}") — same runner as the agent page`);
+              // R4-17: the same dispatch now ALSO opens a real staged session on
+              // disk (<projectsRoot>/<project>/_onboarding/<sid>/), surfaced here
+              // as data-onboard-session-id. The next beat consumes it.
+              j4SessionId = await page.evaluate(() =>
+                document.querySelector('[data-section="onboard-with-agent"]')?.getAttribute('data-onboard-session-id') ?? '');
+              check(j4SessionId.length > 0,
+                `J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got "${j4SessionId}")`);
               await frame(page, 'j4-2-onboard-agent', 'J4 — the onboarding agent dispatched from /projects (R4-02; turn stubbed under the demo no-spawn seam)');
 
               // Clip: a fresh context re-drives the SAME onboarding form, but with its own
@@ -180,6 +194,65 @@ export const journey = defineJourney({
               }
               check(j4LintOk, 'J4: `forge studio lint` stays green with the onboarded project (exit 0)');
 
+        },
+      },
+      {
+        id: 'su-onboard-session',
+        title: 'the onboarding session stages the contract, build-out visible',
+        narration: 'The dispatch the previous beat fired is not fire-and-forget any more: it opened a real staged session on the shared R2-10 shell. Opening it shows the contract building out stage by stage — contract, instructions, secrets, demo, roadmap — each row derived from the project\'s own artifacts on disk, with secrets shown by NAME only. The same five rows are served by the project-page data contract R4-12-F1 renders in batch D.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[SU] the onboarding session — contract build-out');
+              check(j4SessionId.length > 0,
+                `J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got "${j4SessionId}")`);
+              if (j4SessionId.length === 0) return; // nothing real to drive; the check above already failed
+
+              await page.goto(`${watch.uiUrl}/sessions/onboarding/${j4SessionId}?project=${J4_PROJECT}`,
+                { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page-ready]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 }).catch(() => {});
+              await caption(page, 'The onboarding session — the contract building out, stage by stage.');
+
+              // The shell resolved the NEW session kind off the live registry (no
+              // route code per kind) and rendered the contract-buildout artifact.
+              const buildout = await page.evaluate(() => {
+                const el = document.querySelector('[data-component="contract-buildout"]');
+                if (el === null) return null;
+                const rows = [...document.querySelectorAll('[data-checklist-row]')]
+                  .map((r) => ({ stage: r.getAttribute('data-checklist-row'), status: r.getAttribute('data-checklist-status') }));
+                return { mode: el.getAttribute('data-buildout-mode'), rowCount: el.getAttribute('data-buildout-row-count'), rows };
+              });
+              check(buildout !== null,
+                'J4b (R4-17-F1): the session shell renders the contract-buildout artifact for the new `onboarding` session kind');
+              check(buildout !== null && buildout.rowCount === '5',
+                `J4b (R4-17-F1/D2): all FIVE contract stages are reported, present or absent (got ${buildout?.rowCount ?? 'none'}) — an absent artifact is a row, never a dropped row`);
+              const stages = (buildout?.rows ?? []).map((r) => r.stage).join(',');
+              check(stages === 'contract,instructions,secrets,demo,roadmap',
+                `J4b (R4-17-F1/D2): the stages are the declared vocabulary in declared order (got "${stages}")`);
+              // The onboarded project really does have a declared gate and a scaffolded
+              // roadmap.md, so those two rows must read `present` off real artifacts —
+              // a renderer that reported everything absent would pass the shape checks above.
+              const byStage = Object.fromEntries((buildout?.rows ?? []).map((r) => [r.stage, r.status]));
+              check(byStage.contract === 'present' && byStage.roadmap === 'present',
+                `J4b (R4-17-F1): the rows read REAL artifacts — this project has a declared gate and a scaffolded roadmap.md (contract=${byStage.contract}, roadmap=${byStage.roadmap})`);
+              await frame(page, 'j4-3-onboard-session', 'J4b — the staged onboarding session: the contract build-out, five stages against real artifacts');
+
+              // The project-page data contract (R4-17 D9) R4-12-F1 renders in batch D:
+              // the SAME rows, off the same derivation, on their own route.
+              // Node-side fetch (the shipped idiom in hooks.mjs/community.mjs) — a
+              // browser-side fetch to the bridge origin would be a CORS test, not a
+              // data-contract test.
+              const stagesRes = await fetch(`${watch.bridgeUrl}/api/studio/projects/${J4_PROJECT}/contract-stages`);
+              const stagesPayload = stagesRes.ok ? await stagesRes.json() : { ok: false, status: stagesRes.status };
+              check(stagesPayload?.ok === true && Array.isArray(stagesPayload.stages) && stagesPayload.stages.length === 5,
+                `J4b (R4-17-F1/D9): GET /api/studio/projects/<id>/contract-stages serves the same five staged rows (ok=${stagesPayload?.ok}, n=${stagesPayload?.stages?.length ?? 0})`);
+              // D3, the security invariant: secrets are NAMES ONLY. This project declares
+              // none, so the row is absent AND carries no detail — never a masked value.
+              const secretsRow = (stagesPayload?.stages ?? []).find((s) => s.stage === 'secrets');
+              check(secretsRow !== undefined && Array.isArray(secretsRow.detail)
+                && secretsRow.detail.every((d) => !/[•*]{3,}/.test(d)),
+                'J4b (R4-17-F1/D3): the secrets row carries declared NAMES only — no value, and no invented masked placeholder standing in for one');
         },
       },
       {
