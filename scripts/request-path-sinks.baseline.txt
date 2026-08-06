@@ -50,7 +50,7 @@ cli/bridge-studio-skills.ts mkdirSync 1
 cli/bridge-studio-skills.ts readFileSync 1
 cli/bridge-studio-skills.ts writeFileSync 1
 cli/bridge-studio-writes.ts execFileSync 2
-cli/bridge-studio-writes.ts existsSync 8
+cli/bridge-studio-writes.ts existsSync 10
 cli/bridge-studio-writes.ts mkdirSync 7
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 2
@@ -306,7 +306,7 @@ orchestrator/project-brain-builder-runner.ts readdirSync 1
 orchestrator/project-brain-builder-runner.ts readFileSync 1
 orchestrator/project-brain-builder-runner.ts writeFileSync 1
 orchestrator/project-brain-seed.ts existsSync 1
-orchestrator/project-brain-seed.ts mkdirSync 1
+orchestrator/project-brain-seed.ts mkdirSync 2
 orchestrator/project-brain-seed.ts writeFileSync 1
 orchestrator/project-config.ts existsSync 3
 orchestrator/project-config.ts readFileSync 3
