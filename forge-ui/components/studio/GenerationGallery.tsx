@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 
-import { generationGalleryView, type GenerationGalleryView } from '@/lib/session-artifact-view';
+import { generationGalleryView, preferredGenerationFor, type GenerationGalleryView } from '@/lib/session-artifact-view';
 import type { GenerationGalleryArtifact, GenerationGalleryEntry, GenerationGalleryItem } from '@/lib/session-client';
 import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
 
@@ -19,12 +19,22 @@ import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
 // `GenerationGalleryView` in state, and does NOT key any effect on
 // `artifact` (both of those reset on every new reference, killing the
 // operator's pick within 3 seconds — the exact bug this fixes). Instead it
-// stores only the operator's chosen generation NUMBER — a scalar that
-// survives a fresh `artifact` reference because `generationGalleryView`
-// looks it up BY VALUE, never by array position — and derives the view
-// fresh on every render. `null` means "no explicit pick yet"; the view's
-// own default (newest) takes over, exactly matching the pre-fix behaviour
-// until the operator clicks one.
+// derives the view fresh on every render via `generationGalleryView` looked
+// up BY VALUE, never by array position.
+//
+// R4-16 round 2 (pin 3, Finding C, MAJOR) — the cross-session selection
+// leak: a bare `useState<number | null>` survived a session SWITCH too, not
+// just a poll tick — `projects/[id]/page.tsx`'s `handleDemoSessionStarted`
+// swaps `sessionId` without unmounting this component, so a generation
+// picked in session A silently kept rendering (and would be what
+// "finalize" sends) once the panel moved on to session B. The stored
+// selection now carries the session id it was made in; `preferredGenerationFor`
+// (lib/session-artifact-view.ts) only honours it when that id still matches
+// the CURRENTLY-DISPLAYED `sessionId` — never via an artifact-identity
+// `useEffect` (that was the earlier, now-replaced fix shape). `null` means
+// "no explicit pick yet in this render"; the view's own default (newest)
+// takes over, exactly matching the pre-fix behaviour until the operator
+// clicks one.
 //
 // `project`/`sessionId` are OPTIONAL: this component is reachable both from
 // DemoBuilderPanel (project page, R1-03-F2 entry — always has both) and from
@@ -32,7 +42,9 @@ import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
 // SessionArtifactPane (D3: "falls out of the registry, zero extra code" —
 // that route does not thread project/sessionId through today). Without
 // them, per-item "view" links and the "finalize" action are honestly
-// disabled rather than fabricating a broken link.
+// disabled rather than fabricating a broken link; the selection tracker
+// falls back to `''` as a stable per-mount identity (a route with no
+// sessionId never swaps sessions, so this never leaks anything).
 // ---------------------------------------------------------------------------
 
 export function GenerationGallery({
@@ -50,8 +62,11 @@ export function GenerationGallery({
    *  disabled — never a silently-swallowed click. */
   onFinalize?: (generationNumber: number) => void;
 }): JSX.Element {
-  const [selectedNumber, setSelectedNumber] = useState<number | null>(null);
-  const view: GenerationGalleryView = generationGalleryView(artifact, selectedNumber ?? undefined);
+  // Stable per-mount identity for a caller that doesn't thread `sessionId`
+  // (the deep-link session-shell route) — see the module header above.
+  const effectiveSessionId = sessionId ?? '';
+  const [selection, setSelection] = useState<{ sessionId: string; number: number } | null>(null);
+  const view: GenerationGalleryView = generationGalleryView(artifact, preferredGenerationFor(selection, effectiveSessionId));
 
   const selected = view.selectedIndex >= 0 ? view.generations[view.selectedIndex] : null;
 
@@ -78,7 +93,7 @@ export function GenerationGallery({
                   data-action="select-generation"
                   data-generation-number={g.number}
                   data-generation-selected={isSelected ? 'true' : 'false'}
-                  onClick={() => setSelectedNumber(g.number)}
+                  onClick={() => setSelection({ sessionId: effectiveSessionId, number: g.number })}
                   style={{
                     fontSize: 12,
                     fontWeight: 600,

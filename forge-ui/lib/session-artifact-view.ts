@@ -127,7 +127,7 @@ export function selectBrainStructureFile(view: BrainStructureView, index: number
 }
 
 // ---------------------------------------------------------------------------
-// generationGalleryView / selectGeneration — R4-16
+// generationGalleryView / preferredGenerationFor — R4-16
 // ---------------------------------------------------------------------------
 
 export type GenerationGalleryView = {
@@ -179,26 +179,29 @@ export function generationGalleryView(
   };
 }
 
-function clampGenerationIndex(index: number, length: number): number {
-  if (length === 0) return -1;
-  if (index < 0) return 0;
-  if (index > length - 1) return length - 1;
-  return index;
-}
-
-/** REUSE EVALUATION (R4-16, recorded per this repo's "reuse, don't fork"
- *  rule): `selectFile` (file-package.ts) clamps an index into a
- *  `{path, body}` FILE list — a generation is not a file (it is
- *  `{number, createdAt, feedback, targetElement, items[]}`; forcing it
- *  through `PackageFile` would mean fabricating a `body` field nothing on
- *  the wire provides, exactly what D7 forbids), so `selectFile` cannot back
- *  this selector without inventing data. `clampGenerationIndex` above is a
- *  same-shape reimplementation of `file-package.ts`'s OWN `clampIndex` (not
- *  a divergent one) — the clamping RULE is reused faithfully; only the
- *  wrapped state's element type differs. Returns a NEW view object
- *  (immutability); the input view is never mutated. */
-export function selectGeneration(view: GenerationGalleryView, index: number): GenerationGalleryView {
-  return { ...view, selectedIndex: clampGenerationIndex(index, view.generations.length) };
+/**
+ * R4-16 round 2 (pin 3, Finding C, MAJOR) — the pure decision behind the
+ * cross-session selection-leak fix. `GenerationGallery` used to store a bare
+ * `useState<number | null>`, so a generation picked while viewing session A
+ * silently kept rendering after the panel swapped to session B (the caller
+ * swaps `sessionId` without unmounting). This function is what lets the
+ * component derive its view fresh every render, with NO artifact-identity
+ * `useEffect` (that shape was the ROUND-1 defect this replaces — an effect
+ * keyed on the artifact's object reference resets on every 3s poll tick even
+ * when nothing the operator picked actually changed, AT-112).
+ *
+ * Returns `selection.number` iff `selection.sessionId === sessionId` — the
+ * session currently on screen — else `undefined`, so `generationGalleryView`
+ * falls back to its existing, already-pinned newest-generation default
+ * (AT-101/111). `null` (nothing picked yet, in any session) also yields
+ * `undefined`.
+ */
+export function preferredGenerationFor(
+  selection: { sessionId: string; number: number } | null,
+  sessionId: string,
+): number | undefined {
+  if (selection === null) return undefined;
+  return selection.sessionId === sessionId ? selection.number : undefined;
 }
 
 // ---------------------------------------------------------------------------

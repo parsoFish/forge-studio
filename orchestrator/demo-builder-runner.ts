@@ -596,11 +596,27 @@ function isAllowedSkillRelPath(relPath: string): boolean {
  *  outside location (AT-45 — the allowlist only proves the path STRING's
  *  shape, never where it resolves). Walks up from `dir` to the closest
  *  EXISTING ancestor — the allowlist already forbids ".." and absolute paths,
- *  so once that ancestor is verified contained, any remaining NEW segments
- *  `mkdirSync(..., {recursive:true})` creates under it cannot escape (they
- *  are plain literal directory names, not symlinks) — and verifies THAT
+ *  so once that ancestor is verified contained, the remaining NEW segments
+ *  are plain literal directory names, not symlinks — and verifies THAT
  *  ancestor's realpath stays inside `repoRealPath`. Fails closed (false) if
- *  no ancestor can be resolved at all. */
+ *  no ancestor can be resolved at all.
+ *
+ *  Honest limit (R4-16 round 2), same trust tier as the TOCTOU residual
+ *  documented in `orchestrator/studio/session-transcript.ts`'s header — read
+ *  that first; this follows the same disclosure shape (mechanism, trust
+ *  tier, why accepted). This check and the `mkdirSync`/`writeFileSync` calls
+ *  it gates (this function's caller, above) are separate syscalls, not one
+ *  atomic operation: "cannot escape" above describes the segments as they
+ *  are checked, not a guarantee that holds across time. An attacker able to
+ *  race a symlink into one of those NEW segments in the gap between this
+ *  check returning `true` and the write actually landing defeats
+ *  containment. Accepted, not fixed, on the same basis as
+ *  session-transcript.ts's TOCTOU note: mounting that race requires the same
+ *  local write access inside the project repo that would let an attacker
+ *  write the outside content in directly, so closing it (e.g. holding an
+ *  open directory file descriptor from `mkdir` instead of re-resolving paths
+ *  by name) buys negligible additional protection for real implementation
+ *  cost. */
 function closestExistingAncestorContained(dir: string, repoRealPath: string): boolean {
   let candidate = dir;
   while (!existsSync(candidate)) {
