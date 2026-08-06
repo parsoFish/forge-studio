@@ -123,6 +123,7 @@ import {
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
+import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -1566,6 +1567,28 @@ function architectSessionDir(projectsRoot: string, project: string, sessionId: s
   return join(projectsRoot, project, '_architect', sessionId);
 }
 
+/**
+ * R4-16 PIN 4 (SEC-02, forge-d1f) — `/api/architect/start`,
+ * `/api/instructions/start`, and `/api/demo-builder/start` each accept an
+ * optional caller-supplied `projectRepoPath` and persist it verbatim into
+ * the session's `status.json` as `project_repo_path`. That field becomes the
+ * agent's `cwd`, the target of real `git` branch-create + commit calls, and
+ * the base for every artifact write — reproduced live: an unvalidated field
+ * served a planted sentinel outside the forge tree and let a forged status
+ * write real artifacts into an arbitrary git repo.
+ *
+ * Reuses the SHIPPED guard (`isContainedProjectRepoPath`,
+ * `cli/manifest-path-guard.ts`) rather than a new check — same choke point
+ * `cli/bridge-recovery.ts` already uses for `worktree_path` /
+ * `project_repo_path` on the recovery routes. Returns the offending value
+ * (so the caller can name it in the 400) when present-but-not-contained,
+ * `null` when absent or genuinely contained under `<forgeRoot>/projects/`.
+ */
+function invalidProjectRepoPath(candidate: string | undefined, forgeRoot: string): string | null {
+  if (candidate === undefined || candidate === '') return null;
+  return isContainedProjectRepoPath(candidate, { forgeRoot }) ? null : candidate;
+}
+
 function readJsonFile<T>(path: string): T | null {
   if (!existsSync(path)) return null;
   try { return JSON.parse(readFileSync(path, 'utf8')) as T; } catch { return null; }
@@ -1672,6 +1695,13 @@ async function handleArchitect(
       const body = (await readJson(req)) as { project?: string; idea?: string; projectRepoPath?: string };
       if (!body.project || !body.idea) {
         sendJson(res, 400, { error: 'project and idea are required' }, origin);
+        return true;
+      }
+      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/writeFileSync/status
+      // write. See invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
       }
       const sessionId = newArchitectSessionId();
@@ -1948,6 +1978,15 @@ async function handleInstructions(
       const body = (await readJson(req)) as { project?: string; mode?: 'init' | 'edit'; projectRepoPath?: string };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      // SEC-02 (forge-d1f) — reject BEFORE the readAgentInstructionsFile read
+      // below (an unvalidated READ through the field, not just a write
+      // target) and before any mkdirSync/status write. See
+      // invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
       }
       const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
@@ -2516,6 +2555,13 @@ async function handleDemoBuilder(
       const body = (await readJson(req)) as { project?: string; mode?: 'create' | 'update'; projectRepoPath?: string; targetElement?: string };
       if (!body.project) {
         sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through
+      // read/status write. See invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
       }
       // The CREATE case — `dirOutcome.dir` does not exist on disk yet;
