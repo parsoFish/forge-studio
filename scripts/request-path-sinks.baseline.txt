@@ -92,6 +92,8 @@ cli/forge-watch.ts existsSync 1
 cli/forge-watch.ts renameSync 1
 cli/forge-watch.ts spawn 2
 cli/forge-watch.ts writeFileSync 1
+cli/materials-staging.ts mkdirSync 1
+cli/materials-staging.ts writeFileSync 1
 cli/metrics.ts existsSync 2
 cli/metrics.ts readdirSync 1
 cli/metrics.ts readFileSync 1
@@ -111,7 +113,7 @@ cli/reflect-reconcile.ts statSync 1
 cli/studio-path-guard.ts lstatSync 2
 cli/studio-path-guard.ts realpathSync 2
 cli/ui-bridge.ts existsSync 47
-cli/ui-bridge.ts mkdirSync 8
+cli/ui-bridge.ts mkdirSync 9
 cli/ui-bridge.ts openSync 3
 cli/ui-bridge.ts readdirSync 13
 cli/ui-bridge.ts readFileSync 15
