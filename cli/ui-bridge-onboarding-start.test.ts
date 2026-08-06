@@ -172,17 +172,118 @@ test('R4-17 AT-5: POST /api/studio/onboarding/start — no "inputs" field at all
 // D6 — identical dispatch, verified end-to-end via the SHARED run-status
 // surface (real client path, not reflection on a private helper) (AT-6)
 // ---------------------------------------------------------------------------
+//
+// AMENDED (R6-04 D22, cross-initiative re-pin — test-writer of record for
+// both R4-17 and R6-04 in this session): AT-6 previously asserted an exact
+// `assert.equal(statusRes.status, 200)`. That assertion was stronger than
+// AT-6's own stated rationale ever required, and it was passing for the
+// WRONG reason. This file's `before()` runs the whole suite under
+// FORGE_ARCHITECT_NO_SPAWN=1 — and `spawnAgentDispatch` (cli/ui-bridge.ts)
+// returns BEFORE its `mkdirSync(logDir, ...)` call whenever NO_SPAWN (or
+// dry-bridge) is set:
+//
+//   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+//   ...
+//   const logDir = join(forgeRoot, '_logs', runId);
+//   mkdirSync(logDir, { recursive: true });   // <- never reached here
+//
+// So under THIS file's own harness, an onboarding-issued runId NEVER gets a
+// `_logs/<runId>` directory — identically to a runId minted by the generic
+// `POST /api/agents/:slug/run` route under the same suppression. Once
+// `GET /api/agents/runs/:runId` distinguishes "no run directory at all"
+// (404) from "directory exists, no events yet" (200/running) — R6-04 D22,
+// the fix that makes RunView.tsx's `found` prop reachable — this exact
+// runId now correctly 404s. The literal 200 was an artifact of the route's
+// old always-200 behaviour, not of the property AT-6 actually set out to
+// prove (its own assertion message, unchanged below, has always named the
+// real failure mode as a 400 — "a parallel, incompatible runId scheme would
+// 400 here" — never a 404).
+//
+// D22 did not break AT-6's intent; it exposed that the assertion was
+// coupled to a permissiveness this codebase has since removed. Per ruling:
+// leave R5-01-F1 (cli/ui-bridge-dry-spawn.test.ts, the shipped invariant
+// that dry-bridge must NOT create that same directory) untouched — it is a
+// correct, working detector for its OWN invariant — and amend AT-6 instead
+// to test what its rationale actually claims:
+//
+//   1. the scheme is ACCEPTED by the shared surface (not 400 — the failure
+//      mode AT-6's own message names);
+//   2. EQUIVALENCE — an onboarding runId and a runId from the generic
+//      POST /api/agents/:slug/run route, dispatched in the SAME harness
+//      state, land on the SAME status on the shared surface. This is a
+//      DIRECT proof of "identical plumbing, not a parallel one" — strictly
+//      stronger than pinning either route's absolute status code, and it
+//      stays true whatever that code is;
+//   3. the body shape matches whatever status the equivalence establishes
+//      (a 404 body carries `{error}`, never the old `{ok:true}`).
+// ---------------------------------------------------------------------------
 
-test('R4-17 AT-6 (D6): the returned runId is a REAL run identity usable on the SAME shared GET /api/agents/runs/<runId> status-poll surface the generic dispatch route uses — proves this route rides the identical dispatch plumbing, not a parallel one', async () => {
-  const res = await fetch(`${url}/api/studio/onboarding/start`, {
+test('R4-17 AT-6 (D6, AMENDED — R6-04 D22): the onboarding runId is a REAL run identity on the SAME shared GET /api/agents/runs/<runId> status-poll surface the generic dispatch route uses — proved by STATUS EQUIVALENCE with a runId from POST /api/agents/:slug/run in the SAME harness state, not by either route\'s absolute status code', async () => {
+  // A comparable fixture agent for the generic dispatch route — mirrors
+  // cli/ui-bridge-agent-run.test.ts's own `studioAgent()` fixture shape.
+  // This slug is used by NO other test in this file.
+  const equivSlug = 'onboarding-at6-equivalence-agent';
+  mkdirSync(join(forgeRoot, 'skills', equivSlug), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', equivSlug, 'SKILL.md'), `---
+name: ${equivSlug}
+description: AT-6 equivalence fixture
+purpose: prove the onboarding route's runId behaves identically to the generic dispatch route's runId on the shared status-poll surface
+brainAccess: advisory
+interactivity: Autonomous once launched; asks no questions.
+surface: unattended
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: []
+runtime:
+  sdk: claude
+  strategy: fixed
+  model: claude-sonnet-4-6
+allowed-tools: [Read]
+disallowed-tools: [Bash]
+---
+
+Fixture body for ${equivSlug}.
+`);
+
+  const onboardingRes = await fetch(`${url}/api/studio/onboarding/start`, {
     method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'demoproj' }),
   });
-  const { runId } = (await res.json()) as { runId: string };
+  const { runId: onboardingRunId } = (await onboardingRes.json()) as { runId: string };
 
-  const statusRes = await fetch(`${url}/api/agents/runs/${encodeURIComponent(runId)}`);
-  assert.equal(statusRes.status, 200, 'the runId this route hands back must be a valid identity on the SAME shared run-status route the generic /api/agents/:slug/run dispatch uses — a parallel, incompatible runId scheme would 400 here');
-  const statusBody = (await statusRes.json()) as { ok: boolean; state: string };
-  assert.equal(statusBody.ok, true);
+  const genericRes = await fetch(`${url}/api/agents/${equivSlug}/run`, {
+    method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'demoproj' }),
+  });
+  const { runId: genericRunId } = (await genericRes.json()) as { runId: string };
+
+  const [onboardingStatusRes, genericStatusRes] = await Promise.all([
+    fetch(`${url}/api/agents/runs/${encodeURIComponent(onboardingRunId)}`),
+    fetch(`${url}/api/agents/runs/${encodeURIComponent(genericRunId)}`),
+  ]);
+
+  // (1) accepted, not rejected as malformed — the failure mode AT-6's own
+  // message has always named.
+  assert.notEqual(
+    onboardingStatusRes.status, 400,
+    'the onboarding runId must never be rejected as a malformed/incompatible identity by the shared status-poll surface',
+  );
+
+  // (2) EQUIVALENCE — the direct proof of "identical plumbing, not a
+  // parallel one".
+  assert.equal(
+    onboardingStatusRes.status, genericStatusRes.status,
+    `onboarding runId (${onboardingRunId}) and generic-dispatch runId (${genericRunId}) must land on the SAME status on the shared surface — a parallel/incompatible runId scheme would diverge here even if neither alone were 400`,
+  );
+
+  // (3) body shape matches whatever status the equivalence establishes.
+  const onboardingBody = (await onboardingStatusRes.json()) as Record<string, unknown>;
+  if (onboardingStatusRes.status === 404) {
+    assert.equal(typeof onboardingBody['error'], 'string', '404 body must carry an error string, not a fabricated run shape');
+    assert.equal(onboardingBody['ok'], undefined, '404 body must not carry the old {ok:true} success shape');
+  } else {
+    assert.equal(onboardingBody['ok'], true);
+  }
 });
 
 // ---------------------------------------------------------------------------
