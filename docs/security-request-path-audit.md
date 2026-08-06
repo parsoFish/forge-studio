@@ -43,19 +43,40 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 49 |
+| Classified rows below | 51 |
 | — `guarded` | 14 |
 | — fixed in this sweep (all were `unguarded`) | 12 |
 | — fixed later in SEC-02 (`forge-d1f`) | 3 |
-| — `unguarded`, filed for follow-up | 11 |
+| — fixed later in R4-16 (the four `/start` routes' `projectRepoPath`) | 1 |
+| — fixed later in SEC-03 | 2 |
+| — `unguarded`, filed for follow-up | 10 |
 | — `accidentally-safe` (accident named on each) | 9 |
-| `[unver]` items, listed separately and never counted safe | 10 |
-| bd issues filed | 4 (1 closed: `forge-d1f` by SEC-02) |
+| `[unver]` items, listed separately and never counted safe | 7 |
+| bd issues filed | 4 (1 closed: `forge-d1f` by SEC-02; `forge-q80` PARTLY addressed by SEC-03 — its `POST /api/studio/projects` items are fixed, its `packageDir`/zip-slip and community-index items are not, so it stays open) |
 
-Verification markers across those rows: **24 `[exec]`** (live repro executed),
-**25 `[read]`** (classified by reading). SEC-02 moved three `forge-d1f` rows from
-`[read]` to `[exec]` by reproducing each escape live before fixing it. A row may carry more than one marker
-where it covers several routes.
+Verification markers, counted as ROWS CARRYING a marker (not as marker
+occurrences — a row may carry more than one where it covers several routes):
+**29 rows carry `[exec]`** (live repro executed), **23 carry `[read]`**
+(classified by reading), and exactly **one row carries both** (the
+`/demo/`+`/fragment/` row, where the escape is `[exec]` and the
+no-plant-primitive-found reasoning is `[read]`). 29 + 23 − 1 = **51**, the
+classified-row total. Reconciled by recounting every row, not by arithmetic on
+the previous revision's figures.
+
+**Two count defects in the previous revision, found by that recount and stated
+rather than quietly overwritten** — the same failure mode SEC-01's adversarial
+review found in this exact document before, which is why the recount is
+mandatory: it claimed 24 `[exec]` / 25 `[read]` for the pre-SEC-03 49 rows
+(the two were transposed — the real figures were 25 / 24), and it claimed 10
+`[unver]` items when the `[unver]` bullet list had only 6. SEC-02 moved three
+`forge-d1f` rows from `[read]` to `[exec]` by reproducing each escape live
+before fixing it; SEC-03 moved a fourth (`POST /api/studio/projects`) the same
+way and added two genuinely NEW rows rather than reclassifying existing ones
+(`mint-triggered-initiative.ts`'s choke-point bypass, and the
+`/demo/`+`/fragment/` GET-route severity re-assessment split out of the row
+that previously lumped it in with `/file/`+`/history/`). SEC-03 also moved the
+four `/start` routes' `projectRepoPath` row out of "unguarded, filed" — R4-16
+had fixed it and the row still said otherwise.
 
 ---
 
@@ -103,17 +124,28 @@ Each fix keeps the charset check as an independent **first layer** and adds cont
 
 | file:line | op | request field | class | evidence / why not mechanical |
 |---|---|---|---|---|
-| `cli/ui-bridge.ts:1539,1808,2259,2311` (+ the sessions they seed) | `writeFileSync`/`readFileSync` | `POST /api/{architect,instructions,project-brain,demo-builder}/start` body **`projectRepoPath`** | unguarded `[read]` | Accepted **verbatim** — not a slug resolving under a trusted root but an arbitrary absolute path, then *persisted* into `status.json` as ground truth for the rest of the session. `resolveGuardedPath` assumes `<root>/<id>`; it has no answer for "the client handed me the whole path". Needs an allowlist against `discoverProjects()`, or the field removed. → bd `forge-28o` |
 | `cli/ui-bridge.ts:1533,1813,2261,2316` and ~14 sibling session routes | `mkdirSync`/`writeFileSync` | body `project`, `sessionId` | unguarded `[read]` | `architectSessionDir(projectsRoot, body.project, sessionId)` with only a truthiness check — `SAFE_PROJECT_NAME_RE` exists in the same file and is never applied. A `..`-bearing `project` escapes `projectsRoot` and `mkdirSync(recursive:true)` creates it. → bd `forge-28o` |
-| `cli/ui-bridge.ts:1500,1774,2145,2210` | `existsSync`/`readFileSync` | `GET /api/{architect,instructions}/file/:project/:sid/:filename`, demo-builder fragment/history | unguarded `[read]` | Self-defeating idiom: `base` **and** `requested` are both built from the same unvalidated `project`/`sessionId`, so `requested.startsWith(base)` bakes the taint into both operands and cannot fail for traversal inside those segments. The guard must run on the *inputs*, not on two paths built from them. → bd `forge-28o` |
+| `cli/ui-bridge.ts:1719-1720,2000-2001,2505-2506` (line numbers current as of SEC-03; the original audit's `1500,1774,2145,2210` shifted as R4-16 inserted code above them) | `existsSync`/`readFileSync` | `GET /api/architect/file/:project/:sid/:filename`, `GET /api/instructions/file/:project/:sid/:filename`, `GET /api/demo-builder/history/:project/:id` | unguarded `[read]` | Self-defeating idiom: `base` **and** `requested` are both built from the same unvalidated `project`/`sessionId` (`project`/`id` for the history route), so `requested.startsWith(base)` bakes the taint into both operands and cannot fail for traversal inside those segments — it CAN, correctly, fail for traversal inside the trailing `filename`/`id` component alone, which does NOT feed `base`. The guard must run on the *inputs*, not on two paths built from them. **`demo-builder fragment` (`/demo/` and `/fragment/`) is SPLIT OUT of this row** — SEC-03's Deliverable-B severity re-assessment (below) found it is a materially different, and worse, shape than this one, not an instance of it. → bd `forge-28o` |
+| `cli/ui-bridge.ts:2333-2368` (`GET /api/demo-builder/demo/:project/:sid`), `2373-2409` (`GET /api/demo-builder/fragment/:project/:sid/:element`) | `existsSync`/`readFileSync` | `project`, `sessionId`, `element` (all three URL path segments) | unguarded `[exec]` — **severity RAISED from LOW during SEC-03 Deliverable B** | Carried from the R4-16 review and folded into SEC-03 by T1 ruling; R4-16 rated this LOW on the premise that reaching a poisoned `project_repo_path` required first escaping session-dir containment. That premise is now doubly obsolete. First, the premise itself was already wrong the way R4-16's own `/start` finding showed (an attacker could supply `projectRepoPath` directly) — but that specific route is now fixed: reading `/api/{architect,instructions,demo-builder,project-brain}/start` on this branch confirms all four now gate `projectRepoPath` through `isContainedProjectRepoPath` before ever persisting it. Second, and this is the re-assessment's actual finding: **`/demo/` and `/fragment/` don't need a poisoned `project_repo_path` at all.** They are the two demo-builder GET routes explicitly named as OUT OF SCOPE in the code comment directly above the `/generation/` route ("The sibling /demo/ and /fragment/ GET routes above remain OUT OF SCOPE for this round... rely solely on a lexical startsWith(base) check... a real gap, filed as an evidenced follow-up") — unlike the `/generation/` route and the five POST routes (start/brief/feedback/lock/abandon), which all resolve their session dir through `resolveDemoSessionDir` (realpath identity containment under the specific project's own resolved dir), `/demo/` and `/fragment/` validate `project`/`sessionId` for **non-emptiness only** (`if (!project \|\| !sessionId)`) and pass them straight into a bare `join()`. **Live-reproduced** (ad-hoc probe script mirroring the `cli/bridge-studio-sibling-containment.test.ts` idiom — real `startBridge({forgeRoot, port:0})`, a `status.json` planted directly on disk at `<escaped-dir>/_demo/x/status.json` with `project_repo_path` pointing at a third, wholly outside "attacker repo" directory; probe deleted after use, not left as a permanent AT, since this document is the only file T3 may edit): `GET /api/demo-builder/fragment/..%2F..%2F<escaped-dir>/x/evil` → `200`, response body contains the planted `PWNED-FRAGMENT-CONTENT`; `GET /api/demo-builder/demo/..%2F..%2F<escaped-dir>/x` → `200 PWNED-DEMO-CONTENT` verbatim. The percent-encoded `%2F` survives the route's own `url.slice(prefix).split('/')` (split runs on the RAW, still-encoded URL) and only becomes a literal `/` afterwards, in the subsequent `.map(decodeURIComponent)` — the classic encoded-slash traversal bypass. Independently of the traversal, `/demo/`'s `requested.startsWith(base)` check is a **guard that cannot fail** (this document's own definition of `unguarded`, see "How to read the classifications" above): `DEMO_HTML_REL_PATH` is the fixed literal `.forge/demo/DEMO.html`, so `requested` is ALWAYS exactly `base + 'DEMO.html'` for every possible `status.project_repo_path`, poisoned or not — it cannot reject anything. `/fragment/`'s equivalent check is NOT vacuous in the same way: it correctly rejects a traversing `element` (the one input that actually participates in the base/requested comparison), so this route's containment is real for `element` alone, vacuous for `project`/`sessionId`. **Bound of what was verified, kept honest per this document's own rule ("a conclusion you did not execute is a lead, not a proven exploit"):** full exploitability against content fully outside the forge tree, from a single request with nothing pre-staged, additionally requires a `_demo/<sid>/status.json`-shaped file to already be reachable via traversal from `ctx.projectsRoot` — an HTTP-only chain to plant one there (with no local pre-seeding) was searched for and NOT found: the demo-builder family's own five write routes are correctly closed (`resolveDemoSessionDir` cannot create outside `projectsRoot`, confirmed by reading); the sibling architect/instructions/project-brain `/start` routes' OWN session-dir join (`architectSessionDir` et al., row above, bd `forge-28o`) is unguarded for `body.project` in the identical shape and DOES permit an arbitrary-path `mkdirSync`+`writeFileSync`, but always under a different, hardcoded subdirectory name (`_architect`/`_instructions`/`_project-brain`, never `_demo`) — so it does not, on inspection, chain into this specific route. The remaining unguarded writers in this table (`packageDir` install, KB-maintenance `file`) were not each individually checked against this exact shape — recorded `[unver]` below, not assumed safe. A symlinked session directory (the R4-16 round-2 BLOCKER shape) would defeat this identically to the traversal above and was not separately tested — redundant to prove, since these two routes apply NO containment of any kind, lexical or realpath, to `project`/`sessionId`, unlike the routes `resolveDemoSessionDir` DOES cover. **Verdict: severity raised from LOW to MODERATE.** The containment failure is now `[exec]`-proven rather than `[read]`-argued, and — unlike the finding it was carried from — it no longer depends on any OTHER route's field being poisoned; it stands on its own two unvalidated URL segments. It is not rated higher only because no HTTP-only plant chain for the precondition was found despite a genuine search. → bd `forge-28o` |
 | `cli/ui-bridge.ts:781,818,853,904,2468,2489` | `readFileSync`/`writeFileSync` | `GET /api/events/:cycleId`, `/graph/`, `/work-item/`, `/artifact/`, `POST /api/reflect/:cycleId/answer` | unguarded `[read]` | `cycleId` is `decodeURIComponent`'d with no validation on most of these (the `/artifact/` route alone charset-gates it). `POST /api/reflect/:cycleId/answer` is a **write**. → bd `forge-2zz` |
 | `orchestrator/studio/skill-library.ts:500-537,613-631`, `orchestrator/studio/community-install.ts:163-176` | `readdirSync`/`writeFileSync` | `POST /api/studio/skills/install` body **`packageDir`**; community install | unguarded `[read]` | Two problems. (1) `packageDir` *is* the containment root — a raw client string with no allowlist tying it to any forge directory, so any server-local path can be named and copied into `skills/<id>/`. (2) The install loop writes N entries whose own relative sub-paths are joined onto the destination — the classic zip-slip shape, needing **per-entry** verification, not one call. → bd `forge-q80` |
-| `cli/bridge-studio-writes.ts:679-737` | `mkdirSync`/`writeFileSync` | `POST /api/studio/projects` body **`repoPath`** | unguarded `[read]` | The final `writeFileSync` of `.forge/project.json` has **no existence check at all**, so a fresh non-colliding `name` with `repoPath` aimed at another onboarded project clobbers that project's config — including the `quality_gate_cmd` forge later executes. A path guard proves "under the root"; it cannot prove "not already someone else's project". Application-level invariant. → bd `forge-q80` |
 | `cli/bridge-studio-kbs.ts:788-794` | spawn arg | `POST /api/studio/kbs/:id/maintenance` body `file` | unguarded `[read]` | Client supplies a full absolute path; `resolve(file) !== file → reject` blocks `..` but does no realpath. `segments[]` requires single-component names, so this needs a request-shape change (`{kbId, relPath}`), not a guard call. → bd `forge-2zz` |
 | `cli/bridge-studio.ts:471`, `cli/bridge-studio-kbs.ts:151`, `cli/bridge-studio.ts:389` | `readFileSync` | `GET /api/runs/:id/phases/:node/log`, `/kbs/:id/fix-agent/:runId`, preflight fix-agent | unguarded `[read]` | Lexical `resolve+startsWith`. The phase-log route does not charset-gate `runId` at all, unlike every sibling in that file. Exploitability needs a pre-planted symlink under `_logs/`; no HTTP-reachable primitive to plant one was found, so severity is low — but the checks provide no containment. → bd `forge-2zz` |
 | `orchestrator/project-config.ts:305-308,326-328` | `existsSync`/`readFileSync` | `PUT /api/studio/projects/:id` → real `projectRoot` + `AGENTS.md` / `.forge/quality_gate_cmd` | unguarded `[read]` | A symlinked `.forge` directory or leaf is followed, three lines from a sibling call that closes exactly that shape. Mechanical, but outside this sweep's route set and reached from the scheduler too. → bd `forge-2zz` |
 | `orchestrator/studio/community-index.ts:271-274,310-323` | `readFileSync` | `GET /api/studio/community/:kind/:id` | unguarded `[read]` | Fixed-filename direct reads bypass the dirent-walk protection the rest of that module gets — a leaf-symlinked `SKILL.md`/`hook.yaml` inside an otherwise dir-guarded package is followed. → bd `forge-q80` |
 | `cli/bridge-studio-runs.ts:559,598,603` | `readFileSync`/`writeFileSync` | `POST /api/plan-verdict` body `project`, `sessionId` | unguarded `[read]` | `project` **is** `SLUG_RE`-gated and `sessionId` `SAFE_ID_RE`-gated here (materially stronger than the `ui-bridge.ts` equivalents), but `_architectSessionDir` is still a bare `join()` with no realpath. → bd `forge-28o` |
+
+### Fixed in R4-16 — the four `/start` routes' `projectRepoPath`
+
+Recorded here because leaving the row below in "unguarded" after R4-16 shipped
+its fix would have been a false claim in a permanent artifact. Found by SEC-03's
+re-read of the branch, not by anything that watches for it — which is precisely
+the gap `scripts/check-request-path-sinks.mjs` now covers for NEW sinks and
+still does not cover for a row whose status changed under it.
+
+| file:line (as audited) | op | request field | class | how it was closed |
+|---|---|---|---|---|
+| `cli/ui-bridge.ts:1539,1808,2259,2311` (+ the sessions they seed) | `writeFileSync`/`readFileSync` | `POST /api/{architect,instructions,project-brain,demo-builder}/start` body **`projectRepoPath`** | **fixed** `[exec]` | Was accepted **verbatim** — not a slug resolving under a trusted root but an arbitrary absolute path, then *persisted* into `status.json` as ground truth for the rest of the session (the agent's `cwd`, the target of `ensureStudioBranch`/`commitStudioChange`, the base for every artifact write). Closed by `invalidProjectRepoPath` (`cli/ui-bridge.ts:1610`), which delegates to the SHIPPED `isContainedProjectRepoPath` (`cli/manifest-path-guard.ts`, SEC-02) — reuse, not a new check. Four routes, not three: round 4 found `POST /api/project-brain/start` had zero containment while its three siblings called the guard, and round 4 also closed a fails-open `''` case where the validator returned "not invalid" for the empty string and the call sites' `??` default could never substitute for it. |
 
 ### Fixed in SEC-02 — manifest-carried path fields (`forge-d1f`)
 
@@ -127,6 +159,19 @@ consumed unchecked by a dozen modules. SEC-02 closed them at the **write point**
 | `cli/forge-requeue.ts:209`, `orchestrator/requeue-resume.ts:68-189`, `cli/bridge-studio-runs.ts:185,327,474`, `cli/bridge-recovery.ts:96,111` | **`rmSync(recursive)`**, reads, writes | `POST /api/initiatives` body manifest → frontmatter `worktree_path`, `project_repo_path`, `cycle_id`, `project` | **fixed** `[exec]` | Was the campaign's most severe finding: an **unconditional recursive delete** of an attacker-named directory, reached via `POST /api/recovery/:id/requeue` (`resumeFromDemo` defaults false → `preserveWorktree` false). Reproduced live against a planted sentinel — the route returned `200 {"ok":true,"worktreeRemoved":true}` while destroying it. Closed by `cli/manifest-path-guard.ts` at the ingest choke point (`writeManifest`, whose only two production callers are `orchestrator/promote-manifests.ts` and `POST /api/initiatives`), plus an independent assertion inside `runRequeue` ahead of `inferRequeueResume` and the destructive block — so a manifest reaching disk by any other route is still caught. The lexical `resolve().startsWith()` checks in the approve/send-back branches were replaced with real per-segment identity containment. |
 | `orchestrator/flow-artifacts.ts:167-171`, `orchestrator/logging.ts:124-138` | `mkdirSync`/`writeFileSync`/`appendFileSync` | `manifest.cycle_id` | **fixed** `[exec]` | `resolve(logsRoot, cycleId)` normalised a poisoned id straight past `logsRoot`. Ingest validation alone proved **insufficient**: the adversarial round showed the verdict handler reads its manifest from disk, never from an ingest body, and a traversing `cycle_id` really did write `artifacts/verdict.json` (and an `events.jsonl`) outside both `logsRoot` and the forge root. Closed at ingest AND with an `isSafeCycleId` check in both verdict branches before any cycleId-derived path is built. |
 | `cli/bridge-recovery.ts:56,86,96,107` | `existsSync`/`readFileSync` | `GET /api/recovery/:id` | **fixed** `[exec]` | `INIT_ID_RE`-gated, lexical join only; `recoveryInspect` additionally returned `prDraftChars`, an arbitrary-file-length oracle. Both `recoveryInspect` and `recoveryAbandon` (which runs `git -C <projectRepoPath> branch -D` / `push origin --delete`) now gate on the containment helpers, reusing their existing response shapes. |
+
+### Fixed in SEC-03 — project-CREATE containment + the mint choke-point violation
+
+Two more sites, closed in this initiative. The first was previously filed as
+`unguarded [read]` in the table above (moved here, not duplicated — see the count
+reconciliation in the Summary). The second had no prior row at all: it was found by
+applying this document's own "Completeness rule" (below) to the manifest-write
+choke point, not by luck.
+
+| file:line (as audited) | op | request field | class | how it was closed |
+|---|---|---|---|---|
+| `cli/bridge-studio-writes.ts:679-737` | `mkdirSync`/`writeFileSync` | `POST /api/studio/projects` body `name`, `repoPath` | **fixed** `[exec]` | Two independent defects, both closed in one pass. (1) The lexical `resolve(projectRoot).startsWith(resolve(forgeRoot)+sep)` check on an UNRESOLVED path — the exact worthless shape this document's own introduction names — is replaced by `isContainedProjectRepoPath` (`cli/manifest-path-guard.ts`, itself built on `resolveGuardedPath`), which requires genuine per-segment realpath identity under `<forgeRoot>/projects/` specifically, not merely "somewhere under forgeRoot". Live-reproduced before the fix: a real `git init` + `.forge/project.json` + `roadmap.md` + `brain/profile.md` written OUTSIDE the forge root, with the route returning `200 {"ok":true}`. (2) A missing existence check let a fresh, non-colliding `name` whose `repoPath` pointed at an ALREADY-ONBOARDED project silently overwrite that project's `.forge/project.json` wholesale — including `testProcess.local.cmd`, the quality-gate command forge later **executes**. `existsSync(join(projectRoot,'.forge','project.json'))` now 400s before either side effect runs. Both defects pinned by 13 ATs in `cli/bridge-studio-project-create-containment.test.ts`. → bd `forge-q80` (partially closed — this was one of three rows filed under it; the `skill-library.ts`/`community-install.ts`/`community-index.ts` rows remain open). |
+| `orchestrator/mint-triggered-initiative.ts` (previously no row) | `mkdirSync`/`writeFileSync` (direct, pre-fix) | `PUT /api/studio/flows/:id` body `project` → background flow-trigger sweep → minted manifest's `project` / `project_repo_path` | **fixed** `[exec]` | The finding was the choke-point bypass itself: this module wrote a queue manifest with `serializeManifest` + `writeFileSync` directly, never calling `writeManifest` — the SSOT ingest choke point the "Recorded design assumption" section below names. Reachability was proven live end-to-end, not argued: `validateFlow` never checked `flow.project`'s shape, and `PUT /api/studio/flows/:id` persists `body.project` verbatim (`200 {"ok":true,...,"findings":[]}` for `project: "../../<outside-dir>"`, confirmed on disk in `flow.yaml`). `mintTriggeredInitiative` then does `join(resolveProjectsDir(...), flow.project)` — `path.join()`, not `path.resolve()`, so the working escape shape is a relative `..`-traversal — and, with the target pre-existing, wrote a real manifest straight to `_queue/pending/` carrying `project_repo_path` genuinely outside `forgeRoot`, bypassing `writeManifest`/`assertManifestPathFields` entirely and landing exactly in the sinks SEC-02 closed (`runRequeue`'s `rmSync(recursive)`, `finalize-merged.ts`, `drain-fix-loop.ts`'s `git -C <path>` + `spawnSync`, `orchestrator/scheduler.ts`). Closed by routing through `writeManifest` (now class 1 — see "Recorded design assumption" below), plus a defence-in-depth ERROR-level `project/shape` finding added to `validateFlow` (`orchestrator/studio/validate.ts`) as the charset first layer, built on `isSafeProjectName` (the exact predicate the choke point itself uses, imported rather than re-derived, so the two layers cannot drift apart) — error level, not a warning, because a warning here would be the "declared data fails open" shape this campaign has repeatedly found and closed. Pinned by `orchestrator/mint-triggered-containment.test.ts`. A second, latent defect surfaced while wiring this fix: the mint's `queueRoot` defaulted to the bare relative `'_queue'` (i.e. `<process.cwd()>/_queue`), while `writeManifest` re-derives `forgeRoot` as `dirname(resolve(queueRoot))` to run its own containment check — a daemon whose `cwd` was not `forgeRoot` at the moment of a trigger-fired mint would validate containment against the WRONG root. Now anchored explicitly on the caller's already-resolved `forgeRoot` rather than a bare relative default. (No pre-existing bd — this row did not exist in any form before SEC-03.) |
 
 ### Accidentally-safe — the accident is the protection, and nothing knows it
 
@@ -152,6 +197,7 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 - Hardlink vectors at the KB routes: the guidance leaf filename is timestamp-generated (unguessable to pre-plant) and the only fixed-name write requires its parent not to pre-exist. Recorded **unverified-as-inapplicable**, not safe.
 - `orchestrator/kb-health.ts` shares `resolveKbBrainDir` (now fixed) but is reflector-internal; no HTTP route reaches it today. Flagged for future exposure.
 - Whether a symlink can be planted through the HTTP surface **alone** for each "pre-plant" precondition above, versus requiring local checkout access. The structural defects are confirmed by reading; the end-to-end plant-then-exploit chain was established only where marked `[exec]`. `forge-wze`'s urgency rests on R3-07's community-install path making planted third-party content a live vector.
+- Whether an HTTP-only chain (no local pre-seeding) exists to plant a `_demo/<sid>/status.json`-shaped FILE — an ordinary file, no symlink required — outside `<forgeRoot>/projects/`, which the SEC-03 Deliverable-B `/demo/`/`/fragment/` re-assessment above depends on for exploitability against content fully outside the forge tree. Checked and ruled out: the demo-builder family's own five write routes (`resolveDemoSessionDir`) and the architect/instructions/project-brain `/start` routes' unguarded `project` param (writes land under a different, hardcoded subdirectory name, never `_demo`). NOT checked against this specific shape: the remaining unguarded writers in this table (`packageDir` install, KB-maintenance `file`).
 
 ---
 
@@ -169,6 +215,7 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 | `orchestrator/project-config.ts` | `readAgentInstructionsFile`, `readQualityGateSidecar` | unguarded → `forge-2zz` |
 | `orchestrator/studio/skill-library.ts`, `community-install.ts`, `community-index.ts` | package install/read | unguarded → `forge-q80` |
 | `orchestrator/requeue-resume.ts`, `flow-artifacts.ts`, `logging.ts` | manifest-carried `worktree_path` / `cycle_id` | **fixed in SEC-02** (`forge-d1f`) |
+| `orchestrator/mint-triggered-initiative.ts` | mints a queue manifest from a flow's `project` field (background flow-trigger sweep, fed by `PUT /api/studio/flows/:id`) | **fixed in SEC-03** — previously bypassed `writeManifest` entirely; see "Fixed in SEC-03" above |
 | `orchestrator/review-comments.ts`, `enqueue-*.ts`, `project-create.ts` | charset-gated | guarded |
 | `orchestrator/studio/connection-library.ts`, `daemon.ts`, `agent-dispatch.ts` | — | no request-derived path reaches a filesystem call |
 | `orchestrator/finalize-merged.ts` | manifest-carried `worktree_path` / `project_repo_path` / `cycle_id` → `confirmMerge`, `pendingFixWorkItems`, `createLogger`, `writeVerdictJson`, `CycleInput` | **fixed in SEC-02**. This row previously read "no request-derived path reaches a filesystem call" and was WRONG: the merge-confirmation sweep reads all three fields off a `ready-for-review/` manifest into the same sinks as the verdict handler, from a different entry point. |
@@ -184,32 +231,60 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 manifest with no `project_repo_path`) and every consumer that receives a built
 `CycleInput` are **not** individually guarded, by design. They are safe **iff every
 path by which a manifest reaches disk passes ingest validation** — `writeManifest`,
-whose only two production callers are `orchestrator/promote-manifests.ts` and
-`POST /api/initiatives`.
+whose three production callers, as of SEC-03, are `orchestrator/promote-manifests.ts`,
+`POST /api/initiatives`, and `orchestrator/mint-triggered-initiative.ts` (added by
+SEC-03 — previously bypassed the choke point entirely; see "Fixed in SEC-03" above).
 
 This is written down rather than left as silence so nobody later reads the absence of
 a row as evidence of coverage. The condition is load-bearing: SEC-02 itself found
 THREE consumers (`runRequeue`, `applyReviewVerdict`, and the two sweeps) that read
 manifests which had **not** necessarily come through ingest, and each needed its own
-assertion. Writers of manifest frontmatter fall into exactly three classes, and the third is
+assertion; SEC-03 found a FOURTH writer that bypassed the choke point on the write
+side instead (`mint-triggered-initiative.ts`, now closed — moved into class 1 below).
+Writers of manifest frontmatter fall into exactly three classes, and the third is
 real — the taxonomy is stated in full so it cannot be read as exhaustive when it is
 not:
 
-1. **Routes through `writeManifest`** — validated at ingest. The two production
-   ingest callers.
+1. **Routes through `writeManifest`** — validated at ingest. Three production
+   ingest callers as of SEC-03: `orchestrator/promote-manifests.ts`,
+   `cli/bridge-recovery.ts`'s `POST /api/initiatives`, and
+   `orchestrator/mint-triggered-initiative.ts`.
 2. **Carries its own assertion** — `runRequeue`, `applyReviewVerdict`,
    `finalize-merged.ts`, `drain-fix-loop.ts`. These read manifests that did not
    necessarily come through ingest, so each guards at its own boundary.
 3. **Writes a value that is TRUSTED AT CONSTRUCTION, and revalidates nothing** —
-   `orchestrator/scheduler.ts:749`'s
-   `annotateManifest(manifestPath, { worktree_path: wtHandle.path })`, a raw
-   frontmatter regex edit that bypasses `writeManifest` entirely. It is safe because
-   `wtHandle.path` is `resolve(worktreesRoot, initiativeId)` — computed by forge from
-   config plus an already-pattern-gated id, never client-derived — **not** because
-   anything checks it afterwards. The `persistManifest*` family in
-   `orchestrator/manifest.ts` is the same class: it round-trips an
-   already-on-disk manifest through `serializeManifest` + `writeFileSync` without
-   revalidating.
+   these do not derive the value from request data at all, so there is nothing to
+   validate against `forgeRoot`. The complete set, as of SEC-03's entry-point sweep
+   (previously this list named only the first two):
+   - `orchestrator/scheduler.ts:749`'s
+     `annotateManifest(manifestPath, { worktree_path: wtHandle.path })`, a raw
+     frontmatter regex edit that bypasses `writeManifest` entirely. Safe because
+     `wtHandle.path` is `resolve(worktreesRoot, initiativeId)` — computed by forge
+     from config plus an already-pattern-gated id, never client-derived.
+   - The `persistManifest*` family in `orchestrator/manifest.ts` — round-trips an
+     already-on-disk manifest through `serializeManifest` + `writeFileSync` without
+     revalidating anything.
+   - `orchestrator/scheduler-dispatch.ts`'s `annotateManifestForRetry` — re-parses
+     and re-serialises an already-on-disk manifest, mutating only `retry_count` and
+     `previous_failure_modes`; no path-shaped field is touched.
+   - `orchestrator/enqueue-flow-run.ts` and `orchestrator/enqueue-plan-run.ts` — each
+     re-serialises an already-on-disk manifest to "repoint" it, mutating only
+     `flow_id`/`phase` and deleting `resume_from`/`claimed_at`/`claimed_by`; no
+     path-shaped field is touched.
+   - `cli/bridge-studio-runs.ts`'s `POST /api/runs` — re-serialises an already-on-disk
+     manifest, mutating only `origin` (constrained server-side to the literal union
+     `'architect' | 'human-directed'`, never the request's raw string).
+
+   **Not class 3, and not an ingest point either — a pre-ingest STAGING tier:**
+   `orchestrator/architect-runner.ts` writes and amends DRAFT manifests directly into
+   `paths.manifestsDir` (`mkdirSync` + `writeFileSync`/`serializeManifest`, multiple
+   call sites). This is not a bypass of the choke point: every draft written there is
+   later PROMOTED through the class-1 path (`promoteManifests(paths.manifestsDir,
+   ...)` — the same `orchestrator/promote-manifests.ts` this section already counts
+   as a `writeManifest` caller), and the fields the architect writes at the drafting
+   stage (initiative id, title, acceptance criteria, body prose) never include a
+   path-shaped field — `project_repo_path`/`worktree_path`/`cycle_id` are added later,
+   at promotion, not here.
 
 Class 3 is the fragile one: its safety is a property of the *caller*, so a future
 change that lets request data reach one of those constructed values removes the
@@ -238,6 +313,70 @@ each one's status individually — a caller you did not check is "not checked", 
 
 ---
 
+## Mechanical backstop — the no-new-unguarded-sinks ratchet (SEC-03)
+
+`scripts/check-request-path-sinks.mjs` — wired into `npm test` via
+`scripts/check-request-path-sinks.test.ts`, and into CI as its own step
+(`.github/workflows/ci.yml`, "Request-path sinks ratchet check") — is a checked-in
+ratchet against `scripts/request-path-sinks.baseline.txt`. It walks every module
+reachable, via relative imports, from `cli/ui-bridge.ts` plus every `cli/bridge-*.ts`,
+counts calls to a fixed list of fs/process sinks (`writeFileSync`, `readFileSync`,
+`mkdirSync`, `rmSync`, `spawn`, `execSync`, etc. — 24 names total) per reachable file,
+and fails the build the moment a NEW `(file, sink)` pair appears or an existing pair's
+call count goes UP versus the baseline. It never tightens the wrong way on its own — a
+count drop or a disappearing pair passes silently, since removing a sink is never a
+regression; `--write` regenerates the baseline and still requires a human to look at
+the diff before it is committed.
+
+**What it covers.** It forces a stop-and-look the moment a NEW request-derived-path
+*shape* appears anywhere reachable from a bridge HTTP route in `cli/`/`orchestrator/`
+— a new file entering the reachable set, or a new/growing sink call inside a file
+already in it. That is precisely the discovery gap this document's own introduction
+names: "the same defect was found ten separate times across six initiatives, always
+opportunistically... discovery was luck-driven."
+
+**What it provably cannot do — stated here in substance because an audit or lint that
+overstates its own rigour is worse than none (the script's own header states this
+explicitly, and states it first):**
+
+- **No dataflow.** It cannot tell a request-derived path from a hardcoded constant —
+  `writeFileSync('/tmp/known-safe-file', x)` counts identically to
+  `writeFileSync(join(root, req.params.id), x)`. A human (or this document) still has
+  to make that call for every new line the ratchet flags.
+- **Aliased or dynamically-dispatched sinks are invisible.** `const w = writeFileSync`,
+  `fs[name](...)`, and a sink re-exported under a new local name all evade the
+  `\bNAME\(` match.
+- **`fs/promises` is not tracked** — only the synchronous `node:fs` names plus
+  `child_process`. A promise-based rewrite of a guarded site produces zero signal.
+- **A guarded site that becomes unguarded through an edit to its GUARD produces no
+  signal at all.** The ratchet key is `(file, sink, count)` — pure call-site
+  bookkeeping, not "is this call preceded by a guard call". Gutting
+  `resolveGuardedPath` itself, while leaving the sink call and surrounding line count
+  unchanged, is invisible to this script.
+- **Only UNQUALIFIED calls are counted** (`(?<![.\w$])NAME\(`) — a receiver-qualified
+  call (`fs.writeFileSync(...)`, any namespace import) is invisible. This is a
+  deliberate, measured trade documented in the script's own header (every sink call in
+  `cli/`+`orchestrator/` today is a named import called bare; counting `.`-qualified
+  calls too would flag ordinary `regex.exec()` calls and train an author to blind
+  `--write` past the noise — the failure mode that destroys a ratchet's value).
+- **The comment filter is line-based, not a real parser**, and string literals are
+  never parsed at all — a sink name appearing inside a string can be over-counted, but
+  reachability itself (which files get walked) is exact for the import forms followed.
+- **Reachability only follows relative static/dynamic imports with string-literal
+  specifiers**, restricted to files under `cli/`/`orchestrator/`. Bare-specifier (npm
+  package) imports are never followed.
+
+**Tying this to the Standing rule below.** Until SEC-03, the obligation to guard a new
+request-derived path and add its row here was enforced by discipline alone — reading
+this document and remembering to check it. The ratchet is a mechanical backstop *on
+top of* that discipline, not a replacement for it: a green run means "the known
+reachable sink surface has not grown since the baseline was last accepted", never "the
+reachable surface is safe". It is a **call-shape tripwire, not a proof** — the actual
+judgment of guarded/unguarded/accidentally-safe for any given site is, and remains,
+this document's job, row by row.
+
 ## Standing rule
 
 Any new route, or any change to an existing one, that turns request data into a filesystem path must add its row here and route through `resolveGuardedPath` with a fixed root and the untrusted id as its own segment. A charset regex is the first layer, never the containment. If a site cannot be expressed as `<fixed root>/<segments...>`, that is the signal it needs a design decision rather than a guard call — file it rather than force-fitting.
+
+Since SEC-03, `scripts/check-request-path-sinks.mjs` (above) gives this rule a mechanical backstop in CI and `npm test` — but the backstop only proves the reachable sink surface has not silently grown; the obligation to guard the site and add its row here remains entirely on the author, never the tool.
