@@ -1243,10 +1243,23 @@ async function handleHttp(
         const runDir = join(ctx.logsRoot, runId);
         // `runId` is server-minted (just above) and `ctx.logsRoot` is
         // config-derived — both trusted, neither built from untrusted
-        // input — so realizing the run's own directory here is safe. This
-        // is the run's FIRST artifact: under FORGE_DRY_BRIDGE, spawnAgentDispatch
-        // below never runs, so nothing else creates `runDir` before
-        // `stageMaterials`/`resolveGuardedPath` need it to already exist.
+        // input — so realizing the run's own directory here is safe.
+        // Still applying `isSafeRunId` defensively before the mkdir below,
+        // mirroring the SAME check this file already runs on this SAME
+        // value at its other two sites (spawnAgentDispatch ~line 1789,
+        // the run-status route ~line 1118) — guard-symmetry, so a future
+        // change to `newRunStamp()`/the slug regex can't quietly turn this
+        // THIRD site into the one that skips it. A server-minted id
+        // failing its own safety check is a server anomaly, not a client
+        // mistake, so it's raised as MaterialsStagingError -> the route's
+        // existing 500 path, never a 400.
+        if (!isSafeRunId(runId)) {
+          throw new MaterialsStagingError('materials: refused to stage — unsafe run id');
+        }
+        // This is the run's FIRST artifact: under FORGE_DRY_BRIDGE,
+        // spawnAgentDispatch below never runs, so nothing else creates
+        // `runDir` before `stageMaterials`/`resolveGuardedPath` need it to
+        // already exist.
         mkdirSync(runDir, { recursive: true });
         stageMaterials(
           runDir,
