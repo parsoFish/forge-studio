@@ -107,7 +107,7 @@ test('harness mode: an agent-complete fire stages a claimable request ONLY, then
   const fireAgentCompleteTriggers = mod['fireAgentCompleteTriggers'] as
     | ((
         flows: Array<{ id: string; triggers: unknown[] }>,
-        triggeredBy: string,
+        completedAgentSlug: string,
         opts?: { queueRoot?: string },
       ) => Promise<unknown[]>)
     | undefined;
@@ -124,8 +124,10 @@ test('harness mode: an agent-complete fire stages a claimable request ONLY, then
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   process.env.FORGE_DRY_BRIDGE = '1';
   try {
-    const flows = [{ id: 'watcher', triggers: [{ on: 'agent-complete', target: { kind: 'flow', ref: 'tick' } }] }];
-    await fireAgentCompleteTriggers!(flows, 'agent:doc-updater', { queueRoot });
+    // T1 ruling #1: agent-complete rows require `agent:`, the source slug,
+    // matched by identity — the completed slug below must equal it exactly.
+    const flows = [{ id: 'watcher', triggers: [{ on: 'agent-complete', target: { kind: 'flow', ref: 'tick' }, agent: 'doc-updater' }] }];
+    await fireAgentCompleteTriggers!(flows, 'doc-updater', { queueRoot });
 
     const staged = readdirSync(join(queueRoot, 'flow-runs')).filter((f) => f.endsWith('.json'));
     assert.equal(staged.length, 1, 'exactly one staged request');

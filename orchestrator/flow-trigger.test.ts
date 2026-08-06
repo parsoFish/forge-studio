@@ -80,22 +80,22 @@ test('ADR-041 registry: seven kinds, reserved rows have no runtime, merged is an
     [...TRIGGER_KIND_IDS],
     ['flow-complete', 'agent-complete', 'merged', 'manual', 'cron', 'webhook', 'feed'],
   );
-  // NOTE for the R2-08-F2 implementer: this exact-array assertion pins
-  // TODAY's (pre-F2) shipped set. Flipping agent-complete's row to
-  // status:'shipped' (see the two new tests below) legitimately changes
-  // SHIPPED_TRIGGER_KIND_IDS's contents — this assertion and the one below it
-  // must be updated (insert 'agent-complete' after 'flow-complete', matching
-  // TRIGGER_KINDS' own declaration order) in the SAME change that ships F2.
-  // Per this WI's immutable-gates contract the T3 test-writer may not edit an
-  // existing test, so it was intentionally left as-is; see the two new tests
-  // below for the actual RED acceptance criteria.
-  assert.deepEqual([...SHIPPED_TRIGGER_KIND_IDS], ['flow-complete', 'merged', 'cron', 'webhook']);
+  // T1 ruling (R2-08-F2 pin review): this exact-array assertion originally
+  // pinned the pre-F2 shipped set (without 'agent-complete'). T1 explicitly
+  // ruled that the T3 test-writer amends this ONE pre-existing test itself
+  // (the implementer must not — see this WI's immutable-gates contract) —
+  // 'agent-complete' is inserted after 'flow-complete', matching TRIGGER_KINDS'
+  // own declaration order, making this RED until F2's registry row ships.
+  assert.deepEqual([...SHIPPED_TRIGGER_KIND_IDS], ['flow-complete', 'agent-complete', 'merged', 'cron', 'webhook']);
   const merged = TRIGGER_KINDS.find((k) => k.id === 'merged');
   assert.equal(merged?.origin, 'ootb', 'merged is a domain-event row the OOTB suite contributes, not a platform literal');
 });
 
 // ---------------------------------------------------------------------------
-// ACCEPTANCE TESTS (T3, R2-08-F2) — agent-complete flips reserved → shipped.
+// ACCEPTANCE TEST (T3, R2-08-F2) — agent-complete flips reserved → shipped.
+// The exact-array assertion above (amended per T1's ruling) already pins
+// membership in SHIPPED_TRIGGER_KIND_IDS; this test pins the underlying
+// `status` field the array is derived from, a distinct fact.
 // ---------------------------------------------------------------------------
 
 test('(RED) [F2 #10] agent-complete TRIGGER_KINDS row is shipped, not reserved', () => {
@@ -105,12 +105,5 @@ test('(RED) [F2 #10] agent-complete TRIGGER_KINDS row is shipped, not reserved',
     row!.status,
     'shipped',
     `expected agent-complete's status to be "shipped" (ADR-027's R2-08 amendment: "agent-complete (R2-08-F2) likewise flips status: reserved → shipped") — got "${row!.status}"`,
-  );
-});
-
-test('(RED) [F2 #10] agent-complete appears in SHIPPED_TRIGGER_KIND_IDS', () => {
-  assert.ok(
-    (SHIPPED_TRIGGER_KIND_IDS as readonly string[]).includes('agent-complete'),
-    `expected SHIPPED_TRIGGER_KIND_IDS to include "agent-complete" — got ${JSON.stringify(SHIPPED_TRIGGER_KIND_IDS)}`,
   );
 });

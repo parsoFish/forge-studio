@@ -926,9 +926,18 @@ describe('validateFlow — trigger-kind', () => {
 });
 
 describe('validateFlow — trigger-kind-reserved', () => {
-  it('reserved kind (agent-complete) → error trigger-kind-reserved', () => {
+  // T1 ruling (R2-08-F2 pin review): this case originally used `agent-complete`
+  // as its "reserved kind" example. F2 ships that row as `status: 'shipped'`
+  // (ADR-027's R2-08 amendment), so that example now asserts the OPPOSITE of
+  // the ratified design. T1 explicitly ruled that the T3 test-writer amends
+  // this ONE pre-existing test itself (the implementer must not — editing the
+  // tests that judge your own change is exactly what the immutable-gates
+  // contract prevents); the example below was swapped to `manual`, a kind
+  // that stays reserved. See the new describe block below for the RED
+  // acceptance criteria this swap makes room for.
+  it('reserved kind (manual) → error trigger-kind-reserved', () => {
     const flow = makeFlow({
-      triggers: [{ on: 'agent-complete', target: { kind: 'agent', ref: 'my-agent' } }],
+      triggers: [{ on: 'manual', target: { kind: 'agent', ref: 'my-agent' } }],
     });
     const findings = validateFlow(flow, makeAgentMap(makeAgent()));
     const f = findings.find((x) => x.check === 'trigger-kind-reserved');
@@ -948,19 +957,9 @@ describe('validateFlow — trigger-kind-reserved', () => {
 
 /**
  * ACCEPTANCE TESTS (T3, R2-08-F2) — `agent-complete` flips reserved → shipped.
- *
- * NOTE for whoever implements F2: the pre-existing test immediately above,
- * "reserved kind (agent-complete) → error trigger-kind-reserved" (in the
- * `trigger-kind-reserved` describe block), asserts the OPPOSITE of what this
- * block pins — it is correct for TODAY's (pre-F2) registry and becomes wrong
- * the moment `TRIGGER_KINDS`' `agent-complete` row flips `status: 'reserved'
- * → 'shipped'` (ADR-027's R2-08 amendment, "Registry rows added" section).
- * That is an unavoidable, intended consequence of shipping F2 correctly — per
- * this WI's immutable-gates contract, the T3 test-writer may not edit an
- * existing test, so it was left untouched. The IMPLEMENTER must update that
- * one assertion (swap its "reserved" example for `manual` or `feed` — see the
- * green-on-arrival tests below, which already use those two and must stay
- * green) in the same change that ships F2.
+ * The `manual` case above already covers "still reserved"; `feed` is covered
+ * here as the second reserved kind (kills a fix that flips the WHOLE registry
+ * to shipped instead of just the one row).
  */
 describe('validateFlow — trigger-kind-reserved after R2-08-F2 (agent-complete shipped)', () => {
   it('(RED) agent-complete is NO LONGER reserved once its TRIGGER_KINDS row ships → no trigger-kind-reserved finding', () => {
@@ -974,17 +973,7 @@ describe('validateFlow — trigger-kind-reserved after R2-08-F2 (agent-complete 
     );
   });
 
-  it('(green-on-arrival) manual is STILL reserved after F2 ships — kills flipping the WHOLE registry to shipped instead of just the one row', () => {
-    const flow = makeFlow({
-      triggers: [{ on: 'manual', target: { kind: 'agent', ref: 'my-agent' } }],
-    });
-    const findings = validateFlow(flow, makeAgentMap(makeAgent()));
-    const f = findings.find((x) => x.check === 'trigger-kind-reserved');
-    assert.ok(f, 'expected "manual" to remain schema-reserved after F2 ships — a fix that flips the whole registry would make this finding disappear too');
-    assert.equal(f!.level, 'error');
-  });
-
-  it('(green-on-arrival) feed is STILL reserved after F2 ships — same kill as above, second reserved kind', () => {
+  it('(green-on-arrival) feed is STILL reserved after F2 ships — kills flipping the WHOLE registry to shipped instead of just the one row', () => {
     const flow = makeFlow({
       triggers: [{ on: 'feed', target: { kind: 'agent', ref: 'my-agent' } }],
     });
@@ -992,6 +981,41 @@ describe('validateFlow — trigger-kind-reserved after R2-08-F2 (agent-complete 
     const f = findings.find((x) => x.check === 'trigger-kind-reserved');
     assert.ok(f, 'expected "feed" to remain schema-reserved after F2 ships');
     assert.equal(f!.level, 'error');
+  });
+});
+
+/**
+ * ACCEPTANCE TESTS (T3, R2-08-F2, T1 ruling #1) — `trigger-agent-complete`:
+ * an `on: agent-complete` row's `agent:` field is REQUIRED. Absent must never
+ * mean "fires for all" (the fail-open shape T1's ruling closed) — it is a
+ * `forge studio lint` error, same `surface/enum`-family shape as
+ * `trigger-projects` above (this WI's other new per-kind requiredness check).
+ */
+describe('validateFlow — trigger-agent-complete (R2-08-F2, T1 ruling #1)', () => {
+  it('(RED) an agent-complete row with agent: absent → error trigger-agent-complete', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'agent-complete', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowIds: new Set(['my-flow', 'other-flow']) });
+    const f = findings.find((x) => x.check === 'trigger-agent-complete');
+    assert.ok(
+      f,
+      `expected a trigger-agent-complete finding for a missing "agent:" — got ${JSON.stringify(findings)}. An absent agent: must never default to "fires for all" (T1's fail-open ruling).`,
+    );
+    assert.equal(f!.level, 'error');
+  });
+
+  it('(green-on-arrival — vacuously true until the check exists, meaningful only paired with the RED test above) an agent-complete row WITH agent: declared → no trigger-agent-complete finding', () => {
+    const flow = makeFlow({
+      triggers: [
+        { on: 'agent-complete', target: { kind: 'flow', ref: 'other-flow' }, agent: 'doc-updater' } as unknown as FlowTrigger,
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowIds: new Set(['my-flow', 'other-flow']) });
+    assert.ok(
+      !findings.some((x) => x.check === 'trigger-agent-complete'),
+      `expected no trigger-agent-complete finding when agent: is declared — got ${JSON.stringify(findings)}`,
+    );
   });
 });
 
