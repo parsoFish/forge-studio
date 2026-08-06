@@ -78,7 +78,7 @@ function makeFixture() {
   return root;
 }
 
-function baselinePathFor(root) {
+function baselinePathFor(root: string): string {
   return join(root, 'baseline.txt');
 }
 
