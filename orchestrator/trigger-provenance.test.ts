@@ -49,16 +49,29 @@
  *    edge case in this file), since no live call path produces it as a
  *    file on disk without running a real cycle.
  *
- *    AMBIGUITY (escalated in the T3 report, not guessed silently): whether
- *    F4 should derive flow-complete/merged provenance from this
- *    *-trigger-firing event on the run's own log (my assumption here,
- *    consistent with run-model.ts's existing findOrigin-from-cycle.start
- *    pattern and ADR 008's "the event log is written once; readers
- *    aggregate from it" rule cited by ADR-027), or whether the
- *    implementation instead needs new manifest-frontmatter plumbing
- *    threaded through enqueueFlowRun/finalize-merged.ts. Both are
- *    consistent with "derived from the staged request"; only the former is
- *    achievable without a production change outside run-model.ts today.
+ *    AMBIGUITY (escalated in the T3 report, resolved by round-2 review): the
+ *    landed implementation (orchestrator/run-model.ts's `deriveTrigger` +
+ *    `findTriggerFiringEvent`) confirms the event-log-derived path assumed
+ *    here — cron/webhook/agent-complete persist `trigger_kind`/
+ *    `trigger_source`/`trigger_scope` onto the minted manifest at mint time;
+ *    flow-complete/merged read the SAME `*-trigger-firing` event these
+ *    fixtures plant, with `scope` resolved from the run's OWN
+ *    `manifest.project` (there is no separate "event project" for these two
+ *    kinds — the dispatch runs against this exact initiative).
+ *
+ * ROUND-2 AMENDMENT (relayed operator ruling): the original webhook
+ * fixtures below omitted `sourceFlowId` — a field every real
+ * `cli/bridge-hooks.ts` call site now sets (the declaring flow, resolved by
+ * `findWebhookTrigger`). Omitting it pressured the implementation into
+ * adding a fallback in `orchestrator/mint-triggered-initiative.ts`'s
+ * `deriveTriggerFields`: strip the `webhook:` prefix off `triggeredBy` and
+ * report the HOOK id as `source` — a value the contract forbids (`source`
+ * is a DEFINITION id, never an endpoint slug). Fixed: every webhook fixture
+ * now threads `sourceFlowId`, mirroring the real call site exactly, and a
+ * new test pins the CORRECT behaviour for the genuinely-possible case where
+ * it is absent — `trigger` must be ABSENT entirely, never a degraded
+ * hook-id-shaped trigger. That new test is RED until the fallback is
+ * removed.
  */
 
 import { test } from 'node:test';
@@ -249,6 +262,14 @@ test('trigger.kind === "webhook" for a run derived from a staged webhook request
       target: { kind: 'flow', ref: 'worker-webhook' },
       origin: 'webhook',
       triggeredBy: 'webhook:demo-runner-hook',
+      // Every real webhook call site (cli/bridge-hooks.ts) now sets
+      // sourceFlowId — the declaring flow, already resolved by
+      // findWebhookTrigger. Omitting it here would exercise a fixture shape
+      // no real caller produces (round-2 finding: an earlier version of this
+      // fixture omitted it and, to satisfy it, the implementation grew a
+      // fallback that reports the HOOK id as `source` — a value ruled
+      // forbidden; see the dedicated "no sourceFlowId" test below).
+      sourceFlowId: 'demo-runner-declaring-flow',
       payload: {
         kind: 'webhook',
         provider: 'github',
@@ -375,10 +396,18 @@ test('an attacker-controlled webhook payload string never appears anywhere in tr
   const root = makeTmp();
   try {
     planFlow(root, 'worker-webhook-2', 'test-project');
+    const hookId = 'demo-runner-hook';
+    const declaringFlowId = 'demo-runner-declaring-flow-2';
     const run = mintAndDeriveRun(root, {
       target: { kind: 'flow', ref: 'worker-webhook-2' },
       origin: 'webhook',
-      triggeredBy: 'webhook:demo-runner-hook',
+      triggeredBy: `webhook:${hookId}`,
+      // Mirrors the real call site (cli/bridge-hooks.ts): sourceFlowId is
+      // the declaring flow, resolved separately from the hook id embedded
+      // in triggeredBy. Round-2 finding: omitting this field here made the
+      // implementation grow a forbidden fallback (strip 'webhook:' off
+      // triggeredBy, report the HOOK id as source) to satisfy this fixture.
+      sourceFlowId: declaringFlowId,
       payload: {
         kind: 'webhook',
         provider: 'github',
@@ -402,6 +431,15 @@ test('an attacker-controlled webhook payload string never appears anywhere in tr
     assert.notEqual(run.trigger?.kind, ATTACKER_STRING);
     assert.notEqual(run.trigger?.source, ATTACKER_STRING);
     assert.notEqual(run.trigger?.scope, ATTACKER_STRING);
+    // The concrete WRONG value this pins against (round-2 ruling): source
+    // must be the DECLARING FLOW id (sourceFlowId), never the hook-id slug
+    // recovered by stripping a `webhook:` prefix off triggeredBy.
+    assert.equal(run.trigger?.source, declaringFlowId, `expected trigger.source to be the declaring flow id '${declaringFlowId}', got ${JSON.stringify(run.trigger)}`);
+    assert.notEqual(run.trigger?.source, hookId, `trigger.source must never be the hook id '${hookId}' recovered from triggeredBy's 'webhook:' prefix`);
+    assert.ok(
+      !/^webhook:/.test(String(run.trigger?.source)),
+      `trigger.source must never carry a 'webhook:' prefix shape, got ${JSON.stringify(run.trigger?.source)}`,
+    );
   } finally {
     cleanup(root);
   }
@@ -454,6 +492,11 @@ test('trigger.scope is exactly null (not undefined, not "") when the firing even
       target: { kind: 'flow', ref: 'worker-unscoped' },
       origin: 'webhook',
       triggeredBy: 'webhook:some-hook',
+      // Mirrors the real call site (cli/bridge-hooks.ts) — sourceFlowId is
+      // independent of scope (which derives from eventProject, deliberately
+      // absent below); omitting it would exercise the forbidden hook-id
+      // fallback instead of the real derivation path this test targets.
+      sourceFlowId: 'some-hook-declaring-flow',
       payload: {
         kind: 'webhook',
         provider: 'github',
@@ -470,6 +513,62 @@ test('trigger.scope is exactly null (not undefined, not "") when the firing even
     assert.equal(run.trigger?.scope, null, `expected scope === null exactly, got ${JSON.stringify(run.trigger?.scope)} (typeof ${typeof run.trigger?.scope})`);
     assert.notEqual(run.trigger?.scope, undefined, 'scope must be present-and-null, not absent');
     assert.notEqual(run.trigger?.scope, '', 'scope must be null, not an empty string');
+  } finally {
+    cleanup(root);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Test 3b (round-2 amendment) — a webhook request with NO sourceFlowId has
+// no honest provenance: trigger must be ABSENT entirely, never a fallback
+// that reports the hook id as the source.
+// ---------------------------------------------------------------------------
+// Round-2 ruling (operator, relayed): a webhook request without a declaring
+// flow has no honest provenance, so `trigger` should be ABSENT — not
+// present with a degraded/guessed `source`. This closes the loop the
+// round-1 fixtures opened: those fixtures omitted `sourceFlowId` (a field
+// every real cli/bridge-hooks.ts call site sets) while still asserting
+// `trigger` was present, which pressured the implementation into adding a
+// fallback (`deriveTriggerFields` in orchestrator/mint-triggered-initiative.ts:
+// strip the `webhook:` prefix off `triggeredBy` and report the HOOK id as
+// `source`) — a value the contract explicitly forbids (`source` is a
+// DEFINITION id: a flow id or agent slug, never a webhook endpoint slug).
+// Kills: that exact fallback arm. A correct implementation returns `trigger
+// === undefined` here; the fallback returns a present-but-wrong trigger
+// whose `source` is the raw hook id.
+test('a webhook request with no sourceFlowId yields trigger ABSENT entirely — never a hook-id-shaped fallback source', () => {
+  const root = makeTmp();
+  try {
+    planFlow(root, 'worker-webhook-no-source', 'test-project');
+    const hookId = 'some-hook-with-no-declaring-flow';
+    const run = mintAndDeriveRun(root, {
+      target: { kind: 'flow', ref: 'worker-webhook-no-source' },
+      origin: 'webhook',
+      triggeredBy: `webhook:${hookId}`,
+      // sourceFlowId deliberately OMITTED — simulates a caller that never
+      // resolved (or cannot resolve) the declaring flow. This IS a shape a
+      // real caller could produce (e.g. a future webhook receiver that
+      // hasn't been updated to thread sourceFlowId) — unlike the round-1
+      // fixtures above, which now all thread it because bridge-hooks.ts
+      // always resolves it today.
+      payload: {
+        kind: 'webhook',
+        provider: 'github',
+        event: 'push',
+        repo: 'acme/widgets',
+        ref: 'refs/heads/main',
+        headSha: 'a'.repeat(40),
+        pusherLogin: 'octocat',
+        commitCount: 1,
+        headCommitMessage: 'no declaring flow available',
+      },
+    });
+    assert.equal(
+      run.trigger,
+      undefined,
+      `a webhook request with no declaring flow has no honest provenance — trigger must be ABSENT, not a hook-id-shaped fallback. Kills deriveTriggerFields's forbidden fallback (strips 'webhook:' off triggeredBy, reports the hook id '${hookId}' as source). Got ${JSON.stringify(run.trigger)}`,
+    );
+    assert.equal('trigger' in run, false, 'trigger key must not even be present (not merely undefined-valued)');
   } finally {
     cleanup(root);
   }
