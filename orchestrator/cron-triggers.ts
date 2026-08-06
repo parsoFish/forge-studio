@@ -156,6 +156,12 @@ function makeFireFn(
           target: d.target,
           origin: 'cron',
           triggeredBy: `cron:${d.flowId}`,
+          // R2-08-F4 (round-2): thread the declaring flow id through the SAME
+          // dedicated field webhook uses, so trigger-provenance derivation
+          // reads one mechanism per kind rather than parsing it back out of
+          // `triggeredBy` — `triggeredBy` keeps its own `cron:<flowId>` shape
+          // unchanged for its own (pre-existing) readers.
+          sourceFlowId: d.flowId,
           concurrency: d.concurrency,
           payload: { kind: 'cron', schedule: d.schedule, firedAt: new Date().toISOString() },
           // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.

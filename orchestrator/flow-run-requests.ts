@@ -76,13 +76,18 @@ export type FlowRunRequest = {
   /** R2-08-F2: the completed agent slug that staged this request (agent-complete origin only). */
   sourceAgent?: string;
   /**
-   * R2-08-F4: the DECLARING flow's id (webhook origin only) — threaded from
-   * `findWebhookTrigger`'s already-resolved `flow.id` so trigger provenance
-   * can name the definition that fired, not `triggeredBy`'s hook-id slug
-   * (`webhook:<hookId>` — a delivery-endpoint id, not a definition id; kept
-   * unchanged for its own existing readers). Absent for every other origin —
-   * cron's declaring flow is already recoverable from `triggeredBy`
-   * (`cron:<flowId>`); agent-complete's declaring definition is `sourceAgent`.
+   * R2-08-F4 (round-2): the DECLARING flow's id (cron + webhook origins).
+   * `triggeredBy` deliberately keeps its own kind-prefixed shape
+   * (`cron:<flowId>` / `webhook:<hookId>`) for its own pre-existing readers
+   * (notify messages, concurrency lookups) — this field is the ONE
+   * mechanism trigger-provenance derivation reads instead, so a future
+   * change to `triggeredBy`'s format can never silently corrupt `source`.
+   * webhook has NO fallback when this is absent (`findWebhookTrigger`
+   * already resolves it at every real call site; a hook id is never a
+   * substitute definition id — round-2 ruling). cron falls back to
+   * recovering it from `triggeredBy`'s `cron:<flowId>` shape when absent
+   * (a genuinely correct value, unlike webhook's hook-id shape). Absent for
+   * `agent-complete` — its declaring definition is `sourceAgent`.
    */
   sourceFlowId?: string;
   createdAt: string;

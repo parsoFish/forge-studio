@@ -40,22 +40,30 @@ function idToken(s: string): string {
 }
 
 /**
- * R2-08-F4 (ADR-027 amendment): derive the trigger-provenance fields to
- * persist on the minted manifest, from the staged request alone — never
- * from `req.payload` (free-text/external data; the attacker-payload
- * acceptance test pins that `trigger` never carries payload text). `source`
- * is always a DEFINITION id:
+ * R2-08-F4 (ADR-027 amendment; round-2 correction): derive the
+ * trigger-provenance fields to persist on the minted manifest, from the
+ * staged request alone — never from `req.payload` (free-text/external data;
+ * the attacker-payload acceptance test pins that `trigger` never carries
+ * payload text). `source` is always a DEFINITION id:
  *   - `agent-complete` → the completed agent's own slug (`sourceAgent`).
- *   - `webhook`        → the declaring flow id, threaded by the caller onto
- *     `sourceFlowId` (bridge-hooks.ts's `findWebhookTrigger` resolves it;
- *     `triggeredBy` deliberately stays the hook-id slug for its own readers).
- *     Every real production caller sets it now; a caller that doesn't falls
- *     back to `triggeredBy`'s own `webhook:<hookId>` shape below — a
- *     structured, non-prose token, not the correct definition id, but never
- *     a fabricated one either.
- *   - `cron`           → recovered from `triggeredBy`'s own
- *     `cron:<declaringFlowId>` shape (cron-triggers.ts's `makeFireFn` — no
- *     separate field needed).
+ *   - `webhook`        → ONLY `sourceFlowId` — the declaring flow, threaded
+ *     by the caller (bridge-hooks.ts's `findWebhookTrigger` resolves it;
+ *     `triggeredBy` deliberately stays the hook-id slug `webhook:<hookId>`
+ *     for its own readers, and a hook id is NOT a definition id). NO
+ *     fallback: a webhook request with no resolved declaring flow has no
+ *     honest provenance at all — `null`, never a degraded trigger whose
+ *     `source` is a hook-id slug (round-2 ruling; the earlier fallback that
+ *     stripped `webhook:` off `triggeredBy` produced exactly that forbidden
+ *     shape and is deleted).
+ *   - `cron`           → prefers `sourceFlowId` (every real
+ *     `cron-triggers.ts` fire sets it, for the same one-mechanism-per-field
+ *     reason as webhook); falls back to recovering the declaring flow id
+ *     from `triggeredBy`'s own `cron:<declaringFlowId>` shape when absent.
+ *     This fallback is NOT the webhook one reinstated: a cron `triggeredBy`
+ *     prefix genuinely IS the declaring flow id (cron-triggers.ts's
+ *     `makeFireFn` writes `cron:${d.flowId}` — documented intent, correct by
+ *     construction), where a webhook `triggeredBy` prefix is a hook id,
+ *     never a flow id.
  * Only these three origins ever reach this function (drainFlowRunRequests
  * routes chaining's `origin: 'trigger'` through `enqueueFlowRun` instead,
  * never through mint). Returns `null` when no honest source is derivable at
@@ -67,14 +75,9 @@ function deriveTriggerFields(req: FlowRunRequest): { kind: string; source: strin
     source = req.sourceAgent;
   } else if (req.origin === 'webhook') {
     source = req.sourceFlowId;
-  }
-  // Fallback (cron always lands here; webhook falls back only when a caller
-  // omits `sourceFlowId`): recover the definition id from `triggeredBy`'s own
-  // `<origin>:<id>` shape — a structured, non-prose token every real call
-  // site already writes, never a fabricated placeholder.
-  if (!source) {
-    const prefix = `${req.origin}:`;
-    source = req.triggeredBy.startsWith(prefix) ? req.triggeredBy.slice(prefix.length) : undefined;
+  } else if (req.origin === 'cron') {
+    const prefix = 'cron:';
+    source = req.sourceFlowId ?? (req.triggeredBy.startsWith(prefix) ? req.triggeredBy.slice(prefix.length) : undefined);
   }
   if (!source) return null;
   return {
