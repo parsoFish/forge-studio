@@ -287,3 +287,253 @@ test('ADR-024: demoBuilderAgentSpec derives phase (unifier), tier (sonnet), and 
   assert.ok(demoBuilderAgentSpec.allowedTools.includes('Write'), 'demo-builder writes the machinery + HTML');
   assert.ok(demoBuilderAgentSpec.allowedTools.includes('Bash'), 'demo-builder runs the project for real output');
 });
+
+// ---------------------------------------------------------------------------
+// R4-16 — generation snapshots + choose-a-generation lock.
+//
+// TEST-FIRST PIN: none of this exists yet at branch base. `runGenerateStep`
+// today writes ONLY into the project repo (.forge/demo/, .forge/skills/) and
+// never touches `<sessionDir>/generations/`; `runLockStep` never reads
+// `status.selectedGeneration` and `demo.lock.json` has no `generation` field.
+// Every test below is RED for that reason — see each test's comment for the
+// specific wrong implementation it kills.
+// ---------------------------------------------------------------------------
+
+/** A queryFn that writes DEMO.html + the demo-design SKILL.md with CALLER-
+ *  CONTROLLED byte content each turn — lets a test drive two generations with
+ *  distinct, independently-verifiable bytes (the R4-16 round-trip ATs). */
+function makeVersionedWritingQueryFn(demoBytes: string, skillBytes: string): QueryFn {
+  return ({ options }) => {
+    const cwd = (options?.cwd as string) ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(cwd, '.forge', 'demo'), { recursive: true });
+      mkdirSync(join(cwd, '.forge', 'skills', 'demo-design'), { recursive: true });
+      writeFileSync(join(cwd, DEMO_SKILL_REL_PATH), skillBytes);
+      writeFileSync(join(cwd, DEMO_HTML_REL_PATH), demoBytes);
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+}
+
+function generationDir(sessionDir: string, n: number | string): string {
+  return join(sessionDir, 'generations', String(n));
+}
+
+function readMeta(sessionDir: string, n: number | string): Record<string, unknown> {
+  return JSON.parse(readFileSync(join(generationDir(sessionDir, n), 'meta.json'), 'utf8'));
+}
+
+// R4-16 AT-1: a successful generate turn snapshots DEMO.html + SKILL.md +
+// meta.json into generations/<iteration>/ — kills an implementation that
+// never snapshots at all (today's runGenerateStep only writes into the repo).
+test('R4-16 AT-1: generate turn snapshots DEMO.html + SKILL.md + meta.json into generations/<iteration>/', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V1 demo</html>', '# demo-design V1'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const gdir = generationDir(sessionDir, 1);
+  assert.ok(existsSync(join(gdir, 'DEMO.html')), 'DEMO.html snapshotted');
+  assert.ok(existsSync(join(gdir, 'SKILL.md')), 'SKILL.md snapshotted');
+  assert.ok(existsSync(join(gdir, 'meta.json')), 'meta.json written');
+  assert.equal(readFileSync(join(gdir, 'DEMO.html'), 'utf8'), '<html>V1 demo</html>');
+  assert.equal(readFileSync(join(gdir, 'SKILL.md'), 'utf8'), '# demo-design V1');
+});
+
+// R4-16 AT-2: meta.json fidelity for a plain (non-composed, non-targetElement,
+// no feedback) generation — kills an implementation that invents/omits fields
+// or defaults feedback to "" instead of null.
+test('R4-16 AT-2: meta.json carries iteration, a real createdAt, feedback:null, targetElement:null, composed:false, and the demo-design skillRelPath', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V1</html>', '# skill V1'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const meta = readMeta(sessionDir, 1);
+  assert.equal(meta.iteration, 1);
+  assert.ok(typeof meta.createdAt === 'string' && !Number.isNaN(Date.parse(meta.createdAt)), `createdAt must be a real ISO timestamp, got: ${meta.createdAt}`);
+  assert.equal(meta.feedback, null, 'no feedback.md at turn end ⇒ feedback:null, never fabricated');
+  assert.equal(meta.targetElement, null);
+  assert.equal(meta.composed, false);
+  assert.equal(meta.skillRelPath, DEMO_SKILL_REL_PATH);
+});
+
+// R4-16 AT-3: feedback attribution — the feedback.md content that drove THIS
+// generation is captured verbatim; kills an implementation that fabricates,
+// drops, or attributes the WRONG (e.g. a later) round's feedback.
+test('R4-16 AT-3: meta.json.feedback captures the feedback.md content that drove THIS generation, verbatim', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 2 });
+  writeFileSync(join(sessionDir, 'feedback.md'), 'Make it punchier and shorter.');
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>V2</html>', '# skill V2'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const meta = readMeta(sessionDir, 2);
+  assert.equal(meta.feedback, 'Make it punchier and shorter.');
+});
+
+// R4-16 AT-4: targetElement iteration snapshots the PER-ELEMENT skill (not the
+// composer), and meta.json names the element + the real project-repo-relative
+// skillRelPath it was copied from — kills an implementation that always
+// snapshots the demo-design composer regardless of targetElement.
+test('R4-16 AT-4: per-element iteration snapshots the element skill, and meta.json.skillRelPath + targetElement name it', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating', targetElement: 'cli-capture', iteration: 1 });
+  writeComposedProcess(repoPath);
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const meta = readMeta(sessionDir, 1);
+  assert.equal(meta.targetElement, 'cli-capture');
+  assert.equal(meta.skillRelPath, '.forge/skills/demo/cli-capture/SKILL.md');
+  const gdir = generationDir(sessionDir, 1);
+  assert.equal(readFileSync(join(gdir, 'SKILL.md'), 'utf8'), '# cli-capture element');
+});
+
+// R4-16 AT-5: a composed (multi-element) generate turn records composed:true
+// and snapshots the composer skill (demo-design), not a per-element one —
+// kills an implementation that hardcodes composed:false or snapshots the
+// wrong skill for the composed case.
+test('R4-16 AT-5: composed generate turn records composed:true and snapshots the demo-design composer skill', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  writeComposedProcess(repoPath);
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const meta = readMeta(sessionDir, 1);
+  assert.equal(meta.composed, true);
+  assert.equal(meta.skillRelPath, DEMO_SKILL_REL_PATH);
+});
+
+// R4-16 AT-6: accumulation — a later generation must never modify or delete an
+// earlier one. Kills an implementation that snapshots into a single reused
+// dir, or overwrites generation 1 when generation 2 is written.
+test('R4-16 AT-6: generation snapshots accumulate — generation 1 is untouched after generation 2 is written', async () => {
+  const { projectRoot, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>GEN-ONE</html>', '# skill ONE'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  // Advance to a second generate turn (operator gave feedback; iteration bumped).
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeFileSync(join(sessionDir, 'feedback.md'), 'Round 2 feedback.');
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'generating', iteration: 2 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>GEN-TWO</html>', '# skill TWO'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(readFileSync(join(generationDir(sessionDir, 1), 'DEMO.html'), 'utf8'), '<html>GEN-ONE</html>', 'generation 1 DEMO.html must be untouched by generation 2');
+  assert.equal(readFileSync(join(generationDir(sessionDir, 1), 'SKILL.md'), 'utf8'), '# skill ONE');
+  assert.equal(readFileSync(join(generationDir(sessionDir, 2), 'DEMO.html'), 'utf8'), '<html>GEN-TWO</html>');
+});
+
+// R4-16 AT-7 (mandatory adversarial AT — real-client-path round-trip): run the
+// REAL runDemoBuilderTurn TWICE with an injected queryFn writing DIFFERENT
+// DEMO.html + SKILL.md bytes each turn, then run the REAL lock step choosing
+// generation 1 — the file the demo-runner would EXECUTE afterward must be
+// generation 1's exact bytes, not the latest. Kills an implementation that
+// ignores selectedGeneration and simply locks whatever is currently in the
+// repo (today's runLockStep behaviour, unmodified).
+test('R4-16 AT-7: choosing an earlier generation at lock restores ITS bytes to the repo, not the latest — real runner, real lock step, on-disk round-trip', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: makeVersionedWritingQueryFn('<html>GENERATION-ONE-BYTES</html>', '# GENERATION-ONE-SKILL'),
+    logger: logger(logsRoot, sessionId), logsRoot,
+  });
+
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeFileSync(join(sessionDir, 'feedback.md'), 'The operator will actually pick the earlier draft.');
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'generating', iteration: 2 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: makeVersionedWritingQueryFn('<html>GENERATION-TWO-BYTES</html>', '# GENERATION-TWO-SKILL'),
+    logger: logger(logsRoot, sessionId), logsRoot,
+  });
+
+  // Sanity: before locking, the repo holds the LATEST (generation 2) bytes.
+  assert.equal(readFileSync(join(repoPath, DEMO_HTML_REL_PATH), 'utf8'), '<html>GENERATION-TWO-BYTES</html>');
+
+  const afterGen2 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen2, phase: 'locking', selectedGeneration: 1 });
+  const result = await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(result.phase, 'locked');
+
+  assert.equal(
+    readFileSync(join(repoPath, DEMO_HTML_REL_PATH), 'utf8'),
+    '<html>GENERATION-ONE-BYTES</html>',
+    "the repo's DEMO.html must hold generation 1's bytes after choosing it at lock — not the latest generation",
+  );
+  assert.equal(
+    readFileSync(join(repoPath, DEMO_SKILL_REL_PATH), 'utf8'),
+    '# GENERATION-ONE-SKILL',
+    "the repo's demo-design SKILL.md must hold generation 1's bytes after choosing it at lock",
+  );
+
+  const lock = JSON.parse(readFileSync(join(repoPath, DEMO_LOCK_REL_PATH), 'utf8'));
+  assert.equal(lock.generation, 1, 'demo.lock.json must record the CHOSEN generation, not the latest iteration');
+});
+
+// R4-16 AT-8 (mandatory adversarial AT — the guard that must fail): choosing a
+// generation that has no readable/parsable snapshot must THROW, naming the
+// requested number AND the generations that DO exist, and must leave the repo
+// + demo.lock.json untouched (fail closed — the declared-data-fails-open
+// antipattern this campaign keeps finding). Kills an implementation that
+// silently falls back to locking the latest generation when the requested one
+// is missing.
+test('R4-16 AT-8: selectedGeneration naming a generation with no snapshot on disk throws, naming the requested + existing generations, and leaves the repo + demo.lock.json untouched', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: makeVersionedWritingQueryFn('<html>G1</html>', '# S1'),
+    logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'generating', iteration: 2 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT,
+    queryFn: makeVersionedWritingQueryFn('<html>G2-LATEST</html>', '# S2'),
+    logger: logger(logsRoot, sessionId), logsRoot,
+  });
+
+  const afterGen2 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen2, phase: 'locking', selectedGeneration: 99 });
+
+  await assert.rejects(
+    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.match(err.message, /99/, 'must name the requested (nonexistent) generation');
+      assert.match(err.message, /1/, 'must name a generation that DOES exist (1)');
+      assert.match(err.message, /2/, 'must name a generation that DOES exist (2)');
+      return true;
+    },
+  );
+
+  assert.equal(
+    readFileSync(join(repoPath, DEMO_HTML_REL_PATH), 'utf8'),
+    '<html>G2-LATEST</html>',
+    'no partial restore — the repo must still hold the LATEST bytes, untouched',
+  );
+  assert.ok(!existsSync(join(repoPath, DEMO_LOCK_REL_PATH)), 'no lock file must be written when the chosen generation cannot be restored');
+  assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locking', 'phase must NOT flip to locked on a failed restore');
+});
+
+// R4-16 AT-9: locking WITHOUT a selectedGeneration records generation:null in
+// demo.lock.json — never attributed from status.iteration (a field that
+// happens to be a number is not the same thing as "the chosen generation").
+// Kills an implementation that omits the "generation" key entirely, or that
+// defaults it to status.iteration.
+test('R4-16 AT-9: locking without selectedGeneration records demo.lock.json.generation as null, never status.iteration', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'locking', iteration: 7 });
+  mkdirSync(join(repoPath, '.forge', 'demo'), { recursive: true });
+  mkdirSync(join(repoPath, '.forge', 'skills', 'demo-design'), { recursive: true });
+  writeFileSync(join(repoPath, DEMO_SKILL_REL_PATH), '# demo-design');
+  writeFileSync(join(repoPath, DEMO_HTML_REL_PATH), '<!DOCTYPE html><html><body>demo</body></html>');
+
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const lock = JSON.parse(readFileSync(join(repoPath, DEMO_LOCK_REL_PATH), 'utf8'));
+  assert.ok(Object.prototype.hasOwnProperty.call(lock, 'generation'), 'demo.lock.json must carry a "generation" key even when none was chosen');
+  assert.strictEqual(lock.generation, null, 'no selectedGeneration ⇒ generation:null — must never be omitted, and must never be attributed from status.iteration (7)');
+});

@@ -331,11 +331,19 @@ test('AT-20: parseSessionArtifact: brain-structure "themeCount" missing or non-n
   expect((parseSessionArtifact(divergent) as { themeCount: number }).themeCount).toBe(5);
 });
 
-test('AT-21: parseSessionArtifact: an unrecognised OR reserved artifact kind THROWS naming it; not a plain object THROWS', () => {
+test('AT-21: parseSessionArtifact: an unrecognised OR (still-)reserved artifact kind THROWS naming it; not a plain object THROWS', () => {
   expect(() => parseSessionArtifact({ kind: 'totally-bogus' })).toThrow(/totally-bogus/);
   expect(() => parseSessionArtifact({ kind: 'file-package' })).toThrow(/file-package/);
   expect(() => parseSessionArtifact({ kind: 'contract-buildout' })).toThrow(/contract-buildout/);
-  expect(() => parseSessionArtifact({ kind: 'generation-gallery' })).toThrow(/generation-gallery/);
+  // R4-16: "generation-gallery" is NO LONGER in this bucket — it is a real,
+  // live kind now (see AT-102..109 below for its own full parse contract).
+  // The bare `{kind:'generation-gallery'}` shape used to hit the generic
+  // "unrecognised/reserved" branch (whose message always echoes the kind);
+  // once it has a REAL per-field parser, the same bare object still throws
+  // (missing "label"/"generations"/"sourcesScanned"), but for a DIFFERENT
+  // reason whose message does not necessarily contain the kind string
+  // anymore — asserting /generation-gallery/ here would be pinning the OLD,
+  // now-incorrect contract. Removed rather than left to silently rot.
   expect(() => parseSessionArtifact(null)).toThrow();
   expect(() => parseSessionArtifact([])).toThrow();
 });
@@ -659,4 +667,123 @@ test('AT-100: parseSessionArtifact: roadmap-draft row "dependsOn" that is a non-
 test('AT-101: parseSessionArtifact: roadmap-draft row "dependsOn" containing a non-string element THROWS naming the field — matches requireStringArray\'s per-element check, never silently dropped/stringified', () => {
   const badRow = { ...WELL_FORMED_ROADMAP_ARTIFACT, rows: [{ ...WELL_FORMED_ROADMAP_ARTIFACT.rows[0], dependsOn: ['INIT-2026-01-01-fixture-a', 42] }] };
   expect(() => parseSessionArtifact(badRow)).toThrow(/dependsOn/);
+});
+
+// ===========================================================================
+// R4-16 (2026-08-06) — a NEW live artifact kind, "generation-gallery"
+// (orchestrator/studio/session-transcript.ts's `deriveGenerationGallery`).
+// TEST-FIRST PIN: `parseSessionArtifact` does not have a case for this kind
+// yet — every well-formed fixture below currently falls into the generic
+// "unrecognised/reserved" default branch, which is the correct RED (this is
+// exactly the same shape of pin AT-21 above used to encode before this
+// round). Field-hardening ATs follow this file's established convention
+// (requireString/requireNumber/requireStringArray, never a silent default).
+// — AT-102..AT-109
+// ===========================================================================
+
+const WELL_FORMED_GENERATION_GALLERY_ARTIFACT = {
+  kind: 'generation-gallery',
+  label: 'Demo generations', // studio/session-kinds.yaml's real declared label for the "demo" kind
+  generations: [
+    {
+      number: 1,
+      createdAt: '2026-08-06T10:00:00.000Z',
+      feedback: null,
+      targetElement: null,
+      items: [
+        { path: 'DEMO.html', kind: 'html', bytes: 512 },
+        { path: 'SKILL.md', kind: 'markdown', bytes: 128 },
+      ],
+    },
+    {
+      number: 2,
+      createdAt: '2026-08-06T11:00:00.000Z',
+      feedback: 'Make it punchier.',
+      targetElement: 'cli-capture',
+      items: [{ path: 'SKILL.md', kind: 'markdown', bytes: 96 }],
+    },
+  ],
+  sourcesScanned: ['generations/* (2 generation(s) found)'],
+};
+
+test('AT-102: parseSessionArtifact: a well-formed generation-gallery artifact round-trips exactly, generations + items in server order', () => {
+  const parsed = parseSessionArtifact(WELL_FORMED_GENERATION_GALLERY_ARTIFACT);
+  expect(parsed).toEqual(WELL_FORMED_GENERATION_GALLERY_ARTIFACT);
+});
+
+test('AT-103: parseSessionArtifact: generation-gallery "generations" missing or non-array THROWS — never coerced to []', () => {
+  // Sanity: a WELL-FORMED generation-gallery must parse cleanly — proves this
+  // test is genuinely red today (the whole kind is unimplemented, so it
+  // throws regardless of field validity) rather than accidentally green
+  // because every generation-gallery input currently throws no matter what.
+  expect(() => parseSessionArtifact(WELL_FORMED_GENERATION_GALLERY_ARTIFACT)).not.toThrow();
+  const { generations: _drop, ...missing } = WELL_FORMED_GENERATION_GALLERY_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: 'nope' })).toThrow();
+});
+
+test('AT-104: parseSessionArtifact: a generation entry with a missing/non-integer "number" THROWS', () => {
+  // Sanity: see AT-103's comment — proves this test is genuinely red today.
+  expect(() => parseSessionArtifact(WELL_FORMED_GENERATION_GALLERY_ARTIFACT)).not.toThrow();
+  const badNumber = {
+    ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT,
+    generations: [{ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], number: '1' }],
+  };
+  expect(() => parseSessionArtifact(badNumber)).toThrow();
+  const floatNumber = {
+    ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT,
+    generations: [{ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], number: 1.5 }],
+  };
+  expect(() => parseSessionArtifact(floatNumber)).toThrow();
+  const { number: _drop, ...rowWithoutNumber } = WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0];
+  const missingNumber = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [rowWithoutNumber] };
+  expect(() => parseSessionArtifact(missingNumber)).toThrow();
+});
+
+test('AT-105: parseSessionArtifact: a generation entry with a missing/non-array "items" THROWS — never coerced to []', () => {
+  // Sanity: see AT-103's comment — proves this test is genuinely red today.
+  expect(() => parseSessionArtifact(WELL_FORMED_GENERATION_GALLERY_ARTIFACT)).not.toThrow();
+  const { items: _drop, ...rowWithoutItems } = WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0];
+  const missing = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [rowWithoutItems] };
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  const wrongType = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [{ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], items: 'nope' }] };
+  expect(() => parseSessionArtifact(wrongType)).toThrow();
+});
+
+test('AT-106: parseSessionArtifact: an item with a missing/non-string "path", an unrecognised "kind", or a missing/non-number "bytes" THROWS', () => {
+  const badPath = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [{ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], items: [{ kind: 'html', bytes: 1 }] }] };
+  expect(() => parseSessionArtifact(badPath)).toThrow();
+  const badKind = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [{ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], items: [{ path: 'x.html', kind: 'video', bytes: 1 }] }] };
+  expect(() => parseSessionArtifact(badKind)).toThrow(/video/);
+  const badBytes = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [{ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], items: [{ path: 'x.html', kind: 'html', bytes: '1' }] }] };
+  expect(() => parseSessionArtifact(badBytes)).toThrow();
+});
+
+test('AT-107: parseSessionArtifact: a generation\'s "feedback"/"targetElement" accept null OR a string, but THROW on any other type — never silently coerced', () => {
+  const nullBoth = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], feedback: null, targetElement: null };
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [nullBoth] })).not.toThrow();
+  const stringBoth = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], feedback: 'fb', targetElement: 'el' };
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [stringBoth] })).not.toThrow();
+  const badFeedback = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], feedback: 7 };
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [badFeedback] })).toThrow();
+  const badTargetElement = { ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT.generations[0], targetElement: [] };
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, generations: [badTargetElement] })).toThrow();
+});
+
+test('AT-108: parseSessionArtifact: generation-gallery "sourcesScanned" or "label" missing or non-well-typed THROWS — same treatment as every other live kind (AT-90\'s label contract, AT-10\'s sourcesScanned contract)', () => {
+  // Sanity: see AT-103's comment — proves this test is genuinely red today.
+  expect(() => parseSessionArtifact(WELL_FORMED_GENERATION_GALLERY_ARTIFACT)).not.toThrow();
+  const { sourcesScanned: _drop1, ...missingSources } = WELL_FORMED_GENERATION_GALLERY_ARTIFACT;
+  expect(() => parseSessionArtifact(missingSources)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, sourcesScanned: 'nope' })).toThrow();
+
+  const { label: _drop2, ...missingLabel } = WELL_FORMED_GENERATION_GALLERY_ARTIFACT;
+  expect(() => parseSessionArtifact(missingLabel)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_GENERATION_GALLERY_ARTIFACT, label: 7 })).toThrow();
+});
+
+test('AT-109: parseSessionArtifact: an EMPTY generation-gallery ("generations": []) is legitimately ok — distinct from a malformed/missing "generations"', () => {
+  const empty = { kind: 'generation-gallery', label: 'Demo generations', generations: [], sourcesScanned: ['generations/* (0 generation(s) found)'] };
+  const parsed = parseSessionArtifact(empty) as { generations: unknown[] };
+  expect(parsed.generations).toEqual([]);
 });

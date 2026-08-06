@@ -79,9 +79,13 @@ import {
   brainStructureView,
   selectBrainStructureFile,
   sessionArtifactView,
+  // R4-16: does not exist yet — module-not-found is the expected red for
+  // this whole file until generationGalleryView/selectGeneration land.
+  generationGalleryView,
+  selectGeneration,
 } from './session-artifact-view.ts';
 import { filePackageTabs, selectFile } from './file-package.ts';
-import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact } from './session-client.ts';
+import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact } from './session-client.ts';
 import { sessionShellState, selectStage } from './session-shell-view.ts';
 import type { SessionShellPayload } from './session-client.ts';
 // R4-15: the SHARED dependency-DAG view model roadmapDraftView's new "dag"
@@ -253,8 +257,15 @@ test('AT-84: sessionArtifactView: dispatches each of the 3 live kinds to its mat
   expect(sessionArtifactView(BRAIN_ARTIFACT)).toEqual(brainStructureView(BRAIN_ARTIFACT));
 });
 
-test('AT-85: sessionArtifactView: a RESERVED artifact kind (file-package, contract-buildout, generation-gallery) reaching the view THROWS an explicit error naming the reserved kind — zero stub renderers', () => {
-  for (const reservedKind of ['file-package', 'contract-buildout', 'generation-gallery']) {
+// R4-16: the reserved-kind roster SHRINKS to 2 — "generation-gallery" now has
+// a real renderer (generationGalleryView, below) and must no longer throw
+// "reserved". This is the required correction to a PRE-EXISTING assertion,
+// not a weakening: leaving it looping over 3 kinds would make this test
+// permanently, wrongly RED once generation-gallery correctly dispatches (a
+// live kind is precisely NOT reserved) — see AT-104..106 below for the
+// positive proof that generation-gallery dispatches instead of throwing.
+test('AT-85: sessionArtifactView: a STILL-RESERVED artifact kind (file-package, contract-buildout) reaching the view THROWS an explicit error naming the reserved kind — zero stub renderers for either', () => {
+  for (const reservedKind of ['file-package', 'contract-buildout']) {
     expect(() => sessionArtifactView({ kind: reservedKind }), `reserved kind "${reservedKind}" must throw`).toThrow(new RegExp(reservedKind));
   }
 });
@@ -297,8 +308,9 @@ test('AT-88: sessionArtifactView: the reserved-kind and unknown-kind error messa
   expect(reservedMessage).not.toBe(unknownMessage);
 });
 
-test('AT-89: sessionArtifactView: all three reserved kinds produce pairwise-distinct messages (each names ITS OWN kind, never a copy-pasted generic reserved-kind string)', () => {
-  const messages = ['file-package', 'contract-buildout', 'generation-gallery'].map((kind) => {
+// R4-16: shrunk to the 2 still-reserved kinds — see AT-85's comment.
+test('AT-89: sessionArtifactView: both still-reserved kinds produce pairwise-distinct messages (each names ITS OWN kind, never a copy-pasted generic reserved-kind string)', () => {
+  const messages = ['file-package', 'contract-buildout'].map((kind) => {
     try {
       sessionArtifactView({ kind });
       return '';
@@ -306,7 +318,7 @@ test('AT-89: sessionArtifactView: all three reserved kinds produce pairwise-dist
       return String(err);
     }
   });
-  expect(new Set(messages).size).toBe(3);
+  expect(new Set(messages).size).toBe(2);
 });
 
 // ===========================================================================
@@ -516,4 +528,126 @@ test('AT-99 (regression guard, green today): roadmapDraftView: two rows sharing 
   expect(view.dag.nodes[0].deps).toEqual(['SOMETHING-A']);
   expect(view.dag.nodes[1].deps).toEqual(['SOMETHING-B']);
   expect(view.dag.nodes[0].deps).not.toEqual(view.dag.nodes[1].deps);
+});
+
+// ===========================================================================
+// R4-16 (2026-08-06) — generationGalleryView / selectGeneration, the NEW
+// renderer for the "generation-gallery" artifact kind, plus sessionArtifactView's
+// dispatch flip (generation-gallery: reserved → live). TEST-FIRST PIN: neither
+// export exists yet at branch base (module-not-found on THESE two named
+// imports specifically — this file's esbuild-based transform resolves a
+// missing named export to `undefined` rather than a hard import error, so
+// the pre-existing AT-70..99 tests above are unaffected; only the tests
+// below, which actually CALL `generationGalleryView`/`selectGeneration`, are
+// red). — AT-100..AT-109
+// ===========================================================================
+
+const GALLERY_TWO_GENERATIONS: GenerationGalleryArtifact = {
+  kind: 'generation-gallery',
+  label: 'Demo generations',
+  generations: [
+    {
+      number: 1,
+      createdAt: '2026-08-06T10:00:00.000Z',
+      feedback: null,
+      targetElement: null,
+      items: [{ path: 'DEMO.html', kind: 'html', bytes: 512 }],
+    },
+    {
+      number: 3, // deliberately non-contiguous — numbers may have gaps (R4-16's no-renumbering rule)
+      createdAt: '2026-08-06T11:00:00.000Z',
+      feedback: 'Make it punchier.',
+      targetElement: null,
+      items: [{ path: 'DEMO.html', kind: 'html', bytes: 700 }],
+    },
+  ],
+  sourcesScanned: ['generations/* (2 generation(s) found)'],
+};
+
+const EMPTY_GALLERY: GenerationGalleryArtifact = {
+  kind: 'generation-gallery',
+  label: 'Demo generations',
+  generations: [],
+  sourcesScanned: ['generations/* (0 generation(s) found)'],
+};
+
+test('AT-100: generationGalleryView: non-empty gallery — generations pass through verbatim, count matches, isEmpty is false, emptyMessage is null', () => {
+  const view = generationGalleryView(GALLERY_TWO_GENERATIONS);
+  expect(view.generations).toEqual(GALLERY_TWO_GENERATIONS.generations);
+  expect(view.count).toBe(2);
+  expect(view.isEmpty).toBe(false);
+  expect(view.emptyMessage).toBeNull();
+});
+
+test('AT-101: generationGalleryView: selectedIndex defaults to the NEWEST generation — the LAST entry in the (ascending-by-number) array, never the first — kills an implementation that defaults to the oldest generation', () => {
+  const view = generationGalleryView(GALLERY_TWO_GENERATIONS);
+  expect(view.selectedIndex).toBe(1); // index of generation number 3, the newest
+  expect(view.generations[view.selectedIndex]!.number).toBe(3);
+});
+
+test('AT-102: generationGalleryView: an EMPTY gallery has isEmpty:true, count:0, and a non-null emptyMessage naming what was scanned — never a bare pane', () => {
+  const view = generationGalleryView(EMPTY_GALLERY);
+  expect(view.isEmpty).toBe(true);
+  expect(view.count).toBe(0);
+  expect(view.generations).toEqual([]);
+  expect(view.emptyMessage).not.toBeNull();
+  expect(view.emptyMessage).toContain('generations/* (0 generation(s) found)');
+});
+
+test('AT-103: selectGeneration: an out-of-range index (negative, or past the last) is CLAMPED into range, never throws', () => {
+  const view = generationGalleryView(GALLERY_TWO_GENERATIONS);
+  expect(() => selectGeneration(view, -5)).not.toThrow();
+  expect(selectGeneration(view, -5).selectedIndex).toBe(0);
+  expect(() => selectGeneration(view, 999)).not.toThrow();
+  expect(selectGeneration(view, 999).selectedIndex).toBe(1); // clamped to the last real index
+});
+
+test('AT-104: selectGeneration: a valid in-range index selects exactly that generation', () => {
+  const view = generationGalleryView(GALLERY_TWO_GENERATIONS);
+  const selected = selectGeneration(view, 0);
+  expect(selected.selectedIndex).toBe(0);
+  expect(selected.generations[selected.selectedIndex]!.number).toBe(1);
+});
+
+test('AT-105: selectGeneration: returns a NEW view object (immutability) — the input view is never mutated', () => {
+  const view = generationGalleryView(GALLERY_TWO_GENERATIONS);
+  const originalSelectedIndex = view.selectedIndex;
+  const next = selectGeneration(view, 0);
+  expect(next).not.toBe(view);
+  // The ORIGINAL view object must be unchanged after selectGeneration is called on it.
+  expect(view.selectedIndex).toBe(originalSelectedIndex);
+});
+
+test('AT-106: sessionArtifactView: dispatches "generation-gallery" to generationGalleryView — the SAME output, proving reuse rather than a parallel reimplementation', () => {
+  const dispatched = sessionArtifactView(GALLERY_TWO_GENERATIONS);
+  expect(dispatched).toEqual(generationGalleryView(GALLERY_TWO_GENERATIONS));
+});
+
+test('AT-107: sessionArtifactView: "generation-gallery" no longer throws "reserved" — the flip this whole round exists to make (mirrors AT-85\'s shrunk 2-kind roster from the OTHER direction: proving the removed kind genuinely dispatches, not merely that the test loop got smaller)', () => {
+  expect(() => sessionArtifactView(GALLERY_TWO_GENERATIONS)).not.toThrow();
+  const view = sessionArtifactView(GALLERY_TWO_GENERATIONS) as { kind: string };
+  expect(view.kind).toBe('generation-gallery');
+});
+
+// GREEN today, not a defect pin (mirrors session-transcript.test.ts's AT-78
+// precedent for this exact shape of pin): file-package/contract-buildout are
+// unaffected by this round's flip, so this assertion is already true both
+// before and after the implementation lands. It earns its place as a
+// regression guard against the WRONG fix — an implementation that widens
+// RESERVED_ARTIFACT_KINDS's shrink to accidentally drop one of these two, or
+// that breaks the reserved-check generally while wiring generation-gallery's
+// new branch — would silently pass AT-85/89/106/107 above while failing
+// here, which is exactly the failure mode this test exists to catch.
+test('AT-108: sessionArtifactView: the two SURVIVING reserved kinds (file-package, contract-buildout) still throw "reserved" — the flip only ever affected generation-gallery, nothing else', () => {
+  for (const stillReservedKind of ['file-package', 'contract-buildout']) {
+    expect(() => sessionArtifactView({ kind: stillReservedKind })).toThrow(/reserved/i);
+  }
+});
+
+test('AT-109: sessionArtifactView: generation-gallery is stage-UNAWARE like every other live kind today — passing a stage argument produces byte-identical output (mirrors AT-91\'s invariance pin for the 3 pre-existing live kinds)', () => {
+  const noStage = sessionArtifactView(GALLERY_TWO_GENERATIONS);
+  const withStageA = sessionArtifactView(GALLERY_TWO_GENERATIONS, 'demo');
+  const withStageB = sessionArtifactView(GALLERY_TWO_GENERATIONS, 'roadmap');
+  expect(withStageA).toEqual(noStage);
+  expect(withStageB).toEqual(noStage);
 });
