@@ -273,6 +273,21 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
       `runAgent: agent "${def.slug}" declares unknown loopStrategy ${JSON.stringify(loopStrategy)} (expected 'ralph' or 'one-shot')`,
     );
   }
+  // R6-04 (WI-2), round 7 (T1 ruling): a ceiling that cannot be enforced must
+  // be REFUSED, never silently accepted. `options.maxBudgetUsd` is only ever
+  // set on the one-shot spawn path (runOneShotSpawn, below) — the legacy
+  // invocation path (loopStrategy undefined; 14 of 19 real dispatchable
+  // roster agents) has no budget concept at all, so an accepted ceiling
+  // there would be validated, recorded, and shown in the UI while enforcing
+  // nothing. The SECOND enforcement layer (defense-in-depth): the bridge
+  // route (cli/ui-bridge.ts) refuses this too, but `forge agent dispatch
+  // --cost-ceiling-usd` never passes through that route at all, so this
+  // check must also live here.
+  if (ctx.kickoffCeilingUsd !== undefined && loopStrategy !== 'one-shot') {
+    throw new Error(
+      `runAgent: ceiling not enforceable for this agent's loop strategy (agent "${def.slug}" declares ${JSON.stringify(loopStrategy)} — an operator cost ceiling can only be enforced for loopStrategy: 'one-shot')`,
+    );
+  }
 
   // Step 1: derive the spec from the studio SKILL.md (ADR-027).
   const spec = deriveAgentSpec(relative(FORGE_ROOT, def.path));

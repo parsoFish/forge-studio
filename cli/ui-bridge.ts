@@ -1241,6 +1241,31 @@ async function handleHttp(
           return;
         }
         costCeilingUsd = v;
+        // R6-04 WI-2, round 7 (T1 ruling) — a ceiling that cannot be
+        // enforced must be REFUSED, never silently accepted. Only agents
+        // declaring `runtime.loopStrategy: 'one-shot'` are enforceable
+        // (options.maxBudgetUsd, orchestrator/run-agent.ts's
+        // runOneShotSpawn) — the legacy invocation path (no loopStrategy
+        // declared; 14 of 19 real dispatchable roster agents) has no budget
+        // concept at all, so an accepted ceiling there would be validated,
+        // recorded, and shown in the UI while doing nothing. This mirrors
+        // the SAME guard `runAgent` itself enforces (defense-in-depth: this
+        // route is not the only entry point — `forge agent dispatch
+        // --cost-ceiling-usd` never passes through it).
+        if (def.runtime.loopStrategy !== 'one-shot') {
+          sendJson(
+            res,
+            400,
+            {
+              error:
+                `costCeilingUsd: ceiling not enforceable for this agent's loop strategy ` +
+                `(agent "${slug}" declares ${JSON.stringify(def.runtime.loopStrategy)} — an operator ` +
+                `cost ceiling can only be enforced for loopStrategy: 'one-shot')`,
+            },
+            origin,
+          );
+          return;
+        }
       }
       // R6-04-F2 WI-1 — materials contract enforcement, the agent-kickoff
       // upload seam. ALL validation happens here, alongside `inputs` above,
