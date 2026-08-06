@@ -153,19 +153,58 @@ export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void>
  *
  * `sessionDir` is a CLI flag from our OWN spawning code
  * (`spawnAgentDispatch`, cli/ui-bridge.ts), not raw HTTP request text, but
- * the write path is still guarded rather than trusted blindly: `sessionDir`
- * itself is realpath-resolved, and if its `status.json` turns out to be a
- * symlink escaping that resolved directory the write is refused (never
- * followed) — the same realpath-containment shape used throughout this
- * initiative, applied here even though the caller is trusted, per "guard the
- * write path" rather than assume the caller always will. Best-effort: any
+ * the write path is still guarded rather than trusted blindly — twice over:
+ * `sessionDir` itself must realpath-resolve to somewhere INSIDE `forgeRoot`
+ * (round-1 BLOCKER consequence-path fix — this sink previously had no
+ * containment reference at all and unconditionally wrote wherever it was
+ * pointed, so the guard depended entirely on the route that started the run
+ * having validated the dir first; "one sink, many entry points" — see
+ * `cli/ui-bridge-onboarding-start.test.ts` AT-9), and separately, if its
+ * `status.json` turns out to be a symlink escaping that resolved directory
+ * the write is refused (never followed).
+ *
+ * The containment root here is deliberately `forgeRoot`, not the NARROWER
+ * `projectsRoot` the write ROUTE above enforces (`POST /api/studio/
+ * onboarding/start` always creates `sessionDir` under `<projectsRoot>/
+ * <project>/_onboarding/<sessionId>`, a strict subset): the pre-existing,
+ * regression-pinned `cli/agent-run-dispatch.test.ts` AT-D7-1/AT-D7-2 drive
+ * this function with a `sessionDir` under `<forgeRoot>/_logs/…` — inside the
+ * forge tree, but outside `projectsRoot` — and must keep succeeding (D6/D7
+ * were never scoped to `projectsRoot` specifically; only "the run ended, so
+ * the observing process writes the terminal phase"). `forgeRoot` is the
+ * widest boundary that satisfies BOTH constraints at once: it refuses
+ * AT-9's genuinely-external target (a directory under the OS temp root,
+ * outside `forgeRoot` entirely) while still accepting every `sessionDir`
+ * either caller — the real route or the pre-existing test fixture — actually
+ * uses. It is a real, disclosed narrowing versus the round-1 BLOCKER state
+ * (no check at all), not a claim that it matches the route's own tighter
+ * `projectsRoot` boundary.
+ *
+ * Both checks use the same realpath + `startsWith(root + sep)` boundary
+ * shape used throughout this initiative (`resolveContainedProjectDir`,
+ * `cli/contract-stages.ts`; `resolveSafeSessionDir`, `cli/bridge-studio-
+ * sessions.ts`) — not reused verbatim, because both of those build their
+ * candidate path by joining validated components onto a root, whereas
+ * `sessionDir` here arrives as a single, already-composed absolute path (the
+ * CLI flag itself), with no components to reassemble. Best-effort: any
  * failure here is swallowed — it must never mask the dispatch's own
  * outcome/exit code.
  */
-function writeSessionTerminalPhase(sessionDir: string, phase: 'complete' | 'failed'): void {
+function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase: 'complete' | 'failed'): void {
   try {
     if (!existsSync(sessionDir) || !statSync(sessionDir).isDirectory()) return;
     const realSessionDir = realpathSync(sessionDir);
+
+    let realForgeRoot: string;
+    try {
+      realForgeRoot = realpathSync(forgeRoot);
+    } catch {
+      return; // no such forgeRoot at all — refuse rather than guess
+    }
+    if (realSessionDir !== realForgeRoot && !realSessionDir.startsWith(realForgeRoot + sep)) {
+      return; // sessionDir escapes forgeRoot — refuse the write
+    }
+
     const statusPath = join(realSessionDir, 'status.json');
     let existing: Record<string, unknown> = {};
     if (existsSync(statusPath)) {
@@ -226,7 +265,9 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
   const project = projectArg
     ? { name: projectArg, repoPath: resolve('projects', projectArg) }
     : undefined;
-  // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header.
+  // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header for
+  // the round-1 BLOCKER fix: it now refuses a `--session-dir` outside
+  // `forgeRoot` (already a parameter here — no extra resolution needed).
   const sessionDir = flagValue('--session-dir');
 
   // `--input k=v` may repeat; each is surfaced as prompt DATA (never instructions).
@@ -264,7 +305,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       }
       const out = await runBandAgentStandalone({ slug, initiativeId, runId, forgeRoot, queryFn: undefined });
       console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`);
-      if (sessionDir) writeSessionTerminalPhase(sessionDir, 'complete');
+      if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete');
       return;
     }
 
@@ -283,7 +324,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
     }
     // D7 — the run ended (successfully, whether or not spawn was suppressed
     // under the dry-bridge seam): write the terminal phase now.
-    if (sessionDir) writeSessionTerminalPhase(sessionDir, 'complete');
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`forge agent dispatch: ${msg}`);
@@ -303,7 +344,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       });
     } catch { /* best-effort */ }
     // D7 — the run ended in failure: write the terminal phase before exiting.
-    if (sessionDir) writeSessionTerminalPhase(sessionDir, 'failed');
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed');
     process.exit(1);
   }
 }

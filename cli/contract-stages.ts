@@ -51,7 +51,7 @@
  * report for the full note.
  */
 
-import { realpathSync } from 'node:fs';
+import { existsSync, realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
 import { SESSION_STAGES } from '../orchestrator/studio/session-kinds.ts';
@@ -63,6 +63,7 @@ import {
 } from '../orchestrator/studio/session-transcript.ts';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
+import { projectBrainDir } from '../orchestrator/brain-paths.ts';
 
 export type { ContractStageRow, ContractStageStatus } from '../orchestrator/studio/session-transcript.ts';
 
@@ -90,8 +91,15 @@ const ROADMAP_REL_PATH = 'roadmap.md';
  * mirroring `resolveSafeSessionDir` (`cli/bridge-studio-sessions.ts`). See
  * the module header for why this — not `resolveGuardedPath` — is the right
  * shape here (AT-28's false-rejection control).
+ *
+ * Exported (R4-17 round-1 BLOCKER fix): `POST /api/studio/onboarding/start`
+ * (`cli/ui-bridge.ts`) needs the IDENTICAL containment shape on the same
+ * `projectsRoot`/project-id pair `GET /api/studio/projects/:id/
+ * contract-stages` already resolves through this function — reused by import
+ * rather than re-implemented, per this campaign's standing "one guard, many
+ * callers" rule (see `cli/ui-bridge.ts`'s call site for the full note).
  */
-function resolveContainedProjectDir(projectsRoot: string, projectId: string): string | null {
+export function resolveContainedProjectDir(projectsRoot: string, projectId: string): string | null {
   let realProjectsRoot: string;
   try {
     realProjectsRoot = realpathSync(projectsRoot);
@@ -119,8 +127,10 @@ function deriveContractRow(projectDir: string, config: ProjectConfig | null): Co
   let status: ContractStageStatus = 'absent';
   if (config !== null) {
     status = 'present';
-    // NB: avoid the word "declared" here — it contains the D11-forbidden
-    // substring "red" ("decla-RED"), which AT-23 greps for literally.
+    // Wording ("gate command: <tokens>") is pinned to the
+    // ALLOWED_DETAIL_PATTERNS allow-list shape (cli/contract-stages.test.ts,
+    // AT-23) — a fixed template, not a word choice being preserved for its
+    // own sake.
     detail.push(`gate command: ${config.testProcess.local.cmd.join(' ')}`);
     if (safeReadFileInSession(projectDir, COMPLIANCE_REPORT_REL_PATH) !== null) {
       detail.push('a compliance report file exists at .forge/contract-compliance-report.json');
@@ -163,8 +173,9 @@ function deriveSecretsRow(config: ProjectConfig | null): ContractStageRow {
  *  the demo is ever built, is legitimately present — it names an intent). */
 function deriveDemoRow(projectDir: string, config: ProjectConfig | null): ContractStageRow {
   const demoSteps = config?.demoProcess ?? [];
-  // NB: "step: <kind>" not "declared step" — "declared"/"configured" both
-  // contain the D11-forbidden substring "red", which AT-23 greps for.
+  // Wording ("step: <kind>") is pinned to the ALLOWED_DETAIL_PATTERNS
+  // allow-list shape (cli/contract-stages.test.ts, AT-23) — a fixed
+  // template, not a word choice being preserved for its own sake.
   const detail: string[] = demoSteps.map((step) => `step: ${step.kind}`);
   let status: ContractStageStatus = demoSteps.length > 0 ? 'present' : 'absent';
 
@@ -187,15 +198,49 @@ function deriveDemoRow(projectDir: string, config: ProjectConfig | null): Contra
   return { stage: 'demo', status, source: '.forge/project.json + .forge/demo/demo.lock.json', detail, bytes: null };
 }
 
+const BRAIN_PROFILE_FILENAME = 'profile.md';
+
 /** Builds the `roadmap` stage row — a file that exists but is EMPTY is
  *  still `present` (bytes: 0); "present" answers "does the artifact exist",
- *  not "is it non-empty". */
-function deriveRoadmapRow(projectDir: string): ContractStageRow {
+ *  not "is it non-empty".
+ *
+ *  T2 ruling (round-1 pin 2, item 3): `checkC4` (HARD) in `cli/preflight.ts`
+ *  fails closed unless BOTH `roadmap.md` AND `brain/projects/<id>/
+ *  profile.md` (Brain 3, ADR 035, central in the forge repo) exist, but this
+ *  row previously only ever looked at `roadmap.md` — a project could read
+ *  `roadmap: present` here while `forge preflight` failed it outright, with
+ *  nothing in this row hinting why. `status` STAYS presence-of-roadmap.md
+ *  ONLY (folding the brain profile in would be a clause verdict — D11
+ *  forbids it, only `forge preflight`'s exit code is entitled to make that
+ *  call), but the profile's real presence/absence is now always reported as
+ *  a `detail` fact (never a verdict), and `source` additionally names the
+ *  profile file whenever it is actually there to name (kept conditional,
+ *  rather than unconditional, so the row's `source` stays exactly
+ *  `'roadmap.md'` for every project with no brain profile at all — AT-17/18/
+ *  19's pinned shape — and only grows to name a second file once there is a
+ *  second real file to name). */
+function deriveRoadmapRow(projectDir: string, forgeRoot: string, projectId: string): ContractStageRow {
   const body = safeReadFileInSession(projectDir, ROADMAP_REL_PATH);
-  if (body === null) {
-    return { stage: 'roadmap', status: 'absent', source: ROADMAP_REL_PATH, detail: [], bytes: null };
+
+  // Guarded read: `projectId` is already SLUG_RE + length-cap validated by
+  // `deriveContractStages` before any row-deriver is ever called, but the
+  // read itself is still guarded rather than trusted blind — a path built
+  // from an id is never assumed safe just because a caller upstream checked
+  // its shape once.
+  let profilePresent = false;
+  try {
+    profilePresent = existsSync(join(projectBrainDir(forgeRoot, projectId), BRAIN_PROFILE_FILENAME));
+  } catch {
+    profilePresent = false;
   }
-  return { stage: 'roadmap', status: 'present', source: ROADMAP_REL_PATH, detail: [], bytes: Buffer.byteLength(body, 'utf8') };
+  const profileRelPath = `brain/projects/${projectId}/${BRAIN_PROFILE_FILENAME}`;
+  const detail = [`brain profile: ${profilePresent ? 'present' : 'absent'} (${profileRelPath})`];
+  const source = profilePresent ? `${ROADMAP_REL_PATH} + ${profileRelPath}` : ROADMAP_REL_PATH;
+
+  if (body === null) {
+    return { stage: 'roadmap', status: 'absent', source, detail, bytes: null };
+  }
+  return { stage: 'roadmap', status: 'present', source, detail, bytes: Buffer.byteLength(body, 'utf8') };
 }
 
 /**
@@ -207,7 +252,7 @@ export function deriveContractStages(input: {
   projectsRoot: string;
   projectId: string;
 }): DeriveContractStagesResult {
-  const { projectsRoot, projectId } = input;
+  const { forgeRoot, projectsRoot, projectId } = input;
 
   if (projectId.length === 0 || projectId.length > MAX_PROJECT_ID_LENGTH || !SLUG_RE.test(projectId)) {
     return {
@@ -233,7 +278,7 @@ export function deriveContractStages(input: {
     deriveInstructionsRow(projectDir),
     deriveSecretsRow(config),
     deriveDemoRow(projectDir, config),
-    deriveRoadmapRow(projectDir),
+    deriveRoadmapRow(projectDir, forgeRoot, projectId),
   ];
 
   const sourcesScanned = [
@@ -241,7 +286,7 @@ export function deriveContractStages(input: {
     `${AGENT_INSTRUCTION_FILES.join(' | ')} (instructions)`,
     '.forge/project.json (secrets: testProcess.acceptance.requiresEnv — NAMES ONLY, never a value)',
     '.forge/project.json (demoProcess) + .forge/demo/demo.lock.json (built)',
-    'roadmap.md',
+    `roadmap.md + brain/projects/${projectId}/profile.md (C4 divergence visibility, not a verdict)`,
   ];
 
   return { ok: true, rows, sourcesScanned };
