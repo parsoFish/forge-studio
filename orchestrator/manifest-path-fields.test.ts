@@ -594,3 +594,211 @@ test('R4-17 pin 5, item 2 (ACCEPT control — default configuration must stay by
     rmSync(legitDefault, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// R4-17 pin 7 — round-4 adversarial review: `isContainedProjectRepoPath` /
+// `isContainedWorktreePath` self-resolve the projects root by RE-READING
+// `forge.config.json` from disk on EVERY call (`resolveConfiguredProjectsRoot`,
+// cli/manifest-path-guard.ts:115-117), while `startBridge` (cli/ui-bridge.ts:241)
+// snapshots `ctx.projectsRoot` ONCE at server start and every route handler
+// uses that cached value for the process's lifetime. A live `forge.config.json`
+// edit while the bridge is running — an ordinary action, and forge is
+// explicitly designed to run unattended between human interaction points —
+// makes the GUARD and the PRODUCER diverge, false-rejecting legitimate
+// approve/finalize/requeue paths for the rest of that process's uptime. This
+// is the identical "the guard resolves its root differently from the
+// producer" failure mode round 2 (pin 2) and round 3 (pin 5, above) each
+// fixed once — reintroduced one level deeper by the fix for it.
+//
+// T2's ruling: the root is PASSED, not re-derived. `isContainedProjectRepoPath`
+// / `isContainedWorktreePath` accept an optional `projectsRoot` in their
+// options; when a caller supplies it (every bridge caller has `ctx.projectsRoot`
+// in hand) that value is used VERBATIM and no config is read; when absent they
+// self-resolve exactly as they do today, so no existing caller changes
+// behaviour.
+//
+// Neither function's options type declares `projectsRoot` yet (production
+// code is out of scope for T3 — TESTS ONLY). These ATs build the options
+// object through an intermediate, explicitly-typed local variable — never a
+// fresh object literal directly at the call site — so TypeScript's ordinary
+// structural assignability (a wider-typed variable assigned to a narrower
+// parameter type) lets the extra field through with ZERO tsc error, while
+// `--experimental-strip-types` still passes it through verbatim at runtime
+// (type stripping removes annotations, not properties). That is what makes
+// item 1 fail on VALUE (wrong boolean) rather than on a type or module error
+// — the correct RED shape for a parameter the implementation does not read
+// yet.
+// ---------------------------------------------------------------------------
+
+type ContainmentOptsWithRoot = { forgeRoot: string; projectsRoot?: string };
+
+test('R4-17 pin 7, item 1 (RED — round-4 divergence defect): isContainedProjectRepoPath must ACCEPT a path contained under a projectsRoot the caller passed explicitly, even after forge.config.json on disk is mutated to name a DIFFERENT root — the startBridge shape: ctx.projectsRoot is resolved ONCE at server start and held for the process lifetime, so a config edit mid-run must not start rejecting paths genuinely contained under the root the caller actually resolved', () => {
+  const originalProjectsRoot = join(forgeRoot, 'projects');
+  const legitPath = join(originalProjectsRoot, 'pin7-divergence-legit');
+  mkdirSync(legitPath, { recursive: true });
+
+  assert.equal(
+    isContainedProjectRepoPath(legitPath, { forgeRoot }),
+    true,
+    'precondition: legitPath must be accepted under the DEFAULT (unconfigured) root before any config mutation',
+  );
+
+  // Simulate a live config edit while a long-lived caller (e.g. startBridge)
+  // is holding `originalProjectsRoot` as its own cached ctx.projectsRoot — an
+  // ordinary, expected action against a daemon designed to run unattended.
+  const newRoot = newOutsideDir('mpf-pin7-divergent-newroot-');
+  const configPath = join(forgeRoot, 'forge.config.json');
+  writeFileSync(configPath, JSON.stringify({ projectsDir: newRoot }), 'utf8');
+
+  try {
+    const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: originalProjectsRoot };
+    assert.equal(
+      isContainedProjectRepoPath(legitPath, opts),
+      true,
+      `a caller that explicitly passes the projectsRoot it resolved/snapshotted earlier (${originalProjectsRoot}) must have that root honoured VERBATIM — today isContainedProjectRepoPath ignores any passed projectsRoot and re-derives via resolveConfiguredProjectsRoot(forgeRoot) on EVERY call, which now reads the mutated forge.config.json and resolves to ${newRoot} instead, wrongly REJECTING this genuinely-contained path`,
+    );
+  } finally {
+    rmSync(configPath, { force: true });
+  }
+});
+
+test('R4-17 pin 7, item 1b (RED — same round-4 divergence defect, isContainedWorktreePath\'s in-place-worktree fallback branch, manifest-path-guard.ts:166-167): isContainedWorktreePath must ACCEPT an in-place worktree path contained under a projectsRoot the caller passed explicitly, even after forge.config.json is mutated to name a different root', () => {
+  const initiativeId = 'INIT-2026-08-06-pin7-wt';
+  const originalProjectsRoot = join(forgeRoot, 'projects');
+  // An "in-place worktree" (H2) — genuinely contained under projects/, NOT
+  // under _worktrees/<initiativeId> — exercises isContainedWorktreePath's
+  // FALLBACK branch, which shares the exact same resolveConfiguredProjectsRoot()
+  // re-derivation as isContainedProjectRepoPath. No existing test in this file
+  // drives that fallback branch directly (the worktree_path tests above all
+  // use the identity-bound _worktrees/<id> branch instead).
+  const legitInPlaceWt = join(originalProjectsRoot, 'pin7-wt-project', 'worktrees', initiativeId);
+  mkdirSync(legitInPlaceWt, { recursive: true });
+
+  assert.equal(
+    isContainedWorktreePath(legitInPlaceWt, { forgeRoot, initiativeId }),
+    true,
+    'precondition: an in-place worktree path must be accepted under the DEFAULT root before any config mutation',
+  );
+
+  const newRoot = newOutsideDir('mpf-pin7-wt-divergent-newroot-');
+  const configPath = join(forgeRoot, 'forge.config.json');
+  writeFileSync(configPath, JSON.stringify({ projectsDir: newRoot }), 'utf8');
+
+  try {
+    const opts: { forgeRoot: string; initiativeId: string; projectsRoot?: string } = {
+      forgeRoot,
+      initiativeId,
+      projectsRoot: originalProjectsRoot,
+    };
+    assert.equal(
+      isContainedWorktreePath(legitInPlaceWt, opts),
+      true,
+      `isContainedWorktreePath's in-place-worktree fallback branch must honour a passed projectsRoot VERBATIM too — today it ignores it and re-derives via resolveConfiguredProjectsRoot(forgeRoot), which now resolves to the mutated root ${newRoot}, wrongly REJECTING this genuinely-contained path`,
+    );
+  } finally {
+    rmSync(configPath, { force: true });
+  }
+});
+
+test('R4-17 pin 7, item 2 (REJECT control — GREEN, must stay green): a genuine symlink escape is still REJECTED when a projectsRoot is passed explicitly — the parameter must not become a way to widen the guard', (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const originalProjectsRoot = join(forgeRoot, 'projects');
+  const outside = newOutsideDir('mpf-pin7-reject-outside-');
+  const evilPath = join(originalProjectsRoot, 'pin7-evil-passedroot');
+  symlinkSync(outside, evilPath, 'dir');
+
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot: originalProjectsRoot };
+  assert.equal(
+    isContainedProjectRepoPath(evilPath, opts),
+    false,
+    'a real symlink escape must still be REJECTED when a projectsRoot is passed explicitly — the parameter exists to fix the caller/producer root-disagreement, not to bypass per-segment identity containment (containedUnder/resolveGuardedPath, shared by every caller regardless of which root value they supply)',
+  );
+});
+
+test('R4-17 pin 7, item 3 (back-compat — GREEN, must stay green): with NO projectsRoot passed, isContainedProjectRepoPath keeps self-resolving through forge.config.json exactly as today, protecting every EXISTING call site (none of which passes projectsRoot)', () => {
+  const customRoot = newOutsideDir('mpf-pin7-backcompat-configured-');
+  const legitUnderConfigured = join(customRoot, 'pin7-backcompat-proj');
+  mkdirSync(legitUnderConfigured, { recursive: true });
+  const staleUnderDefault = join(forgeRoot, 'projects', 'pin7-backcompat-stale');
+  mkdirSync(staleUnderDefault, { recursive: true });
+  const configPath = join(forgeRoot, 'forge.config.json');
+  writeFileSync(configPath, JSON.stringify({ projectsDir: customRoot }), 'utf8');
+
+  try {
+    // The exact `{ forgeRoot }`-only shape every current call site uses.
+    assert.equal(
+      isContainedProjectRepoPath(legitUnderConfigured, { forgeRoot }),
+      true,
+      "omitting projectsRoot must preserve self-resolution through the configured projects root (pin 5 behaviour) — a fix for pin 7 must not make projectsRoot mandatory or change default resolution",
+    );
+    assert.equal(
+      isContainedProjectRepoPath(staleUnderDefault, { forgeRoot }),
+      false,
+      'omitting projectsRoot must still reject the stale hardcoded-default path once a different root is configured (pin 5 behaviour) — this must not regress',
+    );
+  } finally {
+    rmSync(configPath, { force: true });
+    rmSync(staleUnderDefault, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R4-17 pin 7, item 4 — SEC-02/SEC-03 property preservation, explicitly.
+// ---------------------------------------------------------------------------
+
+test('R4-17 pin 7, item 4a (SEC-02 preservation, passed-root variant): escape-and-return "<forgeRoot>/projects/../projects/<dir>" resolves to a genuinely contained real path and is ACCEPTED even when projectsRoot is passed explicitly (the no-projectsRoot ACCEPT for this exact shape is already pinned above by "project_repo_path: \\"<forgeRoot>/projects/../projects/legit-escapereturn\\" ... MUST be ACCEPTED" — not duplicated here, only the passed-root variant is new)', () => {
+  const projectsRoot = join(forgeRoot, 'projects');
+  const legitPath = join(projectsRoot, 'pin7-escapereturn-passedroot');
+  mkdirSync(legitPath, { recursive: true });
+  const roundtrip = `${forgeRoot}/projects/../projects/pin7-escapereturn-passedroot`;
+
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot };
+  assert.equal(
+    isContainedProjectRepoPath(roundtrip, opts),
+    true,
+    `escape-and-return must remain ACCEPTED with a passed projectsRoot too — got false for "${roundtrip}"`,
+  );
+});
+
+test('R4-17 pin 7, item 4b (SEC-02/SEC-03 preservation — no existing test in this file covers this): a brand-new, NONEXISTENT directory under projects/ (create-mode — the project does not exist on disk yet, exactly the shape a project CREATE flow names) is ACCEPTED, both without and with a passed projectsRoot', () => {
+  const projectsRoot = join(forgeRoot, 'projects');
+  const brandNewPath = join(projectsRoot, 'pin7-brand-new-nonexistent-proj');
+  assert.equal(existsSync(brandNewPath), false, 'precondition: this directory must not exist yet — this test pins CREATE-mode containment (resolveGuardedPath\'s literal-tail-reassembly path), not an existing-directory check');
+
+  assert.equal(
+    isContainedProjectRepoPath(brandNewPath, { forgeRoot }),
+    true,
+    `a brand-new, not-yet-created directory under <forgeRoot>/projects/ must be ACCEPTED — got false for "${brandNewPath}"`,
+  );
+
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot };
+  assert.equal(
+    isContainedProjectRepoPath(brandNewPath, opts),
+    true,
+    `the same brand-new directory must also be ACCEPTED when projectsRoot is passed explicitly — got false for "${brandNewPath}"`,
+  );
+});
+
+test("R4-17 pin 7, item 4c (SEC-02/SEC-03 preservation — scripts/verify-cycle.mjs's exact shape): join(FORGE_ROOT, 'projects', PROJECT) (the real-capability harness's projectRepoPath(), scripts/verify-cycle.mjs:150) is ACCEPTED, both without and with a passed projectsRoot — a false rejection here breaks forge's real-capability regression harness", () => {
+  const projectsRoot = join(forgeRoot, 'projects');
+  // verify-cycle.mjs's --project flag defaults to 'mdtoc', but the harness
+  // must ALWAYS be run with --project gitpulse (CLAUDE.md: mdtoc is
+  // committed inside forge's own repo and must never be the harness ground)
+  // — pinning the real operative value, not a placeholder.
+  const PROJECT = 'gitpulse';
+  const harnessRepoPath = join(forgeRoot, 'projects', PROJECT); // scripts/verify-cycle.mjs:150's exact `join(FORGE_ROOT, 'projects', PROJECT)` shape
+  mkdirSync(harnessRepoPath, { recursive: true });
+
+  assert.equal(
+    isContainedProjectRepoPath(harnessRepoPath, { forgeRoot }),
+    true,
+    `verify-cycle.mjs's projectRepoPath() shape must be ACCEPTED — got false for "${harnessRepoPath}"`,
+  );
+
+  const opts: ContainmentOptsWithRoot = { forgeRoot, projectsRoot };
+  assert.equal(
+    isContainedProjectRepoPath(harnessRepoPath, opts),
+    true,
+    `the same harness shape must also be ACCEPTED when projectsRoot is passed explicitly — got false for "${harnessRepoPath}"`,
+  );
+});
