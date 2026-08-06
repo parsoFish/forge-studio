@@ -194,7 +194,7 @@ import type { DispatchAgentRunOpts, DispatchAgentRunResult } from '../orchestrat
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
-function studioAgent(slug: string, surface: string): string {
+function studioAgent(slug: string, surface: string, loopStrategy?: string): string {
   return `---
 name: ${slug}
 description: fixture agent for the kickoff cost-ceiling test
@@ -211,7 +211,7 @@ runtime:
   sdk: claude
   strategy: fixed
   model: claude-sonnet-4-6
-allowed-tools: [Read]
+${loopStrategy !== undefined ? `  loopStrategy: ${loopStrategy}\n` : ''}allowed-tools: [Read]
 disallowed-tools: [Bash]
 ---
 
@@ -227,7 +227,23 @@ function scaffoldForgeRoot(): string {
   mkdirSync(join(root, '_logs'), { recursive: true });
   mkdirSync(join(root, 'projects', 'gitpulse'), { recursive: true });
   mkdirSync(join(root, 'skills', 'test-runnable'), { recursive: true });
-  writeFileSync(join(root, 'skills', 'test-runnable', 'SKILL.md'), studioAgent('test-runnable', 'unattended'));
+  // R6-04 WI-2 ROUND 7 — declares loopStrategy: 'one-shot' explicitly (it
+  // did not before). This is a deliberate fixture change, not incidental:
+  // the round-7 ruling makes the ceiling refused-not-threaded for any agent
+  // that ISN'T one-shot, and every EXISTING "costCeilingUsd ⇒ 200" test in
+  // this file already uses `test-runnable` — those tests were always meant
+  // to pin the ACCEPTED path, which only remains meaningful now if the
+  // fixture is genuinely enforceable. Verified safe: `studioAgent`/
+  // `scaffoldForgeRoot` have exactly one other caller family (the
+  // GET /api/studio/agents defaultCostCeilingUsd tests), which don't touch
+  // loopStrategy/spawn-path behaviour at all.
+  writeFileSync(join(root, 'skills', 'test-runnable', 'SKILL.md'), studioAgent('test-runnable', 'unattended', 'one-shot'));
+  // NEW — the round-7 counterpart: NO loopStrategy declared (mirrors 14 of
+  // 19 real dispatchable roster agents, and `test-runnable`'s OWN original
+  // shape before this round). This is the fixture the new refusal +
+  // negative-twin tests below drive.
+  mkdirSync(join(root, 'skills', 'test-legacy'), { recursive: true });
+  writeFileSync(join(root, 'skills', 'test-legacy', 'SKILL.md'), studioAgent('test-legacy', 'unattended'));
   return root;
 }
 
@@ -277,7 +293,14 @@ function runRouteSkipCount(): number {
 type RunBody = { ok?: boolean; runId?: string; slug?: string; error?: string; dryBridge?: { skipped: string[] } };
 
 async function postRun(body: unknown): Promise<{ status: number; body: RunBody }> {
-  const res = await fetch(`${url}/api/agents/test-runnable/run`, {
+  return postRunAs('test-runnable', body);
+}
+
+/** Round 7 — generalized so the new refusal/negative-twin tests can drive
+ *  "test-legacy" (no loopStrategy) while every existing test keeps calling
+ *  the unchanged `postRun` against "test-runnable" (now one-shot). */
+async function postRunAs(slug: string, body: unknown): Promise<{ status: number; body: RunBody }> {
+  const res = await fetch(`${url}/api/agents/${slug}/run`, {
     method: 'POST',
     headers: CSRF,
     body: JSON.stringify(body),
@@ -367,6 +390,34 @@ test('POST /api/agents/<slug>/run: an agent declaring its own budget AND an oper
   const skipsBefore = runRouteSkipCount();
   const { status, body } = await postRun({ project: 'gitpulse', costCeilingUsd: 1.5, inputs: { northStar: 'ship it' } });
   assertAccepted(status, body, skipsBefore);
+});
+
+// ---------------------------------------------------------------------------
+// R6-04 WI-2 ROUND 7 — spawner ruling, fail-closed guard, BRIDGE-ROUTE layer.
+// See orchestrator/run-agent-ceiling.test.ts's own round-7 header for the
+// full finding (14 of 19 dispatchable roster agents take the legacy path,
+// which has no budget concept — an operator ceiling against one of them
+// would be validated, recorded, shown in the UI, and silently unenforced).
+// This is the OTHER of the two required enforcement layers: the route must
+// refuse before ever reaching the spawn point, using the SAME pinned message
+// substrings as the runAgent-level guard (two substring matches, not a full-
+// string template — the ruling gave an example wording, not a verbatim one,
+// unlike WI-1's gate-refusal messages).
+// ---------------------------------------------------------------------------
+
+test('POST /api/agents/<slug>/run: costCeilingUsd against "test-legacy" (no loopStrategy declared — the round-7 fixture mirroring 14 of 19 real dispatchable agents) ⇒ 400, fail-closed, before any spawn — a ceiling that cannot be enforced is refused, never silently accepted', async () => {
+  const skipsBefore = runRouteSkipCount();
+  const { status, body } = await postRunAs('test-legacy', { project: 'gitpulse', costCeilingUsd: 2.5 });
+  assertRefused(status, body, skipsBefore, 'non-one-shot-ceiling');
+  assert.match(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `expected the pinned reason — got: ${JSON.stringify(body.error)}`);
+  assert.match(body.error ?? '', /one-shot/, `expected the enforceable class named — got: ${JSON.stringify(body.error)}`);
+});
+
+test('POST /api/agents/<slug>/run: NEGATIVE TWIN, load-bearing — no costCeilingUsd at all against "test-legacy" ⇒ still 200, completely unaffected by the new guard. This is the path every ordinary dispatch of the 14 non-one-shot roster agents takes; if the refusal leaked into this case, most of the roster would break to add a limit feature', async () => {
+  const skipsBefore = runRouteSkipCount();
+  const { status, body } = await postRunAs('test-legacy', { project: 'gitpulse' });
+  assertAccepted(status, body, skipsBefore);
+  assert.match(body.runId as string, /^_agent-test-legacy-/);
 });
 
 // ---------------------------------------------------------------------------
