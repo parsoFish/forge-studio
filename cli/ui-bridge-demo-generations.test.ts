@@ -109,6 +109,38 @@ function rawGet(rawPath: string): Promise<{ status: number; text: string }> {
   });
 }
 
+/** Sends a raw HTTP POST with a hand-built body TEXT (not a client-serialized
+ *  object) — the malicious-body ATs below construct the JSON on the wire
+ *  directly (e.g. an artificially deep array literal spliced into the text)
+ *  rather than via `JSON.stringify` on a JS value, mirroring PIN 4/round-3's
+ *  own lesson (never trust a client-side helper to faithfully deliver an
+ *  adversarial shape — go around it). Resolves `{status:-2, text:'', timedOut:true}`
+ *  after `timeoutMs` rather than hanging the test suite forever if the server
+ *  never responds at all — the actual failure mode an unhandled rejection
+ *  (no `.catch` on the `void handleHttp(...)` dispatch) would produce. */
+function rawPostBody(rawPath: string, bodyText: string, timeoutMs = 10000): Promise<{ status: number; text: string; timedOut: boolean }> {
+  return new Promise((resolvePromise) => {
+    const u = new URL(url);
+    const req = httpRequest(
+      {
+        hostname: u.hostname,
+        port: u.port,
+        path: rawPath,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', 'content-length': Buffer.byteLength(bodyText) },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk.toString('utf8'); });
+        res.on('end', () => { clearTimeout(timer); resolvePromise({ status: res.statusCode ?? 0, text: data, timedOut: false }); });
+      },
+    );
+    req.on('error', () => { clearTimeout(timer); resolvePromise({ status: -1, text: '', timedOut: false }); });
+    const timer = setTimeout(() => resolvePromise({ status: -2, text: '', timedOut: true }), timeoutMs);
+    req.end(bodyText);
+  });
+}
+
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-demo-gen-'));
   mkdirSync(repoDir(), { recursive: true });
@@ -689,3 +721,98 @@ for (const bad of [0, {}]) {
     assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
   });
 }
+
+// ===========================================================================
+// R4-16 PIN 6 — the round-4 fix (`invalidProjectRepoPath`'s
+// `typeof candidate !== 'string' ⇒ return JSON.stringify(candidate)` branch)
+// shipped its OWN instance of the defect it closed: `JSON.stringify` itself
+// THROWS (RangeError: Maximum call stack size exceeded) on a deeply-nested
+// structure — no try/catch around it — and the whole stringified value is
+// interpolated unbounded into the 400 message for any WIDE (not deep)
+// non-string value, producing a response that can be materially larger than
+// the request that provoked it.
+//
+// Measured depths (verified empirically against THIS Node/V8 build before
+// picking a number to pin, per the brief's explicit instruction not to pin
+// an unverified depth):
+//   - JSON.parse succeeds at depth 100,000 (the largest depth probed) — V8's
+//     JSON.parse tolerates far deeper nesting than JSON.stringify.
+//   - JSON.stringify's boundary (bisected precisely): OK at depth 4,166,
+//     THROWS at depth 4,167.
+//   - Depth 10,000 (the brief's suggested value) sits safely past
+//     JSON.stringify's failure boundary while JSON.parse still succeeds on
+//     it — confirmed both facts hold for a depth-10,000 array nested as the
+//     VALUE of `projectRepoPath` inside a full request body (not just a
+//     standalone `JSON.parse`/`JSON.stringify` call), so the malicious value
+//     genuinely reaches `invalidProjectRepoPath`'s stringify call rather than
+//     failing earlier at `readJson`'s own `JSON.parse`.
+//
+// HOME: pinned here (not duplicated across all four /start route test
+// files) because the defect lives entirely inside the ONE shared function,
+// `invalidProjectRepoPath` (cli/ui-bridge.ts), that every /start route calls
+// — this file already carries AT-55, the existing non-string-400 coverage
+// for that exact function via the demo-builder route, so extending it here
+// keeps the guard's full contract (TypeError leak closed AND RangeError leak
+// closed AND response-size bounded) in one place rather than scattered
+// per-route duplicates of the same shared-function assertion.
+// ===========================================================================
+
+// Mandatory adversarial AT — the load-bearing one. Sent over the RAW WIRE
+// (rawPostBody, not the `post()` JSON-serializing helper) because a client
+// that serializes the body itself would need to build the SAME deep
+// structure in-process to send it — exactly the client-normalisation-masks-
+// a-server-hole shape this initiative's own earlier pins already learned to
+// route around (PIN 2's AT-36, PIN 4's raw dot-segment probes). Kills an
+// implementation that leaves `JSON.stringify(candidate)` unguarded (today's
+// shape — empirically verified: 500, body is exactly
+// `{"error":"RangeError: Maximum call stack size exceeded"}`) OR one that
+// converts the throw into an unhandled rejection with no response at all.
+test('R4-16 AT-56 (PIN 6, mandatory adversarial AT): a depth-10,000 nested-array projectRepoPath, sent as raw wire bytes, must 400 — never a 500 leaking RangeError/"Maximum call stack", and never an unhandled rejection with no response at all', async () => {
+  const depth = 10000;
+  const nestedArrayLiteral = '['.repeat(depth) + ']'.repeat(depth);
+  const bodyText = `{"project":"demo","projectRepoPath":${nestedArrayLiteral}}`;
+
+  const before_ = listDemoSessionIds();
+  const result = await rawPostBody('/api/demo-builder/start', bodyText);
+
+  assert.equal(result.timedOut, false, 'the request must receive a real response — a hung request with no response is the actual failure mode of an unhandled rejection (no .catch on the void handleHttp(...) dispatch)');
+  assert.equal(result.status, 400, `a deeply-nested projectRepoPath must be rejected with 400 (a clean, named rejection), got ${result.status}: ${result.text.slice(0, 200)}`);
+  assert.ok(!result.text.includes('RangeError'), `the response must never leak the raw RangeError, got: ${result.text.slice(0, 200)}`);
+  assert.ok(!result.text.includes('Maximum call stack'), `the response must never leak the raw stack-overflow message, got: ${result.text.slice(0, 200)}`);
+  assert.ok(result.text.length > 0, 'the 400 body must still name the rejection somehow, not be empty');
+  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+});
+
+// The truncation case. A WIDE (not deep) non-string value — JSON.stringify
+// succeeds on this one (no RangeError), but interpolating the full result
+// unbounded produces a response that can be as large as, or larger than, the
+// request that provoked it (empirically verified before writing this AT: a
+// 200,038-byte request produced a 300,063-byte response today — LARGER than
+// the request, because array-of-strings JSON re-quoting adds overhead on top
+// of the original). Bound chosen: response body under 5,000 bytes (any sane
+// truncated message — e.g. "first N characters of the stringified value…" —
+// comfortably fits in a few hundred bytes; 5,000 is a generous cap with
+// headroom, not a tight guess at the fix's exact truncation length, which
+// this AT does not need to know) AND under 5% of the request body size (a
+// relative safety net independent of the absolute cap, so the AT still means
+// something if a future request-size default changes).
+test('R4-16 AT-57 (PIN 6): a large-but-representable (WIDE, not deep) non-string projectRepoPath ⇒ 400, and the response body is TRUNCATED — materially smaller than the request, not a near-verbatim echo of it', async () => {
+  const wideArray = new Array(50000).fill('x');
+  const requestBody = JSON.stringify({ project: 'demo', projectRepoPath: wideArray });
+  const requestBytes = Buffer.byteLength(requestBody);
+  assert.ok(requestBytes < 1024 * 1024, 'sanity: the request itself must stay under the 1 MiB body cap (readJson\'s MAX_BODY_BYTES) so this AT is about truncation, not the pre-existing size guard');
+
+  const before_ = listDemoSessionIds();
+  const res = await fetch(`${url}/api/demo-builder/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: requestBody,
+  });
+  const text = await res.text();
+  const responseBytes = Buffer.byteLength(text);
+
+  assert.equal(res.status, 400, `a wide non-string projectRepoPath must be rejected with 400, got ${res.status}`);
+  assert.ok(responseBytes < 5000, `the response body must be TRUNCATED (chosen bound: under 5,000 bytes — any sane truncated message comfortably fits), got ${responseBytes} bytes`);
+  assert.ok(responseBytes < requestBytes * 0.05, `the response must be materially smaller than the request (chosen ratio: under 5% of the request's ${requestBytes} bytes), got ${responseBytes} bytes — today's unbounded interpolation produces a response LARGER than the request`);
+  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+});
