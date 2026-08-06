@@ -31,7 +31,7 @@ import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-
 import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
 import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/band-agent-run.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { createLogger } from '../orchestrator/logging.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
@@ -198,7 +198,10 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
 
     let realProjectsRoot: string;
     try {
-      realProjectsRoot = realpathSync(resolveProjectsDir(resolve(forgeRoot), loadConfig()));
+      // R4-17 round-3 BLOCKER (pin 5, item 2): forge-root-anchored config
+      // path, not loadConfig()'s cwd-relative default — see
+      // defaultConfigPath's docstring (orchestrator/config.ts).
+      realProjectsRoot = realpathSync(resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot))));
     } catch {
       return; // no resolvable projects root at all — refuse rather than guess
     }

@@ -53,7 +53,7 @@ import { resolveGuardedPath } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
@@ -283,7 +283,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   // half-onboarded dir without `.forge/project.json` still surfaces, with
   // id-as-name defaults, so the operator can SEE it and finish onboarding —
   // `forge studio lint` warns about the missing contract file separately).
-  const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig());
+  const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const discovered = discoverProjects(projectsDir, forgeRoot);
 
   return discovered.map((ref) => {
@@ -734,7 +734,7 @@ export async function handleStudioRoutes(
       // B1: resolve the project by disk scan rather than the projects.yaml
       // registry. A dir without `.forge/project.json` still preflights (the
       // operator runs preflight to learn WHY it is not yet contract-green).
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);
@@ -775,7 +775,7 @@ export async function handleStudioRoutes(
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);
@@ -832,7 +832,7 @@ export async function handleStudioRoutes(
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
-      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const result = deriveContractStages({ forgeRoot: ctx.forgeRoot, projectsRoot, projectId: id });
       if (!result.ok) {
         // Distinguishes "unknown project" from "project exists but its

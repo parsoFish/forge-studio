@@ -73,7 +73,7 @@ import { join, resolve, sep } from 'node:path';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import { deriveContractStages } from './contract-stages.ts';
@@ -235,7 +235,7 @@ export async function handleStudioSessionsRoutes(
       return true;
     }
 
-    const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+    const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
     const kindDirName = `_${descriptor.id}`;
     const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
     if (!sessionDir) {

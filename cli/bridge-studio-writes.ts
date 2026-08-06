@@ -46,7 +46,7 @@ import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSideca
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
 import { seedProjectBrain, checkProjectBrainSeedContainment } from '../orchestrator/project-brain-seed.ts';
 import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
@@ -297,7 +297,7 @@ function resolveManagedProject(
     sendJson(res, 400, { error: 'invalid project id' }, origin);
     return null;
   }
-  const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+  const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
   const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
   if (!projectRef) {
     sendJson(res, 404, { error: 'unknown project' }, origin);
@@ -744,7 +744,7 @@ export async function handleStudioWriteRoutes(
       if (!name || !appType || !northStar) {
         sendJson(res, 400, { error: 'name, appType and northStar are required' }, origin); return true;
       }
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       let out;
       try {
         out = scaffoldGreenfieldProject({
@@ -808,7 +808,7 @@ export async function handleStudioWriteRoutes(
 
       // Reject a duplicate id by disk scan (B1: projects are discovered, not
       // registered). Resolve + guard the repo path under the projects root.
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       if (discoverProjects(projectsDir, ctx.forgeRoot).some((p) => p.id === id)) {
         sendJson(res, 409, { error: `project "${id}" already exists` }, origin); return true;
       }
@@ -1034,7 +1034,7 @@ export async function handleStudioWriteRoutes(
       }
 
       // 2. Resolve the project by disk scan (B1: auto-discovered from disk).
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);

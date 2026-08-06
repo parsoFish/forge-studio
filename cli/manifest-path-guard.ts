@@ -82,6 +82,7 @@
 
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath } from './studio-path-guard.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 
 export type ManifestPathFields = {
   initiative_id: string;
@@ -94,6 +95,26 @@ export type ManifestPathFields = {
 /** Generous but bounded — cycle ids are timestamp+slug shaped, never this long. */
 const MAX_CYCLE_ID_LENGTH = 200;
 const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/**
+ * R4-17 round-3 BLOCKER (pin 5, item 2): the ONE resolution of "where do
+ * managed projects live" this module uses — `resolveProjectsDir`, the SAME
+ * config-aware helper `ctx.projectsRoot` (`cli/ui-bridge.ts`) and
+ * `writeSessionTerminalPhase` (`cli/agent-run.ts`) already resolve through,
+ * fed a FORGE-ROOT-ANCHORED config path (`defaultConfigPath`) rather than
+ * `loadConfig`'s cwd-relative default. Before this fix, `isContainedProjectRepoPath`
+ * (and `isContainedWorktreePath`'s projects-root fallback branch) hardcoded
+ * `join(forgeRoot, 'projects')` — a THIRD, independent disagreement with the
+ * producers, on top of the two round-2 fixed already. Under a configured
+ * `FORGE_PROJECTS_DIR`/`projectsDir`, a legitimately-produced session's write
+ * would be silently refused by this guard while every producer correctly
+ * used the configured root — "a configured projectsDir could break cycle
+ * approval entirely". One concept ("the projects root"), one resolution,
+ * used everywhere that concept is checked.
+ */
+function resolveConfiguredProjectsRoot(forgeRoot: string): string {
+  return resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
+}
 
 /**
  * Real per-segment containment of `candidate` under `root`. The candidate is
@@ -142,7 +163,7 @@ export function isContainedWorktreePath(p: string, opts: { forgeRoot: string; in
   if (identity.ok && identity.segments.length === 1 && identity.segments[0] === opts.initiativeId) {
     return true;
   }
-  const projectsRoot = join(opts.forgeRoot, 'projects');
+  const projectsRoot = resolveConfiguredProjectsRoot(opts.forgeRoot);
   return containedUnder(projectsRoot, p).ok;
 }
 
@@ -168,7 +189,7 @@ export function isContainedWorktreePath(p: string, opts: { forgeRoot: string; in
  * it returns. Do not build a second, unguarded path for the same write.
  */
 export function isContainedProjectRepoPath(p: string, opts: { forgeRoot: string }): boolean {
-  const projectsRoot = join(opts.forgeRoot, 'projects');
+  const projectsRoot = resolveConfiguredProjectsRoot(opts.forgeRoot);
   return containedUnder(projectsRoot, p).ok;
 }
 

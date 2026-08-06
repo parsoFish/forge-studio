@@ -115,7 +115,7 @@ cli/ui-bridge.ts mkdirSync 8
 cli/ui-bridge.ts openSync 3
 cli/ui-bridge.ts readdirSync 13
 cli/ui-bridge.ts readFileSync 15
-cli/ui-bridge.ts realpathSync 4
+cli/ui-bridge.ts realpathSync 3
 cli/ui-bridge.ts spawn 2
 cli/ui-bridge.ts statSync 7
 cli/ui-bridge.ts writeFileSync 11

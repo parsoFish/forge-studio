@@ -27,7 +27,7 @@ import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects 
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '../orchestrator/studio/types.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
@@ -537,7 +537,7 @@ export async function handleStudioKbRoutes(
             return true;
           }
         } else {
-          const projectsDir = resolveProjectsDir(ctx.forgeRoot, loadConfig());
+          const projectsDir = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
           const projectIds = discoverProjects(projectsDir, ctx.forgeRoot).map((p) => p.id);
           if (!projectIds.includes(ref)) {
             sendJson(res, 400, { error: `binding.ref "${ref}" is not a discovered project id` }, origin);
