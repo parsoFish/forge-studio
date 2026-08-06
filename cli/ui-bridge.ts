@@ -139,6 +139,11 @@ import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
+// R6-04 WI-4 — GET /api/agents/runs/<runId>'s `lines` field cap. A fixed
+// cap (not a proportion of the log size) so a runaway log is never served
+// whole; the TAIL (most-recently-written lines) is preserved when capping,
+// so a long-running run's log view never looks frozen at dispatch.
+const RUN_LOG_LINES_MAX = 500;
 // Feature #8 — daemon-stall liveness. Mirrors orchestrator/scheduler.ts's
 // staleHeartbeatMs default (5min). The UI flips to `daemon-stalled` only at a
 // GENEROUS multiple of that so a slow-but-alive cycle never false-alarms — the
@@ -1113,6 +1118,16 @@ async function handleHttp(
   // the run's `_logs/<runId>/events.jsonl` and reports {state, costUsd, events}
   // so the agent-page RunPanel shows live status + cost (the F1 "events/cost
   // visible" AC) without a bespoke per-agent monitor.
+  //
+  // R6-04 WI-4: also reports `lines` — the run's own parsed event records,
+  // capped to RUN_LOG_LINES_MAX and TAIL-preserving (most-recently-written
+  // lines survive the cap, not the earliest ones) — so the standalone run
+  // view can render a live log off this SAME poll rather than a second
+  // endpoint or re-reading the JSONL file client-side. `state`/`costUsd`/
+  // `events` keep their EXACT current meaning (`events` stays the COUNT,
+  // uncapped) — both response call sites below (the early return when no
+  // events file exists yet, and the main JSONL-parsing path) return `lines`
+  // so the shape never differs between branches of this one endpoint.
   if (method === 'GET' && url.startsWith('/api/agents/runs/')) {
     const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length));
     if (!isSafeRunId(runId)) {
@@ -1122,7 +1137,7 @@ async function handleHttp(
     const eventsPath = join(ctx.logsRoot, runId, 'events.jsonl');
     if (!existsSync(eventsPath)) {
       // Dispatched but no event yet (or spawn suppressed with no log dir).
-      sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0 }, origin);
+      sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0, lines: [] }, origin);
       return;
     }
     try {
@@ -1146,7 +1161,11 @@ async function handleHttp(
       const ceilingStopped = endMetadata?.['result_subtype'] === 'error_max_budget_usd';
       const state = failed ? 'failed' : suppressed ? 'suppressed' : ceilingStopped ? 'budget-exceeded' : endEvent ? 'done' : 'running';
       const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : 0;
-      sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length }, origin);
+      // `events` stays the COUNT (uncapped); `lines` is the tail slice served
+      // for rendering — a fixed cap regardless of log size (never a
+      // proportion of the total), per RUN_LOG_LINES_MAX below.
+      const lines = parsed.slice(-RUN_LOG_LINES_MAX);
+      sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length, lines }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
