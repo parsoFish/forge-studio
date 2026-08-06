@@ -272,6 +272,7 @@ already-aligned surfaces are baseline material (R4-B13), not initiatives.
 | R4-18 onboard-project OOTB flow | per-OOTB-flow | R4 | M | R4-17 |
 | R4-19 brain creation & maintenance agents | per-OOTB-agent | R4 | M | R2-10 · R1-06 |
 | R4-20 brain-tune OOTB flow | per-OOTB-flow | R4 | S | R4-09 |
+| R4-21 OOTB authoring agent (skill/hook producer — minted batch-C planning) | per-OOTB-agent | R4 | M | R2-10 · R3-01-F3/F4 |
 
 Parked/rejected in the same cut: plan-band branching + demo-design/research
 agents → **R2-D2** (decision 2); manual KB ingest → rejected, reflection-only
@@ -293,7 +294,7 @@ execution detail; THIS table is the driving view.
 | **A — Library** | library-skills · library-hooks · library-connections · library-templates · community-browser | R3-01-F3/F4 · R3-06 · R3-03 · R3-04 · R3-07 | build-skill · build-hook · install-skills-hooks · install-connections |
 | **B — Sessions & builder** | sessions-surface · agent-builder · per-OOTB sessions | R2-10 · R2-09 · R4-15 · R4-16 · R4-17 | create-agent · edit-agent · onboard-project · create-project · run-agent-{architect, demo-builder, onboarding} |
 | **C — Runs, triggers & monitors** | triggers-runtime · agent-kickoff+run · flow-run-detail · flows-home/monitor · agents-home/monitor | R2-08 · R6-04 · R6-01-F1/F4/F5 (+the R2-05 slice typed outputs need) · R6-05 · R6-06 | run-agent · run-flow · run-agent-{developer, adversarial-review, demo-runner, reflector} — all three trigger framings |
-| **D — Projects & knowledge** | projects-list/detail · project-roadmap-tab · demo-showcase · kb-create/maintain · kb-explore · per-OOTB flows | R4-12 · R4-13 · R4-14 · R1-06 · R6-08 · R4-19 · R4-18 · R4-20 | create-kb-project · create-kb-cycle · kb-maintain · run-agent-brain-creation · run-flow-onboard · run-flow-brain-tune |
+| **D — Projects & knowledge** | projects-list/detail · project-roadmap-tab · demo-showcase · kb-create/maintain · kb-explore · per-OOTB flows · per-OOTB authoring | R4-12 · R4-13 · R4-14 · R1-06 · R6-08 · R4-19 · R4-18 · R4-20 · R4-21 | create-kb-project · create-kb-cycle · kb-maintain · run-agent-brain-creation · run-flow-onboard · run-flow-brain-tune · build-skill · build-hook |
 | **E — IA & Home** | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav + Home live; nav/landing beats across the gallery |
 | **F — Refinement & ground truth** | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep clean; three-scope docs (operate / develop / plan) |
 
@@ -745,3 +746,16 @@ object is written. The story itself stays `pending` for an honest reason — the
 remaining blocker is beat granularity (splitting the composite
 `agents-scratch-build` beat), which is planned surgery on a passing beat, i.e.
 genuinely "planned but not yet built".
+
+- 2026-08-07 — **Batch-C planning: R4-21 minted and scheduled into batch D**
+  (cut count 20→21; §4 cut table + batch-D row updated; full spec in
+  `R4-ootb-suite.md`). Grounds: the batch-B exit measurement — the
+  `build-skill` / `build-hook` parity stories (and `create-agent`'s
+  non-excluded remainder) share ONE blocker: forge has no producer, i.e. no
+  agent that authors an artifact package (16 `runtime:` roster agents, none
+  authors one), so `file-package` stays a RESERVED row. One OOTB authoring
+  agent plus its save path is an initiative, not a rider — minted per §5
+  rule 4, deps R2-10 + R3-01-F3/F4 (both implemented). Batch C itself
+  proceeds per the batch plan unchanged, piloting two parallel lanes
+  (R2-08 ∥ R6-04) per the batch-B efficiency report's untried largest
+  saving.

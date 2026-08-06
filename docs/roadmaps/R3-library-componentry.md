@@ -433,8 +433,9 @@ third connection kind above); `npm run parity:stories` exits 0.
 - **Status:** implemented (F1+F2, 2026-07-19, PR-B — see baseline R3-B7); F3+F4 re-entered `planned` 2026-08-03 (wave 5) — the studio-endstate-v2 mockup IS the reserved §4b.1 design (see the wave-5 re-entry note below); **F3+F4 implemented 2026-08-04 (branch `feat/r3-01-skills-library` — see baseline R3-B8)**  ·  **Wave:** 3 (F1+F2) / 5 (F3+F4)
 - **Depends on:** — . **Depended on by:** R3-02 (landing-place), R3-03 (soft —
   hooks reuse the unified-registry + library-view pattern), R3-04 (soft — same
-  surface pattern), R5-05 (skills-palette residue cross-references here, not
-  duplicated).
+  surface pattern), R4-21 (F3's FilePackage renderer + F4's install/palette
+  pipeline receive its authored packages), R5-05 (skills-palette residue
+  cross-references here, not duplicated).
 - **Context:** Three converging findings: [known-gaps §4.11](../known-gaps.md)
   (UI-created skills invisible to the agent builder's palette — the S5b demo
   rebuild broke its create-skill→compose-into-agent throughline on this),
