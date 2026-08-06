@@ -125,11 +125,43 @@ export function validateMaterialsClientSide(
 
 /**
  * The cost-ceiling dispatch decision (R6-04 WI-3 headline pin): "an operator
- * never submits a ceiling that will be refused." Gated purely on the AGENT's
- * enforceability (a fact about the agent, invariant under the value) — NOT
- * on the value's truthiness, so an enforceable agent with a ceiling of
- * exactly 0 still dispatches 0, not `undefined`.
+ * never submits a ceiling that will be refused." Gated on the AGENT's
+ * enforceability (a fact about the agent, invariant under the value) AND on
+ * the value's own validity — mirroring the server's own bounds check
+ * (cli/ui-bridge.ts: `v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD`, plus the
+ * shape check `!Number.isFinite(v)`). round-2 hardening (the real defect a
+ * full-gate journey run found): `0` is NOT a legitimate dispatch value even
+ * for an enforceable agent — treating it as one is exactly what let a stale
+ * `0` field value reach the wire and 400 for every one-shot agent. Same
+ * pattern already established for materials: a convenience mirror of the
+ * server's rules, never the authority, but present so a bad value degrades
+ * to "nothing sent" instead of a round-tripped 400.
  */
 export function resolveCostCeilingForDispatch(inputValue: number, enforceable: boolean): number | undefined {
-  return enforceable ? inputValue : undefined;
+  if (!enforceable) return undefined;
+  if (!Number.isFinite(inputValue) || inputValue <= 0) return undefined;
+  return inputValue;
+}
+
+/**
+ * THE FIX for the real defect a full-gate journey run found (see this
+ * module's callers / `run-panel-view.test.ts`'s header for the full
+ * writeup): RunPanel.tsx used to seed its cost-ceiling field with
+ * `useState(defaultCostCeilingUsd)` — a value captured ONCE at first mount.
+ * `defaultCostCeilingUsd` arrives ASYNCHRONOUSLY (the parent page starts it
+ * at `0` and fills it after `fetchStudioAgentsWithMeta()` resolves), so a
+ * `useState` initializer never re-synced and the field stayed stuck at `0`
+ * forever — breaking dispatch for every one-shot agent.
+ *
+ * The fix: the DISPLAYED value is a pure function of the CURRENT
+ * `defaultCostCeilingUsd` argument, recomputed on every call/render — never
+ * memoized — UNLESS the operator has manually typed something
+ * (`manualOverride !== undefined`), in which case that typed value always
+ * wins, even over a default that arrives (or changes) later. `0` is a
+ * legitimate FIELD value when it's what the operator typed (distinct from
+ * `resolveCostCeilingForDispatch`'s separate refusal to DISPATCH `0` — the
+ * two decisions are deliberately independent).
+ */
+export function resolveCeilingFieldValue(defaultCostCeilingUsd: number, manualOverride: number | undefined): number {
+  return manualOverride !== undefined ? manualOverride : defaultCostCeilingUsd;
 }

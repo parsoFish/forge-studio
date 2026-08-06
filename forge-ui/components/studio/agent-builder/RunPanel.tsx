@@ -45,7 +45,11 @@ import {
   type AgentRunStatus,
   type MaterialUpload,
 } from '@/lib/studio-client';
-import { validateMaterialsClientSide, resolveCostCeilingForDispatch } from '@/lib/run-panel-view';
+import {
+  validateMaterialsClientSide,
+  resolveCostCeilingForDispatch,
+  resolveCeilingFieldValue,
+} from '@/lib/run-panel-view';
 
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
@@ -103,7 +107,20 @@ export function RunPanel({
 }: Props) {
   const [project, setProject] = useState('');
   const [inputsText, setInputsText] = useState('');
-  const [costCeiling, setCostCeiling] = useState(defaultCostCeilingUsd);
+  // R6-04 WI-3 round-2 fix (real defect a full-gate journey run found): do
+  // NOT `useState(defaultCostCeilingUsd)` — that snapshots the prop's value
+  // at first mount and never re-syncs once the parent page's async fetch
+  // resolves it, so the field stayed stuck at the initial `0` forever and a
+  // stale `0` reached the wire for every one-shot agent (the server
+  // correctly 400s `v <= 0`). Instead: track ONLY whether the operator has
+  // manually typed something (`undefined` until they do); the DISPLAYED
+  // value is recomputed from the CURRENT `defaultCostCeilingUsd` prop on
+  // every render via `resolveCeilingFieldValue` (lib/run-panel-view.ts),
+  // unless a manual override is present, in which case it always wins —
+  // even a manually-typed `0` (a legitimate FIELD value, independent of
+  // `resolveCostCeilingForDispatch`'s separate refusal to DISPATCH `0`).
+  const [manualCostCeiling, setManualCostCeiling] = useState<number | undefined>(undefined);
+  const costCeiling = resolveCeilingFieldValue(defaultCostCeilingUsd, manualCostCeiling);
   const [materials, setMaterials] = useState<MaterialUpload[]>([]);
   const [materialsError, setMaterialsError] = useState<string | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
@@ -253,7 +270,7 @@ export function RunPanel({
             min={0}
             step="0.01"
             value={costCeiling}
-            onChange={(e) => setCostCeiling(Number(e.target.value))}
+            onChange={(e) => setManualCostCeiling(Number(e.target.value))}
             disabled={!costCeilingEnforceable || controlsDisabled}
           />
           {!costCeilingEnforceable && (
