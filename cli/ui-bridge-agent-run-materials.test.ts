@@ -225,6 +225,25 @@ function splitBytes(total: number, maxPerFile: number, maxCount: number): number
   return parts;
 }
 
+/** R6-04-F2 ROUND 2 — exact refusal-message templates, specified by the
+ *  round-2 spawner ruling (round 1 used loose regexes here; this replaces
+ *  them with full-string equality so a compliant-but-differently-phrased
+ *  message fails loudly, and so a message that silently drops the
+ *  declared-kinds clause fails too):
+ *    no kind:        materials: "<filename>" maps to no material kind; agent "<slug>" declares: <kinds|(none)>
+ *    undeclared kind: materials: "<filename>" is <kind>; agent "<slug>" declares: <kinds|(none)>
+ *  <kinds> is comma-separated in declaration order; literal "(none)" when
+ *  the agent declares nothing at all. */
+function declaredKindsClause(declared: readonly string[]): string {
+  return declared.length > 0 ? declared.join(', ') : '(none)';
+}
+function noKindMessage(filename: string, slug: string, declared: readonly string[]): string {
+  return `materials: "${filename}" maps to no material kind; agent "${slug}" declares: ${declaredKindsClause(declared)}`;
+}
+function undeclaredKindMessage(filename: string, kind: string, slug: string, declared: readonly string[]): string {
+  return `materials: "${filename}" is ${kind}; agent "${slug}" declares: ${declaredKindsClause(declared)}`;
+}
+
 // =============================================================================
 // Contract point 1 — materials absent / [] ⇒ identical to today (back-compat)
 // =============================================================================
@@ -404,6 +423,7 @@ test('CONTAINMENT: the literal filename "materials" is refused — but via the m
   const before_ = snapshotBefore();
   const { status, json } = await postRun('agent-images-only', { materials: [{ filename: 'materials', contentBase64: b64('x') }] });
   assertRefusalLeftNoTrace(status, json, before_, 'literal-materials-filename');
+  assert.equal(json.error, noKindMessage('materials', 'agent-images-only', ['images']), 'confirms refusal is via the no-recognized-extension rule, not a containment message');
 });
 
 // =============================================================================
@@ -415,12 +435,21 @@ test('unknown extension → 400', async () => {
   const before_ = snapshotBefore();
   const { status, json } = await postRun('agent-images-only', { materials: [{ filename: 'payload.xyz123', contentBase64: b64('x') }] });
   assertRefusalLeftNoTrace(status, json, before_, 'unknown-extension');
+  assert.equal(json.error, noKindMessage('payload.xyz123', 'agent-images-only', ['images']));
 });
 
 test('absent extension → 400', async () => {
   const before_ = snapshotBefore();
   const { status, json } = await postRun('agent-images-only', { materials: [{ filename: 'README', contentBase64: b64('x') }] });
   assertRefusalLeftNoTrace(status, json, before_, 'absent-extension');
+  assert.equal(json.error, noKindMessage('README', 'agent-images-only', ['images']));
+});
+
+test('DELIBERATE EXCLUSION end-to-end: ".svg" is refused via the same route a real upload would use, even for an agent that declares "images" — SVG is deliberately excluded from the images allowlist (active-content risk); this is the route-level companion to the dedicated unit pin in materials.test.ts', async () => {
+  const before_ = snapshotBefore();
+  const { status, json } = await postRun('agent-images-only', { materials: [{ filename: 'icon.svg', contentBase64: b64('<svg/>') }] });
+  assertRefusalLeftNoTrace(status, json, before_, 'svg-deliberately-excluded');
+  assert.equal(json.error, noKindMessage('icon.svg', 'agent-images-only', ['images']), '.svg must never derive "images", even though the agent declares images and would otherwise accept it');
 });
 
 test('a client-supplied "kind" field is IGNORED — {filename:"evil.exe", kind:"documents", ...} is still refused, because ".exe" derives no kind server-side regardless of what the client claims', async () => {
@@ -429,6 +458,7 @@ test('a client-supplied "kind" field is IGNORED — {filename:"evil.exe", kind:"
     materials: [{ filename: 'evil.exe', kind: 'documents', contentBase64: b64('x') }],
   });
   assertRefusalLeftNoTrace(status, json, before_, 'client-kind-ignored-unknown-ext');
+  assert.equal(json.error, noKindMessage('evil.exe', 'agent-images-only', ['images']), 'the message must reflect the SERVER-derived outcome (no kind), never echo the client-supplied "documents"');
 });
 
 test('a client-supplied "kind" cannot be used to BYPASS the gate: agent-multi declares [images, audio] only; filename "notes.pdf" server-derives "documents" (not accepted) — a client lying kind:"images" must NOT flip this to acceptance', async () => {
@@ -437,6 +467,7 @@ test('a client-supplied "kind" cannot be used to BYPASS the gate: agent-multi de
     materials: [{ filename: 'notes.pdf', kind: 'images', contentBase64: b64('x') }],
   });
   assertRefusalLeftNoTrace(status, json, before_, 'client-kind-cannot-bypass-gate');
+  assert.equal(json.error, undeclaredKindMessage('notes.pdf', 'documents', 'agent-multi', ['images', 'audio']), 'the message must name the SERVER-derived kind ("documents"), never the client-supplied "images"');
 });
 
 test('a client-supplied "kind" cannot be used to WRONGLY REFUSE a legitimate upload: agent-multi declares [images, audio]; filename "song.mp3" server-derives "audio" (accepted) — a client lying kind:"images" must NOT cause a false refusal (the flip side of the previous test: proves the server truly IGNORES the field rather than merely distrusting it in one direction)', async () => {
@@ -458,22 +489,16 @@ test('an agent with NO materials declaration refuses EVERY kind, and the message
     materials: [{ filename: 'picture.png', contentBase64: b64('img') }],
   });
   assertRefusalLeftNoTrace(status, json, before_, 'no-materials-declared');
-  assert.match(json.error ?? '', /material/i, 'the refusal message must at least reference materials');
-  assert.match(
-    json.error ?? '',
-    /\bnone\b|\[\]|no materials|does not accept any/i,
-    `expected the message to explicitly say the agent accepts NO kinds — got ${JSON.stringify(json.error)}`,
-  );
+  assert.equal(json.error, undeclaredKindMessage('picture.png', 'images', 'agent-no-materials', []), 'must use the literal "(none)" clause for an agent with no materials declaration');
 });
 
-test('headline AC: an out-of-contract upload is refused with the declared kinds NAMED — agent-multi declares [images, audio]; a "documents"-kind upload (.pdf) is refused with BOTH declared kinds present in the message', async () => {
+test('headline AC: an out-of-contract upload is refused with the declared kinds NAMED — agent-multi declares [images, audio]; a "documents"-kind upload (.pdf) is refused with BOTH declared kinds present, in declaration order, in the message', async () => {
   const before_ = snapshotBefore();
   const { status, json } = await postRun('agent-multi', {
     materials: [{ filename: 'notes.pdf', contentBase64: b64('doc') }],
   });
   assertRefusalLeftNoTrace(status, json, before_, 'out-of-contract-names-declared-kinds');
-  assert.match(json.error ?? '', /images/, `expected the declared kind "images" named in the refusal — got ${JSON.stringify(json.error)}`);
-  assert.match(json.error ?? '', /audio/, `expected the declared kind "audio" named in the refusal — got ${JSON.stringify(json.error)}`);
+  assert.equal(json.error, undeclaredKindMessage('notes.pdf', 'documents', 'agent-multi', ['images', 'audio']));
 });
 
 test('a declared kind IS accepted: agent-images-only declares [images]; an images-kind upload (.png) passes the gate', async () => {
