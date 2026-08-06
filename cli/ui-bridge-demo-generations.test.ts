@@ -22,7 +22,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { request as httpRequest } from 'node:http';
@@ -561,4 +561,87 @@ test('R4-16 AT-49 (Finding B, BLOCKER): POST /lock — a symlinked session dir i
     rmSync(demoSessionDirFor('attackerLockSession456'), { force: true });
     rmSync(outsideDir, { recursive: true, force: true });
   }
+});
+
+// ===========================================================================
+// R4-16 PIN 4 — round-3 finding (BLOCKER): POST /api/demo-builder/start
+// accepts a caller-supplied `projectRepoPath` with ZERO validation
+// (`const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot,
+// body.project);`) and persists it verbatim as status.json.project_repo_path
+// — the field the runner then trusts as cwd, as the target of a REAL git
+// branch-create + commit, and as the base for every DEMO.html/SKILL.md/
+// demo.lock.json write. Pins 2/3's containment (the skillRelPath allowlist,
+// the session-dir choke point) say nothing about THIS field — this makes
+// that earlier work decorative for exactly this route.
+//
+// Fix shape (binding, per the brief): reuse `isContainedProjectRepoPath`
+// (cli/manifest-path-guard.ts, SEC-02) — already hardened over four review
+// rounds — rather than a new check. That function is a pure boolean; the
+// route itself must still construct the 400 + message naming the offending
+// value, which is what these ATs pin at the ROUTE level (the function's own
+// containment edge cases are already covered by
+// orchestrator/manifest-path-fields.test.ts — not re-litigated here).
+// ===========================================================================
+
+/** Snapshot of session ids currently under `<repoDir()>/_demo/` — used to
+ *  prove a REJECTED /start call creates NO new session dir at all (an
+ *  id-agnostic filesystem check, since a 400 response carries no sessionId
+ *  to look up directly). */
+function listDemoSessionIds(): string[] {
+  const dir = join(repoDir(), '_demo');
+  try {
+    return readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+}
+
+test('R4-16 AT-50 (PIN 4, BLOCKER): POST /api/demo-builder/start with projectRepoPath OUTSIDE forgeRoot/projects/ is rejected — 400 naming the offending path, and NO new session dir is created', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'demo-start-outside-repo-'));
+  try {
+    const before_ = listDemoSessionIds();
+    const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: outsideDir });
+    assert.equal(status, 400, `projectRepoPath outside forgeRoot/projects/ must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+    assert.ok(String(json.error ?? '').includes(outsideDir), `error must name the offending path, got: ${JSON.stringify(json)}`);
+    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-16 AT-51 (PIN 4, BLOCKER): POST /api/demo-builder/start with a projectRepoPath lexically under forgeRoot/projects/ but a SYMLINK resolving outside is rejected', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'demo-start-symlink-outside-'));
+  const evilProjectDir = join(forgeRoot, 'projects', 'evil-project-r416pin4');
+  try {
+    symlinkSync(outsideDir, evilProjectDir);
+    const before_ = listDemoSessionIds();
+    const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: evilProjectDir });
+    assert.equal(status, 400, `a symlinked projectRepoPath must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+  } finally {
+    rmSync(evilProjectDir, { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-16 AT-52 (PIN 4): POST /api/demo-builder/start with a RELATIVE projectRepoPath is rejected — the guard requires absolute, never silently resolved against the server\'s cwd', async () => {
+  const before_ = listDemoSessionIds();
+  const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: 'nonexistent-relative-dir-xyz-9931/demo' });
+  assert.equal(status, 400, `a relative projectRepoPath must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+  assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+});
+
+test('R4-16 AT-53 (PIN 4, positive controls, green today): projectRepoPath ABSENT still defaults to join(projectsRoot, project); a genuinely-contained projectRepoPath is still accepted and persisted verbatim', async () => {
+  const started1 = await post('/api/demo-builder/start', { project: 'demo' });
+  assert.equal(started1.status, 200, `absent projectRepoPath must still succeed, got ${started1.status}: ${JSON.stringify(started1.json)}`);
+  const sid1 = started1.json.sessionId as string;
+  const status1 = readDemoStatus(sid1);
+  assert.equal(status1.project_repo_path, repoDir(), 'absent projectRepoPath must default to join(projectsRoot, project)');
+
+  const containedPath = repoDir(); // join(projectsRoot, 'demo') — genuinely contained, the real shape scripts/verify-cycle.mjs sends
+  const started2 = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: containedPath });
+  assert.equal(started2.status, 200, `a genuinely-contained projectRepoPath must still succeed, got ${started2.status}: ${JSON.stringify(started2.json)}`);
+  const sid2 = started2.json.sessionId as string;
+  const status2 = readDemoStatus(sid2);
+  assert.equal(status2.project_repo_path, containedPath, 'a genuinely-contained projectRepoPath must be persisted verbatim');
 });

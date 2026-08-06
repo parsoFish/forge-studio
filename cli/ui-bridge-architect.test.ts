@@ -8,7 +8,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, existsSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -321,6 +321,90 @@ test('POST /api/architect/start creates a session dir + status', async () => {
   assert.ok(existsSync(join(dir, 'idea.md')));
   const status = JSON.parse(readFileSync(join(dir, 'status.json'), 'utf8'));
   assert.equal(status.phase, 'interviewing');
+});
+
+// ===========================================================================
+// R4-16 PIN 4 — round-3 finding (BLOCKER), applies to /api/architect/start
+// too: `project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot,
+// body.project)` accepts the caller-supplied field with ZERO validation and
+// persists it verbatim — the field every downstream architect/runner call
+// (git ops, file writes under the "repo") trusts. Fix shape (binding): reuse
+// `isContainedProjectRepoPath` (cli/manifest-path-guard.ts, SEC-02) at this
+// route too, per the brief's measurement that no legitimate caller
+// (scripts/verify-cycle.mjs's driveArchitect sends
+// join(FORGE_ROOT,'projects',PROJECT), which the guard accepts) is broken by
+// doing so.
+// ===========================================================================
+
+async function postArchitectStart(body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await fetch(`${url}/api/architect/start`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify(body),
+  });
+  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+}
+
+/** Snapshot of session ids currently under `<forgeRoot>/projects/demo/_architect/`
+ *  — used to prove a REJECTED /start creates NO new session dir (id-agnostic,
+ *  since a 400 response carries no sessionId to look up directly). */
+function listArchitectSessionIds(): string[] {
+  const dir = join(forgeRoot, 'projects', 'demo', '_architect');
+  try {
+    return readdirSync(dir).sort();
+  } catch {
+    return [];
+  }
+}
+
+test('R4-16 PIN 4, AT-A1 (BLOCKER): POST /api/architect/start with projectRepoPath OUTSIDE forgeRoot/projects/ is rejected — 400 naming the offending path, and NO new session dir is created', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'architect-start-outside-repo-'));
+  try {
+    const before_ = listArchitectSessionIds();
+    const { status, json } = await postArchitectStart({ project: 'demo', idea: 'Malicious idea.', projectRepoPath: outsideDir });
+    assert.equal(status, 400, `projectRepoPath outside forgeRoot/projects/ must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+    assert.ok(String(json.error ?? '').includes(outsideDir), `error must name the offending path, got: ${JSON.stringify(json)}`);
+    assert.deepEqual(listArchitectSessionIds(), before_, 'a rejected /start must create NO new session dir under _architect/');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-16 PIN 4, AT-A2 (BLOCKER): POST /api/architect/start with a projectRepoPath lexically under forgeRoot/projects/ but a SYMLINK resolving outside is rejected', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'architect-start-symlink-outside-'));
+  const evilProjectDir = join(forgeRoot, 'projects', 'evil-project-r416pin4');
+  try {
+    symlinkSync(outsideDir, evilProjectDir);
+    const before_ = listArchitectSessionIds();
+    const { status } = await postArchitectStart({ project: 'demo', idea: 'Malicious idea.', projectRepoPath: evilProjectDir });
+    assert.equal(status, 400, `a symlinked projectRepoPath must be rejected with 400, got ${status}`);
+    assert.deepEqual(listArchitectSessionIds(), before_, 'a rejected /start must create NO new session dir under _architect/');
+  } finally {
+    rmSync(evilProjectDir, { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-16 PIN 4, AT-A3: POST /api/architect/start with a RELATIVE projectRepoPath is rejected — the guard requires absolute, never silently resolved against the server\'s cwd', async () => {
+  const before_ = listArchitectSessionIds();
+  const { status } = await postArchitectStart({ project: 'demo', idea: 'x', projectRepoPath: 'nonexistent-relative-dir-xyz-9931/demo' });
+  assert.equal(status, 400, `a relative projectRepoPath must be rejected with 400, got ${status}`);
+  assert.deepEqual(listArchitectSessionIds(), before_, 'a rejected /start must create NO new session dir under _architect/');
+});
+
+test('R4-16 PIN 4, AT-A4 (positive controls, green today): projectRepoPath ABSENT still defaults to join(projectsRoot, project); a genuinely-contained projectRepoPath is still accepted and persisted verbatim — this is the EXACT shape scripts/verify-cycle.mjs sends', async () => {
+  const started1 = await postArchitectStart({ project: 'demo', idea: 'Absent projectRepoPath.' });
+  assert.equal(started1.status, 200, `absent projectRepoPath must still succeed, got ${started1.status}: ${JSON.stringify(started1.json)}`);
+  const sid1 = started1.json.sessionId as string;
+  const status1 = JSON.parse(readFileSync(join(sessionDir(sid1), 'status.json'), 'utf8'));
+  assert.equal(status1.project_repo_path, join(forgeRoot, 'projects', 'demo'), 'absent projectRepoPath must default to join(projectsRoot, project)');
+
+  const containedPath = join(forgeRoot, 'projects', 'demo'); // the real shape scripts/verify-cycle.mjs's driveArchitect sends
+  const started2 = await postArchitectStart({ project: 'demo', idea: 'Contained projectRepoPath.', projectRepoPath: containedPath });
+  assert.equal(started2.status, 200, `a genuinely-contained projectRepoPath must still succeed, got ${started2.status}: ${JSON.stringify(started2.json)}`);
+  const sid2 = started2.json.sessionId as string;
+  const status2 = JSON.parse(readFileSync(join(sessionDir(sid2), 'status.json'), 'utf8'));
+  assert.equal(status2.project_repo_path, containedPath, 'a genuinely-contained projectRepoPath must be persisted verbatim');
 });
 
 // ---------------------------------------------------------------------------
