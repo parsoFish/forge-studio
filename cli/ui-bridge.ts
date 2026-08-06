@@ -101,8 +101,10 @@ import {
 import {
   demoSessionDir,
   DEMO_HTML_REL_PATH,
+  GENERATIONS_DIRNAME,
   type DemoBuilderStatus,
 } from '../orchestrator/demo-builder-runner.ts';
+import { safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
@@ -1371,6 +1373,15 @@ const SAFE_PROJECT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 
+/** R4-16 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>
+ *  path segments. `n` is a bounded digit string (mirrors a generation number,
+ *  never negative/decimal). `filename` structurally forbids `..`, `/`, and an
+ *  absolute path — a malicious segment can never even reach the realpath
+ *  choke point (`safeReadFileInSession`), which is this route's actual
+ *  containment guard (D11). */
+const GENERATION_NUMBER_RE = /^[0-9]{1,6}$/;
+const GENERATION_FILENAME_RE = /^[A-Za-z0-9._-]+$/;
+
 /** Timestamp stamp + short random suffix for a generated run id
  *  (YYYY-MM-DDTHH-mm-ss-SSS-xxxx): the ms precision plus 4 base36 chars so two
  *  dispatches of the same slug in the same millisecond (a programmatic driver,
@@ -2173,6 +2184,39 @@ async function handleDemoBuilder(
     return true;
   }
 
+  // GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename> — serve
+  // one R4-16 generation-snapshot file out of <sessionDir>/generations/<n>/.
+  // Unlike the sibling /demo/ and /fragment/ routes above (a lexical
+  // `startsWith(base)` check on a joined path), this route reads through
+  // `safeReadFileInSession` (session-transcript.ts's realpath choke point,
+  // D11) — a deliberately STRONGER guard than those pre-existing siblings,
+  // whose lexical checks are filed as an evidenced follow-up rather than
+  // fixed inside this PR (a containment change wants its own attack round).
+  const generationMatch = url.match(/^\/api\/demo-builder\/generation\/([^/]+)\/([^/]+)\/([^/]+)\/([^/]+)$/);
+  if (method === 'GET' && generationMatch) {
+    const project = decodeURIComponent(generationMatch[1]);
+    const sessionId = decodeURIComponent(generationMatch[2]);
+    const n = decodeURIComponent(generationMatch[3]);
+    const filename = decodeURIComponent(generationMatch[4]);
+    if (!GENERATION_NUMBER_RE.test(n)) {
+      sendJson(res, 400, { error: `invalid generation number "${n}"` }, origin);
+      return true;
+    }
+    if (!GENERATION_FILENAME_RE.test(filename)) {
+      sendJson(res, 400, { error: `invalid filename "${filename}"` }, origin);
+      return true;
+    }
+    const sessionDir = demoSessionDir(join(ctx.projectsRoot, project), sessionId);
+    const fileBody = safeReadFileInSession(sessionDir, join(GENERATIONS_DIRNAME, n, filename));
+    if (fileBody === null) {
+      sendJson(res, 404, { error: 'generation snapshot file not found', project, sessionId, generation: n, filename }, origin);
+      return true;
+    }
+    res.writeHead(200, { 'content-type': contentTypeFor(filename), 'access-control-allow-origin': origin, 'vary': 'origin' });
+    res.end(fileBody);
+    return true;
+  }
+
   // GET /api/demo-builder/history/<project> — list previously-locked demos
   // (snapshots under <repo>/.forge/demo/history/<id>/), newest first.
   const histListMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)$/);
@@ -2395,12 +2439,20 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/demo-builder/lock {project, sessionId} — lock the current demo in.
+  // POST /api/demo-builder/lock {project, sessionId, generation?} — lock the
+  // current demo in. R4-16: an optional `generation` names which snapshot to
+  // lock — structurally validated (integer ≥ 1) BEFORE any write, so a
+  // rejected request never mutates status.json.
   if (method === 'POST' && url === '/api/demo-builder/lock') {
     try {
-      const body = (await readJson(req)) as { project?: string; sessionId?: string };
+      const body = (await readJson(req)) as { project?: string; sessionId?: string; generation?: unknown };
       if (!body.project || !body.sessionId) {
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      const hasGeneration = Object.prototype.hasOwnProperty.call(body, 'generation') && body.generation !== undefined;
+      if (hasGeneration && !(typeof body.generation === 'number' && Number.isInteger(body.generation) && body.generation >= 1)) {
+        sendJson(res, 400, { error: `generation must be an integer >= 1, got ${JSON.stringify(body.generation)}` }, origin);
         return true;
       }
       const dir = demoSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
@@ -2409,7 +2461,11 @@ async function handleDemoBuilder(
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'locking' });
+      writeSessionStatus<DemoBuilderStatus>(dir, {
+        ...status,
+        phase: 'locking',
+        ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),
+      });
       spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);

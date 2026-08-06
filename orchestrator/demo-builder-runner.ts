@@ -20,8 +20,8 @@
  *                        └ (bridge: abandon) ──▶ abandoned
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
@@ -69,6 +69,18 @@ export const DEMO_FRAGMENTS_REL_DIR = '.forge/demo/fragments';
 /** Forge-root-relative path to the base stylesheet the agent inlines. */
 export const FORGE_DEMO_CSS_REL_PATH = 'studio/demo/forge-demo.css';
 
+/** R4-16 — session-dir-relative home for per-generation snapshots
+ *  (`<sessionDir>/generations/<n>/`), NEVER the project repo (D4: the
+ *  derivation may not read outside sessionDir, and project-repo history would
+ *  commit intermediate generations onto the project's forge-studio branch). */
+export const GENERATIONS_DIRNAME = 'generations';
+/** The two files a generation snapshots — exactly the pair `runGenerateStep`
+ *  already verifies (D5) — plus the metadata file recording how to restore
+ *  them. */
+export const GENERATION_DEMO_FILENAME = 'DEMO.html';
+export const GENERATION_SKILL_FILENAME = 'SKILL.md';
+export const GENERATION_META_FILENAME = 'meta.json';
+
 // ---------------------------------------------------------------------------
 // Session-dir state contract
 // ---------------------------------------------------------------------------
@@ -105,6 +117,15 @@ export type DemoBuilderStatus = {
   /** The operator's look-and-feel guidance / change-notes (persisted to `prompt.md`). */
   prompt: string;
   updated_at: string;
+  /**
+   * R4-16 — the generation number the operator chose to lock, DECLARED here
+   * and ENFORCED by `runLockStep` (D6): naming a generation with no
+   * readable/parsable snapshot fails the lock loudly (declared-data-fails-open
+   * is the antipattern this guards against — it must never silently lock the
+   * latest). Absent ⇒ lock whatever is currently in the repo (today's
+   * behaviour, unchanged) and `demo.lock.json.generation` records `null`.
+   */
+  selectedGeneration?: number;
 };
 
 export type RunDemoBuilderTurnInput = {
@@ -294,6 +315,28 @@ async function runGenerateStep(args: {
     );
   }
 
+  // R4-16: snapshot this turn's verified DEMO.html + generator skill into
+  // <sessionDir>/generations/<iteration>/ (D4/D5) — byte copies (Buffer, not
+  // utf8 decode/re-encode) so a later lock-time restore is byte-identical.
+  // Snapshots ACCUMULATE: this never touches an earlier generation's dir.
+  const genDir = join(sessionDir, GENERATIONS_DIRNAME, String(status.iteration));
+  mkdirSync(genDir, { recursive: true });
+  writeFileSync(join(genDir, GENERATION_DEMO_FILENAME), readFileSync(demoPath));
+  writeFileSync(join(genDir, GENERATION_SKILL_FILENAME), readFileSync(requiredSkillPath));
+  // feedback.md at TURN END (D8) — the runner never clears it, so this is
+  // read fresh rather than reusing the pre-turn `feedback` value, matching
+  // the literal "at turn end" contract even though the two are identical
+  // under today's code (no in-turn feedback.md mutation exists).
+  const generationMeta = {
+    iteration: status.iteration,
+    createdAt: new Date().toISOString(),
+    feedback: readFeedback(sessionDir),
+    targetElement: target ?? null,
+    composed,
+    skillRelPath: requiredSkillRel,
+  };
+  writeFileSync(join(genDir, GENERATION_META_FILENAME), `${JSON.stringify(generationMeta, null, 2)}\n`);
+
   writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
@@ -317,6 +360,32 @@ function runLockStep(args: {
   initiativeId: string;
 }): RunDemoBuilderTurnResult {
   const { input, sessionDir, status, logger, initiativeId } = args;
+
+  // R4-16 (D6) — a chosen generation is validated and restored BEFORE any
+  // write happens. Fail closed: a selectedGeneration naming a missing or
+  // unparsable snapshot throws, naming the requested number AND the
+  // generations that DO exist — no lock file, no history entry, phase not
+  // flipped, repo files untouched (declared-data-fails-open is exactly the
+  // antipattern this guards against; it must never silently lock the latest).
+  if (status.selectedGeneration !== undefined) {
+    const meta = readGenerationSnapshotMeta(sessionDir, status.selectedGeneration);
+    const genDir = join(sessionDir, GENERATIONS_DIRNAME, String(status.selectedGeneration));
+    const snapshotDemoPath = join(genDir, GENERATION_DEMO_FILENAME);
+    const snapshotSkillPath = join(genDir, GENERATION_SKILL_FILENAME);
+    if (meta === null || !existsSync(snapshotDemoPath) || !existsSync(snapshotSkillPath)) {
+      const existing = listExistingGenerationNumbers(sessionDir);
+      throw new Error(
+        `demo-builder runner: cannot lock — generation ${status.selectedGeneration} has no readable/parsable snapshot at ` +
+        `${genDir}. Generations on disk: ${existing.length > 0 ? existing.join(', ') : '(none)'}.`,
+      );
+    }
+    const destSkillPath = join(status.project_repo_path, meta.skillRelPath);
+    mkdirSync(dirname(destSkillPath), { recursive: true });
+    mkdirSync(join(status.project_repo_path, DEMO_REL_DIR), { recursive: true });
+    writeFileSync(join(status.project_repo_path, DEMO_HTML_REL_PATH), readFileSync(snapshotDemoPath));
+    writeFileSync(destSkillPath, readFileSync(snapshotSkillPath));
+  }
+
   const demoPath = join(status.project_repo_path, DEMO_HTML_REL_PATH);
   if (!existsSync(demoPath)) {
     throw new Error(
@@ -334,6 +403,10 @@ function runLockStep(args: {
     // initiative to render a before/after demo of that initiative's changes.
     demo_skill: existsSync(skillPath) ? DEMO_SKILL_REL_PATH : null,
     demo_html: DEMO_HTML_REL_PATH,
+    // R4-16 (D6) — the CHOSEN generation, never attributed from
+    // status.iteration (a field that happens to be a number is not the same
+    // thing as "the chosen generation"). null when nothing was chosen.
+    generation: status.selectedGeneration ?? null,
     locked_at: status.updated_at,
   };
   if (!existsSync(join(status.project_repo_path, DEMO_REL_DIR))) {
@@ -363,6 +436,51 @@ function runLockStep(args: {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+/** R4-16 — the subset of a generation's meta.json the lock-step restore
+ *  needs. Fails CLOSED (returns null) on ANY shape violation: missing file,
+ *  unreadable, not JSON, or a missing/non-string `skillRelPath` (the field
+ *  the restore writes the skill back to — load-bearing). */
+type GenerationSnapshotMeta = { readonly skillRelPath: string };
+
+function readGenerationSnapshotMeta(sessionDir: string, n: number): GenerationSnapshotMeta | null {
+  const metaPath = join(sessionDir, GENERATIONS_DIRNAME, String(n), GENERATION_META_FILENAME);
+  if (!existsSync(metaPath)) return null;
+  let raw: string;
+  try {
+    raw = readFileSync(metaPath, 'utf8');
+  } catch {
+    return null;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const rec = parsed as Record<string, unknown>;
+  if (typeof rec.skillRelPath !== 'string' || rec.skillRelPath.length === 0) return null;
+  return { skillRelPath: rec.skillRelPath };
+}
+
+/** The generation numbers that DO have a `generations/<n>/` dir on disk —
+ *  used only to name what's available in the R4-16 fail-closed lock error.
+ *  Best-effort: a missing/unreadable `generations/` dir yields []. */
+function listExistingGenerationNumbers(sessionDir: string): number[] {
+  const dir = join(sessionDir, GENERATIONS_DIRNAME);
+  if (!existsSync(dir)) return [];
+  let names: string[];
+  try {
+    names = readdirSync(dir);
+  } catch {
+    return [];
+  }
+  return names
+    .map((n) => Number(n))
+    .filter((n) => Number.isInteger(n))
+    .sort((a, b) => a - b);
+}
 
 function describeDemoProcess(projectRepoPath: string): string {
   let steps;
