@@ -53,6 +53,19 @@ const DECISION_R3_04_D2_R3_07_D8 =
   'composition.tools validates against and CatalogPalette renders from — a ' +
   'dispatch-affecting migration, not a browse-surface addition)';
 
+// T1 ruling 2026-08-06 (batch B). `create-agent` mockup steps 3-4 —
+// conversational new-agent drafting — are a DELIBERATE divergence from the
+// mockup, not an unbuilt gap: R2-09 rejected them with two named owners
+// (R4-15, R4-17), both assessed and neither owns them, no wave-5 initiative
+// builds them, and the shipped alternative is the curated StarterPicker.
+// Recorded permanently (a citation into the campaign dir would be a dangling
+// citation — `_wave5/` is gitignored).
+const DECISION_CREATE_AGENT_DRAFTING =
+  'docs/roadmaps/README.md "Batch-B disposition — conversational agent ' +
+  'drafting (2026-08-06, T1 ruling)" — EXCLUDED under §6 (roadmap wins over ' +
+  'the mockup; the mockup gets updated), because both named owners assessed ' +
+  'and neither owns it and the shipped alternative is the StarterPicker';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -143,11 +156,13 @@ export const STORY_REGISTRY = [
       'Steps 3-4 (type into draft-prompt, click "Draft it") are the ' +
       'conversational new-agent drafting R2-09 rejected with an owner (D10 reject ' +
       "#4): the creation AGENT SESSION is R4-15/R4-17 on R2-10's shell, and the " +
-      'shipped alternative is the curated StarterPicker (agents-starters). They ' +
-      'are therefore NOT recorded as permanent {excluded, decision} refs here — ' +
-      'R4-15/R4-17 may make them genuinely real, and pre-excluding them would ' +
-      'freeze a decision those initiatives own. Natural owner of this flip: the ' +
-      'same batch-B initiative that lands the creation session. ' +
+      'shipped alternative is the curated StarterPicker (agents-starters). At the ' +
+      'time R2-09 wrote this they were deliberately left UNEXCLUDED, because ' +
+      'R4-15/R4-17 might still make them real and pre-excluding would have frozen ' +
+      'a decision those initiatives owned — that reasoning was correct then and is ' +
+      'SUPERSEDED now that both have assessed (see the T1 ruling below). Natural ' +
+      'owner of this flip: the same batch-B initiative that lands the creation ' +
+      'session. ' +
       'R4-15 ASSESSED that inheritance (2026-08-06) and does NOT own it: it ' +
       're-surfaces the ARCHITECT session, whose entry is an idea box, not an ' +
       'agent-drafting chat — nothing in R4-15 makes steps 3-4 real. The two ' +
@@ -161,11 +176,20 @@ export const STORY_REGISTRY = [
       'runtime: block in skills/*/SKILL.md yields 16 agents and none of them ' +
       'does. So after both named owners have assessed, NO wave-5 initiative ' +
       'builds conversational agent drafting, and the shipped alternative remains ' +
-      'the curated StarterPicker. Deliberately still NOT recorded as ' +
-      '{excluded}: turning "no planned owner" into "deliberately not built" is ' +
-      'a permanent disposition and a T1/operator call, not a T2 one — raised at ' +
-      'batch-B exit for that decision. The rest of the flip stays blocked on the ' +
-      'beat-granularity surgery above, which is unrelated to R4-17\'s surface.',
+      'the curated StarterPicker. **T1 RULED steps 3-4 EXCLUDED (2026-08-06)** — ' +
+      'a deliberate divergence from the mockup under README §6 (roadmap wins, ' +
+      'mockup gets updated), not an unbuilt gap; the full reasoning lives in the ' +
+      'permanent decision record cited at the end of this note. It is cited ' +
+      'rather than encoded ' +
+      'as a BeatRef because this registry can express exclusion only for a WHOLE ' +
+      'story (which also forces batch:null, and would misrepresent this story\'s ' +
+      '9 genuinely-real steps as deliberately not built) or for a single beat ' +
+      'inside a COMPLETE port.beats array — which cannot be written until the ' +
+      'beat-granularity surgery lands. It becomes a {excluded, decision} ref the ' +
+      'moment that port object exists. The story stays `pending` for an honest ' +
+      'reason: the remaining blocker is splitting the composite ' +
+      'agents-scratch-build beat, which IS planned-but-not-yet-built work. ' +
+      'Decision reference: ' + DECISION_CREATE_AGENT_DRAFTING + '.',
   },
   {
     story: 'edit-agent',

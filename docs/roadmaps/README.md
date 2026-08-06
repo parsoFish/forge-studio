@@ -711,3 +711,37 @@ registry + parity view; §4 story-beat parity rule).
   R2-D1 marked closed-rejected; R1-06-F3 Health-tab entry timed on R6-08;
   R3-06-F3 scaffold vision-promotion recorded; R3 acceptance-refs folded
   per-initiative; cut-table dep column normalized.
+
+### Batch-B disposition — conversational agent drafting (2026-08-06, T1 ruling)
+
+**Decision: `create-agent` mockup steps 3-4 (`draft-prompt` → `draft-btn`, "a new
+agent starts as a description of the job… and the creation agent assembles a
+draft from the library") are EXCLUDED — a deliberate divergence from the mockup,
+not an unbuilt gap.**
+
+Grounds. R2-09 rejected conversational new-agent drafting (its D10 reject #4) but
+deferred the disposition with two named owners: R4-15 and R4-17. **Both assessed
+and neither owns it** — R4-15 re-surfaces the ARCHITECT session, whose entry is
+an idea box rather than an agent-drafting chat; R4-17 lands a staged session for
+PROJECT onboarding and creation, while these steps need an agent that authors
+*agents*, and no such agent exists (16 runtime-bearing skills, none of them). So
+after both named owners assessed, no wave-5 initiative builds it. The shipped
+alternative is the curated **StarterPicker**. Under §6's standing rule — when the
+roadmap and the mockup disagree, the roadmap wins and the mockup is updated —
+that makes this a deliberate product-shape choice.
+
+Why it could not stay `pending`: **`pending` must mean "planned but not yet
+built".** An unowned permanent `pending` corrodes the parity registry's meaning,
+which is exactly the honesty the parity gate exists to protect.
+
+Recording constraint, stated rather than worked around: `scripts/journeys/story-registry.mjs`
+can express exclusion at two levels only — a whole STORY (`excluded`, which also
+requires `batch: null`) or a single BEAT (`{excluded, decision}` inside a complete
+`port.beats` array, one entry per mockup step). Marking the whole `create-agent`
+story excluded would misrepresent its 9 genuinely-real steps as deliberately not
+built, so this decision is recorded here and cited from the registry's note; it
+becomes a per-beat `{excluded, decision}` ref the moment that story's `port`
+object is written. The story itself stays `pending` for an honest reason — the
+remaining blocker is beat granularity (splitting the composite
+`agents-scratch-build` beat), which is planned surgery on a passing beat, i.e.
+genuinely "planned but not yet built".
