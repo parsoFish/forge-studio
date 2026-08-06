@@ -702,7 +702,9 @@ function ProjectOnboardForm() {
                 <input id="onb-repo" data-field="repo-path" style={inputStyle} value={repoPath}
                   placeholder={`projects/${slug || '<id>'}`} onChange={(e) => setRepoPath(e.target.value)} />
                 <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 4 }}>
-                  Must be an existing git repo (clone/symlink it under projects/ first). Defaults to projects/&lt;id&gt;.
+                  Must be a real directory under projects/ — clone it there first. A symlink is rejected
+                  (project discovery skips symlinked entries, so a symlinked project would never appear here).
+                  Defaults to projects/&lt;id&gt;.
                 </div>
               </div>
               <div>

@@ -48,6 +48,7 @@ import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
 import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
+import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { isDryBridge, refuseDryBridge, dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 import { listRuns } from '../orchestrator/run-model.ts';
 import {
@@ -682,8 +683,39 @@ export async function handleStudioWriteRoutes(
       }
       const repoPathRel = typeof b['repoPath'] === 'string' && b['repoPath'].trim() ? b['repoPath'].trim() : `projects/${id}`;
       const projectRoot = resolve(ctx.forgeRoot, repoPathRel);
-      if (!projectRoot.startsWith(resolve(ctx.forgeRoot) + sep)) {
-        sendJson(res, 400, { error: 'repo path escapes the forge root' }, origin); return true;
+      // Real per-segment IDENTITY containment (cli/manifest-path-guard.ts's
+      // isContainedProjectRepoPath, itself built on cli/studio-path-guard.ts's
+      // resolveGuardedPath) — NOT a lexical resolve().startsWith() check. That
+      // shape is blind to a symlinked segment whose on-disk TARGET sits
+      // outside <forgeRoot>/projects even though its lexical location is
+      // inside forgeRoot (SEC-03 Defect 1, live-reproduced: leaf/nested dir
+      // symlink, cross-object alias under the same root, repoPath inside
+      // forgeRoot but outside projects/). Root is <forgeRoot>/projects, not
+      // forgeRoot itself: writeManifest already asserts project_repo_path
+      // under that same root, and discoverProjects only scans it — a project
+      // created outside projects/ could never run a cycle and would be
+      // invisible to the library.
+      if (!isContainedProjectRepoPath(projectRoot, { forgeRoot: ctx.forgeRoot })) {
+        sendJson(res, 400, { error: 'repo path must resolve inside the forge projects directory' }, origin); return true;
+      }
+
+      // SEC-03 Defect 2 (bd forge-q80) — sibling-project clobber. Refuse to
+      // onboard when the target already carries a project config: a fresh,
+      // non-colliding `name` (so the duplicate-id 409 scan above never fires)
+      // whose repoPath points at an ALREADY-ONBOARDED project would otherwise
+      // silently overwrite that project's .forge/project.json wholesale,
+      // including testProcess.local.cmd — the quality-gate command forge
+      // later EXECUTES. Containment alone cannot close this — the victim's
+      // directory is genuinely, honestly contained under projects/; this is
+      // an application-level invariant (does a project already live here?),
+      // checked BEFORE any side effect, same as the containment guard above.
+      // 400, not 409: this is a rejected repoPath (same family as the
+      // containment check immediately above), and the AT's own sanity
+      // assertion requires this request NOT collide with the pre-existing
+      // duplicate-id 409 shape (that 409 guards a different invariant — id
+      // collision by disk scan — and must stay reserved for it alone).
+      if (existsSync(join(projectRoot, '.forge', 'project.json'))) {
+        sendJson(res, 400, { error: 'a project already exists at this repo path' }, origin); return true;
       }
 
       // Create the project + .forge dir up front so the artifact/brain scaffolds
