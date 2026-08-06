@@ -28,23 +28,37 @@
  * `maxBudgetUsd` key is absent from options, not present-as-undefined" case
  * already pinned for the declared-budget path in run-agent.test.ts.
  *
- * Two new named exports are expected to land in `./run-agent.ts`:
- *   - `RunContext.kickoffCeilingUsd?: number` (a ctx field, not exported as a
- *     symbol — just a type-level addition; nothing to import for it)
+ * Two new pieces of surface are expected to land:
+ *   - `RunContext.kickoffCeilingUsd?: number` on `./run-agent.ts` (a ctx
+ *     field, not exported as a symbol — just a type-level addition; nothing
+ *     to import for it)
  *   - `MAX_KICKOFF_COST_CEILING_USD` — the sane absolute maximum an operator
  *     ceiling may not exceed (validated at the bridge route; imported here
  *     only so this file never hardcodes the number, matching the sibling
  *     bridge ceiling test).
- * PLACEMENT JUDGMENT CALL: the WI names `MAX_KICKOFF_COST_CEILING_USD` but not
- * which module exports it. `run-agent.ts` already owns `resolveOneShotBudgetUsd`
- * (the sibling budget-resolution logic) and is already imported directly by
- * `cli/ui-bridge.ts` (`isSafeRunId`), so this is the natural single-owner
- * location. If the implementer places it elsewhere, this import will need a
- * one-line path fix — noted in the test-writer's report.
+ * PLACEMENT RATIFIED (round 2): `MAX_KICKOFF_COST_CEILING_USD` lives in
+ * `./config.ts`, alongside the established `DEFAULT_*`/`MAX_*` policy-bound
+ * cluster (`DEFAULT_TRIGGERED_RUN_COST_BUDGET_USD`, `DEV_WI_CONCURRENCY_CEILING`,
+ * …) rather than in `./run-agent.ts` (round-1's initial guess) — both the
+ * kickoff default and its ceiling are run-level policy, not runAgent's own
+ * concern; splitting them across two modules would leave `run-agent.ts`
+ * holding validation policy it never applies itself.
  *
  * Until that lands, importing `MAX_KICKOFF_COST_CEILING_USD` fails at module
  * load (an import error) — a legitimate RED for a not-yet-existing export,
  * not a fixture/environment problem.
+ *
+ * ROUND 2 FIX: every test below that injects a `queryFn` it expects to
+ * actually be INVOKED now wraps its `runAgent`/`dispatchAgentRun` call with
+ * `withoutSpawnSuppressionEnv()`. Round 1 omitted this — `runAgent`'s
+ * self-lifecycle path checks `FORGE_DRY_BRIDGE`/`FORGE_ARCHITECT_NO_SPAWN`
+ * UNCONDITIONALLY, even when `ctx.queryFn` is injected, and short-circuits to
+ * a suppressed result BEFORE ever calling it. Every assertion in this file
+ * happened to still prove the intended RED under a clean local shell (neither
+ * var was ambient), but the guard is required for correctness regardless of
+ * ambient CI env — `run-agent.test.ts` establishes exactly this precedent and
+ * calls out in its own comments that CI sets `FORGE_ARCHITECT_NO_SPAWN=1` as
+ * an inherited env step.
  */
 
 import { test } from 'node:test';
@@ -53,13 +67,34 @@ import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { runAgent, resolveOneShotBudgetUsd, MAX_KICKOFF_COST_CEILING_USD } from './run-agent.ts';
+import { runAgent, resolveOneShotBudgetUsd } from './run-agent.ts';
+import { MAX_KICKOFF_COST_CEILING_USD } from './config.ts';
 import { dispatchAgentRun } from './agent-dispatch.ts';
 import { listAgentDefinitions } from './studio/registry.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from './studio/types.ts';
 
 const ROOT = process.cwd();
+
+/**
+ * Save + delete BOTH spawn-suppression env vars so a test that injects a
+ * `queryFn` it expects to actually be INVOKED runs deterministically,
+ * regardless of what the ambient shell/CI has set (mirrors
+ * `run-agent.test.ts`'s identical helper — redefined locally since that file
+ * does not export it). Call the returned restore function from a `finally`.
+ */
+function withoutSpawnSuppressionEnv(): () => void {
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+  delete process.env.FORGE_DRY_BRIDGE;
+  return () => {
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
+  };
+}
 
 /** Look up a named library fixture from the real roster (mirrors
  * run-agent.test.ts's identical helper — redefined locally since that file
@@ -148,6 +183,7 @@ function deepIncludes(value: unknown, needle: number | string): boolean {
 // ---------------------------------------------------------------------------
 
 test('runAgent one-shot: ctx.kickoffCeilingUsd reaches options.maxBudgetUsd verbatim when the agent declares no budget at all (kills "the ceiling is parsed but never wired to the SDK call")', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a1-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -171,11 +207,13 @@ test('runAgent one-shot: ctx.kickoffCeilingUsd reaches options.maxBudgetUsd verb
       'the operator kickoff ceiling must reach options.maxBudgetUsd — the exact value the SDK reads to decide when to stop',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot: no ctx.kickoffCeilingUsd ⇒ options.maxBudgetUsd falls back to resolveOneShotBudgetUsd(def.budgets, initiative) unchanged (fallback direction, today\'s behaviour preserved)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a2-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -197,11 +235,13 @@ test('runAgent one-shot: no ctx.kickoffCeilingUsd ⇒ options.maxBudgetUsd falls
     assert.equal(calls[0].options.maxBudgetUsd, expected);
     assert.equal(expected, 3, 'sanity: resolveOneShotBudgetUsd itself must resolve the flat floor');
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot: neither kickoffCeilingUsd nor a declared budget ⇒ the "maxBudgetUsd" key is ABSENT from options, not set to undefined (kills an unconditional-assignment implementation)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a3-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -223,11 +263,13 @@ test('runAgent one-shot: neither kickoffCeilingUsd nor a declared budget ⇒ the
       'a wrong implementation that does `options.maxBudgetUsd = ctx.kickoffCeilingUsd ?? resolveOneShotBudgetUsd(...)` unconditionally would leave the key present with value undefined — `in` catches that, unlike `=== undefined`',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot: an operator ceiling SMALLER than the declared flat budget still wins (kills a max()-of-the-two implementation)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a4a-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -250,11 +292,13 @@ test('runAgent one-shot: an operator ceiling SMALLER than the declared flat budg
       'max(100, 5) would wrongly give 100 — the operator ceiling must win regardless of magnitude',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot: an operator ceiling LARGER than the declared flat budget still wins (kills a min()-of-the-two implementation, and a "declared budget always wins" implementation)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a4b-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -277,11 +321,13 @@ test('runAgent one-shot: an operator ceiling LARGER than the declared flat budge
       'min(2, 50) would wrongly give 2, and a "declared budget wins" implementation would also wrongly give 2',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot: an operator ceiling wins over a maxBudgetUsdShare-derived budget too (not just the flat maxBudgetUsd field)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a5-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -305,11 +351,13 @@ test('runAgent one-shot: an operator ceiling wins over a maxBudgetUsdShare-deriv
       'the share-derived budget (50) must not leak through — an implementation that only special-cases the flat maxBudgetUsd field for precedence would wrongly give 50 here',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot + SELF lifecycle: ctx.kickoffCeilingUsd reaches options.maxBudgetUsd exactly as in the caller-lifecycle path (the plumbing is not lifecycle-specific)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-a6-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -329,17 +377,25 @@ test('runAgent one-shot + SELF lifecycle: ctx.kickoffCeilingUsd reaches options.
 
     assert.equal(calls[0].options.maxBudgetUsd, 1.23);
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 // ---------------------------------------------------------------------------
-// dispatchAgentRun (agent-dispatch.ts) — the "dispatch path" named in the WI
-// contract: `DispatchAgentRunOpts` must grow a kickoffCeilingUsd-shaped field
-// and thread it through to runAgent's ctx unchanged.
+// dispatchAgentRun (agent-dispatch.ts) — the IN-PROCESS half of "dispatch
+// path → ctx": `DispatchAgentRunOpts` must grow a kickoffCeilingUsd-shaped
+// field and thread it through to runAgent's ctx unchanged. The OTHER half —
+// the CLI-argv boundary (`spawnAgentDispatch`'s pure arg-builder →
+// `cmdAgentDispatch`'s parse → this same `dispatchAgentRun` call) — is pinned
+// in the sibling `cli/ui-bridge-agent-run-ceiling.test.ts`, because both
+// `buildAgentDispatchArgs` and `cmdAgentDispatch` are cli/-layer symbols;
+// importing them here would invert forge's cli/ → orchestrator/ dependency
+// direction.
 // ---------------------------------------------------------------------------
 
 test('dispatchAgentRun: an opts.kickoffCeilingUsd reaches runAgent and therefore options.maxBudgetUsd (the in-process half of "dispatch path → ctx")', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-dispatch-'));
   try {
     const calls: Array<{ prompt: string; options: Record<string, unknown> }> = [];
@@ -368,6 +424,7 @@ test('dispatchAgentRun: an opts.kickoffCeilingUsd reaches runAgent and therefore
       'dispatchAgentRun must thread opts.kickoffCeilingUsd through to runAgent\'s ctx.kickoffCeilingUsd — today it is silently dropped (never read from opts at all)',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
@@ -380,6 +437,7 @@ test('dispatchAgentRun: an opts.kickoffCeilingUsd reaches runAgent and therefore
 // ---------------------------------------------------------------------------
 
 test('runAgent one-shot + self lifecycle: a ceiling-stop (SDK subtype error_max_budget_usd) still returns the runaway cost + subtype, and records BOTH the ceiling-in-force and the SDK subtype into the end event (kills "a budget-stopped run is logged identically to a clean success")', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-c-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -441,11 +499,13 @@ test('runAgent one-shot + self lifecycle: a ceiling-stop (SDK subtype error_max_
       'expected the end event to record the SDK result subtype somewhere in its payload — today resultSubtype is computed and returned from runOneShotSpawn but never logged into the end event',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
 
 test('runAgent one-shot + self lifecycle: an ordinary successful run does NOT falsely carry a ceiling-stop subtype (control — proves the C test above is not vacuously true for every end event)', async () => {
+  const restoreEnv = withoutSpawnSuppressionEnv();
   const scratchRoot = mkdtempSync(join(tmpdir(), 'run-agent-ceiling-c-control-'));
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
@@ -473,6 +533,7 @@ test('runAgent one-shot + self lifecycle: an ordinary successful run does NOT fa
       'a clean success must never carry the ceiling-stop subtype anywhere in its end event',
     );
   } finally {
+    restoreEnv();
     rmSync(scratchRoot, { recursive: true, force: true });
   }
 });
