@@ -557,11 +557,30 @@ ADR-041 §1 already defines.
 
 A run exposes `trigger: {kind, source, scope}` — the registry kind, the
 declaration that fired (a definition id, never operator prose), and the
-resolved project id (or `null` when unscoped). It is **derived from the staged
-request**, consistent with [ADR 008](./008-jsonl-event-log.md)'s
+resolved project id (or `null` when unscoped). It is **derived, never stored and
+never authored** — consistent with [ADR 008](./008-jsonl-event-log.md)'s
 one-source-of-truth rule (the event log is written once; readers aggregate from
 it): no new stored run object, no free-text field an agent or a surface can
-author. The `data-*` vocabulary is named by R2-08-F4 and attached
+author.
+
+The derivation source differs by kind, because the kinds differ in whether a run
+is minted at all — recorded here precisely so the contract is not read as
+claiming a single mechanism it does not have:
+
+- **`cron` · `webhook` · `agent-complete`** originate a NEW run, so provenance
+  derives from the **staged request** that minted it.
+- **`flow-complete` · `merged`** mint nothing — chaining repoints the *same*
+  initiative and `merged` dispatches inline within the merged cycle — so
+  provenance derives from the already-shipped **`*.trigger-firing` event**
+  (`orchestrator/flow-runner.ts`, `orchestrator/finalize-merged.ts`), whose
+  `metadata: {on, target, source_flow}` carries exactly the closed triple's
+  inputs.
+
+Both sources are machine-written data; neither is prose. This is a factual
+correction to this amendment's own earlier wording ("derived from the staged
+request"), which was accurate for three of the five shipped kinds and would have
+been a stale claim for the other two. **The decision is unchanged** — provenance
+is derived, is a closed triple, and has no prose member. The `data-*` vocabulary is named by R2-08-F4 and attached
 by the consuming surfaces (R6-04-F2 kickoff, R6-01-F4 run detail, R6-05/R6-06
 ledgers) — this ADR records only that the shape is a closed triple with no
 prose member.
