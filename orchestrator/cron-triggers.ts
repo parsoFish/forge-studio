@@ -78,6 +78,12 @@ type DeclaredCronTrigger = {
   schedule: string;
   target: TriggerTarget;
   concurrency: 'allow' | 'forbid' | 'replace';
+  /** R2-08-F1: the trigger's own `projects:` declaration. Absent ⇒ unscoped. */
+  projects?: string[];
+  /** R2-08-F1: the declaring flow's own `project:` binding (T1 ruling: cron
+   *  has no external event, so eventProject is the declaring flow's own
+   *  project) — `null`/absent stays unresolved. */
+  eventProject: string | null;
 };
 
 function cronKey(flowId: string, index: number, schedule: string, target: TriggerTarget): string {
@@ -95,17 +101,20 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
   const out: DeclaredCronTrigger[] = [];
   const root = resolve(forgeRoot);
   for (const flowId of listFlowIds(root)) {
-    let triggers;
+    let flowDef;
     try {
       const flowYamlPath = join(root, 'studio', 'flows', flowId, 'flow.yaml');
-      triggers = loadFlowDefinition(flowYamlPath).triggers;
+      flowDef = loadFlowDefinition(flowYamlPath);
     } catch (err) {
       notify(
         `cron-triggers: skipping ${flowId} — flow.yaml failed to load: ${err instanceof Error ? err.message : String(err)}`,
       );
       continue;
     }
-    triggers.forEach((t, index) => {
+    // R2-08-F1: cron has no external event to resolve a project from — T1's
+    // ruling is the DECLARING flow's own `project:` binding.
+    const eventProject = flowDef.project ?? null;
+    flowDef.triggers.forEach((t, index) => {
       if (t.on !== 'cron') return;
       if (typeof t.schedule !== 'string' || t.schedule.trim() === '') return;
       out.push({
@@ -114,6 +123,8 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
         schedule: t.schedule,
         target: t.target,
         concurrency: t.concurrency ?? 'forbid',
+        projects: t.projects,
+        eventProject,
       });
     });
   }
@@ -142,6 +153,9 @@ function makeFireFn(
           triggeredBy: `cron:${d.flowId}`,
           concurrency: d.concurrency,
           payload: { kind: 'cron', schedule: d.schedule, firedAt: new Date().toISOString() },
+          // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
+          ...(d.projects !== undefined ? { projects: d.projects } : {}),
+          ...(d.eventProject !== null ? { eventProject: d.eventProject } : {}),
         },
         { queueRoot },
       );

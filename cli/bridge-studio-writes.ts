@@ -1296,9 +1296,15 @@ export async function handleStudioWriteRoutes(
           return undefined;
         }
       };
+      // R2-08-F1: thread the discovered-project id set so the trigger-projects
+      // membership check runs on this write path too (mirrors flowIds above) —
+      // the write path must reject the same shapes the dispatcher/lint reject,
+      // not just accept-and-fail-later on the next load.
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const findings = validateFlow(merged, agentsMap, {
         flowIds: new Set(listFlowIds(ctx.forgeRoot)),
         flowProjectOf,
+        projectIds: new Set(discoverProjects(projectsDir, ctx.forgeRoot).map((p) => p.id)),
       });
       const hasErrors = findings.some((f) => f.level === 'error');
       if (hasErrors) {

@@ -293,12 +293,19 @@ async function processHookReceipt(
   }
 
   // 8. Stage only — no dispatch, no spawn (see the dry-bridge classification).
+  // R2-08-F1 (ADR-027 amendment): carry the trigger's own `projects:`
+  // declaration. `eventProject` is deliberately left UNRESOLVED — there is no
+  // repo→forge-project-id mapping anywhere in the codebase (no
+  // `.forge/project.json` field, no registry); a scoped webhook trigger fails
+  // closed (declared scope + unresolved project ⇒ typed skip at the drain)
+  // until a real mapping lands (R2-08-F3's owned work). Do not invent one here.
   stageFlowRunRequest(
     {
       target: trigger.target,
       origin: 'webhook',
       triggeredBy: `webhook:${hookId}`,
       payload,
+      ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
     },
     { queueRoot: ctx.queueRoot },
   );

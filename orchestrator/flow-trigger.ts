@@ -95,7 +95,13 @@ export async function fireFlowTriggers(
   return fired;
 }
 
-export type FireAgentCompleteTriggersOpts = { queueRoot?: string };
+export type FireAgentCompleteTriggersOpts = {
+  queueRoot?: string;
+  /** R2-08-F1: the completed agent run's own project (T1 ruling), carried
+   *  onto every staged request as `eventProject`. Absent ⇒ unresolved
+   *  (a standalone run with no project binding). */
+  eventProject?: string;
+};
 
 /**
  * R2-08-F2 — fire every `on: 'agent-complete'` row (across the given flow
@@ -138,6 +144,9 @@ export async function fireAgentCompleteTriggers(
           triggeredBy: `agent-complete:${completedAgentSlug}`,
           sourceAgent: completedAgentSlug,
           createdAt,
+          // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
+          ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
+          ...(opts.eventProject !== undefined ? { eventProject: opts.eventProject } : {}),
         },
         { queueRoot: opts.queueRoot },
       );

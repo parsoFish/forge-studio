@@ -19,16 +19,16 @@
  *    that initiative at the target flow (chaining).
  *  - `target.kind: 'flow'` + NO source initiative (cron/webhook origination) →
  *    mint a fresh initiative manifest for the target flow's project.
- *  - `target.kind: 'agent'` → throws until R4-09 wires the standalone-agent
- *    dispatch; the request is retained (surfaced every sweep, never dropped).
+ *  - `target.kind: 'agent'` → throws (the request is retained, surfaced every
+ *    sweep, never dropped). This module has no production `startAgentRun`
+ *    injector: the only production caller (the scheduler) never supplies
+ *    one, so an `agent`-target request always surfaces as a retained error
+ *    here.
  *
- * R4-09 landed the standalone reflect dispatch as its own inline
- * band-guarded arm in `finalize-merged.ts` — a completely different seam
- * from this queue. This module still has no production `startAgentRun`
- * injector: the only production caller (the scheduler) never supplies one,
- * so an `agent`-target request still surfaces as a retained error here.
- * `agent-complete` (R2-08-F2) targets FLOWS, which `startFlowRun` already
- * handles — it does not touch this gap.
+ * R4-09's real standalone reflect dispatch lives elsewhere: its own inline
+ * band-guarded arm in `finalize-merged.ts`, a completely different seam from
+ * this queue. `agent-complete` (R2-08-F2) targets FLOWS, which
+ * `startFlowRun` already handles — it does not touch this gap.
  */
 import { existsSync, mkdirSync, writeFileSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';

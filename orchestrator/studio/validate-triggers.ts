@@ -240,21 +240,40 @@ export function checkFlowTriggers(
       );
     }
 
-    // trigger-projects (R2-08-F1): `projects:` is kind-independent — any
-    // declared id must be a REAL discovered project. Lint reads the SAME
-    // evidence the dispatcher reads (rule 2): the same project enumeration
-    // (`discoverProjects`) threaded in as `opts.projectIds`. Omitted opt ⇒
-    // skip, mirroring `flowIds`'s own precedent.
-    if (trigger.projects !== undefined && opts?.projectIds) {
-      for (const p of trigger.projects) {
-        if (!opts.projectIds.has(p)) {
-          findings.push(
-            err(
-              obj,
-              'trigger-projects',
-              `Trigger "projects" names "${p}", which is not a discovered project — must be one of ${[...opts.projectIds].join('|')}`,
-            ),
-          );
+    // trigger-projects (R2-08-F1): `projects:` is kind-independent. SHAPE is
+    // checked UNCONDITIONALLY — independent of `opts.projectIds` — mirroring
+    // `trigger-agent-complete` twelve lines above: a hand-crafted PUT body
+    // (e.g. a bare string) must be refused even by a caller that never learns
+    // about `projectIds`. A bare string is itself a valid `for...of` target
+    // (it iterates CHARACTERS) — the membership loop below must never run
+    // against a malformed value, or a single bad string emits one nonsense
+    // finding per letter instead of one type error.
+    if (trigger.projects !== undefined) {
+      const shapeOk = Array.isArray(trigger.projects) && trigger.projects.every((p) => typeof p === 'string');
+      if (!shapeOk) {
+        findings.push(
+          err(
+            obj,
+            'trigger-projects',
+            `Trigger "projects" must be an array of strings — got ${JSON.stringify(trigger.projects)}`,
+          ),
+        );
+      } else if (opts?.projectIds) {
+        // MEMBERSHIP: any declared id must be a REAL discovered project. Lint
+        // reads the SAME evidence the dispatcher reads (rule 2): the same
+        // project enumeration (`discoverProjects`) threaded in as
+        // `opts.projectIds`. Omitted opt ⇒ skip, mirroring `flowIds`'s own
+        // precedent — only reachable once shape is already known-good.
+        for (const p of trigger.projects) {
+          if (!opts.projectIds.has(p)) {
+            findings.push(
+              err(
+                obj,
+                'trigger-projects',
+                `Trigger "projects" names "${p}", which is not a discovered project — must be one of ${[...opts.projectIds].join('|')}`,
+              ),
+            );
+          }
         }
       }
     }

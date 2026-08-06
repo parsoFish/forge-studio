@@ -215,7 +215,18 @@ export type FlowRunnerDeps = {
    */
   enqueueFlowRun: (
     flowId: string,
-    opts: { origin: 'trigger'; triggeredBy: string; sourceInitiativeId?: string; targetKind?: 'flow' | 'agent' },
+    opts: {
+      origin: 'trigger';
+      triggeredBy: string;
+      sourceInitiativeId?: string;
+      targetKind?: 'flow' | 'agent';
+      /** R2-08-F1: the firing trigger's own `projects:` declaration, carried
+       *  through to the staged request. Absent ⇒ unscoped. */
+      projects?: string[];
+      /** R2-08-F1: the running initiative's own project (basename of
+       *  `input.projectRepoPath`) — resolved whenever `projects` is declared. */
+      eventProject?: string;
+    },
   ) => void;
 };
 
@@ -359,13 +370,23 @@ function defaultRebaseForResume(input: CycleInput, logger: EventLogger): void {
  */
 function defaultEnqueueFlowRun(
   flowId: string,
-  opts: { origin: 'trigger'; triggeredBy: string; sourceInitiativeId?: string; targetKind?: 'flow' | 'agent' },
+  opts: {
+    origin: 'trigger';
+    triggeredBy: string;
+    sourceInitiativeId?: string;
+    targetKind?: 'flow' | 'agent';
+    projects?: string[];
+    eventProject?: string;
+  },
 ): void {
   stageFlowRunRequest({
     target: { kind: opts.targetKind ?? 'flow', ref: flowId },
     origin: opts.origin,
     triggeredBy: opts.triggeredBy,
     sourceInitiativeId: opts.sourceInitiativeId,
+    // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
+    ...(opts.projects !== undefined ? { projects: opts.projects } : {}),
+    ...(opts.eventProject !== undefined ? { eventProject: opts.eventProject } : {}),
   });
 }
 
@@ -1388,6 +1409,29 @@ export async function runFlow({
       });
     },
     dispatch: (trigger) => {
+      // R2-08-F1 (ADR-027 amendment): carry the trigger's own `projects:`
+      // declaration + a resolved `eventProject` (this running initiative's own
+      // project — `basename(input.projectRepoPath)`, the same precedent this
+      // file already uses for demo-agent/adversarial-review ProjectBinding)
+      // onto the staged request. A DECLARED scope (including `[]`, which can
+      // never match — rule 1, "fires for nothing") is checked HERE, at the
+      // fire site, since eventProject is already known synchronously — an
+      // out-of-scope fire never even stages a request. `drainFlowRunRequests`
+      // still re-enforces the same check (defense in depth) for any other
+      // origin that cannot resolve eventProject this early.
+      if (trigger.projects !== undefined) {
+        const eventProject = basename(input.projectRepoPath);
+        if (!trigger.projects.includes(eventProject)) return;
+        deps.enqueueFlowRun(trigger.target.ref, {
+          origin: 'trigger',
+          triggeredBy: flow.id,
+          sourceInitiativeId: input.initiativeId,
+          targetKind: trigger.target.kind,
+          projects: trigger.projects,
+          eventProject,
+        });
+        return;
+      }
       deps.enqueueFlowRun(trigger.target.ref, {
         origin: 'trigger',
         triggeredBy: flow.id,
