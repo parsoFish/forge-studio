@@ -141,6 +141,22 @@ export interface PathGuardReject {
 
 export type PathGuardResult = PathGuardOk | PathGuardReject;
 
+/**
+ * Shared exception type for a `resolveGuardedPath` rejection that a caller
+ * wants to fail an entire operation closed on, rather than silently skip
+ * (SEC-03 Finding A/round-2). One class, imported by any module that needs
+ * to distinguish "the containment guard rejected this write" from an
+ * unrelated internal error in a `catch` block that lives in a DIFFERENT
+ * file than the `throw` (e.g. `orchestrator/project-brain-seed.ts` throwing,
+ * `cli/bridge-studio-writes.ts` catching) — mirroring the established
+ * `orchestrator/ -> cli/` import direction this module already anchors
+ * (SEC-01, `resolveKbBrainDir`). The message is for internal
+ * diagnostics/logging only, same rule as `PathGuardReject.reason`: a call
+ * site's `catch` block sends its OWN fixed, generic 4xx text to the client,
+ * never this constructor argument verbatim.
+ */
+export class PathGuardContainmentError extends Error {}
+
 /** Three-way outcome of probing a segment's existence. Collapsing this to a
  *  boolean is exactly the fail-open defect this module used to have:
  *  `lstatSync` can fail for reasons that have nothing to do with absence
