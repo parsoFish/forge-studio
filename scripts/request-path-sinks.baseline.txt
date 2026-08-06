@@ -50,8 +50,8 @@ cli/bridge-studio-skills.ts mkdirSync 1
 cli/bridge-studio-skills.ts readFileSync 1
 cli/bridge-studio-skills.ts writeFileSync 1
 cli/bridge-studio-writes.ts execFileSync 2
-cli/bridge-studio-writes.ts existsSync 9
-cli/bridge-studio-writes.ts mkdirSync 6
+cli/bridge-studio-writes.ts existsSync 8
+cli/bridge-studio-writes.ts mkdirSync 7
 cli/bridge-studio-writes.ts openSync 1
 cli/bridge-studio-writes.ts readFileSync 2
 cli/bridge-studio-writes.ts spawn 1
