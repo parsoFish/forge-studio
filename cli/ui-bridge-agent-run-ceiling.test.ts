@@ -138,17 +138,40 @@
  *     above); the CLI parser's job is narrower: "is this string a valid
  *     finite number at all".
  *
- * RESIDUAL GAP, disclosed rather than quietly dropped (round 3): removing the
- * module mock means the exact glue line inside `cmdAgentDispatch` that maps
- * `parseAgentDispatchArgs(...).costCeilingUsd` onto
- * `dispatchAgentRun({..., kickoffCeilingUsd: ...})` is NOT independently
- * observable by this file — proving it would need either the removed mock or
- * a real spawn. What IS independently, rigorously pinned on both sides of
- * that one line: `parseAgentDispatchArgs`'s own output (this file, below),
- * and `dispatchAgentRun`'s consumption of `opts.kickoffCeilingUsd`
- * (`orchestrator/run-agent-ceiling.test.ts`'s "dispatchAgentRun: an
- * opts.kickoffCeilingUsd reaches runAgent" test). Only the one-line wiring
- * BETWEEN those two already-pinned ends is uncovered.
+ * ROUND 4 — the residual gap round 3 disclosed (the one-line glue inside
+ * `cmdAgentDispatch` that maps `parseAgentDispatchArgs(...).costCeilingUsd`
+ * onto `dispatchAgentRun({kickoffCeilingUsd})`) is now CLOSED, not merely
+ * disclosed: a peer orchestrator overruled accepting it, for a concrete
+ * reason worth recording — the orchestrator sibling file's `dispatchAgentRun`
+ * threading test constructs its call args DIRECTLY; it cannot observe a
+ * defect in `cmdAgentDispatch`'s own glue, because that glue never runs in
+ * that test at all. An implementer who writes
+ * `dispatchAgentRun(slug, { project, inputs })` — silently dropping the
+ * parsed ceiling — passes every other test in this WI while shipping a
+ * feature dead on the one path an operator actually drives.
+ *
+ * Closed the same way `orchestrator/run-agent.ts` already lets tests observe
+ * behaviour without a real spawn: an INJECTED DEPENDENCY, mirroring
+ * `RunContext.queryFn`/`ctx.probeConnection`'s existing pattern exactly.
+ * `cmdAgentDispatch` gains an optional third parameter:
+ *
+ *   export async function cmdAgentDispatch(
+ *     rest: string[],
+ *     forgeRoot: string,
+ *     deps?: { dispatch?: typeof dispatchAgentRun },
+ *   ): Promise<void>
+ *
+ * defaulting to the real `dispatchAgentRun` when omitted (production
+ * behaviour unchanged — every OTHER test in this file, and
+ * `cli/agent-run-dispatch.test.ts`, calls `cmdAgentDispatch` with no third
+ * argument and must keep passing byte-identically). The two tests at the end
+ * of section (E) below drive `cmdAgentDispatch` with REAL argv, inject a
+ * capturing fake in place of `dispatchAgentRun`, and assert the CALL RECORD
+ * (the fake's captured `opts`) — not merely an exit code or console line —
+ * because the defect shape here is exactly "this was invoked without the
+ * value", which only the arguments can show. No mock, no
+ * `--experimental-test-module-mocks`, no real spawn: the injected fake
+ * fully replaces the real call, so nothing downstream of it ever executes.
  */
 
 import { test, before, after } from 'node:test';
@@ -167,6 +190,7 @@ import { MAX_KICKOFF_COST_CEILING_USD, DEFAULT_KICKOFF_COST_CEILING_USD } from '
 import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
 import type { StreamQueryFn } from '../orchestrator/pinned-sdk-query.ts';
 import type { AgentDefinition } from '../orchestrator/studio/types.ts';
+import type { DispatchAgentRunOpts, DispatchAgentRunResult } from '../orchestrator/agent-dispatch.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -681,6 +705,18 @@ test('ROUND-TRIP, absence direction: no costCeilingUsd given to buildAgentDispat
 
 // ---- E4: cmdAgentDispatch actually WIRES parseAgentDispatchArgs in -------
 
+/** Shape of `cmdAgentDispatch`'s NEW optional third parameter (round 4) — not
+ *  yet declared on the real function, hence the cast at the one call site
+ *  below rather than scattering `as unknown` casts across every test.
+ *  Mirrors `RunContext.queryFn`/`ctx.probeConnection`'s existing
+ *  test-injection pattern (`orchestrator/run-agent.ts`): production code
+ *  defaults to the real `dispatchAgentRun` when `deps`/`deps.dispatch` is
+ *  omitted, so every OTHER call site (including every other test in this
+ *  file and `cli/agent-run-dispatch.test.ts`) is byte-identical. */
+type InjectedDispatch = (opts: DispatchAgentRunOpts) => Promise<DispatchAgentRunResult>;
+type CmdAgentDispatchDeps = { dispatch?: InjectedDispatch };
+type CmdAgentDispatchWithDeps = (rest: string[], forgeRoot: string, deps?: CmdAgentDispatchDeps) => Promise<void>;
+
 /** Stub process.exit/console around one `cmdAgentDispatch` invocation, so an
  *  exit-2 validation refusal is observable without tearing down the test
  *  runner. Mirrors `cli/agent-run-dispatch.test.ts`'s identical helper. No
@@ -688,10 +724,13 @@ test('ROUND-TRIP, absence direction: no costCeilingUsd given to buildAgentDispat
  *  a malformed `--cost-ceiling-usd` must make `parseAgentDispatchArgs` throw
  *  BEFORE `cmdAgentDispatch` ever reaches a dispatch/spawn call, so this is
  *  safe to run with a plain static `cmdAgentDispatch` import and no
- *  suppression env. */
+ *  suppression env — and the round-4 `deps` param (when supplied) fully
+ *  replaces the real dispatch call, so nothing downstream of it executes
+ *  either. */
 async function runCli(
   args: string[],
   forgeRootArg: string = ROOT,
+  deps?: CmdAgentDispatchDeps,
 ): Promise<{ exitCode: number | null; out: string; err: string }> {
   const origExit = process.exit;
   const origLog = console.log;
@@ -706,7 +745,7 @@ async function runCli(
   console.log = (...a: unknown[]) => { out.push(a.join(' ')); };
   console.error = (...a: unknown[]) => { err.push(a.join(' ')); };
   try {
-    await cmdAgentDispatch(args, forgeRootArg);
+    await (cmdAgentDispatch as unknown as CmdAgentDispatchWithDeps)(args, forgeRootArg, deps);
   } catch (e) {
     if (!/^__exit__/.test((e as Error).message)) throw e;
   } finally {
@@ -720,4 +759,55 @@ async function runCli(
 test('cmdAgentDispatch: --cost-ceiling-usd not-a-number ⇒ exit 2 (fail-closed), matching every other pre-dispatch validation failure already established for this command (missing slug/--run-id, malformed --input) — proves cmdAgentDispatch actually calls parseAgentDispatchArgs, not merely defines it unused', async () => {
   const r = await runCli(['project-scoped-review', '--run-id', '_agent-cli-badceiling', '--cost-ceiling-usd', 'not-a-number']);
   assert.equal(r.exitCode, 2, `expected a fail-closed exit 2 for a malformed --cost-ceiling-usd, got ${JSON.stringify(r)}`);
+});
+
+// ---- E5: the CLOSING pin — injected deps.dispatch captures the CALL RECORD
+
+test('cmdAgentDispatch: injected deps.dispatch captures the CALL RECORD — the operator\'s --cost-ceiling-usd reaches the dispatch call\'s opts.kickoffCeilingUsd with its EXACT value. Closes argv → parseAgentDispatchArgs → dispatch end-to-end with no mock and no real spawn (an injected dependency, mirroring runAgent\'s ctx.queryFn/ctx.probeConnection seam). Kills the one defect no other test in this WI can see: a cmdAgentDispatch that parses the flag correctly and calls dispatchAgentRun WITHOUT ever forwarding kickoffCeilingUsd', async () => {
+  const calls: Record<string, unknown>[] = [];
+  const fakeDispatch: InjectedDispatch = async (opts) => {
+    calls.push(opts as unknown as Record<string, unknown>);
+    return {
+      runId: opts.runId,
+      slug: opts.slug,
+      result: { costUsd: 0, outputRefs: [], tokensIn: 0, tokensOut: 0, suppressed: true },
+    };
+  };
+  const CEILING = 17.5;
+  const r = await runCli(
+    ['project-scoped-review', '--run-id', '_agent-cli-deps-ceiling', '--cost-ceiling-usd', String(CEILING)],
+    ROOT,
+    { dispatch: fakeDispatch },
+  );
+  assert.equal(r.exitCode, null, `expected a clean dispatch, got ${JSON.stringify(r)}`);
+  assert.equal(calls.length, 1, 'the injected dispatch must be called exactly once');
+  assert.equal(
+    calls[0]?.kickoffCeilingUsd,
+    CEILING,
+    'the operator ceiling parsed from --cost-ceiling-usd must reach the dispatch call\'s opts.kickoffCeilingUsd with its exact value',
+  );
+});
+
+test('cmdAgentDispatch: injected deps.dispatch — NEGATIVE TWIN: no --cost-ceiling-usd flag ⇒ kickoffCeilingUsd is ABSENT from the dispatch call\'s opts (not present-as-undefined, not silently defaulted)', async () => {
+  const calls: Record<string, unknown>[] = [];
+  const fakeDispatch: InjectedDispatch = async (opts) => {
+    calls.push(opts as unknown as Record<string, unknown>);
+    return {
+      runId: opts.runId,
+      slug: opts.slug,
+      result: { costUsd: 0, outputRefs: [], tokensIn: 0, tokensOut: 0, suppressed: true },
+    };
+  };
+  const r = await runCli(
+    ['project-scoped-review', '--run-id', '_agent-cli-deps-noceiling'],
+    ROOT,
+    { dispatch: fakeDispatch },
+  );
+  assert.equal(r.exitCode, null, `expected a clean dispatch, got ${JSON.stringify(r)}`);
+  assert.equal(calls.length, 1);
+  assert.equal(
+    'kickoffCeilingUsd' in calls[0],
+    false,
+    'no --cost-ceiling-usd flag must mean no kickoffCeilingUsd key reaches the dispatch call\'s opts at all',
+  );
 });
