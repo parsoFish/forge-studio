@@ -255,6 +255,49 @@ added is the roadmap draft's **dependency edges** and a **shared** DAG renderer:
 - **Not** a redesign: architect behaviour is unchanged and the architect flow is
   not retired (R4-D1).
 
+### R4-B15 Demo-builder generation gallery (implemented)
+
+R4-16-F1 landed 2026-08-06 (wave 5, batch B). The demo-builder session already
+had a real iterate loop (brief → generate → awaiting-review → feedback →
+generate → lock); what F1 added is that the generations **survive** and become
+choosable:
+
+- **Snapshots are the data source.** Each completed generate turn snapshots into
+  the SESSION dir — `projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` +
+  `SKILL.md` + `meta.json` (`orchestrator/demo-builder-runner.ts`). The session
+  dir, not the project repo: the shell derivation may not read outside
+  `sessionDir`, and intermediate generations have no business being committed to
+  the project's `forge-studio` branch. Snapshots accumulate; a later generation
+  never mutates an earlier one.
+- **A fourth session kind, declared as data.** `studio/session-kinds.yaml` gains
+  `id: demo` (the id IS the `_<kind>` session-dir segment
+  `cli/bridge-studio-sessions.ts` derives, which is why it is not
+  `demo-builder`), `agent: demo-builder`, `stages: [demo]`, artifact
+  `generation-gallery` — the R2-10 RESERVED row, now **live**, with
+  `deriveGenerationGallery` (`orchestrator/studio/session-transcript.ts`)
+  reading through the module's existing realpath choke points. Generation
+  numbers come from each snapshot's own recorded iteration, so a corrupt
+  snapshot leaves a visible gap instead of renumbering its successors; item
+  sizes come from the file on disk, never from the metadata beside it.
+- **Rendered in place, entry unchanged.** R1-03-F2 is not reversed: the inline
+  `DemoBuilderPanel` on `/projects/[id]` mounts the REAL `SessionArtifactPane`
+  fed by `GET /api/studio/sessions/demo/<sid>?project=<p>` —
+  `forge-ui/lib/session-artifact-view.ts`'s `generationGalleryView` +
+  `forge-ui/components/studio/GenerationGallery.tsx`, the same lib-module +
+  component shape as R3-01's `FilePackage` and R4-15's `DependencyDag`. The
+  generic `/sessions/demo/<sid>` deep link serves the same thing for free.
+- **Finalize writes the CHOSEN generation.** `DemoBuilderStatus.selectedGeneration`
+  is declared by `POST /api/demo-builder/lock` and ENFORCED in the lock step:
+  the chosen snapshot's sample and its generator skill are restored into the
+  project repo before the existing lock writes `demo.lock.json`, so the
+  `demo_html`/`demo_skill` pair always comes from ONE generation and the file the
+  demo-runner executes is the one the operator picked. A `selectedGeneration`
+  naming a missing snapshot fails the lock loudly rather than silently locking
+  the latest.
+- **Contract + journey:** `data-*` rows in
+  [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beats
+  `demo-builder/demo-builder-generate` + `demo-builder/demo-builder-lock`.
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -1435,7 +1478,8 @@ added is the roadmap draft's **dependency edges** and a **shared** DAG renderer:
 
 ### R4-16 Demo-builder generation gallery
 
-- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent — demo-builder)
+- **Status:** implemented  ·  **Wave:** 5 (module: per-OOTB-agent —
+  demo-builder)  ·  As-built: [R4-B15](#r4-b15-demo-builder-generation-gallery-implemented)
 - **Depends on:** R2-10 (session shell; the gallery is an R2-10-F3 renderer).
 - **Context:** Wave-5 cut. Mockup `SESSIONS['demo-builder']`: the
   demo-capability session iterates **generations 1→3** (clip → +stats
@@ -1457,6 +1501,16 @@ added is the roadmap draft's **dependency edges** and a **shared** DAG renderer:
     `run-agent-demo-builder` journey shape against a real session; gallery
     renderer registered in R2-10-F3; finalize round-trips to a project demo
     skill the demo-runner can execute.
+    **F1 as-built (2026-08-06, branch `feat/r4-16-demo-builder-gallery`) —
+    [R4-B15](#r4-b15-demo-builder-generation-gallery-implemented).** The gap was
+    that generations did not exist on disk: every generate turn overwrote the
+    project repo's `DEMO.html` + generator skill, and `.forge/demo/history/` is
+    per-LOCK, not per-generation. F1 snapshots each completed turn into the
+    session dir, promotes R2-10's reserved `generation-gallery` row to live with
+    a real deriver, mounts the shell's own artifact pane inside the inline panel
+    (entry stays the project page — R1-03-F2 not reversed), and makes finalize
+    restore the CHOSEN generation's sample **and** its generator skill before
+    the existing lock path runs.
 - **Session sizing:** ~1 session.
 - **Acceptance references:** mockup journey `run-agent-demo-builder`;
   surface `views-session.jsx`.
@@ -1769,3 +1823,12 @@ gitignored campaign dir):
   operator-turn count during decomposition via `POST /api/initiatives/:id/plan`,
   adopted as a **batch-F exit rider** on the wave-exit Scope-3 chunk. F1's
   as-built facts absorbed into new baseline entry **R4-B14**.
+- 2026-08-06 — **R4-16 → implemented** (wave 5, batch B). The demo-builder's
+  generations now persist as session-dir snapshots, render through R2-10's
+  shell renderer stack **in place** on the project page (R1-03-F2 not
+  reversed), and "finalize" restores the chosen generation's sample AND its
+  generator skill before the existing lock, so `demo.lock.json` can no longer
+  pair one generation's demo with another's skill. `generation-gallery` is
+  promoted from a reserved artifact row to a live one, and
+  `studio/session-kinds.yaml` gains its fourth descriptor (`id: demo`).
+  As-built facts absorbed into new baseline entry **R4-B15**.

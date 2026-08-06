@@ -520,6 +520,42 @@ inventory rather than one shared page-level contract:
   plus a compact `[data-section="demo-status-strip"]`. The old detached
   `/demo/[sid]` route is a redirect stub
   (`[data-page="demo-builder-redirect"]` → `/projects/<id>?demo=<sid>`).
+- **Generation gallery — the demo-builder's session artifact (R4-16-F1,
+  2026-08-06).** Each completed generate turn is SNAPSHOTTED into the session
+  dir (`projects/<p>/_demo/<sid>/generations/<n>/` = `DEMO.html` + `SKILL.md` +
+  `meta.json`), so the generations accumulate instead of overwriting each
+  other, and a new **live** artifact kind `generation-gallery`
+  (`studio/session-kinds.yaml`'s fourth descriptor, `id: demo` — the id IS the
+  `_<kind>` session-dir segment the read route derives) renders them through
+  the R2-10 shell's own renderer stack. **Entry stays the project page**
+  (R1-03-F2 is not reversed): the inline `DemoBuilderPanel` mounts the REAL
+  `SessionArtifactPane`, fed by the same
+  `GET /api/studio/sessions/demo/<sid>?project=<p>` route the
+  `/sessions/[kind]/[sessionId]` deep link uses — one derivation, one renderer,
+  two mounts. Contract:
+  `[data-section="generation-gallery"][data-generation-count][data-selected-generation]`,
+  per selector button
+  `[data-action="select-generation"][data-generation-number][data-generation-selected="true"|"false"]`,
+  per item
+  `[data-generation-item][data-item-path][data-item-kind="html"|"markdown"|"file"][data-item-bytes]`,
+  the feedback that drove the selected generation
+  `[data-section="generation-feedback"][data-has-feedback="true"|"false"]`,
+  the per-item viewer `[data-action="view-generation-item"]` (serving from
+  `GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>`), the
+  chooser `[data-action="finalize-generation"][data-generation-number]`, and an
+  honest `[data-generation-empty="true"]` naming what was scanned rather than a
+  bare pane. `data-generation-number` is the snapshot's OWN recorded iteration,
+  never an array position, so a corrupt snapshot leaves a visible gap instead
+  of silently renumbering its successors. **The selection is poll-stable**: the
+  panel refetches on ONE 3s interval (never a second cycle — two independent
+  polls is the race this campaign already diagnosed once), and the view is
+  re-derived with the operator's chosen generation NUMBER preserved across the
+  new payload, because a selection that dies every 3 seconds cannot be acted
+  on. `[data-action="lock-demo"]` keeps its meaning (lock the sample currently
+  in the repo); `finalize-generation` restores the CHOSEN snapshot's sample AND
+  its generator skill into the project repo before the same lock runs, so
+  `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
+  generation.
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
   (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
   (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`; the create form's
