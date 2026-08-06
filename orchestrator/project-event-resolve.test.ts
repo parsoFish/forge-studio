@@ -363,9 +363,11 @@ test('(RED) [F3 #8] the resolved value that flows onward is the ENUMERATION id, 
       },
       queueRoot,
     );
-    const files = readdirSync(queueRoot).filter((f) => f.endsWith('.json'));
+    // stageFlowRunRequest always writes under <queueRoot>/flow-runs/
+    // (flow-run-requests.ts flowRunsDir) — never at queueRoot's top level.
+    const files = readdirSync(join(queueRoot, 'flow-runs')).filter((f) => f.endsWith('.json'));
     assert.equal(files.length, 1, 'exactly one request staged');
-    const raw = readFileSync(join(queueRoot, files[0]), 'utf8');
+    const raw = readFileSync(join(queueRoot, 'flow-runs', files[0]), 'utf8');
     const req = JSON.parse(raw) as Record<string, unknown>;
 
     assert.equal(req.eventProject, id, 'eventProject on the staged request must be the enumeration id');
