@@ -106,7 +106,7 @@ import { captureBoundaryBaseline, runBoundaryCheck } from './lib/post-run-bounda
 import { createBeatTracker, renderGallery, writeResultsFile, writeGalleryFile, PACE } from './lib/journey-runtime.mjs';
 import { JOURNEYS, RUN_ORDER } from './journeys/index.mjs';
 import { cleanCommunityArtifacts } from './journeys/community.mjs';
-import { restoreDeveloperRalphSkill } from './journeys/agents.mjs';
+import { restoreDeveloperRalphSkill, cleanKickoffAgent } from './journeys/agents.mjs';
 import {
   FORGE_ROOT, PROJECT, projectRoot, cleanProjectDir, cleanSeededSession,
   OUT, FRAMES, CLIPS,
@@ -408,6 +408,12 @@ async function main() {
         // throw partway through the arc's five mutating beats, which have no
         // per-beat try/catch of their own (see journeys/index.mjs's header).
         restoreDeveloperRalphSkill();
+        // R6-04 kickoff arc: crash-safe backstop for journey-kickoff-agent —
+        // the arc's own closing beat (agents-kickoff-run-view) already cleans
+        // it on the happy path; this covers a throw partway through the
+        // seven-beat arc, which (like the edit-agent arc above) has no
+        // per-beat try/catch of its own.
+        cleanKickoffAgent();
         cleanFirstFlow();
         cleanFirstProject();
         cleanFirstFlowRun();

@@ -66,6 +66,14 @@ const DECISION_CREATE_AGENT_DRAFTING =
   'the mockup; the mockup gets updated), because both named owners assessed ' +
   'and neither owns it and the shipped alternative is the StarterPicker';
 
+// R6-04 (this initiative's own baseline, 2026-08-07) — cited by every
+// run-agent exclusion below rather than a separate ADR, since these are
+// as-built structural facts this initiative itself recorded, not a prior
+// planning ruling.
+const DECISION_R604_KICKOFF_BASELINE =
+  'docs/roadmaps/R6-operator-experience.md R6-B5 "Agent kickoff panel + ' +
+  'standalone run view" (R6-04, 2026-08-07)';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -282,8 +290,62 @@ export const STORY_REGISTRY = [
   {
     story: 'run-agent',
     batch: 'C',
-    port: null,
+    port: {
+      journey: 'agents',
+      beats: [
+        { excluded: 'no dedicated /agents library route exists — forge-ui\'s agents shelf is embedded on the home page (/, [data-section="agents"]), not a standalone route; the real substitute entry point (a library card click) is what step 2 actually drives, ported separately below', decision: DECISION_R604_KICKOFF_BASELINE },
+        'agents-kickoff-entry',
+        { excluded: 'the real kickoff panel is already inline on the agent page (RunPanel.tsx) — there is no separate "open the kickoff form" click to back this step; Run dispatches directly, ported as step 7 below', decision: DECISION_R604_KICKOFF_BASELINE },
+        'agents-kickoff-set-project',
+        'agents-kickoff-attach-material',
+        { excluded: 'the real materials-attach control is one <input type="file" multiple> — a single action attaches every file; there is no second, separate "add another material" click to back this step', decision: DECISION_R604_KICKOFF_BASELINE },
+        'agents-kickoff-dispatch',
+        'agents-kickoff-run-view',
+        { excluded: 'the mockup\'s issue-triage agent (clustering issues, checking the project brain, producing initiative candidates) is fictional business content no agent in forge\'s shipped roster performs — this initiative ships the generic dispatch+view primitive only, not agent-specific business logic', decision: DECISION_R604_KICKOFF_BASELINE },
+        { excluded: 'same as the prior step — fictional issue-triage business content, not a UI-shape gap', decision: DECISION_R604_KICKOFF_BASELINE },
+        { excluded: 'the run view\'s typed-outputs section is honestly always empty — no data source exists yet for a generic dispatched agent\'s artifact outputs (R6-B5); "3 initiative candidates" is fictional issue-triage content this generic primitive does not fabricate', decision: DECISION_R604_KICKOFF_BASELINE },
+        { excluded: 'fictional issue-triage business content (opening a candidate artifact) — no such typed output exists to open', decision: DECISION_R604_KICKOFF_BASELINE },
+        { excluded: 'fictional issue-triage business content (hovering a candidate\'s detail) — no such typed output exists', decision: DECISION_R604_KICKOFF_BASELINE },
+        { excluded: 'fictional issue-triage business content ("file to the roadmap") — no such action exists on the generic run view', decision: DECISION_R604_KICKOFF_BASELINE },
+        { excluded: 'closing narrative line summarising the fictional issue-triage arc, not a distinct UI action', decision: DECISION_R604_KICKOFF_BASELINE },
+      ],
+    },
     excluded: null,
+    note:
+      'R6-04 (this initiative) shipped the kickoff panel + standalone run ' +
+      'view and the new agents-kickoff-* beats port 5 of the mockup\'s 15 ' +
+      'steps to real, executed beats. Step 2 (click the agent card) is ' +
+      'agents-kickoff-entry — a real home-page card click, substituted ' +
+      'honestly for the mockup\'s dedicated (non-existent) library route ' +
+      '(step 1, excluded). Step 4 ("A run binds to a project, with explicit ' +
+      'inputs and limits") is agents-kickoff-set-project — a real project ' +
+      '<select> (GET /api/studio/projects) binds mdtoc, forge\'s one real ' +
+      'project committed inside its own repo (the mockup\'s "gitpulse" is a ' +
+      'genuinely separate, independent repo this harness never checks out) ' +
+      'plus the real, now-enabled cost-ceiling input. Step 5 (attach a ' +
+      'material) is agents-kickoff-attach-material — a real declared-kind ' +
+      'file (mdtoc\'s own test/fixtures/release-notes.md) attached through ' +
+      'the real upload control; step 6 (a second material) is excluded — ' +
+      'the real control is one multi-file input, not two sequential clicks. ' +
+      'Step 7 (Start) is agents-kickoff-dispatch — the actual click ' +
+      'intercepted at the wire (no jsdom in this repo, so this is the ONLY ' +
+      'proof the request carries project/ceiling/material), independently ' +
+      'cross-checked against the staged file on disk; step 3 (a separate ' +
+      '"Run it" open-the-panel click) is excluded — the real panel is ' +
+      'already inline, no open step exists. Step 8 (the session log ' +
+      'streams) is agents-kickoff-run-view — the real standalone run view ' +
+      'renders the log, cost, and the material as a path+kind reference ' +
+      '(never its content, checked in both the DOM and the raw API ' +
+      'response); reached by navigating to a distinct route rather than ' +
+      'staying inline, the one structural divergence from the mockup\'s ' +
+      'single-screen framing. Steps 9-15 are all excluded for the same ' +
+      'reason: the mockup\'s issue-triage agent and its typed candidate ' +
+      'artifacts are fictional business content — no agent in the shipped ' +
+      'roster performs issue-triage clustering, and the run view\'s typed- ' +
+      'outputs section is honestly empty pending a real data source ' +
+      '(R6-B5). Net: 5 of 15 mockup steps are genuinely backed by a real ' +
+      'beat id; the other 10 are explicit, decision-cited exclusions, never ' +
+      'silently skipped.',
   },
   {
     story: 'build-hook',
