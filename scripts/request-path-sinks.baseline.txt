@@ -59,6 +59,7 @@ cli/bridge-studio-writes.ts writeFileSync 6
 cli/bridge-studio.ts existsSync 10
 cli/bridge-studio.ts readdirSync 4
 cli/bridge-studio.ts readFileSync 6
+cli/contract-stages.ts realpathSync 2
 cli/cycle-recap.ts existsSync 9
 cli/cycle-recap.ts mkdirSync 1
 cli/cycle-recap.ts readdirSync 1
@@ -109,14 +110,14 @@ cli/reflect-reconcile.ts statSync 1
 cli/studio-path-guard.ts lstatSync 2
 cli/studio-path-guard.ts realpathSync 2
 cli/ui-bridge.ts existsSync 47
-cli/ui-bridge.ts mkdirSync 6
+cli/ui-bridge.ts mkdirSync 7
 cli/ui-bridge.ts openSync 3
 cli/ui-bridge.ts readdirSync 13
 cli/ui-bridge.ts readFileSync 15
-cli/ui-bridge.ts realpathSync 2
+cli/ui-bridge.ts realpathSync 3
 cli/ui-bridge.ts spawn 2
 cli/ui-bridge.ts statSync 7
-cli/ui-bridge.ts writeFileSync 9
+cli/ui-bridge.ts writeFileSync 11
 orchestrator/architect-runner.ts existsSync 14
 orchestrator/architect-runner.ts mkdirSync 3
 orchestrator/architect-runner.ts readdirSync 4

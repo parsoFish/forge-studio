@@ -494,7 +494,71 @@ export type GenerationGalleryArtifact = {
   readonly sourcesScanned: string[];
 };
 
-export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact | GenerationGalleryArtifact;
+// ---------------------------------------------------------------------------
+// contract-buildout (R4-17) — presence-only rows for the onboarding session's
+// five stages. D4 (binding): this module's "may not read outside sessionDir"
+// invariant is NOT relaxed for this kind — it performs ZERO filesystem work
+// here, full stop. The real derivation (`deriveContractStages`) lives in
+// `cli/contract-stages.ts`, which reads the PROJECT tree (outside any
+// sessionDir) via its own realpath-guarded containment; this module only
+// threads ALREADY-DERIVED, already-guarded rows the caller (cli/bridge-studio-
+// sessions.ts) supplies, and throws when they are absent — never a silently
+// empty/defaulted artifact (see `deriveSessionArtifact`'s `contract-buildout`
+// case below).
+//
+// `ContractStageRow`/`ContractBuildoutArtifact` are declared HERE, not in
+// `cli/contract-stages.ts`, so the ONE type has ONE canonical owner and
+// `cli/contract-stages.ts` imports it from here — the same direction that
+// file already needs for `safeReadFileInSession` and `SESSION_STAGES`
+// (`session-kinds.ts`), so this adds no new import direction and creates no
+// cycle (verified: `orchestrator/` already imports plain VALUES from `cli/`
+// in ~30 files today, e.g. `orchestrator/manifest.ts` -> `cli/manifest-path-
+// guard.ts`, so a `cli/` -> `orchestrator/` type import here is the
+// established direction, not a reversal).
+// ---------------------------------------------------------------------------
+
+/** Presence, never a verdict (D11) — `forge preflight`'s exit code is the
+ *  only authoritative contract-green signal; a row says "this artifact is
+ *  present/absent, here is its source", never "this clause passes". */
+export type ContractStageStatus = 'present' | 'absent';
+
+/** The five onboarding stages — SESSION_STAGES minus 'brain' (project-brain
+ *  owns that stage; D2). */
+export type ContractStage = Exclude<SessionStage, 'brain'>;
+
+export type ContractStageRow = {
+  readonly stage: ContractStage;
+  readonly status: ContractStageStatus;
+  /** Which real on-disk artifact this row's presence answer is about — named
+   *  even when `status` is 'absent' (a dropped row is indistinguishable from
+   *  "we never looked"; naming the source at least says "we looked here"). */
+  readonly source: string;
+  /** Presence facts only (D11) — never verdict language ("pass"/"fail"/
+   *  "clause"/"green"/"red"/"compliant"). */
+  readonly detail: string[];
+  /** The real byte length read from disk for the two prose-file-backed
+   *  stages (`instructions`, `roadmap`); `null` for the three config/lock-
+   *  JSON-backed stages (`contract`, `secrets`, `demo`). */
+  readonly bytes: number | null;
+};
+
+export type ContractBuildoutArtifact = {
+  readonly kind: 'contract-buildout';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
+  /** Threaded VERBATIM from the caller — never re-derived, re-sorted, or
+   *  filtered here (D4). */
+  readonly stages: ContractStageRow[];
+  readonly sourcesScanned: string[];
+};
+
+export type SessionArtifactPayload =
+  | RoadmapDraftArtifact
+  | MarkdownDraftArtifact
+  | BrainStructureArtifact
+  | GenerationGalleryArtifact
+  | ContractBuildoutArtifact;
 
 function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
@@ -651,8 +715,14 @@ function deriveGenerationGallery(sessionDir: string, label: string): GenerationG
  * the route (cli/bridge-studio-sessions.ts), which forwards this artifact
  * object unchanged into the 200 response.
  */
-export function deriveSessionArtifact(input: { descriptor: SessionKindDescriptor; sessionDir: string }): SessionArtifactPayload {
-  const { descriptor, sessionDir } = input;
+export function deriveSessionArtifact(input: {
+  descriptor: SessionKindDescriptor;
+  sessionDir: string;
+  /** R4-17 — only consumed by the 'contract-buildout' kind; see that case
+   *  below and the module-header note on D4. Ignored for every other kind. */
+  contractStages?: ContractStageRow[];
+}): SessionArtifactPayload {
+  const { descriptor, sessionDir, contractStages } = input;
   const kind = descriptor.artifact.kind;
   const label = descriptor.artifact.label;
   const state = sessionArtifactKindState(kind);
@@ -673,6 +743,22 @@ export function deriveSessionArtifact(input: { descriptor: SessionKindDescriptor
       return deriveBrainStructure(sessionDir, label);
     case 'generation-gallery':
       return deriveGenerationGallery(sessionDir, label);
+    case 'contract-buildout': {
+      // D4: zero filesystem work here — `sessionDir` is not even touched
+      // (AT-3 pins a non-existent sessionDir has no effect on the result).
+      if (contractStages === undefined) {
+        throw new Error(
+          'deriveSessionArtifact: artifact kind "contract-buildout" requires contractStages to be supplied by the caller ' +
+            '(cli/bridge-studio-sessions.ts derives them via cli/contract-stages.ts\'s deriveContractStages) — never defaults to an empty/silent artifact',
+        );
+      }
+      return {
+        kind: 'contract-buildout',
+        label,
+        stages: contractStages,
+        sourcesScanned: ['contractStages supplied by the caller (cli/contract-stages.ts) — this module performs no filesystem scanning for this kind (D4)'],
+      };
+    }
     default: {
       // Exhaustiveness guard: state === 'live' but the kind matched none of
       // the three known live renderers — only reachable if SESSION_ARTIFACT_KINDS

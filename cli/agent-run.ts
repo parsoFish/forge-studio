@@ -22,8 +22,8 @@
  * mirroring how `cmdStudioLauncher` threads `forgeRoot` into `runWatch`.
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
 import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
@@ -139,14 +139,69 @@ export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void>
 }
 
 /**
- * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]`
- * — the generic standalone-run path for a NON-interactive roster agent
- * (R2-01-F3 dispatch half). Unlike `forge agent run` (the four bespoke
- * interactive turn-runners in `AGENT_RUNNERS`), this resolves ANY studio agent
- * def by slug and runs it once through the F1 `runAgent` primitive via
- * `dispatchAgentRun`. This is the CLI the bridge's `POST /api/agents/:slug/run`
- * spawns detached (mirroring `spawnAgentTurn`), so the run's events/cost land
- * under `_logs/<run-id>/` for the monitor.
+ * R4-17, D7 — writes the TERMINAL phase (`complete`/`failed`) into
+ * `<sessionDir>/status.json` when a dispatch run driven with `--session-dir`
+ * ends; `phase: 'running'` was already written by the process that STARTED
+ * the run (`POST /api/studio/onboarding/start`) — this is the process that
+ * OBSERVES the run ending, so it is the one that writes the terminal phase
+ * (D7's "phase is written by the process that observes the run" rule).
+ *
+ * D6: this is purely ADDITIVE — a dispatch invoked WITHOUT `--session-dir`
+ * never calls this at all, so behaviour without the flag stays byte-
+ * identical to before R4-17 (pinned by `cli/agent-run-dispatch.test.ts`'s
+ * AT-D7-3).
+ *
+ * `sessionDir` is a CLI flag from our OWN spawning code
+ * (`spawnAgentDispatch`, cli/ui-bridge.ts), not raw HTTP request text, but
+ * the write path is still guarded rather than trusted blindly: `sessionDir`
+ * itself is realpath-resolved, and if its `status.json` turns out to be a
+ * symlink escaping that resolved directory the write is refused (never
+ * followed) — the same realpath-containment shape used throughout this
+ * initiative, applied here even though the caller is trusted, per "guard the
+ * write path" rather than assume the caller always will. Best-effort: any
+ * failure here is swallowed — it must never mask the dispatch's own
+ * outcome/exit code.
+ */
+function writeSessionTerminalPhase(sessionDir: string, phase: 'complete' | 'failed'): void {
+  try {
+    if (!existsSync(sessionDir) || !statSync(sessionDir).isDirectory()) return;
+    const realSessionDir = realpathSync(sessionDir);
+    const statusPath = join(realSessionDir, 'status.json');
+    let existing: Record<string, unknown> = {};
+    if (existsSync(statusPath)) {
+      const realStatusPath = realpathSync(statusPath);
+      if (realStatusPath !== statusPath && !realStatusPath.startsWith(realSessionDir + sep)) {
+        return; // status.json escapes the session dir via a symlink — refuse the write
+      }
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(statusPath, 'utf8'));
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Unreadable/malformed status.json — write a fresh one rather than
+        // failing the dispatch outcome over a status-sidecar defect.
+      }
+    }
+    writeFileSync(statusPath, JSON.stringify({ ...existing, phase }, null, 2), 'utf8');
+  } catch {
+    /* best-effort — never masks the dispatch outcome/exit code */
+  }
+}
+
+/**
+ * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
+ * [--session-dir <abs>]` — the generic standalone-run path for a
+ * NON-interactive roster agent (R2-01-F3 dispatch half). Unlike `forge agent
+ * run` (the four bespoke interactive turn-runners in `AGENT_RUNNERS`), this
+ * resolves ANY studio agent def by slug and runs it once through the F1
+ * `runAgent` primitive via `dispatchAgentRun`. This is the CLI the bridge's
+ * `POST /api/agents/:slug/run` spawns detached (mirroring `spawnAgentTurn`),
+ * so the run's events/cost land under `_logs/<run-id>/` for the monitor.
+ *
+ * `--session-dir <abs>` (R4-17, D7, optional) — when given, the terminal
+ * phase (`complete`/`failed`) is written into that dir's `status.json` when
+ * this dispatch ends. See `writeSessionTerminalPhase` above.
  */
 export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promise<void> {
   const slug = rest[0];
@@ -171,6 +226,8 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
   const project = projectArg
     ? { name: projectArg, repoPath: resolve('projects', projectArg) }
     : undefined;
+  // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header.
+  const sessionDir = flagValue('--session-dir');
 
   // `--input k=v` may repeat; each is surfaced as prompt DATA (never instructions).
   const inputs: Record<string, string> = {};
@@ -207,6 +264,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       }
       const out = await runBandAgentStandalone({ slug, initiativeId, runId, forgeRoot, queryFn: undefined });
       console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`);
+      if (sessionDir) writeSessionTerminalPhase(sessionDir, 'complete');
       return;
     }
 
@@ -223,6 +281,9 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
     } else {
       console.log(`agent dispatch complete — ${out.slug} run ${out.runId} — cost $${result.costUsd.toFixed(4)}`);
     }
+    // D7 — the run ended (successfully, whether or not spawn was suppressed
+    // under the dry-bridge seam): write the terminal phase now.
+    if (sessionDir) writeSessionTerminalPhase(sessionDir, 'complete');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`forge agent dispatch: ${msg}`);
@@ -241,6 +302,8 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
         metadata: { error: msg, agent_slug: slug },
       });
     } catch { /* best-effort */ }
+    // D7 — the run ended in failure: write the terminal phase before exiting.
+    if (sessionDir) writeSessionTerminalPhase(sessionDir, 'failed');
     process.exit(1);
   }
 }

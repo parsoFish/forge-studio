@@ -63,3 +63,37 @@
   artifact:
     kind: generation-gallery
     label: Demo generations
+
+# R4-17 — the onboarding session. id is "onboarding" — the bridge derives the
+# session dir as <projectsRoot>/<project>/_<descriptor.id>/<sessionId>
+# (cli/bridge-studio-sessions.ts), and the new POST /api/studio/onboarding/
+# start route creates exactly <projectsRoot>/<project>/_onboarding/<sid>/, so
+# the descriptor id must match that literal directory-name prefix, same rule
+# as "demo" above.
+# legacyRoutes is deliberately [] — there was no predecessor onboarding
+# session ROUTE at all before this initiative: onboarding-agent
+# (skills/onboarding-agent/SKILL.md) was a fire-and-forget POST /api/agents/
+# :slug/run dispatch with no session dir, no status.json, no turns (spec
+# evidence #3, _wave5/specs/R4-17.md). There is nothing for this kind to
+# legacy-replace.
+# This descriptor is REUSED, not duplicated, for project CREATION too (D1) —
+# the mockup gives SESSIONS['project-onboarding'] and SESSIONS['create-project']
+# the SAME artifact ('contract-full') and the SAME label ("Contract
+# build-out"; mockups/studio-endstate-v2/data.jsx:485-531). A second
+# `create-project` descriptor would need its own `agent:` to resolve to a
+# runtime-bearing SKILL.md (validateSessionKinds' unknown-agent check), and no
+# creation agent exists anywhere in the roster (`grep -l '^runtime:'
+# skills/*/SKILL.md` names 16 agents, none of which authors projects) —
+# inventing one just to satisfy a second descriptor would be exactly the
+# fabricated-mapping shape R2-10's D3 already refused once for a different
+# stage. Reusing this one descriptor for both flows is what the AC's literal
+# wording ("Creation (R4-03) reuses the same stages") asks for.
+- id: onboarding
+  agent: onboarding-agent
+  title: Onboarding session
+  legacyRoutes: []
+  stages: [contract, instructions, secrets, demo, roadmap]
+  defaultStage: contract
+  artifact:
+    kind: contract-buildout
+    label: Contract build-out
