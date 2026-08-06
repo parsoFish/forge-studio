@@ -1160,6 +1160,123 @@ describe('validateFlow — trigger-projects (R2-08-F1)', () => {
   });
 });
 
+/**
+ * ACCEPTANCE TESTS (T3, R2-08 addendum, 2026-08-07) — `on: merged` is
+ * EXCLUDED from `projects:` scoping. `on: merged` dispatches INLINE from
+ * `orchestrator/finalize-merged.ts` via `resolveMergeAgentHandler` — it
+ * never stages a `FlowRunRequest`, so `drainFlowRunRequests`'s scope
+ * enforcement (the ONE enforcement point every other kind reaches) never
+ * sees it. A `projects:`-scoped `on: merged` trigger would therefore be
+ * silently unenforced. Ruling (docs/decisions/027-studio-object-model.md,
+ * the addendum committed at 604cfe42): rather than wire a third
+ * per-mechanism patch (the third dispatch mechanism to diverge from the
+ * staged-request seam), the gap is made UNAUTHORABLE — `forge studio lint`
+ * errors when `projects:` is declared on an `on: merged` trigger, tracked
+ * as WI **forge-f9g**.
+ *
+ * Check id: reuses `trigger-projects` — the SAME check id the block above
+ * already uses for shape/membership. This is one more `projects:` validity
+ * rule in that same family, not a new concern needing its own id.
+ */
+describe('validateFlow — trigger-projects excluded on on:merged (R2-08 addendum, 2026-08-07, WI forge-f9g)', () => {
+  it('(RED) projects: on an on:merged trigger → error trigger-projects naming BOTH the inline-dispatch reason AND forge-f9g', () => {
+    const flow = makeFlow({
+      triggers: [
+        { on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
+      ],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    const f = findings.find((x) => x.check === 'trigger-projects');
+    assert.ok(f, `expected a trigger-projects finding for a scoped on:merged trigger — got ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.match(f!.message, /merged/i, 'message must name the kind');
+    assert.match(
+      f!.message,
+      /inline/i,
+      'message must name the REASON — on:merged dispatches inline from finalize-merged.ts, never reaching the drain enforcement point',
+    );
+    assert.match(f!.message, /forge-f9g/, 'message must name the filed WI id so an operator knows where this is tracked');
+  });
+
+  it('(green-on-arrival) an on:merged trigger with NO projects: is still perfectly valid — zero findings — kills an implementation that rejects ALL merged triggers regardless of projects:', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    assert.deepEqual(
+      findings,
+      [],
+      `expected zero findings for an unscoped on:merged trigger — got ${JSON.stringify(findings)}`,
+    );
+  });
+
+  it('(green-on-arrival) projects: on the DRAIN-ENFORCED kinds (cron/webhook/pr-merged/issue-raised/agent-complete/flow-complete) is still valid — kills "blanket-rejected projects: everywhere"', () => {
+    const cases: FlowTrigger[] = [
+      {
+        on: 'cron',
+        target: { kind: 'flow', ref: 'other-flow' },
+        schedule: '0 3 * * *',
+        projects: ['gitpulse'],
+      } as unknown as FlowTrigger,
+      {
+        on: 'webhook',
+        target: { kind: 'flow', ref: 'other-flow' },
+        projects: ['gitpulse'],
+        webhook: {
+          id: 'my-hook',
+          provider: 'github',
+          events: ['push'],
+          secretEnv: 'MY_SECRET',
+          sources: ['acme/widgets'],
+        },
+      } as unknown as FlowTrigger,
+      { on: 'pr-merged', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
+      { on: 'issue-raised', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
+      {
+        on: 'agent-complete',
+        target: { kind: 'flow', ref: 'other-flow' },
+        agent: 'some-agent',
+        projects: ['gitpulse'],
+      } as unknown as FlowTrigger,
+      { on: 'flow-complete', target: { kind: 'flow', ref: 'other-flow' }, projects: ['gitpulse'] } as unknown as FlowTrigger,
+    ];
+    for (const trigger of cases) {
+      const flow = makeFlow({ triggers: [trigger] });
+      const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+        flowIds: new Set(['my-flow', 'other-flow']),
+        projectIds: new Set(['gitpulse']),
+      } as unknown as Parameters<typeof validateFlow>[2]);
+      assert.ok(
+        !findings.some((x) => /forge-f9g/.test(x.message)),
+        `expected on:"${trigger.on}" (drain-enforced) to be unaffected by the on:merged exclusion — got ${JSON.stringify(findings)}`,
+      );
+    }
+  });
+
+  it('(RED) projects: [] on an on:merged trigger is ALSO an error — the empty scope is still a declared scope — kills a fix that only checks non-empty arrays', () => {
+    const flow = makeFlow({
+      triggers: [{ on: 'merged', target: { kind: 'flow', ref: 'other-flow' }, projects: [] } as unknown as FlowTrigger],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), {
+      flowIds: new Set(['my-flow', 'other-flow']),
+      projectIds: new Set(['gitpulse']),
+    } as unknown as Parameters<typeof validateFlow>[2]);
+    const f = findings.find((x) => x.check === 'trigger-projects');
+    assert.ok(
+      f,
+      `expected a trigger-projects finding for projects: [] on on:merged (the empty scope is still a DECLARED scope) — got ${JSON.stringify(findings)}`,
+    );
+    assert.equal(f!.level, 'error');
+    assert.match(f!.message, /forge-f9g/, 'message must name the filed WI id');
+  });
+});
+
 describe('validateFlow — trigger-target', () => {
   it('flow target referencing its own flow → error trigger-target (self-loop)', () => {
     const flow = makeFlow({
