@@ -421,6 +421,55 @@ test('POST /api/agents/<slug>/run: NEGATIVE TWIN, load-bearing — no costCeilin
 });
 
 // ---------------------------------------------------------------------------
+// ROUND 8 — precedence ruling. `[exec]` found the route's enforceability
+// check sits INSIDE the `costCeilingUsd !== undefined` block AFTER the
+// bounds check — so an out-of-bounds value against a legacy-path agent
+// today gets the BOUNDS message ("exceeds max"), which is actively
+// misleading: it implies "use a smaller number" as a remedy, but for a
+// legacy-path agent NO value is acceptable at all. Ruling: three ordered
+// stages — (1) shape/type, unchanged; (2) ENFORCEABILITY, now wins over (3)
+// bounds. Each test below asserts on MESSAGE CONTENT, not just the 400 —
+// an unpinned ordering is exactly the kind of thing a later refactor
+// silently flips, and a bare status-code check cannot catch that.
+//
+// (the fourth cell of the 2x2 — in-bounds + legacy-path ⇒ enforceability —
+// is already pinned above, "costCeilingUsd against test-legacy... ⇒ 400,
+// fail-closed"; not duplicated here.)
+// ---------------------------------------------------------------------------
+
+test('PRECEDENCE: an OUT-OF-BOUNDS ceiling against a LEGACY-PATH agent ⇒ the ENFORCEABILITY message, NOT the bounds message — the bounds message ("use a smaller number") would name a remedy that cannot work for this agent at any value', async () => {
+  const skipsBefore = runRouteSkipCount();
+  const { status, body } = await postRunAs('test-legacy', { costCeilingUsd: MAX_KICKOFF_COST_CEILING_USD + 1 });
+  assertRefused(status, body, skipsBefore, 'out-of-bounds-legacy-path');
+  assert.match(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `expected the ENFORCEABILITY message to win — got: ${JSON.stringify(body.error)}`);
+  assert.doesNotMatch(body.error ?? '', /invalid costCeilingUsd/, `the bounds message must NOT appear here — it would name a remedy ("use a smaller number") that cannot work for this agent at any value — got: ${JSON.stringify(body.error)}`);
+});
+
+test('PRECEDENCE: POSITIVE CONTROL — an OUT-OF-BOUNDS ceiling against a ONE-SHOT agent ⇒ the BOUNDS message, unchanged. Without this pair, the test above could pass for the trivial (wrong) reason that enforceability swallows EVERY refusal regardless of agent — this proves bounds still fires, and fires with its own message, for the class that can actually use it', async () => {
+  const skipsBefore = runRouteSkipCount();
+  const { status, body } = await postRun({ costCeilingUsd: MAX_KICKOFF_COST_CEILING_USD + 1 });
+  assertRefused(status, body, skipsBefore, 'out-of-bounds-one-shot');
+  assert.match(body.error ?? '', /invalid costCeilingUsd/, `expected the BOUNDS message for a one-shot agent (enforceability doesn't even apply here) — got: ${JSON.stringify(body.error)}`);
+  assert.doesNotMatch(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `the enforceability message must not appear for an agent that IS enforceable — got: ${JSON.stringify(body.error)}`);
+});
+
+test('PRECEDENCE: a MALFORMED ceiling ("abc", not a number) against a LEGACY-PATH agent ⇒ the shape/type message, NOT the enforceability message — stage 1 (shape) must still precede stage 2 (enforceability); we should never reason about whether a non-numeric value is "enforceable"', async () => {
+  const skipsBefore = runRouteSkipCount();
+  const { status, body } = await postRunAs('test-legacy', { costCeilingUsd: 'abc' });
+  assertRefused(status, body, skipsBefore, 'malformed-string-legacy-path');
+  assert.match(body.error ?? '', /invalid costCeilingUsd/, `expected the shape/type message to win over enforceability — got: ${JSON.stringify(body.error)}`);
+  assert.doesNotMatch(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `enforceability reasoning must never be reached for a malformed value — got: ${JSON.stringify(body.error)}`);
+});
+
+test('PRECEDENCE: a NaN-shaped ceiling (the string "NaN", the only wire-representable form) against a LEGACY-PATH agent ⇒ the shape/type message, NOT the enforceability message — same stage-1-before-stage-2 property, distinct malformed shape from the plain non-numeric-string case above', async () => {
+  const skipsBefore = runRouteSkipCount();
+  const { status, body } = await postRunAs('test-legacy', { costCeilingUsd: 'NaN' });
+  assertRefused(status, body, skipsBefore, 'nan-string-legacy-path');
+  assert.match(body.error ?? '', /invalid costCeilingUsd/, `expected the shape/type message to win over enforceability — got: ${JSON.stringify(body.error)}`);
+  assert.doesNotMatch(body.error ?? '', /ceiling not enforceable for this agent's loop strategy/, `enforceability reasoning must never be reached for a malformed value — got: ${JSON.stringify(body.error)}`);
+});
+
+// ---------------------------------------------------------------------------
 // (C) A ceiling-stopped run surfaces as a DISTINCT terminal state via
 // GET /api/agents/runs/:runId — never the same state a clean success reports.
 // Both the success case and the ceiling-stop case are driven through a REAL
