@@ -124,6 +124,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { runStudioLint } from './studio-lint.ts';
 import { runBrainLint } from './brain-lint.ts';
+import { serializeKbDescriptor } from '../orchestrator/studio/registry.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -1109,40 +1110,80 @@ test('positive control (passes before AND after the SEC-03 round-3/4 fix): a nor
 
 // ---------------------------------------------------------------------------
 // SEC-03 round 4 — MEASURED: does `forge studio lint` / `forge brain lint`
-// detect the phantom KB? T1 claimed neither does; this campaign has had
-// FOUR prior failure-behaviour claims turn out false, so it is measured
-// here directly (calling each lint entry point's real exported function)
-// rather than banked.
+// detect an orphaned project brain (a brain/projects/<id>/ with no matching
+// projects/<id>/)? T1 claimed neither does.
 //
-// Read from source before writing this test (both confirmed by execution
-// below, not banked on the reading alone):
-//   - cli/studio-lint.ts's KB-descriptor scan (~L395-413) does
-//     `readdirSync(brainDir)` then `join(brainDir, entry, 'kb.yaml')` — ONE
-//     level under brain/. It never recurses into brain/projects/<id>/, so it
-//     never even SEES a per-project KB, phantom or legitimate. (This is a
-//     separate, pre-existing gap from the phantom-KB defect itself: studio
-//     lint does not cover per-project central brains at all — not something
-//     this WI's ATs are scoped to fix, just measured honestly here.)
-//   - cli/brain-lint.ts's checkProjectBrainIndexes (~L337) is the ONLY brain-
-//     lint check that walks brain/projects/<name>/, and it `continue`s
-//     immediately for any project brain whose themes/ has zero non-README
-//     .md files (`themeFiles.length === 0`) — exactly the shape a freshly
-//     seeded stub has (seedProjectBrain writes only themes/README.md, no
-//     real theme yet). No other brain-lint check cross-references
-//     discoverProjects at all.
+// AMENDMENT (round 5): the two-phase check/write fix landed and closed the
+// EACCES route this test originally used to PRODUCE its phantom — driving
+// the real onboard route under the chmod-0o500 fixture no longer leaves a
+// kb.yaml behind (confirmed: this test's own precondition,
+// `existsSync(...kb.yaml)`, now fails where it used to pass). That is the
+// fix working correctly, not a reason to delete this test — the underlying
+// question ("does lint catch an orphaned project brain, however it arose?")
+// is ORTHOGONAL to "can this one route still create one?" and remains a
+// real, filed gap:
+//   - bd `forge-8kq` — cli/studio-lint.ts's KB-descriptor scan
+//     (~L395-413) does `readdirSync(brainDir)` then
+//     `join(brainDir, entry, 'kb.yaml')` — ONE level under brain/. It never
+//     recurses into brain/projects/<id>/, so it never even SEES a
+//     per-project KB, phantom or legitimate.
+//   - bd `forge-4qf` — cli/brain-lint.ts's checkProjectBrainIndexes
+//     (~L337) is the ONLY brain-lint check that walks
+//     brain/projects/<name>/, and it `continue`s immediately for any
+//     project brain whose themes/ has zero non-README .md files — exactly
+//     the shape a freshly seeded stub has. No other brain-lint check
+//     cross-references discoverProjects at all.
+//
+// The phantom is now PLANTED DIRECTLY on disk (mkdirSync + writeFileSync of
+// a valid kb.yaml/profile.md/themes/README.md under
+// <forgeRoot>/brain/projects/<id>/, with no project.json — the shipped
+// seedProjectBrain writes go through resolveGuardedPath (SEC-03 Finding A),
+// but nothing about a DIRECTLY-planted, non-symlinked file trips that
+// containment guard; this is a plain, no-drama filesystem write to a real
+// path, exercising ONLY the lint question) — never through any route. That
+// decouples the two questions honestly: this file's other round-3/4/5 tests
+// (34, 45, 105 and their siblings) already prove the routes cannot produce
+// this shape any more; THIS test is scoped to "if one existed anyway
+// (config drift, a manual brain edit, a future regression, an out-of-band
+// script), would either lint catch it?" — answered here by direct
+// construction, independent of any route.
+//
+// THIS TEST PINS A KNOWN GAP, not a defect this WI fixes. It must be
+// INVERTED (assert the findings ARE non-empty) or DELETED the day either
+// bd `forge-8kq` or `forge-4qf` closes — left as-is afterward, it would
+// silently become a lock against that very fix.
 // ---------------------------------------------------------------------------
 
-test('MEASURED [SEC-03 round 4] neither `forge studio lint` nor `forge brain lint` detects a phantom brain/projects/<id>/kb.yaml with no matching project', async () => {
-  const id = 'lint-measurement-phantom';
-  const projectsDir = join(forgeRoot, 'projects');
-  chmodSync(projectsDir, 0o500);
-  try {
-    await postProject({ name: id, qualityGateCmd: 'echo ok' });
-  } finally {
-    chmodSync(projectsDir, 0o755);
-  }
-  // Sanity: the phantom must genuinely exist before asking whether lint sees it.
-  assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')), 'sanity: expected the phantom KB to exist as a precondition for this measurement');
+/** Directly plant a valid-shaped, orphaned project-brain stub — no route
+ *  involved, no project.json, no symlink. Mirrors seedProjectBrain's own
+ *  three-file shape (orchestrator/project-brain-seed.ts) closely enough to
+ *  load cleanly through loadKbDescriptor, without importing that module's
+ *  private builders. */
+function plantOrphanedProjectBrain(forgeRoot: string, id: string): void {
+  const brainDir = join(forgeRoot, 'brain', 'projects', id);
+  mkdirSync(join(brainDir, 'themes'), { recursive: true });
+  writeFileSync(
+    join(brainDir, 'kb.yaml'),
+    serializeKbDescriptor({
+      id,
+      name: `${id} (project)`,
+      binding: { kind: 'project', ref: id },
+      desc: `Per-project brain for ${id} — directly planted for a lint-measurement AT, no project.json anywhere.`,
+      backend: 'filesystem',
+      path: '',
+    }),
+  );
+  writeFileSync(join(brainDir, 'profile.md'), `# ${id} — project brain (Brain 3 profile)\n\nDirectly planted; no matching project.\n`);
+  writeFileSync(join(brainDir, 'themes', 'README.md'), `# ${id} — Brain 3 theme pages\n\nDirectly planted; no matching project.\n`);
+}
+
+test('MEASURED, PINS A KNOWN GAP (bd forge-8kq / forge-4qf) [SEC-03 round 4/5] neither `forge studio lint` nor `forge brain lint` detects a DIRECTLY-PLANTED orphaned brain/projects/<id>/ with no matching project', () => {
+  const id = 'lint-measurement-phantom-planted';
+  plantOrphanedProjectBrain(forgeRoot, id);
+
+  // Sanity: the orphan genuinely exists, and genuinely has no matching
+  // project — a real precondition now, not one that depends on any route.
+  assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')), 'sanity: expected the directly-planted orphan KB to exist');
   assert.ok(!existsSync(join(forgeRoot, 'projects', id)), 'sanity: expected no matching project directory');
 
   const studioResult = runStudioLint(forgeRoot);
@@ -1150,7 +1191,7 @@ test('MEASURED [SEC-03 round 4] neither `forge studio lint` nor `forge brain lin
   assert.deepEqual(
     studioHit,
     [],
-    `MEASURED: forge studio lint DOES flag the phantom (contradicts T1's claim) — findings: ${JSON.stringify(studioHit)}`,
+    `MEASURED: forge studio lint DOES flag the orphan (bd forge-8kq would be closed — invert or delete this test) — findings: ${JSON.stringify(studioHit)}`,
   );
 
   const brainResult = runBrainLint({ cwd: forgeRoot, scope: 'full' });
@@ -1158,6 +1199,6 @@ test('MEASURED [SEC-03 round 4] neither `forge studio lint` nor `forge brain lin
   assert.deepEqual(
     brainHit,
     [],
-    `MEASURED: forge brain lint DOES flag the phantom (contradicts T1's claim) — findings: ${JSON.stringify(brainHit)}`,
+    `MEASURED: forge brain lint DOES flag the orphan (bd forge-4qf would be closed — invert or delete this test) — findings: ${JSON.stringify(brainHit)}`,
   );
 });

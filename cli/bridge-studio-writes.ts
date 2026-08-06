@@ -44,7 +44,7 @@ import { SLUG_RE, validateAgent, validateFlow } from '../orchestrator/studio/val
 import { MAX_MATERIALS_LENGTH } from '../orchestrator/studio/materials.ts';
 import { validateProjectConfig, readAgentInstructionsFile, readQualityGateSidecar, injectSidecarIntoTestProcess } from '../orchestrator/project-config.ts';
 import { readArtifactRoot } from '../orchestrator/brain-paths.ts';
-import { seedProjectBrain } from '../orchestrator/project-brain-seed.ts';
+import { seedProjectBrain, checkProjectBrainSeedContainment } from '../orchestrator/project-brain-seed.ts';
 import { scaffoldGreenfieldProject } from '../orchestrator/project-create.ts';
 import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { runPreflight } from './preflight.ts';
@@ -73,6 +73,83 @@ import {
  * mirroring `PathGuardReject.reason` never reaching the client.
  */
 class ScaffoldContainmentError extends Error {}
+
+/** One of `scaffoldContractArtifacts`'s two file targets. */
+type ContractArtifactTarget = {
+  /** Segments passed to `resolveGuardedPath(projectRoot, segments)`. */
+  segments: readonly string[];
+  /** Absolute, plain-joined path — for the symlink-following `existsSync`
+   *  idempotency probe only, never for reading/writing directly. */
+  absPath: string;
+  /** Relative path (project-root-relative, forward-slash) for reporting. */
+  relPath: string;
+};
+
+/**
+ * SINGLE SOURCE OF TRUTH for `scaffoldContractArtifacts`'s two write
+ * targets (`roadmap.md`, `<artifactRoot>/brain/profile.md`) beneath
+ * `projectRoot`. Both `scaffoldContractArtifacts` itself (the write) and
+ * `checkContractArtifactContainment` (the pure Phase-1 pre-check on `POST
+ * /api/studio/projects`, below) compute their target paths from THIS
+ * function — one path set, not two that could drift apart (SEC-03 round 4).
+ */
+function contractArtifactTargets(projectRoot: string): { roadmap: ContractArtifactTarget; profile: ContractArtifactTarget } {
+  // `readArtifactRoot` already rejects an absolute value, a backslash, or a
+  // literal '..' component in the RAW string — but a legitimate
+  // multi-component value (e.g. "sub/dir") must still be split into
+  // INDIVIDUAL segments[] elements before reaching resolveGuardedPath: a
+  // segment containing '/' fails `isSafeSegment` outright, so folding it as
+  // ONE element would always be rejected rather than silently under-checked.
+  const artifactRoot = readArtifactRoot(projectRoot);
+  const artifactSegments = artifactRoot === '.' ? [] : artifactRoot.split('/').filter((s) => s.length > 0 && s !== '.');
+  const profileRel = artifactRoot === '.' ? join('brain', 'profile.md') : join(artifactRoot, 'brain', 'profile.md');
+  return {
+    roadmap: { segments: ['roadmap.md'], absPath: join(projectRoot, 'roadmap.md'), relPath: 'roadmap.md' },
+    profile: {
+      segments: [...artifactSegments, 'brain', 'profile.md'],
+      absPath: join(projectRoot, ...artifactSegments, 'brain', 'profile.md'),
+      relPath: profileRel.split(sep).join('/'),
+    },
+  };
+}
+
+/**
+ * PURE containment pre-check (SEC-03 round 4, T1's two-phase
+ * check-then-write ruling) for every path `POST /api/studio/projects`
+ * writes beneath `projectRoot`: `.forge/project.json` (this route's own
+ * write) plus `scaffoldContractArtifacts`'s two targets (`roadmap.md`,
+ * `<artifactRoot>/brain/profile.md`), computed via the SAME
+ * `contractArtifactTargets` `scaffoldContractArtifacts` itself uses. Zero
+ * side effects: no `mkdirSync`, no `writeFileSync`.
+ *
+ * When `projectRoot` does not exist yet (the common brand-new-onboard
+ * case), nothing beneath it could carry a pre-planted symlink —
+ * `resolveGuardedPath` has no create-mode for `root` itself and would
+ * reject a legitimately-absent directory outright — so this returns
+ * immediately; `projectRoot`'s OWN identity is validated separately by the
+ * caller's `isContainedProjectRepoPath` check, which does not require it to
+ * exist. When `projectRoot` already exists (onboarding an existing
+ * checkout), every target below is containment-checked before any write on
+ * the route runs. Throws `ScaffoldContainmentError` on rejection — the same
+ * class the write-time guards throw, so one catch clause at the call site
+ * covers both.
+ */
+function checkContractArtifactContainment(projectRoot: string): void {
+  if (!existsSync(projectRoot)) return;
+
+  const forgeJsonPath = join(projectRoot, '.forge', 'project.json');
+  if (!existsSync(forgeJsonPath)) {
+    const guard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
+    if (!guard.ok) throw new ScaffoldContainmentError('path containment check failed while checking .forge/project.json');
+  }
+
+  const { roadmap, profile } = contractArtifactTargets(projectRoot);
+  for (const target of [roadmap, profile]) {
+    if (existsSync(target.absPath)) continue; // already there — idempotent skip, nothing to guard
+    const guard = resolveGuardedPath(projectRoot, target.segments);
+    if (!guard.ok) throw new ScaffoldContainmentError(`path containment check failed while checking ${target.relPath}`);
+  }
+}
 
 /**
  * Idempotently scaffold the machine-readable architecture context the C4
@@ -137,15 +214,16 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
     }
   }
 
+  const { roadmap, profile } = contractArtifactTargets(projectRoot);
+
   // roadmap.md (C4) — TODO stub, clearly marked. SEC-03 Finding B: probe
   // existence FIRST (plain, symlink-following `existsSync` — "already
   // there, skip" is the whole of the idempotency contract), and only guard
   // + write when genuinely absent. Never clobbers an existing operator
   // file — a SEPARATE, real requirement from the containment guard; both
   // apply independently.
-  const roadmapPath = join(projectRoot, 'roadmap.md');
-  if (!existsSync(roadmapPath)) {
-    const roadmapGuard = resolveGuardedPath(projectRoot, ['roadmap.md']);
+  if (!existsSync(roadmap.absPath)) {
+    const roadmapGuard = resolveGuardedPath(projectRoot, roadmap.segments);
     if (!roadmapGuard.ok) throw new ScaffoldContainmentError('path containment check failed while scaffolding roadmap.md');
     writeFileSync(
       roadmapGuard.realPath,
@@ -160,27 +238,15 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
     created.push('roadmap.md');
   }
 
-  // brain sub-wiki profile.md (C4, Brain 3) under the artifactRoot.
-  // `readArtifactRoot` already rejects an absolute value, a backslash, or a
-  // literal '..' component in the RAW string — but a legitimate
-  // multi-component value (e.g. "sub/dir") must still be split into
-  // INDIVIDUAL segments[] elements before reaching resolveGuardedPath: a
-  // segment containing '/' fails `isSafeSegment` outright, so folding it as
-  // ONE element would always be rejected rather than silently under-checked
-  // — splitting is what makes a legitimate multi-component artifactRoot
-  // actually usable while still identity-verifying every component on its
-  // own. On THIS call path artifactRoot is always '.' in practice (this
-  // function always runs before .forge/project.json exists, and
-  // readArtifactRoot returns '.' whenever that file is absent) — but the
-  // split is applied unconditionally rather than leaning on that as an
+  // brain sub-wiki profile.md (C4, Brain 3) under the artifactRoot. On THIS
+  // call path artifactRoot is always '.' in practice (this function always
+  // runs before .forge/project.json exists, and readArtifactRoot returns
+  // '.' whenever that file is absent) — but `contractArtifactTargets`
+  // applies the split unconditionally rather than leaning on that as an
   // invariant, since scaffoldContractArtifacts's own contract makes no such
   // promise about call order.
-  const artifactRoot = readArtifactRoot(projectRoot);
-  const artifactSegments = artifactRoot === '.' ? [] : artifactRoot.split('/').filter((s) => s.length > 0 && s !== '.');
-  const brainRel = artifactRoot === '.' ? join('brain', 'profile.md') : join(artifactRoot, 'brain', 'profile.md');
-  const profilePath = join(projectRoot, ...artifactSegments, 'brain', 'profile.md');
-  if (!existsSync(profilePath)) {
-    const profileGuard = resolveGuardedPath(projectRoot, [...artifactSegments, 'brain', 'profile.md']);
+  if (!existsSync(profile.absPath)) {
+    const profileGuard = resolveGuardedPath(projectRoot, profile.segments);
     if (!profileGuard.ok) throw new ScaffoldContainmentError('path containment check failed while scaffolding brain/profile.md');
     mkdirSync(dirname(profileGuard.realPath), { recursive: true });
     writeFileSync(
@@ -193,7 +259,7 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
         `## Stack\n\nTODO\n\n## Module map\n\nTODO\n\n## Conventions & invariants\n\nTODO\n`,
       'utf8',
     );
-    created.push(brainRel.split(sep).join('/'));
+    created.push(profile.relPath);
   }
 
   return created;
@@ -783,53 +849,41 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 400, { error: 'a project already exists at this repo path' }, origin); return true;
       }
 
-      // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
-      // profile.md + themes/) so the KB pillar — and the C4 preflight
-      // clause, which requires the central profile.md — are never empty for
-      // a freshly onboarded project. Idempotent per file (never clobbers an
-      // operator-authored brain).
+      // ---- Phase 1 (SEC-03 round 4, T1's two-phase check-then-write ruling)
+      // PURE containment checks — zero side effects on anything
+      // request-derived — for EVERY path this route (and the two helpers it
+      // calls) will write: `.forge/project.json`, `roadmap.md`,
+      // `<artifactRoot>/brain/profile.md` beneath `projectRoot`
+      // (`checkContractArtifactContainment`), and the
+      // `brain/projects/<id>/**` targets `seedProjectBrain` owns
+      // (`checkProjectBrainSeedContainment`). A rejection from either check
+      // returns here with NOTHING request-derived on disk anywhere.
       //
-      // SEC-03 round 3 (this WI): moved to run FIRST on this route — before
-      // the `mkdirSync(projectRoot)` below, and therefore before
-      // `scaffoldContractArtifacts` and `.forge/project.json` too.
-      // `seedProjectBrain`'s target (`<forgeRoot>/brain/projects/<id>/`) is
-      // entirely independent of `projectRoot`, so nothing about it requires
-      // the project directory to exist yet. A containment rejection here now
-      // leaves NO project-directory footprint at all — no half-created,
-      // git-initialized `projects/<id>/` with a roadmap.md/local-brain stub
-      // but no `.forge/project.json`, the exact shape `loadProjectsWithMeta`
-      // would otherwise list as a half-onboarded ghost (every discovered dir
-      // is listed regardless of whether `.forge/project.json` exists). This
-      // still satisfies — and strengthens — the R4-02-F3 invariant below
-      // (the KB binding can only point at a KB that provably exists on
-      // disk): the seed now runs before EVERY write on this route, not
-      // merely before project.json.
-      //
-      // Consequence, stated explicitly: if a LATER write on this route
-      // (`mkdirSync(projectRoot)`, `scaffoldContractArtifacts`, the
-      // `.forge/project.json` write) fails for an unrelated reason AFTER
-      // this seed already landed, the result is an orphaned central brain
-      // stub (`brain/projects/<id>/`) with no project directory. That is the
-      // better of the two inconsistencies: it is inert (`discoverProjects`
-      // scans `projects/`, never `brain/projects/`, so nothing lists a bare
-      // brain stub as a project), idempotent to retry (a second onboard
-      // attempt with the same id finds the stub files already present and
-      // skips them, per-file — see `seedProjectBrain`'s docstring), and it
-      // never tells the operator "not created" while a project directory
-      // actually exists on disk — the opposite failure mode this WI fixes.
-      //
-      // SEC-03 Finding A (round-2 adversarial review): `seedProjectBrain`
-      // (orchestrator/project-brain-seed.ts) carries its OWN per-segment
-      // resolveGuardedPath containment on every file it writes and throws
-      // the shared `PathGuardContainmentError` (cli/studio-path-guard.ts,
-      // the established orchestrator/ -> cli/ import direction — SEC-01
-      // precedent) on rejection, never a silent skip. Fail closed here too:
-      // refuse before ANY of this route's writes (including the
-      // `mkdirSync(projectRoot)` immediately below), never surface it as an
-      // unrelated 500.
-      let brainSeed: ReturnType<typeof seedProjectBrain>;
+      // WHY THIS REPLACES "seed the brain first" (round 3): round 3 made
+      // `seedProjectBrain` — a WRITING operation — run before every
+      // project-directory write, which closed the containment-rejection
+      // scenario (nothing under `projectRoot` yet when it throws) but not an
+      // UNRELATED failure AFTER it succeeded: EACCES on this route's own
+      // `mkdirSync(projectRoot)` left a fully-formed, orphaned
+      // `brain/projects/<id>/kb.yaml` behind — a phantom KB, invisible to
+      // `discoverProjects` (scans `projects/` only) but VISIBLE to
+      // `loadKbDescriptors` (`cli/bridge-studio-kbs.ts`), which walks
+      // `brain/projects/` as its own second containment root. Moving the
+      // orphan is not removing it. Separating the CHECK from the WRITE
+      // removes the ordering question entirely: no write on this route can
+      // even be ATTEMPTED before every path any of them touch is proven
+      // safe, so `seedProjectBrain` can be restored to writing where it
+      // always made most sense — after the project directory exists.
       try {
-        brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
+        checkContractArtifactContainment(projectRoot);
+      } catch (err) {
+        if (err instanceof ScaffoldContainmentError) {
+          sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
+        }
+        throw err;
+      }
+      try {
+        checkProjectBrainSeedContainment(ctx.forgeRoot, id);
       } catch (err) {
         if (err instanceof PathGuardContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
@@ -837,31 +891,25 @@ export async function handleStudioWriteRoutes(
         throw err;
       }
 
-      // SEC-03 Defect 5 (BLOCKER, found by the adversarial round INSIDE this
-      // PR's own fix): validating projectRoot's own identity (the
-      // isContainedProjectRepoPath check above) does not validate what this
-      // route writes BENEATH it. Every subsequent write below built its path
-      // with a plain join()/resolve() off projectRoot with NO further
-      // containment — a symlinked or hardlinked `.forge`/`project.json`
-      // segment was followed straight through. The general principle, now
-      // recurred five times in this campaign: validating a root does not
-      // validate what you write beneath it.
-      //
-      // Fix: resolveGuardedPath, with projectRoot as the TRUSTED root (this
-      // PR's own isContainedProjectRepoPath call above already proved it via
-      // a genuine per-segment realpath identity walk) and every subsequent
-      // path component — here `.forge`, `project.json` — as its OWN
-      // segments[] element, never folded into root (studio-path-guard.ts's
-      // CONTRACT section: folding an untrusted/unverified segment into
-      // `root` bypasses the per-segment identity walk entirely).
-      //
-      // resolveGuardedPath realpaths `root` unconditionally — it has no
-      // create-mode for root itself — so projectRoot must physically exist
-      // before this guard call can run. Safe to create here: the
-      // isContainedProjectRepoPath call above just walked every segment of
-      // this exact path with genuine realpath identity checks (not a
-      // lexical prefix test), so materializing the directory it already
-      // proved is contained introduces no new escape.
+      // ---- Phase 2 — writes, in the ORIGINAL order (restored, SEC-03
+      // round 4): mkdirSync(projectRoot) → .forge/project.json's own guard →
+      // scaffoldContractArtifacts → seedProjectBrain → the project.json
+      // write itself. Every path below was already containment-checked in
+      // Phase 1 above; the per-write guards that remain (Defect 5,
+      // scaffoldContractArtifacts's own, seedProjectBrain's own) are kept as
+      // defense in depth — this function never writes through a path it has
+      // not itself just re-verified, whether or not Phase 1 already ran. ----
+
+      // SEC-03 Defect 5 (BLOCKER): validating projectRoot's own identity
+      // (the isContainedProjectRepoPath check above) does not validate what
+      // this route writes BENEATH it — see that section's own history for
+      // the full writeup. resolveGuardedPath realpaths `root`
+      // unconditionally — it has no create-mode for root itself — so
+      // projectRoot must physically exist before this guard call can run.
+      // Safe to create here: the isContainedProjectRepoPath call above just
+      // walked every segment of this exact path with genuine realpath
+      // identity checks (not a lexical prefix test), so materializing the
+      // directory it already proved is contained introduces no new escape.
       if (!existsSync(projectRoot)) mkdirSync(projectRoot, { recursive: true });
 
       const forgeGuard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
@@ -884,6 +932,26 @@ export async function handleStudioWriteRoutes(
         scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
+          sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
+        }
+        throw err;
+      }
+
+      // Phase 5 §8 / SEC-03 round 4: seed the project's CENTRAL Brain-3 stub
+      // (kb.yaml + profile.md + themes/) — restored to its ORIGINAL
+      // position, after the project-directory scaffolding above and before
+      // the .forge/project.json write below (see the Phase 1 comment above
+      // for why this ordering question no longer matters for containment:
+      // every path either write touches was already proven safe before
+      // Phase 2 started). Idempotent per file (never clobbers an
+      // operator-authored brain). `seedProjectBrain` re-runs
+      // `checkProjectBrainSeedContainment` itself (single source of truth,
+      // see that module) rather than trusting Phase 1's result blindly.
+      let brainSeed: ReturnType<typeof seedProjectBrain>;
+      try {
+        brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
+      } catch (err) {
+        if (err instanceof PathGuardContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
         }
         throw err;
