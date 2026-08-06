@@ -104,9 +104,15 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'skills', 'agent-no-materials'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills', 'agent-images-only'), { recursive: true });
   mkdirSync(join(forgeRoot, 'skills', 'agent-multi'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'skills', 'agent-any-kind'), { recursive: true });
   writeFileSync(join(forgeRoot, 'skills', 'agent-no-materials', 'SKILL.md'), studioAgent('agent-no-materials'));
   writeFileSync(join(forgeRoot, 'skills', 'agent-images-only', 'SKILL.md'), studioAgent('agent-images-only', '[images]'));
   writeFileSync(join(forgeRoot, 'skills', 'agent-multi', 'SKILL.md'), studioAgent('agent-multi', '[images, audio]'));
+  // ROUND 3 — declares all four MATERIAL_KINDS, so charset-focused tests
+  // (widened filename class) can span images/documents/audio/data-files
+  // filenames without an unrelated gate refusal muddying the RED signal —
+  // the gate itself is already pinned separately (contract point 5 tests).
+  writeFileSync(join(forgeRoot, 'skills', 'agent-any-kind', 'SKILL.md'), studioAgent('agent-any-kind', '[images, documents, audio, data-files]'));
 
   escapeRoot = mkdtempSync(join(tmpdir(), 'materials-escape-target-'));
 
@@ -357,6 +363,83 @@ test('filename length boundary: 129 chars is REFUSED', async () => {
   const before_ = snapshotBefore();
   const { status, json } = await postRun('agent-images-only', { materials: [{ filename, contentBase64: b64('img') }] });
   assertRefusalLeftNoTrace(status, json, before_, 'filename-129-chars');
+});
+
+// =============================================================================
+// R6-04-F2 ROUND 3 — WIDENED filename charset (spawner amendment 1). The
+// original regex (^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$, pinned in rounds 1-2)
+// was too strict: it rejected the filenames operators' own machines produce
+// by DEFAULT — a macOS screenshot, a browser's duplicate-download suffix, an
+// ordinary "Meeting Notes.pdf" — on this feature's headline use case
+// (attaching a screenshot). New charset, per the amendment: alnum-first,
+// then alnum plus space, ".", "_", "-", "(", ")", "[", "]", max 128 total.
+// ASCII-only is UNCHANGED and deliberate (see the non-ASCII test below) —
+// this widening only ADDS space/()[] to the allowed tail; it does not touch
+// the leading-character rule, the length cap, or any of the excluded
+// characters ("/", "\", "%", NUL, control chars) that the traversal tests
+// above and below depend on.
+// =============================================================================
+
+test('WIDENED CHARSET: the three realistic operator filenames named by the amendment are ACCEPTED and written byte-exact — kills a regex that still only recognizes the old, narrower class. Uses agent-any-kind (declares all four MATERIAL_KINDS) so a .csv (data-files) and a .pdf (documents) alongside a .png (images) never trip an UNRELATED gate refusal — this test is about the CHARSET, not the gate, which is pinned separately', async () => {
+  const realisticNames = [
+    'Screen Shot 2026-08-07 at 10.32.15 AM.png', // macOS default screenshot name
+    'data (1).csv', // browser duplicate-download suffix
+    'Meeting Notes.pdf', // ordinary operator-authored name
+  ];
+  for (const filename of realisticNames) {
+    const marker = Buffer.from(`WIDENED-CHARSET-MARKER-${filename}`);
+    const { status, json } = await postRun('agent-any-kind', { materials: [{ filename, contentBase64: b64(marker) }] });
+    assert.equal(status, 200, `expected "${filename}" to be accepted under the widened charset — got ${status} (${JSON.stringify(json)})`);
+    const target = join(logsRoot, json.runId!, 'materials', filename);
+    await waitFor(() => existsSync(target));
+    assert.deepEqual(readFileSync(target), marker, `expected "${filename}" written byte-exact`);
+  }
+});
+
+test('WIDENED CHARSET: a filename combining every newly-allowed character (space, parens, brackets, underscore, dash, multiple dots) is ACCEPTED', async () => {
+  const filename = 'My Photo (v2) [final]_edit-1.2.3.png';
+  const { status, json } = await postRun('agent-images-only', { materials: [{ filename, contentBase64: b64('combo') }] });
+  assert.equal(status, 200, `expected the combined-charset filename to be accepted — got ${status} (${JSON.stringify(json)})`);
+  await waitFor(() => existsSync(join(logsRoot, json.runId!, 'materials', filename)));
+});
+
+test('DELIBERATE LIMIT: non-ASCII filename ("résumé.pdf") is STILL refused — INTENTIONAL, not an oversight of the widening: filesystem unicode normalization differs by platform (macOS tends toward NFD, Linux does not), so the identical logical name can be two different byte sequences on disk, and resolveGuardedPath\'s identity comparison would behave differently per platform for the same input — fail-closed-and-consistent beats convenient-and-platform-dependent. Uses agent-any-kind (which DOES declare "documents", .pdf\'s kind) specifically to prove the refusal is the CHARSET check, not an unrelated gate refusal', async () => {
+  const before_ = snapshotBefore();
+  const { status, json } = await postRun('agent-any-kind', { materials: [{ filename: 'résumé.pdf', contentBase64: b64('x') }] });
+  assertRefusalLeftNoTrace(status, json, before_, 'non-ascii-filename');
+});
+
+test('ATTACK THE FIX: a filename containing a literal ".." SUBSTRING via the newly-allowed brackets/parens (not a real path segment — no "/" anywhere) is ACCEPTED and written INSIDE materials/, never escaping — kills an implementation that naively bans any filename containing "..' + '" as a substring (which would be an over-broad, and separately WRONG, defense: this exact shape is not a traversal, mirroring studio-path-guard.ts\'s own established "..foo is a legitimate name" precedent)', async () => {
+  const filename = 'photo [..] (backup)..png'; // contains ".." twice, and there is genuinely no "/" anywhere in this name — not a path segment boundary, just characters
+  const { status, json } = await postRun('agent-images-only', { materials: [{ filename, contentBase64: b64('safe-because-no-slash') }] });
+  assert.equal(status, 200, `expected this embedded-".."-but-no-slash filename to be accepted — got ${status} (${JSON.stringify(json)})`);
+  const target = join(logsRoot, json.runId!, 'materials', filename);
+  await waitFor(() => existsSync(target));
+  // The written file must be exactly the literal join of materials/ + filename
+  // (proves it landed INSIDE the run's own materials/ directory, not escaped
+  // via some naive unwrapping of the bracket/paren-enclosed ".." text) — and
+  // must NOT exist one level up, which is what a bracket-unwrapping bug would
+  // produce.
+  assert.ok(existsSync(target), 'the file must exist at the literal join() location inside materials/');
+  assert.equal(existsSync(join(logsRoot, json.runId!, 'photo [..] (backup)..png')), false, 'must not have escaped one level up out of materials/');
+});
+
+test('ATTACK THE FIX: every previously-pinned refusal shape remains refused under the widened class — "/" is still excluded', async () => {
+  const before_ = snapshotBefore();
+  const { status, json } = await postRun('agent-images-only', { materials: [{ filename: 'inner/traversal.png', contentBase64: b64('x') }] });
+  assertRefusalLeftNoTrace(status, json, before_, 'widened-class-still-excludes-slash');
+});
+
+test('ATTACK THE FIX: backslash is still excluded under the widened class (Windows-style separator, same honest-scope note as round 1: inert on this POSIX runtime, pinned as a character-class refusal regardless)', async () => {
+  const before_ = snapshotBefore();
+  const { status, json } = await postRun('agent-images-only', { materials: [{ filename: 'inner\\traversal.png', contentBase64: b64('x') }] });
+  assertRefusalLeftNoTrace(status, json, before_, 'widened-class-still-excludes-backslash');
+});
+
+test('ATTACK THE FIX: percent sign is still excluded under the widened class', async () => {
+  const before_ = snapshotBefore();
+  const { status, json } = await postRun('agent-images-only', { materials: [{ filename: '..%2Fx.png', contentBase64: b64('x') }] });
+  assertRefusalLeftNoTrace(status, json, before_, 'widened-class-still-excludes-percent');
 });
 
 // ---- containment: relative traversal (plant + assert unchanged) -----------

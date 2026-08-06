@@ -49,7 +49,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { stageMaterials } from './materials-staging.ts';
+import { stageMaterials, MaterialsStagingError } from './materials-staging.ts';
 
 function freshRunDir(prefix: string): string {
   return mkdtempSync(join(tmpdir(), `materials-staging-${prefix}-`));
@@ -123,7 +123,7 @@ test('CONTAINMENT: <runDir>/materials pre-planted as a DIRECTORY SYMLINK pointin
     // symlink, or the rest of this test would pass vacuously.
     assert.ok(lstatSync(join(runDir, 'materials')).isSymbolicLink(), 'arrange-step failed: <runDir>/materials is not actually a symlink');
 
-    assert.throws(() => stageMaterials(runDir, [{ filename: 'evidence.png', bytes: Buffer.from('ATTACK') }]));
+    assert.throws(() => stageMaterials(runDir, [{ filename: 'evidence.png', bytes: Buffer.from('ATTACK') }]), MaterialsStagingError);
 
     assert.equal(readFileSync(join(outsideDir, 'secret.txt'), 'utf8'), 'ORIGINAL-OUTSIDE-DIR-CONTENT', 'the outside directory\'s pre-existing file must be byte-unchanged');
     assert.equal(existsSync(join(outsideDir, 'evidence.png')), false, 'no new file may appear in the directory the symlink points to');
@@ -148,7 +148,7 @@ test('CONTAINMENT: <runDir>/materials/notes.md pre-planted as a FILE SYMLINK to 
 
     assert.ok(lstatSync(join(runDir, 'materials', 'notes.md')).isSymbolicLink(), 'arrange-step failed: notes.md is not actually a symlink');
 
-    assert.throws(() => stageMaterials(runDir, [{ filename: 'notes.md', bytes: Buffer.from('ATTACK') }]));
+    assert.throws(() => stageMaterials(runDir, [{ filename: 'notes.md', bytes: Buffer.from('ATTACK') }]), MaterialsStagingError);
 
     assert.equal(readFileSync(outsideFile, 'utf8'), 'ORIGINAL-OUTSIDE-FILE-CONTENT', 'the outside file must be byte-unchanged after a refused write through a file symlink');
   } finally {
@@ -207,7 +207,7 @@ test('ATOMICITY: one legitimate entry + one entry hitting a containment trap in 
     assert.throws(() => stageMaterials(runDir, [
       { filename: 'legitimate.png', bytes: Buffer.from('SHOULD-NEVER-LAND') },
       { filename: 'trap.md', bytes: Buffer.from('ATTACK') },
-    ]));
+    ]), MaterialsStagingError);
 
     assert.equal(existsSync(join(runDir, 'materials', 'legitimate.png')), false, 'a call that is refused overall must not leave an EARLIER, individually-legitimate entry written to disk — all-or-nothing, not partial');
     assert.equal(readFileSync(outsideFile, 'utf8'), 'ORIGINAL-ATOMICITY-OUTSIDE-CONTENT', 'the outside file must remain byte-unchanged');
@@ -231,12 +231,73 @@ test('NEGATIVE SPACE: after a refused file-symlink write, <runDir>/materials con
     writeFileSync(outsideFile, 'ORIGINAL-NEGSPACE-CONTENT');
     symlinkSync(outsideFile, join(runDir, 'materials', 'notes.md'));
 
-    assert.throws(() => stageMaterials(runDir, [{ filename: 'notes.md', bytes: Buffer.from('ATTACK') }]));
+    assert.throws(() => stageMaterials(runDir, [{ filename: 'notes.md', bytes: Buffer.from('ATTACK') }]), MaterialsStagingError);
 
     const entries = readdirSync(join(runDir, 'materials'));
     assert.deepEqual(entries, ['notes.md'], `expected only the pre-existing "notes.md" entry to remain — got ${JSON.stringify(entries)} (a stray temp/partial file would indicate a non-atomic write)`);
   } finally {
     rmSync(runDir, { recursive: true, force: true });
     rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+// =============================================================================
+// R6-04-F2 ROUND 3 amendment 2 — stageMaterials must refuse duplicate targets
+// ITSELF, not trust the route to have deduped. `[exec]`-confirmed by review:
+// calling stageMaterials directly with two entries sharing one filename does
+// NOT throw today — Phase 1 has zero side effects, so each entry's
+// resolveGuardedPath call succeeds independently (neither sees the other),
+// and Phase 2 then writes both, the SECOND silently clobbering the first.
+// This is a guard-symmetry gap: the module's own docstring promises "ZERO
+// partial writes on refusal", but a silent full overwrite is a different,
+// undocumented, unguarded failure mode — a full write is not a partial one.
+// The route happens to dedupe today (cli/ui-bridge.ts's
+// validateMaterialsField, contract point 8), but "the caller already checks
+// this" is exactly the guard-symmetry gap this codebase just closed for
+// isSafeRunId — the module must not trust its caller.
+// =============================================================================
+
+test('DUPLICATE TARGET: two entries with the SAME filename in one stageMaterials call throws MaterialsStagingError, and writes NOTHING (not even one copy) — kills the current silent-clobber behaviour (confirmed live: today this does not throw at all)', () => {
+  const runDir = freshRunDir('dup-adjacent');
+  try {
+    assert.throws(
+      () => stageMaterials(runDir, [
+        { filename: 'dup.txt', bytes: Buffer.from('FIRST-VERSION') },
+        { filename: 'dup.txt', bytes: Buffer.from('SECOND-VERSION-WOULD-SILENTLY-WIN') },
+      ]),
+      MaterialsStagingError,
+      'expected a MaterialsStagingError for a duplicate target filename within one call',
+    );
+    assert.equal(existsSync(join(runDir, 'materials', 'dup.txt')), false, 'NEITHER version may land on disk — this is a refusal, not "last write wins"');
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test('DUPLICATE TARGET: a duplicate that is NOT adjacent (entries 1 and 3 of 3) is still caught — kills an implementation that only compares consecutive entries', () => {
+  const runDir = freshRunDir('dup-nonadjacent');
+  try {
+    assert.throws(
+      () => stageMaterials(runDir, [
+        { filename: 'a.png', bytes: Buffer.from('A') },
+        { filename: 'b.png', bytes: Buffer.from('B') },
+        { filename: 'a.png', bytes: Buffer.from('A-AGAIN') },
+      ]),
+      MaterialsStagingError,
+    );
+    assert.equal(existsSync(join(runDir, 'materials')), false, 'the whole call must be refused before ANY entry is written — including the non-duplicate "b.png" — all-or-nothing, matching the existing atomicity contract');
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
+  }
+});
+
+test('DUPLICATE TARGET: a duplicate against an ALREADY-STAGED file from a PRIOR call is not itself required to throw (this pins the boundary precisely: the guard is WITHIN one call\'s entries, matching the route\'s own contract point 8 wording "duplicate filename in one request") — but the prior file must survive byte-unchanged if the second call also fails for its own reasons, and must be legitimately overwritten if the second call is independently valid (re-staging the same filename is a normal edit, not an attack)', () => {
+  const runDir = freshRunDir('dup-across-calls');
+  try {
+    assert.doesNotThrow(() => stageMaterials(runDir, [{ filename: 'a.png', bytes: Buffer.from('FIRST-CALL') }]));
+    assert.doesNotThrow(() => stageMaterials(runDir, [{ filename: 'a.png', bytes: Buffer.from('SECOND-CALL-LEGITIMATE-RE-STAGE') }]));
+    assert.deepEqual(readFileSync(join(runDir, 'materials', 'a.png')), Buffer.from('SECOND-CALL-LEGITIMATE-RE-STAGE'), 'a second, independent call re-staging the same filename is an ordinary edit — the WITHIN-one-call guard must not be widened into a cross-call guard that would make a run\'s materials write-once');
+  } finally {
+    rmSync(runDir, { recursive: true, force: true });
   }
 });
