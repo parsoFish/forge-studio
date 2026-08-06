@@ -645,3 +645,47 @@ test('R4-16 AT-53 (PIN 4, positive controls, green today): projectRepoPath ABSEN
   const status2 = readDemoStatus(sid2);
   assert.equal(status2.project_repo_path, containedPath, 'a genuinely-contained projectRepoPath must be persisted verbatim');
 });
+
+// ===========================================================================
+// R4-16 PIN 5 — Finding B (MEDIUM) + Finding C (LOW), pinned at this route
+// (invalidProjectRepoPath is already wired here from pin 4's fix).
+// ===========================================================================
+
+// Finding B: `invalidProjectRepoPath` treats `undefined` AND `''` alike
+// (return null / "not invalid" — matching manifest-path-guard.ts's own
+// convention), but every call site defaults with `body.projectRepoPath ??
+// join(...)`, and `??` does NOT substitute for `''` — so the literal empty
+// string sails past the guard and is what actually lands in status.json.
+// Pins the PERSISTED VALUE (not just the 200), which is the only way to
+// distinguish "correctly defaulted" from "the empty string got through".
+test('R4-16 AT-54 (PIN 5, Finding B): POST /api/demo-builder/start with projectRepoPath:"" is accepted, but the PERSISTED value is the default, never the literal ""', async () => {
+  const started = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: '' });
+  assert.equal(started.status, 200, `projectRepoPath:"" must still succeed (treated as absent), got ${started.status}: ${JSON.stringify(started.json)}`);
+  const sid = started.json.sessionId as string;
+  const persisted = readDemoStatus(sid).project_repo_path;
+  assert.notEqual(persisted, '', 'the literal empty string must never be what lands in project_repo_path');
+  assert.equal(persisted, repoDir(), 'projectRepoPath:"" must default to join(projectsRoot, project), exactly like an absent field');
+});
+
+// Finding C: a non-string projectRepoPath must fail CLOSED (400, named,
+// nothing persisted) rather than an accident-of-ordering 500 that echoes a
+// raw Node TypeError. Empirically reproduced live at THIS route (unlike
+// project-brain/start's sibling AT — see that file's own note — this route
+// already calls `invalidProjectRepoPath`, whose internal `isAbsolute()` call
+// genuinely throws `TypeError [ERR_INVALID_ARG_TYPE]` for a non-string input
+// today, uncaught until the route's outer try/catch echoes `String(err)`
+// straight into the 500 body). The message-absence assertion is the part
+// that actually pins the leak — a wrong "fix" that catches the throw but
+// still forwards `String(err)` into a 400 body would pass a status-code-only
+// check but fail this one.
+for (const bad of [0, {}]) {
+  test(`R4-16 AT-55 (PIN 5, Finding C): POST /api/demo-builder/start with projectRepoPath=${JSON.stringify(bad)} (non-string) → 400 naming the offending value, never a 500 leaking a Node TypeError`, async () => {
+    const before_ = listDemoSessionIds();
+    const { status, json } = await post('/api/demo-builder/start', { project: 'demo', projectRepoPath: bad as unknown as string });
+    assert.equal(status, 400, `a non-string projectRepoPath must be rejected with 400, got ${status}: ${JSON.stringify(json)}`);
+    const bodyText = JSON.stringify(json);
+    assert.ok(!bodyText.includes('ERR_INVALID_ARG_TYPE'), `the response must never leak a raw Node TypeError, got: ${bodyText}`);
+    assert.ok(!bodyText.includes('TypeError'), `the response must never leak a raw Node TypeError, got: ${bodyText}`);
+    assert.deepEqual(listDemoSessionIds(), before_, 'a rejected /start must create NO new session dir under _demo/');
+  });
+}

@@ -235,3 +235,27 @@ test('R4-16 PIN 4, AT-I4 (positive controls, green today): projectRepoPath ABSEN
   const status2 = readInstrStatus(sid2);
   assert.equal(status2.project_repo_path, containedPath, 'a genuinely-contained projectRepoPath must be persisted verbatim');
 });
+
+// ===========================================================================
+// R4-16 PIN 5, Finding B (MEDIUM): `invalidProjectRepoPath` treats
+// `undefined` AND `''` alike (return null / "not invalid"), but `??` does
+// NOT substitute for `''` — the literal empty string sails past the guard
+// and lands in status.json. THIS route is the one where the reviewer's live
+// reproduction actually mattered most: `readAgentInstructionsFile('')` does
+// `join('', 'AGENTS.md')` → the bare relative `'AGENTS.md'`, resolved
+// against the process cwd — which picked up forge's own CLAUDE.md, then
+// seeded the drafting agent's prompt labelled as the project's existing
+// instructions (a cross-boundary READ). Pins the PERSISTED VALUE, the only
+// way to distinguish "correctly defaulted" from "the empty string got
+// through". Ruling on the fix shape (binding): "" is treated as absent END
+// TO END — never a 400.
+// ===========================================================================
+
+test('R4-16 PIN 5, AT-I5 (Finding B): POST /api/instructions/start with projectRepoPath:"" is accepted, but the PERSISTED value is the default, never the literal ""', async () => {
+  const started = await post('/api/instructions/start', { project: 'demo', projectRepoPath: '' });
+  assert.equal(started.status, 200, `projectRepoPath:"" must still succeed (treated as absent), got ${started.status}: ${JSON.stringify(started.json)}`);
+  const sid = started.json.sessionId as string;
+  const persisted = readInstrStatus(sid).project_repo_path;
+  assert.notEqual(persisted, '', 'the literal empty string must never be what lands in project_repo_path');
+  assert.equal(persisted, repoDir(), 'projectRepoPath:"" must default to join(projectsRoot, project), exactly like an absent field');
+});

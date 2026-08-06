@@ -482,6 +482,27 @@ test('POST /api/plan-verdict concurrent double-approve → exactly one 200 (stat
 // The per-family table lives in ui-bridge-dry-spawn.test.ts.
 // ---------------------------------------------------------------------------
 
+// ===========================================================================
+// R4-16 PIN 5, Finding B (MEDIUM): `invalidProjectRepoPath` treats
+// `undefined` AND `''` alike (return null / "not invalid" — matching
+// manifest-path-guard.ts's own convention), but every call site defaults
+// with `body.projectRepoPath ?? join(...)`, and `??` does NOT substitute for
+// `''` — so the literal empty string sails past the guard and is what
+// actually lands in status.json. Pins the PERSISTED VALUE (not just the
+// 200), which is the only way to distinguish "correctly defaulted" from "the
+// empty string got through". Ruling on the fix shape (binding): "" is
+// treated as absent END TO END — never a 400.
+// ===========================================================================
+
+test('R4-16 PIN 5, AT-A5 (Finding B): POST /api/architect/start with projectRepoPath:"" is accepted, but the PERSISTED value is the default, never the literal ""', async () => {
+  const started = await postArchitectStart({ project: 'demo', idea: 'Empty-string projectRepoPath.', projectRepoPath: '' });
+  assert.equal(started.status, 200, `projectRepoPath:"" must still succeed (treated as absent), got ${started.status}: ${JSON.stringify(started.json)}`);
+  const sid = started.json.sessionId as string;
+  const status = JSON.parse(readFileSync(join(sessionDir(sid), 'status.json'), 'utf8'));
+  assert.notEqual(status.project_repo_path, '', 'the literal empty string must never be what lands in project_repo_path');
+  assert.equal(status.project_repo_path, join(forgeRoot, 'projects', 'demo'), 'projectRepoPath:"" must default to join(projectsRoot, project), exactly like an absent field');
+});
+
 test('R5-01-F1: FORGE_DRY_BRIDGE=1 alone suppresses the architect spawn (local state progresses + explicit marker)', async () => {
   const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
