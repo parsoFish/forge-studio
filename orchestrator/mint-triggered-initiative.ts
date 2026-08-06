@@ -39,6 +39,51 @@ function idToken(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'run';
 }
 
+/**
+ * R2-08-F4 (ADR-027 amendment): derive the trigger-provenance fields to
+ * persist on the minted manifest, from the staged request alone — never
+ * from `req.payload` (free-text/external data; the attacker-payload
+ * acceptance test pins that `trigger` never carries payload text). `source`
+ * is always a DEFINITION id:
+ *   - `agent-complete` → the completed agent's own slug (`sourceAgent`).
+ *   - `webhook`        → the declaring flow id, threaded by the caller onto
+ *     `sourceFlowId` (bridge-hooks.ts's `findWebhookTrigger` resolves it;
+ *     `triggeredBy` deliberately stays the hook-id slug for its own readers).
+ *     Every real production caller sets it now; a caller that doesn't falls
+ *     back to `triggeredBy`'s own `webhook:<hookId>` shape below — a
+ *     structured, non-prose token, not the correct definition id, but never
+ *     a fabricated one either.
+ *   - `cron`           → recovered from `triggeredBy`'s own
+ *     `cron:<declaringFlowId>` shape (cron-triggers.ts's `makeFireFn` — no
+ *     separate field needed).
+ * Only these three origins ever reach this function (drainFlowRunRequests
+ * routes chaining's `origin: 'trigger'` through `enqueueFlowRun` instead,
+ * never through mint). Returns `null` when no honest source is derivable at
+ * all — never a fabricated placeholder.
+ */
+function deriveTriggerFields(req: FlowRunRequest): { kind: string; source: string; scope?: string } | null {
+  let source: string | undefined;
+  if (req.origin === 'agent-complete') {
+    source = req.sourceAgent;
+  } else if (req.origin === 'webhook') {
+    source = req.sourceFlowId;
+  }
+  // Fallback (cron always lands here; webhook falls back only when a caller
+  // omits `sourceFlowId`): recover the definition id from `triggeredBy`'s own
+  // `<origin>:<id>` shape — a structured, non-prose token every real call
+  // site already writes, never a fabricated placeholder.
+  if (!source) {
+    const prefix = `${req.origin}:`;
+    source = req.triggeredBy.startsWith(prefix) ? req.triggeredBy.slice(prefix.length) : undefined;
+  }
+  if (!source) return null;
+  return {
+    kind: req.origin,
+    source,
+    ...(req.eventProject !== undefined && req.eventProject !== null ? { scope: req.eventProject } : {}),
+  };
+}
+
 export function mintTriggeredInitiative(
   req: FlowRunRequest,
   opts: { queueRoot?: string; forgeRoot?: string; logsRoot?: string } = {},
@@ -92,6 +137,11 @@ export function mintTriggeredInitiative(
       initiativeId = `${baseId}-${n}`;
     }
 
+    // R2-08-F4: trigger provenance, derived from the staged request alone
+    // and persisted onto the manifest's own frontmatter (never a new stored
+    // object — run-model.ts reads it straight off this SAME manifest).
+    const triggerFields = deriveTriggerFields(req);
+
     const manifest: InitiativeManifest = {
       initiative_id: initiativeId,
       project: flow.project,
@@ -102,6 +152,13 @@ export function mintTriggeredInitiative(
       phase: 'pending',
       origin: 'triggered',
       flow_id: flowId,
+      ...(triggerFields
+        ? {
+            trigger_kind: triggerFields.kind,
+            trigger_source: triggerFields.source,
+            ...(triggerFields.scope !== undefined ? { trigger_scope: triggerFields.scope } : {}),
+          }
+        : {}),
       body: [
         `# ${initiativeId}`,
         '',

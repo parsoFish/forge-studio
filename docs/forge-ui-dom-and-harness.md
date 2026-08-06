@@ -816,6 +816,24 @@ inventory rather than one shared page-level contract:
   `/skills/[id]` uses — `[data-component="file-package"][data-file-count][data-active-file]`,
   per-tab `[data-file-tab][data-file-path]` — the whole scaffold's file tree,
   tabbed, kind-agnostic reuse (shared with R2-10-F3).
+- **Trigger provenance — named, not yet attached (R2-08-F4, 2026-08-07).**
+  `GET /api/runs` / `GET /api/runs/<id>` now surface an optional
+  `run.trigger: {kind, source, scope}` — derived, never stored; a run with no
+  derivable provenance carries no `trigger` key at all. A new read-only
+  `GET /api/triggers` lists every declared `FlowTrigger` across the whole flow
+  roster as `{on, target, projects, sourceFlowId}`, `projects: null`
+  (unscoped) kept distinct from `projects: []` (scoped to nothing) on the
+  wire. Per ADR-027's R2-08 amendment ("the `data-*` vocabulary is named by
+  R2-08-F4 and attached by the consuming surfaces"), the vocabulary this wire
+  data will render through is named here as the contract only — **no
+  attribute below is attached to any DOM element by this initiative**: a
+  run's own trigger renders `[data-trigger-kind][data-trigger-source]
+  [data-trigger-scope]` (`data-trigger-scope=""` when `scope` is `null`); a
+  standing-trigger row (the `/api/triggers` listing) renders
+  `[data-standing-trigger][data-trigger-kind][data-trigger-target]
+  [data-trigger-scope-count]`. The consuming surfaces — R6-04-F2 kickoff,
+  R6-01-F4 run detail, R6-05/R6-06 ledgers — attach them when they render
+  this data.
 
 The shared status vocabularies:
 

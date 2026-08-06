@@ -10,6 +10,7 @@
  *   GET /api/runs?flow=<id>                 → { runs: Run[] } (filtered)
  *   GET /api/runs/<id>                      → { run: Run }
  *   GET /api/runs/<id>/phases/<node>/log    → { lines } (stderr=1 to filter)
+ *   GET /api/triggers                       → { triggers: {on,target,projects,sourceFlowId}[] } (R2-08-F4)
  *   GET /api/studio/agents                  → { agents: (AgentDefinition & { capability: AgentCapabilityDescriptor })[] }
  *   GET /api/studio/flows                   → { flows: FlowDefinition[] }
  *   GET /api/studio/projects                → { projects }
@@ -41,6 +42,7 @@ import {
   // (listProjectStarters imported below from project-create)
   loadStarterFlow,
   loadFlowDefinition,
+  listFlowIds,
   discoverProjects,
   loadCatalog,
   listDemoElements,
@@ -536,6 +538,38 @@ export async function handleStudioRoutes(
         return true;
       }
       sendJson(res, 200, { run }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/triggers (standing trigger declarations, R2-08-F4) -----------
+  // Pure read: scans every registered flow's OWN declarations — no write, no
+  // materialized index. `projects: null` (absent on the declaration) is kept
+  // distinct from `projects: []` (declared empty) all the way to the wire
+  // (ADR-027 R2-08 amendment rule 1) — never collapsed into each other.
+  if (url === '/api/triggers') {
+    try {
+      const root = resolve(ctx.forgeRoot);
+      const triggers: Array<{ on: string; target: FlowDefinition['triggers'][number]['target']; projects: string[] | null; sourceFlowId: string }> = [];
+      for (const flowId of listFlowIds(root)) {
+        let flow: FlowDefinition;
+        try {
+          flow = loadFlowDefinition(join(root, 'studio', 'flows', flowId, 'flow.yaml'));
+        } catch {
+          continue; // one malformed flow.yaml must not sink the whole listing
+        }
+        for (const trigger of flow.triggers) {
+          triggers.push({
+            on: trigger.on,
+            target: trigger.target,
+            projects: trigger.projects !== undefined ? trigger.projects : null,
+            sourceFlowId: flow.id,
+          });
+        }
+      }
+      sendJson(res, 200, { triggers }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

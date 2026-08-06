@@ -188,6 +188,22 @@ export type InitiativeManifest = {
    * alongside `architect_cost_usd` in the cycle's architect end event.
    */
   architect_duration_ms?: number;
+  /**
+   * R2-08-F4 (ADR-027 amendment): trigger provenance for a MINTED run
+   * (cron / webhook / agent-complete origination only — chaining and merged
+   * dispatch never mint a manifest, so their provenance is derived instead
+   * from the run's own `*.trigger-firing` event; see run-model.ts). Persisted
+   * ONCE at mint time (`mintTriggeredInitiative`) from the staged
+   * `FlowRunRequest` that minted this run — never authored, never re-derived
+   * from `body` prose. `trigger_kind`/`trigger_source` are always written
+   * together (both absent, or both present); `trigger_scope` is present only
+   * when the firing event resolved to a project — absent means unresolved
+   * (the run model reports that as `scope: null`, never a fabricated
+   * default).
+   */
+  trigger_kind?: string;
+  trigger_source?: string;
+  trigger_scope?: string;
 };
 
 const INITIATIVE_ID_PATTERN = /^INIT-\d{4}-\d{2}-\d{2}-[a-z0-9]+(-[a-z0-9]+)*$/;
@@ -266,6 +282,15 @@ export function parseManifest(content: string): InitiativeManifest {
     const specs = (data.specs as unknown[]).filter((s): s is string => typeof s === 'string');
     if (specs.length > 0) manifest.specs = specs;
   }
+  if (typeof data.trigger_kind === 'string' && data.trigger_kind.length > 0) {
+    manifest.trigger_kind = data.trigger_kind;
+  }
+  if (typeof data.trigger_source === 'string' && data.trigger_source.length > 0) {
+    manifest.trigger_source = data.trigger_source;
+  }
+  if (typeof data.trigger_scope === 'string' && data.trigger_scope.length > 0) {
+    manifest.trigger_scope = data.trigger_scope;
+  }
   return manifest;
 }
 
@@ -318,6 +343,9 @@ export function serializeManifest(m: InitiativeManifest): string {
   if (m.specs && m.specs.length > 0) {
     data.specs = m.specs;
   }
+  if (m.trigger_kind) data.trigger_kind = m.trigger_kind;
+  if (m.trigger_source) data.trigger_source = m.trigger_source;
+  if (m.trigger_scope) data.trigger_scope = m.trigger_scope;
   return matter.stringify('\n' + m.body.replace(/^\n+/, ''), data);
 }
 

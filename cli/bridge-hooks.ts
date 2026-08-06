@@ -197,7 +197,7 @@ async function processHookReceipt(
     sendJson(res, 404, { error: 'unknown hook' }, origin);
     return true;
   }
-  const { trigger, webhook } = found;
+  const { flow, trigger, webhook } = found;
 
   // 2. Raw body, capped, BEFORE any parsing — HMAC/token verification needs
   // the exact bytes the sender signed.
@@ -304,6 +304,10 @@ async function processHookReceipt(
       target: trigger.target,
       origin: 'webhook',
       triggeredBy: `webhook:${hookId}`,
+      // R2-08-F4: thread the DECLARING flow id (already resolved above by
+      // findWebhookTrigger) so trigger provenance can derive `source` from a
+      // real definition id — never the hook id `triggeredBy` carries.
+      sourceFlowId: flow.id,
       payload,
       ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
     },

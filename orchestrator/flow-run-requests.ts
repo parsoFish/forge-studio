@@ -75,6 +75,16 @@ export type FlowRunRequest = {
   eventProject?: string | null;
   /** R2-08-F2: the completed agent slug that staged this request (agent-complete origin only). */
   sourceAgent?: string;
+  /**
+   * R2-08-F4: the DECLARING flow's id (webhook origin only) — threaded from
+   * `findWebhookTrigger`'s already-resolved `flow.id` so trigger provenance
+   * can name the definition that fired, not `triggeredBy`'s hook-id slug
+   * (`webhook:<hookId>` — a delivery-endpoint id, not a definition id; kept
+   * unchanged for its own existing readers). Absent for every other origin —
+   * cron's declaring flow is already recoverable from `triggeredBy`
+   * (`cron:<flowId>`); agent-complete's declaring definition is `sourceAgent`.
+   */
+  sourceFlowId?: string;
   createdAt: string;
 };
 
