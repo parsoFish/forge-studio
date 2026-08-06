@@ -6,7 +6,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, existsSync, symlinkSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -536,4 +536,210 @@ test('R4-16 AT-9: locking without selectedGeneration records demo.lock.json.gene
   const lock = JSON.parse(readFileSync(join(repoPath, DEMO_LOCK_REL_PATH), 'utf8'));
   assert.ok(Object.prototype.hasOwnProperty.call(lock, 'generation'), 'demo.lock.json must carry a "generation" key even when none was chosen');
   assert.strictEqual(lock.generation, null, 'no selectedGeneration ⇒ generation:null — must never be omitted, and must never be attributed from status.iteration (7)');
+});
+
+// ---------------------------------------------------------------------------
+// R4-16 PIN 2 — round-2 adversarial findings against HEAD b1f59575 (backend
+// a374805c already landed). Findings B + C: `readGenerationSnapshotMeta`
+// (demo-builder-runner.ts) only checks `skillRelPath` is a non-empty string
+// before `runLockStep` does `join(status.project_repo_path, meta.skillRelPath)`
+// and WRITES to it — an unvalidated write target — and `demo.lock.json`'s
+// `demo_skill` is hardcoded to `existsSync(DEMO_SKILL_REL_PATH) ? ... : null`,
+// ignoring which skill this generation ACTUALLY restored.
+// ---------------------------------------------------------------------------
+
+/** Overwrites an EXISTING generation's meta.json (written by a real generate
+ *  turn) with the given field overrides — used to smuggle a malicious
+ *  `skillRelPath` past a real, already-verified-valid generation snapshot,
+ *  exactly the shape an operator-facing bug or a compromised agent turn
+ *  could produce (every OTHER field stays genuinely valid JSON). */
+function overwriteGenerationMeta(sessionDir: string, n: number | string, overrides: Record<string, unknown>): void {
+  const p = join(generationDir(sessionDir, n), 'meta.json');
+  const current = JSON.parse(readFileSync(p, 'utf8'));
+  writeFileSync(p, JSON.stringify({ ...current, ...overrides }, null, 2));
+}
+
+// Finding B (MAJOR) — skillRelPath is an unvalidated write target.
+
+// R4-16 AT-43 (Finding B, relative escape): kills the current implementation,
+// which happily writes ONE LEVEL ABOVE the repo because
+// `readGenerationSnapshotMeta` only checks skillRelPath is a non-empty
+// string — no allowlist, no containment.
+test('R4-16 AT-43: a generation meta.json with skillRelPath="../OUTSIDE-pwned.md" is REJECTED at lock — no file written outside the repo, no lock file, phase unchanged', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', '# S1'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  overwriteGenerationMeta(sessionDir, 1, { skillRelPath: '../OUTSIDE-pwned.md' });
+
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'locking', selectedGeneration: 1 });
+
+  await assert.rejects(
+    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    (err: unknown) => { assert.ok(err instanceof Error); return true; },
+  );
+  // setup() lays out <root>/{project,repo} — "one level above the repo" is <root>.
+  const rootAboveRepo = resolve(repoPath, '..');
+  assert.ok(!existsSync(join(rootAboveRepo, 'OUTSIDE-pwned.md')), 'no file may ever be written outside the repo');
+  assert.ok(!existsSync(join(repoPath, DEMO_LOCK_REL_PATH)), 'no lock file must be written when skillRelPath is rejected');
+  assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locking', 'phase must NOT flip to locked on a rejected skillRelPath');
+});
+
+// R4-16 AT-44 (Finding B, absolute-shaped path — a NAIVE ".."-blocklist fix
+// would NOT catch this, since it contains zero ".." segments): empirically,
+// `join(repoPath, '/tmp/x')` (this codebase uses `path.join`, never
+// `path.resolve`/manual concatenation) does NOT escape the repo the way a
+// relative "../…" does — it nests under the repo as `repoPath/tmp/x`
+// (verified: `join('/a/b','/tmp/x') === '/a/b/tmp/x'`, NOT '/tmp/x'). This is
+// still a real defect (an arbitrary write to an unintended in-repo location,
+// never one of the two legitimate skill paths) and the CONTRACT's allowlist
+// must reject it regardless of where it resolves — this AT is the proof that
+// only a real allowlist (not a "no .." check") satisfies the contract, since
+// this exact input would sail through a naive dot-dot filter.
+test('R4-16 AT-44: skillRelPath="/tmp/OUTSIDE-abs-pwned.md" (absolute-shaped, zero ".." segments) is REJECTED at lock by the allowlist — never written anywhere, no lock file, phase unchanged', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', '# S1'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  overwriteGenerationMeta(sessionDir, 1, { skillRelPath: '/tmp/OUTSIDE-abs-pwned.md' });
+
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'locking', selectedGeneration: 1 });
+
+  await assert.rejects(
+    () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+    (err: unknown) => { assert.ok(err instanceof Error); return true; },
+  );
+  // Today's (buggy) actual write location, per path.join's real semantics —
+  // must never exist once the allowlist rejects this shape.
+  assert.ok(!existsSync(join(repoPath, 'tmp', 'OUTSIDE-abs-pwned.md')), 'an absolute-shaped skillRelPath must never be written anywhere, in or out of the repo');
+  assert.ok(!existsSync(join(repoPath, DEMO_LOCK_REL_PATH)), 'no lock file must be written');
+  assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locking');
+});
+
+// R4-16 AT-45 (Finding B, symlinked directory — proves the allowlist ALONE
+// is not sufficient, realpath containment is also required): the path
+// STRING here (".forge/skills/demo/evil/SKILL.md") lexically matches the
+// legitimate per-element shape exactly — only realpath resolution reveals
+// that "demo/evil" is a symlink to an outside directory. Kills an
+// implementation that validates skillRelPath by regex/shape alone.
+test('R4-16 AT-45: a symlinked .forge/skills/demo/evil/ directory + a LEXICALLY-legitimate skillRelPath (".forge/skills/demo/evil/SKILL.md") is still REJECTED — realpath containment catches what the allowlist shape alone cannot', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeVersionedWritingQueryFn('<html>G1</html>', '# S1'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const outsideDir = mkdtempSync(join(tmpdir(), 'skillrelpath-escape-outside-'));
+  try {
+    mkdirSync(join(repoPath, '.forge', 'skills', 'demo'), { recursive: true });
+    symlinkSync(outsideDir, join(repoPath, '.forge', 'skills', 'demo', 'evil'));
+    overwriteGenerationMeta(sessionDir, 1, { skillRelPath: '.forge/skills/demo/evil/SKILL.md' });
+
+    const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+    writeSessionStatus(sessionDir, { ...afterGen1, phase: 'locking', selectedGeneration: 1 });
+
+    await assert.rejects(
+      () => runDemoBuilderTurn({ sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot }),
+      (err: unknown) => { assert.ok(err instanceof Error); return true; },
+    );
+    assert.ok(!existsSync(join(outsideDir, 'SKILL.md')), 'no file may be written through a symlinked directory outside the repo, even when the path STRING lexically matches the allowlist shape');
+    assert.ok(!existsSync(join(repoPath, DEMO_LOCK_REL_PATH)), 'no lock file must be written');
+    assert.equal(readSessionStatus<DemoBuilderStatus>(sessionDir)?.phase, 'locking');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+// R4-16 AT-46 (Finding B, positive control — the per-element legitimate
+// shape): GREEN today, not a defect pin (today has no allowlist at all, so
+// nothing rejects this legitimate path either) — it earns its place as the
+// regression guard against the WRONG fix for AT-43/44/45: an allowlist
+// implemented too narrowly (e.g. only ever accepting the exact composer path)
+// would silently start rejecting real per-element locks the moment it ships.
+// The composer-path positive control is ALREADY covered end-to-end by AT-7
+// (its round-trip restores through the default DEMO_SKILL_REL_PATH shape) —
+// not duplicated here.
+test('R4-16 AT-46 (positive control, green today): a per-element generation restores end-to-end through its real skillRelPath at lock — the legitimate shape must keep working once the allowlist ships, not just be rejected', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating', targetElement: 'cli-capture', iteration: 1 });
+  writeComposedProcess(repoPath);
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  // Overwrite the repo's copies with stale content so a real restore is
+  // provably what put the correct bytes back, not "it was already there".
+  writeFileSync(join(repoPath, '.forge', 'skills', 'demo', 'cli-capture', 'SKILL.md'), '# STALE — must be overwritten by the restore');
+  writeFileSync(join(repoPath, DEMO_HTML_REL_PATH), '<html>STALE — must be overwritten</html>');
+
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'locking', selectedGeneration: 1 });
+  const result = await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.equal(result.phase, 'locked', 'the legitimate per-element shape must still lock successfully once the allowlist ships');
+  assert.equal(
+    readFileSync(join(repoPath, '.forge', 'skills', 'demo', 'cli-capture', 'SKILL.md'), 'utf8'),
+    '# cli-capture element',
+    'the real snapshot content must have been restored — proves this is a genuine restore, not a no-op pass-through',
+  );
+});
+
+// Finding C (MAJOR) — demo.lock.json's demo_skill is hardcoded to the
+// composer path, ignoring which generator this generation ACTUALLY restored.
+
+// R4-16 AT-47 (Finding C, false negative): kills
+// `demo_skill: existsSync(DEMO_SKILL_REL_PATH) ? DEMO_SKILL_REL_PATH : null`
+// — today this reports null for a per-element lock even though the REAL
+// generator (the element skill) is sitting right there on disk.
+test('R4-16 AT-47: finalizing a per-element generation (no composer skill anywhere in the repo) records demo_skill as the ELEMENT path, never null', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ phase: 'generating', targetElement: 'cli-capture', iteration: 1 });
+  writeComposedProcess(repoPath);
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.ok(!existsSync(join(repoPath, DEMO_SKILL_REL_PATH)), 'sanity: the composer skill genuinely does not exist for this generation');
+
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'locking', selectedGeneration: 1 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const lock = JSON.parse(readFileSync(join(repoPath, DEMO_LOCK_REL_PATH), 'utf8'));
+  assert.equal(
+    lock.demo_skill,
+    '.forge/skills/demo/cli-capture/SKILL.md',
+    `demo_skill must name the ACTUAL generator restored for this generation, not fall back to null just because the (irrelevant) composer path is absent — got: ${JSON.stringify(lock.demo_skill)}`,
+  );
+});
+
+// R4-16 AT-48 (Finding C, false positive — the WORSE direction): kills the
+// same hardcoded read pairing a STALE composer skill (left over from an
+// earlier, composed generation) with a LATER, per-element generation's
+// DEMO.html — today's demo.lock.json would claim the wrong generator entirely.
+test('R4-16 AT-48: finalizing a per-element generation 2 after a composed generation 1 left a stale composer skill on disk — demo_skill must name generation 2\'s OWN skillRelPath, never the stale composer', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId, sessionDir } = setup({ iteration: 1 });
+  writeComposedProcess(repoPath);
+  // Generation 1: composed — writes a REAL composer skill to the repo.
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeWritingQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.ok(existsSync(join(repoPath, DEMO_SKILL_REL_PATH)), "sanity: generation 1 really did leave a composer skill on disk");
+
+  // Generation 2: per-element — the stale composer from generation 1 is left
+  // untouched in the repo (makeElementQueryFn never writes DEMO_SKILL_REL_PATH).
+  const afterGen1 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeFileSync(join(sessionDir, 'feedback.md'), 'Refine just the cli-capture element.');
+  writeSessionStatus(sessionDir, { ...afterGen1, phase: 'generating', iteration: 2, targetElement: 'cli-capture' });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeElementQueryFn('cli-capture'), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  assert.ok(existsSync(join(repoPath, DEMO_SKILL_REL_PATH)), 'sanity: the STALE composer skill is still sitting in the repo, untouched');
+
+  const afterGen2 = readSessionStatus<DemoBuilderStatus>(sessionDir)!;
+  writeSessionStatus(sessionDir, { ...afterGen2, phase: 'locking', selectedGeneration: 2 });
+  await runDemoBuilderTurn({
+    sessionId, projectRoot, forgeRoot: FORGE_ROOT, queryFn: makeNoopQueryFn(), logger: logger(logsRoot, sessionId), logsRoot,
+  });
+  const lock = JSON.parse(readFileSync(join(repoPath, DEMO_LOCK_REL_PATH), 'utf8'));
+  assert.notEqual(lock.demo_skill, DEMO_SKILL_REL_PATH, "demo_skill must NOT pair generation 2's DEMO.html with generation 1's stale composer skill");
+  assert.equal(lock.demo_skill, '.forge/skills/demo/cli-capture/SKILL.md', "demo_skill must name generation 2's OWN skillRelPath");
 });

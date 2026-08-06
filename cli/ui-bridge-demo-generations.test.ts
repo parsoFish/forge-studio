@@ -25,6 +25,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync, rmSync, symlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { request as httpRequest } from 'node:http';
 
 import { startBridge } from './ui-bridge.ts';
 
@@ -82,6 +83,30 @@ function writeGenerationFixture(sid: string, n: number | string, files: Record<s
   const dir = join(demoSessionDirFor(sid), 'generations', String(n));
   mkdirSync(dir, { recursive: true });
   for (const [name, body] of Object.entries(files)) writeFileSync(join(dir, name), body, 'utf8');
+}
+
+/** Sends a raw HTTP GET with the EXACT path bytes given — no WHATWG URL /
+ *  undici `fetch()` involved, so client-side dot-segment normalisation never
+ *  runs (Node's low-level `http.request` puts the `path` option straight onto
+ *  the request line, unmodified). This is the ONLY way to actually deliver a
+ *  literal `%2E%2E` percent-encoded traversal segment to the server: the
+ *  WHATWG URL spec treats `%2e`/`%2E` as equivalent to a literal `.` for
+ *  dot-segment detection specifically to close this exact bypass, so a real
+ *  `fetch()` call collapses it away before the request is ever sent (the same
+ *  class of problem documented in cli/bridge-studio-sessions.test.ts's header,
+ *  which resorts to direct handler invocation instead — unavailable here
+ *  because `handleDemoBuilder` is not exported from ui-bridge.ts). */
+function rawGet(rawPath: string): Promise<{ status: number; text: string }> {
+  return new Promise((resolvePromise, reject) => {
+    const u = new URL(url);
+    const req = httpRequest({ hostname: u.hostname, port: u.port, path: rawPath, method: 'GET' }, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk.toString('utf8'); });
+      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, text: data }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
 }
 
 before(async () => {
@@ -260,4 +285,99 @@ test('R4-16 AT-35: an unknown project/sessionId pair on the generation route →
   assert.equal(res.status, 404, `expected 404 for a nonexistent session, got ${res.status}`);
   const body = await res.json() as Record<string, unknown>;
   assert.ok(body.error, `404 must carry a JSON error body, got: ${JSON.stringify(body)}`);
+});
+
+// ===========================================================================
+// R4-16 PIN 2 — round-2 adversarial findings against HEAD b1f59575, where the
+// R4-16 backend (a374805c) and forge-ui (b1f59575) implementations already
+// landed. `n`/`filename` ARE guarded (GENERATION_NUMBER_RE/GENERATION_FILENAME_RE
+// + safeReadFileInSession's realpath), but `project`/`sessionId` are RAW
+// decodeURIComponent output fed straight into demoSessionDir(...) with NO
+// SLUG_RE/SAFE_ID_RE/length-cap validation at all — the exact declared-data-
+// fails-open shape this campaign keeps finding, just on a sibling field.
+// ===========================================================================
+
+// Finding A (BLOCKER) — reproduced live: with project=".." and
+// sessionId="../OUTSIDE" (both whole-segment ".."-shaped, only reachable past
+// client-side URL normalisation via a raw request — see rawGet's header),
+// demoSessionDir(join(projectsRoot, '..'), '../OUTSIDE') resolves to
+// <forgeRoot>/OUTSIDE — an attacker-chosen directory ENTIRELY of the
+// attacker's choosing, which safeReadFileInSession then trivially "contains"
+// (it only proves containment relative to whatever sessionDir it's handed).
+// Kills the current implementation, which returns 200 with the outside
+// file's real content for this exact request.
+test('R4-16 AT-36 (BLOCKER, live exploit reproduction): project=".." + sessionId="../OUTSIDE" escapes projectsRoot entirely — must be 400, and the outside marker must never appear in the body', async () => {
+  // demoSessionDir(join(projectsRoot, '..'), '../OUTSIDE') === join(forgeRoot, '_demo', '../OUTSIDE') === join(forgeRoot, 'OUTSIDE').
+  const OUTSIDE_MARKER = 'TOP-SECRET-PROJECT-SESSIONID-ESCAPE-MARKER-3390';
+  const outsideGenDir = join(forgeRoot, 'OUTSIDE', 'generations', '1');
+  mkdirSync(outsideGenDir, { recursive: true });
+  writeFileSync(join(outsideGenDir, 'secret.html'), `<html>${OUTSIDE_MARKER}</html>`, 'utf8');
+  try {
+    // %2E%2E / %2E%2E%2FOUTSIDE — literal percent-encoded dots. A real
+    // fetch() would collapse the whole-segment ".." variant client-side
+    // before the request is ever sent (WHATWG URL treats %2e as a literal
+    // dot for exactly this detection) — rawGet bypasses that entirely.
+    const res = await rawGet('/api/demo-builder/generation/%2E%2E/%2E%2E%2FOUTSIDE/1/secret.html');
+    assert.equal(res.status, 400, `project/sessionId escaping projectsRoot must be rejected with 400, got ${res.status}: ${res.text}`);
+    assert.ok(!res.text.includes(OUTSIDE_MARKER), `the outside file's content must NEVER appear in the body, got: ${res.text}`);
+  } finally {
+    rmSync(join(forgeRoot, 'OUTSIDE'), { recursive: true, force: true });
+  }
+});
+
+test('R4-16 AT-37: project failing SLUG_RE (e.g. "Bad_Project", uppercase + underscore) → 400, naming the offending value', async () => {
+  const sid = await startSession();
+  writeGenerationFixture(sid, 1, { 'DEMO.html': '<html/>' });
+  const res = await fetch(`${url}/api/demo-builder/generation/${encodeURIComponent('Bad_Project')}/${encodeURIComponent(sid)}/1/DEMO.html`);
+  assert.equal(res.status, 400, `an invalid-slug project must be rejected with 400, got ${res.status}`);
+  const body = await res.json() as Record<string, unknown>;
+  assert.ok(String(body.error ?? '').includes('Bad_Project'), `error must name the offending project value, got: ${JSON.stringify(body)}`);
+});
+
+test('R4-16 AT-38: sessionId failing SAFE_ID_RE (embedded "/"/".." via one opaque encoded segment, matching AT-30/31\'s technique) → 400, naming the offending value', async () => {
+  const maliciousSessionId = 'sid/../x';
+  const res = await fetch(`${url}/api/demo-builder/generation/demo/${encodeURIComponent(maliciousSessionId)}/1/DEMO.html`);
+  assert.equal(res.status, 400, `a sessionId containing "/" must be rejected with 400, got ${res.status}`);
+  const body = await res.json() as Record<string, unknown>;
+  assert.ok(String(body.error ?? '').includes(maliciousSessionId), `error must name the offending sessionId value, got: ${JSON.stringify(body)}`);
+});
+
+test('R4-16 AT-39: an over-length project (past the MAX_SKILL_ID_LENGTH cap the sibling route uses) → 400', async () => {
+  const overLongProject = 'a'.repeat(101); // charset-valid (all lowercase), only the LENGTH is the violation
+  const res = await fetch(`${url}/api/demo-builder/generation/${overLongProject}/some-sid/1/DEMO.html`);
+  assert.equal(res.status, 400, `an over-length project must be rejected with 400, got ${res.status}`);
+});
+
+test('R4-16 AT-40: an over-length sessionId (past the MAX_SKILL_ID_LENGTH cap the sibling route uses) → 400', async () => {
+  const overLongSessionId = 'a'.repeat(101); // charset-valid, only the LENGTH is the violation
+  const res = await fetch(`${url}/api/demo-builder/generation/demo/${overLongSessionId}/1/DEMO.html`);
+  assert.equal(res.status, 400, `an over-length sessionId must be rejected with 400, got ${res.status}`);
+});
+
+// Finding E (MINOR) — GENERATION_FILENAME_RE's character class
+// (`[A-Za-z0-9._-]+`) accepts a bare "." or ".." as a WHOLE filename (only
+// harmless today by coincidence, because it happens to resolve to a
+// directory downstream and 404 for an unrelated reason — EISDIR/ENOENT — not
+// because the filename was actually rejected). Kills an implementation that
+// leaves this structural gap open (e.g. after a future refactor stops
+// resolving "." /".." to a directory read failure).
+// A literal "." or ".." as the LAST raw path segment is exactly the shape
+// WHATWG URL's client-side dot-segment removal rewrites BEFORE the request
+// is ever sent (a trailing ".." strips the preceding "1" segment too,
+// changing the route's segment count entirely and missing the 4-group
+// generation regex altogether) — so, same as AT-36, these two must go
+// through rawGet with the percent-encoded form (%2E / %2E%2E), never a plain
+// fetch()+encodeURIComponent (encodeURIComponent does not escape ".").
+test('R4-16 AT-41: filename="." (raw %2E, bypassing client-side dot-segment collapse) → structurally rejected (400), not merely a coincidental 404', async () => {
+  const sid = await startSession();
+  writeGenerationFixture(sid, 1, { 'DEMO.html': '<html/>' });
+  const res = await rawGet(`/api/demo-builder/generation/demo/${encodeURIComponent(sid)}/1/%2E`);
+  assert.equal(res.status, 400, `filename="." must be structurally rejected with 400, got ${res.status}: ${res.text}`);
+});
+
+test('R4-16 AT-42: filename=".." (raw %2E%2E, bypassing client-side dot-segment collapse) → structurally rejected (400), not merely a coincidental 404', async () => {
+  const sid = await startSession();
+  writeGenerationFixture(sid, 1, { 'DEMO.html': '<html/>' });
+  const res = await rawGet(`/api/demo-builder/generation/demo/${encodeURIComponent(sid)}/1/%2E%2E`);
+  assert.equal(res.status, 400, `filename=".." must be structurally rejected with 400, got ${res.status}: ${res.text}`);
 });

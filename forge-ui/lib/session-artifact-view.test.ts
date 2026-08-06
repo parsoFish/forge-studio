@@ -651,3 +651,79 @@ test('AT-109: sessionArtifactView: generation-gallery is stage-UNAWARE like ever
   expect(withStageA).toEqual(noStage);
   expect(withStageB).toEqual(noStage);
 });
+
+// ===========================================================================
+// R4-16 PIN 2 — Finding D (MAJOR): the operator's generation selection is
+// destroyed on every 3s poll. `DemoBuilderPanel` refetches every 3s;
+// `fetchSessionShell` builds a brand-new object graph each time;
+// `GenerationGallery`'s effect fires on the new artifact reference and
+// `generationGalleryView` unconditionally resets `selectedIndex` to the
+// newest generation — so a picked generation cannot survive 3 seconds.
+// Fix: `generationGalleryView(artifact, preferredNumber?: number)` gains an
+// OPTIONAL second argument. TEST-FIRST PIN: the function does not accept a
+// second argument yet at HEAD b1f59575 — every AT below is red because the
+// (currently ignored) second argument has no effect on `selectedIndex` at
+// all; it always falls back to newest.
+//
+// A gappy generation-number set ([1, 3, 4], not [1, 2, 3]) is used
+// throughout so a POSITION-based implementation (treating preferredNumber as
+// an array index) is distinguishable from the correct VALUE-based one:
+// preferredNumber=3 must select array index 1 (generations[1].number === 3),
+// not index 3 (out of bounds for a 3-element array).
+// ===========================================================================
+
+function makeGappyGalleryArtifact(): GenerationGalleryArtifact {
+  return {
+    kind: 'generation-gallery',
+    label: 'Demo generations',
+    generations: [
+      { number: 1, createdAt: '2026-08-06T10:00:00.000Z', feedback: null, targetElement: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 100 }] },
+      { number: 3, createdAt: '2026-08-06T11:00:00.000Z', feedback: null, targetElement: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 200 }] },
+      { number: 4, createdAt: '2026-08-06T12:00:00.000Z', feedback: null, targetElement: null, items: [{ path: 'DEMO.html', kind: 'html', bytes: 300 }] },
+    ],
+    sourcesScanned: ['generations/* (3 generation(s) found)'],
+  };
+}
+
+test('AT-110: generationGalleryView: an OPTIONAL preferredNumber selects the generation carrying THAT number — by VALUE, never by array position', () => {
+  const gappy = makeGappyGalleryArtifact();
+  const view = generationGalleryView(gappy, 3);
+  expect(view.generations[view.selectedIndex]!.number).toBe(3);
+  expect(view.selectedIndex).toBe(1); // index of number:3 in [1,3,4] — NOT index 3 (out of bounds) and NOT index 2
+});
+
+// GREEN today, not a defect pin (mirrors AT-46/AT-108's precedent): with
+// preferredNumber currently ignored entirely, the view already always falls
+// back to newest — so this assertion is trivially true both before AND after
+// the fix lands. It earns its place as the regression guard against the
+// WRONG fix for AT-110/112: an implementation that THROWS (or otherwise
+// misbehaves) on an unrecognised preferredNumber instead of gracefully
+// falling back would pass AT-110 while failing here.
+test('AT-111: generationGalleryView: a preferredNumber naming a generation that no longer exists on disk falls back to the NEWEST generation, never throws', () => {
+  const gappy = makeGappyGalleryArtifact();
+  expect(() => generationGalleryView(gappy, 99)).not.toThrow();
+  const view = generationGalleryView(gappy, 99);
+  expect(view.generations[view.selectedIndex]!.number).toBe(4); // newest — the same fallback as no preferredNumber at all
+  expect(view.selectedIndex).toBe(2);
+});
+
+// The mandatory adversarial AT for this finding: kills the reference-identity
+// reset directly. `artifactA`/`artifactB` are two INDEPENDENTLY built object
+// graphs (A !== B by reference, exactly what a fresh 3s poll fetch produces)
+// that are structurally identical — the ONLY thing that must matter to
+// generationGalleryView's selection is the preferredNumber argument, never
+// object identity.
+test('AT-112 (mandatory adversarial AT — poll-survival): the SAME preferredNumber selects the SAME generation across two structurally-identical, independently-built artifact objects (A !== B by reference) — the exact shape of a 3s poll rebuilding a fresh object graph', () => {
+  const artifactA = makeGappyGalleryArtifact();
+  const artifactB = makeGappyGalleryArtifact();
+  expect(artifactA).not.toBe(artifactB); // different references...
+  expect(artifactA).toEqual(artifactB); // ...but structurally identical, exactly like a re-fetched payload
+
+  // The operator picked generation 3 (not the newest, 4).
+  const viewA = generationGalleryView(artifactA, 3);
+  expect(viewA.generations[viewA.selectedIndex]!.number).toBe(3);
+
+  // Simulate the 3s poll tick: a BRAND NEW artifact object, SAME preferred number.
+  const viewB = generationGalleryView(artifactB, 3);
+  expect(viewB.generations[viewB.selectedIndex]!.number).toBe(3); // must NOT silently reset to 4 (newest)
+});
