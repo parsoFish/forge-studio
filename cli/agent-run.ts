@@ -31,6 +31,7 @@ import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-
 import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
 import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/band-agent-run.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
+import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { createLogger } from '../orchestrator/logging.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
@@ -163,22 +164,22 @@ export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void>
  * `status.json` turns out to be a symlink escaping that resolved directory
  * the write is refused (never followed).
  *
- * The containment root here is deliberately `forgeRoot`, not the NARROWER
- * `projectsRoot` the write ROUTE above enforces (`POST /api/studio/
- * onboarding/start` always creates `sessionDir` under `<projectsRoot>/
- * <project>/_onboarding/<sessionId>`, a strict subset): the pre-existing,
- * regression-pinned `cli/agent-run-dispatch.test.ts` AT-D7-1/AT-D7-2 drive
- * this function with a `sessionDir` under `<forgeRoot>/_logs/…` — inside the
- * forge tree, but outside `projectsRoot` — and must keep succeeding (D6/D7
- * were never scoped to `projectsRoot` specifically; only "the run ended, so
- * the observing process writes the terminal phase"). `forgeRoot` is the
- * widest boundary that satisfies BOTH constraints at once: it refuses
- * AT-9's genuinely-external target (a directory under the OS temp root,
- * outside `forgeRoot` entirely) while still accepting every `sessionDir`
- * either caller — the real route or the pre-existing test fixture — actually
- * uses. It is a real, disclosed narrowing versus the round-1 BLOCKER state
- * (no check at all), not a claim that it matches the route's own tighter
- * `projectsRoot` boundary.
+ * The containment root is `projectsRoot`, matching EXACTLY the boundary the
+ * write ROUTE above enforces: `POST /api/studio/onboarding/start` is the only
+ * real sender of `--session-dir` and it always creates `sessionDir` under
+ * `<projectsRoot>/<project>/_onboarding/<sessionId>`, so a `projectsRoot`
+ * guard is provably a no-op for every legitimate caller (measured, not
+ * assumed). An earlier revision of this function used the WIDER `forgeRoot`
+ * purely because the AT-D7 fixtures then built their session dirs under
+ * `<forgeRoot>/_logs/…`; T2 ruled that the rule stands and the FIXTURE was
+ * the incomplete thing (the R2-10 gate precedent, where a fail-closed
+ * registry check broke a synthetic `tmpRoot()` and the fixture was fixed,
+ * not the rule). `forgeRoot` would have accepted a `status.json` write
+ * anywhere in the forge tree — `brain/`, `skills/`, `studio/`, `docs/`,
+ * `.git/` — which no caller needs. AT-D7-4 pins the narrowing with a
+ * `sessionDir` inside `forgeRoot` but outside `projectsRoot`, asserting on
+ * the FILESYSTEM (the planted `status.json` keeps its pre-run phase), because
+ * an exit code cannot distinguish "refused" from "wrote it and carried on".
  *
  * Both checks use the same realpath + `startsWith(root + sep)` boundary
  * shape used throughout this initiative (`resolveContainedProjectDir`,
@@ -195,14 +196,14 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
     if (!existsSync(sessionDir) || !statSync(sessionDir).isDirectory()) return;
     const realSessionDir = realpathSync(sessionDir);
 
-    let realForgeRoot: string;
+    let realProjectsRoot: string;
     try {
-      realForgeRoot = realpathSync(forgeRoot);
+      realProjectsRoot = realpathSync(resolveProjectsDir(resolve(forgeRoot), loadConfig()));
     } catch {
-      return; // no such forgeRoot at all — refuse rather than guess
+      return; // no resolvable projects root at all — refuse rather than guess
     }
-    if (realSessionDir !== realForgeRoot && !realSessionDir.startsWith(realForgeRoot + sep)) {
-      return; // sessionDir escapes forgeRoot — refuse the write
+    if (realSessionDir !== realProjectsRoot && !realSessionDir.startsWith(realProjectsRoot + sep)) {
+      return; // sessionDir escapes projectsRoot — refuse the write
     }
 
     const statusPath = join(realSessionDir, 'status.json');

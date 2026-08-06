@@ -237,41 +237,52 @@ and unconditionally wrote `status.json` into whatever `sessionDir` string it
 was handed, so its guarantee depended ENTIRELY on the route above having
 validated the directory first — "one sink, many entry points" — pinned RED by
 AT-9 (`cli/ui-bridge-onboarding-start.test.ts`) before the fix. **Closed** by
-threading `forgeRoot` (already a parameter of `cmdAgentDispatch` — no new
-resolution needed) into `writeSessionTerminalPhase` and refusing the write
-when `realpathSync(sessionDir)` does not land inside `realpathSync(forgeRoot)`
+resolving `projectsRoot` inside `writeSessionTerminalPhase`
+(`resolveProjectsDir(resolve(forgeRoot), loadConfig())` — the same call
+`cli/bridge-studio.ts` already makes) and refusing the write when
+`realpathSync(sessionDir)` does not land inside `realpathSync(projectsRoot)`
 — the same realpath + `startsWith(root + sep)` boundary shape used throughout
 this initiative, not reused verbatim because this call site's `sessionDir`
 arrives as a single already-composed absolute path (a CLI flag), not
 components to join. The pre-existing status.json-symlink-escape guard
 (refusing to follow `status.json` if it escapes the now-verified `sessionDir`
-via a symlink) is unchanged. **The boundary here is deliberately `forgeRoot`,
-not the route's own narrower `projectsRoot`** (`POST /api/studio/onboarding/
-start` always creates `sessionDir` under `<projectsRoot>/<project>/
-_onboarding/<sessionId>`, a strict subset of `forgeRoot`): the pre-existing,
-regression-pinned `cli/agent-run-dispatch.test.ts` AT-D7-1/AT-D7-2 drive this
-function with a `sessionDir` fixture under `<forgeRoot>/_logs/…` — inside the
-forge tree but outside `projectsRoot` — and a `projectsRoot`-scoped boundary
-would have refused it, regressing two tests this document's own initiative is
-required to keep green. `forgeRoot` is the widest boundary that satisfies
-both constraints: it refuses AT-9's genuinely-external target (an OS temp
-directory, outside `forgeRoot` entirely) while still accepting every
-`sessionDir` either caller — the real route or the pre-existing test fixture
-— actually uses. Recorded here rather than silently narrowed, per this
-document's own "validating a root does not validate what you write beneath
-it" discipline in reverse: this row is honest that its root is wider than the
-one legitimate caller currently needs. **Executed:** AT-9 plants a
-`--session-dir` OUTSIDE `forgeRoot` entirely (an OS temp directory) with a
-pre-existing `status.json` carrying a sentinel value, drives
-`cmdAgentDispatch` with an unknown slug (forcing the failure path,
-`writeSessionTerminalPhase(..., 'failed')`), and asserts the sentinel file is
-byte-identical afterwards — the write never happened. Pinned alongside the
-pre-existing `cli/agent-run-dispatch.test.ts` AT-D7-1/AT-D7-2 (write happens
-on both success and failure, for a `sessionDir` that IS contained under
-`forgeRoot`) and AT-D7-3 (D6: omitting `--session-dir` touches no session
-`status.json` anywhere, byte-identical to before this flag existed —
-unaffected by this fix, since the containment check only runs when
-`--session-dir` is given).
+via a symlink) is unchanged.
+
+**The boundary is `projectsRoot`, matching the route's own — and the history
+of that choice is worth recording, because the first fix got it wrong in an
+instructive way.** `POST /api/studio/onboarding/start` is the only real sender
+of `--session-dir` and always creates `sessionDir` under
+`<projectsRoot>/<project>/_onboarding/<sessionId>`, so a `projectsRoot` guard
+is provably a no-op for every legitimate caller (measured, not assumed). The
+first fix round nevertheless used the WIDER `forgeRoot`, for one reason only:
+the `cli/agent-run-dispatch.test.ts` AT-D7 fixtures then built their session
+dirs under `<forgeRoot>/_logs/…`, and a `projectsRoot` boundary refused them.
+**T2 ruled that the rule stands and the FIXTURE was the incomplete thing** —
+the R2-10 gate precedent, where a fail-closed registry check broke a synthetic
+`tmpRoot()` and the fixture was corrected rather than the rule. `forgeRoot`
+would have accepted a `status.json` write anywhere in the forge tree —
+`brain/`, `skills/`, `studio/`, `docs/`, `.git/` — which no caller needs. The
+fixtures were re-homed to the real `<projectsRoot>/<project>/_onboarding/<sid>`
+shape the route actually produces, and the boundary narrowed to match.
+**The named failure mode, kept because it is the inverse of the
+accidental-pass family: a production guard widened until a test fixture's
+convenient location fit, rather than a test corrected to production's real
+shape.**
+
+**Executed, three ways.** AT-9 plants a `--session-dir` OUTSIDE `forgeRoot`
+entirely (an OS temp directory) with a pre-existing `status.json` carrying a
+sentinel value, drives `cmdAgentDispatch` with an unknown slug (forcing the
+failure path, `writeSessionTerminalPhase(..., 'failed')`), and asserts the
+sentinel file is byte-identical afterwards — the write never happened.
+**AT-D7-4** is the narrowing's own pin: a `sessionDir` INSIDE `forgeRoot` but
+OUTSIDE `projectsRoot` (under `<forgeRoot>/_logs/…`) is refused, asserted on
+the FILESYSTEM (the planted `status.json` keeps its pre-run phase), because an
+exit code cannot distinguish "refused" from "wrote it and carried on". AT-D7-1/
+AT-D7-2 are the ACCEPT controls (the write does happen, on both success and
+failure, for a `sessionDir` under a real `projectsRoot`), and AT-D7-3 pins D6
+(omitting `--session-dir` touches no session `status.json` anywhere,
+byte-identical to before this flag existed — unaffected, since the containment
+check only runs when the flag is given).
 
 ### Accidentally-safe — the accident is the protection, and nothing knows it
 
