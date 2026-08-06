@@ -409,6 +409,47 @@ shell. Full reasoning is recorded on the registry entry itself.
 - **Acceptance references:** mockup journeys `onboard-project`, `create-project`, `build-hook`, `build-skill` (session beats); surface `views-session.jsx`, `SESSIONS` + `CONTRACT_STAGES` in `data.jsx`.
 - **Out of scope:** the deep phase-machine convergence (stays deferred per R2-01-F3's documented scope decision); session ENTRY consolidation (the one-Run-button initiative in R6); per-agent session content (R4).
 
+### R2-11 Legacy invocation path becomes budget-aware
+
+- **Status:** planned  ·  **Wave:** unwaved (platform continuity — explicitly
+  outside wave-5 closure, pulled at need)
+- **Depends on:** — (R6-04's fail-closed refusal is the honesty ratchet this
+  relaxes, not a build dependency).
+- **Depended on by:** — (relaxes R6-04-F2's per-agent ceiling refusal as
+  enforcement arrives).
+- **Context:** Minted at batch-C execution (2026-08-07, T1 ruling on a lane-β
+  ⚑ park — see the change log). Measured against the real roster: of 19
+  dispatchable (non-interactive) agents, **4** declare `loopStrategy:
+  one-shot` — where `runOneShotSpawn` sets `options.maxBudgetUsd` and the SDK
+  enforces the ceiling — and **15** ride the legacy invocation path
+  (`loops/ralph/claude-agent.ts`), which has no budget concept at all. Before
+  R6-04's fix, an operator could set a per-kickoff ceiling that the server
+  validated, the run recorded and the UI displayed while nothing enforced it
+  — the declared-data-fails-open shape inside the enforcement feature itself.
+  R6-04 ships the fail-closed refusal (a ceiling the resolved agent's path
+  cannot enforce is refused with the reason named); THIS initiative makes the
+  legacy path actually enforce, so the refusal can relax per-agent with the
+  claim staying true.
+- **Features:**
+  - **R2-11-F1 Budget concept in the legacy invocation spawn.** Thread a
+    per-run budget through `runInvocationSpawn` and the ralph adapter with
+    the same semantics `runOneShotSpawn` gets from `options.maxBudgetUsd`
+    (SDK-enforced where the runtime supports it; a documented, execution-
+    proven stop where it must be adapter-side). ACs: a seeded runaway fixture
+    demonstrably stops under the ceiling on a legacy-path agent `[exec]`; the
+    ceiling-stop surfaces as a distinct terminal state; no behaviour change
+    when no ceiling is supplied.
+  - **R2-11-F2 Per-phase ATs + refusal relaxation.** ATs across the phases
+    that ride the legacy path (dev-loop, brain agents, release tooling —
+    enumerate at build time from the roster, not this list); R6-04's
+    dispatch refusal relaxes exactly per-agent as enforcement lands (the
+    refusal test flips to an accept test per class, test-writer-amended).
+    ACs: no roster agent can accept a ceiling its path does not enforce —
+    the invariant survives the relaxation.
+- **Session sizing:** ~1-2 sessions.
+- **Out of scope:** the kickoff UI (R6-04); cost *integrity* (R5-03);
+  per-adapter tier ladders (R2-06-F2).
+
 ## Deferred
 
 ### R2-D1 Parallel-work merge-resolution — CLOSED-REJECTED (2026-07-25, R2-03-F1 spike)
@@ -625,3 +666,12 @@ prior-art research) demonstrably bottlenecks the linear flow.
   recorded as permanent exclusions, because R4-15/R4-17 may make them real on
   the R2-10 shell and pre-excluding them would freeze a decision those
   initiatives own. Owed work, reasoning recorded on the registry entry.
+- 2026-08-07 — **R2-11 minted** (batch-C execution, T1 ruling on a lane-β
+  R6-04 park-point): the legacy invocation path (`loops/ralph/claude-agent.ts`)
+  becomes budget-aware. Grounds, measured against the roster: 4 of 19
+  dispatchable agents are one-shot (SDK-enforced `options.maxBudgetUsd`); the
+  other 15 ride a path with no budget concept, so a validated, recorded,
+  displayed per-kickoff ceiling was enforced by nothing. R6-04 ships the
+  fail-closed refusal now; R2-11 is the enforcement work that relaxes it
+  per-agent. Unwaved platform continuity — outside wave-5 closure, pulled at
+  need.
