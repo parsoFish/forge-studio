@@ -64,9 +64,32 @@ type MaterialEntry = { filename: string; bytes: Buffer };
  * covered by the "zero partial writes" guarantee above without this
  * explicit check. The comparison is on each entry's RESOLVED
  * `realPath` (from `resolveGuardedPath`), not the raw input `filename`
- * string — two different filenames must not be able to resolve to one
- * on-disk target either (e.g. a filesystem that collapses distinct names to
- * one canonical path). The check is scoped to entries within ONE call only
+ * string, so a name that resolves onto an ALREADY-EXISTING sibling target is
+ * caught: for a segment that exists, `resolveGuardedPath` calls
+ * `realpathSync` and identity-compares, so the collision surfaces as two
+ * equal `realPath` values (or is rejected outright by the guard).
+ *
+ * BOUND OF THIS CHECK — do not overstate it (2026-08-07 adversarial
+ * re-review). In CREATE mode — the common case, where neither file exists
+ * yet — `resolveGuardedPath` performs NO `realpathSync` on the non-existent
+ * leaf and reassembles the tail LITERALLY (`studio-path-guard.ts`, the walk
+ * stops at the first absent segment). So the dedup key is a literal string
+ * there, and two DISTINCT filenames that the underlying filesystem would
+ * fold to one directory entry — `Notes.md` vs `notes.md` on a
+ * case-insensitive volume (default macOS APFS, exFAT, an SMB/NTFS mount) —
+ * produce two different keys, pass this check, and then collide at
+ * `writeFileSync`, second write winning. NOT reachable on a case-sensitive
+ * filesystem (ext4, the deployment this was measured on), which is why the
+ * suite is green; the PRECONDITION that makes it live is `logsRoot` sitting
+ * on a case-folding volume. Deliberately not "fixed" by lower-casing the
+ * key: on a case-sensitive filesystem `Notes.md` and `notes.md` are two
+ * legitimate distinct files, and rejecting them would be a fails-closed
+ * false rejection of valid input — trading a real defect for a different
+ * one. Closing it properly means detecting the volume's case behaviour, not
+ * normalising blindly. Tracked, with this precondition, rather than papered
+ * over.
+ *
+ * The check is scoped to entries within ONE call only
  * — re-staging the same filename across two SEPARATE `stageMaterials` calls
  * is an ordinary edit (a run's materials are not write-once), matching the
  * route's own contract-point-8 wording ("duplicate filename in one
