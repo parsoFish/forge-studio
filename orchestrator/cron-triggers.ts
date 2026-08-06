@@ -39,7 +39,7 @@
 import { join, resolve } from 'node:path';
 import { Cron } from 'croner';
 
-import { listFlowIds, loadFlowDefinition } from './studio/registry.ts';
+import { listFlowIds, loadFlowDefinition, normalizeProjectId } from './studio/registry.ts';
 import { stageFlowRunRequest } from './flow-run-requests.ts';
 import type { TriggerTarget } from './studio/types.ts';
 
@@ -112,8 +112,13 @@ function scanDeclaredCronTriggers(forgeRoot: string, notify: (msg: string) => vo
       continue;
     }
     // R2-08-F1: cron has no external event to resolve a project from — T1's
-    // ruling is the DECLARING flow's own `project:` binding.
-    const eventProject = flowDef.project ?? null;
+    // ruling is the DECLARING flow's own `project:` binding. N1 (round-4):
+    // `flow.project` is a raw path segment (per isSafeProjectName's own doc —
+    // it becomes `resolve('projects', m.project)` at the scheduler's manifest
+    // fallback), not guaranteed pre-normalized, so it is run through the SAME
+    // `normalizeProjectId` `discoverProjects` uses before comparison — lint
+    // and dispatch must read identical evidence (rule 2).
+    const eventProject = flowDef.project !== null ? normalizeProjectId(flowDef.project) : null;
     flowDef.triggers.forEach((t, index) => {
       if (t.on !== 'cron') return;
       if (typeof t.schedule !== 'string' || t.schedule.trim() === '') return;

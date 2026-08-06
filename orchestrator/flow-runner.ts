@@ -82,7 +82,7 @@ import {
   type MergeGateResult,
 } from './cycle-helpers.ts';
 import { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
-import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS } from './studio/registry.ts';
+import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS, normalizeProjectId } from './studio/registry.ts';
 import { resolveBandGuard, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
 import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
@@ -223,8 +223,13 @@ export type FlowRunnerDeps = {
       /** R2-08-F1: the firing trigger's own `projects:` declaration, carried
        *  through to the staged request. Absent ⇒ unscoped. */
       projects?: string[];
-      /** R2-08-F1: the running initiative's own project (basename of
-       *  `input.projectRepoPath`) — resolved whenever `projects` is declared. */
+      /** R2-08-F1 (N1, round-4): the running initiative's own project —
+       *  `normalizeProjectId(basename(input.projectRepoPath))`, the SAME
+       *  normalization `discoverProjects` applies, so a scoped trigger
+       *  declared against the normalized id (the only id `forge studio
+       *  lint` accepts) actually matches at dispatch. Resolved
+       *  unconditionally (carried even on an unscoped/out-of-scope fire —
+       *  scope is enforced only at the drain, never here). */
       eventProject?: string;
     },
   ) => void;
@@ -1409,34 +1414,26 @@ export async function runFlow({
       });
     },
     dispatch: (trigger) => {
-      // R2-08-F1 (ADR-027 amendment): carry the trigger's own `projects:`
-      // declaration + a resolved `eventProject` (this running initiative's own
-      // project — `basename(input.projectRepoPath)`, the same precedent this
-      // file already uses for demo-agent/adversarial-review ProjectBinding)
-      // onto the staged request. A DECLARED scope (including `[]`, which can
-      // never match — rule 1, "fires for nothing") is checked HERE, at the
-      // fire site, since eventProject is already known synchronously — an
-      // out-of-scope fire never even stages a request. `drainFlowRunRequests`
-      // still re-enforces the same check (defense in depth) for any other
-      // origin that cannot resolve eventProject this early.
-      if (trigger.projects !== undefined) {
-        const eventProject = basename(input.projectRepoPath);
-        if (!trigger.projects.includes(eventProject)) return;
-        deps.enqueueFlowRun(trigger.target.ref, {
-          origin: 'trigger',
-          triggeredBy: flow.id,
-          sourceInitiativeId: input.initiativeId,
-          targetKind: trigger.target.kind,
-          projects: trigger.projects,
-          eventProject,
-        });
-        return;
-      }
+      // R2-08-F1 (ADR-027 amendment; N2, round-4 correction): carry the
+      // trigger's own `projects:` declaration + a resolved `eventProject`
+      // onto EVERY staged request UNCONDITIONALLY — including `projects: []`.
+      // `drainFlowRunRequests` is the ONE enforcement point (rule 2); a
+      // fire-time filter made its `skipped-out-of-scope` status unreachable
+      // for this kind and turned an out-of-scope event into a silent drop —
+      // no staged file, no notify, no result row — forbidden by rule 3.
+      // `eventProject` is normalized via the SAME `normalizeProjectId`
+      // `discoverProjects` uses (N1, round-4): a raw `basename()` diverges
+      // from the normalized ids `forge studio lint` validates `projects:`
+      // against, so a project directory like `My_Project` would lint-validate
+      // fine but never dispatch-match.
+      const eventProject = normalizeProjectId(basename(input.projectRepoPath));
       deps.enqueueFlowRun(trigger.target.ref, {
         origin: 'trigger',
         triggeredBy: flow.id,
         sourceInitiativeId: input.initiativeId,
         targetKind: trigger.target.kind,
+        ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
+        eventProject,
       });
     },
   });

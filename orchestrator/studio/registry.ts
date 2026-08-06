@@ -787,6 +787,24 @@ export type DiscoveredProject = ProjectRef & {
 };
 
 /**
+ * R2-08-F1 (N1, round-4): the ONE normalizer for "directory/raw name → project
+ * id" — `discoverProjects` below is its original (and still primary) caller,
+ * but `forge studio lint`'s `trigger-projects` membership check validates
+ * `triggers[].projects` against IDS THIS FUNCTION PRODUCES. Every site that
+ * resolves an `eventProject` (a raw directory name / `ProjectBinding.name` /
+ * a flow's own `project:` field — none of which are guaranteed pre-normalized)
+ * MUST run it through this SAME function before comparing against a declared
+ * scope, or lint and dispatch silently read different evidence (rule 2) — a
+ * project directory like `My_Project` would validate fine but never
+ * dispatch-match. Extracted so there is exactly one regex to drift from, not
+ * a copy re-typed at each call site (the second copy would be the same
+ * defect one layer down).
+ */
+export function normalizeProjectId(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+/**
  * Scan `projectsDir` for project sub-directories. Pure + total: a missing or
  * unreadable projects root yields an empty list (a fresh box has no projects,
  * which is a working state, not an error). Entries are sorted by id so callers
@@ -808,7 +826,7 @@ export function discoverProjects(projectsDir: string, forgeRoot: string): Discov
   const root = resolve(forgeRoot);
   const found: DiscoveredProject[] = [];
   for (const name of entries) {
-    const id = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const id = normalizeProjectId(name);
     if (!id) continue;
     const absPath = join(projectsDir, name);
     const rel = relative(root, absPath);

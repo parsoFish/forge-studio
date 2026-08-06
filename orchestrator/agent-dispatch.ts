@@ -20,7 +20,7 @@
 import { readdirSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 
-import { listAgentDefinitions, listFlowIds, loadFlowDefinition } from './studio/registry.ts';
+import { listAgentDefinitions, listFlowIds, loadFlowDefinition, normalizeProjectId } from './studio/registry.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
@@ -328,7 +328,13 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
     try {
       await fireAgentCompleteTriggers(loadFlowRosterBestEffort(forgeRoot), def.slug, {
         queueRoot: join(forgeRoot, '_queue'),
-        ...(opts.project ? { eventProject: opts.project.name } : {}),
+        // N1 (round-4): `opts.project.name` is a raw operator/request-supplied
+        // directory name (e.g. the CLI's `--project` value, or the bridge's
+        // `body.project` — both checked against `existsSync`, never against
+        // `discoverProjects`' normalized ids), so it is run through the SAME
+        // `normalizeProjectId` `discoverProjects` uses — lint and dispatch
+        // must read identical evidence (rule 2).
+        ...(opts.project ? { eventProject: normalizeProjectId(opts.project.name) } : {}),
       });
     } catch (err) {
       console.error(
