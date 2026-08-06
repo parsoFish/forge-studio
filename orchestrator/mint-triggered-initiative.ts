@@ -15,7 +15,7 @@ import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from './config.ts';
-import { serializeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
+import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
@@ -60,7 +60,25 @@ export function mintTriggeredInitiative(
     const now = new Date();
     const date = now.toISOString().slice(0, 10);
     const hms = now.toISOString().slice(11, 19).replace(/:/g, '');
-    const paths = getPaths(opts.queueRoot ?? '_queue');
+    // The queue root MUST be derived from `forgeRoot` (already resolved above —
+    // either the caller's explicit, trusted `opts.forgeRoot`, or this module's
+    // own on-disk location), never from a bare `'_queue'` relative default.
+    // `writeManifest` (below) independently re-derives forgeRoot as
+    // `dirname(resolve(queueRoot))` to run `assertManifestPathFields`'
+    // containment check — a caller that omits `opts.queueRoot` (the production
+    // daemon's `runFlowTriggerSweep`, which passes `forgeRoot` but not
+    // `queueRoot`) would otherwise fall back to `resolve('_queue')`, i.e.
+    // `<process.cwd()>/_queue`. That is only equal to `<forgeRoot>/_queue` when
+    // the daemon's cwd happens to equal forgeRoot — an incidental, unenforced
+    // property, not an invariant (a service manager, cron wrapper, or an
+    // operator invoking `forge serve` from a project subdirectory can all break
+    // it). A cwd/forgeRoot mismatch would make `writeManifest` validate
+    // containment against the WRONG root, silently accepting a project outside
+    // the real forgeRoot's `projects/` — the exact defect this fix closes,
+    // reopened through the back door. Anchoring explicitly on `forgeRoot` makes
+    // the mint correct by construction rather than by incidental cwd alignment.
+    const queueRoot = opts.queueRoot ?? join(forgeRoot, '_queue');
+    const paths = getPaths(queueRoot);
     // Id from validated tokens only: kind + flow ref + a time suffix. Two
     // origination fires for the SAME flow within one second would otherwise
     // collide (identical date/origin/flow/hms) and the second write would
@@ -92,9 +110,18 @@ export function mintTriggeredInitiative(
         '(data, never prompt text — ADR-041).',
       ].join('\n'),
     };
-    mkdirSync(paths.pending, { recursive: true });
-    const manifestPath = join(paths.pending, `${initiativeId}.md`);
-    writeFileSync(manifestPath, serializeManifest(manifest));
+    // SEC-03 (Defect 3): route through the single write choke point
+    // (`writeManifest`, orchestrator/manifest.ts) rather than
+    // `serializeManifest` + `writeFileSync` directly. `writeManifest` runs
+    // full `validateManifest` AND `assertManifestPathFields` (the SEC-02
+    // containment guard on `project` / `project_repo_path` / `worktree_path` /
+    // `cycle_id`) BEFORE any bytes land on disk, and creates `pending/` itself
+    // — the old `mkdirSync(paths.pending, ...)` above is therefore dead and
+    // has been removed rather than kept as false assurance. `writeManifest`
+    // throws on a rejected manifest; that throw is caught by this function's
+    // own try/catch (below) and surfaces as `{status:'error', detail}` — fail
+    // closed, never a silently-written unsafe manifest.
+    const manifestPath = writeManifest(manifest, { queueRoot });
     mintAndPersistManifestCycleId(manifestPath, initiativeId);
 
     // Persist the typed payload beside the cycle's artifacts (read-as-data).
