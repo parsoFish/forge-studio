@@ -230,14 +230,21 @@ function baseAgentDefFixture(overrides: Partial<AgentDefinition> = {}): AgentDef
   };
 }
 
+// R6-04 WI-3 amendment (test-writer, re-pinned): agentCapabilityDescriptor
+// gains `costCeilingEnforceable` (see derive-cost-ceiling-enforceable.test.ts
+// for the dedicated coverage of that field). Both fixtures here declare no
+// `runtime.loopStrategy`, so the expected value is `false` in both — these
+// full-object deepEqual literals are amended so implementing WI-3 does not
+// spuriously fail two pre-existing, unrelated assertions the moment the new
+// key appears on the wire.
 test('agentCapabilityDescriptor: surface unattended → interactive:false', () => {
   const def = baseAgentDefFixture({ surface: 'unattended' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [] });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: false, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: false });
 });
 
 test('agentCapabilityDescriptor: surface interactive → interactive:true', () => {
   const def = baseAgentDefFixture({ surface: 'interactive' });
-  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [] });
+  assert.deepEqual(agentCapabilityDescriptor(def), { interactive: true, runtimeSdks: ['claude'], fanoutCapable: false, materials: [], costCeilingEnforceable: false });
 });
 
 test('agentCapabilityDescriptor: R2-03-F2 — fanoutCapable reflects a declared fanout: block', () => {
