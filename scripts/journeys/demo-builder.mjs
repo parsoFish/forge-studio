@@ -3,8 +3,10 @@ import {
   ACT, THINK, WORK, caption, PROJECT,
   writeDemoStatus, demoEvent, demoBurst,
   patchDemoProcess, restoreProjectJson, writeDemoArtifacts, writeDemoLock,
-  cleanDemoBuilderSession,
+  writeDemoGeneration, cleanDemoBuilderSession, demoDir,
 } from '../lib/journey-fixtures.mjs';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { sleep } from '../lib/journey-assertions.mjs';
 
 // module-scope cross-beat state (mirrors stand-up-create.mjs's instrSid/pbSid).
@@ -16,7 +18,7 @@ let demoBrief = '';
 export const journey = defineJourney({
   id: 'demo-builder',
   title: 'Regenerate the demo page',
-  story: 'As the operator, I regenerate a project\'s demo page element by element WITHOUT leaving the project page (R1-03-F2: the demo builder is an inline panel, not a detached route) — brief the agent, watch it compose the capture/verify/present trio, review the result, and lock it in as the reproducible artifact.',
+  story: 'As the operator, I regenerate a project\'s demo page element by element WITHOUT leaving the project page (R1-03-F2: the demo builder is an inline panel, not a detached route) — brief the agent, watch it compose the capture/verify/present trio, feed back on what I see, and watch the next generation land BESIDE the first (R4-16) so I can finalize the take I actually want as the project\'s reproducible demo skill.',
   beats: [
     {
       id: 'demo-builder-brief',
@@ -62,6 +64,9 @@ export const journey = defineJourney({
         await frame(page, 'demo-1-generating', 'The demo agent composes the page, element by element');
         await demoBurst(demoSid, ['Read', 'Bash', 'Write']);
         writeDemoArtifacts();
+        // R4-16: the turn's output is SNAPSHOTTED as generation 1, so it
+        // survives the next generation instead of being overwritten.
+        writeDemoGeneration(demoSid, 1);
         writeDemoStatus(demoSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief });
         demoEvent(demoSid, 'log', 'demo composed — awaiting review');
         await page.waitForFunction(
@@ -76,6 +81,28 @@ export const journey = defineJourney({
         check(await page.locator('[data-demo-iframe]').count() > 0, 'DB-2: the composed demo previews in an iframe');
         check(await page.locator('[data-section="demo-process"][data-step-count="3"]').count() > 0, 'DB-2: the demo process shows all 3 element-bound steps');
         await countAtLeast(page, '[data-step-element]', 3, 'DB-2: all 3 demo-process steps carry a data-step-element');
+        // R4-16: the generation gallery renders IN PLACE on the project page
+        // (R1-03-F2 not reversed) through the R2-10 shell's own artifact pane.
+        // Wait for the state rather than sampling it — the panel refetches on
+        // its 3s poll, so a bare read here would be a coin flip (the two-poll
+        // race R4-15 diagnosed).
+        const gal1 = await page.waitForFunction(
+          () => document.querySelector('[data-section="generation-gallery"]')?.getAttribute('data-generation-count') === '1',
+          null, { timeout: 15000 },
+        ).then(() => true).catch(() => false);
+        check(gal1, 'DB-2: the generation gallery renders generation 1 through the session shell ([data-generation-count="1"])');
+        check(
+          await page.locator('[data-section="session-artifact"][data-artifact-kind="generation-gallery"]').count() > 0,
+          'DB-2: it is the SHELL artifact pane doing the rendering, not a panel-local copy ([data-artifact-kind="generation-gallery"])',
+        );
+        check(
+          await page.locator('[data-generation-item][data-item-path="DEMO.html"]').count() > 0,
+          'DB-2: the snapshotted sample is listed as a real item with its path',
+        );
+        check(
+          await page.locator('[data-section="generation-feedback"][data-has-feedback="false"]').count() > 0,
+          'DB-2: generation 1 honestly reports no feedback drove it (the brief did)',
+        );
         await frame(page, 'demo-2-review', 'The demo agent — composed demo ready for review', { key: true });
 
         // Clip: a fresh clip-only session shows the FULL entry-to-generation
@@ -130,6 +157,7 @@ export const journey = defineJourney({
           ).catch(() => {});
           await sleep(WORK);
           writeDemoArtifacts();
+          writeDemoGeneration(demoClipSid, 1);
           writeDemoStatus(demoClipSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief });
           demoEvent(demoClipSid, 'log', 'demo composed — awaiting review');
           await p.waitForFunction(
@@ -145,24 +173,100 @@ export const journey = defineJourney({
       },
     },
     {
-      id: 'demo-builder-lock',
-      title: 'Lock the demo in',
-      narration: 'Locking writes demo.lock.json plus a history entry to disk and simply closes the panel — the operator never left the project page. The regenerated demo becomes the one reproducible artifact for this cycle, not a throwaway preview.',
+      id: 'demo-builder-generations',
+      title: 'Feedback drives the next generation — side by side',
+      narration: 'The operator does not accept or reject a single take. Real feedback goes back to the agent, the next generation lands beside the first — numbered, accumulating, never overwriting — and the operator can sit on an earlier generation for as long as they like while the panel keeps polling.',
       drive: async (ctx) => {
         const { page, frame, check } = ctx;
-        console.log('\n[DB-3] demo-builder — lock');
-        await page.locator('[data-action="lock-demo"]').click().catch(() => {});
+        console.log('\n[DB-3] demo-builder — generations accumulate');
+        const feedbackText = 'Keep the CLI capture, but lead with the test evidence card.';
+        // REAL round trip: the operator types into the real review surface and
+        // the real bridge route writes feedback.md + bumps the iteration.
+        await page.locator('[data-field="demo-feedback"]').fill(feedbackText).catch(() => {});
+        await page.locator('[data-action="apply-feedback"]').click().catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-section="demo-builder-panel"]')?.getAttribute('data-demo-phase') === 'generating',
+          null, { timeout: 15000 },
+        ).catch(() => {});
+        const feedbackOnDisk = (() => {
+          try { return readFileSync(join(demoDir(demoSid), 'feedback.md'), 'utf8'); } catch { return ''; }
+        })();
+        check(feedbackOnDisk === feedbackText, 'DB-3: the real bridge route persisted the operator\'s feedback to the session\'s feedback.md');
+
+        demoEvent(demoSid, 'start', 'demo-builder turn (phase=generating) — applying operator feedback');
+        writeDemoArtifacts();
+        // The generation records the feedback it was DRIVEN BY, read from the
+        // real feedback.md the bridge just wrote — never passed in by the
+        // harness, so the assertion below is a real round trip.
+        writeDemoGeneration(demoSid, 2, feedbackText);
+        writeDemoStatus(demoSid, { phase: 'awaiting-review', mode: 'create', prompt: demoBrief, iteration: 2 });
+        demoEvent(demoSid, 'log', 'generation 2 composed — awaiting review');
+
+        const twoGens = await page.waitForFunction(
+          () => document.querySelector('[data-section="generation-gallery"]')?.getAttribute('data-generation-count') === '2',
+          null, { timeout: 20000 },
+        ).then(() => true).catch(() => false);
+        check(twoGens, 'DB-3: generation 2 lands BESIDE generation 1 — the gallery accumulates ([data-generation-count="2"])');
+        check(await page.locator('[data-action="select-generation"][data-generation-number="1"]').count() > 0, 'DB-3: generation 1 is still selectable — the earlier take was not overwritten');
+        check(await page.locator('[data-action="select-generation"][data-generation-number="2"]').count() > 0, 'DB-3: generation 2 is selectable');
+        const selectedNow = await page.evaluate(() => document.querySelector('[data-section="generation-gallery"]')?.getAttribute('data-selected-generation') ?? null);
+        check(selectedNow === '2', 'DB-3: the newest generation is selected by default');
+        const shownFeedback = await page.evaluate(() => document.querySelector('[data-section="generation-feedback"]')?.textContent ?? '');
+        check(
+          shownFeedback.includes('lead with the test evidence card'),
+          'DB-3: the gallery shows the operator\'s OWN words as the feedback that drove generation 2 (real POST → real feedback.md → real derivation → real DOM)',
+        );
+        await frame(page, 'demo-3-generations', 'Generations accumulate — feedback drives the next one', { key: true });
+
+        // Pick the earlier generation and prove the choice SURVIVES a poll
+        // tick. The panel refetches every 3s with a freshly-parsed payload; a
+        // selection that resets on each tick cannot be acted on, so this is
+        // asserted after more than one full interval, not immediately.
+        await page.locator('[data-action="select-generation"][data-generation-number="1"]').click().catch(() => {});
+        const picked = await page.waitForFunction(
+          () => document.querySelector('[data-section="generation-gallery"]')?.getAttribute('data-selected-generation') === '1',
+          null, { timeout: 10000 },
+        ).then(() => true).catch(() => false);
+        check(picked, 'DB-3: the operator can select the earlier generation ([data-selected-generation="1"])');
+        await sleep(4200); // > one 3s poll interval — deliberate, not padding
+        const stillPicked = await page.evaluate(() => document.querySelector('[data-section="generation-gallery"]')?.getAttribute('data-selected-generation') ?? null);
+        check(stillPicked === '1', 'DB-3: the selection SURVIVES a refetch — the poll does not snap the operator back to the newest generation');
+        await frame(page, 'demo-4-generation-picked', 'The operator sits on generation 1 — the choice holds across the poll');
+      },
+    },
+    {
+      id: 'demo-builder-lock',
+      title: 'Finalize the chosen generation',
+      narration: 'Finalizing the chosen generation restores that take — its sample AND the generator skill that produced it — into the project repo, then writes demo.lock.json plus a history entry. The operator never left the project page, and the demo skill the runner will execute from now on is the one they picked, not merely the last one the agent happened to produce.',
+      drive: async (ctx) => {
+        const { page, frame, check } = ctx;
+        console.log('\n[DB-4] demo-builder — finalize the chosen generation');
+        check(
+          await page.locator('[data-action="lock-demo"]').count() > 0,
+          'DB-4: the plain "lock the current sample" control is still offered (R4-16 added a chooser, it did not replace the existing path)',
+        );
+        // R4-16: finalize GENERATION 1 — the one selected in DB-3, not the
+        // newest. This POSTs to the real bridge lock route with the chosen
+        // generation number.
+        await page.locator('[data-action="finalize-generation"][data-generation-number="1"]').click().catch(() => {});
         await sleep(ACT);
-        writeDemoLock(demoSid, demoBrief);
+        const persisted = (() => {
+          try { return JSON.parse(readFileSync(join(demoDir(demoSid), 'status.json'), 'utf8')); } catch { return {}; }
+        })();
+        check(
+          persisted.selectedGeneration === 1,
+          'DB-4: the real bridge persisted the operator\'s choice to status.json (selectedGeneration=1) — the lock step enforces it',
+        );
+        writeDemoLock(demoSid, demoBrief, 1);
         demoEvent(demoSid, 'log', 'demo locked (.forge/demo/demo.lock.json + history/ written)');
-        writeDemoStatus(demoSid, { phase: 'locked', mode: 'create', prompt: demoBrief });
+        writeDemoStatus(demoSid, { phase: 'locked', mode: 'create', prompt: demoBrief, iteration: 2, selectedGeneration: 1 });
         await page.waitForSelector('[data-section="demo-status"]', { timeout: 15000 }).catch(() => {});
-        check(await page.locator('[data-section="demo-status"]').count() > 0, 'DB-3: the locked success surface renders in the panel');
+        check(await page.locator('[data-section="demo-status"]').count() > 0, 'DB-4: the locked success surface renders in the panel');
         check(
           await page.locator('[data-section="demo-builder-panel"] [data-action="close-demo-panel"]').count() > 0,
-          'DB-3: close-demo-panel offered once locked (the operator is already on the project page — R1-03-F2)',
+          'DB-4: close-demo-panel offered once locked (the operator is already on the project page — R1-03-F2)',
         );
-        await frame(page, 'demo-3-locked', 'The demo agent — locked in as the reproducible demo artifact');
+        await frame(page, 'demo-5-locked', 'The chosen generation — locked in as the reproducible demo artifact');
 
         // Self-contained cleanup (e2e-journey.mjs's finally block is out of this
         // task's touch-scope, so this journey cleans up its own state here).

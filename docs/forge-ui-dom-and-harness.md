@@ -516,6 +516,8 @@ inventory rather than one shared page-level contract:
   containing the preserved inner contract —
   `[data-section="session-briefing"|"demo-target-element"|"demo-status"|"demo-history"|"demo-viewer"|"demo-process"]`,
   `[data-component="demo-review"]`, `[data-demo-iframe]`,
+  `[data-field="demo-feedback"]` (the review textarea — named so the harness
+  can drive a real feedback round trip, R4-16),
   `[data-action="submit-brief"|"lock-demo"|"abandon-demo"|"iterate-element"|"view-element-output"|"close-demo-panel"]`
   plus a compact `[data-section="demo-status-strip"]`. The old detached
   `/demo/[sid]` route is a redirect stub
