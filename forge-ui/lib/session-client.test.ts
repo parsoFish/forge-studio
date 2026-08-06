@@ -787,3 +787,80 @@ test('AT-109: parseSessionArtifact: an EMPTY generation-gallery ("generations": 
   const parsed = parseSessionArtifact(empty) as { generations: unknown[] };
   expect(parsed.generations).toEqual([]);
 });
+
+// ===========================================================================
+// R4-17 — contract-buildout artifact parsing. TEST-FIRST PIN: `kind:
+// 'contract-buildout'` is not yet a recognised case in the real, unmodified
+// `parseSessionArtifact` — every test below currently throws
+// "unrecognised session artifact kind" (the `default` branch), mirroring the
+// generation-gallery block's own AT-103-style sanity comment pattern at ITS
+// branch base. Mirrors `cli/contract-stages.ts`'s server-side
+// `ContractStageRow` shape exactly (structurally identical, per the R4-17
+// contract) — never a client-side re-derivation of status/detail/bytes.
+// ===========================================================================
+
+const WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT = {
+  kind: 'contract-buildout',
+  label: 'Contract build-out',
+  stages: [
+    { stage: 'contract', status: 'present', source: '.forge/project.json', detail: ['npm test'], bytes: null },
+    { stage: 'instructions', status: 'present', source: 'AGENTS.md', detail: [], bytes: 512 },
+    { stage: 'secrets', status: 'absent', source: '.forge/project.json', detail: [], bytes: null },
+    { stage: 'demo', status: 'absent', source: '.forge/project.json + .forge/demo/demo.lock.json', detail: [], bytes: null },
+    { stage: 'roadmap', status: 'present', source: 'roadmap.md', detail: [], bytes: 2046 },
+  ],
+  sourcesScanned: ['.forge/project.json', 'AGENTS.md', 'roadmap.md'],
+};
+
+test('R4-17 AT-110: parseSessionArtifact: a well-formed contract-buildout artifact round-trips exactly, five stage rows in server order', () => {
+  const parsed = parseSessionArtifact(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT);
+  expect(parsed).toEqual(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT);
+});
+
+test('R4-17 AT-111: parseSessionArtifact: contract-buildout "stages" missing or non-array THROWS — never coerced to []', () => {
+  // Sanity: a WELL-FORMED payload must parse cleanly — proves this test is
+  // genuinely red today for the right reason (the whole kind is
+  // unrecognised, so every input throws regardless of field validity),
+  // mirroring AT-103's own sanity-check pattern.
+  expect(() => parseSessionArtifact(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT)).not.toThrow();
+  const { stages: _drop, ...missing } = WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: 'nope' })).toThrow();
+});
+
+test('R4-17 AT-112: parseSessionArtifact: a stage row with an unrecognised "status" (not "present"/"absent") THROWS naming it — never silently coerced to the most permissive reading', () => {
+  const badStatus = {
+    ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT,
+    stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], status: 'unknown-status-value' }],
+  };
+  expect(() => parseSessionArtifact(badStatus)).toThrow(/unknown-status-value/);
+});
+
+test('R4-17 AT-113: parseSessionArtifact: a stage row with a missing/non-string "stage" or "source", or a non-array "detail", THROWS', () => {
+  const badStage = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], stage: 7 }] };
+  expect(() => parseSessionArtifact(badStage)).toThrow();
+  const badSource = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], source: null }] };
+  expect(() => parseSessionArtifact(badSource)).toThrow();
+  const badDetail = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], detail: 'not-an-array' }] };
+  expect(() => parseSessionArtifact(badDetail)).toThrow();
+});
+
+test('R4-17 AT-114: parseSessionArtifact: a stage row\'s "bytes" accepts a number OR literal null, but THROWS on any other type (e.g. a string, or omitted entirely) — never silently coerced', () => {
+  const nullBytes = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], bytes: null }] };
+  expect(() => parseSessionArtifact(nullBytes)).not.toThrow();
+  const numberBytes = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], bytes: 128 }] };
+  expect(() => parseSessionArtifact(numberBytes)).not.toThrow();
+  const stringBytes = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [{ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0], bytes: '128' }] };
+  expect(() => parseSessionArtifact(stringBytes)).toThrow();
+  const { bytes: _drop, ...rowWithoutBytes } = WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[0];
+  const missingBytes = { ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, stages: [rowWithoutBytes] };
+  expect(() => parseSessionArtifact(missingBytes)).toThrow();
+});
+
+test('R4-17 AT-115: parseSessionArtifact: contract-buildout "sourcesScanned" or "label" missing or non-well-typed THROWS — same treatment as every other live kind', () => {
+  const { sourcesScanned: _drop1, ...missingSources } = WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT;
+  expect(() => parseSessionArtifact(missingSources)).toThrow();
+  const { label: _drop2, ...missingLabel } = WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT;
+  expect(() => parseSessionArtifact(missingLabel)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, label: 7 })).toThrow();
+});

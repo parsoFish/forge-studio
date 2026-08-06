@@ -115,6 +115,9 @@ const INVALID_JSON_STATUS_SESSION = '2026-08-08T17-01-00';
 const NON_OBJECT_STATUS_SESSION = '2026-08-08T17-02-00';
 const NO_PHASE_STATUS_SESSION = '2026-08-08T17-03-00';
 const NON_STRING_PHASE_STATUS_SESSION = '2026-08-08T17-04-00';
+// R4-17 — onboarding / contract-buildout route-threading fixtures.
+const ONBOARDING_SESSION = '2026-08-10T09-00-00';
+const ONBOARDING_BAD_CONFIG_SESSION = '2026-08-10T09-01-00';
 
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
@@ -167,6 +170,17 @@ function writeSessionKindsYaml(root: string): void {
         stages: ['brain'],
         defaultStage: 'brain',
         artifact: { kind: 'brain-structure', label: 'Seeded structure' },
+      },
+      // R4-17: the new "onboarding" session kind — D2's five-stage
+      // vocabulary, D9's artifact.label the project page renders.
+      {
+        id: 'onboarding',
+        agent: 'onboarding-agent',
+        title: 'Onboarding session',
+        legacyRoutes: [],
+        stages: ['contract', 'instructions', 'secrets', 'demo', 'roadmap'],
+        defaultStage: 'contract',
+        artifact: { kind: 'contract-buildout', label: 'Contract build-out' },
       },
     ]),
     'utf8',
@@ -249,6 +263,33 @@ function writeProjectBrainSession(projectsRoot: string, project: string, session
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'analyzing' }), 'utf8');
 }
 
+// R4-17 — the onboarding session dir (honestly one turn, D8: no fabricated
+// interview) + a REAL project fixture with a well-formed `.forge/project.json`
+// so `deriveContractStages` (cli/contract-stages.ts) has something real to
+// derive over when the route threads it in.
+function writeOnboardingSession(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'prompt.md'), 'Onboard this project.\n', 'utf8');
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'running' }), 'utf8');
+}
+
+function writeOnboardedProjectFixture(projectsRoot: string, project: string): void {
+  const dir = join(projectsRoot, project);
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({ testProcess: { local: { cmd: ['npm', 'test'] } } }), 'utf8');
+  writeFileSync(join(dir, 'roadmap.md'), '# Roadmap\n', 'utf8');
+}
+
+/** A project whose `.forge/project.json` is deliberately malformed — proves
+ *  the route surfaces `deriveContractStages`'s {ok:false} as a non-200 error
+ *  naming the cause, never a 200 with an empty/silent artifact. */
+function writeMalformedContractProjectFixture(projectsRoot: string, project: string): void {
+  const dir = join(projectsRoot, project);
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), '{ not valid json [[[', 'utf8');
+}
+
 before(async () => {
   forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-sessions-'));
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
@@ -264,12 +305,21 @@ before(async () => {
   writeSkillAgent(forgeRoot, 'architect');
   writeSkillAgent(forgeRoot, 'instructions-creator', { libraryFalse: true });
   writeSkillAgent(forgeRoot, 'project-brain-builder', { libraryFalse: true });
+  writeSkillAgent(forgeRoot, 'onboarding-agent');
 
   const projectsRoot = join(forgeRoot, 'projects');
   writeArchitectSession(projectsRoot, 'demoproj', REAL_ARCHITECT_SESSION);
   writeInstructionsSession(projectsRoot, 'demoproj', REAL_INSTRUCTIONS_SESSION);
   writeProjectBrainSession(projectsRoot, 'demoproj', REAL_PROJECT_BRAIN_SESSION);
   writeArchitectSessionWithDeps(projectsRoot, 'depsproj', DEPS_SESSION);
+
+  // R4-17 — onboarding session fixtures: a well-formed project (contract
+  // stages derive cleanly) and a malformed one (deriveContractStages
+  // {ok:false} must surface as a non-200, never a 200 with an empty artifact).
+  writeOnboardingSession(projectsRoot, 'onboardedproj', ONBOARDING_SESSION);
+  writeOnboardedProjectFixture(projectsRoot, 'onboardedproj');
+  writeOnboardingSession(projectsRoot, 'malformedcontractproj', ONBOARDING_BAD_CONFIG_SESSION);
+  writeMalformedContractProjectFixture(projectsRoot, 'malformedcontractproj');
 
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
@@ -735,4 +785,60 @@ test('AT-77: GET /api/studio/sessions/architect/<id>?project=<p> carries "depend
     ['INIT-2026-01-01-fixture-a', 'INIT-2025-06-01-already-merged'],
     'row B\'s dependsOn must survive the REAL route\'s JSON serialization verbatim, including the entry pointing outside this session\'s own manifest set',
   );
+});
+
+// ---------------------------------------------------------------------------
+// R4-17 — the "onboarding" session kind threads deriveContractStages
+// (cli/contract-stages.ts) into the contract-buildout artifact. This is the
+// REAL wire (route → deriveContractStages → deriveSessionArtifact), not a
+// unit-level fixture — the standing R2-09 rule that a value's survival
+// through the route's own serialization needs at least one real-client-path
+// AT.
+// ---------------------------------------------------------------------------
+
+test('R4-17 AT-1: GET /api/studio/sessions/onboarding/<id>?project=<p> derives contract-buildout via the REAL deriveContractStages over a REAL onboarded project fixture — 200, honestly one turn, five stage rows in order', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/onboarding/${ONBOARDING_SESSION}?project=onboardedproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'onboarding');
+  assert.equal(body.phase, 'running', 'phase must be the real value read from status.json');
+  assert.deepEqual(body.stages, ['contract', 'instructions', 'secrets', 'demo', 'roadmap']);
+  assert.equal(body.defaultStage, 'contract');
+
+  // D8 — no fabricated interview: the onboarding-agent asks no questions,
+  // so the honest transcript is exactly the one prompt.md operator turn.
+  assert.equal(body.turns.length, 1, `onboarding must surface honestly as one turn, no fabricated interview questions, got: ${JSON.stringify(body.turns)}`);
+  assert.equal(body.turns[0].role, 'operator');
+  assert.equal(body.turns[0].source, 'prompt.md');
+
+  const artifact = body.artifact as { kind: string; label: string; stages: Array<{ stage: string; status: string }> };
+  assert.equal(artifact.kind, 'contract-buildout');
+  assert.equal(artifact.label, 'Contract build-out');
+  assert.deepEqual(
+    artifact.stages.map((s) => s.stage),
+    ['contract', 'instructions', 'secrets', 'demo', 'roadmap'],
+    'the derived rows must reach the wire in the declared D2 order, all five, never a dropped row',
+  );
+  // The fixture's REAL on-disk shape: testProcess.local.cmd + roadmap.md
+  // exist; AGENTS.md/CLAUDE.md and the acceptance/demo blocks do not.
+  const byStage = (s: string): { status: string } => artifact.stages.find((r) => r.stage === s)!;
+  assert.equal(byStage('contract').status, 'present');
+  assert.equal(byStage('instructions').status, 'absent');
+  assert.equal(byStage('secrets').status, 'absent');
+  assert.equal(byStage('demo').status, 'absent');
+  assert.equal(byStage('roadmap').status, 'present');
+});
+
+test('R4-17 AT-2: a malformed .forge/project.json → deriveContractStages\'s {ok:false} surfaces as a NON-200 error naming the cause, never a 200 with an empty/silent artifact', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/onboarding/${ONBOARDING_BAD_CONFIG_SESSION}?project=malformedcontractproj`);
+  assert.notEqual(res.status, 200, 'a malformed project.json must never be smoothed into a 200 — this is the "declared data fails open" shape this campaign keeps finding');
+  const body = (await res.json()) as { error?: string; ok?: boolean };
+  assert.ok(
+    typeof body.error === 'string' && body.error.length > 0,
+    `the error response must name the cause, got: ${JSON.stringify(body)}`,
+  );
+  assert.notEqual(body.ok, true, 'the response must not claim ok:true alongside an error');
 });

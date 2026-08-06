@@ -190,21 +190,25 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
   });
 
-  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 4 live + 2 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live, deriveGenerationGallery ships a real renderer)', () => {
+  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 5 live + 1 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer)', () => {
     const ids = SESSION_ARTIFACT_KINDS.map((k) => k.id);
     assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
     const live = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'live').map((k) => k.id);
     const reserved = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'reserved').map((k) => k.id);
-    // R4-16 AT-20: generation-gallery now has a real renderer
-    // (deriveGenerationGallery, orchestrator/studio/session-transcript.ts) —
-    // the row flips to live. Declaration ORDER is unchanged (still last in
-    // the vocabulary); only its status flips. This assertion is RED at
-    // branch base — today's real session-kinds.ts still lists it reserved —
-    // and is the pin for that flip (kills an implementation that ships the
-    // derivation but forgets to promote the row, leaving it a permanent
-    // lint error per validateSessionKinds's reserved-artifact-kind check).
-    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'generation-gallery']);
-    assert.deepEqual(reserved, ['file-package', 'contract-buildout']);
+    // R4-17: contract-buildout now has a real renderer (the onboarding
+    // session's contractStages-consuming case in deriveSessionArtifact,
+    // session-transcript.ts) — the row flips to live. Declaration ORDER is
+    // unchanged (contract-buildout still sits between file-package and
+    // generation-gallery); only its status flips, so the LIVE set gains it
+    // at its DECLARED position (before generation-gallery), not appended at
+    // the end. This assertion is RED at branch base — today's real
+    // session-kinds.ts still lists it reserved — and is the pin for that
+    // flip (kills an implementation that ships deriveContractBuildout but
+    // forgets to promote the row, leaving the onboarding descriptor a
+    // permanent lint error per validateSessionKinds's
+    // reserved-artifact-kind check).
+    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'contract-buildout', 'generation-gallery']);
+    assert.deepEqual(reserved, ['file-package']);
     assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS));
   });
 
@@ -218,6 +222,12 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     // same frozen array, so a real implementation cannot diverge here — this
     // is the same evidence as AT-2, checked through the OTHER accessor).
     assert.equal(sessionArtifactKindState('generation-gallery'), 'live');
+    // R4-17: contract-buildout is now LIVE, not reserved — same evidence as
+    // AT-2's flip, checked through this OTHER accessor (kills an
+    // implementation that flips the array row but sessionArtifactKindState
+    // somehow still answers stale — impossible if it genuinely reads the
+    // same frozen array, but that is exactly the invariant this pins).
+    assert.equal(sessionArtifactKindState('contract-buildout'), 'live');
     assert.equal(sessionArtifactKindState('no-such-kind-at-all'), undefined, 'an unrecognised kind must resolve to undefined, never a guess and never a throw');
   });
 });
@@ -422,9 +432,9 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
   });
 
-  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 4 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo")', () => {
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 5 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding")', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 4, `expected exactly 4 real session kinds (R4-16 adds "demo"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 5, `expected exactly 5 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding"), got ids: ${descs.map((d) => d.id).join(', ')}`);
 
     const architect = byId(descs, 'architect');
     assert.equal(architect.agent, 'architect');
@@ -461,6 +471,27 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(demo.stages, ['demo']);
     assert.equal(demo.defaultStage, 'demo');
     assert.deepEqual(demo.artifact, { kind: 'generation-gallery', label: 'Demo generations' });
+
+    // R4-17: the new "onboarding" session kind (D1 — ONE descriptor shared by
+    // both onboarding AND creation, D2 — the five-stage vocabulary drawn
+    // straight from SESSION_STAGES minus "brain", D9's project-page-facing
+    // artifact.label). legacyRoutes:[] — onboarding has never had a session
+    // page before this initiative (evidence #3 in the spec: onboarding-agent
+    // was a fire-and-forget dispatch with no session dir at all).
+    const onboarding = byId(descs, 'onboarding');
+    assert.equal(onboarding.agent, 'onboarding-agent');
+    assert.deepEqual(onboarding.legacyRoutes, []);
+    assert.deepEqual(
+      onboarding.stages,
+      ['contract', 'instructions', 'secrets', 'demo', 'roadmap'],
+      'stages must be the D2 five-stage vocabulary, in this exact order — never including "brain" (project-brain owns that stage), never a parallel vocabulary',
+    );
+    assert.equal(onboarding.defaultStage, 'contract');
+    assert.deepEqual(
+      onboarding.artifact,
+      { kind: 'contract-buildout', label: 'Contract build-out' },
+      'the label is verbatim from the mockup (mockups/studio-endstate-v2/data.jsx SESSIONS[\'project-onboarding\'].artifactLabel) — pinned exactly, not paraphrased',
+    );
   });
 });
 

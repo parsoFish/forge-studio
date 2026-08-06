@@ -7,7 +7,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { rmSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { cmdAgentDispatch } from './agent-run.ts';
@@ -74,5 +74,72 @@ test('cmdAgentDispatch: happy path under the no-spawn seam → suppressed, no ex
     if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
     rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R4-17, D7 — `--session-dir <abs>`: the process that OBSERVES the run
+// writes the terminal phase (complete/failed) into that session dir's
+// status.json when the run ends. D6: WITHOUT the flag, behaviour is
+// byte-identical to today (the 5 tests above, all still passing unmodified,
+// ARE that regression pin — this block only adds NEW, additive coverage for
+// the NEW flag).
+// ---------------------------------------------------------------------------
+
+function makeSessionDirFixture(name: string): string {
+  const dir = join(ROOT, '_logs', `_r4-17-session-dir-fixture-${name}`);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ phase: 'running' }), 'utf8');
+  return dir;
+}
+
+test('cmdAgentDispatch: R4-17 AT-D7-1 — with --session-dir, a SUCCESSFUL dispatch (suppressed under the no-spawn seam still counts as "the run ended") writes phase:"complete" into that dir\'s status.json', async () => {
+  const prior = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const runId = '_agent-cli-sessiondir-complete-test';
+  const sessionDir = makeSessionDirFixture('complete');
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir]);
+    assert.equal(r.exitCode, null, 'a successful (even if suppressed) dispatch must not exit non-zero');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'complete', `--session-dir must write the terminal phase when the run ends, got status.json: ${JSON.stringify(status)}`);
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: R4-17 AT-D7-2 — with --session-dir, a FAILED dispatch (unknown slug) writes phase:"failed" into that dir\'s status.json', async () => {
+  const runId = '_agent-cli-sessiondir-failed-test';
+  const sessionDir = makeSessionDirFixture('failed');
+  try {
+    const r = await run(['totally-unknown-slug-does-not-exist', '--run-id', runId, '--session-dir', sessionDir]);
+    assert.equal(r.exitCode, 1, 'an unknown-slug dispatch must still exit 1, exactly as before this flag existed');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    assert.equal(status.phase, 'failed', `--session-dir must write phase:"failed" on a failed run, got status.json: ${JSON.stringify(status)}`);
+  } finally {
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(sessionDir, { recursive: true, force: true });
+  }
+});
+
+test('cmdAgentDispatch: R4-17 AT-D7-3 (D6 — byte-identical without the flag) — omitting --session-dir on a successful dispatch touches NO session status.json anywhere; a pre-existing fixture dir\'s status.json is left completely untouched', async () => {
+  const prior = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
+  const runId = '_agent-cli-nosessiondir-test';
+  const untouchedDir = makeSessionDirFixture('untouched');
+  const before = readFileSync(join(untouchedDir, 'status.json'), 'utf8');
+  try {
+    const r = await run(['project-scoped-review', '--run-id', runId]);
+    assert.equal(r.exitCode, null);
+    const after = readFileSync(join(untouchedDir, 'status.json'), 'utf8');
+    assert.equal(after, before, 'a dispatch run with NO --session-dir flag must never guess at or touch ANY session status.json — D6\'s "byte-identical without the flag" claim');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = prior;
+    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(untouchedDir, { recursive: true, force: true });
   }
 });
