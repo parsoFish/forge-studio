@@ -1491,14 +1491,44 @@ const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
 /** R6-04-F2 WI-1 contract point 3 — a `materials:` upload's `filename` must
  *  be a single safe path-segment NAME: alnum-first (bans dotfiles like
  *  `.env` and the `..foo`/`.`/`..` shapes outright — no traversal token is
- *  needed for any of those to be refused), alnum/`.`/`_`/`-` only (no `/`,
- *  no `\`, never decoded — this field is a JSON string VALUE, never a URL
- *  segment), max 128 chars. Deliberately STRICTER than, and NOT reused from,
- *  `studio-path-guard.ts`'s `isSafeSegment` (which legitimately allows
- *  `..foo` as an ordinary directory-entry name) — this is a narrower,
- *  purpose-built contract for an untrusted upload name, not a relaxation of
- *  the shared guard's rule. */
-const MATERIAL_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+ *  needed for any of those to be refused), then alnum plus SPACE, `.`, `_`,
+ *  `-`, `(`, `)`, `[`, `]` (no `/`, no `\`, no `%`, no NUL/control chars,
+ *  never decoded — this field is a JSON string VALUE, never a URL segment),
+ *  max 128 chars total.
+ *
+ *  ROUND 3 WIDENING (adversarial review): the original class
+ *  (`[A-Za-z0-9._-]` only) rejected the filenames operators' own machines
+ *  produce by DEFAULT — `Screen Shot 2026-08-07 at 10.32.15 AM.png` (macOS
+ *  screenshot), `data (1).csv` (browser duplicate-download suffix),
+ *  `Meeting Notes.pdf` — on this feature's headline use case (attaching a
+ *  screenshot). Space/`(`/`)`/`[`/`]` were added to the TAIL class only; the
+ *  leading-character rule, the length cap, and every excluded character
+ *  (`/`, `\`, `%`, NUL, control chars) are UNCHANGED from round 1/2.
+ *
+ *  ATTACK-THE-FIX (personally attempted before accepting this widening, not
+ *  just watched pass): a literal `..` substring embedded via the newly
+ *  allowed brackets/parens (e.g. `photo [..] (backup)..png`) is safe and
+ *  correctly ACCEPTED — there is no `/` anywhere, so it is one opaque
+ *  segment name, never a path boundary, exactly `studio-path-guard.ts`'s own
+ *  established `..foo`-is-legitimate precedent; `/`, `\`, `%`, NUL, and
+ *  control characters are all still excluded by the class itself (adding
+ *  space/parens/brackets to the tail did not touch the exclusion list); a
+ *  name that is only dots/spaces (no alnum at all) is still refused by the
+ *  alnum-first rule, unchanged.
+ *
+ *  Deliberately STILL ASCII-only — non-ASCII (e.g. `résumé.pdf`) is REFUSED,
+ *  not an oversight of the widening: filesystem unicode normalization
+ *  differs by platform (macOS tends toward NFD, Linux does not), so one
+ *  logical name can be two different on-disk byte sequences, and
+ *  `resolveGuardedPath`'s realpath-identity comparison would behave
+ *  differently per platform for the SAME input — fail-closed-and-consistent
+ *  beats convenient-and-platform-dependent.
+ *
+ *  Deliberately STRICTER than, and NOT reused from, `studio-path-guard.ts`'s
+ *  `isSafeSegment` (which allows `..foo` but not space/parens/brackets at
+ *  all) — this is a narrower, purpose-built contract for an untrusted
+ *  upload name, not a relaxation of the shared guard's rule. */
+const MATERIAL_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ()._[\]-]{0,127}$/;
 
 /** Comma-separated, declaration-order rendering of an agent's declared
  *  materials kinds for a refusal message — the literal `(none)` when the

@@ -40,11 +40,37 @@ type MaterialEntry = { filename: string; bytes: Buffer };
  *   through `resolveGuardedPath` (the shared, generalized realpath-based
  *   guard — symlinked directory, symlinked leaf, and hardlinked leaf are
  *   all caught there; see that module's docstring for the full escape-shape
- *   catalogue) — with NO filesystem writes at all. Only once every single
- *   entry has passed does Phase 2 run, writing each file. If entry N (of
- *   any N, including the very last) fails its check, entries 1..N-1 are
- *   NEVER written — moving a write earlier would only change which artifact
- *   gets orphaned on a later refusal, not eliminate the problem.
+ *   catalogue) — with NO filesystem writes at all. Phase 1 ALSO refuses a
+ *   DUPLICATE resolved target within the same call — see the paragraph
+ *   below; this is not a containment check, but the same phase catches it
+ *   for the same reason (still zero side effects). Only once every single
+ *   entry has passed BOTH checks does Phase 2 run, writing each file. If
+ *   entry N (of any N, including the very last) fails either check, entries
+ *   1..N-1 are NEVER written — moving a write earlier would only change
+ *   which artifact gets orphaned on a later refusal, not eliminate the
+ *   problem.
+ *
+ * DUPLICATE-TARGET refusal (round 3 adversarial-review amendment) — this
+ * function does NOT trust its caller to have deduped. The route
+ * (`cli/ui-bridge.ts`'s `validateMaterialsField`) happens to reject a
+ * duplicate `filename` within one request today, but "the caller already
+ * checks this" is precisely the guard-symmetry gap this codebase just
+ * closed for `isSafeRunId` (see `cli/ui-bridge.ts`'s run-dir mkdir) — a
+ * module must not rely on an assumption about who calls it. Without this
+ * check, two entries sharing one filename would each pass Phase 1
+ * independently (it is side-effect-free, so neither sees the other), and
+ * Phase 2 would then write both, the SECOND silently clobbering the first —
+ * a full, undocumented overwrite, not a partial write, and therefore NOT
+ * covered by the "zero partial writes" guarantee above without this
+ * explicit check. The comparison is on each entry's RESOLVED
+ * `realPath` (from `resolveGuardedPath`), not the raw input `filename`
+ * string — two different filenames must not be able to resolve to one
+ * on-disk target either (e.g. a filesystem that collapses distinct names to
+ * one canonical path). The check is scoped to entries within ONE call only
+ * — re-staging the same filename across two SEPARATE `stageMaterials` calls
+ * is an ordinary edit (a run's materials are not write-once), matching the
+ * route's own contract-point-8 wording ("duplicate filename in one
+ * request").
  *
  * Throws `MaterialsStagingError` on any refusal (mirrors the established
  * throw-not-return convention of this route's sibling
@@ -54,8 +80,10 @@ type MaterialEntry = { filename: string; bytes: Buffer };
 export function stageMaterials(runDir: string, entries: ReadonlyArray<MaterialEntry>): void {
   if (entries.length === 0) return;
 
-  // Phase 1 — resolve + verify every path. Zero side effects.
+  // Phase 1 — resolve + verify every path, AND refuse a duplicate resolved
+  // target within this call. Zero side effects.
   const resolved: Array<{ realPath: string; bytes: Buffer }> = [];
+  const seenTargets = new Set<string>();
   for (const entry of entries) {
     const result = resolveGuardedPath(runDir, ['materials', entry.filename]);
     if (!result.ok) {
@@ -64,12 +92,16 @@ export function stageMaterials(runDir: string, entries: ReadonlyArray<MaterialEn
       // forwarded — this message names neither it nor any filesystem path.
       throw new MaterialsStagingError(`materials: refused to stage "${entry.filename}" — containment check failed`);
     }
+    if (seenTargets.has(result.realPath)) {
+      throw new MaterialsStagingError(`materials: refused to stage "${entry.filename}" — duplicate target within one call`);
+    }
+    seenTargets.add(result.realPath);
     resolved.push({ realPath: result.realPath, bytes: entry.bytes });
   }
 
-  // Phase 2 — write. Every path was already identity-verified above; the
-  // `materials/` directory itself is created here (mkdirSync recursive) if
-  // this is the first material for this run.
+  // Phase 2 — write. Every path was already identity-verified AND
+  // uniqueness-checked above; the `materials/` directory itself is created
+  // here (mkdirSync recursive) if this is the first material for this run.
   for (const item of resolved) {
     mkdirSync(dirname(item.realPath), { recursive: true });
     writeFileSync(item.realPath, item.bytes);
