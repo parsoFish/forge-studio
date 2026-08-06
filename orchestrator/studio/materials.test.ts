@@ -19,7 +19,15 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MATERIAL_KINDS, parseMaterials, agentAcceptsMaterial } from './materials.ts';
+import {
+  MATERIAL_KINDS,
+  parseMaterials,
+  agentAcceptsMaterial,
+  materialKindForFilename,
+  MAX_MATERIALS_COUNT,
+  MAX_MATERIAL_BYTES,
+  MAX_MATERIALS_TOTAL_BYTES,
+} from './materials.ts';
 import type { AgentDefinition } from './types.ts';
 
 // ---------------------------------------------------------------------------
@@ -196,5 +204,126 @@ describe('agentAcceptsMaterial — fail-closed on a malformed (non-array) def.ma
 
   it('def itself is undefined → false, never throws', () => {
     assert.equal(agentAcceptsMaterial(undefined as unknown as AgentDefinition, 'images'), false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// materialKindForFilename + the materials caps (R6-04-F2, WI-1 — "materials
+// contract enforcement + guarded staging", the agent-kickoff upload seam).
+//
+// NEW exports — none of these exist at HEAD, so importing them is itself
+// part of this file's RED proof (a genuine "feature not implemented yet"
+// red — a `node --test` module-resolution failure on the import line above,
+// not a missing npm dependency).
+//
+// Route-level ACCEPTANCE tests (the shape/gate/cap/base64/duplicate/success
+// contract, the client-supplied-`kind`-must-not-be-trusted proof, and every
+// containment escape shape) live in
+// cli/ui-bridge-agent-run-materials.test.ts — THIS file only pins the pure
+// vocabulary: the extension→kind derivation function and the three named cap
+// constants, at the unit level.
+// ---------------------------------------------------------------------------
+
+describe('materialKindForFilename — server-side extension→kind derivation (R6-04-F2 contract point 4)', () => {
+  // These three extensions are pinned to a SPECIFIC kind because there is no
+  // plausible alternate classification among the four MATERIAL_KINDS for any
+  // of them — a PNG cannot reasonably be "audio" or "documents", an MP3
+  // cannot reasonably be "images" or "data-files", a PDF cannot reasonably be
+  // "audio" or "images". Deliberately NOT pinned here: any 'data-files'
+  // extension (.csv/.json/.parquet/.xlsx/...) — every candidate has a
+  // plausible alternate classification an implementer could reasonably
+  // choose (e.g. .csv as 'documents'), and the WI does not specify an
+  // extension table, so hardcoding one risks failing a compliant
+  // implementation that simply chose a different (but reasonable) mapping.
+  it('an unambiguous image extension (.png) derives "images"', () => {
+    assert.equal(materialKindForFilename('photo.png'), 'images');
+  });
+
+  it('an unambiguous audio extension (.mp3) derives "audio"', () => {
+    assert.equal(materialKindForFilename('track.mp3'), 'audio');
+  });
+
+  it('an unambiguous document extension (.pdf) derives "documents"', () => {
+    assert.equal(materialKindForFilename('report.pdf'), 'documents');
+  });
+
+  it('an unrecognized extension (.exe) derives undefined, never a fabricated kind', () => {
+    assert.equal(materialKindForFilename('payload.exe'), undefined);
+  });
+
+  it('no extension at all derives undefined', () => {
+    assert.equal(materialKindForFilename('README'), undefined);
+  });
+
+  it('a bare dot with nothing after it derives undefined, not a crash', () => {
+    assert.equal(materialKindForFilename('trailing.'), undefined);
+  });
+
+  it('every derivable result is a genuine member of MATERIAL_KINDS — kills an implementation that returns the raw extension string (or any other non-vocabulary value) instead of a proper MaterialKind', () => {
+    const candidates = [
+      'a.png', 'a.jpg', 'a.jpeg', 'a.gif', 'a.webp',
+      'a.mp3', 'a.wav', 'a.m4a', 'a.ogg',
+      'a.pdf', 'a.docx', 'a.txt', 'a.md',
+      'a.csv', 'a.json', 'a.parquet', 'a.xlsx',
+      'a.zip', 'a.exe', 'a.dll', 'noext',
+    ];
+    for (const filename of candidates) {
+      const kind = materialKindForFilename(filename);
+      assert.ok(
+        kind === undefined || (MATERIAL_KINDS as readonly string[]).includes(kind),
+        `materialKindForFilename(${JSON.stringify(filename)}) returned ${JSON.stringify(kind)} — neither undefined nor a member of MATERIAL_KINDS`,
+      );
+    }
+  });
+});
+
+describe('materials caps — named constants exported from materials.ts (R6-04-F2 contract point 6)', () => {
+  it('MAX_MATERIALS_COUNT is a positive integer', () => {
+    assert.equal(Number.isInteger(MAX_MATERIALS_COUNT), true, `MAX_MATERIALS_COUNT must be an integer, got ${MAX_MATERIALS_COUNT}`);
+    assert.ok(MAX_MATERIALS_COUNT > 0, 'MAX_MATERIALS_COUNT must be positive');
+  });
+
+  it('MAX_MATERIAL_BYTES is a positive integer', () => {
+    assert.equal(Number.isInteger(MAX_MATERIAL_BYTES), true, `MAX_MATERIAL_BYTES must be an integer, got ${MAX_MATERIAL_BYTES}`);
+    assert.ok(MAX_MATERIAL_BYTES > 0, 'MAX_MATERIAL_BYTES must be positive');
+  });
+
+  it('MAX_MATERIALS_TOTAL_BYTES is a positive integer', () => {
+    assert.equal(Number.isInteger(MAX_MATERIALS_TOTAL_BYTES), true, `MAX_MATERIALS_TOTAL_BYTES must be an integer, got ${MAX_MATERIALS_TOTAL_BYTES}`);
+    assert.ok(MAX_MATERIALS_TOTAL_BYTES > 0, 'MAX_MATERIALS_TOTAL_BYTES must be positive');
+  });
+
+  it('MAX_MATERIAL_BYTES does not exceed MAX_MATERIALS_TOTAL_BYTES (a single file cannot legitimately exceed the whole request\'s total cap)', () => {
+    assert.ok(
+      MAX_MATERIAL_BYTES <= MAX_MATERIALS_TOTAL_BYTES,
+      `MAX_MATERIAL_BYTES (${MAX_MATERIAL_BYTES}) must be <= MAX_MATERIALS_TOTAL_BYTES (${MAX_MATERIALS_TOTAL_BYTES}), otherwise a single at-cap file could never actually be sent`,
+    );
+  });
+
+  // R6-04-F2 contract point 10 — DRIFT GUARD. `cli/ui-bridge.ts`'s
+  // `MAX_BODY_BYTES` (line ~3207, `1 * 1024 * 1024`) is a module-private
+  // constant — not exported, and this test file must not touch
+  // cli/ui-bridge.ts to export it (out of scope: "files you own" for this
+  // work item is materials.ts/.test.ts + the bridge materials test file
+  // only). So this mirrors the literal value with a comment citing the
+  // source line, rather than importing it live. If cli/ui-bridge.ts:3207
+  // ever changes, this mirrored literal must be updated in the same PR, or
+  // this test is testing a stale number.
+  //
+  // The inequality must hold with real margin, not just by one byte: a
+  // materials payload at the DECODED total cap becomes ~4/3 LARGER once
+  // base64-encoded, plus JSON envelope overhead (per-material object
+  // punctuation/keys) — so MAX_MATERIALS_TOTAL_BYTES must leave enough
+  // headroom under MAX_BODY_BYTES for that inflation, or a legitimate
+  // at-cap request would be rejected by the bridge's own outer body-size
+  // guard (a 500, per readJson's reject path) before materials validation
+  // ever runs — see cli/ui-bridge-agent-run-materials.test.ts's boundary
+  // tests, which exercise this live over HTTP.
+  it('MAX_MATERIALS_TOTAL_BYTES is strictly less than the bridge\'s MAX_BODY_BYTES (1 MiB, cli/ui-bridge.ts:3207) — fails loudly if a future edit inverts this', () => {
+    const MAX_BODY_BYTES_MIRROR = 1 * 1024 * 1024; // cli/ui-bridge.ts:3207 — literal, not imported (module-private, out of this WI's file scope)
+    assert.ok(
+      MAX_MATERIALS_TOTAL_BYTES < MAX_BODY_BYTES_MIRROR,
+      `MAX_MATERIALS_TOTAL_BYTES (${MAX_MATERIALS_TOTAL_BYTES}) must be strictly less than MAX_BODY_BYTES (${MAX_BODY_BYTES_MIRROR})`,
+    );
   });
 });
