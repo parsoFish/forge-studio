@@ -839,7 +839,13 @@ test('(RED) [round-3 addendum] PUT with a VALID projects: array saves successful
   const id = 'scoped-projects-valid';
 
   const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse']));
-  assert.equal(res.status, 200, `expected a valid projects: array to save — got ${res.status}: ${JSON.stringify(await res.text())}`);
+  // Read the body ONCE, unconditionally, before any assertion — a Response
+  // body can only be consumed once, and an assertion's message argument is
+  // evaluated eagerly (even when the assertion passes), so a `res.text()`/
+  // `res.json()` call inline in a message throws "Body has already been
+  // read" the moment anything downstream also reads it.
+  const bodyText = await res.text();
+  assert.equal(res.status, 200, `expected a valid projects: array to save — got ${res.status}: ${bodyText}`);
 
   const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', id, 'flow.yaml'));
   assert.deepEqual(
@@ -861,11 +867,12 @@ test('(RED) [round-3 addendum] PUT with triggers[].projects as a bare STRING (no
   const originalYaml = readFileSync(flowPath, 'utf8');
 
   const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody('gitpulse'));
+  const bodyText = await res.text();
 
   assert.equal(
     res.status,
     400,
-    `expected a bare-string projects: to be REFUSED with a validation finding — got ${res.status}: ${JSON.stringify(await res.text())}`,
+    `expected a bare-string projects: to be REFUSED with a validation finding — got ${res.status}: ${bodyText}`,
   );
 
   // Assert the ARTIFACT, not just the status code: byte-unchanged, still loads.
@@ -884,11 +891,12 @@ test('(RED) [round-3 addendum] PUT with a non-string entry inside triggers[].pro
   const originalYaml = readFileSync(flowPath, 'utf8');
 
   const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse', 42]));
+  const bodyText = await res.text();
 
   assert.equal(
     res.status,
     400,
-    `expected a non-string projects: entry to be REFUSED with a validation finding — got ${res.status}: ${JSON.stringify(await res.text())}`,
+    `expected a non-string projects: entry to be REFUSED with a validation finding — got ${res.status}: ${bodyText}`,
   );
 
   const afterYaml = readFileSync(flowPath, 'utf8');
@@ -906,13 +914,18 @@ test('(RED) [round-3 addendum] PUT with an UNKNOWN project id in triggers[].proj
   const originalYaml = readFileSync(flowPath, 'utf8');
 
   const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['ghost-project']));
+  // Read the body ONCE — the earlier bug here (Body has already been read)
+  // meant this test could never pass: `res.text()` was called unconditionally
+  // inside the assert message, THEN `res.json()` below tried to read the
+  // already-consumed body and always threw, regardless of what production did.
+  const bodyText = await res.text();
 
   assert.equal(
     res.status,
     400,
-    `expected an unknown project id to be REFUSED (trigger-projects) — got ${res.status}: ${JSON.stringify(await res.text())}. This is the real PUT route never threading discoverProjects()'s projectIds into validateFlow.`,
+    `expected an unknown project id to be REFUSED (trigger-projects) — got ${res.status}: ${bodyText}. This is the real PUT route never threading discoverProjects()'s projectIds into validateFlow.`,
   );
-  const body = (await res.json()) as { findings?: Array<{ check: string }> };
+  const body = JSON.parse(bodyText) as { findings?: Array<{ check: string }> };
   assert.ok(
     body.findings?.some((f) => f.check === 'trigger-projects'),
     `expected a trigger-projects finding — got ${JSON.stringify(body.findings)}`,
