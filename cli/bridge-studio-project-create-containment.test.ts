@@ -109,6 +109,7 @@ import assert from 'node:assert/strict';
 import {
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   existsSync,
   linkSync,
@@ -962,4 +963,64 @@ test('positive control (passes before AND after any Finding-B fix): a pre-existi
   const bytesAfter = readFileSync(join(projectDir, 'roadmap.md'), 'utf8');
   assert.equal(bytesAfter, operatorBytes, `the operator's real roadmap.md must never be clobbered by the TODO scaffold stub — got: ${bytesAfter}`);
   assert.ok(existsSync(join(projectDir, '.forge', 'project.json')), 'expected .forge/project.json to still be written');
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 3 — MEASURED FINDING (stated loudly, per the task): the
+// ONBOARD route (this same POST /api/studio/projects handler) is NOT clean —
+// it is a SECOND INSTANCE of the half-created-project class the round-3
+// review found on the greenfield route (scaffoldGreenfieldProject →
+// cli/bridge-studio-writes.ts's /create route), not a distinct or merely
+// cosmetic issue.
+//
+// Traced from source (cli/bridge-studio-writes.ts, the "POST /api/studio/
+// projects" handler above): by the time `seedProjectBrain` is called, this
+// route has ALREADY (a) mkdirSync'd a bare `projectRoot` (the Defect-5 fix,
+// "safe to create — isContainedProjectRepoPath already proved it"), and (b)
+// run `scaffoldContractArtifacts`, which WRITES `.git/`, `roadmap.md`, and
+// the LOCAL `brain/profile.md` stub into that directory — all BEFORE
+// `seedProjectBrain` (the CENTRAL brain seed) ever runs. Unlike
+// `scaffoldContractArtifacts`'s call (wrapped in its own try/catch for
+// `ScaffoldContainmentError` → 400), `seedProjectBrain`'s call has NO
+// dedicated catch here — a `PathGuardContainmentError` falls through to the
+// route's generic outer catch → 500. Either way, `.forge/project.json` is
+// written LAST (after seedProjectBrain returns), so a seedProjectBrain
+// rejection leaves the SAME class of leftover: a real, git-initialized
+// `projects/<id>/` with roadmap.md + a local brain stub but no
+// `.forge/project.json` — and per loadProjectsWithMeta's own documented
+// contract ("All discovered dirs are listed — a half-onboarded dir without
+// .forge/project.json still surfaces, with id-as-name defaults, so the
+// operator can SEE it"), THIS ROUTE'S half-created leftover is, if anything,
+// MORE visible in the listing than greenfield's, not less.
+//
+// Framed as a RED acceptance pin (asserting the DESIRED property, which
+// fails today), matching every other test in this file/campaign — NOT as a
+// "measured, currently passing" characterization — so this test correctly
+// flips to green the day the onboard route gets the same fix as
+// scaffoldGreenfieldProject, rather than silently locking in the bug.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-03 round 3, onboard route — SECOND INSTANCE, not a clean route] a seedProjectBrain rejection must not leave a half-created, listed project behind', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'onboard-halfcreated-blocker';
+  const outside = newOutsideDir('onboard-halfcreated-blocker-outside-');
+  symlinkSync(outside, join(forgeRoot, 'brain', 'projects', id), 'dir');
+
+  const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+  assert.notEqual(status, 200, `sanity: the containment rejection must not report success — got ${status}: ${text}`);
+
+  const projectDir = join(forgeRoot, 'projects', id);
+  assert.ok(
+    !existsSync(projectDir),
+    `MEASURED: the onboard route is NOT clean — a seedProjectBrain rejection leaves the SAME class of leftover scaffoldGreenfieldProject does: a real, git-initialized "${projectDir}" (roadmap.md + a local brain stub written by scaffoldContractArtifacts, which runs BEFORE seedProjectBrain) with no .forge/project.json (written LAST, after seedProjectBrain returns). This is a SECOND INSTANCE of the round-3 half-created-project class, not a distinct or merely cosmetic issue — status ${status}: ${text}`,
+  );
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+  assert.ok(
+    !projects.some((p) => p.id === id),
+    `MEASURED: loadProjectsWithMeta lists every discovered dir regardless of hasConfig ("a half-onboarded dir without .forge/project.json still surfaces... so the operator can SEE it") — the half-created leftover from THIS route is therefore, if anything, MORE visible to the operator than greenfield's, not less. Found: ${JSON.stringify(projects.map((p) => p.id))}`,
+  );
+
+  assert.deepEqual(readdirSync(outside), [], 'nothing may be created at the symlink target outside forgeRoot — the containment guard itself is not what this test is measuring');
 });

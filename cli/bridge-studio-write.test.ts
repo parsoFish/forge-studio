@@ -24,6 +24,7 @@ import {
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -306,6 +307,72 @@ test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a templ
   // The scaffolded project is real + tokens substituted.
   const pkg = readFileSync(join(forgeRoot, 'projects', 'greenfield-demo', 'package.json'), 'utf8');
   assert.match(pkg, /"name": "greenfield-demo"/);
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 3 (BLOCKER) — POST /api/studio/projects/create leaves a
+// HALF-CREATED project behind when seedProjectBrain rejects. See
+// orchestrator/project-create.test.ts's matching function-level test for the
+// full mechanism writeup; this is the SAME defect driven through the REAL
+// HTTP route, with the operator-visible consequence (GET /api/studio/projects
+// still lists it) asserted via the real listing route.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-03 round 3] POST /api/studio/projects/create: after a seedProjectBrain rejection, the project directory does not exist and does not appear in GET /api/studio/projects', async () => {
+  cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
+  const id = 'halfcreated-http-blocker';
+  const outside = mkdtempSync(join(tmpdir(), 'bridge-studio-write-halfcreated-outside-'));
+  try {
+    // Finding-A shape #1 (already fixed, correctly rejects): brain/projects/<id>
+    // itself a symlinked directory pointing outside forgeRoot.
+    mkdirSync(join(forgeRoot, 'brain', 'projects'), { recursive: true });
+    symlinkSync(outside, join(forgeRoot, 'brain', 'projects', id), 'dir');
+
+    const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
+      name: 'Halfcreated Http Blocker',
+      appType: 'typescript-cli',
+      northStar: 'ship the thing',
+    });
+    assert.notEqual(res.status, 200, `sanity: the containment rejection must not report success — got ${res.status}: ${await res.text()}`);
+
+    const projectDir = join(forgeRoot, 'projects', id);
+    assert.ok(
+      !existsSync(projectDir),
+      `copyTemplate already wrote a complete project directory before seedProjectBrain ran — the operator was told "not created" (status ${res.status}) but "${projectDir}" exists on disk`,
+    );
+
+    // Operator-visible consequence — driven through the REAL listing route.
+    const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+    assert.equal(listRes.status, 200);
+    const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+    assert.ok(
+      !projects.some((p) => p.id === id),
+      `GET /api/studio/projects must NOT list a project the create API just reported as failed — found: ${JSON.stringify(projects.map((p) => p.id))}`,
+    );
+
+    // Property #3: the original containment property must not regress.
+    assert.deepEqual(readdirSync(outside), [], 'nothing may be created at the symlink target outside forgeRoot');
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('positive control (passes before AND after the SEC-03 round-3 fix): a normal POST /api/studio/projects/create still succeeds and appears in GET /api/studio/projects', async () => {
+  cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
+  const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
+    name: 'Normal Http Greenfield',
+    appType: 'typescript-cli',
+    northStar: 'ship the thing',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected a normal greenfield create to succeed — got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; id: string };
+  assert.equal(body.ok, true);
+  assert.ok(existsSync(join(forgeRoot, 'projects', body.id, '.forge', 'project.json')));
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+  assert.ok(projects.some((p) => p.id === body.id), `expected "${body.id}" in the listing — got ${JSON.stringify(projects.map((p) => p.id))}`);
 });
 
 // POST /api/studio/skills test coverage MOVED to cli/bridge-studio-skills.test.ts
