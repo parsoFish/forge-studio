@@ -1,0 +1,238 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+
+import { generationGalleryView, selectGeneration, type GenerationGalleryView } from '@/lib/session-artifact-view';
+import type { GenerationGalleryArtifact, GenerationGalleryEntry, GenerationGalleryItem } from '@/lib/session-client';
+import { architectFileUrl, demoGenerationFileUrl } from '@/lib/bridge-client';
+
+// ---------------------------------------------------------------------------
+// GenerationGallery — the demo-builder's accumulating generation selector
+// (R4-16). Modelled on DependencyDag.tsx: presentational, driven by a view
+// model — `generationGalleryView`/`selectGeneration` (lib/session-artifact-
+// view.ts) own every bit of derived state; this component owns only the
+// per-mount "which generation is selected" React state (mirrors FilePackage.
+// tsx's `useState(() => filePackageTabs(files))` idiom exactly, including
+// its re-derive-on-new-`artifact` effect — a fresh `artifact` reference
+// resets the selection to the newest generation, the same behaviour
+// FilePackage already has for a fresh `files` reference; not a new quirk
+// introduced here).
+//
+// `project`/`sessionId` are OPTIONAL: this component is reachable both from
+// DemoBuilderPanel (project page, R1-03-F2 entry — always has both) and from
+// the generic `/sessions/[kind]/[sessionId]` deep-link route via
+// SessionArtifactPane (D3: "falls out of the registry, zero extra code" —
+// that route does not thread project/sessionId through today). Without
+// them, per-item "view" links and the "finalize" action are honestly
+// disabled rather than fabricating a broken link.
+// ---------------------------------------------------------------------------
+
+export function GenerationGallery({
+  artifact,
+  project,
+  sessionId,
+  onFinalize,
+}: {
+  artifact: GenerationGalleryArtifact;
+  project?: string;
+  sessionId?: string;
+  /** Enacts "finalize this generation" (POST /api/demo-builder/lock with the
+   *  chosen generation number) — owned by the caller (DemoBuilderPanel),
+   *  never by this presentational component. Absent ⇒ the control renders,
+   *  disabled — never a silently-swallowed click. */
+  onFinalize?: (generationNumber: number) => void;
+}): JSX.Element {
+  const [view, setView] = useState<GenerationGalleryView>(() => generationGalleryView(artifact));
+
+  useEffect(() => {
+    setView(generationGalleryView(artifact));
+  }, [artifact]);
+
+  const selected = view.selectedIndex >= 0 ? view.generations[view.selectedIndex] : null;
+
+  return (
+    <div
+      data-section="generation-gallery"
+      data-generation-count={view.count}
+      data-selected-generation={selected ? selected.number : ''}
+      style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
+    >
+      {view.isEmpty ? (
+        <div data-generation-empty="true" style={{ fontSize: 12.5, color: 'var(--faint)', fontStyle: 'italic', padding: '6px 0' }}>
+          {view.emptyMessage}
+        </div>
+      ) : (
+        <>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+            {view.generations.map((g, i) => {
+              const isSelected = i === view.selectedIndex;
+              return (
+                <button
+                  key={g.number}
+                  type="button"
+                  data-action="select-generation"
+                  data-generation-number={g.number}
+                  data-generation-selected={isSelected ? 'true' : 'false'}
+                  onClick={() => setView((v) => selectGeneration(v, i))}
+                  style={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    padding: '6px 12px',
+                    borderRadius: 6,
+                    border: '1px solid var(--line)',
+                    background: isSelected ? 'var(--ember, #FF9E4A)' : 'var(--panel-2)',
+                    color: isSelected ? '#1a1206' : 'var(--text)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  Gen {g.number}
+                </button>
+              );
+            })}
+          </div>
+
+          {selected && (
+            <GenerationDetail
+              generation={selected}
+              project={project}
+              sessionId={sessionId}
+              onFinalize={onFinalize}
+            />
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function GenerationDetail({
+  generation,
+  project,
+  sessionId,
+  onFinalize,
+}: {
+  generation: GenerationGalleryEntry;
+  project?: string;
+  sessionId?: string;
+  onFinalize?: (generationNumber: number) => void;
+}): JSX.Element {
+  const hasFeedback = generation.feedback !== null;
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+        {generation.items.map((item) => (
+          <GenerationItemCard
+            key={item.path}
+            item={item}
+            generationNumber={generation.number}
+            project={project}
+            sessionId={sessionId}
+          />
+        ))}
+      </div>
+
+      <div
+        data-section="generation-feedback"
+        data-has-feedback={hasFeedback ? 'true' : 'false'}
+        style={{
+          fontSize: 12.5,
+          color: hasFeedback ? 'var(--text)' : 'var(--faint)',
+          fontStyle: hasFeedback ? 'normal' : 'italic',
+          padding: '8px 12px',
+          border: '1px solid var(--line)',
+          borderRadius: 8,
+          background: 'var(--panel)',
+        }}
+      >
+        {hasFeedback ? (
+          <>
+            <strong style={{ color: 'var(--faint)', fontWeight: 700, textTransform: 'uppercase', fontSize: 10.5, letterSpacing: '.05em' }}>
+              Feedback that drove this generation
+            </strong>
+            <div style={{ marginTop: 4 }}>{generation.feedback}</div>
+          </>
+        ) : (
+          'No feedback — the initial brief.'
+        )}
+      </div>
+
+      <button
+        type="button"
+        data-action="finalize-generation"
+        data-generation-number={generation.number}
+        onClick={() => onFinalize?.(generation.number)}
+        disabled={!onFinalize}
+        title={onFinalize ? undefined : 'Not available from this view'}
+        style={{
+          alignSelf: 'flex-start',
+          fontSize: 13,
+          fontWeight: 600,
+          color: '#fff',
+          background: onFinalize ? '#238636' : 'var(--panel-2)',
+          border: '1px solid var(--line)',
+          borderRadius: 6,
+          padding: '7px 16px',
+          cursor: onFinalize ? 'pointer' : 'default',
+          opacity: onFinalize ? 1 : 0.5,
+        }}
+      >
+        Finalize this generation
+      </button>
+    </div>
+  );
+}
+
+/** html/markdown items are servable+renderable text; 'file' is an honest
+ *  catch-all for anything else (D7: items carry metadata, never bodies) —
+ *  the "view" affordance is offered only for the two kinds this route can
+ *  meaningfully show inline, and only once project/sessionId are known. */
+function isViewableKind(kind: GenerationGalleryItem['kind']): boolean {
+  return kind === 'html' || kind === 'markdown';
+}
+
+function GenerationItemCard({
+  item,
+  generationNumber,
+  project,
+  sessionId,
+}: {
+  item: GenerationGalleryItem;
+  generationNumber: number;
+  project?: string;
+  sessionId?: string;
+}): JSX.Element {
+  const canView = isViewableKind(item.kind) && !!project && !!sessionId;
+
+  async function viewItem(): Promise<void> {
+    if (!project || !sessionId) return;
+    const abs = await architectFileUrl(demoGenerationFileUrl(project, sessionId, generationNumber, item.path));
+    if (abs) window.open(abs, '_blank', 'noopener,noreferrer');
+  }
+
+  return (
+    <div
+      data-generation-item
+      data-item-path={item.path}
+      data-item-kind={item.kind}
+      data-item-bytes={item.bytes}
+      style={{ border: '1px solid var(--line)', borderRadius: 8, padding: '10px 12px', background: 'var(--panel)' }}
+    >
+      <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--text)', wordBreak: 'break-word' }}>{item.path}</div>
+      <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 2 }}>
+        {item.kind} · {item.bytes} bytes
+      </div>
+      {canView && (
+        <button
+          type="button"
+          data-action="view-generation-item"
+          data-item-path={item.path}
+          onClick={() => void viewItem()}
+          style={{ marginTop: 6, fontSize: 11.5, color: 'var(--ember)', background: 'transparent', border: 'none', cursor: 'pointer', padding: 0 }}
+        >
+          view →
+        </button>
+      )}
+    </div>
+  );
+}

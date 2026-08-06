@@ -1,9 +1,9 @@
 /**
  * Pure, per-renderer view-state for the session shell's artifact pane
- * (R2-10, PR2) — one module covering all three LIVE artifact kinds
- * (roadmap-draft, markdown-draft, brain-structure), rather than three
- * separate files: they are three tightly-related renderers for the SAME
- * pane of the SAME page, and the combined module stays well under this
+ * (R2-10, PR2) — one module covering all four LIVE artifact kinds
+ * (roadmap-draft, markdown-draft, brain-structure, generation-gallery),
+ * rather than one file per kind: they are tightly-related renderers for the
+ * SAME pane of the SAME page, and the combined module stays well under this
  * repo's file-size discipline. No DOM, no React, no network — mirrors
  * file-package.ts's / skill-library-view.ts's testability convention.
  *
@@ -28,7 +28,15 @@
 
 import { filePackageTabs, selectFile, type FilePackageState } from './file-package';
 import { dependencyDagView, type DependencyDagView } from './dependency-dag';
-import type { BrainStructureArtifact, MarkdownDraftArtifact, RoadmapDraftArtifact, RoadmapDraftRow, SessionArtifactPayload } from './session-client';
+import type {
+  BrainStructureArtifact,
+  GenerationGalleryArtifact,
+  GenerationGalleryEntry,
+  MarkdownDraftArtifact,
+  RoadmapDraftArtifact,
+  RoadmapDraftRow,
+  SessionArtifactPayload,
+} from './session-client';
 
 // ---------------------------------------------------------------------------
 // roadmapDraftView
@@ -119,17 +127,75 @@ export function selectBrainStructureFile(view: BrainStructureView, index: number
 }
 
 // ---------------------------------------------------------------------------
+// generationGalleryView / selectGeneration — R4-16
+// ---------------------------------------------------------------------------
+
+export type GenerationGalleryView = {
+  kind: 'generation-gallery';
+  /** Passed through verbatim, server order (ascending by number) — never
+   *  re-sorted, never a fabricated entry added or dropped. */
+  generations: GenerationGalleryEntry[];
+  count: number;
+  /** Index into `generations` of the currently-selected generation; -1 iff
+   *  `isEmpty`. Defaults to the LAST entry (the newest generation), never
+   *  the first — mirrors the operator's expectation of landing on the most
+   *  recent output. */
+  selectedIndex: number;
+  isEmpty: boolean;
+  /** Non-null iff `generations` is empty — names what was scanned (derived
+   *  from `sourcesScanned`, never a generic hardcoded string), mirroring
+   *  `roadmapDraftView`'s idiom exactly. */
+  emptyMessage: string | null;
+};
+
+export function generationGalleryView(artifact: GenerationGalleryArtifact): GenerationGalleryView {
+  const isEmpty = artifact.generations.length === 0;
+  return {
+    kind: 'generation-gallery',
+    generations: artifact.generations,
+    count: artifact.generations.length,
+    selectedIndex: isEmpty ? -1 : artifact.generations.length - 1,
+    isEmpty,
+    emptyMessage: isEmpty ? `No generations yet — scanned ${artifact.sourcesScanned.join(', ')}` : null,
+  };
+}
+
+function clampGenerationIndex(index: number, length: number): number {
+  if (length === 0) return -1;
+  if (index < 0) return 0;
+  if (index > length - 1) return length - 1;
+  return index;
+}
+
+/** REUSE EVALUATION (R4-16, recorded per this repo's "reuse, don't fork"
+ *  rule): `selectFile` (file-package.ts) clamps an index into a
+ *  `{path, body}` FILE list — a generation is not a file (it is
+ *  `{number, createdAt, feedback, targetElement, items[]}`; forcing it
+ *  through `PackageFile` would mean fabricating a `body` field nothing on
+ *  the wire provides, exactly what D7 forbids), so `selectFile` cannot back
+ *  this selector without inventing data. `clampGenerationIndex` above is a
+ *  same-shape reimplementation of `file-package.ts`'s OWN `clampIndex` (not
+ *  a divergent one) — the clamping RULE is reused faithfully; only the
+ *  wrapped state's element type differs. Returns a NEW view object
+ *  (immutability); the input view is never mutated. */
+export function selectGeneration(view: GenerationGalleryView, index: number): GenerationGalleryView {
+  return { ...view, selectedIndex: clampGenerationIndex(index, view.generations.length) };
+}
+
+// ---------------------------------------------------------------------------
 // sessionArtifactView — dispatcher + reserved/unknown kind guards
 // ---------------------------------------------------------------------------
 
-export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView;
+export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView | GenerationGalleryView;
 
 /** Vocabulary-reserved artifact kinds (mirrors orchestrator/studio/session-
  *  kinds.ts's SESSION_ARTIFACT_KINDS `reserved` rows) — a session carrying
  *  one of these reaches this dispatcher only if a future descriptor is
- *  wired before its renderer ships. Zero stub renderers exist for any of
- *  these; the error names the reserved kind explicitly. */
-const RESERVED_ARTIFACT_KINDS = ['file-package', 'contract-buildout', 'generation-gallery'] as const;
+ *  wired before its renderer ships. Zero stub renderers exist for either of
+ *  these; the error names the reserved kind explicitly. R4-16: shrinks from
+ *  3 to 2 — "generation-gallery" now has a real renderer (generationGalleryView
+ *  above) and is dispatched, not reserved. */
+const RESERVED_ARTIFACT_KINDS = ['file-package', 'contract-buildout'] as const;
 
 /** A trailing " (requested stage: "X")" clause when `stage` was passed —
  *  proof the argument genuinely reached the dispatch boundary (AT-92/93),
@@ -153,6 +219,8 @@ export function sessionArtifactView(artifact: SessionArtifactPayload | { kind: s
       return markdownDraftView(artifact as MarkdownDraftArtifact);
     case 'brain-structure':
       return brainStructureView(artifact as BrainStructureArtifact);
+    case 'generation-gallery':
+      return generationGalleryView(artifact as GenerationGalleryArtifact);
     default: {
       const kind = artifact.kind;
       if ((RESERVED_ARTIFACT_KINDS as readonly string[]).includes(kind)) {

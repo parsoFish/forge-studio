@@ -761,6 +761,14 @@ export function demoFragmentUrl(project: string, sessionId: string, element: str
   return `/api/demo-builder/fragment/${encodeURIComponent(project)}/${encodeURIComponent(sessionId)}/${encodeURIComponent(element)}`;
 }
 
+/** R4-16: bridge-relative URL serving one file out of a specific demo
+ *  generation snapshot (`GET /api/demo-builder/generation/<project>/<sid>/
+ *  <n>/<filename>`, cli/ui-bridge.ts). `generation` is the snapshot's own
+ *  recorded number (GenerationGalleryEntry.number), never an array index. */
+export function demoGenerationFileUrl(project: string, sessionId: string, generation: number, filename: string): string {
+  return `/api/demo-builder/generation/${encodeURIComponent(project)}/${encodeURIComponent(sessionId)}/${generation}/${encodeURIComponent(filename)}`;
+}
+
 export async function listDemoSessions(): Promise<DemoSessionSummary[]> {
   const body = await bridgeGet<{ sessions: DemoSessionSummary[] }>(
     '/api/demo-builder/sessions',
@@ -894,6 +902,10 @@ export async function demoBuilderFeedback(input: {
 export async function demoBuilderLock(input: {
   project: string;
   sessionId: string;
+  /** R4-16 (D6): names which generation snapshot to lock — validated
+   *  server-side (integer >= 1) BEFORE any write. Omitted = lock the
+   *  current/live sample (the pre-R4-16 behaviour, unchanged). */
+  generation?: number;
 }): Promise<{ ok: boolean; error?: string }> {
   return bridgePost('/api/demo-builder/lock', input);
 }

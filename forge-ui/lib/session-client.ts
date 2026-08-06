@@ -72,6 +72,30 @@ function requireNumber(r: Record<string, unknown>, field: string): number {
   return v;
 }
 
+/** A required integer (e.g. a generation number) — rejects a non-number AND
+ *  a non-integer number (1.5) alike, naming the field. */
+function requireInteger(r: Record<string, unknown>, field: string): number {
+  const v = requireNumber(r, field);
+  if (!Number.isInteger(v)) {
+    throw new Error(`missing or invalid "${field}": expected an integer, got ${JSON.stringify(v)}`);
+  }
+  return v;
+}
+
+/** A field that must be a string OR literal null — never any other type,
+ *  and never omitted (an absent key is `undefined`, which fails the same
+ *  check as any other wrong type). Used for generation-gallery's
+ *  `feedback`/`targetElement`, which are legitimately null (no feedback yet
+ *  drove generation 1) but never silently coerced from a missing key. */
+function requireNullableString(r: Record<string, unknown>, field: string): string | null {
+  const v = r[field];
+  if (v === null) return null;
+  if (typeof v !== 'string') {
+    throw new Error(`missing or invalid "${field}": expected a string or null, got ${JSON.stringify(v)}`);
+  }
+  return v;
+}
+
 /** A required array of strings — never coerced from a non-array (the same
  *  refusal template-client.ts's `parseUsedBy` applies to `usedBy`). */
 function requireStringArray(raw: unknown, field: string): string[] {
@@ -126,10 +150,11 @@ export function parseSessionTurn(raw: unknown): SessionTurn {
 }
 
 // ---------------------------------------------------------------------------
-// SessionArtifactPayload — mirrors session-transcript.ts's three LIVE
+// SessionArtifactPayload — mirrors session-transcript.ts's four LIVE
 // artifact shapes (RoadmapDraftArtifact / MarkdownDraftArtifact /
-// BrainStructureArtifact). The three reserved kinds (file-package,
-// contract-buildout, generation-gallery) have zero shape here — a session
+// BrainStructureArtifact / GenerationGalleryArtifact — R4-16 flips
+// generation-gallery from reserved to live). The two STILL-reserved kinds
+// (file-package, contract-buildout) have zero shape here — a session
 // carrying one is a malformed/unsupported response at THIS layer (the
 // reserved-vs-unrecognised DISTINCTION is a view-layer concern, drawn in
 // session-artifact-view.ts's `sessionArtifactView`, not here).
@@ -180,7 +205,37 @@ export type BrainStructureArtifact = {
   files: BrainStructureFile[];
 };
 
-export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact;
+// R4-16: "generation-gallery" — the demo-builder's accumulating generation
+// selector. Mirrors orchestrator/studio/session-transcript.ts's
+// GenerationGalleryArtifact / GenerationGalleryEntry / GenerationGalleryItem
+// exactly (hand-mirrored, per this file's convention — never a cross-boundary
+// import of the orchestrator type).
+
+const GENERATION_GALLERY_ITEM_KINDS = ['html', 'markdown', 'file'] as const;
+export type GenerationGalleryItemKind = (typeof GENERATION_GALLERY_ITEM_KINDS)[number];
+
+export type GenerationGalleryItem = {
+  path: string;
+  kind: GenerationGalleryItemKind;
+  bytes: number;
+};
+
+export type GenerationGalleryEntry = {
+  number: number;
+  createdAt: string;
+  feedback: string | null;
+  targetElement: string | null;
+  items: GenerationGalleryItem[];
+};
+
+export type GenerationGalleryArtifact = {
+  kind: 'generation-gallery';
+  label: string;
+  generations: GenerationGalleryEntry[];
+  sourcesScanned: string[];
+};
+
+export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact | GenerationGalleryArtifact;
 
 function parseRoadmapDraftRow(raw: unknown, index: number): RoadmapDraftRow {
   if (!isPlainObject(raw)) {
@@ -255,11 +310,60 @@ function parseBrainStructureArtifact(r: Record<string, unknown>): BrainStructure
   };
 }
 
-/** An unrecognised OR reserved artifact kind throws, naming it — a reserved
- *  kind has no shape here to parse (that would fabricate a shape the server
- *  never sends for it today); distinguishing "reserved" from "genuinely
- *  unknown" is a view-layer concern (session-artifact-view.ts), not this
- *  parse layer's. */
+function parseGenerationGalleryItemKind(raw: unknown): GenerationGalleryItemKind {
+  if (raw === 'html' || raw === 'markdown' || raw === 'file') return raw;
+  throw new Error(
+    `unrecognised generation-gallery item kind ${JSON.stringify(raw)} — must be one of: ${GENERATION_GALLERY_ITEM_KINDS.join(', ')}`,
+  );
+}
+
+function parseGenerationGalleryItem(raw: unknown, index: number): GenerationGalleryItem {
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed generation-gallery item[${index}]: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  return {
+    path: requireString(raw, 'path'),
+    kind: parseGenerationGalleryItemKind(raw['kind']),
+    bytes: requireNumber(raw, 'bytes'),
+  };
+}
+
+function parseGenerationGalleryEntry(raw: unknown, index: number): GenerationGalleryEntry {
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed generation-gallery entry[${index}]: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  const itemsRaw = raw['items'];
+  if (!Array.isArray(itemsRaw)) {
+    throw new Error(`missing or invalid "items": expected an array, got ${JSON.stringify(itemsRaw)}`);
+  }
+  return {
+    number: requireInteger(raw, 'number'),
+    createdAt: requireString(raw, 'createdAt'),
+    feedback: requireNullableString(raw, 'feedback'),
+    targetElement: requireNullableString(raw, 'targetElement'),
+    items: itemsRaw.map((it, i) => parseGenerationGalleryItem(it, i)),
+  };
+}
+
+function parseGenerationGalleryArtifact(r: Record<string, unknown>): GenerationGalleryArtifact {
+  const label = requireString(r, 'label');
+  const generationsRaw = r['generations'];
+  if (!Array.isArray(generationsRaw)) {
+    throw new Error(`missing or invalid "generations": expected an array, got ${JSON.stringify(generationsRaw)}`);
+  }
+  return {
+    kind: 'generation-gallery',
+    label,
+    generations: generationsRaw.map((g, i) => parseGenerationGalleryEntry(g, i)),
+    sourcesScanned: requireStringArray(r['sourcesScanned'], 'sourcesScanned'),
+  };
+}
+
+/** An unrecognised OR still-reserved artifact kind throws, naming it — a
+ *  reserved kind has no shape here to parse (that would fabricate a shape
+ *  the server never sends for it today); distinguishing "reserved" from
+ *  "genuinely unknown" is a view-layer concern (session-artifact-view.ts),
+ *  not this parse layer's. */
 export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
   if (!isPlainObject(raw)) {
     throw new Error(`malformed session artifact: expected an object, got ${JSON.stringify(raw)}`);
@@ -272,6 +376,8 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
       return parseMarkdownDraftArtifact(raw);
     case 'brain-structure':
       return parseBrainStructureArtifact(raw);
+    case 'generation-gallery':
+      return parseGenerationGalleryArtifact(raw);
     default:
       throw new Error(`unrecognised session artifact kind: ${JSON.stringify(kind)}`);
   }

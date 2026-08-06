@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from 'react';
 import {
   listDemoSessions,
   demoBuilderBrief,
+  demoBuilderLock,
   startDemoBuilder,
   demoFragmentUrl,
   listDemoHistory,
@@ -15,9 +16,11 @@ import {
   type DemoHistoryEntry,
   type DemoElementSummary,
 } from '@/lib/bridge-client';
+import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
 import { fetchStudioProjects, type DemoStep } from '@/lib/studio-client';
 import { SessionBriefing } from '@/components/SessionBriefing';
 import { DemoReview } from '@/components/DemoReview';
+import { SessionArtifactPane } from '@/components/studio/session/SessionArtifactPane';
 import { ArchitectActivityLog } from '@/components/ArchitectActivityLog';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { STATUS_COLOR } from '@/lib/status-colors';
@@ -89,9 +92,19 @@ export function DemoBuilderPanel({
 
   const [session, setSession] = useState<DemoSessionSummary | null>(null);
   const [loaded, setLoaded] = useState(false);
+  // R4-16: the session-shell read route's payload (title/turns/artifact —
+  // the artifact is the generation-gallery). Fetched INSIDE the same
+  // `loadSession` poll tick as `listDemoSessions()` (Promise.all below), so
+  // both pieces of state always advance together — a second, independently-
+  // scheduled `setInterval` here is exactly the class of defect that caused
+  // an R4-15 journey flake (one pane sampled a poll interval stale relative
+  // to its sibling). `null` = not yet fetched; `{ok:false}` is an honest
+  // fetch failure (never rendered as a fabricated empty gallery).
+  const [shellResult, setShellResult] = useState<SessionShellFetchResult | null>(null);
   // Which iterate action is in-flight: an element id, or '__whole__', or null.
   const [iterating, setIterating] = useState<string | null>(null);
   const [iterateError, setIterateError] = useState<string | null>(null);
+  const [finalizeError, setFinalizeError] = useState<string | null>(null);
   // When set, the panel shows that output in-app (an iframe) with a back button,
   // instead of opening a new tab.
   const [viewing, setViewing] = useState<{ url: string; label: string } | null>(null);
@@ -104,13 +117,17 @@ export function DemoBuilderPanel({
   const [history, setHistory] = useState<ResolvedHistoryEntry[]>([]);
 
   const loadSession = useCallback(() => {
-    listDemoSessions()
-      .then((list) => {
+    // R4-16: fetched together (Promise.all, not two independent calls) so
+    // `session` and `shellResult` land in the SAME state update — see the
+    // `shellResult` state's doc comment above for why this matters.
+    Promise.all([listDemoSessions(), fetchSessionShell('demo', sessionId, projectId)])
+      .then(([list, shell]) => {
         setSession(list.find((s) => s.sessionId === sessionId) ?? null);
+        setShellResult(shell);
         setLoaded(true);
       })
       .catch(() => setLoaded(true));
-  }, [sessionId]);
+  }, [sessionId, projectId]);
 
   useEffect(() => {
     loadSession();
@@ -202,6 +219,21 @@ export function DemoBuilderPanel({
     if (!session?.demoUrl) return;
     const u = await architectFileUrl(session.demoUrl);
     if (u) setViewing({ url: u, label: 'the full demo' });
+  }
+
+  // R4-16: "finalize this generation" — locks the CHOSEN snapshot in,
+  // distinct from DemoReview's pre-existing `[data-action="lock-demo"]`
+  // ("lock the current sample"), which is untouched. demoBuilderLock never
+  // throws (bridge-client.ts's bridgePost catches internally), so a plain
+  // ok-check is enough — no fabricated success on a real failure.
+  async function finalizeGeneration(generationNumber: number): Promise<void> {
+    setFinalizeError(null);
+    const res = await demoBuilderLock({ project: projectId, sessionId, generation: generationNumber });
+    if (!res.ok) {
+      setFinalizeError(res.error ?? 'failed to finalize the generation');
+      return;
+    }
+    loadSession();
   }
 
   return (
@@ -343,6 +375,32 @@ export function DemoBuilderPanel({
             onIteratePart={iteratePart}
             onView={(url, label) => setViewing({ url, label })}
           />
+
+          {/* R4-16 — the generation gallery, rendered through the REAL R2-10
+              shell renderer stack (SessionArtifactPane → GenerationGallery),
+              not a second panel-local gallery. Shown in every phase (like
+              DemoProcessPanel above), honest about a fetch failure rather
+              than rendering a fabricated empty gallery. */}
+          {shellResult && shellResult.ok && (
+            <div style={{ marginTop: 16 }}>
+              <SessionArtifactPane
+                artifact={shellResult.payload.artifact}
+                project={projectId}
+                sessionId={sessionId}
+                onFinalizeGeneration={(n) => void finalizeGeneration(n)}
+              />
+            </div>
+          )}
+          {shellResult && !shellResult.ok && (
+            <div data-section="generation-gallery-error" style={{ fontSize: 12, color: 'var(--red, #f85149)', marginTop: 12 }}>
+              Could not load demo generations: {shellResult.error}
+            </div>
+          )}
+          {finalizeError && (
+            <div data-section="finalize-generation-error" style={{ fontSize: 12, color: 'var(--red, #f85149)', marginTop: 8 }}>
+              {finalizeError}
+            </div>
+          )}
 
           {session.phase === 'locked' && (
             <div

@@ -2,15 +2,17 @@
 
 import { FilePackage } from '@/components/studio/FilePackage';
 import { DependencyDag } from '@/components/studio/DependencyDag';
+import { GenerationGallery } from '@/components/studio/GenerationGallery';
 import { roadmapDraftView, markdownDraftView } from '@/lib/session-artifact-view';
 import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-client';
 
 // ---------------------------------------------------------------------------
 // SessionArtifactPane — the RIGHT-hand "living artifact" pane of the shared
-// session shell (R2-10 PR2, WI-7). One module covering all three LIVE
-// artifact kinds (roadmap-draft / markdown-draft / brain-structure) — mirrors
-// session-artifact-view.ts's own "one module, not three files" precedent
-// (they are tightly-related renderers for the SAME pane of the SAME page).
+// session shell (R2-10 PR2, WI-7). One module covering all four LIVE
+// artifact kinds (roadmap-draft / markdown-draft / brain-structure /
+// generation-gallery — R4-16) — mirrors session-artifact-view.ts's own "one
+// module, not one file per kind" precedent (they are tightly-related
+// renderers for the SAME pane of the SAME page).
 //
 // Row/empty/state LOGIC is never re-implemented here: roadmap-draft and
 // markdown-draft dispatch through the pure `roadmapDraftView`/`markdownDraftView`
@@ -20,7 +22,19 @@ import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-clie
 // is written here; `FilePackage` is handed the raw `files` and manages its own
 // tab-selection state via the same `filePackageTabs`/`selectFile` primitives
 // `lib/session-artifact-view.ts`'s (unused-by-this-component)
-// `brainStructureView`/`selectBrainStructureFile` also wrap.
+// `brainStructureView`/`selectBrainStructureFile` also wrap. generation-gallery
+// follows the SAME "hand the raw data to a self-contained component" pattern:
+// `GenerationGallery` owns its own selection state via `generationGalleryView`/
+// `selectGeneration` internally (mirrors `FilePackage`, not a state lift here).
+//
+// `project`/`sessionId` are OPTIONAL passthrough, needed only by
+// generation-gallery's per-item "view" links + "finalize" action (D7: gallery
+// items carry metadata, never bodies, so viewing one requires resolving a
+// bridge URL keyed on project+session+generation+filename). The other three
+// kinds ignore them entirely. `onFinalizeGeneration` is likewise optional —
+// owned and wired by whichever caller has a live demo-builder session to act
+// on (DemoBuilderPanel); the generic `/sessions/[kind]/[sessionId]` deep-link
+// route renders the gallery read-only without it (D3: "zero extra code").
 //
 // The wrapper carries the mandated DOM-as-metrics contract
 // (docs/forge-ui-dom-and-harness.md): `data-section="session-artifact"`,
@@ -30,7 +44,17 @@ import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-clie
 // client-side kind→label lookup).
 // ---------------------------------------------------------------------------
 
-export function SessionArtifactPane({ artifact }: { artifact: SessionArtifactPayload }): JSX.Element {
+export function SessionArtifactPane({
+  artifact,
+  project,
+  sessionId,
+  onFinalizeGeneration,
+}: {
+  artifact: SessionArtifactPayload;
+  project?: string;
+  sessionId?: string;
+  onFinalizeGeneration?: (generationNumber: number) => void;
+}): JSX.Element {
   return (
     <div
       data-section="session-artifact"
@@ -63,8 +87,10 @@ export function SessionArtifactPane({ artifact }: { artifact: SessionArtifactPay
           <RoadmapDraftBody artifact={artifact} />
         ) : artifact.kind === 'markdown-draft' ? (
           <MarkdownDraftBody artifact={artifact} />
-        ) : (
+        ) : artifact.kind === 'brain-structure' ? (
           <BrainStructureBody artifact={artifact} />
+        ) : (
+          <GenerationGallery artifact={artifact} project={project} sessionId={sessionId} onFinalize={onFinalizeGeneration} />
         )}
       </div>
     </div>
