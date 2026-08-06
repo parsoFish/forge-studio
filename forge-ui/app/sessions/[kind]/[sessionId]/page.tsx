@@ -192,7 +192,7 @@ export default function SessionShellPage({
               <SessionProjectBrainPanel session={summary.data} themes={themes} onRefresh={refreshSummary} />
             ) : null}
           </SessionTranscript>
-          <SessionArtifactPane artifact={viewState.artifact} />
+          <SessionArtifactPane artifact={viewState.artifact} activeStage={viewState.selectedStage} />
         </div>
       ) : viewState.status === 'error' ? (
         <div data-section="session-error" style={{ fontSize: 13, color: '#f85149' }}>

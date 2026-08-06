@@ -30,6 +30,8 @@ import { filePackageTabs, selectFile, type FilePackageState } from './file-packa
 import { dependencyDagView, type DependencyDagView } from './dependency-dag';
 import type {
   BrainStructureArtifact,
+  ContractBuildoutArtifact,
+  ContractStageRow,
   GenerationGalleryArtifact,
   GenerationGalleryEntry,
   MarkdownDraftArtifact,
@@ -205,19 +207,62 @@ export function preferredGenerationFor(
 }
 
 // ---------------------------------------------------------------------------
+// contractBuildoutView — R4-17
+// ---------------------------------------------------------------------------
+
+export type ContractBuildoutView =
+  | { kind: 'contract-buildout'; mode: 'checklist'; checklist: ContractStageRow[] }
+  | { kind: 'contract-buildout'; mode: 'detail'; row: ContractStageRow | null };
+
+/**
+ * Stage-aware, mirroring the mockup (`mockups/studio-endstate-v2/
+ * views-session.jsx:77-158`) exactly: the `contract` stage renders the
+ * CHECKLIST of all five stage rows (the "which components are present"
+ * overview, `:139-157`); every other stage renders THAT stage's own row
+ * detail (`:80-138`). An `activeStage` naming a stage with no matching row
+ * (never happens for a real 5-stage payload) resolves `row: null` rather
+ * than throwing — this module's house style of failing soft on VIEW
+ * derivation, reserving throws for dispatch-boundary vocabulary errors
+ * (below). D11: rows are rendered exactly as given — presence, source,
+ * detail lines, byte count — never upgraded into pass/fail language.
+ *
+ * `artifact.stages` missing/non-array (a genuinely malformed artifact, not
+ * a normal view-derivation edge case) DOES throw, naming the kind — this is
+ * what lets a bare `{kind:'contract-buildout'}` reaching the dispatcher
+ * (AT-92, session-artifact-view.test.ts) fail loudly instead of crashing
+ * with an unhelpful native TypeError.
+ */
+export function contractBuildoutView(
+  artifact: ContractBuildoutArtifact | { kind: string; stages?: unknown },
+  activeStage?: string,
+): ContractBuildoutView {
+  const stagesRaw = (artifact as { stages?: unknown }).stages;
+  if (!Array.isArray(stagesRaw)) {
+    throw new Error(`contractBuildoutView: malformed "contract-buildout" artifact — missing or invalid "stages"${stageSuffix(activeStage)}`);
+  }
+  const stages = stagesRaw as ContractStageRow[];
+  if (activeStage === 'contract') {
+    return { kind: 'contract-buildout', mode: 'checklist', checklist: stages };
+  }
+  const row = stages.find((r) => r.stage === activeStage) ?? null;
+  return { kind: 'contract-buildout', mode: 'detail', row };
+}
+
+// ---------------------------------------------------------------------------
 // sessionArtifactView — dispatcher + reserved/unknown kind guards
 // ---------------------------------------------------------------------------
 
-export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView | GenerationGalleryView;
+export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView | GenerationGalleryView | ContractBuildoutView;
 
 /** Vocabulary-reserved artifact kinds (mirrors orchestrator/studio/session-
  *  kinds.ts's SESSION_ARTIFACT_KINDS `reserved` rows) — a session carrying
  *  one of these reaches this dispatcher only if a future descriptor is
- *  wired before its renderer ships. Zero stub renderers exist for either of
- *  these; the error names the reserved kind explicitly. R4-16: shrinks from
- *  3 to 2 — "generation-gallery" now has a real renderer (generationGalleryView
- *  above) and is dispatched, not reserved. */
-const RESERVED_ARTIFACT_KINDS = ['file-package', 'contract-buildout'] as const;
+ *  wired before its renderer ships. Zero stub renderers exist for this one;
+ *  the error names the reserved kind explicitly. R4-16: shrank from 3 to 2
+ *  ("generation-gallery" flipped live). R4-17: shrinks again, to 1 —
+ *  "contract-buildout" now has a real renderer (contractBuildoutView above)
+ *  and is dispatched, not reserved. */
+const RESERVED_ARTIFACT_KINDS = ['file-package'] as const;
 
 /** A trailing " (requested stage: "X")" clause when `stage` was passed —
  *  proof the argument genuinely reached the dispatch boundary (AT-92/93),
@@ -243,6 +288,8 @@ export function sessionArtifactView(artifact: SessionArtifactPayload | { kind: s
       return brainStructureView(artifact as BrainStructureArtifact);
     case 'generation-gallery':
       return generationGalleryView(artifact as GenerationGalleryArtifact);
+    case 'contract-buildout':
+      return contractBuildoutView(artifact as ContractBuildoutArtifact, stage);
     default: {
       const kind = artifact.kind;
       if ((RESERVED_ARTIFACT_KINDS as readonly string[]).includes(kind)) {

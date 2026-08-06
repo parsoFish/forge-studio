@@ -3,24 +3,47 @@
 import { FilePackage } from '@/components/studio/FilePackage';
 import { DependencyDag } from '@/components/studio/DependencyDag';
 import { GenerationGallery } from '@/components/studio/GenerationGallery';
-import { roadmapDraftView, markdownDraftView } from '@/lib/session-artifact-view';
+import { ContractBuildout } from '@/components/studio/ContractBuildout';
+import { roadmapDraftView, markdownDraftView, sessionArtifactView, type SessionArtifactView } from '@/lib/session-artifact-view';
 import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-client';
 
 // ---------------------------------------------------------------------------
 // SessionArtifactPane — the RIGHT-hand "living artifact" pane of the shared
-// session shell (R2-10 PR2, WI-7). One module covering all four LIVE
+// session shell (R2-10 PR2, WI-7). One module covering all five LIVE
 // artifact kinds (roadmap-draft / markdown-draft / brain-structure /
-// generation-gallery — R4-16) — mirrors session-artifact-view.ts's own "one
-// module, not one file per kind" precedent (they are tightly-related
-// renderers for the SAME pane of the SAME page).
+// generation-gallery — R4-16 / contract-buildout — R4-17) — mirrors
+// session-artifact-view.ts's own "one module, not one file per kind"
+// precedent (they are tightly-related renderers for the SAME pane of the
+// SAME page).
+//
+// D10 (R4-17, binding, ruled by T2): branch selection DELEGATES to the
+// `sessionArtifactView` dispatcher instead of a bespoke
+// `artifact.kind === X ? ... : <Y>` ternary. The PRIOR ternary's final
+// `else` unconditionally rendered `<GenerationGallery>`, so a kind the pane
+// didn't explicitly branch on silently misrendered as a gallery instead of
+// failing loudly — a declared-data-fails-open instance, and this initiative
+// adds a new kind, so it ships the guard. `sessionArtifactView` is the ONE
+// exhaustive dispatcher every live kind resolves through (session-artifact-
+// view.test.ts's AT-84..122): an unhandled/unknown kind THROWS there, naming
+// it, never silently matching another kind's view shape. This pane calls it
+// ONCE, up front, purely to pick which branch to render (`view.kind`) — and
+// catches its throw into an EXPLICIT, visible failure state
+// (`UnhandledArtifactBody`), never any specific renderer. The duplicate
+// ternary this replaces is deleted, not left beside the new path.
 //
 // Row/empty/state LOGIC is never re-implemented here: roadmap-draft and
-// markdown-draft dispatch through the pure `roadmapDraftView`/`markdownDraftView`
-// (lib/session-artifact-view.ts). brain-structure's `themeCount` is a direct
-// passthrough field on the artifact (no derived logic to reuse), and its file
-// tabs render through the SHARED `FilePackage` component — no second tab-strip
-// is written here; `FilePackage` is handed the raw `files` and manages its own
-// tab-selection state via the same `filePackageTabs`/`selectFile` primitives
+// markdown-draft still dispatch through the pure `roadmapDraftView`/
+// `markdownDraftView` (lib/session-artifact-view.ts) inside their own body
+// components — the top-level `sessionArtifactView` call above exists for the
+// BRANCH DECISION (and is contract-buildout's sole path, since that kind's
+// view IS its render input), not to replace those per-kind calls; the two
+// pure functions are cheap and side-effect-free, so computing a kind's view
+// twice (once for dispatch, once for render) costs nothing observable.
+// brain-structure's `themeCount` is a direct passthrough field on the
+// artifact (no derived logic to reuse), and its file tabs render through the
+// SHARED `FilePackage` component — no second tab-strip is written here;
+// `FilePackage` is handed the raw `files` and manages its own tab-selection
+// state via the same `filePackageTabs`/`selectFile` primitives
 // `lib/session-artifact-view.ts`'s (unused-by-this-component)
 // `brainStructureView`/`selectBrainStructureFile` also wrap. generation-gallery
 // follows the SAME "hand the raw data to a self-contained component" pattern:
@@ -28,16 +51,23 @@ import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-clie
 // `FilePackage`, not a state lift here) — as a poll-stable generation NUMBER
 // fed through `generationGalleryView`'s optional `preferredNumber` (R4-16 pin
 // 2, Finding D), not an index derived from whichever `artifact` object
-// reference happened to arrive on the latest 3s poll tick.
+// reference happened to arrive on the latest 3s poll tick. contract-buildout
+// (R4-17) hands `ContractBuildout` the ALREADY-COMPUTED `sessionArtifactView`
+// output directly — that view IS its render input (mode:'checklist'|'detail'),
+// so there is no second call to make.
 //
 // `project`/`sessionId` are OPTIONAL passthrough, needed only by
 // generation-gallery's per-item "view" links + "finalize" action (D7: gallery
 // items carry metadata, never bodies, so viewing one requires resolving a
-// bridge URL keyed on project+session+generation+filename). The other three
-// kinds ignore them entirely. `onFinalizeGeneration` is likewise optional —
+// bridge URL keyed on project+session+generation+filename). The other kinds
+// ignore them entirely. `onFinalizeGeneration` is likewise optional —
 // owned and wired by whichever caller has a live demo-builder session to act
 // on (DemoBuilderPanel); the generic `/sessions/[kind]/[sessionId]` deep-link
 // route renders the gallery read-only without it (D3: "zero extra code").
+// `activeStage` (R4-17) is the currently-selected session stage
+// (session-shell-view.ts's `state.selectedStage`) — threaded straight to the
+// dispatcher; every stage-UNAWARE kind (everything except contract-buildout)
+// treats it as a no-op (session-artifact-view.test.ts's AT-91/109).
 //
 // The wrapper carries the mandated DOM-as-metrics contract
 // (docs/forge-ui-dom-and-harness.md): `data-section="session-artifact"`,
@@ -51,13 +81,23 @@ export function SessionArtifactPane({
   artifact,
   project,
   sessionId,
+  activeStage,
   onFinalizeGeneration,
 }: {
   artifact: SessionArtifactPayload;
   project?: string;
   sessionId?: string;
+  activeStage?: string;
   onFinalizeGeneration?: (generationNumber: number) => void;
 }): JSX.Element {
+  let view: SessionArtifactView | null = null;
+  let dispatchError: string | null = null;
+  try {
+    view = sessionArtifactView(artifact, activeStage);
+  } catch (err) {
+    dispatchError = err instanceof Error ? err.message : String(err);
+  }
+
   return (
     <div
       data-section="session-artifact"
@@ -86,14 +126,25 @@ export function SessionArtifactPane({
         {artifact.label}
       </div>
       <div style={{ padding: 16, overflow: 'auto' }}>
-        {artifact.kind === 'roadmap-draft' ? (
-          <RoadmapDraftBody artifact={artifact} />
-        ) : artifact.kind === 'markdown-draft' ? (
-          <MarkdownDraftBody artifact={artifact} />
-        ) : artifact.kind === 'brain-structure' ? (
-          <BrainStructureBody artifact={artifact} />
+        {view === null ? (
+          <UnhandledArtifactBody kind={artifact.kind} error={dispatchError ?? 'sessionArtifactView produced no view'} />
+        ) : view.kind === 'roadmap-draft' ? (
+          <RoadmapDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'roadmap-draft' }>} />
+        ) : view.kind === 'markdown-draft' ? (
+          <MarkdownDraftBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'markdown-draft' }>} />
+        ) : view.kind === 'brain-structure' ? (
+          <BrainStructureBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'brain-structure' }>} />
+        ) : view.kind === 'generation-gallery' ? (
+          <GenerationGallery
+            artifact={artifact as Extract<SessionArtifactPayload, { kind: 'generation-gallery' }>}
+            project={project}
+            sessionId={sessionId}
+            onFinalize={onFinalizeGeneration}
+          />
+        ) : view.kind === 'contract-buildout' ? (
+          <ContractBuildout view={view} activeStage={activeStage} />
         ) : (
-          <GenerationGallery artifact={artifact} project={project} sessionId={sessionId} onFinalize={onFinalizeGeneration} />
+          <UnhandledArtifactBody kind={artifact.kind} error={`sessionArtifactView returned an unhandled view kind ${JSON.stringify((view as { kind: string }).kind)}`} />
         )}
       </div>
     </div>
@@ -191,6 +242,23 @@ function BrainStructureBody({ artifact }: { artifact: Extract<SessionArtifactPay
         {artifact.themeCount} theme file{artifact.themeCount === 1 ? '' : 's'} seeded.
       </div>
       <FilePackage files={artifact.files} />
+    </div>
+  );
+}
+
+/** D10's explicit failure state: an artifact kind `sessionArtifactView` could
+ *  not resolve to a renderer (reserved or genuinely unrecognised) reaches
+ *  here instead of silently rendering as any specific kind's view — the
+ *  dispatcher's thrown message (naming the offending kind) is shown
+ *  verbatim, never swallowed. */
+function UnhandledArtifactBody({ kind, error }: { kind: string; error: string }): JSX.Element {
+  return (
+    <div
+      data-section="session-artifact-unhandled"
+      data-artifact-unhandled-kind={kind}
+      style={{ fontSize: 12.5, color: 'var(--red)', padding: '6px 0' }}
+    >
+      This artifact kind has no renderer: {error}
     </div>
   );
 }

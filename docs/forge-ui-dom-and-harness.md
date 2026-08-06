@@ -377,10 +377,21 @@ inventory rather than one shared page-level contract:
   from a framework template and navigates to its page.
   An existing project's editor aside carries the R4-02-F1 second onboarding
   entry point: `[data-section="onboard-with-agent"]` with a
-  `[data-action="run-onboarding-agent"]` button that dispatches the
-  onboarding agent through the SAME runner as `/agents/[id]`'s RunPanel
-  (`dispatchAgentRun('onboarding-agent', {project})`); `[data-onboard-run-id]`
-  carries the dispatched runId.
+  `[data-action="run-onboarding-agent"]` button. **Repointed R4-17
+  (2026-08-06):** the button now dispatches through the staged onboarding
+  session route, `POST /api/studio/onboarding/start` (`{project, inputs?}` →
+  `{ok, sessionId, runId, project}`, `forge-ui/lib/studio-client.ts`'s
+  `startOnboardingSession`) rather than the generic
+  `POST /api/agents/onboarding-agent/run` — D6 (R4-17) keeps the underlying
+  spawn byte-identical, so `[data-onboard-run-id]` /
+  `[data-onboard-run-status]` / `[data-action="run-onboarding-agent"]` are
+  UNCHANGED (an existing journey beat asserts them). Additive:
+  `[data-onboard-session-id]` carries the new staged session's id, and once a
+  run is dispatched a `[data-action="view-onboarding-session"]` link opens
+  the shared session shell at `/sessions/onboarding/<sessionId>?project=<id>`
+  — the SAME stage-aware `contract-buildout` artifact pane described below,
+  reused verbatim for onboarding (D1: one session-kind descriptor,
+  `onboarding`, for both onboarding AND creation).
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
   `pending`/`done`) gets recovery affordances right on its `InitiativeCard`
@@ -417,7 +428,16 @@ inventory rather than one shared page-level contract:
   client-side table). Fail-closed state:
   `[data-session-error][data-session-error-kind]` — a checkpoint stage outside
   the kind's declared `stages` surfaces the server's message naming the
-  offending value and the allowed set, never a defaulted render.
+  offending value and the allowed set, never a defaulted render. **D10
+  (R4-17, 2026-08-06):** `SessionArtifactPane`'s branch selection DELEGATES to
+  the `sessionArtifactView` dispatcher (`forge-ui/lib/session-artifact-view.ts`)
+  instead of a bespoke ternary — the prior ternary's final `else`
+  unconditionally rendered the generation gallery, so an artifact kind the
+  pane didn't explicitly branch on silently misrendered as a gallery instead
+  of failing loudly. An unhandled/unknown kind now renders
+  `[data-section="session-artifact-unhandled"][data-artifact-unhandled-kind]`
+  — an explicit, visible failure state naming the offending kind, never any
+  specific renderer.
   **Every per-kind operator affordance keeps its original `data-*` name** so
   the harness drives it unchanged: the architect hex
   (`[data-component="architect-hex"][data-architect-phase][data-architect-active]`,
@@ -558,6 +578,34 @@ inventory rather than one shared page-level contract:
   its generator skill into the project repo before the same lock runs, so
   `demo.lock.json`'s `demo_html`/`demo_skill` pair always comes from one
   generation.
+- **Contract build-out — the onboarding/creation session's artifact (R4-17,
+  2026-08-06).** The `onboarding` session-kind descriptor (`studio/
+  session-kinds.yaml`, D1: ONE descriptor reused for both the `/projects/[id]`
+  onboarding entry point AND the R4-03 create-from-template flow) declares
+  `stages: [contract, instructions, secrets, demo, roadmap]`,
+  `defaultStage: contract`, and a new **live** artifact kind
+  `contract-buildout` — a five-row PRESENCE report (`cli/contract-stages.ts`'s
+  `deriveContractStages`; D11: presence only, "present"/"absent", never a
+  clause verdict — `forge preflight`'s exit code stays the only authoritative
+  contract-green signal). Stage-aware, mirroring
+  `mockups/studio-endstate-v2/views-session.jsx:77-158`: the `contract` stage
+  renders the CHECKLIST of all five rows (reuses the SAME
+  `.readiness-list`/`.readiness-item`/`.ri-dot` classes
+  `ReadinessPanel.tsx` already ships); every other stage renders THAT stage's
+  own row detail. Contract:
+  `[data-component="contract-buildout"][data-buildout-mode="checklist"|"detail"][data-buildout-active-stage][data-buildout-row-count]`;
+  checklist mode: `[data-section="contract-checklist"][data-checklist-row-count]`
+  with per-row `[data-checklist-row][data-checklist-status="present"|"absent"]`;
+  detail mode: `[data-stage-detail-state="row"|"no-row"][data-stage-detail-stage][data-stage-detail-status]`
+  with a `[data-section="stage-detail-list"]` of `[data-detail-line]` entries.
+  **D3 (security, load-bearing):** the `secrets` stage's detail lines are
+  NAMES ONLY — the wire payload never carries a value, and the component
+  renders each name plainly with no fabricated placeholder value (no
+  "••••••", no invented "redacted" string) that could read as though a real
+  value were partially shown. The pane threads the session shell's
+  `selectedStage` straight to the dispatcher as `activeStage`
+  (`SessionArtifactPane`'s new optional prop) — every OTHER live kind treats
+  it as a no-op (stage-UNAWARE by nature).
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
   (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
   (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`; the create form's
