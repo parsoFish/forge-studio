@@ -201,7 +201,7 @@ export async function applyReviewVerdict(
     // Deliberately moved AHEAD of the existsSync probe below (was previously
     // checked first) — an out-of-bounds path must never even be stat'd through
     // this route.
-    if (!isContainedWorktreePath(approveWorktreePath, { forgeRoot: ctx.forgeRoot, initiativeId })) {
+    if (!isContainedWorktreePath(approveWorktreePath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId })) {
       sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
       return;
     }
@@ -219,7 +219,7 @@ export async function applyReviewVerdict(
     // use of the value, using the same "outside allowed root" 409 shape.
     if (
       approveManifest.project_repo_path &&
-      !isContainedProjectRepoPath(approveManifest.project_repo_path, { forgeRoot: ctx.forgeRoot })
+      !isContainedProjectRepoPath(approveManifest.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })
     ) {
       sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
       return;
@@ -378,7 +378,7 @@ export async function applyReviewVerdict(
   // an unresolved path, against the two legitimate roots (in-place worktrees
   // under <forgeRoot>/projects/, forge-managed worktrees identity-bound to
   // THIS initiative under <forgeRoot>/_worktrees/).
-  if (!isContainedWorktreePath(worktreePath, { forgeRoot: ctx.forgeRoot, initiativeId })) {
+  if (!isContainedWorktreePath(worktreePath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId })) {
     sendJson(res, 409, { error: 'worktree_path outside allowed root', initiativeId }, origin);
     return;
   }
@@ -387,7 +387,7 @@ export async function applyReviewVerdict(
   // read an arbitrary project.json off the filesystem through this route.
   if (
     manifest.project_repo_path &&
-    !isContainedProjectRepoPath(manifest.project_repo_path, { forgeRoot: ctx.forgeRoot })
+    !isContainedProjectRepoPath(manifest.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })
   ) {
     sendJson(res, 409, { error: 'project_repo_path outside allowed root', initiativeId }, origin);
     return;
@@ -807,7 +807,7 @@ export async function handleStudioPostRoutes(
       return true;
     }
     try {
-      runRequeue(runId, { forgeRoot: ctx.forgeRoot, resumeFromDemo: true });
+      runRequeue(runId, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, resumeFromDemo: true });
       sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);

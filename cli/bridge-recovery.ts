@@ -35,7 +35,15 @@ import {
   isContainedProjectRepoPath,
 } from './manifest-path-guard.ts';
 
-export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
+/**
+ * `projectsRoot` (R4-17 round-4, pin 7) is the bridge's snapshot —
+ * `ctx.projectsRoot`, resolved ONCE at `startBridge` and held for the
+ * process's lifetime. Threaded verbatim into every containment check on these
+ * routes so a live `forge.config.json` edit cannot make the guard re-derive a
+ * DIFFERENT root than the bridge is actually running against (see
+ * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`).
+ */
+export type RecoveryContext = { forgeRoot: string; queueRoot: string; logsRoot: string; projectsRoot: string };
 
 type QueueState = 'pending' | 'in-flight' | 'ready-for-review' | 'merged' | 'done' | 'failed';
 
@@ -98,7 +106,7 @@ export function recoveryInspect(initiativeId: string, ctx: RecoveryContext): Rec
   // reading `<wt>/.forge/pr-description.md` would leak an arbitrary file's
   // length (prDraftChars). Falls into the SAME existing shape the "no
   // worktree" case already uses (worktreeExists:false) rather than a new one.
-  const wtContained = wt !== null && isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, initiativeId });
+  const wtContained = wt !== null && isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId });
   if (wt && wtContained && existsSync(wt)) {
     out.worktreeExists = true;
     out.commits = git(wt, ['log', '--no-color', '--format=%h %s', '-n', '20', 'main..HEAD'])
@@ -124,10 +132,10 @@ export function recoveryAbandon(initiativeId: string, ctx: RecoveryContext): { o
   // --delete` against an out-of-bounds path. Reuses the SAME error shape this
   // function already returns for "no manifest found" rather than inventing a
   // new one, and never echoes the offending path back to the caller.
-  if (wt && !isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, initiativeId })) {
+  if (wt && !isContainedWorktreePath(wt, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot, initiativeId })) {
     return { ok: false, detail: 'no manifest found' };
   }
-  if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot: ctx.forgeRoot })) {
+  if (projectRepoPath && !isContainedProjectRepoPath(projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
     return { ok: false, detail: 'no manifest found' };
   }
   const branch = `forge/${initiativeId}`;
@@ -208,6 +216,7 @@ export async function handleRecoveryRoutes(
         resetRetries: body['resetRetries'] === true,
         resumeFromDemo: body['resumeFromDemo'] === true,
         forgeRoot: ctx.forgeRoot,
+        projectsRoot: ctx.projectsRoot,
       });
       sendJson(res, 200, { ok: true, ...result }, origin);
     } catch (err) { sendJson(res, 409, { error: sanitizeError(err) }, origin); }
@@ -231,7 +240,7 @@ export async function handleRecoveryRoutes(
       // project_repo_path / cycle_id / project BEFORE writeManifest ever
       // runs, so the ingest route reports a clean 400 instead of the
       // writeManifest guard's throw surfacing as a 500.
-      const pathErrors = validateManifestPathFields(manifest, { forgeRoot: ctx.forgeRoot });
+      const pathErrors = validateManifestPathFields(manifest, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (pathErrors.length > 0) { sendJson(res, 400, { error: 'invalid manifest', detail: pathErrors }, origin); return true; }
       const paths = getPaths(ctx.queueRoot);
       const filename = `${manifest.initiative_id}.md`;
@@ -239,7 +248,7 @@ export async function handleRecoveryRoutes(
         sendJson(res, 409, { error: 'initiative already pending or in-flight', initiativeId: manifest.initiative_id }, origin);
         return true;
       }
-      const out = writeManifest(manifest, { queueRoot: ctx.queueRoot });
+      const out = writeManifest(manifest, { queueRoot: ctx.queueRoot, projectsRoot: ctx.projectsRoot });
       sendJson(res, 201, { ok: true, initiativeId: manifest.initiative_id, path: out }, origin);
     } catch (err) { sendJson(res, 500, { error: sanitizeError(err) }, origin); }
     return true;

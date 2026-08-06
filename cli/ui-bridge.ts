@@ -965,7 +965,7 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
   // read-only; the POSTs are gated by the x-forge-csrf guard above.
-  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot, projectsRoot: ctx.projectsRoot }, url, method)) return;
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -1659,10 +1659,10 @@ function renderOnboardingPrompt(inputs: Record<string, string>): string {
  * from a non-JSON source would reopen shapes `describeRejectedValue` cannot
  * be assumed to survive.
  */
-function invalidProjectRepoPath(candidate: unknown, forgeRoot: string): string | null {
+function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; projectsRoot: string }): string | null {
   if (candidate === undefined || candidate === '') return null;
   if (typeof candidate !== 'string') return describeRejectedValue(candidate);
-  return isContainedProjectRepoPath(candidate, { forgeRoot }) ? null : candidate;
+  return isContainedProjectRepoPath(candidate, roots) ? null : candidate;
 }
 
 /** Cap on the rendered offending value interpolated into a 400 body. Two
@@ -1819,7 +1819,7 @@ async function handleArchitect(
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/writeFileSync/status
       // write. See invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
@@ -2104,7 +2104,7 @@ async function handleInstructions(
       // below (an unvalidated READ through the field, not just a write
       // target) and before any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
@@ -2502,7 +2502,7 @@ async function handleDemoBuilder(
     // use the caller's default" — correct for a request body at WRITE time,
     // wrong here, where the field is mandatory and already persisted; a
     // forged empty string must be REJECTED, not silently treated as fine.)
-    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot })) {
+    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
       sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
@@ -2557,7 +2557,7 @@ async function handleDemoBuilder(
     // fully `join()`-normalised) is already safe; it says nothing about
     // `project_repo_path` itself. Close the same hole here rather than leave
     // the twin route exposed. `element`'s own handling below is UNCHANGED.
-    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot })) {
+    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
       sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
@@ -2732,7 +2732,7 @@ async function handleDemoBuilder(
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
@@ -2927,7 +2927,7 @@ async function handleDemoBuilder(
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through
       // read/status write. See invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;

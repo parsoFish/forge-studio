@@ -826,7 +826,13 @@ export async function handleStudioWriteRoutes(
       // under that same root, and discoverProjects only scans it — a project
       // created outside projects/ could never run a cycle and would be
       // invisible to the library.
-      if (!isContainedProjectRepoPath(projectRoot, { forgeRoot: ctx.forgeRoot })) {
+      // R4-17 round-4 (pin 7): the guard checks against `projectsDir` — the
+      // root THIS handler already resolved four lines up and used for the
+      // duplicate-id scan — instead of re-reading `forge.config.json` inside
+      // the guard. Without the pass-through the same handler resolves the
+      // projects root TWICE from disk, so a config write landing between the
+      // two reads scans one root and validates against another.
+      if (!isContainedProjectRepoPath(projectRoot, { forgeRoot: ctx.forgeRoot, projectsRoot: projectsDir })) {
         sendJson(res, 400, { error: 'repo path must resolve inside the forge projects directory' }, origin); return true;
       }
 

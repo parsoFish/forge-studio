@@ -376,6 +376,18 @@ export function validateManifest(m: InitiativeManifest): string[] {
 
 export type WriteOptions = {
   queueRoot?: string;          // defaults to './_queue'
+  /**
+   * R4-17 round-4 (pin 7): the projects root the CALLER already resolved,
+   * passed through to `assertManifestPathFields` verbatim instead of letting
+   * the guard re-read `forge.config.json` from disk. A long-lived caller (the
+   * bridge, which snapshots `ctx.projectsRoot` once at server start) must be
+   * validated against the root it is actually using — see
+   * `cli/manifest-path-guard.ts`'s `ProjectsRootOpt`. Omitted by the
+   * short-lived callers (`promote-manifests`, `mint-triggered-initiative`),
+   * which resolve fresh at invocation time and have no snapshot to diverge
+   * from; the guard then self-resolves exactly as before.
+   */
+  projectsRoot?: string;
 };
 
 export function writeManifest(m: InitiativeManifest, opts: WriteOptions = {}): string {
@@ -393,7 +405,7 @@ export function writeManifest(m: InitiativeManifest, opts: WriteOptions = {}): s
   // for why validation belongs HERE rather than at the dozen downstream read
   // sites. Throws (fails closed) rather than writing an unsafe manifest.
   const forgeRoot = dirname(queueRoot);
-  assertManifestPathFields(m, { forgeRoot });
+  assertManifestPathFields(m, { forgeRoot, projectsRoot: opts.projectsRoot });
   const pending = join(queueRoot, 'pending');
   if (!existsSync(pending)) mkdirSync(pending, { recursive: true });
   const out = join(pending, `${m.initiative_id}.md`);
