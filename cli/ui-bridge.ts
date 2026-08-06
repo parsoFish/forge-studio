@@ -117,6 +117,15 @@ import {
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
 import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
+import {
+  agentAcceptsMaterial,
+  materialKindForFilename,
+  MAX_MATERIALS_COUNT,
+  MAX_MATERIAL_BYTES,
+  MAX_MATERIALS_TOTAL_BYTES,
+} from '../orchestrator/studio/materials.ts';
+import { stageMaterials, MaterialsStagingError } from './materials-staging.ts';
+import type { AgentDefinition } from '../orchestrator/studio/types.ts';
 import { skillsDir, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
@@ -1152,7 +1161,7 @@ async function handleHttp(
       return;
     }
     try {
-      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown };
+      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown; materials?: unknown };
       // Resolve + validate against the live roster (unknown/interactive → 400).
       let def: ReturnType<typeof resolveDispatchableAgent>;
       try {
@@ -1207,7 +1216,66 @@ async function handleHttp(
           inputs[k] = v;
         }
       }
+      // R6-04-F2 WI-1 — materials contract enforcement, the agent-kickoff
+      // upload seam. ALL validation happens here, alongside `inputs` above,
+      // BEFORE `runId` is minted below: a refused request never reaches the
+      // point where a run directory could exist at all, which is what makes
+      // "nothing written on refusal" true BY CONSTRUCTION rather than by a
+      // compensating delete. `def` (the agent's declared `materials:`) is
+      // already resolved above; the kind for every entry is derived
+      // SERVER-SIDE (`materialKindForFilename`) — a client-supplied `kind`
+      // field, if present, is never read.
+      const materialsValidation = validateMaterialsField(body.materials, def);
+      if (!materialsValidation.ok) {
+        sendJson(res, 400, { error: materialsValidation.error }, origin);
+        return;
+      }
       const runId = `_agent-${slug}-${newRunStamp()}`;
+      // Staging happens AFTER runId is minted (it needs a run dir to write
+      // into) and BEFORE spawnAgentDispatch (so the spawned agent process
+      // can see the files). A `MaterialsStagingError` here is a SERVER-side
+      // anomaly, not a client-attributable refusal — every client-fixable
+      // problem already 400'd above, and the client cannot plant a
+      // symlink/hardlink under a runId it never knew in advance — so it
+      // falls through to the route's normal catch below, which maps it to a
+      // 500 via the existing `sanitizeError`, not a hand-rolled sanitiser.
+      if (materialsValidation.entries.length > 0) {
+        const runDir = join(ctx.logsRoot, runId);
+        // `runId` is server-minted (just above) and `ctx.logsRoot` is
+        // config-derived — both trusted, neither built from untrusted
+        // input — so realizing the run's own directory here is safe. This
+        // is the run's FIRST artifact: under FORGE_DRY_BRIDGE, spawnAgentDispatch
+        // below never runs, so nothing else creates `runDir` before
+        // `stageMaterials`/`resolveGuardedPath` need it to already exist.
+        mkdirSync(runDir, { recursive: true });
+        stageMaterials(
+          runDir,
+          materialsValidation.entries.map((m) => ({ filename: m.filename, bytes: m.bytes })),
+        );
+        // Record REFERENCES ONLY (relative path + derived kind) on the run's
+        // own event log — never the bytes (forge-wide rule: the event log
+        // logs refs, never contents).
+        createLogger(runId, ctx.logsRoot).emit({
+          initiative_id: runId,
+          phase: 'orchestrator',
+          skill: slug,
+          // NOT 'start' — `runAgent` (orchestrator/run-agent.ts:297) already
+          // emits the run's real lifecycle `start` event when the spawned
+          // process runs; a second `start` here would double up the
+          // lifecycle terminal for the same runId (wrong "when did this run
+          // begin" answers, an inflated events count on the status route).
+          // This is a supplementary record, not a lifecycle boundary — 'log'
+          // is the established shape for that (mirrors
+          // 'run-agent.spawn-suppressed', also a non-lifecycle `log` event).
+          event_type: 'log',
+          input_refs: materialsValidation.entries.map((m) => `materials/${m.filename}`),
+          output_refs: [],
+          message: 'agent-run.materials-staged',
+          metadata: {
+            materials: materialsValidation.entries.map((m) => ({ path: `materials/${m.filename}`, kind: m.kind })),
+          },
+        });
+      }
       spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs);
       sendJson(
         res,
@@ -1216,6 +1284,17 @@ async function handleHttp(
         origin,
       );
     } catch (err) {
+      // A MaterialsStagingError (thrown by stageMaterials) lands here too —
+      // deliberately: it maps to the SAME 500 + sanitizeError() as every
+      // other unexpected failure on this route, not a hand-rolled second
+      // sanitiser. See the staging call above for why a staging throw is a
+      // server-state anomaly rather than a client-attributable 400. Worth a
+      // distinct server-side log line, though, since this specific path
+      // means containment refused a write under a runId only the server
+      // ever knew — an environment fault, never a client mistake.
+      if (err instanceof MaterialsStagingError) {
+        console.error(`POST /api/agents/:slug/run: materials staging failed: ${err.message}`);
+      }
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return;
@@ -1396,6 +1475,131 @@ const SAFE_AGENT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 const SAFE_PROJECT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+/** R6-04-F2 WI-1 contract point 3 — a `materials:` upload's `filename` must
+ *  be a single safe path-segment NAME: alnum-first (bans dotfiles like
+ *  `.env` and the `..foo`/`.`/`..` shapes outright — no traversal token is
+ *  needed for any of those to be refused), alnum/`.`/`_`/`-` only (no `/`,
+ *  no `\`, never decoded — this field is a JSON string VALUE, never a URL
+ *  segment), max 128 chars. Deliberately STRICTER than, and NOT reused from,
+ *  `studio-path-guard.ts`'s `isSafeSegment` (which legitimately allows
+ *  `..foo` as an ordinary directory-entry name) — this is a narrower,
+ *  purpose-built contract for an untrusted upload name, not a relaxation of
+ *  the shared guard's rule. */
+const MATERIAL_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
+
+/** Comma-separated, declaration-order rendering of an agent's declared
+ *  materials kinds for a refusal message — the literal `(none)` when the
+ *  agent declares nothing at all (R6-04-F2 WI-1, exact wording pinned by
+ *  `cli/ui-bridge-agent-run-materials.test.ts`). */
+function declaredMaterialKindsClause(declared: readonly string[]): string {
+  return declared.length > 0 ? declared.join(', ') : '(none)';
+}
+
+/** Exact refusal text for a filename whose extension derives NO material
+ *  kind at all (`materialKindForFilename` returned `undefined`). Wording is
+ *  pinned character-for-character by the acceptance tests — do not reword. */
+function materialsNoKindMessage(filename: string, slug: string, declared: readonly string[]): string {
+  return `materials: "${filename}" maps to no material kind; agent "${slug}" declares: ${declaredMaterialKindsClause(declared)}`;
+}
+
+/** Exact refusal text for a filename that DOES derive a kind, but one the
+ *  agent has not declared (`agentAcceptsMaterial` returned `false`). Wording
+ *  is pinned character-for-character by the acceptance tests — do not
+ *  reword. */
+function materialsUndeclaredKindMessage(filename: string, kind: string, slug: string, declared: readonly string[]): string {
+  return `materials: "${filename}" is ${kind}; agent "${slug}" declares: ${declaredMaterialKindsClause(declared)}`;
+}
+
+/** Decode `raw` as base64 and require it to ROUND-TRIP back to the exact
+ *  same string. Node's base64 decoder is lenient — it silently drops stray
+ *  invalid characters instead of throwing — so "does `Buffer.from` throw"
+ *  is not a valid validity check on its own; only a successful round-trip
+ *  proves `raw` was genuinely, exactly base64. Returns `undefined` (never
+ *  throws) on any mismatch. */
+function decodeStrictBase64(raw: string): Buffer | undefined {
+  const buf = Buffer.from(raw, 'base64');
+  return buf.toString('base64') === raw ? buf : undefined;
+}
+
+type ValidatedMaterial = { filename: string; bytes: Buffer; kind: string };
+type MaterialsValidation = { ok: true; entries: ValidatedMaterial[] } | { ok: false; error: string };
+
+/**
+ * Validate one `POST /api/agents/:slug/run` request body's `materials`
+ * field end to end (R6-04-F2 WI-1, contract points 2-8): shape, filename
+ * charset, duplicate-within-request, strict base64, the three caps, and —
+ * the headline behaviour — the kind gate itself. The kind for every entry
+ * is derived SERVER-SIDE via `materialKindForFilename`; nothing here ever
+ * reads a client-supplied `kind` field, so one can never influence the
+ * outcome in either direction (acceptance test: a lying `kind` can neither
+ * bypass the gate nor cause a false refusal).
+ *
+ * Pure and synchronous — no filesystem I/O, no partial state. Returns
+ * either the fully-validated, decoded entries ready for `stageMaterials`,
+ * or a single `error` string ready to send as a 400. `materials` absent (or
+ * `[]`) returns `{ ok: true, entries: [] }` — contract point 1,
+ * byte-identical to today's behaviour.
+ */
+function validateMaterialsField(rawMaterials: unknown, def: AgentDefinition): MaterialsValidation {
+  if (rawMaterials === undefined) return { ok: true, entries: [] };
+  if (!Array.isArray(rawMaterials)) {
+    return { ok: false, error: 'materials: must be an array' };
+  }
+  if (rawMaterials.length > MAX_MATERIALS_COUNT) {
+    return { ok: false, error: `materials: at most ${MAX_MATERIALS_COUNT} materials per request (got ${rawMaterials.length})` };
+  }
+
+  const declared = def.materials ?? [];
+  const seenFilenames = new Set<string>();
+  const entries: ValidatedMaterial[] = [];
+  let totalBytes = 0;
+
+  for (const raw of rawMaterials) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { ok: false, error: 'materials: each entry must be an object with filename and contentBase64' };
+    }
+    const entry = raw as Record<string, unknown>;
+
+    if (typeof entry.filename !== 'string') {
+      return { ok: false, error: 'materials: filename must be a string' };
+    }
+    const filename = entry.filename;
+    if (!MATERIAL_FILENAME_RE.test(filename)) {
+      return { ok: false, error: `materials: invalid filename ${JSON.stringify(filename)}` };
+    }
+    if (typeof entry.contentBase64 !== 'string') {
+      return { ok: false, error: `materials: "${filename}" contentBase64 must be a string` };
+    }
+    if (seenFilenames.has(filename)) {
+      return { ok: false, error: `materials: duplicate filename "${filename}" in one request` };
+    }
+    seenFilenames.add(filename);
+
+    const bytes = decodeStrictBase64(entry.contentBase64);
+    if (!bytes) {
+      return { ok: false, error: `materials: "${filename}" contentBase64 is not valid base64` };
+    }
+    if (bytes.length > MAX_MATERIAL_BYTES) {
+      return { ok: false, error: `materials: "${filename}" exceeds the per-file size cap (${MAX_MATERIAL_BYTES} bytes)` };
+    }
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_MATERIALS_TOTAL_BYTES) {
+      return { ok: false, error: `materials: total size exceeds the request cap (${MAX_MATERIALS_TOTAL_BYTES} bytes)` };
+    }
+
+    const kind = materialKindForFilename(filename);
+    if (!kind) {
+      return { ok: false, error: materialsNoKindMessage(filename, def.slug, declared) };
+    }
+    if (!agentAcceptsMaterial(def, kind)) {
+      return { ok: false, error: materialsUndeclaredKindMessage(filename, kind, def.slug, declared) };
+    }
+
+    entries.push({ filename, bytes, kind });
+  }
+
+  return { ok: true, entries };
+}
 
 /** R4-16 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>
  *  path segments. `n` is a bounded digit string (mirrors a generation number,
