@@ -12,6 +12,7 @@ import { FANOUT_ISOLATION_KINDS } from './types.ts';
 import { FLOW_KICKOFF_KINDS } from './types.ts';
 import { KB_BACKENDS } from './types.ts';
 import { SLUG_RE } from '../skill-path.ts';
+import { isSafeProjectName } from '../../cli/manifest-path-guard.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
 import { MATERIAL_KINDS } from './materials.ts';
 import { agentCapabilityDescriptor } from './derive.ts';
@@ -451,6 +452,27 @@ export function validateFlow(
   // slug
   if (!SLUG_RE.test(flow.id)) {
     findings.push(err(obj, 'slug', `Flow id "${flow.id}" does not match ${SLUG_RE}`));
+  }
+
+  // project/shape (SEC-03 Defect 3, defence in depth). The REAL enforcement is
+  // `writeManifest`'s `assertManifestPathFields` at the manifest-write choke
+  // point (orchestrator/mint-triggered-initiative.ts routes through it) — this
+  // is layer 2, a charset check catching a poisoned `flow.project` at the
+  // PUT/lint boundary, BEFORE it ever reaches a mint. Mirrors the exact
+  // predicate the choke point itself uses (`isSafeProjectName`,
+  // cli/manifest-path-guard.ts) so the two layers can never drift apart. Error
+  // level, not a flag: a warning here would be the "declared data fails open"
+  // shape this campaign has repeatedly found and closed. `null`/absent/`''`
+  // are all legal (no project binding) — checkFlowTriggers separately requires
+  // a non-null project on flows targeted by external triggers.
+  if (flow.project !== null && flow.project !== undefined && flow.project !== '' && !isSafeProjectName(flow.project)) {
+    findings.push(
+      err(
+        obj,
+        'project/shape',
+        `Flow project "${flow.project}" must be a safe single path segment (no separators, no "." or "..")`,
+      ),
+    );
   }
 
   // version: must be an integer >= 1

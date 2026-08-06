@@ -17,7 +17,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { seedProjectBrain } from './project-brain-seed.ts';
+import { seedProjectBrain, checkProjectBrainSeedContainment } from './project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from '../cli/preflight.ts';
 import { skillsDir } from './skill-path.ts';
 
@@ -166,12 +166,46 @@ export function scaffoldGreenfieldProject(input: {
   const projectDir = resolve(projectsRoot, id);
   if (existsSync(projectDir)) throw new Error(`project "${id}" already exists at ${projectDir}`);
 
+  // SEC-03 round 4 (T1 ruling) — Phase 1: a PURE containment check, zero
+  // side effects on anything request-derived (see
+  // `checkProjectBrainSeedContainment`'s docstring), for every path
+  // `seedProjectBrain` will write under `brain/projects/<id>/`. Runs BEFORE
+  // `copyTemplate` — the FIRST write this function makes — so a containment
+  // rejection here leaves NOTHING on disk anywhere, not even a project
+  // directory (closes round 3's half-created-project class without ever
+  // giving `seedProjectBrain` a chance to WRITE before that write is known
+  // to be safe).
+  //
+  // Round 3's fix ran the real `seedProjectBrain` WRITE first instead — that
+  // closed the containment-rejection scenario but, for an UNRELATED failure
+  // AFTER it succeeded (e.g. EACCES on `copyTemplate`'s own `mkdirSync`),
+  // left a fully-formed, orphaned `brain/projects/<id>/kb.yaml` behind: a
+  // phantom KB bound to a project that was never created, invisible to
+  // `discoverProjects` (which only scans `projectsRoot`) but VISIBLE to
+  // `loadKbDescriptors` (`cli/bridge-studio-kbs.ts`), which walks
+  // `brain/projects/` as its own second containment root — strictly worse
+  // than the half-created directory it replaced. Separating the check from
+  // the write removes the ordering question entirely: nothing this function
+  // writes can even be ATTEMPTED before every path it and `seedProjectBrain`
+  // will touch is proven safe.
+  checkProjectBrainSeedContainment(input.forgeRoot, id);
+
+  // Phase 2 — writes, in the ORIGINAL order (restored, SEC-03 round 4):
+  // `copyTemplate` first, `seedProjectBrain` after. `seedProjectBrain`'s
+  // target is entirely independent of `projectDir`, so this ordering was
+  // never about correctness — only about which artifact gets orphaned by an
+  // unrelated later failure. With Phase 1 above having already validated
+  // every brain-seed target, `seedProjectBrain` here can only fail for a
+  // reason genuinely unrelated to containment (or not fail at all), and the
+  // Phase 1 check ran before `copyTemplate` regardless of where
+  // `seedProjectBrain` itself sits in Phase 2.
   const filesWritten: string[] = [];
   copyTemplate(templateDir, projectDir, { id, title: manifest.name, northStar: manifest.northStar }, filesWritten);
 
-  // Hand off to the onboarding side: the CENTRAL Brain-3 stub (kb.yaml + profile.md)
-  // is the only forge-owned artifact not in the template — seed it so C4's central
-  // profile + the KB binding resolve. Idempotent per file.
+  // Hand off to the onboarding side: the CENTRAL Brain-3 stub (kb.yaml +
+  // profile.md) is the only forge-owned artifact not in the template — seed
+  // it so C4's central profile + the KB binding resolve. Idempotent per
+  // file; its own containment was already proven by Phase 1 above.
   seedProjectBrain(input.forgeRoot, id, manifest.name);
 
   const report = runPreflight(projectDir, { forgeRoot: input.forgeRoot });

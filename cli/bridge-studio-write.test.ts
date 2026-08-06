@@ -19,11 +19,13 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  chmodSync,
   cpSync,
   existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   rmSync,
   symlinkSync,
@@ -306,6 +308,143 @@ test('POST /api/studio/projects/create (R4-03): greenfield scaffold from a templ
   // The scaffolded project is real + tokens substituted.
   const pkg = readFileSync(join(forgeRoot, 'projects', 'greenfield-demo', 'package.json'), 'utf8');
   assert.match(pkg, /"name": "greenfield-demo"/);
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 3 (BLOCKER) — POST /api/studio/projects/create leaves a
+// HALF-CREATED project behind when seedProjectBrain rejects. See
+// orchestrator/project-create.test.ts's matching function-level test for the
+// full mechanism writeup; this is the SAME defect driven through the REAL
+// HTTP route, with the operator-visible consequence (GET /api/studio/projects
+// still lists it) asserted via the real listing route.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-03 round 3] POST /api/studio/projects/create: after a seedProjectBrain rejection, the project directory does not exist and does not appear in GET /api/studio/projects', async () => {
+  cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
+  const id = 'halfcreated-http-blocker';
+  const outside = mkdtempSync(join(tmpdir(), 'bridge-studio-write-halfcreated-outside-'));
+  try {
+    // Finding-A shape #1 (already fixed, correctly rejects): brain/projects/<id>
+    // itself a symlinked directory pointing outside forgeRoot.
+    mkdirSync(join(forgeRoot, 'brain', 'projects'), { recursive: true });
+    symlinkSync(outside, join(forgeRoot, 'brain', 'projects', id), 'dir');
+
+    const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
+      name: 'Halfcreated Http Blocker',
+      appType: 'typescript-cli',
+      northStar: 'ship the thing',
+    });
+    assert.notEqual(res.status, 200, `sanity: the containment rejection must not report success — got ${res.status}: ${await res.text()}`);
+
+    const projectDir = join(forgeRoot, 'projects', id);
+    assert.ok(
+      !existsSync(projectDir),
+      `copyTemplate already wrote a complete project directory before seedProjectBrain ran — the operator was told "not created" (status ${res.status}) but "${projectDir}" exists on disk`,
+    );
+
+    // Operator-visible consequence — driven through the REAL listing route.
+    const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+    assert.equal(listRes.status, 200);
+    const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+    assert.ok(
+      !projects.some((p) => p.id === id),
+      `GET /api/studio/projects must NOT list a project the create API just reported as failed — found: ${JSON.stringify(projects.map((p) => p.id))}`,
+    );
+
+    // RETROFIT (SEC-03 round 4) — "sweep for other surfaces that OBSERVE the
+    // state you claim to have cleaned up": GET /api/studio/projects was the
+    // only listing checked before round 4. loadKbDescriptors walks
+    // brain/projects/ as its OWN second containment root (cli/bridge-studio-
+    // kbs.ts), independent of discoverProjects — a fix that only cleans up
+    // projects/ can still leave a phantom visible here.
+    const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
+    assert.equal(kbListRes.status, 200);
+    const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
+    assert.ok(
+      !kbs.some((k) => k.id === id),
+      `GET /api/studio/kbs must NOT list a KB for a project the create API just reported as failed — found: ${JSON.stringify(kbs.map((k) => k.id))}`,
+    );
+    assert.ok(
+      !existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')),
+      `no phantom KB may be written under brain/projects/${id}/ either — in this containment-rejection scenario, seedProjectBrain's plan-then-write pattern should already prevent this (measured, not assumed)`,
+    );
+
+    // Property #3: the original containment property must not regress.
+    assert.deepEqual(readdirSync(outside), [], 'nothing may be created at the symlink target outside forgeRoot');
+  } finally {
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 4 (MAJOR) — the round-3 reordering fix moved the orphan, it
+// did not remove it. An UNRELATED failure AFTER seedProjectBrain succeeds
+// (EACCES on copyTemplate's mkdirSync, the reference case) leaves a
+// phantom brain/projects/<id>/kb.yaml behind — visible to GET
+// /api/studio/kbs, invisible to GET /api/studio/projects. Same
+// chmod-0o500-on-projects/ mechanism as orchestrator/project-create.test.ts's
+// matching test (verified deterministic there); driven here through the
+// REAL HTTP route + the REAL GET /api/studio/kbs listing route. The
+// greenfield route maps EACCES to a 400 (a pre-existing status-code
+// inconsistency with the onboard route's 500, already recorded elsewhere) —
+// not asserted here; only the disk/listing PROPERTY is.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-03 round 4] POST /api/studio/projects/create: an UNRELATED EACCES failure must not leave a phantom KB visible in GET /api/studio/kbs', async () => {
+  cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
+  const id = 'eacces-phantom-http-blocker';
+  const projectsDir = join(forgeRoot, 'projects');
+  chmodSync(projectsDir, 0o500);
+  try {
+    const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
+      name: 'Eacces Phantom Http Blocker',
+      appType: 'typescript-cli',
+      northStar: 'ship the thing',
+    });
+    const text = await res.text();
+    assert.notEqual(res.status, 200, `sanity: the EACCES failure must not report success — got ${res.status}: ${text}`);
+  } finally {
+    chmodSync(projectsDir, 0o755);
+  }
+
+  assert.ok(!existsSync(join(forgeRoot, 'projects', id)), 'the project directory must not exist');
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+  assert.ok(!projects.some((p) => p.id === id), `GET /api/studio/projects must not list it — found: ${JSON.stringify(projects.map((p) => p.id))}`);
+
+  const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
+  const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
+  assert.ok(
+    !kbs.some((k) => k.id === id),
+    `seedProjectBrain succeeded (writes to brain/projects/${id}/, independent of projects/'s permissions) and copyTemplate then failed with EACCES — GET /api/studio/kbs must NOT list a KB bound to a project the operator was just told was not created. Found: ${JSON.stringify(kbs.map((k) => k.id))}`,
+  );
+  assert.ok(!existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')), 'the phantom kb.yaml must not exist on disk either');
+});
+
+test('positive control (passes before AND after the SEC-03 round-3/4 fix): a normal POST /api/studio/projects/create still succeeds, and BOTH GET /api/studio/projects and GET /api/studio/kbs list it with the KB bound', async () => {
+  cpSync(join(process.cwd(), 'studio', 'starters', 'projects'), join(forgeRoot, 'studio', 'starters', 'projects'), { recursive: true });
+  const res = await postJson(`${bridgeUrl}/api/studio/projects/create`, {
+    name: 'Normal Http Greenfield',
+    appType: 'typescript-cli',
+    northStar: 'ship the thing',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected a normal greenfield create to succeed — got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; id: string };
+  assert.equal(body.ok, true);
+  assert.ok(existsSync(join(forgeRoot, 'projects', body.id, '.forge', 'project.json')));
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+  assert.ok(projects.some((p) => p.id === body.id), `expected "${body.id}" in the projects listing — got ${JSON.stringify(projects.map((p) => p.id))}`);
+
+  const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
+  const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
+  assert.ok(kbs.some((k) => k.id === body.id), `expected "${body.id}" in the KB listing — got ${JSON.stringify(kbs.map((k) => k.id))}`);
+
+  const cfg = JSON.parse(readFileSync(join(forgeRoot, 'projects', body.id, '.forge', 'project.json'), 'utf8')) as { kb?: string };
+  assert.equal(cfg.kb, body.id, 'expected project.json.kb bound to the seeded KB (R4-02-F3)');
 });
 
 // POST /api/studio/skills test coverage MOVED to cli/bridge-studio-skills.test.ts

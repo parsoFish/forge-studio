@@ -1427,11 +1427,18 @@ function invalidGenerationSessionIdReason(id: string): string | null {
 
 /**
  * R4-16 round 2 (pin 3, Findings A + B, both BLOCKER) — the ONE choke point
- * every demo-builder route uses to turn a caller-supplied `project` +
- * `sessionId` into a session dir. This is the ONLY place `demoSessionDir(
- * join(ctx.projectsRoot, project), sessionId)` is called from in the
- * demo-builder handler — round 1 validated `project`/`sessionId` on the GET
- * generation route alone, which closed that one ROUTE, not the class: the
+ * every demo-builder route uses to turn a CALLER-SUPPLIED `project` +
+ * `sessionId` into a session dir. This is the ONLY place a caller-supplied
+ * `project`/`sessionId` is turned into a session dir via `demoSessionDir(
+ * join(ctx.projectsRoot, project), sessionId)` in the demo-builder handler
+ * (SEC-03 WI-6 correction: `listDemoSessions` also calls `demoSessionDir`
+ * directly, but on names it obtained itself from `readdirSync` — server-
+ * enumerated, never caller-supplied — so it is deliberately outside this
+ * function's coverage, not an oversight; the original wording overstated
+ * this as the ONLY caller of `demoSessionDir` full stop, which is what let
+ * the `/demo/` and `/fragment/` GET routes below be written straight past
+ * this choke point undetected) — round 1 validated `project`/`sessionId` on
+ * the GET generation route alone, which closed that one ROUTE, not the class: the
  * five sibling routes (start/brief/feedback/lock/abandon) built the exact
  * same unguarded call themselves and reached `readSessionStatus`/
  * `writeSessionStatus` (no containment of their own) with only a
@@ -2337,19 +2344,47 @@ async function handleDemoBuilder(
       sendJson(res, 400, { error: 'expected /api/demo-builder/demo/<project>/<sid>' }, origin);
       return true;
     }
-    const status = readSessionStatus<DemoBuilderStatus>(
-      demoSessionDir(join(ctx.projectsRoot, project), sessionId),
-    );
+    // SEC-03 WI-6, Half A — route through the SHIPPED choke point
+    // (`resolveDemoSessionDir`, ~1477) instead of calling `demoSessionDir`
+    // raw. `split('/')` above runs on the RAW url BEFORE `decodeURIComponent`,
+    // so a %2F-smuggled ".." survives the split and only becomes a "/"
+    // afterwards — invisible to the truthiness check that used to be the
+    // only gate here. `resolveDemoSessionDir` validates `project`/`sessionId`
+    // by charset (never reaching `join`) AND proves real realpath
+    // containment inside THIS project's own resolved dir.
+    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
+    if (!dirOutcome.ok) {
+      sendJson(res, 400, { error: dirOutcome.reason }, origin);
+      return true;
+    }
+    const status = readSessionStatus<DemoBuilderStatus>(dirOutcome.dir);
     if (!status) {
       sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
       return true;
     }
-    const base = join(status.project_repo_path, '.forge', 'demo') + sep;
-    const requested = join(status.project_repo_path, DEMO_HTML_REL_PATH);
-    if (!requested.startsWith(base)) {
-      sendJson(res, 400, { error: 'path escape rejected' }, origin);
+    // SEC-03 WI-6, Half B — `status.project_repo_path` is untrusted at READ
+    // time (status.json content, not routing input; a forged file on disk
+    // reaches here exactly the way a forged session dir did for Half A). The
+    // OLD check here built BOTH `base` and `requested` from this SAME
+    // untrusted value, so `requested.startsWith(base)` was true BY
+    // CONSTRUCTION for every possible value — a guard that cannot fail is
+    // not a guard, so it is deleted here rather than kept as decoration.
+    // Validate the value itself instead, with the SHIPPED
+    // `isContainedProjectRepoPath` (cli/manifest-path-guard.ts) — the same
+    // guard `invalidProjectRepoPath` (~1610) applies to `project_repo_path`
+    // on every `/start` route. (`invalidProjectRepoPath` itself is not
+    // reused directly: its `candidate === ''` early-return means "absent,
+    // use the caller's default" — correct for a request body at WRITE time,
+    // wrong here, where the field is mandatory and already persisted; a
+    // forged empty string must be REJECTED, not silently treated as fine.)
+    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot })) {
+      sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
+    // DEMO_HTML_REL_PATH is a fixed constant ('.forge/demo/DEMO.html', no
+    // caller input), so once project_repo_path itself is proven contained,
+    // no further base/requested check is needed to reach it.
+    const requested = join(status.project_repo_path, DEMO_HTML_REL_PATH);
     if (!existsSync(requested)) {
       sendJson(res, 404, { error: 'DEMO.html not found', project, sessionId }, origin);
       return true;
@@ -2377,9 +2412,28 @@ async function handleDemoBuilder(
       sendJson(res, 400, { error: 'expected /api/demo-builder/fragment/<project>/<sid>/<element>' }, origin);
       return true;
     }
-    const status = readSessionStatus<DemoBuilderStatus>(demoSessionDir(join(ctx.projectsRoot, project), sessionId));
+    // SEC-03 WI-6, Half A — see the /demo/ route above for the full
+    // rationale; identical fix, same choke point.
+    const dirOutcome = resolveDemoSessionDir(ctx.projectsRoot, project, sessionId);
+    if (!dirOutcome.ok) {
+      sendJson(res, 400, { error: dirOutcome.reason }, origin);
+      return true;
+    }
+    const status = readSessionStatus<DemoBuilderStatus>(dirOutcome.dir);
     if (!status) {
       sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
+      return true;
+    }
+    // SEC-03 WI-6, Half B (symmetry) — this route's base/requested check
+    // below is ALSO built from `status.project_repo_path` on both sides, so
+    // it is exactly as tautological in `project_repo_path` as the /demo/
+    // route's deleted check was — the AT-13 non-regression test measures
+    // only that the `element` component (folded into `requested` alone,
+    // fully `join()`-normalised) is already safe; it says nothing about
+    // `project_repo_path` itself. Close the same hole here rather than leave
+    // the twin route exposed. `element`'s own handling below is UNCHANGED.
+    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot })) {
+      sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
     const base = join(status.project_repo_path, '.forge', 'demo', 'fragments') + sep;

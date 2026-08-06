@@ -32,10 +32,11 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join, relative, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 
 import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
+import { resolveGuardedPath, PathGuardContainmentError } from '../cli/studio-path-guard.ts';
 
 export type ProjectBrainSeedFile = {
   /** forge-root-relative path, forward-slash separated. */
@@ -148,41 +149,190 @@ reflection phase populates it after ${projectId}'s first merged cycle.
 `;
 }
 
+/** One of the three fixed on-disk targets `seedProjectBrain` writes. */
+type BrainSeedTarget = {
+  /** Path components under `brainProjectsRoot` — this target's OWN
+   *  `segments[]` element for `resolveGuardedPath`, per that module's
+   *  CONTRACT section (never folded into `root`). */
+  segments: readonly string[];
+  /** Absolute, plain-joined path — used for the symlink-following
+   *  `existsSync` idempotency probe and for relPath reporting. Never used
+   *  to read/write through directly (that always goes through the
+   *  guard-verified `realPath`). */
+  absPath: string;
+};
+
+/**
+ * SINGLE SOURCE OF TRUTH for what `seedProjectBrain` writes: `projectId`'s
+ * three targets (`kb.yaml`, `profile.md`, `themes/README.md`) under
+ * `<forgeRoot>/brain/projects/<projectId>/`, plus the trusted containment
+ * root. Both `checkProjectBrainSeedContainment` (the pure pre-check) and
+ * `seedProjectBrain` itself (the write) compute their target paths from
+ * THIS function and nowhere else — SEC-03 round 4's T1 ruling: a second,
+ * independently-computed copy of this path set is exactly the "two layers
+ * that drift apart" failure this campaign keeps closing.
+ */
+function brainSeedTargets(
+  forgeRoot: string,
+  projectId: string,
+): {
+  brainDir: string;
+  themesDir: string;
+  brainProjectsRoot: string;
+  kb: BrainSeedTarget;
+  profile: BrainSeedTarget;
+  themesReadme: BrainSeedTarget;
+} {
+  const brainDir = projectBrainDir(forgeRoot, projectId);
+  const themesDir = projectThemesDir(forgeRoot, projectId);
+  // Fixed, config-derived containment root — never built by folding
+  // `projectId` into it (studio-path-guard.ts's CONTRACT section).
+  const brainProjectsRoot = resolve(forgeRoot, 'brain', 'projects');
+  return {
+    brainDir,
+    themesDir,
+    brainProjectsRoot,
+    kb: { segments: [projectId, 'kb.yaml'], absPath: join(brainDir, 'kb.yaml') },
+    profile: { segments: [projectId, 'profile.md'], absPath: join(brainDir, 'profile.md') },
+    themesReadme: { segments: [projectId, 'themes', 'README.md'], absPath: join(themesDir, 'README.md') },
+  };
+}
+
+/**
+ * PURE containment pre-check (SEC-03 round 4, T1's two-phase
+ * check-then-write ruling) for every path `seedProjectBrain` will write for
+ * `projectId`. Zero side effects on request-derived paths: no
+ * `writeFileSync`, and no `mkdirSync` beneath `brain/projects/` — the ONLY
+ * filesystem mutation here is materializing `<forgeRoot>/brain/projects`
+ * itself (see below), which is entirely forgeRoot + fixed literal segments,
+ * never influenced by `projectId`.
+ *
+ * A caller uses this to validate the brain-seed targets BEFORE performing
+ * ANY write on its route (including writes entirely unrelated to the
+ * brain — e.g. the project-directory scaffolding on both create paths),
+ * so a rejection here can never race a write that already landed
+ * elsewhere. `seedProjectBrain` below calls this SAME function first, so
+ * there is exactly one path set and one containment check, not two that
+ * could silently diverge.
+ *
+ * Throws `PathGuardContainmentError` on any rejection; returns normally
+ * (void) once every target is either already-existing (idempotent skip,
+ * mirroring `seedProjectBrain`'s own per-file idempotency contract — see
+ * its docstring) or passes `resolveGuardedPath`'s per-segment identity walk.
+ */
+export function checkProjectBrainSeedContainment(forgeRoot: string, projectId: string): void {
+  const { brainProjectsRoot, kb, profile, themesReadme } = brainSeedTargets(forgeRoot, projectId);
+  // `resolveGuardedPath` deliberately performs NO identity check on `root`
+  // itself and has no create-mode for it (it must already exist) — see that
+  // module's CONTRACT section. Materializing this TRUSTED, forgeRoot-derived
+  // directory when absent (a brand-new forge instance's first-ever project)
+  // is not a request-controlled write — nothing request-derived (no
+  // `projectId` segment) is ever created by this call.
+  mkdirSync(brainProjectsRoot, { recursive: true });
+
+  for (const target of [kb, profile, themesReadme]) {
+    if (existsSync(target.absPath)) continue; // already there — idempotent skip, nothing to guard
+    const guard = resolveGuardedPath(brainProjectsRoot, target.segments);
+    if (!guard.ok) {
+      throw new PathGuardContainmentError(`seedProjectBrain: containment check failed for "${target.segments.join('/')}"`);
+    }
+  }
+}
+
 /**
  * Idempotently seed `brain/projects/<projectId>/` with the three files
- * above. Directories are created as needed (`mkdirSync(..., {recursive:
- * true})` is itself idempotent); each file is written only if absent, so an
- * operator's or the reflector's real content is never overwritten.
+ * above. Each file is written only if absent, so an operator's or the
+ * reflector's real content is never overwritten.
+ *
+ * SEC-03 Finding A (round-2 adversarial review) — `projectId` is
+ * `SLUG_RE`-validated by every caller (never traverses), so this was never a
+ * traversing-id bug; the vector is a PRE-PLANTED symlink/hardlink under
+ * `brain/projects/<projectId>/`. The old implementation resolved every path
+ * with a bare `join()`/`resolve()` off a TRUSTED `forgeRoot` and NO
+ * per-segment containment — including the up-front `mkdirSync(themesDir,
+ * {recursive: true})`, which created directories through a symlinked
+ * `<projectId>` or `<projectId>/themes` segment before any file was ever
+ * written. Every write below is now resolved through the shared
+ * `resolveGuardedPath` (`cli/studio-path-guard.ts`), with the FIXED
+ * `brain/projects/` directory as the TRUSTED root and `projectId` (plus
+ * every path component below it) as its OWN `segments[]` element — never
+ * folded into `root` (see that module's CONTRACT section: folding an
+ * untrusted id into `root` bypasses the per-segment identity walk
+ * entirely).
+ *
+ * SEC-03 Finding B parity — mirrors `scaffoldContractArtifacts`: existence
+ * is probed FIRST with a plain, symlink-following `existsSync` (the
+ * idempotency contract's actual meaning — "already there, skip"), and the
+ * containment guard is invoked ONLY for a file that is genuinely absent (a
+ * dangling symlink still reads as absent here, so it still reaches the
+ * guard and is still rejected). A file that already exists — including an
+ * ordinary in-forgeRoot hardlink — is skipped without ever reaching
+ * `resolveGuardedPath`'s `nlink` check, so it can never be false-rejected
+ * for a write this function was never going to make.
+ *
+ * All three guards run (or the file is marked skipped) BEFORE any of the
+ * writes below — same reason as `scaffoldContractArtifacts`: a guard that
+ * has to unwind a write it already made is a guard in the wrong place. A
+ * rejection throws `PathGuardContainmentError` rather than silently
+ * skipping the write (a skipped write reported as success is the "declared
+ * data fails open" shape this campaign keeps finding); the caller is
+ * responsible for turning that into a generic, fail-closed 4xx before any
+ * later write (e.g. `.forge/project.json`) proceeds.
+ *
+ * SEC-03 round 4 — calls `checkProjectBrainSeedContainment` (above) FIRST,
+ * so this function's own containment behaviour and a caller's Phase-1
+ * pre-check are backed by the exact same code, not a parallel
+ * re-implementation. The per-file `resolveGuardedPath` call in `plan()`
+ * below re-verifies (rather than blindly trusting) that pre-check before
+ * ever writing through its `realPath` — this function never writes through
+ * a path it has not itself just verified, whether or not a caller already
+ * called the pre-check too.
  */
 export function seedProjectBrain(
   forgeRoot: string,
   projectId: string,
   name: string,
 ): ProjectBrainSeedResult {
-  const brainDir = projectBrainDir(forgeRoot, projectId);
-  const themesDir = projectThemesDir(forgeRoot, projectId);
-  mkdirSync(themesDir, { recursive: true });
+  checkProjectBrainSeedContainment(forgeRoot, projectId);
+
+  const { brainDir, brainProjectsRoot, kb, profile, themesReadme } = brainSeedTargets(forgeRoot, projectId);
 
   const files: ProjectBrainSeedFile[] = [];
+  const pending: Array<{ realPath: string; build: () => string; verify?: (path: string) => void }> = [];
 
-  const seedFile = (absPath: string, build: () => string, verify?: (path: string) => void): void => {
-    const path = toRelPath(forgeRoot, absPath);
-    if (existsSync(absPath)) {
+  const plan = (
+    target: BrainSeedTarget,
+    build: () => string,
+    verify?: (path: string) => void,
+  ): void => {
+    const path = toRelPath(forgeRoot, target.absPath);
+    if (existsSync(target.absPath)) {
       files.push({ path, action: 'skipped-existing' });
       return;
     }
-    writeFileSync(absPath, build(), 'utf8');
-    if (verify) verify(absPath);
-    files.push({ path, action: 'created' });
+    const guard = resolveGuardedPath(brainProjectsRoot, target.segments);
+    if (!guard.ok) {
+      throw new PathGuardContainmentError(`seedProjectBrain: containment check failed for "${path}"`);
+    }
+    pending.push({ realPath: guard.realPath, build, verify });
   };
 
-  seedFile(join(brainDir, 'kb.yaml'), () => buildKbYaml(projectId), (p) => {
+  plan(kb, () => buildKbYaml(projectId), (p) => {
     // Loud, immediate self-check: fail creation rather than ship a kb.yaml
     // Studio's KB graph can't parse.
     loadKbDescriptor(p);
   });
-  seedFile(join(brainDir, 'profile.md'), () => buildProfileMd(projectId, name));
-  seedFile(join(themesDir, 'README.md'), () => buildThemesReadme(projectId));
+  plan(profile, () => buildProfileMd(projectId, name));
+  plan(themesReadme, () => buildThemesReadme(projectId));
+
+  // Every guard above already passed (or its file was marked skipped) —
+  // perform the writes only now.
+  for (const w of pending) {
+    mkdirSync(dirname(w.realPath), { recursive: true });
+    writeFileSync(w.realPath, w.build(), 'utf8');
+    if (w.verify) w.verify(w.realPath);
+    files.push({ path: toRelPath(forgeRoot, w.realPath), action: 'created' });
+  }
 
   return { projectId, brainDir, files };
 }
