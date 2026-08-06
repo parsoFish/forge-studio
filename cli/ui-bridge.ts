@@ -124,6 +124,7 @@ import {
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
+import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
@@ -219,7 +220,18 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // child of forgeRoot.
   const queuePaths = getPaths(resolve(forgeRoot, '_queue'));
   const logsRoot = resolve(forgeRoot, '_logs');
-  const projectsRoot = resolve(forgeRoot, 'projects');
+  // R4-17 round-2 BLOCKER: this was a hardcoded `resolve(forgeRoot,'projects')`
+  // — the ONE module of eight that never consulted config, while 23 sites
+  // elsewhere resolve through `resolveProjectsDir` (which honours
+  // `FORGE_PROJECTS_DIR` and `forge.config.json`'s documented `projectsDir`,
+  // orchestrator/config.ts). With that config set, this producer and
+  // `writeSessionTerminalPhase`'s containment guard resolved DIFFERENT roots, so
+  // a legitimately-created session dir failed the guard and the terminal phase
+  // was silently never written — a finished run reading `running` forever. A
+  // guard that resolves its root differently from the producer of the thing it
+  // guards is a false-rejection generator; the fix is one value, not two
+  // independent resolutions that happen to coincide in the default config.
+  const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig());
   const mergePrFn = opts.mergePr ?? mergePullRequest;
   const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
   // WS-A (release): the default release-finalize hook constructs a per-cycle
@@ -2760,8 +2772,38 @@ async function handleDemoBuilder(
       // `sessionId` is this code's own generated value (never request-
       // derived) and `_onboarding` is a fixed literal — joining it onto the
       // already realpath-verified `realProjectDir` cannot escape.
-      const sessionDir = join(realProjectDir, '_onboarding', sessionId);
+      // R4-17 round-2 BLOCKER: `resolveContainedProjectDir` proves the PROJECT
+      // dir is contained — it says NOTHING about what is written beneath it.
+      // `_onboarding` is a path segment inside a CHECKED-OUT REPO, so it is
+      // attacker-supplied content: a commit carrying a symlink named
+      // `_onboarding` redirects every write here, because
+      // `mkdirSync(recursive:true)` transparently follows a symlinked
+      // intermediate segment. Reproduced live before this guard existed —
+      // `status.json` and `prompt.md` landed outside `projectsRoot` from a
+      // project that passed containment. "Validating a root does not validate
+      // what you write beneath it", one level deeper than the round-1 fix.
+      //
+      // The parent is therefore created and realpath-verified BEFORE the
+      // session dir is created beneath it, and the session dir is verified in
+      // turn — the same realpath + `startsWith(root + sep)` shape used
+      // throughout, applied at every level that is written rather than only at
+      // the root. A pre-existing REAL `_onboarding` directory (the second and
+      // every later onboarding run) passes unchanged; only one whose realpath
+      // leaves the verified project dir is refused.
+      const onboardingParent = join(realProjectDir, '_onboarding');
+      mkdirSync(onboardingParent, { recursive: true });
+      const realOnboardingParent = realpathSync(onboardingParent);
+      if (!realOnboardingParent.startsWith(realProjectDir + sep)) {
+        sendJson(res, 400, { error: `onboarding session directory for project "${project}" resolves outside the project` }, origin);
+        return true;
+      }
+      const sessionDir = join(realOnboardingParent, sessionId);
       mkdirSync(sessionDir, { recursive: true });
+      const realSessionDir = realpathSync(sessionDir);
+      if (!realSessionDir.startsWith(realOnboardingParent + sep)) {
+        sendJson(res, 400, { error: `onboarding session directory for project "${project}" resolves outside the project` }, origin);
+        return true;
+      }
       writeFileSync(
         join(sessionDir, 'status.json'),
         JSON.stringify({ phase: 'running', project, runId, startedAt: new Date().toISOString() }, null, 2),
