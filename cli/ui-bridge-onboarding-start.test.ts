@@ -22,6 +22,27 @@
  * spawns — verified end-to-end via the SHARED `GET /api/agents/runs/<runId>`
  * status-poll surface (the real client path both routes' runIds are
  * interchangeable on), not by reflecting on the private spawn helper.
+ *
+ * ROUTE vs SEAM split (pin 6): most ATs here (AT-1..12, AT-16, AT-17) drive
+ * the real HTTP ROUTE end-to-end (`fetch` against `startBridge`'s server) —
+ * that's the only way to pin route-level concerns (status codes, body
+ * shape, the `projectRepoPath`-is-inert claim, the configured-root
+ * producer bug). AT-13/14/15/18 instead call `writeOnboardingSession`
+ * (exported from `cli/ui-bridge.ts`) DIRECTLY, with an explicit, known
+ * `sessionId`, bypassing the route entirely. That split exists because
+ * `newArchitectSessionId()` (the id the route generates) gained real
+ * entropy in the same fix round that added the three closes AT-13/14/15
+ * pin — once the id is genuinely unguessable, no external caller (this
+ * test included) can reliably pre-plant a colliding directory ahead of the
+ * route creating it, so driving those three THROUGH the route would make
+ * their REJECT assertions pass vacuously (the route simply never touches
+ * the planted fixture, not because it was refused — see each test's own
+ * comment for detail). Calling the seam directly with a chosen id restores
+ * the ability to engineer the exact collision each test needs, independent
+ * of guessability. AT-16 (second-run, real id) and AT-17 (entropy itself)
+ * correctly keep driving the ROUTE — they are ABOUT the route's real id
+ * generation, so replacing the route with a direct seam call there would
+ * make them test nothing.
  */
 
 import { test, before, after } from 'node:test';
@@ -30,7 +51,7 @@ import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, 
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { startBridge } from './ui-bridge.ts';
+import { startBridge, writeOnboardingSession } from './ui-bridge.ts';
 import { cmdAgentDispatch } from './agent-run.ts';
 import { SAFE_ID_RE } from './bridge-studio.ts';
 
@@ -459,122 +480,142 @@ test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-reject
 // is nothing there to collide with), so this test's "stays empty" assertion
 // depends on close (1) alone, not on close (2).
 //
-// DISCLOSED LIMITATION (not silently assumed away): all three of AT-13/14/15
-// depend on being able to GUESS the upcoming session id well enough to
-// pre-plant its directory before the route creates it. Once close (3)
-// (entropy, pinned independently by AT-17 below) ships — and it ships in the
-// SAME fix as (1)/(2) — the id becomes genuinely unguessable, so none of
-// AT-13/14/15's candidate directories will ever again coincide with the
-// route's real target. Their assertions (sentinel byte-unchanged / planted
-// dirs stay empty) remain TRUE post-fix, but only VACUOUSLY — the route
-// simply never touches them, not because it was refused. They are reliable
-// RED-now proofs for this round's fix, not perpetual regression sentinels
-// for closes (1)/(2) in isolation; see the T3 pin-5 report for a suggested
-// follow-up (a unit-level test against a fixed/injected id, owned by
-// whoever implements the fix and knows its internal seam).
+// PIN 6 RE-POINT (this round): the paragraph above predicted its own
+// obsolescence, correctly. `newArchitectSessionId()` now carries real
+// entropy (an 8-hex-char suffix, `cli/ui-bridge.ts:1700-1710`), so none of
+// AT-13/14/15's candidate directories can coincide with the route's real
+// target ever again — their assertions stayed TRUE but became VACUOUS
+// (green for the wrong reason: the route simply never touches the planted
+// fixture, not because it was refused). `writeOnboardingSession` was
+// extracted as its own EXPORTED function specifically to be this follow-up
+// seam (see its own docstring, `cli/ui-bridge.ts:2333-2369`, which names
+// this exact test file as the place a fixed-id unit test would land).
+// AT-13/AT-14/AT-15 below now call it DIRECTLY with an explicit, known
+// `sessionId` instead of guessing at the route's — the three closes below
+// are unchanged, only the calling surface moved from "HTTP request, guessed
+// id" to "direct function call, known id":
+//
+// T2's ruling (unchanged): THREE independent closes — (1) `mkdirSync
+// (sessionDir)` with NO `recursive` (a pre-existing dir is refused, never
+// reused), (2) both leaf writes use an exclusive create flag (`'wx'`, so an
+// existing path — including a symlink — fails the write instead of being
+// followed), (3) the session id gains entropy so it is not guessable at all
+// (pinned independently, via the ROUTE, by AT-17 — entropy is a property of
+// `newArchitectSessionId()`, which only the route calls, so it cannot be
+// pinned through the seam).
+//
+// AT-13/AT-14 pin close (2) via the classic exploit shape (a pre-existing
+// dir with a symlinked leaf file) — this ALSO trips close (1) (the dir has
+// to pre-exist for a leaf symlink to live inside it), which is fine and, with
+// direct control over the id, now PROVEN rather than merely disclosed: the
+// assertion is OUTCOME-based (the outside sentinel is byte-unchanged), true
+// whichever of the two closes stops the write. Structurally, closes (1) and
+// (2) cannot be independently discriminated by THIS attack shape — any
+// pre-planted leaf content requires the session dir to already exist, so
+// close (1) alone is always sufficient to refuse it before either leaf write
+// is ever attempted; only a regression to BOTH closes at once lets the
+// symlinked leaf get followed. AT-15 is what independently pins close (1)
+// alone: a directory that is REAL but EMPTY (no symlink, no files) — if
+// close (1) alone regressed to `recursive:true` while close (2) (the 'wx'
+// flag) remained, this empty directory would be silently reused and
+// populated with FRESH, non-colliding files (no EEXIST from 'wx' — there is
+// nothing there to collide with), so this test's "stays empty" assertion
+// depends on close (1) alone, not on close (2). AT-18 is the ACCEPT control
+// this direct-seam surface didn't have before: a fresh, never-planted id
+// under a real `_onboarding` parent must still succeed and write both files
+// correctly — proving the three closes are real containment/exclusivity,
+// not a blanket refusal (the "guard that cannot fail is not a guard" brief).
 // ---------------------------------------------------------------------------
 
-/**
- * Mirrors `newArchitectSessionId()` (cli/ui-bridge.ts:1693-1696) exactly:
- * `new Date().toISOString()`, ":" -> "-", truncated to one-second
- * granularity. Spans a window around "now" wide enough to reliably contain
- * whatever the server computes a few milliseconds later (the server's own
- * `Date.now()` can only be >= this function's own `Date.now()` snapshot,
- * never earlier, hence the asymmetric -1/+4 spread) — the same
- * candidate-window technique the round-3 review used to get a 100% hit rate
- * with a narrower 4-second window; this one is deliberately wider for
- * headroom under CI load.
- */
-function candidateOnboardingSessionIds(): string[] {
-  const now = Date.now();
-  const ids = new Set<string>();
-  for (let offsetSec = -1; offsetSec <= 4; offsetSec++) {
-    ids.add(new Date(now + offsetSec * 1000).toISOString().replace(/:/g, '-').replace(/\..+$/, ''));
-  }
-  return [...ids];
-}
-
-test('R4-17 AT-13 (BLOCKER, pin 5 item 1, REJECT — real filesystem object, never a status code): every candidate session-id directory spanning the request\'s wall-clock window is pre-planted with status.json as a SYMLINK to an outside sentinel file; the route must never write through it', async () => {
-  const project = 'symlinkstatusleafproj';
-  const projectDir = join(forgeRoot, 'projects', project);
-  const onboardingDir = join(projectDir, '_onboarding');
-  mkdirSync(onboardingDir, { recursive: true });
+test('R4-17 AT-13 (BLOCKER, pin 5 item 1 / pin 6 re-point, REJECT — seam-level, explicit sessionId, real filesystem object, never a status code / thrown-or-not check alone): writeOnboardingSession is called DIRECTLY against a KNOWN session id whose directory already exists with status.json as a SYMLINK to an outside sentinel file; the call must never write through it', async () => {
+  const project = 'symlinkstatusleafproj-seam';
+  const onboardingDir = mkdtempSync(join(tmpdir(), 'onboarding-seam-status-parent-'));
+  const sessionId = 'r4-17-seam-status-fixed-2026-08-06T00-00-00';
+  const sessionDir = join(onboardingDir, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
   const sentinelDir = mkdtempSync(join(tmpdir(), 'onboarding-status-sentinel-'));
   const sentinelPath = join(sentinelDir, 'outside-status.json');
   const sentinelContent = 'SENTINEL-STATUS-UNTOUCHED-7f3c91';
   writeFileSync(sentinelPath, sentinelContent, 'utf8');
-  const candidates = candidateOnboardingSessionIds();
-  const plantedDirs = candidates.map((sid) => join(onboardingDir, sid));
+  symlinkSync(sentinelPath, join(sessionDir, 'status.json'));
   try {
-    for (const dir of plantedDirs) {
-      mkdirSync(dir, { recursive: true });
-      symlinkSync(sentinelPath, join(dir, 'status.json'));
-    }
-    await fetch(`${url}/api/studio/onboarding/start`, {
-      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'symlinked status.json probe' } }),
-    });
+    try {
+      writeOnboardingSession(onboardingDir, sessionId, project, '_agent-onboarding-seam-status-test', { northStar: 'symlinked status.json probe' });
+    } catch { /* expected — refusal is asserted on the filesystem below, not on the throw itself */ }
     assert.equal(
       readFileSync(sentinelPath, 'utf8'), sentinelContent,
-      `the outside sentinel target of a planted status.json symlink must be byte-unchanged for EVERY candidate session id (${candidates.join(', ')}) — a write-through here means the route reused a pre-existing session dir and/or wrote through a pre-existing symlink instead of refusing it`,
+      `the outside sentinel target of a planted status.json symlink must be byte-unchanged for the KNOWN session id ${sessionId} — a write-through here means writeOnboardingSession reused a pre-existing session dir and/or wrote through a pre-existing symlink instead of refusing it`,
     );
   } finally {
-    for (const dir of plantedDirs) rmSync(dir, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(onboardingDir, { recursive: true, force: true });
     rmSync(sentinelDir, { recursive: true, force: true });
   }
 });
 
-test('R4-17 AT-14 (BLOCKER, pin 5 item 1, REJECT — real filesystem object, never a status code): every candidate session-id directory spanning the request\'s wall-clock window is pre-planted with prompt.md as a SYMLINK to an outside sentinel file; the route must never write through it', async () => {
-  const project = 'symlinkpromptleafproj';
-  const projectDir = join(forgeRoot, 'projects', project);
-  const onboardingDir = join(projectDir, '_onboarding');
-  mkdirSync(onboardingDir, { recursive: true });
+test('R4-17 AT-14 (BLOCKER, pin 5 item 1 / pin 6 re-point, REJECT — seam-level, explicit sessionId, real filesystem object, never a status code / thrown-or-not check alone): writeOnboardingSession is called DIRECTLY against a KNOWN session id whose directory already exists with prompt.md as a SYMLINK to an outside sentinel file; the call must never write through it', async () => {
+  const project = 'symlinkpromptleafproj-seam';
+  const onboardingDir = mkdtempSync(join(tmpdir(), 'onboarding-seam-prompt-parent-'));
+  const sessionId = 'r4-17-seam-prompt-fixed-2026-08-06T00-00-00';
+  const sessionDir = join(onboardingDir, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
   const sentinelDir = mkdtempSync(join(tmpdir(), 'onboarding-prompt-sentinel-'));
   const sentinelPath = join(sentinelDir, 'outside-prompt.md');
   const sentinelContent = 'SENTINEL-PROMPT-UNTOUCHED-a82e4d';
   writeFileSync(sentinelPath, sentinelContent, 'utf8');
-  const candidates = candidateOnboardingSessionIds();
-  const plantedDirs = candidates.map((sid) => join(onboardingDir, sid));
+  symlinkSync(sentinelPath, join(sessionDir, 'prompt.md'));
   try {
-    for (const dir of plantedDirs) {
-      mkdirSync(dir, { recursive: true });
-      symlinkSync(sentinelPath, join(dir, 'prompt.md'));
-    }
-    await fetch(`${url}/api/studio/onboarding/start`, {
-      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'symlinked prompt.md probe' } }),
-    });
+    try {
+      writeOnboardingSession(onboardingDir, sessionId, project, '_agent-onboarding-seam-prompt-test', { northStar: 'symlinked prompt.md probe' });
+    } catch { /* expected — refusal is asserted on the filesystem below, not on the throw itself */ }
     assert.equal(
       readFileSync(sentinelPath, 'utf8'), sentinelContent,
-      `the outside sentinel target of a planted prompt.md symlink must be byte-unchanged for EVERY candidate session id (${candidates.join(', ')}) — a write-through here means the route reused a pre-existing session dir and/or wrote through a pre-existing symlink instead of refusing it`,
+      `the outside sentinel target of a planted prompt.md symlink must be byte-unchanged for the KNOWN session id ${sessionId} — a write-through here means writeOnboardingSession reused a pre-existing session dir and/or wrote through a pre-existing symlink instead of refusing it`,
     );
   } finally {
-    for (const dir of plantedDirs) rmSync(dir, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(onboardingDir, { recursive: true, force: true });
     rmSync(sentinelDir, { recursive: true, force: true });
   }
 });
 
-test('R4-17 AT-15 (BLOCKER, pin 5 item 1, REJECT — pins exclusive session-dir CREATION independently of any symlink): every candidate session-id directory spanning the request\'s wall-clock window is pre-planted as a real, EMPTY directory (no symlinks, no files at all); the route must refuse rather than silently reuse and populate it', async () => {
-  const project = 'preexistingemptydirproj';
-  const projectDir = join(forgeRoot, 'projects', project);
-  const onboardingDir = join(projectDir, '_onboarding');
-  mkdirSync(onboardingDir, { recursive: true });
-  const candidates = candidateOnboardingSessionIds();
-  const plantedDirs = candidates.map((sid) => join(onboardingDir, sid));
+test('R4-17 AT-15 (BLOCKER, pin 5 item 1 / pin 6 re-point, REJECT — seam-level, explicit sessionId, pins exclusive session-dir CREATION independently of any symlink): writeOnboardingSession is called DIRECTLY against a KNOWN session id whose directory already exists as a real, EMPTY directory (no symlinks, no files at all); the call must refuse rather than silently reuse and populate it', async () => {
+  const onboardingDir = mkdtempSync(join(tmpdir(), 'onboarding-seam-emptydir-parent-'));
+  const sessionId = 'r4-17-seam-emptydir-fixed-2026-08-06T00-00-00';
+  const sessionDir = join(onboardingDir, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
   try {
-    for (const dir of plantedDirs) mkdirSync(dir, { recursive: true });
-    await fetch(`${url}/api/studio/onboarding/start`, {
-      method: 'POST', headers: CSRF, body: JSON.stringify({ project, inputs: { northStar: 'pre-existing empty dir probe' } }),
-    });
-    for (const dir of plantedDirs) {
-      assert.deepEqual(
-        readdirSync(dir), [],
-        `pre-existing session dir ${dir} must stay EMPTY (refused, not silently reused/populated) — this is the load-bearing assertion, never the status code: a route relying only on an exclusive WRITE flag but not an exclusive directory CREATE would happily populate this pre-staked empty directory and return 200`,
-      );
-    }
+    try {
+      writeOnboardingSession(onboardingDir, sessionId, 'preexistingemptydirproj-seam', '_agent-onboarding-seam-emptydir-test', { northStar: 'pre-existing empty dir probe' });
+    } catch { /* expected — refusal is asserted on the filesystem below, not on the throw itself */ }
+    assert.deepEqual(
+      readdirSync(sessionDir), [],
+      `pre-existing session dir ${sessionDir} must stay EMPTY (refused, not silently reused/populated) — this is the load-bearing assertion, never a thrown-or-not check alone: a call relying only on an exclusive WRITE flag but not an exclusive directory CREATE would happily populate this pre-staked empty directory and return normally`,
+    );
   } finally {
-    for (const dir of plantedDirs) rmSync(dir, { recursive: true, force: true });
-    rmSync(projectDir, { recursive: true, force: true });
+    rmSync(onboardingDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 AT-18 (pin 6 — seam-level ACCEPT control, the counterpart to AT-13/14/15\'s REJECT pins): writeOnboardingSession called DIRECTLY with a fresh, never-before-planted session id under a real "_onboarding" parent succeeds, and writes BOTH status.json and prompt.md at the correct location with the correct shape — proving the three closes are real containment/exclusivity, not a blanket refusal that would break every legitimate onboarding start', async () => {
+  const onboardingDir = mkdtempSync(join(tmpdir(), 'onboarding-seam-accept-parent-'));
+  const sessionId = 'r4-17-seam-accept-fixed-2026-08-06T00-00-00';
+  const runId = '_agent-onboarding-seam-accept-test';
+  try {
+    const { sessionDir } = writeOnboardingSession(onboardingDir, sessionId, 'acceptcontrolproj-seam', runId, { northStar: 'seam accept control probe 6f2a' });
+    assert.equal(sessionDir, join(onboardingDir, sessionId), 'the returned sessionDir must be exactly onboardingParent/sessionId');
+    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as {
+      phase: string; project: string; runId: string; startedAt: string;
+    };
+    assert.equal(status.phase, 'running');
+    assert.equal(status.project, 'acceptcontrolproj-seam');
+    assert.equal(status.runId, runId);
+    assert.ok(typeof status.startedAt === 'string' && status.startedAt.length > 0);
+    const prompt = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
+    assert.ok(
+      prompt.includes('seam accept control probe 6f2a'),
+      `prompt.md must render the operator inputs verbatim, got: ${JSON.stringify(prompt)}`,
+    );
+  } finally {
+    rmSync(onboardingDir, { recursive: true, force: true });
   }
 });
 

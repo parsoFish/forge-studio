@@ -7,7 +7,7 @@
 
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -15,7 +15,12 @@ import { cmdAgentDispatch } from './agent-run.ts';
 
 const ROOT = process.cwd();
 
-async function run(args: string[]): Promise<{ exitCode: number | null; out: string; err: string }> {
+// `forgeRoot` defaults to the real repo root (`ROOT`) — every pre-existing
+// call site in this file keeps passing it implicitly, byte-identical to
+// before. AT-D7-9 (pin 6 fixture fix, below) is the one caller that now
+// passes a DIFFERENT `forgeRoot` explicitly, instead of relying on a
+// `process.chdir` side effect that this helper never actually consulted.
+async function run(args: string[], forgeRoot: string = ROOT): Promise<{ exitCode: number | null; out: string; err: string }> {
   const origExit = process.exit;
   const origLog = console.log;
   const origErr = console.error;
@@ -28,7 +33,7 @@ async function run(args: string[]): Promise<{ exitCode: number | null; out: stri
   console.log = (...a: unknown[]) => { out.push(a.join(' ')); };
   console.error = (...a: unknown[]) => { err.push(a.join(' ')); };
   try {
-    await cmdAgentDispatch(args, ROOT);
+    await cmdAgentDispatch(args, forgeRoot);
   } catch (e) {
     if (!/^__exit__/.test((e as Error).message)) throw e;
   } finally {
@@ -255,15 +260,42 @@ test('cmdAgentDispatch: R4-17 AT-D7-5 (item 3, ACCEPT control): a --session-dir 
 //
 // Two mechanisms, because `resolveProjectsDir` honours both:
 //   - `FORGE_PROJECTS_DIR` (env, cwd-independent) — AT-D7-6/7/8.
-//   - `forge.config.json`'s `projectsDir` (file) — `loadConfig()` is called
-//     BARE at agent-run.ts:201 (`loadConfig()`, no path arg), so it resolves
-//     `forge.config.json` relative to the process CWD, not `forgeRoot`. The
-//     only way to exercise this mechanism here is to `process.chdir()` into a
-//     forgeRoot that owns the file — mirroring how the REAL CLI entrypoint
-//     already works (`orchestrator/cli.ts:46`, `process.chdir(FORGE_ROOT)`,
-//     before any command runs) and the established test pattern for it
-//     (`orchestrator/manifest-path-fields.test.ts`,
-//     `orchestrator/trigger-prompt-isolation.test.ts`) — AT-D7-9.
+//   - `forge.config.json`'s `projectsDir` (file) — AT-D7-9, below.
+//
+// PIN 6 FIXTURE FIX (T2 ruling — the rule stands, the fixture was the
+// incomplete thing): AT-D7-9 originally exercised the file mechanism by
+// `process.chdir()`-ing into a `forgeRoot` that owns the file, on the theory
+// that `loadConfig()`'s bare cwd-relative default (`agent-run.ts:201`,
+// pre-round-3) would pick it up. That theory was already stale by the time
+// this test ran: round-3's own BLOCKER fix (pin 5, item 2) replaced the bare
+// `loadConfig()` call with `loadConfig(defaultConfigPath(forgeRoot))` —
+// FORGE-ROOT-ANCHORED, not cwd-relative (`orchestrator/config.ts:119`'s
+// `defaultConfigPath`). But this file's `run()` helper (above) always called
+// `cmdAgentDispatch(args, ROOT)` — `ROOT = process.cwd()` captured ONCE at
+// module load — so `forgeRoot` was ALWAYS the real repo, never
+// `configForgeRoot`, regardless of any `process.chdir()` the test performed.
+// The `chdir` moved the PROCESS's cwd; `writeSessionTerminalPhase` never
+// reads `process.cwd()` at all once anchored — it only reads the `forgeRoot`
+// argument it was called with. AT-D7-9 passed anyway, but only because
+// `configForgeRoot` happened to ALSO be a valid (if wrong) `forgeRoot` for a
+// bare, cwd-relative `loadConfig()` — the exact cwd-fragility round 3 was
+// ruled to remove. Once the anchored fix landed, that accident stopped
+// working: the test started failing (`expected: 'complete', actual:
+// 'running'`) because it kept calling `cmdAgentDispatch(args, ROOT)`,
+// checking the REAL repo's `forge.config.json` (absent/irrelevant), never
+// `configForgeRoot`'s.
+//
+// The fix is to thread `configForgeRoot` into `cmdAgentDispatch` DIRECTLY
+// (via `run()`'s new optional `forgeRoot` parameter, above) rather than
+// depend on a `chdir` side effect the production code no longer consults.
+// AT-D7-9 now ALSO asserts the claim this fixture accident was silently
+// hiding: the outcome must be IDENTICAL regardless of the process's own
+// cwd — proven by running the same dispatch once from an unrelated cwd and
+// once from `configForgeRoot` itself, both times passing `configForgeRoot`
+// as the explicit `forgeRoot` argument. This kills the wrong implementation
+// this AT used to accidentally validate: a config load that silently
+// returns `{}` (or picks up the WRONG file) because the process happened to
+// be started from another directory.
 // ---------------------------------------------------------------------------
 
 test('cmdAgentDispatch: R4-17 AT-D7-6 (pin 4, item 1, ACCEPT — FORGE_PROJECTS_DIR, success path): a --session-dir legitimately placed under a CONFIGURED (non-default) projects root still gets phase:"complete" written', async () => {
@@ -344,36 +376,79 @@ test('cmdAgentDispatch: R4-17 AT-D7-8 (pin 4, item 1, REJECT control — configu
   }
 });
 
-test('cmdAgentDispatch: R4-17 AT-D7-9 (pin 4, item 1, ACCEPT — forge.config.json mechanism): with a chdir\'d forgeRoot whose forge.config.json sets "projectsDir", a --session-dir under that configured root still gets its terminal phase written — mirrors AT-D7-6 but through the FILE mechanism instead of the env var', async () => {
+test('cmdAgentDispatch: R4-17 AT-D7-9 (pin 4, item 1, ACCEPT — forge.config.json mechanism) [pin 6, fixture fix]: a --session-dir under a projects root configured via forge.config.json still gets its terminal phase written when the real forgeRoot is threaded into cmdAgentDispatch directly — and the outcome is IDENTICAL whether the process happens to be running from an unrelated cwd or from configForgeRoot itself, proving the guard no longer depends on process.cwd() at all', async () => {
   const priorSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
   process.env.FORGE_ARCHITECT_NO_SPAWN = '1';
   const originalCwd = process.cwd();
   const configForgeRoot = mkdtempSync(join(tmpdir(), 'r4-17-configfile-forgeroot-'));
   const configuredProjectsRoot = mkdtempSync(join(tmpdir(), 'r4-17-configfile-projectsroot-'));
+  const unrelatedCwd = mkdtempSync(join(tmpdir(), 'r4-17-configfile-unrelated-cwd-'));
   writeFileSync(
     join(configForgeRoot, 'forge.config.json'),
     JSON.stringify({ projectsDir: configuredProjectsRoot }),
     'utf8',
   );
-  const runId = '_agent-cli-configfile-root-complete-test';
-  const sessionDir = join(configuredProjectsRoot, 'someproj', '_onboarding', '_r4-17-configfile-root-fixture-complete');
-  mkdirSync(sessionDir, { recursive: true });
-  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ phase: 'running' }), 'utf8');
+  // `cmdAgentDispatch`'s `forgeRoot` is used for TWO things: (a) the config/
+  // containment boundary this AT is actually pinning (`writeSessionTerminalPhase`'s
+  // `resolveProjectsDir` + `defaultConfigPath`), and (b) resolving the roster
+  // agent itself (`skillsDir(forgeRoot)` -> `listAgentDefinitions`, which needs
+  // a REAL `skills/` tree to find "project-scoped-review" at all). `configForgeRoot`
+  // is otherwise a bare temp dir, so it needs the real skills tree symlinked in
+  // for (b) — this does not touch the real repo, only reads through it.
+  symlinkSync(join(ROOT, 'skills'), join(configForgeRoot, 'skills'), 'dir');
+
+  function makeConfigFileSessionDir(name: string): string {
+    const dir = join(configuredProjectsRoot, 'someproj', '_onboarding', `_r4-17-configfile-root-fixture-${name}`);
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, 'status.json'), JSON.stringify({ phase: 'running' }), 'utf8');
+    return dir;
+  }
+
+  const runIdFromUnrelatedCwd = '_agent-cli-configfile-root-unrelated-cwd-test';
+  const runIdFromConfigForgeRoot = '_agent-cli-configfile-root-own-cwd-test';
+  const sessionDirFromUnrelatedCwd = makeConfigFileSessionDir('unrelated-cwd');
+  const sessionDirFromConfigForgeRoot = makeConfigFileSessionDir('own-cwd');
   try {
+    // Run 1: process cwd is UNRELATED to configForgeRoot (a third, unrelated
+    // temp dir) — forgeRoot is still threaded in explicitly.
+    process.chdir(unrelatedCwd);
+    const rUnrelated = await run(
+      ['project-scoped-review', '--run-id', runIdFromUnrelatedCwd, '--session-dir', sessionDirFromUnrelatedCwd],
+      configForgeRoot,
+    );
+    assert.equal(rUnrelated.exitCode, null, 'a successful (even if suppressed) dispatch must not exit non-zero, run from an unrelated cwd');
+    const statusFromUnrelatedCwd = JSON.parse(readFileSync(join(sessionDirFromUnrelatedCwd, 'status.json'), 'utf8')) as { phase: string };
+
+    // Run 2: process cwd IS configForgeRoot — same explicit forgeRoot
+    // argument, only the process's own cwd differs from run 1.
     process.chdir(configForgeRoot);
-    const r = await run(['project-scoped-review', '--run-id', runId, '--session-dir', sessionDir]);
-    assert.equal(r.exitCode, null, 'a successful (even if suppressed) dispatch must not exit non-zero');
-    const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string };
+    const rOwnCwd = await run(
+      ['project-scoped-review', '--run-id', runIdFromConfigForgeRoot, '--session-dir', sessionDirFromConfigForgeRoot],
+      configForgeRoot,
+    );
+    assert.equal(rOwnCwd.exitCode, null, 'a successful (even if suppressed) dispatch must not exit non-zero, run from configForgeRoot itself');
+    const statusFromConfigForgeRoot = JSON.parse(readFileSync(join(sessionDirFromConfigForgeRoot, 'status.json'), 'utf8')) as { phase: string };
+
     assert.equal(
-      status.phase, 'complete',
-      `a --session-dir under a projects root configured via forge.config.json must still get its terminal phase written — got: ${JSON.stringify(status)}`,
+      statusFromUnrelatedCwd.phase, 'complete',
+      `a --session-dir under a projects root configured via forge.config.json must still get its terminal phase written when run from an UNRELATED cwd — got: ${JSON.stringify(statusFromUnrelatedCwd)}`,
+    );
+    assert.equal(
+      statusFromConfigForgeRoot.phase, 'complete',
+      `a --session-dir under a projects root configured via forge.config.json must still get its terminal phase written when run from configForgeRoot's OWN cwd — got: ${JSON.stringify(statusFromConfigForgeRoot)}`,
+    );
+    assert.equal(
+      statusFromUnrelatedCwd.phase, statusFromConfigForgeRoot.phase,
+      'the outcome must be identical regardless of the process\'s own cwd — this is the assertion this AT could not make before pin 6: it is only meaningful now that forgeRoot is threaded explicitly rather than inferred from a chdir side effect',
     );
   } finally {
     process.chdir(originalCwd);
     if (priorSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
     else process.env.FORGE_ARCHITECT_NO_SPAWN = priorSpawn;
-    rmSync(join(ROOT, '_logs', runId), { recursive: true, force: true });
+    rmSync(join(ROOT, '_logs', runIdFromUnrelatedCwd), { recursive: true, force: true });
+    rmSync(join(ROOT, '_logs', runIdFromConfigForgeRoot), { recursive: true, force: true });
     rmSync(configForgeRoot, { recursive: true, force: true });
     rmSync(configuredProjectsRoot, { recursive: true, force: true });
+    rmSync(unrelatedCwd, { recursive: true, force: true });
   }
 });
