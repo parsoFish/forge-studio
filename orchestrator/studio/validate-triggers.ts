@@ -51,6 +51,22 @@ const WEBHOOK_EVENTS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
 /** The `on:` kinds that carry the `webhook:` config block (R2-08-F3). */
 const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']);
 
+/**
+ * adversarial-review fix: `pr-merged`/`issue-raised` are GitHub-only by
+ * ruled design (`cli/bridge-hooks.ts`'s `resolveEventName` only maps
+ * `pull_request`/`issues` under `provider === 'github'` — gitea/gitlab stay
+ * schema-reserved with zero stub handlers). Without a matching lint
+ * restriction, a `provider: gitlab` (or `gitea`) declaration on either kind
+ * was lint-clean yet structurally could never fire — a dead declaration an
+ * operator could author with no warning. `on: webhook` keeps all three
+ * providers (push/release ARE shipped for gitea/gitlab).
+ */
+const WEBHOOK_PROVIDERS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
+  webhook: WEBHOOK_PROVIDERS,
+  'pr-merged': new Set(['github']),
+  'issue-raised': new Set(['github']),
+};
+
 export type TriggerCheckOpts = {
   /** The full registered flow-id set — enables the target-flow existence check. */
   flowIds?: ReadonlySet<string>;
@@ -204,15 +220,19 @@ export function checkFlowTriggers(
     if (trigger.webhook && WEBHOOK_FAMILY_KIND_IDS.has(trigger.on)) {
       const wh = trigger.webhook;
       const allowedEvents = WEBHOOK_EVENTS_BY_KIND[trigger.on] ?? WEBHOOK_EVENTS_BY_KIND.webhook;
+      const allowedProviders = WEBHOOK_PROVIDERS_BY_KIND[trigger.on] ?? WEBHOOK_PROVIDERS;
       if (!WEBHOOK_ID_RE.test(wh.id)) {
         findings.push(err(obj, 'trigger-webhook', `webhook.id "${wh.id}" does not match ${WEBHOOK_ID_RE}`));
       }
-      if (!WEBHOOK_PROVIDERS.has(wh.provider)) {
+      if (!allowedProviders.has(wh.provider)) {
         findings.push(
           err(
             obj,
             'trigger-webhook',
-            `webhook.provider "${wh.provider}" must be one of ${[...WEBHOOK_PROVIDERS].join('|')}`,
+            `webhook.provider "${wh.provider}" must be one of ${[...allowedProviders].join('|')}` +
+              (trigger.on !== 'webhook'
+                ? ` for on:"${trigger.on}" (GitHub only — gitea/gitlab have no grounded payload shape)`
+                : ''),
           ),
         );
       }
@@ -264,6 +284,16 @@ export function checkFlowTriggers(
           'agent-complete trigger requires a non-empty "agent" (the source agent slug whose completion fires this row) — absent never means "fires for all"',
         ),
       );
+    }
+    // adversarial-review fix: `agent-complete` mints a fresh run exactly like
+    // cron/webhook (fireAgentCompleteTriggers → stageFlowRunRequest →
+    // mintTriggeredInitiative), so its `flow` target needs the SAME target-flow
+    // project-binding requirement — missed when this check was added for
+    // cron/webhook only. Not silent at runtime (mintTriggeredInitiative's
+    // `no-project` status still fail-closes the mint), but a flow author
+    // authoring a project-less agent-complete target got no early warning.
+    if (trigger.on === 'agent-complete') {
+      findings.push(...checkTargetProject(obj, 'trigger-agent-complete', flow, trigger.target, opts));
     }
 
     // trigger-projects (R2-08-F1): `projects:` is kind-independent. SHAPE is
@@ -351,9 +381,15 @@ export function checkFlowTriggers(
  * no registry), the check is skipped — studio-lint, which sees every flow,
  * runs it.
  */
+const TARGET_PROJECT_CHECK_LABEL: Readonly<Record<string, string>> = {
+  'trigger-cron': 'cron',
+  'trigger-webhook': 'webhook',
+  'trigger-agent-complete': 'agent-complete',
+};
+
 function checkTargetProject(
   obj: string,
-  check: 'trigger-cron' | 'trigger-webhook',
+  check: 'trigger-cron' | 'trigger-webhook' | 'trigger-agent-complete',
   flow: FlowDefinition,
   target: { kind: string; ref: string },
   opts: TriggerCheckOpts | undefined,
@@ -370,7 +406,7 @@ function checkTargetProject(
       err(
         obj,
         check,
-        `${check === 'trigger-cron' ? 'cron' : 'webhook'} trigger targets flow "${target.ref}", which has no project binding — external triggers mint runs against the TARGET flow's project`,
+        `${TARGET_PROJECT_CHECK_LABEL[check]} trigger targets flow "${target.ref}", which has no project binding — external triggers mint runs against the TARGET flow's project`,
       ),
     ];
   }

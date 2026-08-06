@@ -379,6 +379,13 @@ async function processHookReceipt(
       // findWebhookTrigger) so trigger provenance can derive `source` from a
       // real definition id — never the hook id `triggeredBy` carries.
       sourceFlowId: flow.id,
+      // Adversarial-review fix (R2-08-F3): `origin: 'webhook'` above is the
+      // TRANSPORT (this receiver), never the KIND — `trigger.on` is the
+      // real, declaration-sourced registry id (`webhook` | `pr-merged` |
+      // `issue-raised`), read straight off the resolved trigger config, never
+      // from `payload`. Without this, all three kinds collapse onto
+      // `Run.trigger.kind === 'webhook'`.
+      triggerKind: trigger.on,
       payload,
       ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
       eventProject,

@@ -68,6 +68,21 @@ function idToken(s: string): string {
  * routes chaining's `origin: 'trigger'` through `enqueueFlowRun` instead,
  * never through mint). Returns `null` when no honest source is derivable at
  * all — never a fabricated placeholder.
+ *
+ * `kind` (adversarial-review fix, R2-08-F3): reads `req.triggerKind` — the
+ * DECLARATION's own `on:` value — falling back to `req.origin` only when
+ * absent. `origin` alone is NOT `kind`: it describes the mint/transport
+ * mechanism, and `origin: 'webhook'` now covers THREE distinct registry
+ * kinds (`webhook`, `pr-merged`, `issue-raised` all share the
+ * signature-verified `/api/hooks/:hookId` receiver — R2-08-F3). Reading
+ * `req.origin` directly here would collapse all three onto the single
+ * reported value `'webhook'`, contradicting ADR-027's "kind: the registry
+ * id, the declaration that fired" contract. `cron`/`agent-complete` origins
+ * stay unambiguously 1:1 with their registry kind (there is no `on: cron`
+ * sub-vocabulary), so their real callers never need to set `triggerKind` —
+ * the fallback covers them exactly as before. NEVER sourced from
+ * `req.payload` (external/attacker data) — same exclusion `source` above
+ * already honours.
  */
 function deriveTriggerFields(req: FlowRunRequest): { kind: string; source: string; scope?: string } | null {
   let source: string | undefined;
@@ -81,7 +96,7 @@ function deriveTriggerFields(req: FlowRunRequest): { kind: string; source: strin
   }
   if (!source) return null;
   return {
-    kind: req.origin,
+    kind: req.triggerKind ?? req.origin,
     source,
     ...(req.eventProject !== undefined && req.eventProject !== null ? { scope: req.eventProject } : {}),
   };
@@ -96,7 +111,7 @@ export function mintTriggeredInitiative(
     const flowId = req.target.ref;
     const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'));
     if (!flow.project) {
-      return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook)` };
+      return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook/trigger-agent-complete)` };
     }
     const cfg = loadConfig(defaultConfigPath(forgeRoot));
     const projectRepoPath = join(resolveProjectsDir(forgeRoot, cfg), flow.project);

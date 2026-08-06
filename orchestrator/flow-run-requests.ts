@@ -90,6 +90,23 @@ export type FlowRunRequest = {
    * `agent-complete` — its declaring definition is `sourceAgent`.
    */
   sourceFlowId?: string;
+  /**
+   * R2-08-F3 (adversarial-review fix): the DECLARATION-sourced `TRIGGER_KINDS`
+   * registry id that actually fired this request (the firing trigger's own
+   * `on:` value) — deliberately SEPARATE from `origin`, which describes the
+   * mint/transport mechanism only. Needed because `origin: 'webhook'` now
+   * covers THREE distinct registry kinds (`webhook`, `pr-merged`,
+   * `issue-raised` all share the signature-verified `/api/hooks/:hookId`
+   * receiver) — `mint-triggered-initiative.ts`'s `deriveTriggerFields` reads
+   * THIS for `Run.trigger.kind`, never `origin`, so the three no longer
+   * collapse onto one reported value. Sourced from trusted flow.yaml config
+   * (the trigger declaration), NEVER from `req.payload` — external/attacker
+   * data must never flow into `trigger` (the same exclusion `sourceFlowId`/
+   * `sourceAgent` already honour). Absent ⇒ `deriveTriggerFields` falls back
+   * to `origin` (cron/agent-complete origins are already unambiguous 1:1 with
+   * their registry kind, so they never need to set this).
+   */
+  triggerKind?: string;
   createdAt: string;
 };
 
