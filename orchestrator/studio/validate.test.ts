@@ -15,6 +15,7 @@ import type {
   ProjectDefinition,
 } from './types.ts';
 import { SURFACE_KINDS, PHASE_EXECUTOR_KINDS } from './registry.ts';
+import { TRIGGER_KIND_IDS } from '../flow-trigger.ts';
 import { MATERIAL_KINDS } from './materials.ts';
 import {
   SLUG_RE,
@@ -981,6 +982,70 @@ describe('validateFlow — trigger-kind-reserved after R2-08-F2 (agent-complete 
     const f = findings.find((x) => x.check === 'trigger-kind-reserved');
     assert.ok(f, 'expected "feed" to remain schema-reserved after F2 ships');
     assert.equal(f!.level, 'error');
+  });
+});
+
+/**
+ * ACCEPTANCE TESTS (T3, R2-08-F3 #1) — `pr-merged` / `issue-raised` flip
+ * reserved → shipped (project-event kinds over the existing webhook
+ * receiver, ADR-027's R2-08-F3). Mirrors the F2 block above exactly: RED for
+ * the two newly-shipped kinds, green-on-arrival for the kinds that must stay
+ * reserved (kills flipping the WHOLE registry instead of just these two rows).
+ */
+describe('validateFlow — trigger-kind-reserved after R2-08-F3 (pr-merged / issue-raised shipped)', () => {
+  // NOTE: asserting the absence of a 'trigger-kind-reserved' finding ALONE
+  // would be a characterization test, not acceptance — it is trivially true
+  // on 631154a1 for the WRONG reason (the kind isn't in TRIGGER_KINDS AT ALL
+  // yet, so RESERVED_TRIGGER_KIND_IDS never contains it either — the same
+  // "green on arrival for the wrong reason" trap this exact suite's
+  // immutable-gates review has caught before). Each test below additionally
+  // asserts membership in TRIGGER_KIND_IDS AND a completely clean findings
+  // list for an otherwise-valid trigger, so a kind that doesn't exist at all
+  // yet (today) fails on the FIRST assertion, and a kind that's still
+  // schema-reserved fails on the (still-present) 'trigger-kind'/
+  // 'trigger-kind-reserved' finding.
+  it('(RED) pr-merged is a real, non-reserved TRIGGER_KINDS row → zero findings for an otherwise-valid trigger', () => {
+    assert.ok(
+      (TRIGGER_KIND_IDS as readonly string[]).includes('pr-merged'),
+      'expected "pr-merged" to already be a TRIGGER_KINDS member — RED until F3 registers the row',
+    );
+    const flow = makeFlow({
+      triggers: [{ on: 'pr-merged', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowIds: new Set(['my-flow', 'other-flow']) });
+    assert.deepEqual(
+      findings,
+      [],
+      `expected NO findings at all for a minimal, otherwise-valid pr-merged trigger once F3 ships — got ${JSON.stringify(findings)}`,
+    );
+  });
+
+  it('(RED) issue-raised is a real, non-reserved TRIGGER_KINDS row → zero findings for an otherwise-valid trigger', () => {
+    assert.ok(
+      (TRIGGER_KIND_IDS as readonly string[]).includes('issue-raised'),
+      'expected "issue-raised" to already be a TRIGGER_KINDS member — RED until F3 registers the row',
+    );
+    const flow = makeFlow({
+      triggers: [{ on: 'issue-raised', target: { kind: 'flow', ref: 'other-flow' } }],
+    });
+    const findings = validateFlow(flow, makeAgentMap(makeAgent()), { flowIds: new Set(['my-flow', 'other-flow']) });
+    assert.deepEqual(
+      findings,
+      [],
+      `expected NO findings at all for a minimal, otherwise-valid issue-raised trigger once F3 ships — got ${JSON.stringify(findings)}`,
+    );
+  });
+
+  it('(green-on-arrival) manual and feed are STILL reserved after F3 ships — kills flipping the WHOLE registry to shipped instead of just pr-merged/issue-raised', () => {
+    for (const id of ['manual', 'feed']) {
+      const flow = makeFlow({
+        triggers: [{ on: id, target: { kind: 'agent', ref: 'my-agent' } }],
+      });
+      const findings = validateFlow(flow, makeAgentMap(makeAgent()));
+      const f = findings.find((x) => x.check === 'trigger-kind-reserved');
+      assert.ok(f, `expected "${id}" to remain schema-reserved after F3 ships`);
+      assert.equal(f!.level, 'error');
+    }
   });
 });
 
