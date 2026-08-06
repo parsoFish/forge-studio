@@ -496,6 +496,8 @@ project ids scoping which projects' events may fire this trigger. It sits at
 the top level of the trigger row alongside `on` and `target`, not inside a
 per-kind config block, because it is kind-independent: every kind resolves to a
 project or to nothing, and the scope means the same thing for all of them.
+**(Corrected 2026-08-07 — see the addendum at the end of this amendment: one kind,
+`merged`, is excluded, so "every kind" above is not literally true as shipped.)**
 
 ```yaml
 triggers:
@@ -584,3 +586,42 @@ is derived, is a closed triple, and has no prose member. The `data-*` vocabulary
 by the consuming surfaces (R6-04-F2 kickoff, R6-01-F4 run detail, R6-05/R6-06
 ledgers) — this ADR records only that the shape is a closed triple with no
 prose member.
+
+### Addendum (2026-08-07): `on: merged` is EXCLUDED from `projects:` scoping
+
+**Mechanical corollary; records an exclusion, takes no new decision.** This
+addendum exists because the amendment above asserts the scope field "is
+kind-independent: every kind resolves to a project or to nothing" — and as
+shipped, that sentence is **false for one kind**. Correcting it rather than
+leaving it is the point: an ADR carrying a claim its own implementation does not
+honour is the failure this project keeps paying for.
+
+**The fact.** Rule 2 above names the **dispatch point** as the enforcement point,
+and every trigger kind reaches dispatch by staging a claimable `FlowRunRequest`
+that `drainFlowRunRequests` then scope-checks — except `merged`. `on: merged`
+dispatches **inline** from `orchestrator/finalize-merged.ts` via
+`resolveMergeAgentHandler`, never touching the staged-request seam, so the
+enforcement point never sees it. A `projects:`-scoped `on: merged` trigger would
+therefore be silently unenforced.
+
+**What ships instead.** `forge studio lint` **errors** when `projects:` is declared
+on an `on: merged` trigger. The gap is made *unauthorable* rather than left
+silently fail-open: an operator cannot declare a scope that would not be enforced.
+No product story is blocked — the per-project merged story in the end-state mockup
+(`demo-runner`: "PR merged → refresh demo artifacts, per-project: betterado,
+gitpulse") is the **`pr-merged`** kind, which originates through the webhook
+receiver and IS drain-enforced. `on: merged` is the internal reflect-chain trigger
+and has no per-project story.
+
+**Why it was not simply wired.** Wiring `finalize-merged`'s inline closure is a
+small change, and it was deliberately refused. It would have been the third
+per-mechanism patch of one class: the scope guarantee is asserted **globally**
+("dispatch is the ONE enforcement point") but implemented **per-mechanism**, so
+each dispatch mechanism that diverges from the staged-request seam silently escapes
+it. Patching a third site leaves the identical hole for the fourth. The durable fix
+— route `merged` through the claimable-request seam, or give the guarantee a single
+structural choke point every dispatch mechanism must pass — is tracked separately,
+with the re-entry condition being an actual per-project `merged` story.
+
+**Scope of this addendum:** `projects:` remains kind-independent for every shipped
+kind except `merged`. Nothing else in the amendment changes.
