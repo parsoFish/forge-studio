@@ -65,6 +65,16 @@ import {
 // ---------------------------------------------------------------------------
 
 /**
+ * Thrown by `scaffoldContractArtifacts` when a per-segment containment guard
+ * (`resolveGuardedPath`) rejects one of its writes (SEC-03 Defect 5). Caught
+ * by its one caller and turned into a generic 400 — never allowed to fall
+ * through to the route's outer catch-all, which would report a security
+ * rejection as an unrelated 500. Not exported: internal to this module,
+ * mirroring `PathGuardReject.reason` never reaching the client.
+ */
+class ScaffoldContainmentError extends Error {}
+
+/**
  * Idempotently scaffold the machine-readable architecture context the C4
  * preflight clause requires: a `roadmap.md` at the project root and the
  * project's brain sub-wiki `profile.md` (under the project.json `artifactRoot`,
@@ -73,10 +83,51 @@ import {
  * hollow roadmap is never written silently. A git repo is initialised if the
  * project dir is not already inside one (C6/preflight needs a git surface).
  *
+ * SEC-03 Defect 5: validating `projectRoot`'s own identity (the caller's
+ * `isContainedProjectRepoPath` check) does not validate what gets written
+ * BENEATH it — a plain `resolve(projectRoot, 'roadmap.md')` follows a
+ * symlinked or hardlinked segment straight through. Every path this function
+ * writes through is now resolved via `resolveGuardedPath` (studio-path-
+ * guard.ts), with `projectRoot` as the TRUSTED, already-verified root and
+ * every path component (including every `artifactRoot` component — see
+ * below) its OWN `segments[]` element, never folded into `root` (see that
+ * module's CONTRACT section: folding an untrusted segment into `root`
+ * bypasses the per-segment identity walk entirely). BOTH guards are computed
+ * BEFORE either write (and before git-init) — a guard that has to unwind a
+ * write it already made is a guard in the wrong place — and a rejection
+ * throws `ScaffoldContainmentError` rather than silently skipping the write
+ * (a skipped write reported as success is the "declared data fails open"
+ * shape this campaign keeps finding).
+ *
  * Returns the list of relative paths actually created (empty if everything was
  * already present), so the caller can tell the operator what it touched.
  */
 export function scaffoldContractArtifacts(projectRoot: string, name: string): string[] {
+  // roadmap.md (C4) — guarded before any write.
+  const roadmapGuard = resolveGuardedPath(projectRoot, ['roadmap.md']);
+  if (!roadmapGuard.ok) throw new ScaffoldContainmentError('path traversal detected');
+
+  // brain sub-wiki profile.md (C4, Brain 3) under the artifactRoot.
+  // `readArtifactRoot` already rejects an absolute value, a backslash, or a
+  // literal '..' component in the RAW string — but a legitimate
+  // multi-component value (e.g. "sub/dir") must still be split into
+  // INDIVIDUAL segments[] elements before reaching resolveGuardedPath: a
+  // segment containing '/' fails `isSafeSegment` outright, so folding it as
+  // ONE element would always be rejected rather than silently under-checked
+  // — splitting is what makes a legitimate multi-component artifactRoot
+  // actually usable while still identity-verifying every component on its
+  // own. On THIS call path artifactRoot is always '.' in practice (this
+  // function always runs before .forge/project.json exists, and
+  // readArtifactRoot returns '.' whenever that file is absent) — but the
+  // split is applied unconditionally rather than leaning on that as an
+  // invariant, since scaffoldContractArtifacts's own contract makes no such
+  // promise about call order.
+  const artifactRoot = readArtifactRoot(projectRoot);
+  const artifactSegments = artifactRoot === '.' ? [] : artifactRoot.split('/').filter((s) => s.length > 0);
+  const brainRel = artifactRoot === '.' ? join('brain', 'profile.md') : join(artifactRoot, 'brain', 'profile.md');
+  const profileGuard = resolveGuardedPath(projectRoot, [...artifactSegments, 'brain', 'profile.md']);
+  if (!profileGuard.ok) throw new ScaffoldContainmentError('path traversal detected');
+
   const created: string[] = [];
 
   // git init if the dir is not already a git work tree.
@@ -96,11 +147,12 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
     }
   }
 
-  // roadmap.md (C4) — TODO stub, clearly marked.
-  const roadmapPath = resolve(projectRoot, 'roadmap.md');
-  if (!existsSync(roadmapPath)) {
+  // roadmap.md — TODO stub, clearly marked. Written only if absent (never
+  // clobber an existing operator file) — a SEPARATE, real requirement from
+  // the containment guard above; both apply independently.
+  if (!roadmapGuard.exists) {
     writeFileSync(
-      roadmapPath,
+      roadmapGuard.realPath,
       `# ${name} — Roadmap\n\n` +
         `> TODO (scaffold): replace this stub with the real product roadmap.\n` +
         `> Forge's architect/PM read this file to decompose work; an empty roadmap\n` +
@@ -112,14 +164,10 @@ export function scaffoldContractArtifacts(projectRoot: string, name: string): st
     created.push('roadmap.md');
   }
 
-  // brain sub-wiki profile.md (C4, Brain 3) under the artifactRoot.
-  const artifactRoot = readArtifactRoot(projectRoot);
-  const brainRel = artifactRoot === '.' ? join('brain', 'profile.md') : join(artifactRoot, 'brain', 'profile.md');
-  const profilePath = resolve(projectRoot, brainRel);
-  if (!existsSync(profilePath)) {
-    mkdirSync(resolve(profilePath, '..'), { recursive: true });
+  if (!profileGuard.exists) {
+    mkdirSync(dirname(profileGuard.realPath), { recursive: true });
     writeFileSync(
-      profilePath,
+      profileGuard.realPath,
       `# ${name} — Project Profile (Brain 3)\n\n` +
         `> TODO (scaffold): replace this stub with the project's machine-readable\n` +
         `> architecture profile — the durable facts forge's planners query before\n` +
@@ -718,16 +766,57 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 400, { error: 'a project already exists at this repo path' }, origin); return true;
       }
 
-      // Create the project + .forge dir up front so the artifact/brain scaffolds
-      // below (git init, roadmap.md, project.json) have a directory to write into.
-      const forgeDir = resolve(projectRoot, '.forge');
-      if (!existsSync(forgeDir)) mkdirSync(forgeDir, { recursive: true });
+      // SEC-03 Defect 5 (BLOCKER, found by the adversarial round INSIDE this
+      // PR's own fix): validating projectRoot's own identity (the
+      // isContainedProjectRepoPath check above) does not validate what this
+      // route writes BENEATH it. Every subsequent write below built its path
+      // with a plain join()/resolve() off projectRoot with NO further
+      // containment — a symlinked or hardlinked `.forge`/`project.json`
+      // segment was followed straight through. The general principle, now
+      // recurred five times in this campaign: validating a root does not
+      // validate what you write beneath it.
+      //
+      // Fix: resolveGuardedPath, with projectRoot as the TRUSTED root (this
+      // PR's own isContainedProjectRepoPath call above already proved it via
+      // a genuine per-segment realpath identity walk) and every subsequent
+      // path component — here `.forge`, `project.json` — as its OWN
+      // segments[] element, never folded into root (studio-path-guard.ts's
+      // CONTRACT section: folding an untrusted/unverified segment into
+      // `root` bypasses the per-segment identity walk entirely).
+      //
+      // resolveGuardedPath realpaths `root` unconditionally — it has no
+      // create-mode for root itself — so projectRoot must physically exist
+      // before this guard call can run. Safe to create here: the
+      // isContainedProjectRepoPath call above just walked every segment of
+      // this exact path with genuine realpath identity checks (not a
+      // lexical prefix test), so materializing the directory it already
+      // proved is contained introduces no new escape.
+      if (!existsSync(projectRoot)) mkdirSync(projectRoot, { recursive: true });
+
+      const forgeGuard = resolveGuardedPath(projectRoot, ['.forge', 'project.json']);
+      if (!forgeGuard.ok) {
+        sendJson(res, 400, { error: 'path traversal detected' }, origin); return true;
+      }
 
       // B3: scaffold the C4 artifacts the architect/PM need so a freshly
       // onboarded project is preflight-green (or at least clear about what is
       // missing). All writes are idempotent — never clobber an existing
       // operator file, and the stubs are clearly marked as TODO scaffolding.
-      const scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
+      // scaffoldContractArtifacts computes its OWN per-segment guards
+      // (roadmap.md, brain/profile.md) BEFORE either of its writes — see its
+      // docstring — and throws ScaffoldContainmentError, never a silent
+      // skip, on rejection. Fail closed here too: refuse before ANY of this
+      // route's writes (including the .forge/project.json write below),
+      // never surface it as an unrelated 500.
+      let scaffoldedLocal: string[];
+      try {
+        scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
+      } catch (err) {
+        if (err instanceof ScaffoldContainmentError) {
+          sendJson(res, 400, { error: 'path traversal detected' }, origin); return true;
+        }
+        throw err;
+      }
 
       // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
       // profile.md + themes/) so the KB pillar — and the C4 preflight clause,
@@ -766,7 +855,13 @@ export async function handleStudioWriteRoutes(
       try { validateProjectConfig(cfg); }
       catch (err) { sendJson(res, 400, { error: String(err) }, origin); return true; }
 
-      writeFileSync(resolve(forgeDir, 'project.json'), JSON.stringify(cfg, null, 2), 'utf8');
+      // Write through the ALREADY-GUARDED real path (forgeGuard.realPath),
+      // not a fresh unguarded resolve(projectRoot, '.forge', 'project.json')
+      // — reusing the guarded value end-to-end means there is no second,
+      // unguarded path construction for this write to slip through.
+      const forgeDirPath = dirname(forgeGuard.realPath);
+      if (!existsSync(forgeDirPath)) mkdirSync(forgeDirPath, { recursive: true });
+      writeFileSync(forgeGuard.realPath, JSON.stringify(cfg, null, 2), 'utf8');
 
       const scaffolded = [
         ...scaffoldedLocal,
