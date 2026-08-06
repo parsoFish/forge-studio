@@ -9,7 +9,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
+import { chmodSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -243,6 +243,20 @@ test('(RED) [SEC-03 round 3] scaffoldGreenfieldProject leaves NO project directo
       !discovered.some((p) => p.id === id),
       `discoverProjects must not adopt the half-created directory — found: ${JSON.stringify(discovered.map((p) => p.id))}`,
     );
+
+    // RETROFIT (SEC-03 round 4) — "sweep for other surfaces that OBSERVE the
+    // state you claim to have cleaned up": this scenario is a symlinked
+    // brain/projects/<id> ITSELF, so seedProjectBrain's very first plan()
+    // call already fails containment before queuing ANY write — no
+    // kb.yaml/profile.md/themes/README.md should ever land on disk here.
+    // Asserted on disk only (function level — no HTTP listing route to
+    // drive; see cli/bridge-studio-write.test.ts / cli/bridge-studio-
+    // project-create-containment.test.ts for the GET /api/studio/kbs
+    // assertion on the two HTTP routes).
+    assert.ok(
+      !existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')),
+      `no phantom KB may be written under brain/projects/${id}/ either — a rejection this early in seedProjectBrain's plan-then-write pattern must leave zero files, not just zero project directory`,
+    );
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
     rmSync(outside, { recursive: true, force: true });
@@ -258,7 +272,54 @@ test('positive control (passes before AND after the SEC-03 round-3 fix): a norma
     assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', out.id, 'kb.yaml')), 'expected the central brain to be seeded');
     const discovered = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
     assert.ok(discovered.some((p) => p.id === out.id), `expected the new project to be discoverable — got ${JSON.stringify(discovered.map((p) => p.id))}`);
+    const cfg = JSON.parse(readFileSync(join(out.projectDir, '.forge', 'project.json'), 'utf8')) as { kb?: string };
+    assert.equal(cfg.kb, out.id, 'expected project.json.kb bound to the seeded KB (R4-02-F3)');
   } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 4 (MAJOR) — the round-3 reordering fix moved the orphan, it
+// did not remove it. seedProjectBrain now runs FIRST — a WRITING operation
+// moved earlier, not fail-before-write. An UNRELATED failure AFTER it
+// succeeds (e.g. EACCES on copyTemplate's mkdirSync) leaves a complete,
+// valid brain/projects/<id>/kb.yaml behind: a PHANTOM KB, invisible to
+// discoverProjects (it only scans projects/), but VISIBLE to
+// loadKbDescriptors (cli/bridge-studio-kbs.ts), which walks brain/projects/
+// as its OWN second containment root — see cli/bridge-studio-write.test.ts's
+// EACCES test for the live GET /api/studio/kbs confirmation.
+//
+// Failure-injection mechanism: chmod 0o500 (r-x, no write) on the PARENT of
+// the directory copyTemplate's first mkdirSync needs to create —
+// `<forgeRoot>/projects` itself. Verified deterministic in this environment
+// (uid 1000, non-root — root would bypass the permission check entirely):
+// `mkdirSync(child, {recursive:true})` under a 0o500 parent throws EACCES
+// reliably, confirmed via a standalone probe before writing this test.
+// Permissions are restored in `finally`, before rmSync cleanup — rmSync's
+// OWN recursive delete needs write on `projects/` to remove its children.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-03 round 4] an UNRELATED EACCES failure after seedProjectBrain succeeds must not leave a phantom brain/projects/<id>/kb.yaml behind', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const projectsDir = join(forgeRoot, 'projects');
+  try {
+    const id = 'eacces-phantom-blocker';
+    chmodSync(projectsDir, 0o500);
+    try {
+      // expected scaffoldGreenfieldProject to throw on the injected EACCES
+      assert.throws(() => scaffoldGreenfieldProject({ manifest: manifest({ name: 'Eacces Phantom Blocker' }), forgeRoot }));
+    } finally {
+      chmodSync(projectsDir, 0o755);
+    }
+
+    assert.ok(
+      !existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')),
+      `seedProjectBrain succeeded (it writes to brain/projects/${id}/, entirely independent of projects/'s permissions) and copyTemplate then failed with EACCES on mkdirSync(projects/${id}) — the earlier write was never unwound, leaving a phantom KB bound to a project that was never created`,
+    );
+    assert.ok(!existsSync(join(forgeRoot, 'projects', id)), `the project directory must not exist either — got existsSync=${existsSync(join(forgeRoot, 'projects', id))}`);
+  } finally {
+    chmodSync(projectsDir, 0o755);
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });

@@ -107,6 +107,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -121,6 +122,8 @@ import { basename, dirname, join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
+import { runStudioLint } from './studio-lint.ts';
+import { runBrainLint } from './brain-lint.ts';
 
 function tmp(prefix: string): string {
   return mkdtempSync(join(tmpdir(), prefix));
@@ -1022,5 +1025,139 @@ test('(RED) [SEC-03 round 3, onboard route — SECOND INSTANCE, not a clean rout
     `MEASURED: loadProjectsWithMeta lists every discovered dir regardless of hasConfig ("a half-onboarded dir without .forge/project.json still surfaces... so the operator can SEE it") — the half-created leftover from THIS route is therefore, if anything, MORE visible to the operator than greenfield's, not less. Found: ${JSON.stringify(projects.map((p) => p.id))}`,
   );
 
+  // RETROFIT (SEC-03 round 4) — "sweep for other surfaces that OBSERVE the
+  // state you claim to have cleaned up": this file's own SEC-03-round-3
+  // ordering fix (seedProjectBrain now runs FIRST on this route too, not
+  // merely after Defect-2's clobber check) already makes the assertions
+  // above pass — but round 3's HTTP listing check was GET /api/studio/projects
+  // only. loadKbDescriptors walks brain/projects/ as its OWN second
+  // containment root (cli/bridge-studio-kbs.ts), independent of
+  // discoverProjects — checked here too, measured rather than assumed.
+  const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
+  const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
+  assert.ok(
+    !kbs.some((k) => k.id === id),
+    `GET /api/studio/kbs must NOT list a KB for a project the onboard route just reported as failed — found: ${JSON.stringify(kbs.map((k) => k.id))}`,
+  );
+  assert.ok(
+    !existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')),
+    `no phantom KB may be written under brain/projects/${id}/ either`,
+  );
+
   assert.deepEqual(readdirSync(outside), [], 'nothing may be created at the symlink target outside forgeRoot — the containment guard itself is not what this test is measuring');
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 4 (MAJOR) — the round-3 reordering fix moved the orphan, it
+// did not remove it. seedProjectBrain running FIRST on this route closes the
+// CONTAINMENT-rejection scenario (test above, now green) but not an
+// UNRELATED failure AFTER it succeeds: EACCES on this route's own
+// `mkdirSync(projectRoot)` (the reference case — same chmod-0o500-on-
+// projects/ mechanism as the other two SEC-03-round-4 tests in this
+// campaign, verified deterministic there). seedProjectBrain's target
+// (brain/projects/<id>/) is entirely independent of projects/'s
+// permissions, so it succeeds and leaves a real kb.yaml behind; the very
+// next statement on this route, `mkdirSync(projectRoot)`, then throws
+// EACCES — uncaught by any dedicated handler here, so it falls through to
+// the route's generic outer catch (500), leaving no `.forge/project.json`
+// and no project directory at all, but a fully-formed phantom KB.
+// ---------------------------------------------------------------------------
+
+test('(RED) [SEC-03 round 4] POST /api/studio/projects: an UNRELATED EACCES failure must not leave a phantom KB visible in GET /api/studio/kbs', async () => {
+  const id = 'onboard-eacces-phantom-blocker';
+  const projectsDir = join(forgeRoot, 'projects');
+  chmodSync(projectsDir, 0o500);
+  try {
+    const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+    assert.notEqual(status, 200, `sanity: the EACCES failure must not report success — got ${status}: ${text}`);
+  } finally {
+    chmodSync(projectsDir, 0o755);
+  }
+
+  assert.ok(!existsSync(join(forgeRoot, 'projects', id)), 'the project directory must not exist');
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+  assert.ok(!projects.some((p) => p.id === id), `GET /api/studio/projects must not list it — found: ${JSON.stringify(projects.map((p) => p.id))}`);
+
+  const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
+  const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
+  assert.ok(
+    !kbs.some((k) => k.id === id),
+    `seedProjectBrain succeeded (writes to brain/projects/${id}/, independent of projects/'s permissions) and the route's own mkdirSync(projectRoot) then failed with EACCES — GET /api/studio/kbs must NOT list a KB bound to a project the operator was just told was not created. Found: ${JSON.stringify(kbs.map((k) => k.id))}`,
+  );
+  assert.ok(!existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')), 'the phantom kb.yaml must not exist on disk either');
+});
+
+test('positive control (passes before AND after the SEC-03 round-3/4 fix): a normal onboard still succeeds, and BOTH GET /api/studio/projects and GET /api/studio/kbs list it with the KB bound', async () => {
+  const { status, text, json } = await postProject({ name: 'round4-onboard-positive-control', qualityGateCmd: 'echo ok' });
+  assert.equal(status, 200, `expected a normal onboard to succeed — got ${status}: ${text}`);
+  const id = json?.id as string;
+  assert.equal(id, 'round4-onboard-positive-control');
+
+  const listRes = await fetch(`${bridgeUrl}/api/studio/projects`);
+  const { projects } = (await listRes.json()) as { projects: Array<{ id: string }> };
+  assert.ok(projects.some((p) => p.id === id), `expected "${id}" in the projects listing — got ${JSON.stringify(projects.map((p) => p.id))}`);
+
+  const kbListRes = await fetch(`${bridgeUrl}/api/studio/kbs`);
+  const { kbs } = (await kbListRes.json()) as { kbs: Array<{ id: string }> };
+  assert.ok(kbs.some((k) => k.id === id), `expected "${id}" in the KB listing — got ${JSON.stringify(kbs.map((k) => k.id))}`);
+
+  const cfg = JSON.parse(readFileSync(join(forgeRoot, 'projects', id, '.forge', 'project.json'), 'utf8')) as { kb?: string };
+  assert.equal(cfg.kb, id, 'expected project.json.kb bound to the seeded KB (R4-02-F3)');
+});
+
+// ---------------------------------------------------------------------------
+// SEC-03 round 4 — MEASURED: does `forge studio lint` / `forge brain lint`
+// detect the phantom KB? T1 claimed neither does; this campaign has had
+// FOUR prior failure-behaviour claims turn out false, so it is measured
+// here directly (calling each lint entry point's real exported function)
+// rather than banked.
+//
+// Read from source before writing this test (both confirmed by execution
+// below, not banked on the reading alone):
+//   - cli/studio-lint.ts's KB-descriptor scan (~L395-413) does
+//     `readdirSync(brainDir)` then `join(brainDir, entry, 'kb.yaml')` — ONE
+//     level under brain/. It never recurses into brain/projects/<id>/, so it
+//     never even SEES a per-project KB, phantom or legitimate. (This is a
+//     separate, pre-existing gap from the phantom-KB defect itself: studio
+//     lint does not cover per-project central brains at all — not something
+//     this WI's ATs are scoped to fix, just measured honestly here.)
+//   - cli/brain-lint.ts's checkProjectBrainIndexes (~L337) is the ONLY brain-
+//     lint check that walks brain/projects/<name>/, and it `continue`s
+//     immediately for any project brain whose themes/ has zero non-README
+//     .md files (`themeFiles.length === 0`) — exactly the shape a freshly
+//     seeded stub has (seedProjectBrain writes only themes/README.md, no
+//     real theme yet). No other brain-lint check cross-references
+//     discoverProjects at all.
+// ---------------------------------------------------------------------------
+
+test('MEASURED [SEC-03 round 4] neither `forge studio lint` nor `forge brain lint` detects a phantom brain/projects/<id>/kb.yaml with no matching project', async () => {
+  const id = 'lint-measurement-phantom';
+  const projectsDir = join(forgeRoot, 'projects');
+  chmodSync(projectsDir, 0o500);
+  try {
+    await postProject({ name: id, qualityGateCmd: 'echo ok' });
+  } finally {
+    chmodSync(projectsDir, 0o755);
+  }
+  // Sanity: the phantom must genuinely exist before asking whether lint sees it.
+  assert.ok(existsSync(join(forgeRoot, 'brain', 'projects', id, 'kb.yaml')), 'sanity: expected the phantom KB to exist as a precondition for this measurement');
+  assert.ok(!existsSync(join(forgeRoot, 'projects', id)), 'sanity: expected no matching project directory');
+
+  const studioResult = runStudioLint(forgeRoot);
+  const studioHit = studioResult.findings.filter((f) => JSON.stringify(f).includes(id));
+  assert.deepEqual(
+    studioHit,
+    [],
+    `MEASURED: forge studio lint DOES flag the phantom (contradicts T1's claim) — findings: ${JSON.stringify(studioHit)}`,
+  );
+
+  const brainResult = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+  const brainHit = brainResult.findings.filter((f) => JSON.stringify(f).includes(id));
+  assert.deepEqual(
+    brainHit,
+    [],
+    `MEASURED: forge brain lint DOES flag the phantom (contradicts T1's claim) — findings: ${JSON.stringify(brainHit)}`,
+  );
 });
