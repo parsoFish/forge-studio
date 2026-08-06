@@ -1725,6 +1725,54 @@ contract produced which artifact.
   in `data.jsx`.
 - **Out of scope:** reflect content (R4-09); trigger machinery (R2-08).
 
+### R4-21 OOTB authoring agent (skill/hook package producer)
+
+- **Status:** planned  ·  **Wave:** 5, batch D (module: per-OOTB-agent —
+  authoring)
+- **Depends on:** R2-10 (session shell, implemented — authoring sessions
+  render through it), R3-01-F3/F4 (FilePackage renderer + install/palette
+  pipeline, implemented — the package surface + library landing).
+- **Depended on by:** — (parity closure: the `build-skill` / `build-hook`
+  stories + the `file-package` reserved artifact row).
+- **Context:** Minted at batch-C planning (2026-08-07, T1 ruling — see the
+  README §4 change log) on the batch-B exit measurement: the `build-skill`
+  and `build-hook` parity stories cannot flip because forge has no
+  **producer** — no agent that authors an artifact package (measured at
+  batch-B exit: 16 roster agents carry `runtime:`, none authors one). R4-17
+  proved a new session kind plugs into the R2-10 shell with no route code;
+  the missing piece is the agent itself. The `file-package` artifact row
+  stays RESERVED until a producer exists — a renderer with no producer is
+  the stub the reserved-row convention forbids. One authoring agent plus its
+  save path is an initiative, not a rider on a story flip.
+- **Features:**
+  - **R4-21-F1 The authoring agent.** One OOTB interactive agent that
+    authors a skill or hook file-package (SKILL.md / hook manifest + files)
+    through an R2-10 session: describe the job → draft package accumulates
+    in the artifact pane (FilePackage tabs) → operator iterates → save.
+    Drafts are never auto-saved. ACs: session descriptor + stage vocabulary
+    declared (R2-10-F2 — an unknown stage fails closed); the artifact pane
+    renders the draft via the shared FilePackage component (one component,
+    now three surfaces); the agent declares honest `materials:` (R2-09-F1).
+  - **R4-21-F2 Save path to the library.** Finalize writes the package
+    through the existing library write/validation path; `forge studio lint`
+    validates the landed package; the install/palette pipeline picks it up
+    with no restart (the R3-01-F2 invariant). ACs: an authored skill is
+    library- and palette-visible; a malformed draft is refused at save with
+    named errors, never half-written (check-then-write — the save path
+    takes operator-influenced file names, so it gets a full containment
+    review); hook packages land under the R3-03 lifecycle rules.
+  - **R4-21-F3 Journey + parity closure.** `build-skill` + `build-hook`
+    beats run against the real surfaces; the `file-package` reserved row is
+    promoted to live. ACs: both journeys green in the real gallery; parity
+    flips only if every beat is real (honest-parity rule).
+- **Session sizing:** ~2 sessions — (1) F1 agent + session; (2) F2 save
+  path + F3 journeys.
+- **Acceptance references:** mockup journeys `build-skill`, `build-hook`;
+  `SESSIONS` in `data.jsx`, `views-session.jsx`.
+- **Out of scope:** conversational agent drafting (`create-agent` steps 3-4
+  — excluded, T1 ruling 2026-08-06, README §4); the creation agent's
+  project scope (R4-03); marketplace publishing (R3-07).
+
 ## Deferred
 
 ### R4-D1 Architect-flow retirement
@@ -1929,3 +1977,12 @@ gitignored campaign dir):
   descriptor (`id: onboarding`), reused by creation rather than duplicated.
   R4-02/R4-03 hand-offs unchanged, pinned by no-regression ATs. As-built facts
   absorbed into new baseline entry **R4-B16**.
+- 2026-08-07 — **R4-21 minted** (batch-C planning session, T1 ruling): OOTB
+  authoring agent — the skill/hook package producer — plus its library save
+  path and the `build-skill`/`build-hook` journey closure; scheduled into
+  wave-5 **batch D** (module per-OOTB-agent). Grounds: the batch-B exit
+  measurement — three parity stories share one blocker, forge has no agent
+  that authors an artifact package (16 `runtime:` roster agents, none
+  authors), so the `file-package` artifact row stays RESERVED until a
+  producer exists. Deps R2-10 + R3-01-F3/F4 (both implemented) — the
+  initiative is unblocked on arrival.
