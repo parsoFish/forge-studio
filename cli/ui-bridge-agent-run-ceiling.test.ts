@@ -3,16 +3,17 @@
  * `POST /api/agents/<slug>/run`, its CLI-argv dispatch seam, and its
  * downstream surfacing.
  *
- * RUN COMMAND — this file needs ONE extra flag beyond the standard
- * `node --test --experimental-strip-types <file>`:
+ * RUN COMMAND — the standard invocation, no extra flags:
  *
- *   node --test --experimental-strip-types --experimental-test-module-mocks \
- *     cli/ui-bridge-agent-run-ceiling.test.ts
+ *   node --test --experimental-strip-types cli/ui-bridge-agent-run-ceiling.test.ts
  *
- * `--experimental-test-module-mocks` is required for the CLI round-trip
- * section below (`node:test`'s `mock.module`) — see that section's header
- * for why a real subprocess spawn is not an option here. The orchestrator
- * sibling file (`orchestrator/run-agent-ceiling.test.ts`) does not need it.
+ * (Round 2 used `node:test`'s `mock.module` for the CLI-argv seam section
+ * below, which needs `--experimental-test-module-mocks` — a real Node
+ * experimental flag with no other user anywhere in this repo, and `npm test`
+ * does not pass it. Round 3 replaced that with a PURE PARSE FUNCTION
+ * (`parseAgentDispatchArgs`, mirroring `buildAgentDispatchArgs`) so the seam
+ * is pinned as ordinary function composition — no mock, no flag, no
+ * import-cache ordering to reason about. See section (E) below.)
  *
  * ============================================================================
  * HONESTY BOUND (read before trusting a green run of this file)
@@ -34,9 +35,13 @@
  *       run-level policy (never nested per-agent);
  *   (E) the CLI-argv dispatch seam: `spawnAgentDispatch` never actually runs
  *       in this test process (harness-suppressed), so the argv it would build
- *       and the parse on the other end are pinned SEPARATELY and then
- *       ROUND-TRIPPED, closing the exact gap a detached-subprocess boundary
- *       would otherwise hide from every other test in this WI.
+ *       (`buildAgentDispatchArgs`) and the parse on the other end
+ *       (`parseAgentDispatchArgs`) are pinned SEPARATELY as pure functions
+ *       and then ROUND-TRIPPED by composing them directly, closing the exact
+ *       gap a detached-subprocess boundary would otherwise hide from every
+ *       other test in this WI — with NO spawn, NO mock, and NO real
+ *       execution of `cmdAgentDispatch`/`dispatchAgentRun` needed at all for
+ *       the round-trip itself.
  * No assertion here is or should be read as "forge halts spend" — only "the
  * ceiling value and its stop are recorded and surfaced honestly".
  * ============================================================================
@@ -94,16 +99,59 @@
  *     full node-invocation array (`--experimental-strip-types`,
  *     `orchestrator/cli.ts`, `agent`, `dispatch` are process-invocation
  *     boilerplate `spawnAgentDispatch` still owns, prepended around this
- *     helper's output). This is what lets the ROUND-TRIP test below feed the
- *     helper's output STRAIGHT into `cmdAgentDispatch` with zero
- *     transformation — if the implementer instead returns the full array,
- *     every test in the buildAgentDispatchArgs + ROUND-TRIP section needs a
- *     one-line `.slice(4)` adjustment, noted here so that's a quick fix, not
- *     a rediscovery.
+ *     helper's output). This is what lets the ROUND-TRIP test below compose
+ *     it directly with `parseAgentDispatchArgs` with zero transformation —
+ *     if the implementer instead returns the full array, every test in the
+ *     buildAgentDispatchArgs + ROUND-TRIP section needs a one-line
+ *     `.slice(4)` adjustment, noted here so that's a quick fix, not a
+ *     rediscovery.
  *   - New CLI flag name: `--cost-ceiling-usd <value>`.
+ *   - `parseAgentDispatchArgs` (round 3, replacing round 2's `mock.module`
+ *     approach) — a NEW pure exported helper the implementer extracts from
+ *     `cmdAgentDispatch`'s existing inline flag-parsing (`cli/agent-run.ts`):
+ *     slug/`--run-id`/`--project`/`--input`/`--session-dir` extraction, PLUS
+ *     the new `--cost-ceiling-usd`. Assumed exported from `./agent-run.ts`
+ *     (same file `cmdAgentDispatch` already lives in) with signature
+ *       `parseAgentDispatchArgs(rest: string[]): { slug: string; runId: string;
+ *        project?: string; inputs: Record<string, string>; sessionDir?: string;
+ *        costCeilingUsd?: number }`
+ *     PINNED PRECISELY (per the round-3 ruling that a refusal shape must be
+ *     specified, not left for the implementer to guess): THROWS a
+ *     JS `Error` synchronously for a missing slug, a missing `--run-id`, a
+ *     malformed `--input` (no `=`), or a `--cost-ceiling-usd` value that does
+ *     not parse to a finite number — mirroring the throw-based idiom already
+ *     used elsewhere on this call path (`resolveDispatchableAgent`,
+ *     `dispatchAgentRun`'s slug/runId guards). `costCeilingUsd` is ABSENT
+ *     (not present-as-`undefined`) from the result when the flag is not
+ *     given — the same "key absent, not undefined" discipline pinned
+ *     throughout this WI (`orchestrator/run-agent-ceiling.test.ts`'s
+ *     equivalent test). `inputs` is always a (possibly empty) object, never
+ *     absent — it is NOT marked optional in the signature above, unlike
+ *     `project`/`sessionDir`/`costCeilingUsd`. NOTE: `parseAgentDispatchArgs`
+ *     does NOT apply the `SAFE_INPUT_KEY_RE` filter — that filter belongs to
+ *     `buildAgentDispatchArgs`'s OUTBOUND construction (what forge itself
+ *     sends); the INBOUND parser's only `--input` validation, mirroring
+ *     `cmdAgentDispatch`'s existing behaviour today, is rejecting a pair with
+ *     no `=`. This function does NOT re-validate `costCeilingUsd`'s business
+ *     bounds (`<= 0`, above `MAX_KICKOFF_COST_CEILING_USD`) — those are
+ *     independently owned and already pinned at the bridge-route layer (B,
+ *     above); the CLI parser's job is narrower: "is this string a valid
+ *     finite number at all".
+ *
+ * RESIDUAL GAP, disclosed rather than quietly dropped (round 3): removing the
+ * module mock means the exact glue line inside `cmdAgentDispatch` that maps
+ * `parseAgentDispatchArgs(...).costCeilingUsd` onto
+ * `dispatchAgentRun({..., kickoffCeilingUsd: ...})` is NOT independently
+ * observable by this file — proving it would need either the removed mock or
+ * a real spawn. What IS independently, rigorously pinned on both sides of
+ * that one line: `parseAgentDispatchArgs`'s own output (this file, below),
+ * and `dispatchAgentRun`'s consumption of `opts.kickoffCeilingUsd`
+ * (`orchestrator/run-agent-ceiling.test.ts`'s "dispatchAgentRun: an
+ * opts.kickoffCeilingUsd reaches runAgent" test). Only the one-line wiring
+ * BETWEEN those two already-pinned ends is uncovered.
  */
 
-import { test, before, after, mock } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync, existsSync,
@@ -112,6 +160,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge, buildAgentDispatchArgs } from './ui-bridge.ts';
+import { cmdAgentDispatch, parseAgentDispatchArgs } from './agent-run.ts';
 import { DRY_BRIDGE_LOG_BUCKET } from './dry-bridge.ts';
 import { runAgent } from '../orchestrator/run-agent.ts';
 import { MAX_KICKOFF_COST_CEILING_USD, DEFAULT_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
@@ -476,37 +525,25 @@ test('GET /api/studio/agents: defaultCostCeilingUsd is a TOP-LEVEL sibling of ag
 
 // =============================================================================
 // (E) The CLI-argv dispatch seam — closing the gap round 1 flagged as
-// unpinnable: bridge → `spawnAgentDispatch` (detached subprocess argv) →
-// `forge agent dispatch` → `cmdAgentDispatch`'s parse → `dispatchAgentRun`.
-// `spawnAgentDispatch` never actually spawns in this test process (harness-
-// suppressed, and even unsuppressed it would hit the real SDK) — so this
-// section pins the TWO HALVES that ARE directly drivable without a real
-// subprocess, per the pattern `cli/agent-run-dispatch.test.ts` already
-// establishes for `cmdAgentDispatch`:
+// unpinnable, WITHOUT `node:test`'s `mock.module` (round 2's approach; round
+// 3 replaced it — see the RESIDUAL GAP note in the file header for exactly
+// what that trade costs). `spawnAgentDispatch` never actually spawns in this
+// test process (harness-suppressed, and even unsuppressed it would hit the
+// real SDK) — so this section pins the seam as PURE FUNCTION COMPOSITION:
 //   1. `buildAgentDispatchArgs` — pure, no execution needed at all.
-//   2. `cmdAgentDispatch`'s parse — driven with REAL argv, `dispatchAgentRun`
-//      intercepted via `node:test`'s `mock.module` (NOT suppressed — the mock
-//      replaces the real call entirely, so nothing downstream ever executes,
-//      no SDK risk).
-// Then ROUND-TRIPPED: part 1's output fed straight into part 2, unchanged —
-// the one test that would have caught "the CLI arg is parsed but the value
-// never reaches the dispatch call" across a real subprocess-argv boundary,
-// which is exactly the shape of this campaign's most expensive prior lesson
-// (a headline feature dead on the product's real path while a fully-green
-// unit suite exercised only the direct in-process call).
-//
-// MOCK-ORDERING NOTE: `mock.module('../orchestrator/agent-dispatch.ts', ...)`
-// only intercepts modules that import that specifier AFTER the mock is
-// registered. `./ui-bridge.ts` (statically imported at the top of this file)
-// already imports `orchestrator/agent-dispatch.ts` for `resolveDispatchableAgent`
-// — by the time any test body runs, that module is already cached with its
-// REAL bindings. `./agent-run.ts` (home of `cmdAgentDispatch`), however, is
-// NOT imported anywhere else in this file's module graph — verified by
-// inspection (cli/ui-bridge.ts never imports cli/agent-run.ts). Each test
-// below therefore dynamically `import('./agent-run.ts')` for the FIRST time
-// AFTER registering its mock, which is what makes the interception work
-// (confirmed against this exact "already-cached dependency, fresh
-// importer" shape with a standalone smoke test before writing these).
+//   2. `parseAgentDispatchArgs` — pure, no execution needed at all.
+//   3. ROUND-TRIP: `parseAgentDispatchArgs(buildAgentDispatchArgs(...))`,
+//      composed directly — the one test that would have caught "the CLI arg
+//      is parsed but the value never reaches the parsed result" across a
+//      real subprocess-argv boundary, with NO spawn/mock/flag required.
+// A single `cmdAgentDispatch`-level integration test (E5, real static
+// import, no mock — plain `process.exit`/console stub, matching
+// `cli/agent-run-dispatch.test.ts`'s own established pattern) additionally
+// pins that `cmdAgentDispatch` actually WIRES `parseAgentDispatchArgs` in
+// (not just defines it unused) by observing the CLI-level exit code on a
+// malformed ceiling — that malformed-input path never reaches any spawn
+// point regardless (the parse throws first), so no suppression env is
+// needed for it either.
 // =============================================================================
 
 function containsFlagPair(args: string[], flag: string, value: string): boolean {
@@ -516,9 +553,9 @@ function containsFlagPair(args: string[], flag: string, value: string): boolean 
   return false;
 }
 
-// ---- E1: buildAgentDispatchArgs — pure, no execution, no mock needed ------
+// ---- E1: buildAgentDispatchArgs — pure, no execution needed --------------
 
-test('buildAgentDispatchArgs: bare minimum (slug + runId only) ⇒ exactly [slug, "--run-id", runId] — the shape cmdAgentDispatch\'s rest parameter expects with zero transformation (the ROUND-TRIP contract)', () => {
+test('buildAgentDispatchArgs: bare minimum (slug + runId only) ⇒ exactly [slug, "--run-id", runId] — the shape parseAgentDispatchArgs\'s rest parameter expects with zero transformation (the ROUND-TRIP contract)', () => {
   const args = buildAgentDispatchArgs('my-slug', 'run-1');
   assert.deepEqual(args, ['my-slug', '--run-id', 'run-1']);
 });
@@ -544,7 +581,7 @@ test('buildAgentDispatchArgs: --session-dir regression', () => {
   assert.ok(containsFlagPair(args, '--session-dir', '/abs/session/dir'));
 });
 
-test('buildAgentDispatchArgs: costCeilingUsd present ⇒ emits --cost-ceiling-usd <value> (kills "the flag is parsed by cmdAgentDispatch but the builder never emits it")', () => {
+test('buildAgentDispatchArgs: costCeilingUsd present ⇒ emits --cost-ceiling-usd <value> (kills "the flag is parsed but the builder never emits it")', () => {
   const args = buildAgentDispatchArgs('my-slug', 'run-1', undefined, undefined, undefined, 2.5);
   assert.ok(containsFlagPair(args, '--cost-ceiling-usd', '2.5'), `expected --cost-ceiling-usd 2.5, got ${JSON.stringify(args)}`);
 });
@@ -564,19 +601,97 @@ test('buildAgentDispatchArgs: ALL optional args together — comprehensive regre
   assert.ok(containsFlagPair(args, '--cost-ceiling-usd', '9.99'));
 });
 
-// ---- E2/E3: cmdAgentDispatch's parse, mocked at the dispatchAgentRun call -
+// ---- E2: parseAgentDispatchArgs — pure, no execution needed ---------------
+
+test('parseAgentDispatchArgs: bare minimum (slug + runId only) ⇒ { slug, runId, inputs: {} } — project/sessionDir/costCeilingUsd all ABSENT (not undefined-valued)', () => {
+  const parsed = parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1']);
+  assert.equal(parsed.slug, 'my-slug');
+  assert.equal(parsed.runId, 'run-1');
+  assert.deepEqual(parsed.inputs, {});
+  assert.equal('project' in parsed, false);
+  assert.equal('sessionDir' in parsed, false);
+  assert.equal('costCeilingUsd' in parsed, false);
+});
+
+test('parseAgentDispatchArgs: --project extraction', () => {
+  const parsed = parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1', '--project', 'gitpulse']);
+  assert.equal(parsed.project, 'gitpulse');
+});
+
+test('parseAgentDispatchArgs: --input extraction (k=v), and a malformed pair (no "=") throws — mirrors cmdAgentDispatch\'s existing "--input expects k=v" behaviour today', () => {
+  const parsed = parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1', '--input', 'northStar=ship it']);
+  assert.deepEqual(parsed.inputs, { northStar: 'ship it' });
+
+  assert.throws(
+    () => parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1', '--input', 'novalue']),
+    'a malformed --input pair (no "=") must throw, not silently drop the flag or produce a garbage key',
+  );
+});
+
+test('parseAgentDispatchArgs: --session-dir extraction', () => {
+  const parsed = parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1', '--session-dir', '/abs/session/dir']);
+  assert.equal(parsed.sessionDir, '/abs/session/dir');
+});
+
+test('parseAgentDispatchArgs: --cost-ceiling-usd <valid number> ⇒ costCeilingUsd is the parsed NUMBER (not the raw string) — kills "the CLI arg is parsed but stays a string, breaking downstream numeric comparisons"', () => {
+  const parsed = parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1', '--cost-ceiling-usd', '2.5']);
+  assert.equal(parsed.costCeilingUsd, 2.5);
+  assert.equal(typeof parsed.costCeilingUsd, 'number');
+});
+
+test('parseAgentDispatchArgs: --cost-ceiling-usd not-a-number ⇒ throws (fail-closed) — kills "malformed ceiling silently dropped, dispatch proceeds anyway"', () => {
+  assert.throws(
+    () => parseAgentDispatchArgs(['my-slug', '--run-id', 'run-1', '--cost-ceiling-usd', 'not-a-number']),
+    'a --cost-ceiling-usd value that does not parse to a finite number must throw, not silently fall through with costCeilingUsd absent/NaN',
+  );
+});
+
+test('parseAgentDispatchArgs: missing slug ⇒ throws', () => {
+  assert.throws(() => parseAgentDispatchArgs(['--run-id', 'run-1']));
+});
+
+test('parseAgentDispatchArgs: missing --run-id ⇒ throws', () => {
+  assert.throws(() => parseAgentDispatchArgs(['my-slug']));
+});
+
+// ---- E3: THE ROUND-TRIP — the real-client-path AT, as pure composition ---
+
+test('ROUND-TRIP (the real-client-path AT this WI is really about): parseAgentDispatchArgs(buildAgentDispatchArgs(...)) — the operator\'s cost ceiling AND every other field survive the CLI-argv seam unchanged, composed directly with no spawn/mock/flag needed. This is the one test that would have caught "field parsed+surfaced but never reaches the other side" across a real subprocess-argv boundary', () => {
+  const CEILING = 17.5;
+  const args = buildAgentDispatchArgs('project-scoped-review', 'run-1', 'gitpulse', { northStar: 'ship it' }, '/abs/session/dir', CEILING);
+  const parsed = parseAgentDispatchArgs(args);
+
+  assert.equal(parsed.slug, 'project-scoped-review');
+  assert.equal(parsed.runId, 'run-1');
+  assert.equal(parsed.project, 'gitpulse');
+  assert.deepEqual(parsed.inputs, { northStar: 'ship it' });
+  assert.equal(parsed.sessionDir, '/abs/session/dir');
+  assert.equal(
+    parsed.costCeilingUsd,
+    CEILING,
+    'the operator ceiling encoded by buildAgentDispatchArgs must survive parseAgentDispatchArgs\'s parse unchanged, as a number, across the round trip',
+  );
+});
+
+test('ROUND-TRIP, absence direction: no costCeilingUsd given to buildAgentDispatchArgs ⇒ parseAgentDispatchArgs\'s result has NO costCeilingUsd key either (today\'s behaviour, unchanged, proven end-to-end through both pure functions together)', () => {
+  const args = buildAgentDispatchArgs('project-scoped-review', 'run-1');
+  const parsed = parseAgentDispatchArgs(args);
+  assert.equal('costCeilingUsd' in parsed, false);
+});
+
+// ---- E4: cmdAgentDispatch actually WIRES parseAgentDispatchArgs in -------
 
 /** Stub process.exit/console around one `cmdAgentDispatch` invocation, so an
  *  exit-2 validation refusal is observable without tearing down the test
- *  runner. Mirrors `cli/agent-run-dispatch.test.ts`'s identical helper,
- *  generalised to accept the function reference (needed here because each
- *  call site dynamically imports a FRESH `cmdAgentDispatch` — see the
- *  mock-ordering note above — rather than a single module-level static
- *  import). */
+ *  runner. Mirrors `cli/agent-run-dispatch.test.ts`'s identical helper. No
+ *  mock needed here (round 3 removed `node:test`'s `mock.module` entirely):
+ *  a malformed `--cost-ceiling-usd` must make `parseAgentDispatchArgs` throw
+ *  BEFORE `cmdAgentDispatch` ever reaches a dispatch/spawn call, so this is
+ *  safe to run with a plain static `cmdAgentDispatch` import and no
+ *  suppression env. */
 async function runCli(
-  fn: (args: string[], forgeRoot: string) => Promise<void>,
   args: string[],
-  forgeRoot: string = ROOT,
+  forgeRootArg: string = ROOT,
 ): Promise<{ exitCode: number | null; out: string; err: string }> {
   const origExit = process.exit;
   const origLog = console.log;
@@ -591,7 +706,7 @@ async function runCli(
   console.log = (...a: unknown[]) => { out.push(a.join(' ')); };
   console.error = (...a: unknown[]) => { err.push(a.join(' ')); };
   try {
-    await fn(args, forgeRoot);
+    await cmdAgentDispatch(args, forgeRootArg);
   } catch (e) {
     if (!/^__exit__/.test((e as Error).message)) throw e;
   } finally {
@@ -602,71 +717,7 @@ async function runCli(
   return { exitCode, out: out.join('\n'), err: err.join('\n') };
 }
 
-type MockDispatchCall = Record<string, unknown>;
-
-function mockDispatchAgentRun(calls: MockDispatchCall[]) {
-  return mock.module('../orchestrator/agent-dispatch.ts', {
-    namedExports: {
-      dispatchAgentRun: async (opts: MockDispatchCall) => {
-        calls.push(opts);
-        return {
-          runId: opts.runId,
-          slug: opts.slug,
-          result: { costUsd: 0, outputRefs: [], tokensIn: 0, tokensOut: 0, suppressed: true },
-        };
-      },
-    },
-  });
-}
-
-test('cmdAgentDispatch: --cost-ceiling-usd not-a-number ⇒ exit 2 (fail-closed), dispatchAgentRun never called — kills "malformed ceiling silently dropped, dispatch proceeds anyway"', async () => {
-  const calls: MockDispatchCall[] = [];
-  const mocked = mockDispatchAgentRun(calls);
-  try {
-    const { cmdAgentDispatch } = await import('./agent-run.ts');
-    const r = await runCli(cmdAgentDispatch, [
-      'project-scoped-review', '--run-id', '_agent-cli-badceiling', '--cost-ceiling-usd', 'not-a-number',
-    ]);
-    assert.equal(r.exitCode, 2, `expected a fail-closed exit 2 for a malformed --cost-ceiling-usd, got ${JSON.stringify(r)}`);
-    assert.equal(calls.length, 0, 'dispatchAgentRun must never be called when the ceiling flag is malformed — refused, not silently dropped');
-  } finally {
-    mocked.restore();
-  }
-});
-
-test('cmdAgentDispatch: no --cost-ceiling-usd flag ⇒ dispatchAgentRun receives no kickoffCeilingUsd key at all (today\'s behaviour, unchanged)', async () => {
-  const calls: MockDispatchCall[] = [];
-  const mocked = mockDispatchAgentRun(calls);
-  try {
-    const { cmdAgentDispatch } = await import('./agent-run.ts');
-    const r = await runCli(cmdAgentDispatch, ['project-scoped-review', '--run-id', '_agent-cli-noceiling']);
-    assert.equal(r.exitCode, null, `expected a clean dispatch, got ${JSON.stringify(r)}`);
-    assert.equal(calls.length, 1);
-    assert.equal('kickoffCeilingUsd' in calls[0], false, 'no --cost-ceiling-usd flag must mean no kickoffCeilingUsd key reaches dispatchAgentRun\'s opts at all');
-  } finally {
-    mocked.restore();
-  }
-});
-
-// ---- E4: THE ROUND-TRIP — the real-client-path AT ------------------------
-
-test('ROUND-TRIP (the real-client-path AT this WI is really about): buildAgentDispatchArgs(...) output fed STRAIGHT into cmdAgentDispatch\'s parse — the operator\'s cost ceiling survives the CLI-argv seam unchanged. This is the one test that would have caught "field parsed+surfaced but never reaches enforcement" across a real subprocess-argv boundary, which no direct dispatchAgentRun/runAgent call (this file\'s (C) section, or the orchestrator sibling file) can exercise', async () => {
-  const calls: MockDispatchCall[] = [];
-  const mocked = mockDispatchAgentRun(calls);
-  try {
-    const { cmdAgentDispatch } = await import('./agent-run.ts');
-    const runId = '_agent-cli-roundtrip-ceiling';
-    const CEILING = 17.5;
-    const args = buildAgentDispatchArgs('project-scoped-review', runId, undefined, undefined, undefined, CEILING);
-    const r = await runCli(cmdAgentDispatch, args);
-    assert.equal(r.exitCode, null, `expected a clean dispatch, got ${JSON.stringify(r)}`);
-    assert.equal(calls.length, 1);
-    assert.equal(
-      calls[0]?.kickoffCeilingUsd,
-      CEILING,
-      'the operator ceiling encoded by buildAgentDispatchArgs must survive cmdAgentDispatch\'s argv parse and reach the dispatchAgentRun call unchanged',
-    );
-  } finally {
-    mocked.restore();
-  }
+test('cmdAgentDispatch: --cost-ceiling-usd not-a-number ⇒ exit 2 (fail-closed), matching every other pre-dispatch validation failure already established for this command (missing slug/--run-id, malformed --input) — proves cmdAgentDispatch actually calls parseAgentDispatchArgs, not merely defines it unused', async () => {
+  const r = await runCli(['project-scoped-review', '--run-id', '_agent-cli-badceiling', '--cost-ceiling-usd', 'not-a-number']);
+  assert.equal(r.exitCode, 2, `expected a fail-closed exit 2 for a malformed --cost-ceiling-usd, got ${JSON.stringify(r)}`);
 });
