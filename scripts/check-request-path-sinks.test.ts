@@ -161,6 +161,7 @@ test('comment filter: a sink-shaped call on a commented-out line is not counted'
     );
     const { rows } = analyze(root);
     const row = rows.find((r) => r.file === 'orchestrator/reached.ts' && r.sink === 'writeFileSync');
+    assert.ok(row, 'orchestrator/reached.ts writeFileSync should be counted');
     assert.equal(row.count, 1);
   } finally {
     rmSync(root, { recursive: true, force: true });
