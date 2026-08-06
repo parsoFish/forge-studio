@@ -34,6 +34,7 @@ import {
   writeFileSync,
   type FSWatcher,
 } from 'node:fs';
+import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
@@ -108,6 +109,7 @@ import {
   type DemoBuilderStatus,
 } from '../orchestrator/demo-builder-runner.ts';
 import { safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
+import { resolveContainedProjectDir } from './contract-stages.ts';
 import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
@@ -123,6 +125,7 @@ import {
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
@@ -218,7 +221,24 @@ export async function startBridge(opts: BridgeOptions): Promise<{ url: string; c
   // child of forgeRoot.
   const queuePaths = getPaths(resolve(forgeRoot, '_queue'));
   const logsRoot = resolve(forgeRoot, '_logs');
-  const projectsRoot = resolve(forgeRoot, 'projects');
+  // R4-17 round-2 BLOCKER: this was a hardcoded `resolve(forgeRoot,'projects')`
+  // — the ONE module of eight that never consulted config, while 23 sites
+  // elsewhere resolve through `resolveProjectsDir` (which honours
+  // `FORGE_PROJECTS_DIR` and `forge.config.json`'s documented `projectsDir`,
+  // orchestrator/config.ts). With that config set, this producer and
+  // `writeSessionTerminalPhase`'s containment guard resolved DIFFERENT roots, so
+  // a legitimately-created session dir failed the guard and the terminal phase
+  // was silently never written — a finished run reading `running` forever. A
+  // guard that resolves its root differently from the producer of the thing it
+  // guards is a false-rejection generator; the fix is one value, not two
+  // independent resolutions that happen to coincide in the default config.
+  //
+  // R4-17 round-3 BLOCKER (pin 5, item 2): `loadConfig()`'s no-arg default is
+  // cwd-relative (`resolve('forge.config.json')` against `process.cwd()`),
+  // not `forgeRoot`-relative — a caller started from a different cwd would
+  // silently fall back to `{}` even with a real `forge.config.json` sitting
+  // in `forgeRoot`. `defaultConfigPath(forgeRoot)` removes that dependence.
+  const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const mergePrFn = opts.mergePr ?? mergePullRequest;
   const finalizeAfterMergeFn = opts.finalizeAfterMerge ?? finalizeMergedReadyForReview;
   // WS-A (release): the default release-finalize hook constructs a per-cycle
@@ -945,7 +965,7 @@ async function handleHttp(
   // ---- Studio read routes (M1-2) + write routes (M2-2) -------------------
   // DEC-6 recovery surface (GET inspect + POST abandon/requeue/initiatives). GET is
   // read-only; the POSTs are gated by the x-forge-csrf guard above.
-  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleRecoveryRoutes(req, res, { forgeRoot: ctx.forgeRoot, queueRoot: ctx.queueRoot, logsRoot: ctx.logsRoot, projectsRoot: ctx.projectsRoot }, url, method)) return;
   if (await handleStudioRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioWriteRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -1548,6 +1568,18 @@ function spawnAgentDispatch(
   runId: string,
   project?: string,
   inputs?: Record<string, string>,
+  /** R4-17, D6/D7 — when given, threaded through as `forge agent dispatch`'s
+   *  `--session-dir <abs>` so the dispatch process can write the terminal
+   *  phase into that session's status.json when the run ends (D7). Omitted
+   *  by the generic `POST /api/agents/:slug/run` route (D6: byte-identical
+   *  behaviour without it) — only `POST /api/studio/onboarding/start` passes
+   *  it today. `sessionDir` is always OUR OWN already-created, already-
+   *  realpath-verified directory (never request-derived text folded in
+   *  here), so no extra validation is needed at this spawn-arg boundary; the
+   *  process on the receiving end (`cmdAgentDispatch`, cli/agent-run.ts)
+   *  guards its own write through it regardless.
+   */
+  sessionDir?: string,
 ): void {
   if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
   if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
@@ -1560,6 +1592,7 @@ function spawnAgentDispatch(
     if (!SAFE_INPUT_KEY_RE.test(k)) continue;
     args.push('--input', `${k}=${v}`);
   }
+  if (sessionDir) args.push('--session-dir', sessionDir);
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });
@@ -1572,6 +1605,18 @@ function spawnAgentDispatch(
 
 function architectSessionDir(projectsRoot: string, project: string, sessionId: string): string {
   return join(projectsRoot, project, '_architect', sessionId);
+}
+
+/** R4-17, D8 — renders the operator's own onboarding-start `inputs` verbatim
+ *  as `prompt.md`'s body. No fabricated interview: form field labels are
+ *  never re-cast as agent questions, mirroring the honest single-turn shape
+ *  project-brain's `prompt.md` already has. */
+function renderOnboardingPrompt(inputs: Record<string, string>): string {
+  const keys = Object.keys(inputs);
+  if (keys.length === 0) return '# Onboarding inputs\n\n(no inputs provided)\n';
+  const lines = ['# Onboarding inputs', ''];
+  for (const k of keys) lines.push(`- ${k}: ${inputs[k]}`);
+  return lines.join('\n') + '\n';
 }
 
 /**
@@ -1614,10 +1659,10 @@ function architectSessionDir(projectsRoot: string, project: string, sessionId: s
  * from a non-JSON source would reopen shapes `describeRejectedValue` cannot
  * be assumed to survive.
  */
-function invalidProjectRepoPath(candidate: unknown, forgeRoot: string): string | null {
+function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; projectsRoot: string }): string | null {
   if (candidate === undefined || candidate === '') return null;
   if (typeof candidate !== 'string') return describeRejectedValue(candidate);
-  return isContainedProjectRepoPath(candidate, { forgeRoot }) ? null : candidate;
+  return isContainedProjectRepoPath(candidate, roots) ? null : candidate;
 }
 
 /** Cap on the rendered offending value interpolated into a 400 body. Two
@@ -1653,8 +1698,25 @@ function readJsonFile<T>(path: string): T | null {
 }
 
 function newArchitectSessionId(): string {
-  // YYYY-MM-DDTHH-mm-ss (matches ArchitectSession.session_id elsewhere).
-  return new Date().toISOString().replace(/:/g, '-').replace(/\..+$/, '');
+  // YYYY-MM-DDTHH-mm-ss (matches ArchitectSession.session_id elsewhere) plus
+  // an 8-hex-char entropy suffix (R4-17 round-3 BLOCKER pin 5, item 1, close
+  // 3): the timestamp alone has only ONE-SECOND granularity — zero entropy —
+  // so a session id was guessable well enough to pre-plant a colliding
+  // directory (reproduced live, 100% hit rate over a 4-second candidate
+  // window; see cli/ui-bridge-onboarding-start.test.ts AT-13/14/15/17). This
+  // helper is shared by FIVE routes (architect / instructions /
+  // project-brain / demo-builder / onboarding start) and nothing downstream
+  // string-matches the bare timestamp shape — only SAFE_ID_RE plus a length
+  // cap gate it — so fixing it here fixes all five in one place rather than
+  // only the caller that happened to get adversarially reviewed.
+  //
+  // Hex digits are a subset of SAFE_ID_RE's charset ([A-Za-z0-9_-]), and the
+  // fixed-width timestamp prefix still sorts chronologically across
+  // different seconds (the entropy suffix only breaks ties WITHIN the same
+  // second, where finer ordering was never a guarantee anyway).
+  const stamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+$/, '');
+  const entropy = randomBytes(4).toString('hex');
+  return `${stamp}-${entropy}`;
 }
 
 /** Returns true if the request was an architect route (and was handled). */
@@ -1757,7 +1819,7 @@ async function handleArchitect(
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/writeFileSync/status
       // write. See invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
@@ -2042,7 +2104,7 @@ async function handleInstructions(
       // below (an unvalidated READ through the field, not just a write
       // target) and before any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
@@ -2268,6 +2330,69 @@ function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
   return out;
 }
 
+/**
+ * R4-17 round-3 BLOCKER pin 5, item 1 — create the onboarding session's own
+ * directory and write its two files (`status.json`, `prompt.md`), extracted
+ * out of the `POST /api/studio/onboarding/start` route body into its own
+ * EXPORTED function taking an EXPLICIT `sessionId`. Exists so the exclusive-
+ * create defences below (closes 1 and 2) can be exercised directly against a
+ * KNOWN id — once `newArchitectSessionId()` carries real entropy (close 3,
+ * that function's own docstring), an external caller can no longer reliably
+ * pre-plant a colliding directory to exercise closes 1/2 THROUGH the route
+ * at all. The round-3 test file discloses exactly this: AT-13/14/15's
+ * assertions stay true post-fix, but only vacuously, once the id is
+ * unguessable — this export is the seam a follow-up unit test (owned by
+ * whoever picks that up) would call directly with a fixed id instead.
+ *
+ * THREE independent closes (T2 ruling — a defence that only works because
+ * another one also works is one defence, not two):
+ *   1. `mkdirSync(sessionDir)` with NO `recursive` — a pre-existing entry at
+ *      this exact path (a planted symlink OR a real, empty directory an
+ *      attacker pre-staked) throws EEXIST rather than being silently reused.
+ *   2. Both leaf writes use the exclusive create flag (`{flag:'wx'}`, i.e.
+ *      `O_CREAT|O_EXCL`) — an existing path at the leaf, symlink included,
+ *      fails the open() with EEXIST instead of following the symlink and
+ *      writing through it.
+ *   3. `newArchitectSessionId()` (the id this function's callers pass in)
+ *      now carries real entropy — see its own docstring, above.
+ *
+ * `onboardingParent` MUST already be the caller's realpath-verified,
+ * contained `_onboarding` directory (the route verifies this BEFORE calling
+ * in) — this function does not re-derive that; it only guards the ONE new
+ * segment (`sessionId`) joined onto it. Since `sessionId` is required to
+ * match `SAFE_ID_RE` (no `/`, no `..`, no leading `.`) it is always a single
+ * path segment, so `join(onboardingParent, sessionId)` cannot itself escape
+ * `onboardingParent` — "validating a root does not validate what you write
+ * beneath it" (this file's round-2 lesson, applied one level deeper again;
+ * here the id is generated/validated rather than request-derived, so the
+ * escape vector this closes is TOCTOU/guessing, not path injection).
+ */
+export function writeOnboardingSession(
+  onboardingParent: string,
+  sessionId: string,
+  project: string,
+  runId: string,
+  inputs: Record<string, string>,
+): { sessionDir: string } {
+  if (!SAFE_ID_RE.test(sessionId)) {
+    throw new Error(`invalid onboarding sessionId: ${JSON.stringify(sessionId)}`);
+  }
+  const sessionDir = join(onboardingParent, sessionId);
+  // Close 1: exclusive directory CREATE. No `recursive` — a pre-existing
+  // entry at this exact path is a hard EEXIST error, never silently reused.
+  mkdirSync(sessionDir);
+  writeFileSync(
+    join(sessionDir, 'status.json'),
+    JSON.stringify({ phase: 'running', project, runId, startedAt: new Date().toISOString() }, null, 2),
+    { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
+  );
+  // D8 — no fabricated interview: prompt.md renders the operator's own
+  // inputs verbatim, exactly as project-brain's honestly-one-turn prompt
+  // does; form field labels are never re-cast as agent questions.
+  writeFileSync(join(sessionDir, 'prompt.md'), renderOnboardingPrompt(inputs), { encoding: 'utf8', flag: 'wx' });
+  return { sessionDir };
+}
+
 /** Returns true if the request was a demo-builder route (and was handled). */
 async function handleDemoBuilder(
   req: IncomingMessage,
@@ -2377,7 +2502,7 @@ async function handleDemoBuilder(
     // use the caller's default" — correct for a request body at WRITE time,
     // wrong here, where the field is mandatory and already persisted; a
     // forged empty string must be REJECTED, not silently treated as fine.)
-    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot })) {
+    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
       sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
@@ -2432,7 +2557,7 @@ async function handleDemoBuilder(
     // fully `join()`-normalised) is already safe; it says nothing about
     // `project_repo_path` itself. Close the same hole here rather than leave
     // the twin route exposed. `element`'s own handling below is UNCHANGED.
-    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot })) {
+    if (typeof status.project_repo_path !== 'string' || !isContainedProjectRepoPath(status.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot })) {
       sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
@@ -2607,7 +2732,7 @@ async function handleDemoBuilder(
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
       // invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
@@ -2657,6 +2782,137 @@ async function handleDemoBuilder(
     return true;
   }
 
+  // POST /api/studio/onboarding/start {project, inputs?} — R4-17, the
+  // onboarding session's kickoff route.
+  //
+  // D5 (BINDING — the headline finding this route's whole shape answers):
+  // the campaign's recurring defect family is a route that accepts a
+  // caller-supplied repo-path field and never re-validates it before using it
+  // as a write/spawn target (SEC-02, SEC-03, the `/start`-family
+  // `projectRepoPath` enumeration above `architectSessionDir`). This route's
+  // answer is to have NO such field to guard at all — the body type below
+  // pulls only `project`/`inputs`; an extra `projectRepoPath` (or anything
+  // else) in the raw body is simply never read, so it is provably inert, not
+  // merely undocumented (AT-3, cli/ui-bridge-onboarding-start.test.ts).
+  //
+  // `project` is validated (SLUG_RE + length cap, via the same
+  // `invalidGenerationProjectReason` the demo-generation routes already use)
+  // BEFORE any fs call, then resolved through the SAME
+  // `resolveContainedProjectDir` (`cli/contract-stages.ts`) the sibling
+  // `GET /api/studio/projects/:id/contract-stages` route already calls — by
+  // IMPORT, not a second implementation (round-1 BLOCKER fix: this route
+  // previously called bare `realpathSync` here, which resolves symlinks but
+  // never checks the result lands inside `ctx.projectsRoot`, so a symlinked
+  // project slug escaped containment entirely — see
+  // `cli/ui-bridge-onboarding-start.test.ts` AT-7/AT-8 for the live-execution
+  // reject/accept proof). `sessionId` is generated by THIS code
+  // (`newArchitectSessionId`), never taken from the request, so the
+  // `_onboarding/<sessionId>` join onto the now-verified real directory
+  // cannot itself introduce a further escape.
+  //
+  // D6: spawns the IDENTICAL `spawnAgentDispatch(forgeRoot, 'onboarding-agent',
+  // runId, project, inputs)` the generic `POST /api/agents/:slug/run` route
+  // spawns, with `--session-dir` additionally threaded through (D7) so
+  // `forge agent dispatch` can write the terminal phase into this session's
+  // status.json when the run ends.
+  if (method === 'POST' && url === '/api/studio/onboarding/start') {
+    try {
+      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown };
+      if (typeof body.project !== 'string') {
+        sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      const projectReason = invalidGenerationProjectReason(body.project);
+      if (projectReason) {
+        sendJson(res, 400, { error: projectReason }, origin);
+        return true;
+      }
+      const project = body.project;
+
+      const inputs: Record<string, string> = {};
+      if (body.inputs !== undefined) {
+        if (typeof body.inputs !== 'object' || body.inputs === null || Array.isArray(body.inputs)) {
+          sendJson(res, 400, { error: 'inputs must be an object of string values' }, origin);
+          return true;
+        }
+        for (const [k, v] of Object.entries(body.inputs as Record<string, unknown>)) {
+          if (!SAFE_INPUT_KEY_RE.test(k)) {
+            sendJson(res, 400, { error: `invalid input key: ${JSON.stringify(k)} (expected ${SAFE_INPUT_KEY_RE})` }, origin);
+            return true;
+          }
+          if (typeof v !== 'string') {
+            sendJson(res, 400, { error: `input "${k}" must be a string` }, origin);
+            return true;
+          }
+          inputs[k] = v;
+        }
+      }
+
+      const realProjectDir = resolveContainedProjectDir(ctx.projectsRoot, project);
+      if (realProjectDir === null) {
+        sendJson(res, 404, { error: `project not found: ${project}` }, origin);
+        return true;
+      }
+
+      const sessionId = newArchitectSessionId();
+      const runId = `_agent-onboarding-agent-${newRunStamp()}`;
+      // `sessionId` is this code's own generated value (never request-
+      // derived) and `_onboarding` is a fixed literal — joining it onto the
+      // already realpath-verified `realProjectDir` cannot escape.
+      // R4-17 round-2 BLOCKER: `resolveContainedProjectDir` proves the PROJECT
+      // dir is contained — it says NOTHING about what is written beneath it.
+      // `_onboarding` is a path segment inside a CHECKED-OUT REPO, so it is
+      // attacker-supplied content: a commit carrying a symlink named
+      // `_onboarding` redirects every write here, because
+      // `mkdirSync(recursive:true)` transparently follows a symlinked
+      // intermediate segment. Reproduced live before this guard existed —
+      // `status.json` and `prompt.md` landed outside `projectsRoot` from a
+      // project that passed containment. "Validating a root does not validate
+      // what you write beneath it", one level deeper than the round-1 fix.
+      //
+      // The parent is therefore created and realpath-verified BEFORE the
+      // session dir is created beneath it, and the session dir is verified in
+      // turn — the same realpath + `startsWith(root + sep)` shape used
+      // throughout, applied at every level that is written rather than only at
+      // the root. A pre-existing REAL `_onboarding` directory (the second and
+      // every later onboarding run) passes unchanged; only one whose realpath
+      // leaves the verified project dir is refused.
+      const onboardingParent = join(realProjectDir, '_onboarding');
+      mkdirSync(onboardingParent, { recursive: true });
+      const realOnboardingParent = realpathSync(onboardingParent);
+      if (!realOnboardingParent.startsWith(realProjectDir + sep)) {
+        sendJson(res, 400, { error: `onboarding session directory for project "${project}" resolves outside the project` }, origin);
+        return true;
+      }
+      // R4-17 round-3 BLOCKER pin 5, item 1: the leaf writes below (session
+      // dir + status.json + prompt.md) are guarded independently of the
+      // realpath checks above — see writeOnboardingSession's own docstring
+      // for the three closes (exclusive dir create, exclusive leaf writes,
+      // sessionId entropy). A guessable, colliding sessionId directory could
+      // otherwise be pre-planted with symlinked leaves that both writes
+      // below would silently follow.
+      const { sessionDir } = writeOnboardingSession(realOnboardingParent, sessionId, project, runId, inputs);
+
+      spawnAgentDispatch(ctx.forgeRoot, 'onboarding-agent', runId, project, inputs, sessionDir);
+      // R4-17 round-3 MAJOR pin 5, item 3: the dry-bridge classification row
+      // for this route (cli/dry-bridge.ts) claims the agent dispatch is
+      // "skipped with marker + event, exactly as the generic run host" — this
+      // is the call that makes that claim true. spawnAgentDispatch already
+      // no-ops under FORGE_DRY_BRIDGE=1 (and FORGE_ARCHITECT_NO_SPAWN=1); this
+      // adds the explicit response marker + JSONL event the OTHER four
+      // spawn-helper families already carry, so dry-bridge suppression is
+      // never silent here either.
+      sendJson(
+        res, 200,
+        { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/onboarding/start', sessionId) },
+        origin,
+      );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
   // R4-16 round 2 (pin 3, Finding A) — every route below resolves its
   // session dir through `resolveDemoSessionDir`, the ONE choke point (see
   // its own header comment, above the GET generation route). Each rejects
@@ -2671,7 +2927,7 @@ async function handleDemoBuilder(
       }
       // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/existsSync-through
       // read/status write. See invalidProjectRepoPath's header for the defect.
-      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
       if (badRepoPath !== null) {
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;

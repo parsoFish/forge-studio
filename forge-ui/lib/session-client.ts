@@ -235,7 +235,41 @@ export type GenerationGalleryArtifact = {
   sourcesScanned: string[];
 };
 
-export type SessionArtifactPayload = RoadmapDraftArtifact | MarkdownDraftArtifact | BrainStructureArtifact | GenerationGalleryArtifact;
+// R4-17: "contract-buildout" — the onboarding/creation session's five-stage
+// presence report. Mirrors orchestrator/studio/session-transcript.ts's
+// ContractStageRow/ContractBuildoutArtifact exactly (hand-mirrored, per this
+// file's convention — never a cross-boundary import of the orchestrator
+// type). D11: a row reports PRESENCE only ("present"/"absent"), never a
+// clause verdict — this client never invents a third status value.
+
+const CONTRACT_STAGE_STATUSES = ['present', 'absent'] as const;
+export type ContractStageStatus = (typeof CONTRACT_STAGE_STATUSES)[number];
+
+export type ContractStageRow = {
+  stage: string;
+  status: ContractStageStatus;
+  source: string;
+  detail: string[];
+  /** The real byte length read off disk for the two prose-file-backed
+   *  stages (`instructions`, `roadmap`); `null` for the three config/lock-
+   *  JSON-backed stages (`contract`, `secrets`, `demo`). Never a string,
+   *  never omitted — a malformed/missing `bytes` throws. */
+  bytes: number | null;
+};
+
+export type ContractBuildoutArtifact = {
+  kind: 'contract-buildout';
+  label: string;
+  stages: ContractStageRow[];
+  sourcesScanned: string[];
+};
+
+export type SessionArtifactPayload =
+  | RoadmapDraftArtifact
+  | MarkdownDraftArtifact
+  | BrainStructureArtifact
+  | GenerationGalleryArtifact
+  | ContractBuildoutArtifact;
 
 function parseRoadmapDraftRow(raw: unknown, index: number): RoadmapDraftRow {
   if (!isPlainObject(raw)) {
@@ -359,6 +393,40 @@ function parseGenerationGalleryArtifact(r: Record<string, unknown>): GenerationG
   };
 }
 
+function parseContractStageStatus(raw: unknown): ContractStageStatus {
+  if (raw === 'present' || raw === 'absent') return raw;
+  throw new Error(`unrecognised contract-buildout stage status ${JSON.stringify(raw)} — must be one of: ${CONTRACT_STAGE_STATUSES.join(', ')}`);
+}
+
+function parseContractStageRow(raw: unknown, index: number): ContractStageRow {
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed contract-buildout stage row[${index}]: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  const stage = requireString(raw, 'stage');
+  const status = parseContractStageStatus(raw['status']);
+  const source = requireString(raw, 'source');
+  const detail = requireStringArray(raw['detail'], 'detail');
+  const bytesRaw = raw['bytes'];
+  if (bytesRaw !== null && typeof bytesRaw !== 'number') {
+    throw new Error(`missing or invalid "bytes": expected a number or null, got ${JSON.stringify(bytesRaw)}`);
+  }
+  return { stage, status, source, detail, bytes: bytesRaw };
+}
+
+function parseContractBuildoutArtifact(r: Record<string, unknown>): ContractBuildoutArtifact {
+  const label = requireString(r, 'label');
+  const stagesRaw = r['stages'];
+  if (!Array.isArray(stagesRaw)) {
+    throw new Error(`missing or invalid "stages": expected an array, got ${JSON.stringify(stagesRaw)}`);
+  }
+  return {
+    kind: 'contract-buildout',
+    label,
+    stages: stagesRaw.map((s, i) => parseContractStageRow(s, i)),
+    sourcesScanned: requireStringArray(r['sourcesScanned'], 'sourcesScanned'),
+  };
+}
+
 /** An unrecognised OR still-reserved artifact kind throws, naming it — a
  *  reserved kind has no shape here to parse (that would fabricate a shape
  *  the server never sends for it today); distinguishing "reserved" from
@@ -378,6 +446,18 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
       return parseBrainStructureArtifact(raw);
     case 'generation-gallery':
       return parseGenerationGalleryArtifact(raw);
+    case 'contract-buildout':
+      // Wrapped so EVERY internal field failure still names "contract-buildout"
+      // (AT-21 pins this even for a bare `{kind:'contract-buildout'}` object,
+      // which fails on the very first required field, "label" — a message
+      // that would otherwise say nothing about which artifact kind it came
+      // from, unlike every other case's kind-specific parser is trusted to
+      // do implicitly because none of THEM has an AT requiring it).
+      try {
+        return parseContractBuildoutArtifact(raw);
+      } catch (err) {
+        throw new Error(`malformed contract-buildout artifact: ${err instanceof Error ? err.message : String(err)}`);
+      }
     default:
       throw new Error(`unrecognised session artifact kind: ${JSON.stringify(kind)}`);
   }

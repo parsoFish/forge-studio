@@ -94,9 +94,12 @@ import {
   // `undefined`, not a hard import error, so only the tests that actually
   // CALL `preferredGenerationFor` go red).
   preferredGenerationFor,
+  // R4-17: does not exist yet — same esbuild-named-export note: an unresolved
+  // import resolves to `undefined`, so only the tests that CALL it go red.
+  contractBuildoutView,
 } from './session-artifact-view.ts';
 import { filePackageTabs, selectFile } from './file-package.ts';
-import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact } from './session-client.ts';
+import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact, ContractBuildoutArtifact } from './session-client.ts';
 import { sessionShellState, selectStage } from './session-shell-view.ts';
 import type { SessionShellPayload } from './session-client.ts';
 // R4-15: the SHARED dependency-DAG view model roadmapDraftView's new "dag"
@@ -275,10 +278,13 @@ test('AT-84: sessionArtifactView: dispatches each of the 3 live kinds to its mat
 // permanently, wrongly RED once generation-gallery correctly dispatches (a
 // live kind is precisely NOT reserved) — see AT-106/107 below for the
 // positive proof that generation-gallery dispatches instead of throwing.
-test('AT-85: sessionArtifactView: a STILL-RESERVED artifact kind (file-package, contract-buildout) reaching the view THROWS an explicit error naming the reserved kind — zero stub renderers for either', () => {
-  for (const reservedKind of ['file-package', 'contract-buildout']) {
-    expect(() => sessionArtifactView({ kind: reservedKind }), `reserved kind "${reservedKind}" must throw`).toThrow(new RegExp(reservedKind));
-  }
+// R4-17: the reserved-kind roster SHRINKS AGAIN, to 1 — "contract-buildout"
+// now has a real renderer (contractBuildoutView, below) and must no longer
+// throw "reserved" either. Same correction shape as R4-16's; see AT-117/118
+// below for the positive proof that contract-buildout dispatches instead of
+// throwing.
+test('AT-85: sessionArtifactView: the one remaining STILL-RESERVED artifact kind (file-package) reaching the view THROWS an explicit error naming it — zero stub renderer', () => {
+  expect(() => sessionArtifactView({ kind: 'file-package' }), 'reserved kind "file-package" must throw').toThrow(/file-package/);
 });
 
 test('AT-86: sessionArtifactView: the reserved-kind error message says "reserved" — distinguishable from a totally unknown kind\'s message', () => {
@@ -305,7 +311,7 @@ test('AT-88: sessionArtifactView: the reserved-kind and unknown-kind error messa
   let reservedMessage = '';
   let unknownMessage = '';
   try {
-    sessionArtifactView({ kind: 'contract-buildout' });
+    sessionArtifactView({ kind: 'file-package' });
   } catch (err) {
     reservedMessage = String(err);
   }
@@ -319,18 +325,14 @@ test('AT-88: sessionArtifactView: the reserved-kind and unknown-kind error messa
   expect(reservedMessage).not.toBe(unknownMessage);
 });
 
-// R4-16: shrunk to the 2 still-reserved kinds — see AT-85's comment.
-test('AT-89: sessionArtifactView: both still-reserved kinds produce pairwise-distinct messages (each names ITS OWN kind, never a copy-pasted generic reserved-kind string)', () => {
-  const messages = ['file-package', 'contract-buildout'].map((kind) => {
-    try {
-      sessionArtifactView({ kind });
-      return '';
-    } catch (err) {
-      return String(err);
-    }
-  });
-  expect(new Set(messages).size).toBe(2);
-});
+// R4-17: AT-89 ("both still-reserved kinds produce pairwise-distinct
+// messages") is DELETED here, not kept green — mirrors R4-16's own AT-103/
+// 104/105 deletion precedent (selectGeneration) for the identical reason: its
+// entire premise was "distinctness ACROSS MULTIPLE reserved kinds", and after
+// this flip there is only ONE reserved kind left (file-package). Keeping a
+// vacuous single-element "pairwise distinct" test green would be exactly the
+// "tests keeping a stale premise alive" shape this campaign refuses. Do not
+// re-add unless a second reserved kind is introduced.
 
 // ===========================================================================
 // AT-amendment (T2 Correction 2, 2026-08-05) — the selected-stage seam:
@@ -630,18 +632,19 @@ test('AT-107: sessionArtifactView: "generation-gallery" no longer throws "reserv
 });
 
 // GREEN today, not a defect pin (mirrors session-transcript.test.ts's AT-78
-// precedent for this exact shape of pin): file-package/contract-buildout are
-// unaffected by this round's flip, so this assertion is already true both
-// before and after the implementation lands. It earns its place as a
-// regression guard against the WRONG fix — an implementation that widens
-// RESERVED_ARTIFACT_KINDS's shrink to accidentally drop one of these two, or
-// that breaks the reserved-check generally while wiring generation-gallery's
-// new branch — would silently pass AT-85/89/106/107 above while failing
-// here, which is exactly the failure mode this test exists to catch.
-test('AT-108: sessionArtifactView: the two SURVIVING reserved kinds (file-package, contract-buildout) still throw "reserved" — the flip only ever affected generation-gallery, nothing else', () => {
-  for (const stillReservedKind of ['file-package', 'contract-buildout']) {
-    expect(() => sessionArtifactView({ kind: stillReservedKind })).toThrow(/reserved/i);
-  }
+// precedent for this exact shape of pin): file-package is unaffected by this
+// round's flip, so this assertion is already true both before and after the
+// implementation lands. It earns its place as a regression guard against the
+// WRONG fix — an implementation that widens RESERVED_ARTIFACT_KINDS's shrink
+// to accidentally drop file-package too, or that breaks the reserved-check
+// generally while wiring generation-gallery's branch — would silently pass
+// AT-85/106/107 above while failing here, which is exactly the failure mode
+// this test exists to catch. R4-17 note: this test is UNCHANGED by THIS
+// round's own flip (contract-buildout) — file-package was already the only
+// kind asserted here that R4-17 also leaves reserved; see AT-117 below for
+// the R4-17-specific positive proof (contract-buildout no longer reserved).
+test('AT-108: sessionArtifactView: the surviving reserved kind (file-package) still throws "reserved" — the R4-16 flip only ever affected generation-gallery, nothing else', () => {
+  expect(() => sessionArtifactView({ kind: 'file-package' })).toThrow(/reserved/i);
 });
 
 test('AT-109: sessionArtifactView: generation-gallery is stage-UNAWARE like every other live kind today — passing a stage argument produces byte-identical output (mirrors AT-91\'s invariance pin for the 3 pre-existing live kinds)', () => {
@@ -800,4 +803,103 @@ test('AT-116: an empty gallery combined with a stored SAME-session selection res
   const view = generationGalleryView(emptyArtifact, preferredGenerationFor(selection, 'session-A'));
   expect(view.isEmpty).toBe(true);
   expect(view.selectedIndex).toBe(-1);
+});
+
+// ===========================================================================
+// R4-17 — contractBuildoutView + the contract-buildout flip. TEST-FIRST PIN:
+// `contractBuildoutView` does not exist yet (esbuild-named-export: an
+// unresolved import is `undefined`, so only tests that CALL it go red), and
+// `contract-buildout` is still in `RESERVED_ARTIFACT_KINDS` in the real,
+// unmodified session-artifact-view.ts today — every `sessionArtifactView`
+// dispatch test below currently throws "reserved" instead of dispatching,
+// mirroring AT-107's own precedent for generation-gallery at ITS branch base.
+//
+// DESIGN CHOICE THIS FILE PINS (flagged for T2 — the spec names the
+// STAGE-AWARE requirement but not an exact return shape): `contractBuildoutView`
+// returns a discriminated union on `activeStage === 'contract'` vs anything
+// else — `mode:'checklist'` (all five rows, for the mockup's "which stages
+// are present" overview) vs `mode:'detail'` (the ONE row matching
+// `activeStage`, for every other stage's own tab). An `activeStage` naming a
+// stage with no matching row (never happens for a real 5-stage payload, but a
+// malformed/future input might) resolves `row: null` rather than throwing —
+// consistent with this module's house style of failing soft on VIEW
+// derivation and reserving throws for dispatch-boundary vocabulary errors.
+// ===========================================================================
+
+const WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT: ContractBuildoutArtifact = {
+  kind: 'contract-buildout',
+  label: 'Contract build-out',
+  stages: [
+    { stage: 'contract', status: 'present', source: '.forge/project.json', detail: ['npm test'], bytes: null },
+    { stage: 'instructions', status: 'present', source: 'AGENTS.md', detail: [], bytes: 512 },
+    { stage: 'secrets', status: 'absent', source: '.forge/project.json', detail: [], bytes: null },
+    { stage: 'demo', status: 'absent', source: '.forge/project.json + .forge/demo/demo.lock.json', detail: [], bytes: null },
+    { stage: 'roadmap', status: 'present', source: 'roadmap.md', detail: [], bytes: 2046 },
+  ],
+  sourcesScanned: ['.forge/project.json', 'AGENTS.md', 'roadmap.md'],
+};
+
+test('R4-17 AT-117: sessionArtifactView: "contract-buildout" no longer throws "reserved" — dispatches to contractBuildoutView, the flip this round exists to make', () => {
+  expect(() => sessionArtifactView(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, 'contract')).not.toThrow();
+  const dispatched = sessionArtifactView(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, 'contract') as { kind: string };
+  expect(dispatched.kind).toBe('contract-buildout');
+  expect(dispatched).toEqual(contractBuildoutView(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, 'contract'));
+});
+
+test('R4-17 AT-118: contractBuildoutView: activeStage "contract" → mode:"checklist" carrying ALL FIVE stage rows verbatim, in server order — the mockup\'s "which stages are present" overview', () => {
+  const view = contractBuildoutView(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, 'contract') as { mode: string; checklist: unknown[] };
+  expect(view.mode).toBe('checklist');
+  expect(view.checklist).toEqual(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages);
+});
+
+test('R4-17 AT-119: contractBuildoutView: activeStage "roadmap" (a non-contract stage) → mode:"detail" carrying ONLY that stage\'s own row, never the other four', () => {
+  const view = contractBuildoutView(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, 'roadmap') as { mode: string; row: { stage: string } | null };
+  expect(view.mode).toBe('detail');
+  expect(view.row).toEqual(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages[4]);
+});
+
+test('R4-17 AT-120: contractBuildoutView: EVERY non-contract stage (instructions/secrets/demo/roadmap) resolves to its OWN row — kills an implementation that hardcodes a single stage or always returns the first/last row regardless of activeStage', () => {
+  for (const row of WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT.stages.filter((r) => r.stage !== 'contract')) {
+    const view = contractBuildoutView(WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, row.stage) as { mode: string; row: unknown };
+    expect(view.mode).toBe('detail');
+    expect(view.row).toEqual(row);
+  }
+});
+
+test('R4-17 AT-121: sessionArtifactView: "file-package" (the one remaining reserved kind) is UNAFFECTED by this round\'s contract-buildout flip — still throws "reserved", pinning that the flip only ever touched contract-buildout', () => {
+  expect(() => sessionArtifactView({ kind: 'file-package' }, 'contract')).toThrow(/reserved/i);
+});
+
+// ===========================================================================
+// R4-17, D10 — SessionArtifactPane.tsx's ternary chain's final `else`
+// unconditionally renders `<GenerationGallery>`, so a kind the pane doesn't
+// explicitly branch on silently misrenders as a gallery instead of failing
+// loudly. Per the T3 task brief's own escape hatch ("if the pane has no pure
+// seam, pin it in session-artifact-view.ts and say so in your report" —
+// see the T3 report: this repo's vitest config only collects
+// `lib/**/*.test.ts`, and no `@testing-library/react`-style component-render
+// harness exists anywhere in forge-ui, so SessionArtifactPane.tsx's own JSX
+// ternary has no seam this test file can drive). This pins the CORRECTED
+// contract at the layer that DOES have a seam: `sessionArtifactView` is the
+// single, exhaustive dispatcher every live kind (including contract-buildout,
+// as of this round) must resolve through — a kind outside its known set
+// throws EXPLICITLY, naming it, rather than resolving to any specific view
+// shape (in particular, never silently matching generation-gallery's shape,
+// which is what an unconditional-else fallback would functionally do).
+// ===========================================================================
+
+test('R4-17 AT-122 (D10): sessionArtifactView: an UNRECOGNISED artifact kind (neither live nor reserved) THROWS an explicit error naming it — never silently resolves to generation-gallery\'s (or any other kind\'s) view shape', () => {
+  const bogus = { kind: 'totally-unknown-future-kind-9182' };
+  expect(() => sessionArtifactView(bogus)).toThrow(/totally-unknown-future-kind-9182/);
+  let thrownMessage = '';
+  try {
+    sessionArtifactView(bogus);
+  } catch (err) {
+    thrownMessage = String(err);
+  }
+  // The failure-mode discrimination this pin cares about: the thrown message
+  // must not itself be (or resemble) a generation-gallery view object — i.e.
+  // this genuinely throws rather than degrading into SOME view shape that a
+  // careless caller could render as if it were valid.
+  expect(thrownMessage).not.toContain('"kind":"generation-gallery"');
 });

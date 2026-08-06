@@ -853,6 +853,32 @@ export async function getAgentRunStatus(runId: string): Promise<AgentRunStatus> 
   }
 }
 
+/**
+ * Kick off the onboarding session (R4-17): `POST /api/studio/onboarding/start`
+ * `{project, inputs?}` → `{ok, sessionId, runId, project}`. D6: spawns the
+ * IDENTICAL `spawnAgentDispatch(...)` the generic {@link dispatchAgentRun}
+ * hits, so `runId` remains pollable via {@link getAgentRunStatus} exactly as
+ * before — the only difference is a real, staged session dir (`sessionId`)
+ * the operator can follow at `/sessions/onboarding/<sessionId>`.
+ */
+export async function startOnboardingSession(
+  project: string,
+  inputs?: Record<string, string>,
+): Promise<{ ok: boolean; error?: string; sessionId?: string; runId?: string; project?: string }> {
+  const r = await studioPost('/api/studio/onboarding/start', {
+    project,
+    ...(inputs ? { inputs } : {}),
+  });
+  const data = r.data;
+  return {
+    ok: r.ok,
+    error: r.error,
+    sessionId: typeof data?.sessionId === 'string' ? data.sessionId : undefined,
+    runId: typeof data?.runId === 'string' ? data.runId : undefined,
+    project: typeof data?.project === 'string' ? data.project : undefined,
+  };
+}
+
 /** A preflight clause the onboarded project still fails (surfaced to the UI). */
 export type FailingClause = { id: string; title: string; detail: string };
 

@@ -166,6 +166,40 @@ function demoDescriptor(overrides: Partial<SessionKindDescriptor> = {}): Session
   } as SessionKindDescriptor;
 }
 
+/** R4-17: the new "onboarding" session kind (studio/session-kinds.yaml — not
+ *  shipped yet at branch base). D1: ONE descriptor shared by onboarding AND
+ *  creation (session-kinds.test.ts's real-repo AT pins the real, on-disk
+ *  values this mirrors). */
+function onboardingDescriptor(overrides: Partial<SessionKindDescriptor> = {}): SessionKindDescriptor {
+  return {
+    id: 'onboarding',
+    agent: 'onboarding-agent',
+    title: 'Onboarding session',
+    legacyRoutes: [],
+    stages: ['contract', 'instructions', 'secrets', 'demo', 'roadmap'],
+    defaultStage: 'contract',
+    artifact: { kind: 'contract-buildout', label: 'Contract build-out' },
+    ...overrides,
+  } as SessionKindDescriptor;
+}
+
+/** A minimal, hand-fixtured `ContractStageRow[]` — deliberately NOT imported
+ *  from cli/contract-stages.ts (this module stays a pure, fs-only
+ *  derivation with no business importing the derivation module that
+ *  computes these rows; the route (cli/bridge-studio-sessions.ts) is the
+ *  layer that wires the real deriveContractStages output in). Mirrors this
+ *  file's existing convention of hand-fixturing rather than cross-importing
+ *  (see e.g. writeGeneration's own header note). */
+function fixtureContractStages(): Array<{ stage: string; status: string; source: string; detail: string[]; bytes: number | null }> {
+  return [
+    { stage: 'contract', status: 'present', source: '.forge/project.json', detail: ['npm test'], bytes: null },
+    { stage: 'instructions', status: 'absent', source: 'AGENTS.md', detail: [], bytes: null },
+    { stage: 'secrets', status: 'absent', source: '.forge/project.json', detail: [], bytes: null },
+    { stage: 'demo', status: 'absent', source: '.forge/project.json + .forge/demo/demo.lock.json', detail: [], bytes: null },
+    { stage: 'roadmap', status: 'present', source: 'roadmap.md', detail: [], bytes: 42 },
+  ];
+}
+
 function writeJson(sessionDir: string, name: string, value: unknown): void {
   writeFileSync(join(sessionDir, name), JSON.stringify(value, null, 2), 'utf8');
 }
@@ -985,5 +1019,80 @@ describe('deriveSessionArtifact — generation-gallery traversal escapes (R4-16)
     assert.ok(!paths.includes('evil.html'), 'the symlinked item must not be surfaced at all, under any name');
     const serialized = JSON.stringify(artifact);
     assert.ok(!serialized.includes(OUTSIDE_MARKER), "the escaped file's content must never appear in the result");
+  });
+});
+
+// ===========================================================================
+// R4-17 — deriveSessionArtifact — contract-buildout. D4: `contract-buildout`
+// consumes ALREADY-DERIVED, already-guarded `contractStages` rows passed in
+// by the caller (the route derives them via cli/contract-stages.ts's
+// deriveContractStages, which lives OUTSIDE this module's containment
+// contract — it reads the PROJECT tree, not sessionDir). This module's own
+// "may not read outside sessionDir" invariant is NOT relaxed: it does zero
+// fs work for this kind, full stop — it just threads the supplied rows +
+// the descriptor's label onto the typed artifact shape, and THROWS when
+// contractStages is absent (never a silently empty/defaulted artifact).
+// TEST-FIRST PIN: `contract-buildout` is still `reserved` in the real,
+// unmodified session-kinds.ts today — every test below currently throws
+// inside deriveSessionArtifact's own `state === 'reserved'` gate before ever
+// reaching the case, exactly like R4-16's generation-gallery block did at
+// ITS branch base (see that block's own header note for the precedent).
+// ===========================================================================
+
+describe('deriveSessionArtifact — contract-buildout (R4-17)', () => {
+  it('R4-17 AT-1: contractStages supplied → returns {kind, label, stages, sourcesScanned} — label from descriptor.artifact.label (never re-derived), stages threaded VERBATIM (not re-sorted, not filtered)', () => {
+    const sessionDir = makeTmpDir('contractbuildout-supplied-');
+    const stages = fixtureContractStages();
+    const artifact = deriveSessionArtifact({
+      descriptor: onboardingDescriptor(),
+      sessionDir,
+      contractStages: stages,
+    } as Parameters<typeof deriveSessionArtifact>[0] & { contractStages: typeof stages }) as {
+      kind: string;
+      label: string;
+      stages: typeof stages;
+      sourcesScanned: string[];
+    };
+    assert.equal(artifact.kind, 'contract-buildout');
+    assert.equal(artifact.label, 'Contract build-out', 'label must come from descriptor.artifact.label — never a hardcoded/re-derived string');
+    assert.deepEqual(artifact.stages, stages, 'the supplied rows must round-trip VERBATIM — this module performs no re-derivation, re-sorting, or filtering of them');
+  });
+
+  it('R4-17 AT-2: contractStages ABSENT → THROWS a named error, never returns an empty/defaulted artifact (D4\'s binding rule)', () => {
+    const sessionDir = makeTmpDir('contractbuildout-missing-');
+    assert.throws(
+      () => deriveSessionArtifact({ descriptor: onboardingDescriptor(), sessionDir }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /contractStages/i, `error must name the missing input, got: ${err.message}`);
+        return true;
+      },
+      'an implementation that defaults to an empty stages:[] artifact instead of throwing is exactly the defect this pins',
+    );
+  });
+
+  it('R4-17 AT-3 (D4 — no fs read outside sessionDir, or ANYWHERE, for this kind): a sessionDir that does not even EXIST on disk still succeeds and returns the supplied rows unchanged — proves the module performs ZERO filesystem work for contract-buildout', () => {
+    const nonExistentSessionDir = join(tmpdir(), 'contract-buildout-does-not-exist-on-disk-8827');
+    const stages = fixtureContractStages();
+    const artifact = deriveSessionArtifact({
+      descriptor: onboardingDescriptor(),
+      sessionDir: nonExistentSessionDir,
+      contractStages: stages,
+    } as Parameters<typeof deriveSessionArtifact>[0] & { contractStages: typeof stages }) as { stages: typeof stages };
+    assert.deepEqual(
+      artifact.stages,
+      stages,
+      'a non-existent sessionDir must have NO effect on the result — this module never reads sessionDir at all for contract-buildout (D4); an implementation that tries to read/list sessionDir for this kind would throw or return something different here instead',
+    );
+  });
+
+  it('R4-17 AT-4: an EMPTY contractStages array (all five stages genuinely absent) is a legitimate, distinct input from "absent altogether" — round-trips as an empty array, never conflated with the missing-input throw of AT-2', () => {
+    const sessionDir = makeTmpDir('contractbuildout-empty-');
+    const artifact = deriveSessionArtifact({
+      descriptor: onboardingDescriptor(),
+      sessionDir,
+      contractStages: [],
+    } as Parameters<typeof deriveSessionArtifact>[0] & { contractStages: unknown[] }) as { stages: unknown[] };
+    assert.deepEqual(artifact.stages, [], 'an explicitly empty array must be accepted and round-tripped, not treated as "absent" and thrown on');
   });
 });

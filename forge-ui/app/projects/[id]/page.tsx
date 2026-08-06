@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, createProject, fetchPreflight, dispatchAgentRun, getAgentRunStatus,
+  saveProject, createProject, fetchPreflight, startOnboardingSession, getAgentRunStatus,
   fetchProjectStarters, createGreenfieldProject,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause, type AgentRunStatus,
@@ -444,15 +444,24 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
-// OnboardWithAgent (R4-02-F1) — the /projects entry point into the onboarding
-// agent. Reaches the SAME runner as the agent page's RunPanel: the shared
-// `dispatchAgentRun('onboarding-agent', {project})` client → POST
-// /api/agents/onboarding-agent/run → generic host. Dispatching the agent drives
-// this project to contract-green (F2 loop); events/cost show on /agents/onboarding-agent.
+// OnboardWithAgent (R4-02-F1, repointed R4-17) — the /projects entry point
+// into the onboarding agent. Now dispatches through the staged onboarding
+// session route, `POST /api/studio/onboarding/start` ({@link
+// startOnboardingSession}), rather than the generic
+// `POST /api/agents/onboarding-agent/run` — D6 keeps the underlying spawn
+// byte-identical (`spawnAgentDispatch(...)`, same argv/prompt), so the
+// returned `runId` remains pollable via the SAME `getAgentRunStatus` this
+// panel always used; the only change is a real, staged session dir
+// (`sessionId`) the operator can now follow to `/sessions/onboarding/<id>`
+// instead of only watching the generic agent page's raw event log.
+// `data-onboard-run-id` / `data-onboard-run-status` /
+// `data-action="run-onboarding-agent"` are UNCHANGED (an existing journey
+// beat asserts them) — `data-onboard-session-id` is additive.
 // ---------------------------------------------------------------------------
 
 function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [status, setStatus] = useState<AgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -481,9 +490,13 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
     setError(null);
     setStatus(null);
     try {
-      const r = await dispatchAgentRun('onboarding-agent', { project: projectId });
-      if (r.ok && r.runId) setRunId(r.runId);
-      else setError(r.error ?? 'dispatch failed');
+      const r = await startOnboardingSession(projectId);
+      if (r.ok && r.runId) {
+        setRunId(r.runId);
+        setSessionId(r.sessionId ?? null);
+      } else {
+        setError(r.error ?? 'dispatch failed');
+      }
     } finally {
       setBusy(false);
     }
@@ -496,6 +509,7 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
       data-section="onboard-with-agent"
       data-onboard-run-id={runId ?? ''}
       data-onboard-run-status={runState}
+      data-onboard-session-id={sessionId ?? ''}
       style={{ border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 14px', marginTop: 12 }}
     >
       <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Onboarding agent</h3>
@@ -519,6 +533,16 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
             status: <strong>{runState}</strong>
             {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
           </div>
+          {sessionId && (
+            <div style={{ marginTop: 4 }}>
+              <a
+                data-action="view-onboarding-session"
+                href={`/sessions/onboarding/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(projectId)}`}
+              >
+                View onboarding session →
+              </a>
+            </div>
+          )}
         </div>
       )}
     </section>

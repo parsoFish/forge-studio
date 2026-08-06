@@ -73,9 +73,10 @@ import { join, resolve, sep } from 'node:path';
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
+import { deriveContractStages } from './contract-stages.ts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -234,7 +235,7 @@ export async function handleStudioSessionsRoutes(
       return true;
     }
 
-    const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+    const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
     const kindDirName = `_${descriptor.id}`;
     const sessionDir = resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId);
     if (!sessionDir) {
@@ -280,7 +281,24 @@ export async function handleStudioSessionsRoutes(
 
     let artifact: unknown;
     try {
-      artifact = deriveSessionArtifact({ descriptor, sessionDir });
+      // R4-17 — the 'contract-buildout' kind needs rows derived from the
+      // PROJECT tree (outside sessionDir's own containment — D4), so they
+      // are computed HERE, via cli/contract-stages.ts's own realpath-guarded
+      // containment, and threaded in verbatim. A {ok:false} derivation (an
+      // unknown/escaping project, or a malformed .forge/project.json)
+      // surfaces as a 409 naming the cause — never a 200 with an empty
+      // artifact, mirroring the fail-closed pass-through just above for
+      // deriveSessionTranscript.
+      if (descriptor.artifact.kind === 'contract-buildout') {
+        const contractResult = deriveContractStages({ forgeRoot: ctx.forgeRoot, projectsRoot, projectId: project });
+        if (!contractResult.ok) {
+          sendJson(res, 409, { ok: false, error: contractResult.error.message }, origin);
+          return true;
+        }
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: contractResult.rows });
+      } else {
+        artifact = deriveSessionArtifact({ descriptor, sessionDir });
+      }
     } catch (err) {
       // A reserved (or otherwise unrecognised) artifact kind — an explicit
       // error, never a 200 with an empty artifact.

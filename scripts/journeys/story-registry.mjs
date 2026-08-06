@@ -53,12 +53,49 @@ const DECISION_R3_04_D2_R3_07_D8 =
   'composition.tools validates against and CatalogPalette renders from — a ' +
   'dispatch-affecting migration, not a browse-surface addition)';
 
+// T1 ruling 2026-08-06 (batch B). `create-agent` mockup steps 3-4 —
+// conversational new-agent drafting — are a DELIBERATE divergence from the
+// mockup, not an unbuilt gap: R2-09 rejected them with two named owners
+// (R4-15, R4-17), both assessed and neither owns them, no wave-5 initiative
+// builds them, and the shipped alternative is the curated StarterPicker.
+// Recorded permanently (a citation into the campaign dir would be a dangling
+// citation — `_wave5/` is gitignored).
+const DECISION_CREATE_AGENT_DRAFTING =
+  'docs/roadmaps/README.md "Batch-B disposition — conversational agent ' +
+  'drafting (2026-08-06, T1 ruling)" — EXCLUDED under §6 (roadmap wins over ' +
+  'the mockup; the mockup gets updated), because both named owners assessed ' +
+  'and neither owns it and the shipped alternative is the StarterPicker';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
     batch: 'B',
     port: null,
     excluded: null,
+    note:
+      'R4-17 (the batch-B initiative that owns this story) ASSESSED the flip ' +
+      'per beat and does NOT claim it. What R4-17 made real: beat 3 ' +
+      '("onboarding is an agent-led session, not a form") — the dispatch now ' +
+      'opens a real staged session on the R2-10 shell, driven by the new ' +
+      'stand-up-onboard/su-onboard-session beat; and the artifact-pane half of ' +
+      'beats 5/7/8/9 — the contract build-out renders five real stage rows ' +
+      '(contract, instructions, secrets, demo, roadmap) derived from the ' +
+      "project's own artifacts, with secrets by NAME only. What is NOT real, " +
+      'and is the reason the flip is refused: beats 4-9 each advance a ' +
+      'multi-turn INTERVIEW with operator push-back ("your answer becomes the ' +
+      'north star", "you push back, it folds in"), and the shipped ' +
+      'onboarding-agent "asks no questions and never blocks mid-run" ' +
+      '(skills/onboarding-agent/SKILL.md:9). Its session transcript is ' +
+      'honestly ONE operator turn from a real prompt.md — R4-17 D8 refused to ' +
+      'synthesise agent questions from form labels, which would have been ' +
+      'fabricated coverage. Beat 10 ("Accept & commit") has no affordance: the ' +
+      'session shell is read-only. Beats 13-15 (contract-panel, roadmap tab, ' +
+      'roadmap DAG on the project page) are R4-12-F1/R4-13, batch D — R4-17 ' +
+      'ships their data contract (GET /api/studio/projects/<id>/contract-stages) ' +
+      'but not their rendering, deliberately. Beat 16 (showcase) is R4-14, ' +
+      'unbuilt. Not recorded as {excluded}: an interactive onboarding interview ' +
+      'is not a decision to never build, and pre-excluding it would freeze a ' +
+      'call R4-18 or a later initiative may legitimately take.',
   },
   {
     story: 'create-project',
@@ -75,7 +112,20 @@ export const STORY_REGISTRY = [
       "create-project wizard (create-project-btn → scaffold picker → name → " +
       'start-creation) is unbuilt. R3-06\'s journey is browse→detail only, ' +
       "explicitly out of scope for this story's beats per its own spec. Port " +
-      'stays null; owned by R4-03/batch B.',
+      'stays null; owned by R4-03/batch B. ' +
+      'R4-17 ASSESSED this story (2026-08-06) and does not flip it. R4-17 made ' +
+      'the STAGES real and shared: creation reuses the same `onboarding` ' +
+      'session-kind descriptor and the same contract build-out artifact rather ' +
+      'than minting a second one (D1 — the mockup itself gives ' +
+      'project-onboarding and create-project the SAME artifact and the SAME ' +
+      '"Contract build-out" label, and no creation agent exists for a second ' +
+      "descriptor's `agent:` field to resolve to). Beats 5-11 are still a " +
+      'multi-turn creation-agent CONVERSATION ("the creation agent takes it ' +
+      'from there"), and no such agent exists: grep for a runtime: block in ' +
+      'skills/*/SKILL.md yields 16 agents, none of which authors a project. ' +
+      'Beats 15-18 (contract panel, roadmap tab, DAG, showcase) are ' +
+      'R4-12/R4-13/R4-14, batch D — R4-17 ships the data contract those ' +
+      'landing beats render, not the rendering.',
   },
   {
     story: 'create-agent',
@@ -106,17 +156,40 @@ export const STORY_REGISTRY = [
       'Steps 3-4 (type into draft-prompt, click "Draft it") are the ' +
       'conversational new-agent drafting R2-09 rejected with an owner (D10 reject ' +
       "#4): the creation AGENT SESSION is R4-15/R4-17 on R2-10's shell, and the " +
-      'shipped alternative is the curated StarterPicker (agents-starters). They ' +
-      'are therefore NOT recorded as permanent {excluded, decision} refs here — ' +
-      'R4-15/R4-17 may make them genuinely real, and pre-excluding them would ' +
-      'freeze a decision those initiatives own. Natural owner of this flip: the ' +
-      'same batch-B initiative that lands the creation session. ' +
+      'shipped alternative is the curated StarterPicker (agents-starters). At the ' +
+      'time R2-09 wrote this they were deliberately left UNEXCLUDED, because ' +
+      'R4-15/R4-17 might still make them real and pre-excluding would have frozen ' +
+      'a decision those initiatives owned — that reasoning was correct then and is ' +
+      'SUPERSEDED now that both have assessed (see the T1 ruling below). Natural ' +
+      'owner of this flip: the same batch-B initiative that lands the creation ' +
+      'session. ' +
       'R4-15 ASSESSED that inheritance (2026-08-06) and does NOT own it: it ' +
       're-surfaces the ARCHITECT session, whose entry is an idea box, not an ' +
       'agent-drafting chat — nothing in R4-15 makes steps 3-4 real. The two ' +
       'drafting steps stay unexcluded and pass to R4-17 (create-project / the ' +
       'creation agent), which is the batch-B initiative that actually lands a ' +
-      'creation session.',
+      'creation session. ' +
+      "R4-17 ASSESSED that inheritance (2026-08-06, batch B's last initiative) " +
+      'and does NOT own it either. R4-17 lands a staged session for PROJECT ' +
+      'onboarding and creation; steps 3-4 are a conversational drafting session ' +
+      'for an AGENT SPEC, which needs an agent that authors agents — grep for a ' +
+      'runtime: block in skills/*/SKILL.md yields 16 agents and none of them ' +
+      'does. So after both named owners have assessed, NO wave-5 initiative ' +
+      'builds conversational agent drafting, and the shipped alternative remains ' +
+      'the curated StarterPicker. **T1 RULED steps 3-4 EXCLUDED (2026-08-06)** — ' +
+      'a deliberate divergence from the mockup under README §6 (roadmap wins, ' +
+      'mockup gets updated), not an unbuilt gap; the full reasoning lives in the ' +
+      'permanent decision record cited at the end of this note. It is cited ' +
+      'rather than encoded ' +
+      'as a BeatRef because this registry can express exclusion only for a WHOLE ' +
+      'story (which also forces batch:null, and would misrepresent this story\'s ' +
+      '9 genuinely-real steps as deliberately not built) or for a single beat ' +
+      'inside a COMPLETE port.beats array — which cannot be written until the ' +
+      'beat-granularity surgery lands. It becomes a {excluded, decision} ref the ' +
+      'moment that port object exists. The story stays `pending` for an honest ' +
+      'reason: the remaining blocker is splitting the composite ' +
+      'agents-scratch-build beat, which IS planned-but-not-yet-built work. ' +
+      'Decision reference: ' + DECISION_CREATE_AGENT_DRAFTING + '.',
   },
   {
     story: 'edit-agent',
@@ -248,7 +321,20 @@ export const STORY_REGISTRY = [
       'hooks-security beat — real, valuable, and simply absent from this ' +
       'mockup story. Net: 8 of 15 mockup beats are genuinely backed by a ' +
       'real beat id; 7 (the session shell) are not, so port stays null — ' +
-      'claiming ported would misrepresent the 7 unbacked beats as real.',
+      'claiming ported would misrepresent the 7 unbacked beats as real. ' +
+      'R4-17 ASSESSED the inherited beats (2026-08-06, batch B\'s last ' +
+      'initiative) and does NOT own them, with the blocker now named precisely ' +
+      'rather than left as "the session shell": the shell EXISTS since R2-10, ' +
+      'and R4-17 proved a new session kind plugs into it with no route code ' +
+      '(the `onboarding` descriptor). What is missing is the PRODUCER — beats ' +
+      '4-10 are an authoring session with a "Creation Agent" that drafts a ' +
+      'hook PACKAGE, and no such agent exists: grep for a runtime: block in ' +
+      'skills/*/SKILL.md yields 16 agents, none of which authors a hook. That ' +
+      'is also why the `file-package` artifact row is still RESERVED in ' +
+      'SESSION_ARTIFACT_KINDS: shipping a renderer with no producer would be ' +
+      'exactly the stub the reserved-row convention exists to forbid. The ' +
+      'remaining work is one OOTB authoring agent plus its runner, which is an ' +
+      'initiative, not a rider on this one.',
   },
   {
     story: 'build-skill',
@@ -270,7 +356,15 @@ export const STORY_REGISTRY = [
       'builder, click release-notes into the catalog, save the binding) ' +
       'exercise ordinary agent-builder skill composition, which already ' +
       'shipped before this wave (R3-01-F1/F2\'s unified palette) — real, but ' +
-      'not new work this initiative owns or ported as a beat.',
+      'not new work this initiative owns or ported as a beat. ' +
+      'R4-17 ASSESSED the inherited beats (2026-08-06) and does NOT own them, ' +
+      'for the same reason recorded on build-hook: R2-10 shipped the session ' +
+      'shell and R4-17 proved a new kind plugs into it with no route code, but ' +
+      'beats 2-8 need a "Creation Agent" that drafts a SKILL PACKAGE and no ' +
+      'such agent exists in skills/ (16 runtime-bearing agents, none authoring ' +
+      'a skill). `file-package` therefore stays a RESERVED artifact row — a ' +
+      'renderer with no producer is the stub that convention forbids. The ' +
+      'shipped alternative remains the /skills/new form.',
   },
   {
     story: 'install-connections',
@@ -564,6 +658,31 @@ export const STORY_REGISTRY = [
     batch: 'B',
     port: null,
     excluded: null,
+    note:
+      'R4-17 ASSESSED this story (2026-08-06) and does not flip it. Beat 2 ' +
+      '("Run → session") is now REAL in substance — the onboarding dispatch ' +
+      'opens a staged session on the R2-10 shell (POST /api/studio/onboarding/' +
+      'start, beat stand-up-onboard/su-onboard-session) — but from the PROJECT ' +
+      "page's [data-action=\"run-onboarding-agent\"], not from the agent " +
+      "builder's generic RunPanel the mockup's beat 1 navigates to; wiring the " +
+      'RunPanel to open a session for one agent would special-case the generic ' +
+      'dispatch host, which R2-01-F3 exists to keep generic. Beats 3-5 each ' +
+      'advance a multi-turn interview and switch the artifact stage from the ' +
+      'transcript; the shipped agent asks no questions ' +
+      '(skills/onboarding-agent/SKILL.md:9) so the transcript is honestly one ' +
+      'turn, and no stage-switcher control exists on the session page yet — ' +
+      'the artifact-RENDERING logic is unit-tested end to end ' +
+      '(sessionArtifactView → contractBuildoutView, both in forge-ui/lib/' +
+      'session-artifact-view.ts, covered by lib/session-artifact-view.test.ts), ' +
+      'so the artifact is stage-aware the moment a switcher lands — but the ' +
+      'COMPONENT that calls it, SessionArtifactPane.tsx, has no test file at ' +
+      'all, and forge-ui/vitest.config.ts only includes lib/**/*.test.ts, so a ' +
+      'component test would not even run today (pin 4, round-2 review, item ' +
+      '4 correction, 2026-08-06). The SessionArtifactPane → sessionArtifactView ' +
+      'delegation WAS traced by hand against all four pre-existing live ' +
+      'artifact kinds with no behaviour change found — reviewed, not tested. ' +
+      'Beat 6 ("Accept") has no affordance: the session shell is read-only. Not ' +
+      'recorded as {excluded} — none of these is a decision to never build.',
   },
   {
     story: 'run-agent-brain-creation',

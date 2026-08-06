@@ -82,6 +82,7 @@
 
 import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 import { resolveGuardedPath } from './studio-path-guard.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 
 export type ManifestPathFields = {
   initiative_id: string;
@@ -94,6 +95,81 @@ export type ManifestPathFields = {
 /** Generous but bounded — cycle ids are timestamp+slug shaped, never this long. */
 const MAX_CYCLE_ID_LENGTH = 200;
 const SAFE_CYCLE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+
+/**
+ * R4-17 round-3 BLOCKER (pin 5, item 2): the ONE resolution of "where do
+ * managed projects live" this module uses — `resolveProjectsDir`, the SAME
+ * config-aware helper `ctx.projectsRoot` (`cli/ui-bridge.ts`) and
+ * `writeSessionTerminalPhase` (`cli/agent-run.ts`) already resolve through,
+ * fed a FORGE-ROOT-ANCHORED config path (`defaultConfigPath`) rather than
+ * `loadConfig`'s cwd-relative default. Before this fix, `isContainedProjectRepoPath`
+ * (and `isContainedWorktreePath`'s projects-root fallback branch) hardcoded
+ * `join(forgeRoot, 'projects')` — a THIRD, independent disagreement with the
+ * producers, on top of the two round-2 fixed already. Under a configured
+ * `FORGE_PROJECTS_DIR`/`projectsDir`, a legitimately-produced session's write
+ * would be silently refused by this guard while every producer correctly
+ * used the configured root — "a configured projectsDir could break cycle
+ * approval entirely". One concept ("the projects root"), one resolution,
+ * used everywhere that concept is checked.
+ */
+function resolveConfiguredProjectsRoot(forgeRoot: string): string {
+  return resolveProjectsDir(forgeRoot, loadConfig(defaultConfigPath(forgeRoot)));
+}
+
+/**
+ * Options shared by both containment predicates. `projectsRoot` is OPTIONAL
+ * and, when supplied, is used VERBATIM — no config is read.
+ *
+ * R4-17 round-4 BLOCKER (pin 7): `resolveConfiguredProjectsRoot` re-reads
+ * `forge.config.json` FROM DISK on every call, while `startBridge`
+ * (`cli/ui-bridge.ts`) resolves `ctx.projectsRoot` ONCE at server start and
+ * every route handler uses that snapshot for the process's lifetime. A live
+ * `forge.config.json` edit (or a `FORGE_PROJECTS_DIR` mutation) while the
+ * bridge is up therefore makes the GUARD and the PRODUCER disagree again —
+ * false-rejecting legitimate approve/finalize/requeue paths for the rest of
+ * that process's uptime. This is the SAME "the guard resolves its root
+ * differently from the producer" failure mode round 2 and round 3 each fixed
+ * once, reintroduced one level deeper by the fix for it: rounds 2/3 made the
+ * two resolutions IDENTICAL, which only holds while the inputs never move.
+ *
+ * The ruling is therefore not "resolve it the same way" but **the root is
+ * PASSED, not re-derived**: a caller holding a snapshot hands it in, and the
+ * guard checks against the root that caller actually used. Callers holding NO
+ * snapshot omit it and self-resolve exactly as before, so no existing
+ * behaviour changes: `writeManifest`'s short-lived callers
+ * (`promote-manifests`, `mint-triggered-initiative`), the `runRequeue` CLI,
+ * and `drain-fix-loop`/`finalize-merged`. The last two are NOT short-lived —
+ * `orchestrator/scheduler.ts:526,549` calls them on every pass of the
+ * `forge serve` forever loop — but they cache no root either: each call
+ * re-resolves, so there are never two values in play to diverge. What makes
+ * pin 7's defect possible is a SNAPSHOT, not uptime.
+ *
+ * FAIL CLOSED, never silently: a supplied `projectsRoot` that is not a
+ * non-empty ABSOLUTE path is refused outright rather than falling back to
+ * self-resolution. `containedUnder` does `relative(resolve(root), …)`, and
+ * `resolve()` on a relative/empty root anchors to `process.cwd()` — the exact
+ * cwd-dependence pin 5 removed. Falling back would ALSO be the
+ * declared-data-fails-open shape: a caller that declares a root and gets a
+ * different one silently checked is worse than a rejection it can see. Every
+ * production caller passes `resolveProjectsDir()`'s output, which is
+ * unconditionally absolute (`orchestrator/config.ts:134-140`), so nothing
+ * legitimate reaches the refusal.
+ *
+ * THE PARAMETER IS NOT A WIDENING. It only chooses WHICH root the
+ * per-segment identity walk runs against; `containedUnder` →
+ * `resolveGuardedPath` is unchanged and still performs the full realpath
+ * identity check on every segment beneath it. A caller cannot use it to skip
+ * containment, only to name the root it already resolved.
+ */
+export type ProjectsRootOpt = { forgeRoot: string; projectsRoot?: string };
+
+/** Resolve the projects root for a containment check: the caller's snapshot verbatim, else config. `null` = refuse (see `ProjectsRootOpt`). */
+function projectsRootFor(opts: ProjectsRootOpt): string | null {
+  const passed = opts.projectsRoot;
+  if (passed === undefined) return resolveConfiguredProjectsRoot(opts.forgeRoot);
+  if (typeof passed !== 'string' || passed === '' || !isAbsolute(passed)) return null;
+  return passed;
+}
 
 /**
  * Real per-segment containment of `candidate` under `root`. The candidate is
@@ -133,22 +209,33 @@ function containedUnder(root: string, candidate: string): { ok: boolean; segment
  * `<forgeRoot>/_worktrees/<initiativeId>` (the forge-managed worktree for
  * THIS initiative — not merely "somewhere under `_worktrees`", which would
  * let one initiative's manifest name another's worktree), OR it is
- * genuinely contained anywhere under `<forgeRoot>/projects/` (in-place
- * worktrees, e.g. `<forgeRoot>/projects/<name>/worktrees/<id>`).
+ * genuinely contained anywhere under the PROJECTS ROOT (in-place worktrees,
+ * e.g. `<projectsRoot>/<name>/worktrees/<id>`) — `opts.projectsRoot` when the
+ * caller passes its own resolved root, otherwise this module's
+ * config-aware self-resolution. See `ProjectsRootOpt`.
  */
-export function isContainedWorktreePath(p: string, opts: { forgeRoot: string; initiativeId: string }): boolean {
+export function isContainedWorktreePath(
+  p: string,
+  opts: ProjectsRootOpt & { initiativeId: string },
+): boolean {
+  // The `_worktrees` branch is forge-root-anchored, never config-derived, so
+  // it has no producer/guard divergence to fix and takes no `projectsRoot`.
   const worktreesRoot = join(opts.forgeRoot, '_worktrees');
   const identity = containedUnder(worktreesRoot, p);
   if (identity.ok && identity.segments.length === 1 && identity.segments[0] === opts.initiativeId) {
     return true;
   }
-  const projectsRoot = join(opts.forgeRoot, 'projects');
+  const projectsRoot = projectsRootFor(opts);
+  if (projectsRoot === null) return false;
   return containedUnder(projectsRoot, p).ok;
 }
 
 /**
- * `project_repo_path` is legitimate iff genuinely contained under
- * `<forgeRoot>/projects/`.
+ * `project_repo_path` is legitimate iff genuinely contained under the
+ * PROJECTS ROOT — `opts.projectsRoot` when the caller passes its own resolved
+ * root, otherwise this module's config-aware self-resolution (which honours
+ * `FORGE_PROJECTS_DIR` / `forge.config.json`'s `projectsDir`, so it is NOT
+ * always `<forgeRoot>/projects/`). See `ProjectsRootOpt`.
  *
  * VALIDATING A ROOT DOES NOT VALIDATE WHAT YOU WRITE BENEATH IT (SEC-03
  * Defect 5, BLOCKER — the fifth time in this campaign a containment fix
@@ -167,8 +254,9 @@ export function isContainedWorktreePath(p: string, opts: { forgeRoot: string; in
  * write as its own `segments[]` element, and write through the `realPath`
  * it returns. Do not build a second, unguarded path for the same write.
  */
-export function isContainedProjectRepoPath(p: string, opts: { forgeRoot: string }): boolean {
-  const projectsRoot = join(opts.forgeRoot, 'projects');
+export function isContainedProjectRepoPath(p: string, opts: ProjectsRootOpt): boolean {
+  const projectsRoot = projectsRootFor(opts);
+  if (projectsRoot === null) return false;
   return containedUnder(projectsRoot, p).ok;
 }
 
@@ -213,7 +301,7 @@ export function isSafeProjectName(name: string): boolean {
  * `cli/studio-path-guard.ts`, which every call site logs-and-discards rather
  * than forwards to the client).
  */
-export function validateManifestPathFields(m: ManifestPathFields, opts: { forgeRoot: string }): string[] {
+export function validateManifestPathFields(m: ManifestPathFields, opts: ProjectsRootOpt): string[] {
   const errors: string[] = [];
 
   if (m.project !== undefined && m.project !== '' && !isSafeProjectName(m.project)) {
@@ -227,7 +315,7 @@ export function validateManifestPathFields(m: ManifestPathFields, opts: { forgeR
   if (
     m.project_repo_path !== undefined &&
     m.project_repo_path !== '' &&
-    !isContainedProjectRepoPath(m.project_repo_path, { forgeRoot: opts.forgeRoot })
+    !isContainedProjectRepoPath(m.project_repo_path, { forgeRoot: opts.forgeRoot, projectsRoot: opts.projectsRoot })
   ) {
     errors.push('project_repo_path must be contained under the forge projects root');
   }
@@ -235,7 +323,11 @@ export function validateManifestPathFields(m: ManifestPathFields, opts: { forgeR
   if (
     m.worktree_path !== undefined &&
     m.worktree_path !== '' &&
-    !isContainedWorktreePath(m.worktree_path, { forgeRoot: opts.forgeRoot, initiativeId: m.initiative_id })
+    !isContainedWorktreePath(m.worktree_path, {
+      forgeRoot: opts.forgeRoot,
+      projectsRoot: opts.projectsRoot,
+      initiativeId: m.initiative_id,
+    })
   ) {
     errors.push('worktree_path must be contained under the forge worktrees or projects root');
   }
@@ -244,7 +336,7 @@ export function validateManifestPathFields(m: ManifestPathFields, opts: { forgeR
 }
 
 /** Throwing form for destructive call sites (`writeManifest`, `runRequeue`) — refuse rather than proceed. */
-export function assertManifestPathFields(m: ManifestPathFields, opts: { forgeRoot: string }): void {
+export function assertManifestPathFields(m: ManifestPathFields, opts: ProjectsRootOpt): void {
   const errors = validateManifestPathFields(m, opts);
   if (errors.length > 0) {
     throw new Error(`invalid manifest path fields:\n  - ${errors.join('\n  - ')}`);

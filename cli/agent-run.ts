@@ -22,8 +22,8 @@
  * mirroring how `cmdStudioLauncher` threads `forgeRoot` into `runWatch`.
  */
 
-import { existsSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve, sep } from 'node:path';
 import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
 import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
@@ -31,6 +31,7 @@ import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-
 import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
 import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/band-agent-run.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { createLogger } from '../orchestrator/logging.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
@@ -139,14 +140,111 @@ export async function cmdAgent(rest: string[], forgeRoot: string): Promise<void>
 }
 
 /**
- * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]`
- * — the generic standalone-run path for a NON-interactive roster agent
- * (R2-01-F3 dispatch half). Unlike `forge agent run` (the four bespoke
- * interactive turn-runners in `AGENT_RUNNERS`), this resolves ANY studio agent
- * def by slug and runs it once through the F1 `runAgent` primitive via
- * `dispatchAgentRun`. This is the CLI the bridge's `POST /api/agents/:slug/run`
- * spawns detached (mirroring `spawnAgentTurn`), so the run's events/cost land
- * under `_logs/<run-id>/` for the monitor.
+ * R4-17, D7 — writes the TERMINAL phase (`complete`/`failed`) into
+ * `<sessionDir>/status.json` when a dispatch run driven with `--session-dir`
+ * ends; `phase: 'running'` was already written by the process that STARTED
+ * the run (`POST /api/studio/onboarding/start`) — this is the process that
+ * OBSERVES the run ending, so it is the one that writes the terminal phase
+ * (D7's "phase is written by the process that observes the run" rule).
+ *
+ * D6: this is purely ADDITIVE — a dispatch invoked WITHOUT `--session-dir`
+ * never calls this at all, so behaviour without the flag stays byte-
+ * identical to before R4-17 (pinned by `cli/agent-run-dispatch.test.ts`'s
+ * AT-D7-3).
+ *
+ * `sessionDir` is a CLI flag from our OWN spawning code
+ * (`spawnAgentDispatch`, cli/ui-bridge.ts), not raw HTTP request text, but
+ * the write path is still guarded rather than trusted blindly — twice over:
+ * `sessionDir` itself must realpath-resolve to somewhere INSIDE `forgeRoot`
+ * (round-1 BLOCKER consequence-path fix — this sink previously had no
+ * containment reference at all and unconditionally wrote wherever it was
+ * pointed, so the guard depended entirely on the route that started the run
+ * having validated the dir first; "one sink, many entry points" — see
+ * `cli/ui-bridge-onboarding-start.test.ts` AT-9), and separately, if its
+ * `status.json` turns out to be a symlink escaping that resolved directory
+ * the write is refused (never followed).
+ *
+ * The containment root is `projectsRoot`, matching EXACTLY the boundary the
+ * write ROUTE above enforces: `POST /api/studio/onboarding/start` is the only
+ * real sender of `--session-dir` and it always creates `sessionDir` under
+ * `<projectsRoot>/<project>/_onboarding/<sessionId>`, so a `projectsRoot`
+ * guard is provably a no-op for every legitimate caller (measured, not
+ * assumed). An earlier revision of this function used the WIDER `forgeRoot`
+ * purely because the AT-D7 fixtures then built their session dirs under
+ * `<forgeRoot>/_logs/…`; T2 ruled that the rule stands and the FIXTURE was
+ * the incomplete thing (the R2-10 gate precedent, where a fail-closed
+ * registry check broke a synthetic `tmpRoot()` and the fixture was fixed,
+ * not the rule). `forgeRoot` would have accepted a `status.json` write
+ * anywhere in the forge tree — `brain/`, `skills/`, `studio/`, `docs/`,
+ * `.git/` — which no caller needs. AT-D7-4 pins the narrowing with a
+ * `sessionDir` inside `forgeRoot` but outside `projectsRoot`, asserting on
+ * the FILESYSTEM (the planted `status.json` keeps its pre-run phase), because
+ * an exit code cannot distinguish "refused" from "wrote it and carried on".
+ *
+ * Both checks use the same realpath + `startsWith(root + sep)` boundary
+ * shape used throughout this initiative (`resolveContainedProjectDir`,
+ * `cli/contract-stages.ts`; `resolveSafeSessionDir`, `cli/bridge-studio-
+ * sessions.ts`) — not reused verbatim, because both of those build their
+ * candidate path by joining validated components onto a root, whereas
+ * `sessionDir` here arrives as a single, already-composed absolute path (the
+ * CLI flag itself), with no components to reassemble. Best-effort: any
+ * failure here is swallowed — it must never mask the dispatch's own
+ * outcome/exit code.
+ */
+function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase: 'complete' | 'failed'): void {
+  try {
+    if (!existsSync(sessionDir) || !statSync(sessionDir).isDirectory()) return;
+    const realSessionDir = realpathSync(sessionDir);
+
+    let realProjectsRoot: string;
+    try {
+      // R4-17 round-3 BLOCKER (pin 5, item 2): forge-root-anchored config
+      // path, not loadConfig()'s cwd-relative default — see
+      // defaultConfigPath's docstring (orchestrator/config.ts).
+      realProjectsRoot = realpathSync(resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot))));
+    } catch {
+      return; // no resolvable projects root at all — refuse rather than guess
+    }
+    if (realSessionDir !== realProjectsRoot && !realSessionDir.startsWith(realProjectsRoot + sep)) {
+      return; // sessionDir escapes projectsRoot — refuse the write
+    }
+
+    const statusPath = join(realSessionDir, 'status.json');
+    let existing: Record<string, unknown> = {};
+    if (existsSync(statusPath)) {
+      const realStatusPath = realpathSync(statusPath);
+      if (realStatusPath !== statusPath && !realStatusPath.startsWith(realSessionDir + sep)) {
+        return; // status.json escapes the session dir via a symlink — refuse the write
+      }
+      try {
+        const parsed: unknown = JSON.parse(readFileSync(statusPath, 'utf8'));
+        if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+          existing = parsed as Record<string, unknown>;
+        }
+      } catch {
+        // Unreadable/malformed status.json — write a fresh one rather than
+        // failing the dispatch outcome over a status-sidecar defect.
+      }
+    }
+    writeFileSync(statusPath, JSON.stringify({ ...existing, phase }, null, 2), 'utf8');
+  } catch {
+    /* best-effort — never masks the dispatch outcome/exit code */
+  }
+}
+
+/**
+ * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
+ * [--session-dir <abs>]` — the generic standalone-run path for a
+ * NON-interactive roster agent (R2-01-F3 dispatch half). Unlike `forge agent
+ * run` (the four bespoke interactive turn-runners in `AGENT_RUNNERS`), this
+ * resolves ANY studio agent def by slug and runs it once through the F1
+ * `runAgent` primitive via `dispatchAgentRun`. This is the CLI the bridge's
+ * `POST /api/agents/:slug/run` spawns detached (mirroring `spawnAgentTurn`),
+ * so the run's events/cost land under `_logs/<run-id>/` for the monitor.
+ *
+ * `--session-dir <abs>` (R4-17, D7, optional) — when given, the terminal
+ * phase (`complete`/`failed`) is written into that dir's `status.json` when
+ * this dispatch ends. See `writeSessionTerminalPhase` above.
  */
 export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promise<void> {
   const slug = rest[0];
@@ -171,6 +269,10 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
   const project = projectArg
     ? { name: projectArg, repoPath: resolve('projects', projectArg) }
     : undefined;
+  // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header for
+  // the round-1 BLOCKER fix: it now refuses a `--session-dir` outside
+  // `forgeRoot` (already a parameter here — no extra resolution needed).
+  const sessionDir = flagValue('--session-dir');
 
   // `--input k=v` may repeat; each is surfaced as prompt DATA (never instructions).
   const inputs: Record<string, string> = {};
@@ -207,6 +309,7 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       }
       const out = await runBandAgentStandalone({ slug, initiativeId, runId, forgeRoot, queryFn: undefined });
       console.log(`agent dispatch complete — ${out.slug} (standalone ${out.kind} pipeline) run ${out.runId} on ${out.initiativeId} → ${out.result.status}`);
+      if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete');
       return;
     }
 
@@ -223,6 +326,9 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
     } else {
       console.log(`agent dispatch complete — ${out.slug} run ${out.runId} — cost $${result.costUsd.toFixed(4)}`);
     }
+    // D7 — the run ended (successfully, whether or not spawn was suppressed
+    // under the dry-bridge seam): write the terminal phase now.
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'complete');
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`forge agent dispatch: ${msg}`);
@@ -241,6 +347,8 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
         metadata: { error: msg, agent_slug: slug },
       });
     } catch { /* best-effort */ }
+    // D7 — the run ended in failure: write the terminal phase before exiting.
+    if (sessionDir) writeSessionTerminalPhase(forgeRoot, sessionDir, 'failed');
     process.exit(1);
   }
 }

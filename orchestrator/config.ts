@@ -11,7 +11,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
 
 export type ForgeConfig = {
   /** Where managed projects are cloned/symlinked. Defaults to `./projects`. */
@@ -100,6 +100,24 @@ export function loadConfig(path = 'forge.config.json'): ForgeConfig {
   } catch {
     return {};
   }
+}
+
+/**
+ * R4-17 round-3 BLOCKER (pin 5, item 2): the FORGE-ROOT-ANCHORED
+ * `forge.config.json` path — pass this to `loadConfig` instead of relying on
+ * its cwd-relative default (`path = 'forge.config.json'`, resolved via a bare
+ * `resolve(path)` against `process.cwd()`). A caller running from a different
+ * cwd than `forgeRoot` (any subprocess, any test, any daemon started from an
+ * unexpected directory) would otherwise silently get `loadConfig`'s soft
+ * `{}` fallback — the untouched DEFAULT config — even with a real
+ * `forge.config.json` sitting right there in `forgeRoot`. Every call to
+ * `loadConfig` on the projects-root resolution path must use this rather
+ * than the bare no-arg default; see `resolveProjectsDir`'s own docstring,
+ * which calls itself "the single source of truth for the projects root" —
+ * a cwd-dependent config load one step upstream of it contradicts that.
+ */
+export function defaultConfigPath(forgeRoot: string): string {
+  return join(resolve(forgeRoot), 'forge.config.json');
 }
 
 /**

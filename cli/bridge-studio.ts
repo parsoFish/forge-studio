@@ -53,7 +53,8 @@ import { resolveGuardedPath } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
@@ -282,7 +283,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   // half-onboarded dir without `.forge/project.json` still surfaces, with
   // id-as-name defaults, so the operator can SEE it and finish onboarding —
   // `forge studio lint` warns about the missing contract file separately).
-  const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig());
+  const projectsDir = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
   const discovered = discoverProjects(projectsDir, forgeRoot);
 
   return discovered.map((ref) => {
@@ -733,7 +734,7 @@ export async function handleStudioRoutes(
       // B1: resolve the project by disk scan rather than the projects.yaml
       // registry. A dir without `.forge/project.json` still preflights (the
       // operator runs preflight to learn WHY it is not yet contract-green).
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);
@@ -774,7 +775,7 @@ export async function handleStudioRoutes(
         sendJson(res, 400, { error: 'invalid project id' }, origin);
         return true;
       }
-      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig());
+      const projectsDir = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
       const projectRef = discoverProjects(projectsDir, ctx.forgeRoot).find((p) => p.id === id);
       if (!projectRef) {
         sendJson(res, 404, { error: 'unknown project' }, origin);
@@ -810,6 +811,40 @@ export async function handleStudioRoutes(
       }
       const roadmap = buildProjectRoadmap(id, ctx.forgeRoot, ctx.logsRoot);
       sendJson(res, 200, { roadmap }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // ---- /api/studio/projects/:id/contract-stages (R4-17, D9) ---------------
+  // The onboarding session's data contract, as its own route — this is what
+  // makes "staged artifacts land on the project page" true rather than
+  // aspirational (R4-12-F1 renders it in batch D). `id` is path-shaped, so it
+  // is validated (SLUG_RE) BEFORE any fs call — a raw ".." segment a browser
+  // client would normalise away must still be rejected server-side (mirrors
+  // the R4-16 wire-level rule for path-shaped params).
+  const contractStagesMatch = url.match(/^\/api\/studio\/projects\/([^/]+)\/contract-stages$/);
+  if (contractStagesMatch) {
+    try {
+      const id = decodeURIComponent(contractStagesMatch[1]);
+      if (!SLUG_RE.test(id)) {
+        sendJson(res, 400, { error: 'invalid project id' }, origin);
+        return true;
+      }
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const result = deriveContractStages({ forgeRoot: ctx.forgeRoot, projectsRoot, projectId: id });
+      if (!result.ok) {
+        // Distinguishes "unknown project" from "project exists but its
+        // .forge/project.json is malformed" the same way deriveContractStages
+        // itself does — an unknown/escaping id 404s, a malformed config never
+        // gets smoothed into a 200 ("declared data fails open" is the shape
+        // this campaign keeps finding and closing).
+        const status = /^unknown project /.test(result.error.message) ? 404 : 409;
+        sendJson(res, status, { ok: false, error: result.error.message }, origin);
+        return true;
+      }
+      sendJson(res, 200, { ok: true, project: id, stages: result.rows, sourcesScanned: result.sourcesScanned }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

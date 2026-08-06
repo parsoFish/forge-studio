@@ -43,6 +43,15 @@ import { assertManifestPathFields } from './manifest-path-guard.ts';
 export type RequeueOptions = {
   /** Forge root (parent of _queue/). Defaults to cwd. */
   forgeRoot?: string;
+  /**
+   * R4-17 round-4 (pin 7): the projects root the CALLER already resolved.
+   * Passed verbatim to `assertManifestPathFields` so a long-lived caller (the
+   * bridge, holding `ctx.projectsRoot` from server start) is validated against
+   * the root it is actually using rather than one this guard re-reads from
+   * `forge.config.json` at call time. Omitted by the CLI path, which resolves
+   * fresh per invocation and has no snapshot to diverge from.
+   */
+  projectsRoot?: string;
   /** Reset retry_count to 0 (default false: keep prior count + append to previous_failure_modes). */
   resetRetries?: boolean;
   /**
@@ -151,7 +160,7 @@ export function runRequeue(
       project_repo_path: projectRepoPath || undefined,
       cycle_id: manifest.cycle_id,
     },
-    { forgeRoot },
+    { forgeRoot, projectsRoot: opts.projectsRoot },
   );
 
   // ADR 019 + N7: decide the resume position. An explicit

@@ -81,7 +81,13 @@ export const SESSION_ARTIFACT_KINDS: readonly SessionArtifactKindRow[] = Object.
   Object.freeze({ id: 'markdown-draft', status: 'live' }),
   Object.freeze({ id: 'brain-structure', status: 'live' }),
   Object.freeze({ id: 'file-package', status: 'reserved' }),
-  Object.freeze({ id: 'contract-buildout', status: 'reserved' }),
+  // R4-17: the onboarding session's 'contract-buildout' case in
+  // deriveSessionArtifact (session-transcript.ts) ships a real renderer —
+  // flips reserved→live. It consumes ALREADY-DERIVED rows the caller
+  // supplies (cli/contract-stages.ts's deriveContractStages) rather than
+  // reading sessionDir itself (D4). Declaration order is unchanged; only
+  // status flips.
+  Object.freeze({ id: 'contract-buildout', status: 'live' }),
   // R4-16: deriveGenerationGallery (session-transcript.ts) ships a real
   // renderer — flips reserved→live. Declaration order is unchanged (still
   // last); only status flips.

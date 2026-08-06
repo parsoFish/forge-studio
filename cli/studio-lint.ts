@@ -54,7 +54,7 @@ import {
   type Finding,
 } from '../orchestrator/studio/validate.ts';
 import { validateConnections } from '../orchestrator/studio/connection-validate.ts';
-import { loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
@@ -383,7 +383,7 @@ export function runStudioLint(root: string): StudioLintResult {
   // `.forge/project.json` contract file warns (forge will skip it).
   // ------------------------------------------------------------------
 
-  const projectsDir = resolveProjectsDir(root, loadConfig());
+  const projectsDir = resolveProjectsDir(root, loadConfig(defaultConfigPath(root)));
   const discoveredProjects = discoverProjects(projectsDir, root);
   findings.push(...validateDiscoveredProjects(discoveredProjects));
   const projectIds = new Set(discoveredProjects.map((p) => p.id));

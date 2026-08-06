@@ -14,7 +14,7 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
-import { loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from './config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveTriggeredRunBudgets } from './config.ts';
 import { writeManifest, mintAndPersistManifestCycleId, readManifestCycleId, type InitiativeManifest } from './manifest.ts';
 import { getPaths } from './queue.ts';
 import { loadFlowDefinition } from './studio/registry.ts';
@@ -50,7 +50,7 @@ export function mintTriggeredInitiative(
     if (!flow.project) {
       return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook)` };
     }
-    const cfg = loadConfig();
+    const cfg = loadConfig(defaultConfigPath(forgeRoot));
     const projectRepoPath = join(resolveProjectsDir(forgeRoot, cfg), flow.project);
     if (!existsSync(projectRepoPath)) {
       return { status: 'error', detail: `project repo not found at ${projectRepoPath}` };

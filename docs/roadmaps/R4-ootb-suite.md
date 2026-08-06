@@ -298,6 +298,71 @@ choosable:
   [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beats
   `demo-builder/demo-builder-generate` + `demo-builder/demo-builder-lock`.
 
+### R4-B16 Onboarding as a staged session with a contract build-out (implemented)
+
+R4-17-F1 landed 2026-08-06 (wave 5, batch B). Before it, project onboarding had
+**no session at all**: `onboarding-agent` was a fire-and-forget roster dispatch
+(`POST /api/agents/:slug/run` → `spawnAgentDispatch` → `dispatchAgentRun` →
+`runAgent`) whose only on-disk trace was `_logs/<runId>/events.jsonl`. There was
+no `_onboarding/` directory anywhere in the repo, no `status.json`, no turns —
+so the R2-10 shell could not render it, and nothing recorded which stage of the
+contract produced which artifact.
+
+- **The onboarding run now opens a real session.** `POST /api/studio/onboarding/start`
+  creates `<projectsRoot>/<project>/_onboarding/<sessionId>/` with `status.json`
+  and `prompt.md` (the operator's run-context, verbatim), then spawns the
+  **identical** `spawnAgentDispatch(..., 'onboarding-agent', ...)` the generic
+  route already spawned — R4-02's behaviour and hand-off are unchanged, and the
+  generic route is untouched. The route accepts **no caller-supplied repo path
+  at all**: `project` is a slug, and the project directory is derived and
+  realpath-contained against `projectsRoot`.
+- **`forge agent dispatch --session-dir` writes the terminal phase**, so a
+  finished run stops claiming `running`. The phase is written by the process
+  that actually observes the run ending, never attributed; without the flag the
+  command is byte-identical to before it existed.
+- **The contract build-out is a derivation over the project's own artifacts.**
+  `deriveContractStages` (`cli/contract-stages.ts`) returns one row per stage for
+  all five of `contract · instructions · secrets · demo · roadmap` — always all
+  five, because an absent artifact is a row that names its source, and a dropped
+  row is indistinguishable from never having looked. Sources are real and were
+  verified before the vocabulary was chosen: `.forge/project.json`'s
+  `testProcess.local.cmd` (C1), `AGENTS.md`/`CLAUDE.md` (C8), the declared
+  `testProcess.acceptance.requiresEnv` NAMES (C7), `demoProcess[]` plus
+  `.forge/demo/demo.lock.json`, and `roadmap.md`. **Secrets are names only,
+  enforced structurally** — `secrets.env` is never opened, pinned by a
+  sentinel-value plant.
+- **Presence, never a verdict.** A row says an artifact exists and names where it
+  came from; it never says a clause passes. `forge preflight`'s exit code remains
+  the only authoritative contract-green signal (the rule comes from
+  [`brain/forge-dev/themes/forge-project-onboarding-contract.md`](../../brain/forge-dev/themes/forge-project-onboarding-contract.md)).
+  The roadmap row therefore also reports whether `brain/projects/<id>/profile.md`
+  exists — C4 requires it alongside `roadmap.md` — as a **fact in the row**,
+  rather than folding a hard-clause verdict into a presence signal or hiding the
+  divergence.
+- **One descriptor, reused by creation.** `studio/session-kinds.yaml` gains
+  `id: onboarding` (the id IS the `_<kind>` session-dir segment), stages
+  `[contract, instructions, secrets, demo, roadmap]`, artifact
+  `contract-buildout` — R2-10's reserved row, now **live**. Creation reuses it
+  rather than minting a second descriptor: the mockup gives
+  `SESSIONS['project-onboarding']` and `SESSIONS['create-project']` the same
+  artifact and the same label, and no creation agent exists for a second
+  descriptor's `agent:` field to resolve to.
+- **The renderer is stage-aware, and the pane no longer guesses.**
+  `contractBuildoutView` (`forge-ui/lib/session-artifact-view.ts`) renders the
+  five-row checklist on the `contract` stage and that stage's own detail
+  elsewhere, matching the mockup's `contract-full` sub-views.
+  `SessionArtifactPane` now DELEGATES its branch selection to that dispatcher —
+  its previous ternary ended in an unconditional generation-gallery `else`, so an
+  unhandled kind silently misrendered as a gallery instead of failing loudly.
+- **The project-page data contract ships now, rendering later.**
+  `GET /api/studio/projects/<id>/contract-stages` serves the same rows off the
+  same derivation; **R4-12-F1 renders them in batch D**, which is why that
+  initiative's "the panel is a VIEW of the artifacts, so it cannot drift"
+  requirement is satisfiable without duplicating any parsing.
+- **Contract + journey:** `data-*` rows in
+  [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beat
+  `stand-up-onboard/su-onboard-session`.
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -1518,8 +1583,8 @@ choosable:
 
 ### R4-17 Onboarding session staging
 
-- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent —
-  project-onboarding)
+- **Status:** implemented  ·  **Wave:** 5 (module: per-OOTB-agent —
+  project-onboarding)  ·  As-built: [R4-B16](#r4-b16-onboarding-as-a-staged-session-with-a-contract-build-out-implemented)
 - **Depends on:** R2-10 (staged-artifact contract — onboarding is its
   flagship consumer), R4-02 (the onboarding agent, done). **Depended on
   by:** R4-18.
@@ -1539,6 +1604,26 @@ choosable:
     ACs: `onboard-project` + `create-project` journey shapes against real
     sessions; staged artifacts land on the project page (R4-12-F1 renders
     them); no-regression on the R4-02/R4-03 hand-offs.
+    **F1 as-built (2026-08-06, branch `feat/r4-17-onboarding-staging`) —
+    [R4-B16](#r4-b16-onboarding-as-a-staged-session-with-a-contract-build-out-implemented).**
+    The gap was that onboarding had no session on disk at all — a fire-and-forget
+    dispatch whose only trace was a run log — so there was nothing for the R2-10
+    shell to render and no record of which stage produced which artifact. F1 opens
+    a real session at `<projectsRoot>/<project>/_onboarding/<sid>/` from a new
+    `/start`-family route that accepts no caller-supplied repo path, promotes
+    R2-10's reserved `contract-buildout` row to live with a real deriver over the
+    project's own contract artifacts (secrets by NAME only, enforced
+    structurally), and serves the same five staged rows on
+    `GET /api/studio/projects/<id>/contract-stages` as the data contract R4-12-F1
+    renders in batch D. R4-02's agent behaviour and hand-off are unchanged; the
+    generic dispatch route is untouched. **Honest limit, stated not implied:** the
+    shipped onboarding agent "asks no questions and never blocks mid-run"
+    (`skills/onboarding-agent/SKILL.md:9`), so the session's transcript is
+    honestly ONE operator turn from a real `prompt.md` — the mockup's
+    interview-with-push-back does not exist in the product and was not
+    fabricated. That is why `onboard-project` / `create-project` /
+    `run-agent-onboarding` stay **pending** in the parity registry, with per-beat
+    evidence recorded there.
 - **Session sizing:** ~1-2 sessions.
 - **Acceptance references:** mockup journeys `onboard-project`,
   `create-project`, `run-agent-onboarding`; surface `views-session.jsx`
@@ -1832,3 +1917,15 @@ gitignored campaign dir):
   promoted from a reserved artifact row to a live one, and
   `studio/session-kinds.yaml` gains its fourth descriptor (`id: demo`).
   As-built facts absorbed into new baseline entry **R4-B15**.
+- 2026-08-06 — **R4-17 → implemented** (wave 5, batch B — the batch's last
+  initiative). Project onboarding had no session on disk at all; it now opens a
+  real one from a `/start`-family route that accepts no caller-supplied repo
+  path, and `contract-buildout` is promoted from a reserved artifact row to a
+  live one with a deriver over the project's own contract artifacts —
+  `contract · instructions · secrets · demo · roadmap`, all five rows always
+  returned, secrets by NAME only, presence never a verdict. The same rows are
+  served on `GET /api/studio/projects/<id>/contract-stages` as the data contract
+  **R4-12-F1** renders in batch D. `studio/session-kinds.yaml` gains its fifth
+  descriptor (`id: onboarding`), reused by creation rather than duplicated.
+  R4-02/R4-03 hand-offs unchanged, pinned by no-regression ATs. As-built facts
+  absorbed into new baseline entry **R4-B16**.
