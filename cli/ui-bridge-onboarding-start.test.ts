@@ -26,7 +26,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -262,5 +262,164 @@ test('R4-17 AT-9 (BLOCKER, consequence path — "one sink, many entry points"): 
     // under the REAL repo's _logs/, exactly as cli/agent-run-dispatch.
     // test.ts's own AT-D7-2 fixture already has to clean up.
     rmSync(join(process.cwd(), '_logs', runId), { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PIN 4 — round-2 adversarial review, item 1 (BLOCKER): `ctx.projectsRoot`
+// here is computed as `resolve(forgeRoot, 'projects')` (cli/ui-bridge.ts:222)
+// — a hardcoded literal that NEVER consults `FORGE_PROJECTS_DIR` or
+// `forge.config.json`'s `projectsDir`, unlike `writeSessionTerminalPhase`
+// (cli/agent-run.ts:201, the sink AT-9 above guards), which resolves the
+// SAME concept via `resolveProjectsDir(resolve(forgeRoot), loadConfig())` —
+// the config-aware helper 23 OTHER call sites in this repo already use
+// (cli/ui-bridge.ts:222 is the one outlier). When an operator configures a
+// custom projects root, the producer here keeps building sessions under the
+// OLD hardcoded literal while the guard checks containment against the
+// CONFIGURED root — the two disagree, and a legitimately-produced session's
+// terminal-phase write is silently refused (a finished run reads
+// phase:"running" forever).
+//
+// AT-10 pins the PRODUCER half directly: this route must find/create the
+// session under WHATEVER root is configured, not the hardcoded literal — RED
+// now (the route can't even find a project that only exists under the
+// configured root, so it 404s instead of placing the session there). The
+// CONSUMER half (writeSessionTerminalPhase already being config-aware, and
+// staying refuse-outside-the-configured-root even once this producer bug is
+// fixed) is pinned separately, in `cli/agent-run-dispatch.test.ts`'s new
+// AT-D7-6..9 — that function was never the broken half; this route is.
+// ---------------------------------------------------------------------------
+
+test('R4-17 AT-10 (BLOCKER, pin 4 item 1): POST /api/studio/onboarding/start honours a CONFIGURED projects root (FORGE_PROJECTS_DIR) — the session must land under the CONFIGURED root, not the hardcoded <forgeRoot>/projects literal', async () => {
+  const priorProjectsDir = process.env.FORGE_PROJECTS_DIR;
+  const scopedForgeRoot = mkdtempSync(join(tmpdir(), 'bridge-onboarding-start-configuredroot-forgeroot-'));
+  const customProjectsRoot = mkdtempSync(join(tmpdir(), 'bridge-onboarding-start-configuredroot-projects-'));
+  for (const state of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+    mkdirSync(join(scopedForgeRoot, '_queue', state), { recursive: true });
+  }
+  mkdirSync(join(scopedForgeRoot, '_logs'), { recursive: true });
+  mkdirSync(join(customProjectsRoot, 'configuredproj'), { recursive: true });
+  process.env.FORGE_PROJECTS_DIR = customProjectsRoot;
+  let scopedUrl = '';
+  let scopedClose: (() => Promise<void>) | undefined;
+  try {
+    ({ url: scopedUrl, close: scopedClose } = await startBridge({ forgeRoot: scopedForgeRoot, port: 0 }));
+    const res = await fetch(`${scopedUrl}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project: 'configuredproj' }),
+    });
+    const text = await res.text();
+    assert.equal(
+      res.status, 200,
+      `expected the route to find "configuredproj" under the CONFIGURED root ${customProjectsRoot} and succeed, got ${res.status}: ${text} — this route only ever looks under the hardcoded <forgeRoot>/projects literal today, regardless of FORGE_PROJECTS_DIR`,
+    );
+    const body = JSON.parse(text) as { sessionId: string };
+    const correctSessionDir = join(customProjectsRoot, 'configuredproj', '_onboarding', body.sessionId);
+    const wrongSessionDir = join(scopedForgeRoot, 'projects', 'configuredproj', '_onboarding', body.sessionId);
+    assert.ok(
+      existsSync(join(correctSessionDir, 'status.json')),
+      `the session must land at ${correctSessionDir} (under the CONFIGURED projects root) — a route that ignores FORGE_PROJECTS_DIR would instead try (and fail, or write to the wrong place) at ${wrongSessionDir}`,
+    );
+  } finally {
+    if (scopedClose) await scopedClose();
+    if (priorProjectsDir === undefined) delete process.env.FORGE_PROJECTS_DIR;
+    else process.env.FORGE_PROJECTS_DIR = priorProjectsDir;
+    rmSync(scopedForgeRoot, { recursive: true, force: true });
+    rmSync(customProjectsRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// PIN 4 — round-2 adversarial review, item 2 (BLOCKER): the route correctly
+// contains the PROJECT dir (`resolveContainedProjectDir`, AT-7/AT-8 above)
+// but then does `join(realProjectDir, '_onboarding', sessionId)` followed by
+// `mkdirSync(sessionDir, {recursive:true})` WITHOUT verifying `_onboarding`
+// itself isn't a symlink escaping `projectsRoot`. `mkdirSync(recursive:
+// true)` follows a symlinked INTERMEDIATE path segment (standard POSIX
+// `mkdir -p` semantics — the OS resolves each existing prefix, including
+// symlinks, before creating the next one), so a project whose `_onboarding`
+// entry is a symlink to an outside directory redirects BOTH `status.json`
+// and `prompt.md` writes there. Reachable: a managed project is a checked-
+// out repo, so a commit containing a symlink named `_onboarding` is
+// attacker-supplied content — the same class of bug already proven (and
+// fixed) for other session-dir producers in this campaign (R2-09's
+// containment ATs for flows/projects). "Validating a root does not validate
+// what you write beneath it", one level deeper, in the very round that fixed
+// it one level up (AT-7/AT-8's `realProjectDir` containment).
+//
+// AT-11 is the reject pin (RED now — a status-code-only check cannot tell
+// "refused before any fs call" from "wrote it and then errored", so the
+// load-bearing assertion is that NOTHING landed at the symlink target).
+// AT-12 is the accept control for a REAL, pre-existing (non-symlink)
+// `_onboarding` directory — the shape every SECOND onboarding run on the
+// same project has; a guard that refuses every symlink AND every pre-
+// existing real directory would break re-running onboarding on any project
+// more than once. The THIRD control ("no `_onboarding` at all") is not
+// duplicated here — AT-4 above already exercises it: `demoproj`'s fixture
+// project (created in this file's `before()`) has no `_onboarding` directory
+// until the route creates one.
+//
+// Reachability check for a NARROWER, separate vector — a symlink planted at
+// the exact `_onboarding/<sessionId>` path itself, or at `status.json`/
+// `prompt.md` inside it: `sessionId` comes from `newArchitectSessionId()`
+// (cli/ui-bridge.ts:1681-1684), which is `new Date().toISOString()`
+// truncated to ONE-SECOND granularity, not a cryptographically random value
+// — so it is not immune to prediction in principle. But there is no seam to
+// inject a fixed `Date` into the route under test, so pinning that narrower
+// vector deterministically would mean racing wall-clock time (predict the
+// current second, plant a symlink under that exact name, fire the request
+// within the same second) — inherently flaky in CI, and not attempted here.
+// This is a real, distinct, narrower follow-up, not silently dropped: the
+// `_onboarding`-symlink vector below is the reliably-reproducible one the
+// review actually named, and the one this file pins.
+// ---------------------------------------------------------------------------
+
+test('R4-17 AT-11 (BLOCKER, pin 4 item 2, REJECT — real filesystem objects, not a lexical string test): a project whose "_onboarding" entry is a SYMLINK to an outside directory must be refused — non-2xx, AND nothing written at the symlink target', async () => {
+  const project = 'symlinkonboardproj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(projectDir, { recursive: true });
+  const outsideDir = mkdtempSync(join(tmpdir(), 'onboarding-start-onboarding-escape-target-'));
+  const onboardingLink = join(projectDir, '_onboarding');
+  try {
+    symlinkSync(outsideDir, onboardingLink, 'dir');
+    const res = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST',
+      headers: CSRF,
+      body: JSON.stringify({ project, inputs: { northStar: 'escape via a symlinked _onboarding' } }),
+    });
+    assert.ok(
+      res.status < 200 || res.status >= 300,
+      `a project whose "_onboarding" entry is a symlink escaping projectsRoot must be refused (non-2xx), got ${res.status} — kills a guard that verifies the PROJECT dir's containment but never re-checks the "_onboarding" segment joined onto it before mkdirSync/writeFileSync follow it`,
+    );
+    assert.equal(
+      readdirSync(outsideDir).length, 0,
+      `nothing must be written at the symlink target ${outsideDir} — this is the load-bearing assertion: a status code alone cannot distinguish "refused before any fs call" from "wrote it anyway and then errored"`,
+    );
+  } finally {
+    rmSync(onboardingLink, { force: true });
+    rmSync(outsideDir, { recursive: true, force: true });
+    rmSync(projectDir, { recursive: true, force: true });
+  }
+});
+
+test('R4-17 AT-12 (pin 4 item 2, ACCEPT control — mirrors AT-8\'s false-rejection-control shape): a project with a REAL, pre-existing (non-symlink) "_onboarding" directory — the shape every SECOND onboarding run on the same project has — must still succeed and write into it. A guard that refuses every pre-existing "_onboarding" dir, symlinked or not, would break re-running onboarding on any project more than once', async () => {
+  const project = 'realonboardingdirproj';
+  const projectDir = join(forgeRoot, 'projects', project);
+  mkdirSync(join(projectDir, '_onboarding'), { recursive: true });
+  try {
+    const res = await fetch(`${url}/api/studio/onboarding/start`, {
+      method: 'POST', headers: CSRF, body: JSON.stringify({ project }),
+    });
+    const text = await res.text();
+    assert.equal(
+      res.status, 200,
+      `a REAL pre-existing "_onboarding" directory must be accepted, got ${res.status}: ${text}`,
+    );
+    const body = JSON.parse(text) as { sessionId: string };
+    assert.ok(
+      existsSync(join(projectDir, '_onboarding', body.sessionId, 'status.json')),
+      `expected the session to land inside the REAL pre-existing "_onboarding" directory at ${join(projectDir, '_onboarding', body.sessionId)}`,
+    );
+  } finally {
+    rmSync(projectDir, { recursive: true, force: true });
   }
 });

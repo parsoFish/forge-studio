@@ -64,14 +64,34 @@ const STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'] a
  * introduced — that deliberate-addition friction IS the D11 gate; the old
  * five-banned-word substring check (`pass|fail|clause|green|red|compliant`)
  * had none, and a wholly new verdict sentence sailed straight through it.
+ *
+ * PIN 4 (round-2 adversarial review, item 3, MAJOR — T2 ruling, binding): the
+ * two entries that used to live here for `gate command:` and `built demo
+ * skill:` — `/^gate command: .+$/` and `/^built demo skill: .+$/` — were
+ * THEMSELVES unbounded wildcards after a fixed prefix, exactly the shape the
+ * original AT-23 replacement was built to close off one level up. The
+ * reviewer mutated `deriveContractRow` to emit `gate command: PASS --
+ * contract clause C1 is compliant and GREEN (npm test)` and all 32 ATs
+ * (including AT-23) stayed green, because `.+` after `"gate command: "`
+ * matches ANY suffix, verdict language included. T2's ruling: tighten to
+ * BYTE-EQUALITY against the value the test's OWN fixture derives, not a
+ * narrower charset (a charset is still a wildcard, just a smaller one). Both
+ * entries are REMOVED from this pattern array — AT-23 below now asserts
+ * these two detail lines match EXACTLY the string derivable from the config
+ * it planted (`gate command: ${cmd.join(' ')}`, `built demo skill:
+ * ${lock.demo_skill}`), so no extra text can ride along in the payload. Note
+ * (honesty, not silently omitted): `gate command:`'s payload is VERBATIM
+ * project-authored config (`testProcess.local.cmd`, the operator's own
+ * `.forge/project.json`) — forge echoing an operator's own command string
+ * back is not forge rendering a verdict. Byte-equality is what keeps that
+ * echo from becoming a channel for forge's OWN verdict language to ride
+ * along inside it undetected.
  */
 const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
-  /^gate command: .+$/, // deriveContractRow — testProcess.local.cmd tokens (contract-stages.ts:124)
   /^a compliance report file exists at \.forge\/contract-compliance-report\.json$/, // deriveContractRow (contract-stages.ts:126)
   /^source file: (AGENTS\.md|CLAUDE\.md)$/, // deriveInstructionsRow (contract-stages.ts:144)
   /^[A-Za-z_][A-Za-z0-9_]*$/, // deriveSecretsRow — a bare declared requiresEnv NAME, verbatim (contract-stages.ts:158; D3 names-only, no template)
   /^step: (capture|verify|present)$/, // deriveDemoRow — a declared demoProcess step kind (contract-stages.ts:168)
-  /^built demo skill: .+$/, // deriveDemoRow — demo.lock.json's demo_skill (contract-stages.ts:179)
   // deriveRoadmapRow — the C4 brain-profile divergence fact (pin 2, item 3;
   // landed round-1 fix, contract-stages.ts's deriveRoadmapRow). The id
   // segment mirrors SLUG_RE exactly (orchestrator/skill-path.ts) rather than
@@ -79,6 +99,13 @@ const ALLOWED_DETAIL_PATTERNS: RegExp[] = [
   // can take here — read off the exact emitted string, not guessed:
   // `brain profile: absent (brain/projects/allgreenproj/profile.md)`.
   /^brain profile: (present|absent) \(brain\/projects\/[a-z][a-z0-9]*(?:-[a-z0-9]+)*\/profile\.md\)$/,
+  // `gate command: …` (contract-stages.ts:134) and `built demo skill: …`
+  // (contract-stages.ts:190) are DELIBERATELY not enumerated here — AT-23
+  // below checks them by byte-equality against its own fixture instead (pin
+  // 4 above). If either shape appears in a NEW test's rows without that
+  // test computing its own expected literal, it will fail this array's
+  // `.some(...)` check, exactly as intended — the fix is to assert the exact
+  // string, never to re-add a wildcard pattern here.
 ];
 
 // ---------------------------------------------------------------------------
@@ -462,13 +489,18 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
   // the onboarding gate"`), while the OLD substring-ban version stayed
   // green under the identical mutation — see the T3 report for the raw
   // before/after run output.
-  it('AT-23 (REPLACED — allow-list template check): every detail line, across all five stages, for a project whose every stage is present, matches one of the explicitly enumerated ALLOWED_DETAIL_PATTERNS shapes', () => {
+  it('AT-23 (REPLACED — allow-list template check, retightened pin 4 item 3 to BYTE-EQUALITY on the two previously-wildcard shapes): every detail line, across all five stages, for a project whose every stage is present, either matches one of the explicitly enumerated ALLOWED_DETAIL_PATTERNS shapes, or — for "gate command:"/"built demo skill:" — equals BYTE-FOR-BYTE the string derivable from the fixture\'s own planted config', () => {
     const projectsRoot = makeProjectsRoot();
     const dir = makeProjectDir(projectsRoot, 'allgreenproj');
     writeFileSync(join(dir, 'AGENTS.md'), '# instructions\n', 'utf8');
     writeFileSync(join(dir, 'roadmap.md'), '# roadmap\n', 'utf8');
+    // Named so the byte-equality assertions below derive their expected
+    // strings from the SAME values planted here, never a second guess at
+    // what the fixture contains.
+    const gateCmd = ['npm', 'test'];
+    const demoSkillPath = '.forge/skills/demo-design-x/SKILL.md';
     writeProjectJson(dir, {
-      testProcess: { local: { cmd: ['npm', 'test'] }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['X'] } },
+      testProcess: { local: { cmd: gateCmd }, acceptance: { match: 'acceptance', required: true, requiresEnv: ['X'] } },
       demoProcess: [{ kind: 'capture', text: 'x' }],
     });
     // Also exercise the two CONDITIONAL detail lines (compliance report,
@@ -476,20 +508,45 @@ describe('deriveContractStages — D11: presence, never a verdict (AT-23, AT-24)
     // this module can currently produce, not just the unconditional ones.
     writeFileSync(join(dir, '.forge', 'contract-compliance-report.json'), JSON.stringify({ finalHardGreen: true }), 'utf8');
     mkdirSync(join(dir, '.forge', 'demo'), { recursive: true });
-    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ demo_skill: '.forge/skills/demo-design-x/SKILL.md' }), 'utf8');
+    writeFileSync(join(dir, '.forge', 'demo', 'demo.lock.json'), JSON.stringify({ demo_skill: demoSkillPath }), 'utf8');
 
     const rows = okRows(deriveContractStages({ forgeRoot: REPO_ROOT, projectsRoot, projectId: 'allgreenproj' }));
     let detailLinesChecked = 0;
+    let gateCommandLineSeen = false;
+    let builtDemoSkillLineSeen = false;
     for (const row of rows) {
       assert.ok(row.status === 'present' || row.status === 'absent', `status must be exactly "present" or "absent", got: ${JSON.stringify(row.status)}`);
       for (const detail of row.detail) {
         detailLinesChecked++;
+        // Pin 4, item 3 (MAJOR, T2 ruling): these two shapes are no longer
+        // checked against a `.+` wildcard pattern — they must equal, BYTE
+        // FOR BYTE, the exact string derivable from the fixture's own
+        // planted config. A mutation that pads EITHER line with extra
+        // (verdict) text now fails HERE, not by matching a looser regex.
+        if (detail.startsWith('gate command: ')) {
+          gateCommandLineSeen = true;
+          assert.equal(
+            detail, `gate command: ${gateCmd.join(' ')}`,
+            `"gate command:" must equal byte-for-byte the string derived from testProcess.local.cmd — got: ${JSON.stringify(detail)}`,
+          );
+          continue;
+        }
+        if (detail.startsWith('built demo skill: ')) {
+          builtDemoSkillLineSeen = true;
+          assert.equal(
+            detail, `built demo skill: ${demoSkillPath}`,
+            `"built demo skill:" must equal byte-for-byte the string derived from demo.lock.json's demo_skill — got: ${JSON.stringify(detail)}`,
+          );
+          continue;
+        }
         assert.ok(
           ALLOWED_DETAIL_PATTERNS.some((p) => p.test(detail)),
           `stage "${row.stage}" produced a detail string matching NO enumerated allow-list pattern: ${JSON.stringify(detail)} — a new/changed detail shape must be a deliberate, reviewed addition to ALLOWED_DETAIL_PATTERNS, never silently accepted`,
         );
       }
     }
+    assert.ok(gateCommandLineSeen, 'expected the fixture to actually produce a "gate command:" detail line');
+    assert.ok(builtDemoSkillLineSeen, 'expected the fixture to actually produce a "built demo skill:" detail line');
     assert.ok(detailLinesChecked >= 6, `expected the fixture to actually exercise every allow-listed shape at least once, only checked ${detailLinesChecked} detail lines`);
   });
 

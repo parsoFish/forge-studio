@@ -647,10 +647,17 @@ export const STORY_REGISTRY = [
       'transcript; the shipped agent asks no questions ' +
       '(skills/onboarding-agent/SKILL.md:9) so the transcript is honestly one ' +
       'turn, and no stage-switcher control exists on the session page yet — ' +
-      'the stage plumbing is wired and unit-tested end to end ' +
-      '(SessionArtifactPane → sessionArtifactView → contractBuildoutView), so ' +
-      'the artifact is stage-aware the moment a switcher lands. Beat 6 ' +
-      '("Accept") has no affordance: the session shell is read-only. Not ' +
+      'the artifact-RENDERING logic is unit-tested end to end ' +
+      '(sessionArtifactView → contractBuildoutView, both in forge-ui/lib/' +
+      'session-artifact-view.ts, covered by lib/session-artifact-view.test.ts), ' +
+      'so the artifact is stage-aware the moment a switcher lands — but the ' +
+      'COMPONENT that calls it, SessionArtifactPane.tsx, has no test file at ' +
+      'all, and forge-ui/vitest.config.ts only includes lib/**/*.test.ts, so a ' +
+      'component test would not even run today (pin 4, round-2 review, item ' +
+      '4 correction, 2026-08-06). The SessionArtifactPane → sessionArtifactView ' +
+      'delegation WAS traced by hand against all four pre-existing live ' +
+      'artifact kinds with no behaviour change found — reviewed, not tested. ' +
+      'Beat 6 ("Accept") has no affordance: the session shell is read-only. Not ' +
       'recorded as {excluded} — none of these is a decision to never build.',
   },
   {
