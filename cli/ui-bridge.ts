@@ -1598,11 +1598,46 @@ function architectSessionDir(projectsRoot: string, project: string, sessionId: s
  * can actually arrive at runtime. A non-string value (e.g. `0`, `null`,
  * `{}`) must fail closed with a 400 naming it, rather than falling through
  * to `isAbsolute()` and leaking a raw Node `TypeError [ERR_INVALID_ARG_TYPE]`.
+ *
+ * PRECONDITION (load-bearing, stated because a future caller will otherwise
+ * break it silently): `candidate` is `JSON.parse` output from a request body.
+ * That is what makes the value space closed — string / number / boolean /
+ * null / array / object, never a BigInt, Symbol, circular structure or a
+ * hostile `toJSON`. This function is deliberately NOT exported; feeding it
+ * from a non-JSON source would reopen shapes `describeRejectedValue` cannot
+ * be assumed to survive.
  */
 function invalidProjectRepoPath(candidate: unknown, forgeRoot: string): string | null {
   if (candidate === undefined || candidate === '') return null;
-  if (typeof candidate !== 'string') return JSON.stringify(candidate);
+  if (typeof candidate !== 'string') return describeRejectedValue(candidate);
   return isContainedProjectRepoPath(candidate, { forgeRoot }) ? null : candidate;
+}
+
+/** Cap on the rendered offending value interpolated into a 400 body. Two
+ *  independent reasons, both measured: (1) `JSON.stringify` THROWS
+ *  `RangeError: Maximum call stack size exceeded` on a deeply nested value —
+ *  measured boundary on this build: fine at depth 4,166, throws at 4,167,
+ *  while `JSON.parse` still succeeds at depth 100,000, so a wire body can
+ *  reach this function and blow up inside it; and (2) without a cap the
+ *  response is unbounded — measured, a 200,038-byte request produced a
+ *  300,063-byte response, LARGER than the request because re-quoting adds
+ *  overhead. Closing a `TypeError` leak while shipping a `RangeError` leak in
+ *  the same error-formatting path would be this campaign's "the fix ships its
+ *  own instance of the defect it closed" pattern, for the fourth time. */
+const MAX_REJECTED_VALUE_CHARS = 200;
+
+/** Renders an untrusted, non-string value for a 400 body: never throws, never
+ *  unbounded. The `?? String(candidate)` arm covers the values whose
+ *  `JSON.stringify` is `undefined` rather than a string. */
+function describeRejectedValue(candidate: unknown): string {
+  let rendered: string;
+  try {
+    rendered = JSON.stringify(candidate) ?? String(candidate);
+  } catch {
+    rendered = '<unrepresentable value>';
+  }
+  if (rendered.length <= MAX_REJECTED_VALUE_CHARS) return rendered;
+  return `${rendered.slice(0, MAX_REJECTED_VALUE_CHARS)}… (${rendered.length} chars, truncated)`;
 }
 
 function readJsonFile<T>(path: string): T | null {
