@@ -558,7 +558,7 @@ ADR-041 §1 already defines.
 A run exposes `trigger: {kind, source, scope}` — the registry kind, the
 declaration that fired (a definition id, never operator prose), and the
 resolved project id (or `null` when unscoped). It is **derived from the staged
-request**, consistent with [ADR 008](./008-event-log-derived-state.md)'s
+request**, consistent with [ADR 008](./008-jsonl-event-log.md)'s
 derived-state rule: no new stored run object, no free-text field an agent or a
 surface can author. The `data-*` vocabulary is named by R2-08-F4 and attached
 by the consuming surfaces (R6-04-F2 kickoff, R6-01-F4 run detail, R6-05/R6-06
