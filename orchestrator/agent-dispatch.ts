@@ -24,6 +24,7 @@ import { listAgentDefinitions } from './studio/registry.ts';
 import { agentCapabilityDescriptor } from './studio/derive.ts';
 import { runAgent, isSafeRunId, type ProjectBinding, type RunAgentResult } from './run-agent.ts';
 import { materialKindForFilename } from './studio/materials.ts';
+import { createLogger } from './logging.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 import type { AgentDefinition } from './studio/types.ts';
 
@@ -133,23 +134,58 @@ export function buildStandaloneRunPrompt(
   return lines.join('\n');
 }
 
+/** Return shape of `discoverStagedMaterials` (R6-04-F2 WI-1, rounds 5-6):
+ *  the usable references, the filenames that were staged but derive no
+ *  material kind (reported, never silently dropped, never fatal — a stray
+ *  `.DS_Store`/editor swapfile must not become an outage for the whole
+ *  run), and — round 6 — `unreadable`, the errno code string, set if and
+ *  only if the materials directory could not be LISTED at all for a reason
+ *  OTHER than "it does not exist". See `discoverStagedMaterials`'s own
+ *  docstring for the full ENOENT-vs-everything-else reasoning. Not exported
+ *  — only the function needs to be (D19), to keep the module's exported
+ *  surface to the one new symbol the errno contract's direct tests require. */
+type DiscoveredMaterials = {
+  materials: MaterialReference[];
+  skipped: string[];
+  unreadable?: string;
+};
+
 /**
  * DISCOVER whatever `cli/ui-bridge.ts`'s `stageMaterials` already staged
  * under `<logsRoot>/<runId>/materials/` (R6-04-F2 WI-1 round 3) — the fix
  * for the finding that nothing in the dispatch path ever read materials
  * back off disk, so a staged, referenced-in-the-event-log file never
  * actually reached the agent. Derived from `runId`/`logsRoot` alone (no new
- * opt on `DispatchAgentRunOpts` — the route already knows both). Absent
- * directory (the common case: every dispatch that predates this feature,
- * and every dispatch with nothing attached) degrades to `[]`, never a
- * throw — `readdirSync` failing for ANY reason here (missing dir, or
- * anything else) must not crash a dispatch that has nothing to do with
- * materials. A discovered filename whose extension derives no kind (should
- * never happen for anything `stageMaterials` actually wrote, since the
- * route's own gate already required a valid kind before staging) is skipped
- * defensively rather than surfaced as a fabricated "unknown" kind.
+ * opt on `DispatchAgentRunOpts` — the route already knows both).
+ *
+ * PURE — no logging concerns here by design, so this stays directly
+ * testable: `dispatchAgentRun` (below) is the one that turns `skipped`/
+ * `unreadable` into reported `log` events. This function only classifies.
+ *
+ * Two failure classes, and they are NOT the same fact (round 6, closing the
+ * SAME defect shape the R2-09 guard round already paid for once — a bare
+ * `lexists`-style `catch {}` conflating EACCES/ENOTDIR with "definitively
+ * absent"):
+ *   - A discovered FILENAME whose extension derives no kind (e.g. a stray
+ *     `.DS_Store`, an editor swapfile) is collected into `skipped`, never
+ *     thrown for, never silently dropped, and never surfaced as a
+ *     fabricated "unknown" kind — `materials.ts` alone owns the closed
+ *     `MATERIAL_KINDS` vocabulary.
+ *   - The materials DIRECTORY itself failing to even be LISTED
+ *     (`readdirSync` throwing) is discriminated by errno:
+ *     - `ENOENT` — genuinely absent. This is the ORDINARY case; virtually
+ *       every dispatch has no materials directory at all. Degrades
+ *       silently to `{materials:[], skipped:[]}`, `unreadable` ABSENT —
+ *       this must stay indistinguishable from "nothing was ever staged",
+ *       or every ordinary dispatch would start reporting a false deviation.
+ *     - Any OTHER errno (`EACCES`, `ENOTDIR`, `ELOOP`, ...) — a materials
+ *       directory PLAUSIBLY EXISTS and this process could not read it.
+ *       That is a genuine, reportable deviation: skipping it silently would
+ *       mean the agent runs as though the operator attached nothing, when
+ *       the truth is discovery was unable to look. Reported via
+ *       `unreadable`, carrying the exact errno code string.
  */
-function discoverStagedMaterials(logsRoot: string, runId: string): MaterialReference[] {
+export function discoverStagedMaterials(logsRoot: string, runId: string): DiscoveredMaterials {
   const materialsDir = join(logsRoot, runId, 'materials');
   let filenames: string[];
   try {
@@ -157,17 +193,31 @@ function discoverStagedMaterials(logsRoot: string, runId: string): MaterialRefer
       .filter((entry) => entry.isFile())
       .map((entry) => entry.name)
       .sort();
-  } catch {
-    return [];
+  } catch (err) {
+    const code = (err as NodeJS.ErrnoException)?.code;
+    if (code === 'ENOENT') return { materials: [], skipped: [] };
+    return { materials: [], skipped: [], unreadable: code ?? '<no error code>' };
   }
-  const refs: MaterialReference[] = [];
+  const materials: MaterialReference[] = [];
+  const skipped: string[] = [];
   for (const filename of filenames) {
     const kind = materialKindForFilename(filename);
-    if (!kind) continue;
-    refs.push({ path: `materials/${filename}`, kind });
+    if (!kind) {
+      skipped.push(filename);
+      continue;
+    }
+    materials.push({ path: `materials/${filename}`, kind });
   }
-  return refs;
+  return { materials, skipped };
 }
+
+/** Namespaced `log`-event messages `dispatchAgentRun` emits for a materials
+ *  discovery deviation — mirrors this repo's established
+ *  `<namespace>.<event>` convention (`run-agent.spawn-suppressed`,
+ *  `dry-bridge.skip`). Both are reported deviations, never failures: the
+ *  run proceeds regardless of either firing. */
+const MATERIAL_SKIPPED_MESSAGE = 'agent-dispatch.material-skipped';
+const MATERIALS_UNREADABLE_MESSAGE = 'agent-dispatch.materials-unreadable';
 
 /**
  * Dispatch one non-interactive roster agent through the F1 `runAgent`
@@ -183,8 +233,47 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
   const loadDefs = opts.loadDefs ?? listAgentDefinitions;
   const def = resolveDispatchableAgent(opts.slug, loadDefs(opts.skillsDir));
   const logsRoot = opts.logsRoot ?? '_logs';
-  const materials = discoverStagedMaterials(logsRoot, opts.runId);
-  const prompt = buildStandaloneRunPrompt(def, { project: opts.project, inputs: opts.inputs, materials });
+  const discovered = discoverStagedMaterials(logsRoot, opts.runId);
+  // Report deviations (round 5 skip / round 6 errno discrimination) — but
+  // ONLY when there is something to report. On the ordinary ENOENT path
+  // (`discovered.skipped` empty AND `discovered.unreadable` absent, which is
+  // every dispatch with nothing attached) this block does not run at all —
+  // not "runs but emits nothing", literally does not touch the logger — so
+  // the ordinary case stays exactly as silent as it was before materials
+  // existed as a concept. Neither ever fails the dispatch: both are
+  // reported deviations, not errors.
+  if (discovered.skipped.length > 0 || discovered.unreadable !== undefined) {
+    const logger = createLogger(opts.runId, logsRoot);
+    for (const filename of discovered.skipped) {
+      // A skipped filename is a REFERENCE ONLY (the same posture as every
+      // materials event log entry this feature writes) — it must never
+      // reach the agent's prompt (see buildStandaloneRunPrompt, which never
+      // receives `skipped` at all), only the event log.
+      logger.emit({
+        initiative_id: opts.runId,
+        phase: 'orchestrator',
+        skill: def.slug,
+        event_type: 'log',
+        input_refs: [`materials/${filename}`],
+        output_refs: [],
+        message: MATERIAL_SKIPPED_MESSAGE,
+        metadata: { filename, path: `materials/${filename}` },
+      });
+    }
+    if (discovered.unreadable !== undefined) {
+      logger.emit({
+        initiative_id: opts.runId,
+        phase: 'orchestrator',
+        skill: def.slug,
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: MATERIALS_UNREADABLE_MESSAGE,
+        metadata: { errno: discovered.unreadable },
+      });
+    }
+  }
+  const prompt = buildStandaloneRunPrompt(def, { project: opts.project, inputs: opts.inputs, materials: discovered.materials });
   const workdir = opts.workdir ?? opts.project?.repoPath ?? process.cwd();
   const result = await runAgent(def, {
     runId: opts.runId,
