@@ -134,7 +134,7 @@ import {
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
@@ -1137,7 +1137,14 @@ async function handleHttp(
       // poll a dead run indefinitely.
       const failed = parsed.some((e) => e['message'] === 'agent-dispatch.failed');
       const endEvent = parsed.find((e) => e['event_type'] === 'end');
-      const state = failed ? 'failed' : suppressed ? 'suppressed' : endEvent ? 'done' : 'running';
+      // R6-04 (WI-2): a ceiling-stop (SDK `result_subtype:
+      // 'error_max_budget_usd'`, recorded into the end event's metadata by
+      // runAgent) must be a DISTINCT terminal state, never collapsed into an
+      // ordinary successful 'done' — a budget-stopped run reported as a
+      // clean success is the exact defect this pins.
+      const endMetadata = endEvent?.['metadata'] as Record<string, unknown> | undefined;
+      const ceilingStopped = endMetadata?.['result_subtype'] === 'error_max_budget_usd';
+      const state = failed ? 'failed' : suppressed ? 'suppressed' : ceilingStopped ? 'budget-exceeded' : endEvent ? 'done' : 'running';
       const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : 0;
       sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length }, origin);
     } catch (err) {
@@ -1161,7 +1168,7 @@ async function handleHttp(
       return;
     }
     try {
-      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown; materials?: unknown };
+      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown; materials?: unknown; costCeilingUsd?: unknown };
       // Resolve + validate against the live roster (unknown/interactive → 400).
       let def: ReturnType<typeof resolveDispatchableAgent>;
       try {
@@ -1215,6 +1222,25 @@ async function handleHttp(
           }
           inputs[k] = v;
         }
+      }
+      // R6-04 WI-2 — the per-kickoff cost ceiling. Fail-closed: non-number,
+      // NaN/non-finite, <= 0, or above MAX_KICKOFF_COST_CEILING_USD all 400
+      // BEFORE runId is minted / spawnAgentDispatch is ever called — no run
+      // is spawned on a refused ceiling. Exactly-at-the-max is accepted
+      // (inclusive boundary); one unit over is refused.
+      let costCeilingUsd: number | undefined;
+      if (body.costCeilingUsd !== undefined) {
+        const v = body.costCeilingUsd;
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return;
+        }
+        costCeilingUsd = v;
       }
       // R6-04-F2 WI-1 — materials contract enforcement, the agent-kickoff
       // upload seam. ALL validation happens here, alongside `inputs` above,
@@ -1289,7 +1315,7 @@ async function handleHttp(
           },
         });
       }
-      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs);
+      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd);
       sendJson(
         res,
         200,
@@ -1801,16 +1827,25 @@ function newRunStamp(): string {
 }
 
 /**
- * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
- * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
- * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
- * never bubbles into the request). slug/runId/project are pre-validated by the
- * route; input keys are re-checked here (defense-in-depth) so no arg injects a
- * flag. Input VALUES are arbitrary — safe as a single `k=v` arg since spawn()
- * runs no shell.
+ * Pure argv builder for `forge agent dispatch <slug> --run-id <runId> [...]`
+ * (R6-04 WI-2 extraction, mirrors `parseAgentDispatchArgs`'s pure argv PARSER
+ * on the other side of the CLI boundary, cli/agent-run.ts). Extracted from
+ * `spawnAgentDispatch` so the argv-building itself becomes independently
+ * testable (no spawn, no mock) — this function has no side effects and
+ * performs no safety checks of its own (`spawnAgentDispatch` still owns the
+ * `isSafeRunId`/`SAFE_AGENT_SLUG_RE` refusal, unchanged, before ever calling
+ * this). Returns EXACTLY the array `cmdAgentDispatch`'s `rest` parameter
+ * expects (`[slug, '--run-id', runId, ...optional flags]`) — NOT the full
+ * node-invocation array; `spawnAgentDispatch` still prepends the
+ * process-invocation boilerplate (`--experimental-strip-types`,
+ * `orchestrator/cli.ts`, `agent`, `dispatch`) around this helper's output.
+ *
+ * Input keys are filtered through `SAFE_INPUT_KEY_RE` here (defense-in-depth,
+ * unchanged from before this extraction) so no arg injects a flag. Input
+ * VALUES are arbitrary — safe as a single `k=v` arg since `spawn()` runs no
+ * shell.
  */
-function spawnAgentDispatch(
-  forgeRoot: string,
+export function buildAgentDispatchArgs(
   slug: string,
   runId: string,
   project?: string,
@@ -1827,19 +1862,50 @@ function spawnAgentDispatch(
    *  guards its own write through it regardless.
    */
   sessionDir?: string,
-): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
-    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
-    return;
-  }
-  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', slug, '--run-id', runId];
+  /** R6-04 (WI-2) — the operator's per-kickoff cost ceiling, already
+   *  validated (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) by the route
+   *  before this is ever called. */
+  costCeilingUsd?: number,
+): string[] {
+  const args = [slug, '--run-id', runId];
   if (project) args.push('--project', project);
   for (const [k, v] of Object.entries(inputs ?? {})) {
     if (!SAFE_INPUT_KEY_RE.test(k)) continue;
     args.push('--input', `${k}=${v}`);
   }
   if (sessionDir) args.push('--session-dir', sessionDir);
+  if (costCeilingUsd !== undefined) args.push('--cost-ceiling-usd', String(costCeilingUsd));
+  return args;
+}
+
+/**
+ * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
+ * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
+ * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
+ * never bubbles into the request). slug/runId/project are pre-validated by the
+ * route; input keys are re-checked in `buildAgentDispatchArgs` (defense-in-
+ * depth) so no arg injects a flag.
+ */
+function spawnAgentDispatch(
+  forgeRoot: string,
+  slug: string,
+  runId: string,
+  project?: string,
+  inputs?: Record<string, string>,
+  sessionDir?: string,
+  costCeilingUsd?: number,
+): void {
+  // Argv construction is pure (no I/O, no side effects) — safe to build
+  // above the spawn-suppression early-return below, so it stays observable
+  // as ordinary function composition rather than something only a real spawn
+  // attempt could exercise.
+  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd);
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
+    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
+    return;
+  }
+  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });

@@ -53,6 +53,13 @@ export type DispatchAgentRunOpts = {
   queryFn?: StreamQueryFn;
   /** Injectable roster loader (tests); default `listAgentDefinitions`. */
   loadDefs?: (skillsDir: string) => AgentDefinition[];
+  /**
+   * R6-04 (WI-2): an explicit per-run operator cost ceiling, threaded
+   * unchanged to `runAgent`'s `ctx.kickoffCeilingUsd` (which itself wins
+   * over the agent's own declared budget — see `run-agent.ts`). Absent ⇒
+   * today's behaviour (the agent's declared budget alone) unchanged.
+   */
+  kickoffCeilingUsd?: number;
 };
 
 export type DispatchAgentRunResult = {
@@ -282,6 +289,7 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
     logsRoot,
     ...(opts.project ? { bindings: { project: opts.project } } : {}),
     ...(opts.queryFn ? { queryFn: opts.queryFn } : {}),
+    ...(opts.kickoffCeilingUsd !== undefined ? { kickoffCeilingUsd: opts.kickoffCeilingUsd } : {}),
   });
   return { runId: opts.runId, slug: def.slug, result };
 }

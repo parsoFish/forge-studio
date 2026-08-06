@@ -80,6 +80,15 @@ export type ForgeConfig = {
     /** Default: `DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET` (30). */
     defaultIterationBudget?: number;
   };
+  /**
+   * R6-04 (WI-2): per-kickoff cost ceiling tuning — the operator-set cap on
+   * `POST /api/agents/:slug/run`, wired to runAgent's existing SDK-budget
+   * enforcement path (`options.maxBudgetUsd`).
+   */
+  runs?: {
+    /** Default: `DEFAULT_KICKOFF_COST_CEILING_USD`. Pre-fills the kickoff UI's ceiling field. */
+    defaultCostCeilingUsd?: number;
+  };
 };
 
 /**
@@ -440,4 +449,35 @@ export function resolveTriggeredRunBudgets(
       DEFAULT_TRIGGERED_RUN_ITERATION_BUDGET,
     ),
   };
+}
+
+/**
+ * R6-04 (WI-2): default per-kickoff cost ceiling, pre-filled into the
+ * kickoff UI and used whenever an operator omits an explicit `costCeilingUsd`
+ * on `POST /api/agents/:slug/run` (the route itself does not apply this as a
+ * cap — an absent `costCeilingUsd` simply means no operator ceiling is in
+ * force; this constant is UI/config guidance only).
+ */
+export const DEFAULT_KICKOFF_COST_CEILING_USD = 10;
+
+/**
+ * R6-04 (WI-2): the sane absolute maximum an operator kickoff ceiling may not
+ * exceed, enforced at the `POST /api/agents/:slug/run` route boundary. A
+ * would-be ceiling above this is refused with a 400 before any dispatch.
+ */
+export const MAX_KICKOFF_COST_CEILING_USD = 500;
+
+/**
+ * Resolve the default per-kickoff cost ceiling served to the kickoff UI
+ * (`GET /api/studio/agents`'s `defaultCostCeilingUsd`). Precedence:
+ *   1. `runs.defaultCostCeilingUsd` from `forge.config.json`
+ *   2. `DEFAULT_KICKOFF_COST_CEILING_USD`
+ * Non-finite / non-positive config values are ignored (fall through) — a
+ * zero/negative default would pre-fill the kickoff UI with a dead-on-arrival
+ * ceiling.
+ */
+export function resolveDefaultKickoffCeilingUsd(cfg: ForgeConfig = loadConfig()): number {
+  const fromCfg = cfg.runs?.defaultCostCeilingUsd;
+  if (typeof fromCfg === 'number' && Number.isFinite(fromCfg) && fromCfg > 0) return fromCfg;
+  return DEFAULT_KICKOFF_COST_CEILING_USD;
 }

@@ -204,6 +204,16 @@ export type RunContext = {
    * never calls it at all, real or injected (cost discipline).
    */
   probeConnection?: (id: string) => ProbeResult;
+  /**
+   * R6-04 (WI-2): an explicit per-run operator cost ceiling (one-shot path
+   * only). WINS over the agent's own declared `budgets` cap —
+   * `kickoffCeilingUsd ?? resolveOneShotBudgetUsd(def.budgets, initiative)` —
+   * never a `max()`/`min()` of the two. Absent ⇒ today's behaviour
+   * (`resolveOneShotBudgetUsd` alone) unchanged. Threaded to the SDK via the
+   * SAME `options.maxBudgetUsd` key an agent's own declared budget already
+   * uses — there is no second enforcement path.
+   */
+  kickoffCeilingUsd?: number;
 };
 
 export type RunAgentResult = {
@@ -350,7 +360,18 @@ export async function runAgent(def: AgentDefinition, ctx: RunContext): Promise<R
     tokens_in: spawned.tokensIn,
     tokens_out: spawned.tokensOut,
     duration_ms: durationMs,
-    metadata: { agent_phase: def.phase, agent_slug: def.slug },
+    metadata: {
+      agent_phase: def.phase,
+      agent_slug: def.slug,
+      // R6-04 (WI-2): a ceiling-stop must be a DISTINCT, honestly-recorded
+      // terminal fact, never collapsed into an ordinary success log — record
+      // BOTH the operator ceiling that was in force (when one was given) and
+      // the SDK's reported result subtype ('success' | 'error_max_budget_usd'
+      // | …) so a downstream reader (GET /api/agents/runs/:runId) can tell
+      // the two apart without re-deriving anything from cost alone.
+      ...(ctx.kickoffCeilingUsd !== undefined ? { kickoff_ceiling_usd: ctx.kickoffCeilingUsd } : {}),
+      ...(spawned.resultSubtype !== undefined ? { result_subtype: spawned.resultSubtype } : {}),
+    },
   });
 
   return spawned;
@@ -377,7 +398,11 @@ async function runOneShotSpawn(
     disallowedTools: [...spec.disallowedTools],
   };
   if (def.budgets.maxTurns !== undefined) options['maxTurns'] = def.budgets.maxTurns;
-  const budgetUsd = resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
+  // R6-04 (WI-2): an explicit operator ceiling WINS over the agent's own
+  // declared budget — not max()/min() of the two. `??` gives exactly that:
+  // `ctx.kickoffCeilingUsd` short-circuits `resolveOneShotBudgetUsd` entirely
+  // when present, regardless of which is numerically larger.
+  const budgetUsd = ctx.kickoffCeilingUsd ?? resolveOneShotBudgetUsd(def.budgets, ctx.bindings?.initiative);
   if (budgetUsd !== undefined) options['maxBudgetUsd'] = budgetUsd;
 
   let abortController: AbortController | undefined;
