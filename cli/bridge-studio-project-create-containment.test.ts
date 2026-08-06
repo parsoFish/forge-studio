@@ -66,6 +66,30 @@
  *   guards already carry — named explicitly at each one, not banked as if
  *   they were deliberate hardlink/symlink-aware defenses.
  *
+ * FINDING A (BLOCKER, round-2 adversarial review) — `seedProjectBrain`
+ *   (`orchestrator/project-brain-seed.ts:157`, called from this SAME route
+ *   two calls after the Defect-5 fix) is the identical shape, unfixed:
+ *   `projectBrainDir(forgeRoot,id)` / `projectThemesDir(...)`
+ *   (`orchestrator/brain-paths.ts`) are bare `resolve()`/`join()` off a
+ *   TRUSTED `forgeRoot` with NO per-segment containment on `brain/projects/
+ *   <id>/{kb.yaml,profile.md,themes/,themes/README.md}` — `id` is
+ *   `SLUG_RE`-validated (no traversal), so the escape is a PRE-PLANTED
+ *   symlink/dangling-symlink under the temp forgeRoot, not a traversing id.
+ *   MEASURED below, not assumed, for all five shapes the review named.
+ *
+ * FINDING B (MAJOR, shipping blocker) — the Defect-5 fix itself
+ *   FALSE-REJECTS a legitimate repo. `scaffoldContractArtifacts` now calls
+ *   `resolveGuardedPath(projectRoot,['roadmap.md'])` /
+ *   `[...,'brain','profile.md']` UNCONDITIONALLY, before the
+ *   `!guard.exists` idempotency check — and `resolveGuardedPath` rejects any
+ *   EXISTING leaf with `nlink !== 1`. An ordinary, harmless, wholly
+ *   in-forgeRoot hardlinked `roadmap.md` (the kind `cp -al`/dedup/cache
+ *   tooling produces routinely) now fails the WHOLE onboard with
+ *   `400 "path traversal detected"` — a message naming an attack that did
+ *   not occur, on a path the route only ever intended to SKIP, never write.
+ *   T1's principle: guard the paths you WRITE, not the paths you merely test
+ *   for existence. Positive ATs below must FAIL now and PASS after the fix.
+ *
  * BINDING RULES applied throughout (four review rounds of this campaign):
  *   - Every escape assertion is on the SECURITY PROPERTY (outside/sibling
  *     bytes untouched, no new artifacts appear) — never a pre-fix status
@@ -160,6 +184,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'skills'), { recursive: true });
   mkdirSync(join(forgeRoot, '_queue2-unused'), { recursive: true }); // never referenced; keeps _queue's own dirs untouched by an accidental collision
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'brain', 'projects'), { recursive: true }); // Finding A fixtures plant under here
 
   // Probe symlink availability once.
   const probeDir = tmp('project-create-symlink-probe-');
@@ -738,4 +763,203 @@ test('positive control (passes before AND after any Defect-5 fix): cloning a rea
   assert.ok(existsSync(join(projectDir, 'brain', 'profile.md')), 'expected brain/profile.md to be written inside the cloned repo');
   // The pre-existing, unrelated repo file must survive untouched.
   assert.equal(readFileSync(join(projectDir, 'README.md'), 'utf8'), '# a totally normal cloned repo\n');
+});
+
+// ---------------------------------------------------------------------------
+// FINDING A — seedProjectBrain (orchestrator/project-brain-seed.ts) is the
+// SAME Defect-5 shape, unfixed. `id` is SLUG_RE-validated (never traverses),
+// so every fixture here is a PRE-PLANTED symlink under
+// <forgeRoot>/brain/projects/<id> — a legitimate, contained `repoPath` is
+// used throughout (default: omitted -> projects/<id>); this is NOT a
+// repoPath-containment test.
+// ---------------------------------------------------------------------------
+
+test('(RED) [Finding A, shape: brain/projects/<id> symlinked DIRECTORY] nothing is created outside forgeRoot', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'finding-a-brain-dirsymlink';
+  const outside = newOutsideDir('finding-a-brain-dirsymlink-outside-');
+  plantSentinel(outside, 'SENTINEL-FINDINGA-BRAINDIR-1a72c');
+  symlinkSync(outside, join(forgeRoot, 'brain', 'projects', id), 'dir');
+
+  const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+
+  assert.ok(
+    !existsSync(join(outside, 'kb.yaml')) && !existsSync(join(outside, 'profile.md')) && !existsSync(join(outside, 'themes')),
+    `projectBrainDir/projectThemesDir (orchestrator/brain-paths.ts) are bare resolve()/join() off forgeRoot with no per-segment containment — a symlinked "brain/projects/<id>" DIRECTORY is followed straight through by mkdirSync(themesDir) + every seedFile write — status ${status}: ${text}`,
+  );
+  assert.equal(readSentinel(outside), 'SENTINEL-FINDINGA-BRAINDIR-1a72c\n', 'the outside sentinel bytes must be byte-unchanged');
+});
+
+test('(RED) [Finding A, shape: brain/projects/<id>/themes symlinked DIRECTORY, <id> dir itself real] themes/README.md is created outside forgeRoot', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'finding-a-themes-dirsymlink';
+  mkdirSync(join(forgeRoot, 'brain', 'projects', id), { recursive: true });
+  const outside = newOutsideDir('finding-a-themes-dirsymlink-outside-');
+  plantSentinel(outside, 'SENTINEL-FINDINGA-THEMESDIR-2b83d');
+  symlinkSync(outside, join(forgeRoot, 'brain', 'projects', id, 'themes'), 'dir');
+
+  const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+
+  assert.ok(
+    !existsSync(join(outside, 'README.md')),
+    `"themes" is followed as a plain join() with no containment — seedFile(join(themesDir,'README.md')) writes straight through the symlink — status ${status}: ${text}`,
+  );
+  assert.equal(readSentinel(outside), 'SENTINEL-FINDINGA-THEMESDIR-2b83d\n', 'the outside sentinel bytes must be byte-unchanged');
+});
+
+test('(RED) [Finding A, shape: brain/projects/<id>/kb.yaml DANGLING symlink] a file is created at the dangling target outside forgeRoot', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'finding-a-kb-dangling';
+  mkdirSync(join(forgeRoot, 'brain', 'projects', id, 'themes'), { recursive: true });
+  const outside = newOutsideDir('finding-a-kb-dangling-outside-');
+  const danglingTarget = join(outside, 'dangling-kb-target.yaml');
+  symlinkSync(danglingTarget, join(forgeRoot, 'brain', 'projects', id, 'kb.yaml'));
+  assert.ok(!existsSync(danglingTarget), 'sanity: the dangling target must not exist before the request');
+
+  const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+
+  assert.ok(
+    !existsSync(danglingTarget),
+    `seedFile's existsSync(absPath) reads a dangling symlink as absent, so writeFileSync (no O_NOFOLLOW) creates a NEW file at the dangling target outside forgeRoot — the live SEC-01 mechanism — status ${status}: ${text}`,
+  );
+});
+
+test('(RED) [Finding A, shape: brain/projects/<id>/profile.md DANGLING symlink] a file is created at the dangling target outside forgeRoot', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'finding-a-profile-dangling';
+  mkdirSync(join(forgeRoot, 'brain', 'projects', id, 'themes'), { recursive: true });
+  const outside = newOutsideDir('finding-a-profile-dangling-outside-');
+  const danglingTarget = join(outside, 'dangling-profile-target.md');
+  symlinkSync(danglingTarget, join(forgeRoot, 'brain', 'projects', id, 'profile.md'));
+  assert.ok(!existsSync(danglingTarget), 'sanity: the dangling target must not exist before the request');
+
+  const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+
+  assert.ok(
+    !existsSync(danglingTarget),
+    `same mechanism as kb.yaml — status ${status}: ${text}`,
+  );
+});
+
+test('(RED) [Finding A, shape: brain/projects/<id>/themes/README.md DANGLING symlink] a file is created at the dangling target outside forgeRoot', async (t) => {
+  if (skipIfNoSymlinks(t)) return;
+  const id = 'finding-a-themesreadme-dangling';
+  mkdirSync(join(forgeRoot, 'brain', 'projects', id, 'themes'), { recursive: true });
+  const outside = newOutsideDir('finding-a-themesreadme-dangling-outside-');
+  const danglingTarget = join(outside, 'dangling-themesreadme-target.md');
+  symlinkSync(danglingTarget, join(forgeRoot, 'brain', 'projects', id, 'themes', 'README.md'));
+  assert.ok(!existsSync(danglingTarget), 'sanity: the dangling target must not exist before the request');
+
+  const { status, text } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+
+  assert.ok(
+    !existsSync(danglingTarget),
+    `same mechanism, third instance (kb.yaml / profile.md / themes/README.md are three independent seedFile calls, each its own unguarded join()) — status ${status}: ${text}`,
+  );
+});
+
+test('positive control (passes before AND after any Finding-A fix): a normal onboard still seeds brain/projects/<id>/{kb.yaml,profile.md,themes/README.md} inside forgeRoot and reports them in brainSeed', async () => {
+  const id = 'finding-a-normal-onboard';
+  const { status, text, json } = await postProject({ name: id, qualityGateCmd: 'echo ok' });
+  assert.equal(status, 200, `expected a normal onboard to succeed — got ${status}: ${text}`);
+
+  const brainDir = join(forgeRoot, 'brain', 'projects', id);
+  assert.ok(existsSync(join(brainDir, 'kb.yaml')), 'expected kb.yaml to be seeded inside forgeRoot');
+  assert.ok(existsSync(join(brainDir, 'profile.md')), 'expected profile.md to be seeded inside forgeRoot');
+  assert.ok(existsSync(join(brainDir, 'themes', 'README.md')), 'expected themes/README.md to be seeded inside forgeRoot');
+
+  const brainSeed = json?.brainSeed as Array<{ path: string; action: string }> | undefined;
+  assert.ok(brainSeed, `expected a brainSeed array in the response — got ${text}`);
+  const paths = brainSeed!.map((f) => f.path).sort();
+  assert.deepEqual(paths, [
+    `brain/projects/${id}/kb.yaml`,
+    `brain/projects/${id}/profile.md`,
+    `brain/projects/${id}/themes/README.md`,
+  ]);
+  assert.ok(brainSeed!.every((f) => f.action === 'created'), `expected every seeded file to report action:"created" — got ${JSON.stringify(brainSeed)}`);
+});
+
+// ---------------------------------------------------------------------------
+// FINDING B — the Defect-5 fix false-rejects a legitimate, wholly-in-forgeRoot
+// hardlinked roadmap.md / brain/profile.md. These are POSITIVE ATs: they must
+// FAIL now (400 "path traversal detected" on a repo where nothing was ever
+// going to be written) and PASS once the fix guards only the paths it WRITES,
+// never the existence probe.
+// ---------------------------------------------------------------------------
+
+test('(RED, positive AT — must FAIL now, PASS after the Finding-B fix) an in-forgeRoot hardlinked roadmap.md must not false-reject the whole onboard', async () => {
+  // Directory basename deliberately differs from the onboarding name's
+  // derived id (discoverProjects duplicate-id collision reasoning, same as
+  // the earlier "clone-then-onboard" positive control in this file) — this
+  // test's OWN defect is the 400 false-rejection, not the unrelated 409.
+  const projectDir = join(forgeRoot, 'projects', 'findingb-hardlink-roadmap-dir');
+  mkdirSync(projectDir, { recursive: true });
+  const canonicalBytes = '# Canonical Roadmap\n\n- [x] Shipped feature one.\n';
+  writeFileSync(join(projectDir, 'ROADMAP-CANONICAL.md'), canonicalBytes);
+  // A perfectly ordinary in-repo hardlink (cp -al / dedup / cache-layout
+  // shape) — BOTH directory entries live inside forgeRoot; nothing outside
+  // it at all.
+  linkSync(join(projectDir, 'ROADMAP-CANONICAL.md'), join(projectDir, 'roadmap.md'));
+
+  const { status, text, json } = await postProject({
+    name: 'findingb-hardlink-roadmap',
+    repoPath: 'projects/findingb-hardlink-roadmap-dir',
+    qualityGateCmd: 'echo ok',
+  });
+
+  assert.equal(
+    status,
+    200,
+    `kills a fix that guards the EXISTENCE PROBE instead of the write: resolveGuardedPath(projectRoot,['roadmap.md']) runs unconditionally before the "!exists" idempotency check and rejects any leaf with nlink!==1 — even though this route was only ever going to SKIP an existing roadmap.md, never write it. Nothing here is being written, nothing is outside forgeRoot — got ${status}: ${text}`,
+  );
+  assert.equal(json?.ok, true, `expected ok:true — got ${text}`);
+  const bytesAfter = readFileSync(join(projectDir, 'roadmap.md'), 'utf8');
+  assert.equal(bytesAfter, canonicalBytes, `roadmap.md must be left byte-identical (skipped, not clobbered) — got: ${bytesAfter}`);
+  assert.ok(existsSync(join(projectDir, '.forge', 'project.json')), 'expected .forge/project.json to still be written — the false rejection must not abort the whole onboard');
+});
+
+test('(RED, positive AT — must FAIL now, PASS after the Finding-B fix) an in-forgeRoot hardlinked brain/profile.md must not false-reject the whole onboard', async () => {
+  const projectDir = join(forgeRoot, 'projects', 'findingb-hardlink-profile-dir');
+  mkdirSync(join(projectDir, 'brain'), { recursive: true });
+  const canonicalBytes = '# Canonical Profile\n\nReal architecture notes.\n';
+  writeFileSync(join(projectDir, 'brain', 'PROFILE-CANONICAL.md'), canonicalBytes);
+  linkSync(join(projectDir, 'brain', 'PROFILE-CANONICAL.md'), join(projectDir, 'brain', 'profile.md'));
+
+  const { status, text, json } = await postProject({
+    name: 'findingb-hardlink-profile',
+    repoPath: 'projects/findingb-hardlink-profile-dir',
+    qualityGateCmd: 'echo ok',
+  });
+
+  assert.equal(
+    status,
+    200,
+    `kills the same wrong implementation as the roadmap.md sibling test, for brain/profile.md's OWN resolveGuardedPath call — got ${status}: ${text}`,
+  );
+  assert.equal(json?.ok, true, `expected ok:true — got ${text}`);
+  const bytesAfter = readFileSync(join(projectDir, 'brain', 'profile.md'), 'utf8');
+  assert.equal(bytesAfter, canonicalBytes, `brain/profile.md must be left byte-identical (skipped, not clobbered) — got: ${bytesAfter}`);
+  assert.ok(existsSync(join(projectDir, '.forge', 'project.json')), 'expected .forge/project.json to still be written — the false rejection must not abort the whole onboard');
+});
+
+test('positive control (passes before AND after any Finding-B fix): a pre-existing ORDINARY roadmap.md (no hardlink) is skipped, not clobbered — the plain idempotency contract', async () => {
+  // Directory basename deliberately differs from the onboarding name's
+  // derived id — same discoverProjects duplicate-id collision reasoning as
+  // the earlier "clone-then-onboard" positive control in this file.
+  const projectDir = join(forgeRoot, 'projects', 'findingb-ordinary-roadmap-dir');
+  mkdirSync(projectDir, { recursive: true });
+  const operatorBytes = '# The operator\'s real roadmap\n\n- [ ] Real milestone.\n';
+  writeFileSync(join(projectDir, 'roadmap.md'), operatorBytes);
+
+  const { status, text, json } = await postProject({
+    name: 'findingb-ordinary-roadmap',
+    repoPath: 'projects/findingb-ordinary-roadmap-dir',
+    qualityGateCmd: 'echo ok',
+  });
+
+  assert.equal(status, 200, `expected an ordinary pre-existing roadmap.md (nlink===1, no symlink) to onboard fine today AND after any fix — got ${status}: ${text}`);
+  assert.equal(json?.ok, true, `expected ok:true — got ${text}`);
+  const bytesAfter = readFileSync(join(projectDir, 'roadmap.md'), 'utf8');
+  assert.equal(bytesAfter, operatorBytes, `the operator's real roadmap.md must never be clobbered by the TODO scaffold stub — got: ${bytesAfter}`);
+  assert.ok(existsSync(join(projectDir, '.forge', 'project.json')), 'expected .forge/project.json to still be written');
 });
