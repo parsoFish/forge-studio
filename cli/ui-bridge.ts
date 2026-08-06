@@ -1568,14 +1568,18 @@ function architectSessionDir(projectsRoot: string, project: string, sessionId: s
 }
 
 /**
- * R4-16 PIN 4 (SEC-02, forge-d1f) — `/api/architect/start`,
- * `/api/instructions/start`, and `/api/demo-builder/start` each accept an
- * optional caller-supplied `projectRepoPath` and persist it verbatim into
- * the session's `status.json` as `project_repo_path`. That field becomes the
- * agent's `cwd`, the target of real `git` branch-create + commit calls, and
- * the base for every artifact write — reproduced live: an unvalidated field
- * served a planted sentinel outside the forge tree and let a forged status
- * write real artifacts into an arbitrary git repo.
+ * R4-16 PIN 4/5 (SEC-02, forge-d1f) — the COMPLETE set of `/start`-family
+ * routes that accept a caller-supplied `projectRepoPath`: `/api/architect/start`,
+ * `/api/instructions/start`, `/api/demo-builder/start`, and
+ * `/api/project-brain/start`. Each persists it verbatim into the session's
+ * `status.json` as `project_repo_path`. That field becomes the agent's
+ * `cwd`, the target of real `git` branch-create + commit calls, and the base
+ * for every artifact write — reproduced live: an unvalidated field served a
+ * planted sentinel outside the forge tree and let a forged status write real
+ * artifacts into an arbitrary git repo. This comment is the complete
+ * enumeration — a future `/start`-family route accepting this field MUST
+ * wire this same guard before any read/write/status-persist, not just add
+ * itself to this list.
  *
  * Reuses the SHIPPED guard (`isContainedProjectRepoPath`,
  * `cli/manifest-path-guard.ts`) rather than a new check — same choke point
@@ -1583,9 +1587,21 @@ function architectSessionDir(projectsRoot: string, project: string, sessionId: s
  * `project_repo_path` on the recovery routes. Returns the offending value
  * (so the caller can name it in the 400) when present-but-not-contained,
  * `null` when absent or genuinely contained under `<forgeRoot>/projects/`.
+ *
+ * Finding B: `''` is treated as absent here, matching every call site's
+ * `body.projectRepoPath || join(ctx.projectsRoot, body.project)` default —
+ * `??` does NOT substitute for `''`, so every call site MUST use `||`, never
+ * `??`, for this field.
+ *
+ * Finding C: `candidate` is `unknown`, not `string | undefined` — the
+ * request body is untrusted JSON and the static type is a lie about what
+ * can actually arrive at runtime. A non-string value (e.g. `0`, `null`,
+ * `{}`) must fail closed with a 400 naming it, rather than falling through
+ * to `isAbsolute()` and leaking a raw Node `TypeError [ERR_INVALID_ARG_TYPE]`.
  */
-function invalidProjectRepoPath(candidate: string | undefined, forgeRoot: string): string | null {
+function invalidProjectRepoPath(candidate: unknown, forgeRoot: string): string | null {
   if (candidate === undefined || candidate === '') return null;
+  if (typeof candidate !== 'string') return JSON.stringify(candidate);
   return isContainedProjectRepoPath(candidate, { forgeRoot }) ? null : candidate;
 }
 
@@ -1711,7 +1727,7 @@ async function handleArchitect(
       const status: ArchitectStatus = {
         session_id: sessionId,
         project: body.project,
-        project_repo_path: body.projectRepoPath ?? join(ctx.projectsRoot, body.project),
+        project_repo_path: body.projectRepoPath || join(ctx.projectsRoot, body.project),
         phase: 'interviewing',
         round: 1,
         idea: body.idea,
@@ -1989,7 +2005,7 @@ async function handleInstructions(
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
       }
-      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       // Default the mode by whether an agent-instruction file already exists.
       const mode: 'init' | 'edit' =
         body.mode ?? (readAgentInstructionsFile(repoPath) ? 'edit' : 'init');
@@ -2500,7 +2516,14 @@ async function handleDemoBuilder(
     try {
       const body = (await readJson(req)) as { project?: string; projectRepoPath?: string };
       if (!body.project) { sendJson(res, 400, { error: 'project is required' }, origin); return true; }
-      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      // SEC-02 (forge-d1f) — reject BEFORE any mkdirSync/status write. See
+      // invalidProjectRepoPath's header for the defect.
+      const badRepoPath = invalidProjectRepoPath(body.projectRepoPath, ctx.forgeRoot);
+      if (badRepoPath !== null) {
+        sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
+        return true;
+      }
+      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       const sessionId = newArchitectSessionId();
       const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), sessionId);
       mkdirSync(dir, { recursive: true });
@@ -2575,7 +2598,7 @@ async function handleDemoBuilder(
         return true;
       }
       const dir = dirOutcome.dir;
-      const repoPath = body.projectRepoPath ?? join(ctx.projectsRoot, body.project);
+      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       // Default the mode by whether a locked demo already exists.
       const mode: 'create' | 'update' =
         body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
