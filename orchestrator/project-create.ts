@@ -166,13 +166,30 @@ export function scaffoldGreenfieldProject(input: {
   const projectDir = resolve(projectsRoot, id);
   if (existsSync(projectDir)) throw new Error(`project "${id}" already exists at ${projectDir}`);
 
+  // SEC-03 round 3: seed the CENTRAL Brain-3 stub (kb.yaml + profile.md +
+  // themes/README.md — the only forge-owned artifact not in the template)
+  // BEFORE `copyTemplate` writes anything to `projectDir`. `seedProjectBrain`'s
+  // target (`<forgeRoot>/brain/projects/<id>/`) is entirely independent of
+  // `projectDir`, and it validates every one of its own per-segment
+  // containment guards before performing any of its writes (see its
+  // docstring), so calling it first costs nothing when it succeeds. When it
+  // throws `PathGuardContainmentError` (a planted symlink/hardlink under
+  // `brain/projects/<id>/`), NOTHING under `projectDir` has been written —
+  // previously `copyTemplate` ran first and wrote a complete project
+  // directory (including `.forge/project.json`) that nothing then unwound,
+  // so a rejection left a half-created, git-discoverable project on disk
+  // while the caller was told "not created". Consequence of this ordering,
+  // stated explicitly: if `copyTemplate` (or `runPreflight`) fails for an
+  // unrelated reason AFTER the brain seed already landed, the result is an
+  // orphaned `brain/projects/<id>/` stub with no project directory. That is
+  // the better of the two inconsistencies — `discoverProjects` only scans
+  // `projectsRoot`, never `brain/projects/`, so an orphaned stub is never
+  // listed as a project, and a retried create with the same id finds the
+  // stub files already present and skips them (idempotent per file).
+  seedProjectBrain(input.forgeRoot, id, manifest.name);
+
   const filesWritten: string[] = [];
   copyTemplate(templateDir, projectDir, { id, title: manifest.name, northStar: manifest.northStar }, filesWritten);
-
-  // Hand off to the onboarding side: the CENTRAL Brain-3 stub (kb.yaml + profile.md)
-  // is the only forge-owned artifact not in the template — seed it so C4's central
-  // profile + the KB binding resolve. Idempotent per file.
-  seedProjectBrain(input.forgeRoot, id, manifest.name);
 
   const report = runPreflight(projectDir, { forgeRoot: input.forgeRoot });
   return {

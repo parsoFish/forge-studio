@@ -783,6 +783,60 @@ export async function handleStudioWriteRoutes(
         sendJson(res, 400, { error: 'a project already exists at this repo path' }, origin); return true;
       }
 
+      // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
+      // profile.md + themes/) so the KB pillar — and the C4 preflight
+      // clause, which requires the central profile.md — are never empty for
+      // a freshly onboarded project. Idempotent per file (never clobbers an
+      // operator-authored brain).
+      //
+      // SEC-03 round 3 (this WI): moved to run FIRST on this route — before
+      // the `mkdirSync(projectRoot)` below, and therefore before
+      // `scaffoldContractArtifacts` and `.forge/project.json` too.
+      // `seedProjectBrain`'s target (`<forgeRoot>/brain/projects/<id>/`) is
+      // entirely independent of `projectRoot`, so nothing about it requires
+      // the project directory to exist yet. A containment rejection here now
+      // leaves NO project-directory footprint at all — no half-created,
+      // git-initialized `projects/<id>/` with a roadmap.md/local-brain stub
+      // but no `.forge/project.json`, the exact shape `loadProjectsWithMeta`
+      // would otherwise list as a half-onboarded ghost (every discovered dir
+      // is listed regardless of whether `.forge/project.json` exists). This
+      // still satisfies — and strengthens — the R4-02-F3 invariant below
+      // (the KB binding can only point at a KB that provably exists on
+      // disk): the seed now runs before EVERY write on this route, not
+      // merely before project.json.
+      //
+      // Consequence, stated explicitly: if a LATER write on this route
+      // (`mkdirSync(projectRoot)`, `scaffoldContractArtifacts`, the
+      // `.forge/project.json` write) fails for an unrelated reason AFTER
+      // this seed already landed, the result is an orphaned central brain
+      // stub (`brain/projects/<id>/`) with no project directory. That is the
+      // better of the two inconsistencies: it is inert (`discoverProjects`
+      // scans `projects/`, never `brain/projects/`, so nothing lists a bare
+      // brain stub as a project), idempotent to retry (a second onboard
+      // attempt with the same id finds the stub files already present and
+      // skips them, per-file — see `seedProjectBrain`'s docstring), and it
+      // never tells the operator "not created" while a project directory
+      // actually exists on disk — the opposite failure mode this WI fixes.
+      //
+      // SEC-03 Finding A (round-2 adversarial review): `seedProjectBrain`
+      // (orchestrator/project-brain-seed.ts) carries its OWN per-segment
+      // resolveGuardedPath containment on every file it writes and throws
+      // the shared `PathGuardContainmentError` (cli/studio-path-guard.ts,
+      // the established orchestrator/ -> cli/ import direction — SEC-01
+      // precedent) on rejection, never a silent skip. Fail closed here too:
+      // refuse before ANY of this route's writes (including the
+      // `mkdirSync(projectRoot)` immediately below), never surface it as an
+      // unrelated 500.
+      let brainSeed: ReturnType<typeof seedProjectBrain>;
+      try {
+        brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
+      } catch (err) {
+        if (err instanceof PathGuardContainmentError) {
+          sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
+        }
+        throw err;
+      }
+
       // SEC-03 Defect 5 (BLOCKER, found by the adversarial round INSIDE this
       // PR's own fix): validating projectRoot's own identity (the
       // isContainedProjectRepoPath check above) does not validate what this
@@ -823,41 +877,13 @@ export async function handleStudioWriteRoutes(
       // (roadmap.md, brain/profile.md) BEFORE either of its writes — see its
       // docstring — and throws ScaffoldContainmentError, never a silent
       // skip, on rejection. Fail closed here too: refuse before ANY of this
-      // route's writes (including the .forge/project.json write below),
-      // never surface it as an unrelated 500.
+      // route's remaining writes (including the .forge/project.json write
+      // below), never surface it as an unrelated 500.
       let scaffoldedLocal: string[];
       try {
         scaffoldedLocal = scaffoldContractArtifacts(projectRoot, name);
       } catch (err) {
         if (err instanceof ScaffoldContainmentError) {
-          sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
-        }
-        throw err;
-      }
-
-      // Phase 5 §8: seed the project's CENTRAL Brain-3 stub (kb.yaml +
-      // profile.md + themes/) so the KB pillar — and the C4 preflight clause,
-      // which requires the central profile.md — are never empty for a
-      // freshly onboarded project. Idempotent per file (never clobbers an
-      // operator-authored brain). Seeded BEFORE project.json so the KB binding
-      // below can only point at a KB that provably exists on disk (R4-02-F3
-      // review fix — a bound-on-field-presence signal would fail open).
-      //
-      // SEC-03 Finding A (round-2 adversarial review): `seedProjectBrain`
-      // (orchestrator/project-brain-seed.ts) carries its OWN per-segment
-      // resolveGuardedPath containment on every file it writes and throws
-      // the shared `PathGuardContainmentError` (cli/studio-path-guard.ts,
-      // the established orchestrator/ -> cli/ import direction — SEC-01
-      // precedent) on rejection, never a silent skip. Fail closed here too,
-      // same shape as the scaffoldContractArtifacts catch immediately
-      // above: refuse BEFORE any of this route's remaining writes
-      // (including the .forge/project.json write below), never surface it
-      // as an unrelated 500.
-      let brainSeed: ReturnType<typeof seedProjectBrain>;
-      try {
-        brainSeed = seedProjectBrain(ctx.forgeRoot, id, name);
-      } catch (err) {
-        if (err instanceof PathGuardContainmentError) {
           sendJson(res, 400, { error: 'path containment check failed' }, origin); return true;
         }
         throw err;
