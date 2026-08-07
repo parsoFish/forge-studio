@@ -1685,6 +1685,60 @@ export const journey = defineJourney({
                   `drawer-live: a NEW review-loop log line posted while the drawer stayed open must appear without closing/reopening it (marker "${marker}" not found — the drawer never re-fetched because this event type never moves lastProgressAt)`);
               }
               await frame(page, 'r6-01-drawer-live-tail', 'R6-01 — the phase-log drawer refreshes on a brand-new line even though it is a non-progress event type');
+
+              // ── R6-01 WI-1 amendment: the SAME-RENDER race ─────────────────────────
+              // `refreshActiveRun` (app/flows/[id]/page.tsx) refetches the WHOLE Run on
+              // every WebSocket event for this cycle. A node's FINAL event can therefore
+              // advance lastEventAt AND flip that node's own status to a terminal value
+              // (complete/failed, deriveNodeStatuses) in the SAME React render. The
+              // pre-amendment guard read `isTerminal` AFTER the transition had already
+              // landed and skipped the fetch outright — so the drawer kept the
+              // second-to-last snapshot, silently dropping the one line that says how
+              // (or why) the node ended. For a failed node that dropped line is
+              // precisely the reason it failed — the standing "operator iterates blind
+              // because the output exists but is not surfaced" complaint this whole
+              // feature answers. Drive that exact transition with the drawer still open:
+              // one more review-loop event that is BOTH the node's terminal event AND
+              // carries a distinguishable message.
+              //
+              // event_type:'end' + metadata.status:'failed' hits endMetaIndicatesFailure
+              // (orchestrator/run-model-derive.ts) — this flips ONLY the review NODE's
+              // own status (deriveNodeStatuses is per-node). run.status stays
+              // queue-state-derived ('gated', from the manifest's ready-for-review
+              // directory) — untouched, so the sibling flows-run-gate-control beat's
+              // data-run-status="gated" check (same CYCLE_ID2 fixture) is unaffected;
+              // likewise run.gate (findGateNodeId: "whichever node the LAST event
+              // attributes to") stays "review" either way, since review-loop's events
+              // are already the newest in this log.
+              const beforeStatus = await page.evaluate(() =>
+                document.querySelector('[data-node-id="review"]')?.getAttribute('data-status') ?? null);
+              const finalMarker = `review.VERDICT-FAILED-${Date.now()}`;
+              studioEvent('review-loop', 'end', finalMarker, { metadata: { status: 'failed' } });
+
+              try {
+                await page.waitForFunction(
+                  () => document.querySelector('[data-node-id="review"]')?.getAttribute('data-status') === 'failed',
+                  null, { timeout: 8000 },
+                );
+                check(true, `drawer-live: the review hex's own data-status transitions to "failed" in this same step (was "${beforeStatus}") — confirms the SAME-render race is genuinely exercised, not merely asserted`);
+              } catch {
+                const got = await page.evaluate(() =>
+                  document.querySelector('[data-node-id="review"]')?.getAttribute('data-status') ?? '(absent)');
+                check(false, `drawer-live: the review hex must transition to data-status="failed" for this case to exercise the SAME-render race (was "${beforeStatus}", got "${got}")`);
+              }
+
+              try {
+                await page.waitForFunction(
+                  (needle) => (document.querySelector('#phase-drawer')?.textContent ?? '').includes(needle),
+                  finalMarker, { timeout: 6000 },
+                );
+                check(true, `drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker "${finalMarker}")`);
+              } catch {
+                const stillThere = await page.evaluate(() => document.querySelector('#phase-drawer')?.textContent ?? '');
+                check(stillThere.includes(finalMarker),
+                  `drawer-live: the node's OWN terminal (failed) line must appear in the still-open drawer without closing/reopening it (marker "${finalMarker}" not found — the terminal-transition render skipped the fetch because isTerminal was already true by the time the effect body ran)`);
+              }
+              await frame(page, 'r6-01b-drawer-live-terminal', 'R6-01 — the drawer surfaces a node\'s own terminal (failed) line even though that SAME event flips the node to terminal status in the same render');
         },
       },
       {
