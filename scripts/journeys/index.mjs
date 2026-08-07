@@ -224,6 +224,7 @@ export const RUN_ORDER = [
   ['agents', 'agents-kickoff-attach-material'],
   ['agents', 'agents-kickoff-dispatch'],
   ['agents', 'agents-kickoff-run-view'],
+  ['agents', 'agents-kickoff-standing-triggers'],
 
   ['flows-author', 'flows-author-new-flow'],
   ['flows-author', 'flows-author-scratch-build'],
@@ -254,6 +255,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-reflect'],
   ['flows-run', 'flows-run-reflect-automated'],
   ['flows-run', 'flows-run-monitor-deep-dive'],
+  ['flows-run', 'flows-run-drawer-live-tail'],
   ['flows-run', 'flows-run-start-run-cta'],
   ['flows-run', 'flows-run-gate-control'],
 

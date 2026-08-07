@@ -1626,6 +1626,68 @@ export const journey = defineJourney({
         },
       },
       {
+        id: 'flows-run-drawer-live-tail',
+        title: 'Flow monitor — the phase-log drawer stays live for non-progress events (R6-01 WI-1)',
+        narration: 'A node whose events so far are only "start"/"log" lines — never a tool_use/file_change/test_run/iteration, the only four event types that move lastProgressAt (orchestrator/run-model-derive.ts PROGRESS_EVENT_TYPES) — still gets its open drawer refreshed the moment it emits a brand-new line, over the SAME WebSocket the page already holds. No new emission path: the line is appended to the running run\'s own events.jsonl, exactly as a real agent would, and the existing 200ms poll-tail + broadcast (cli/ui-bridge.ts) carries it to the page.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-01] Flow monitor — phase-log drawer live-refresh on a non-progress event');
+              // Re-use the SAME gated run (CYCLE_ID2) the monitor-deep-dive beat seeded
+              // above. review-loop (-> flow node "review", CANONICAL_PHASE_OVERRIDES,
+              // orchestrator/run-model.ts:171) received only a 'start' event and a
+              // 'log' event ('reviewer.pr-opened') — NEITHER is in PROGRESS_EVENT_TYPES —
+              // so this node's lastProgressAt has never been set at all.
+              await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
+              const reviewHex = page.locator('[data-node-id="review"]').first();
+              let drawerOpened = false;
+              if ((await reviewHex.count()) > 0) {
+                await reviewHex.click();
+                try {
+                  await page.waitForFunction(
+                    () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true',
+                    null, { timeout: 8000 },
+                  );
+                  drawerOpened = true;
+                  check(true, 'drawer-live: clicking the review hex opens the drawer (data-drawer-open="true")');
+                } catch {
+                  check(false, 'drawer-live: review hex opens drawer');
+                }
+              } else {
+                check(false, 'drawer-live: [data-node-id="review"] hex present to click');
+              }
+              if (!drawerOpened) return;
+              await sleep(ACT);
+              // Baseline (unaffected by the WI-1 fix): the already-seeded
+              // 'reviewer.pr-opened' line is visible on first open via the existing
+              // identity-keyed fetch (DrawerBody Effect 1) — establishes the drawer
+              // itself is wired to real data before testing the LIVE half below.
+              const baselineText = await page.evaluate(() => document.querySelector('#phase-drawer')?.textContent ?? '');
+              check(baselineText.includes('reviewer.pr-opened'),
+                'drawer-live: initial open shows the already-seeded review-loop log line (baseline)');
+              // The live gap this beat pins: append ONE MORE 'log' line to review-loop
+              // while the drawer stays open, WITHOUT closing/reopening it or changing
+              // any of Effect 1's dependencies (cycleId/nodeId/stderrOnly/wiId all
+              // unchanged) and WITHOUT the event moving lastProgressAt (Effect 2's own
+              // trigger). A drawer that is genuinely live must surface this new line
+              // anyway, sourced from the page's existing WebSocket tail — no new
+              // emission path, no manual refetch.
+              const marker = `review.LIVE-TAIL-${Date.now()}`;
+              studioEvent('review-loop', 'log', marker);
+              try {
+                await page.waitForFunction(
+                  (needle) => (document.querySelector('#phase-drawer')?.textContent ?? '').includes(needle),
+                  marker, { timeout: 6000 },
+                );
+                check(true, `drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker "${marker}")`);
+              } catch {
+                const stillThere = await page.evaluate(() => document.querySelector('#phase-drawer')?.textContent ?? '');
+                check(stillThere.includes(marker),
+                  `drawer-live: a NEW review-loop log line posted while the drawer stayed open must appear without closing/reopening it (marker "${marker}" not found — the drawer never re-fetched because this event type never moves lastProgressAt)`);
+              }
+              await frame(page, 'r6-01-drawer-live-tail', 'R6-01 — the phase-log drawer refreshes on a brand-new line even though it is a non-progress event type');
+        },
+      },
+      {
         id: 'flows-run-start-run-cta',
         title: `Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`,
         narration: `On the from-scratch ${SCRATCH_FLOW} flow — never yet run — the Start Run button is live and enabled, proving the engine can launch any authored flow directly from the UI, not only the seeded production ones.`,

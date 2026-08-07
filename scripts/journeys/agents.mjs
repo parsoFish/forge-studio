@@ -1291,5 +1291,49 @@ export const journey = defineJourney({
               cleanKickoffAgent();
         },
       },
+      {
+        id: 'agents-kickoff-standing-triggers',
+        title: 'Kickoff — the panel lists standing triggers targeting this agent (R6-01 WI-4)',
+        narration: 'reflector is the one real OOTB agent a standing trigger targets today — forge-develop\'s own flow.yaml declares `{on: merged, target: {kind: agent, ref: reflector}}` with no `projects:` key (unscoped). The kickoff panel surfaces this read-only, so an operator opening reflector\'s page can see it is already wired to fire automatically on every merge, not just dispatchable by hand.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-01] Kickoff — standing-triggers list on the reflector agent page');
+              await page.goto(watch.uiUrl + '/agents/reflector', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              const agentId = await page.evaluate(() =>
+                document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
+              check(agentId === 'reflector', `agents-kickoff-standing-triggers: landed on the real reflector agent page (data-agent-id="${agentId}")`);
+
+              // Measured against the live seed (studio/flows/forge-develop/flow.yaml):
+              // exactly ONE trigger targets an agent at all today, and it targets
+              // reflector — forge-architect and forge-reflect both declare
+              // `triggers: []`. Give the panel a moment to fetch GET /api/triggers
+              // and render before reading the final count.
+              const rows = page.locator('[data-standing-trigger]');
+              try {
+                await page.waitForFunction(
+                  () => document.querySelectorAll('[data-standing-trigger]').length > 0,
+                  null, { timeout: 6000 },
+                );
+              } catch { /* fall through — count read below reports the real (possibly zero) state */ }
+              const rowCount = await rows.count();
+              check(rowCount === 1,
+                `agents-kickoff-standing-triggers: exactly one standing trigger targets reflector today (forge-develop's on:merged declaration) — got ${rowCount} [data-standing-trigger] row(s)`);
+
+              if (rowCount === 1) {
+                const kind = await rows.first().getAttribute('data-trigger-kind').catch(() => null);
+                const target = await rows.first().getAttribute('data-trigger-target').catch(() => null);
+                const scopeCount = await rows.first().getAttribute('data-trigger-scope-count').catch(() => null);
+                check(kind === 'merged', `agents-kickoff-standing-triggers: data-trigger-kind reflects the real declaration's "on" (got "${kind}")`);
+                check(target === 'reflector', `agents-kickoff-standing-triggers: data-trigger-target reflects the real target ref (got "${target}")`);
+                check(scopeCount === 'all',
+                  `agents-kickoff-standing-triggers: forge-develop declares no 'projects:' key (unscoped) — data-trigger-scope-count must read "all", distinct from a scoped-to-nothing "0" (got "${scopeCount}")`);
+              }
+              await frame(page, 'ak-8-standing-triggers', 'Kickoff — reflector\'s page lists the standing trigger that already targets it (forge-develop, on: merged)');
+        },
+      },
     ],
   });
