@@ -313,7 +313,8 @@ export async function dispatchAgentRun(opts: DispatchAgentRunOpts): Promise<Disp
   }
   const prompt = buildStandaloneRunPrompt(def, { project: opts.project, inputs: opts.inputs, materials: discovered.materials });
   const workdir = opts.workdir ?? opts.project?.repoPath ?? process.cwd();
-  const logsRoot = opts.logsRoot ?? '_logs';
+  // `logsRoot` is already resolved above (materials discovery needs it first) —
+  // the rebase onto R6-04 brought two identical declarations together.
   const result = await runAgent(def, {
     runId: opts.runId,
     workdir,
