@@ -14,18 +14,23 @@
  * See `./history-ledger.test.ts` for the full acceptance contract.
  */
 
-import type { RunStatus } from './studio-client';
+import type { RunPhaseStatus, RunStatus } from './studio-client';
 
 // ---------------------------------------------------------------------------
 // LedgerSegment — the closed, seven-member outcome-narrative vocabulary (D3)
 // ---------------------------------------------------------------------------
 
 /**
- * A single fact in a run's outcome narrative. CLOSED union — exactly seven
- * members (D3). Segment ORDER (produced by a caller's derivation, e.g.
- * `./flow-ledger.ts`'s `deriveFlowLedgerSegments`) is the run's own
- * chronology: work-items → gate-fails → review-findings →
- * gate-waiting|failed → merged → reflection-lost.
+ * A single fact in a run's outcome narrative. CLOSED union — exactly TEN
+ * members (D3; widened from seven by R6-06 D6/D7 + R6-06 ROUND 2 — see
+ * `./history-ledger.test.ts`'s EXHAUSTIVE type-level pin, which fails to
+ * typecheck if an eleventh member is added without updating it there).
+ * Segment ORDER (produced by a caller's derivation, e.g.
+ * `./flow-ledger.ts`'s `deriveFlowLedgerSegments` for the run-level five, or
+ * `./agent-ledger.ts`'s `deriveAgentNodeLedgerSegments` for the per-NODE
+ * three) is the run's own chronology: work-items → gate-fails →
+ * review-findings → gate-waiting|failed → merged → reflection-lost (run
+ * level); in-flow → gate-fails|node-errors → review-findings (node level).
  */
 export type LedgerSegment =
   | { kind: 'work-items'; done: number; total: number }
@@ -35,7 +40,19 @@ export type LedgerSegment =
   | { kind: 'gate-waiting'; note: string }
   | { kind: 'failed'; note: string }
   | { kind: 'merged' }
-  | { kind: 'reflection-lost'; cause: string };
+  | { kind: 'reflection-lost'; cause: string }
+  /** R6-06 D6/D7 — a standalone (non-flow) worker dispatch. Bare, context-
+   *  free positive marker; never combined with any run-level kind above
+   *  (a standalone dispatch is not a flow run at all). */
+  | { kind: 'standalone' }
+  /** R6-06 ROUND 2 — every flow-node row's own `run.flowId` (a fact about
+   *  the ROW, not `phaseMeta[nodeId]` — always populated for a flow-node
+   *  row, independent of that node's own execution facts). */
+  | { kind: 'in-flow'; flowId: string }
+  /** R6-06 ROUND 2 — a NON-`dev` node's own `retries` (an `error`-typed
+   *  event count, D9's sibling rule). NEVER emitted for the `dev` node,
+   *  where `gate-fails` owns that number. */
+  | { kind: 'node-errors'; count: number };
 
 /** The narrative's own joiner sequence — also the sequence `renderSegment`
  *  must neutralize inside any free-text note it interpolates (D11). */
@@ -78,6 +95,20 @@ export function renderSegment(seg: LedgerSegment): string {
       // never appear inside a segment's own content, or a narrative split
       // back apart by " → " desynchronizes into an extra, spurious piece.
       return `reflection lost: ${neutralizeJoiner(seg.cause)}`;
+    // R6-06 D6/D7 — a bare, context-free positive marker. No free text to
+    // neutralize (nothing but a fixed literal).
+    case 'standalone':
+      return 'standalone';
+    // R6-06 ROUND 2 — `flowId` is a caller-controlled identifier (a flow
+    // definition's own `id`, e.g. 'forge-develop'), never run-supplied free
+    // text, so no neutralization applies (same reasoning as 'merged').
+    case 'in-flow':
+      return `in ${seg.flowId}`;
+    // R6-06 ROUND 2 — deliberately DIFFERENT wording from `gate-fails`
+    // ('gate failed ×N'): D9 forbids calling a non-dev node's error count a
+    // gate outcome, so the rendered text must never contain the word 'gate'.
+    case 'node-errors':
+      return `errored ×${seg.count}`;
     default: {
       const exhaustive: never = seg;
       return exhaustive;
@@ -99,6 +130,36 @@ export function renderNarrative(segments: LedgerSegment[]): string | null {
 // LedgerRow — the shared row shape
 // ---------------------------------------------------------------------------
 
+/**
+ * R6-06 D8/D12 — the closed union of THREE REAL status vocabularies a row
+ * can honestly carry, one per execution path: a flow run's own `RunStatus`
+ * (`flow-ledger.ts`), a flow NODE's own `RunPhaseStatus` (`agent-ledger.ts`'s
+ * flow-node entries), or a standalone dispatch's own closed vocabulary. A
+ * session's own `status.json` phase is not a closed set forge controls (D12:
+ * "never coerced into a RunStatus/RunPhaseStatus literal — carried verbatim,
+ * not mapped"), so the trailing `string` covers it — never a fabricated
+ * mapping onto one of the other three vocabularies.
+ */
+export type LedgerRowStatus =
+  | RunStatus
+  | RunPhaseStatus
+  | 'running'
+  | 'done'
+  | 'failed'
+  | 'suppressed'
+  | 'budget-exceeded'
+  | string;
+
+/** R6-06 D8 — which of the three execution paths produced this row.
+ *  Optional: `flow-ledger.ts`'s rows never set it (D8 — that caller's rows
+ *  are already scoped to "inside a flow run" by construction). */
+export type LedgerRowLinkKind = 'flow-node' | 'standalone' | 'session';
+
+/** R6-06 D8 — mirrors `Run.trigger` (`studio-client.ts`) verbatim; the SAME
+ *  shape `FlowRunDetail.tsx`'s `data-trigger-kind/source/scope` already
+ *  renders, now also reaching the ledger row. */
+export type LedgerRowTrigger = { kind: string; source: string; scope: string | null };
+
 export type LedgerRow = {
   id: string;
   /** Raw ISO `run.startedAt`, or '' if absent (D7) — formatting is a
@@ -114,13 +175,23 @@ export type LedgerRow = {
    * null`.
    */
   narrativeKinds: string[];
-  /** The REAL `RunStatus` vocabulary — D4. Never the mockup's invented
-   *  'attention' status. */
-  status: RunStatus;
-  /** `run.costUsd`, read never re-summed — D8. */
-  costUsd: number;
+  /** The REAL status vocabulary for this row's own execution path — D4/D8.
+   *  Never the mockup's invented 'attention' status. */
+  status: LedgerRowStatus;
+  /** `run.costUsd` (flow-node: the NODE's own `phaseMeta[nodeId].costUsd`),
+   *  read never re-summed — D8. `null` when the cost genuinely does not
+   *  exist yet (e.g. a session with no log dir) — NEVER a fabricated
+   *  `0`/`$0.00` standing in for an absent fact. */
+  costUsd: number | null;
   /** Caller-computed — D2, the reuse seam. */
   href: string;
+  /** R6-06 D8 — OPTIONAL: which execution path this row came from. Absent
+   *  on every existing (pre-R6-06) flow-ledger row (byte-identical-when-
+   *  absent regression lock). */
+  linkKind?: LedgerRowLinkKind;
+  /** R6-06 D8 — OPTIONAL: this row's own provenance, when the run/entry
+   *  carries one. Absent on every existing (pre-R6-06) flow-ledger row. */
+  trigger?: LedgerRowTrigger;
 };
 
 // ---------------------------------------------------------------------------

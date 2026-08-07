@@ -108,6 +108,14 @@ export function deriveFlowLedgerSegments(run: Run): LedgerSegment[] {
  * come from the SAME `deriveFlowLedgerSegments(run)` call so they can never
  * disagree (D11). `href` mirrors `RunRail.tsx`'s own existing "Run detail
  * →" link target verbatim (D2, the reuse seam).
+ *
+ * R6-06 D8: `run.trigger` (already on the wire `Run` type — R2-08-F4/R6-01
+ * WI-2, not new here) is now also attached to `row.trigger`, verbatim,
+ * carried through the SAME conditional-spread convention `parseRun` already
+ * uses for it — an absent `run.trigger` leaves `row.trigger` genuinely
+ * absent (byte-identical-when-absent: every EXISTING flow-ledger row is
+ * unaffected). `linkKind` is NEVER set here — this caller's rows are already
+ * scoped to "inside a flow run" by construction (D8).
  */
 export function deriveFlowLedgerRows(runs: Run[]): LedgerRow[] {
   const rows: LedgerRow[] = runs.map((run) => {
@@ -121,6 +129,7 @@ export function deriveFlowLedgerRows(runs: Run[]): LedgerRow[] {
       status: run.status,
       costUsd: run.costUsd,
       href: `/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}`,
+      ...(run.trigger !== undefined ? { trigger: run.trigger } : {}),
     };
   });
   return sortLedgerRowsNewestFirst(rows);

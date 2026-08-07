@@ -102,6 +102,7 @@ import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { request as httpRequest } from 'node:http';
 
 import { startBridge } from './ui-bridge.ts';
 
@@ -138,6 +139,43 @@ function seedForgeArchitectFlow(): void {
   const dir = join(forgeRoot, 'studio', 'flows', 'forge-architect');
   mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'flow.yaml'), FORGE_ARCHITECT_FLOW_YAML);
+}
+
+/**
+ * ⚑ ROUND 4 (Amendment 1) — verbatim copy of the `architect` descriptor from
+ * the REAL `studio/session-kinds.yaml` (read from this repo before writing
+ * this file) — the ONLY session-kind descriptor the SESSION tests below
+ * exercise. `loadSessionKinds` (orchestrator/studio/session-kinds.ts) THROWS
+ * when this file is absent — this fixture never seeded it, so
+ * `collectSessionRows` (cli/ui-bridge.ts) could only resolve the 'architect'
+ * agent -> session kind via a hand-maintained `FALLBACK_SESSION_KINDS` table
+ * an implementer added purely to fit this gap: a second, independently
+ * drifting copy of declared data this project forbids outright (no
+ * fallbacks — CLAUDE.md "Never do"). Seeding the REAL registry here (same
+ * precedent as `cli/bridge-studio-sessions.test.ts`'s `writeSessionKindsYaml`
+ * and `cli/studio-lint.test.ts`'s `tmpRoot`, both of which seed a real
+ * `studio/session-kinds.yaml` into their synthetic forgeRoot rather than
+ * relying on any fallback) closes the gap the fallback was built for, so it
+ * can be deleted. Mirrors this file's own `FORGE_ARCHITECT_FLOW_YAML`
+ * verbatim-copy convention immediately above.
+ */
+const SESSION_KINDS_YAML = `- id: architect
+  agent: architect
+  title: Planning session
+  legacyRoutes:
+    - /architect/[sessionId]
+    - /architect/[sessionId]/interview
+  stages: [roadmap]
+  defaultStage: roadmap
+  artifact:
+    kind: roadmap-draft
+    label: Roadmap draft
+`;
+
+function seedSessionKindsYaml(): void {
+  const dir = join(forgeRoot, 'studio');
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'session-kinds.yaml'), SESSION_KINDS_YAML);
 }
 
 function manifestText(initId: string, cycleId: string, flowId: string): string {
@@ -310,6 +348,33 @@ async function getJson(path: string): Promise<{ status: number; body: unknown }>
   return { status: res.status, body };
 }
 
+/**
+ * ⚑ ROUND 4 (Amendment 2) — sends a raw HTTP GET with the EXACT path bytes
+ * given, bypassing WHATWG URL / undici `fetch()` entirely, so client-side
+ * RFC-3986 dot-segment normalisation never runs. `fetch()` collapses
+ * `/api/agents/../history` to `/api/history` BEFORE the request ever leaves
+ * the process — the server never sees the `..` segment — so a `..`-shaped
+ * slug can only be delivered to the REAL `/api/agents/:slug/history` route
+ * with a client that puts the path on the wire unmodified. Node's low-level
+ * `http.request({ path })` does exactly that (same precedent as
+ * `cli/ui-bridge-demo-generations.test.ts`'s `rawGet` and
+ * `cli/dry-bridge.test.ts`'s raw-request idiom — read both before writing
+ * this). Returns the raw text (not pre-parsed JSON) so a non-200/non-JSON
+ * body can still be inspected by the caller.
+ */
+function rawGet(rawPath: string): Promise<{ status: number; text: string }> {
+  return new Promise((resolvePromise, reject) => {
+    const u = new URL(url);
+    const req = httpRequest({ hostname: u.hostname, port: u.port, path: rawPath, method: 'GET' }, (res) => {
+      let data = '';
+      res.on('data', (chunk: Buffer) => { data += chunk.toString('utf8'); });
+      res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, text: data }));
+    });
+    req.on('error', reject);
+    req.end();
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Setup
 // ---------------------------------------------------------------------------
@@ -322,6 +387,7 @@ before(async () => {
   mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
   seedForgeArchitectFlow();
+  seedSessionKindsYaml();
 
   // Decoy sentinel — lives OUTSIDE `_logs/`, at forgeRoot's own top level.
   // D5's containment proof: NO traversal-shaped slug may ever cause this
@@ -682,8 +748,24 @@ test("D12: a session's own phase string ('interviewing') is never coerced into a
 // traversal slug that's merely "shaped like" a path escape but doesn't
 // resolve to a real file only proves the response doesn't 500, not that the
 // canary specifically can never leak. Both variants close that gap.
+//
+// ⚑ ROUND 4 (Amendment 2) — the bare `'..'` slug is REMOVED from this array,
+// not kept: `encodeURIComponent('..')` is `'..'` unchanged, so the fetch()
+// URL below is `/api/agents/../history` — THREE path segments (`api`,
+// `agents`, `..`), and WHATWG URL / undici's fetch() applies RFC-3986
+// dot-segment removal CLIENT-SIDE before the request ever leaves the
+// process, collapsing that to `/api/history`. The real
+// `/api/agents/:slug/history` route is therefore structurally unreachable
+// through fetch() for this one slug shape — the loop below was "passing" for
+// it only because an implementer added a three-line handler for the literal
+// path `/api/history` to catch the collapsed request, dead undocumented
+// surface invented to satisfy a client artifact, not because the real
+// slug-filter route was ever exercised. Re-grounded below (immediately after
+// the loop) as a dedicated raw-wire test using `rawGet`, which puts the
+// un-normalized bytes `GET /api/agents/../history` on the wire directly —
+// the only way to actually ask the real route the question.
 const TRAVERSAL_SLUGS = [
-  '../SECRET-OUTSIDE-LOGS.txt', '../SECRET-OUTSIDE-LOGS', '..',
+  '../SECRET-OUTSIDE-LOGS.txt', '../SECRET-OUTSIDE-LOGS',
   '../../../../../../etc/passwd', 'a/../../SECRET-OUTSIDE-LOGS.txt', 'a/b',
   '..%2fSECRET-OUTSIDE-LOGS.txt',
 ];
@@ -741,6 +823,37 @@ for (const evilSlug of TRAVERSAL_SLUGS) {
     assert.ok(!text.includes(forgeRoot), `response must never echo the real forgeRoot filesystem path — got: ${text.slice(0, 300)}`);
   });
 }
+
+test("D5 (ROUND 4, RAW WIRE): the bare '..' slug — sent as genuinely UN-NORMALIZED bytes on the wire via a raw node:http request, NOT fetch() — is BYTE-IDENTICAL to the well-formed-but-unknown-slug baseline, through the REAL /api/agents/:slug/history route, never a dedicated fake handler for the literal path /api/history", async () => {
+  // KILLS: a hand-added handler matching the literal request path
+  // `/api/history` (the shape `fetch('/api/agents/../history')` collapses
+  // to client-side, per RFC-3986 dot-segment removal) — dead, undocumented
+  // product surface invented ONLY because fetch() can never deliver the raw
+  // `..` segment to the real route. This test sends the un-collapsed bytes
+  // `GET /api/agents/../history` directly on the wire (Node's low-level
+  // `http.request({ path })` puts the path string straight onto the request
+  // line, unmodified — no WHATWG URL normalization involved), so it reaches
+  // the REAL `url.startsWith('/api/agents/') && url.endsWith('/history')`
+  // route with slug '..' — D5's filter-over-enumerated-entries design (never
+  // a path join) then handles it exactly like any other unknown slug. A
+  // literal-`/api/history`-matching handler is provably unnecessary: this
+  // test passes with that handler deleted (see the task report's mutation
+  // proof) precisely because the real route already answers this request
+  // correctly on its own.
+  const baseline = await getJson('/api/agents/well-formed-unknown-baseline-slug/history');
+  const raw = await rawGet('/api/agents/../history');
+  assert.equal(raw.status, 200, `raw un-normalized '..' slug must resolve 200 via the REAL /api/agents/:slug/history route, exactly like an ordinary unknown slug (baseline was ${baseline.status})`);
+  const body: unknown = JSON.parse(raw.text);
+  assert.deepEqual(
+    canonicalize(body),
+    canonicalize(baseline.body),
+    `raw wire '..' slug produced a response that DIFFERS from the well-formed-unknown baseline: ${JSON.stringify(body)} vs ${JSON.stringify(baseline.body)}`,
+  );
+  // Belt-and-suspenders (same shape as the fetch-driven battery above).
+  assert.notEqual(raw.status, 500, "must not 500 for the raw wire '..' slug");
+  assert.ok(!raw.text.includes('SENTINEL-9f3a-must-never-leak'), `raw wire '..' slug response must never contain the outside-_logs canary — got: ${raw.text.slice(0, 300)}`);
+  assert.ok(!raw.text.includes(forgeRoot), `raw wire '..' slug response must never echo the real forgeRoot filesystem path — got: ${raw.text.slice(0, 300)}`);
+});
 
 test('D5: after every traversal probe above, the route is still healthy for a normal, safe slug (no crash leaked state)', async () => {
   const { status, body } = await getJson('/api/agents/probe/history');

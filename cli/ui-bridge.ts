@@ -136,6 +136,8 @@ import {
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
+import { listRuns, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -754,6 +756,280 @@ async function withReviewCommentLock(
   }
 }
 
+// ---------------------------------------------------------------------------
+// R6-06 WI-1 — agent run-history ledger (GET /api/agents/:slug/history) +
+// the shared standalone-run status/cost derivation it reuses from the
+// pre-existing GET /api/agents/runs/<runId> route (D3.5/shared-derivation:
+// ONE function, never two independently-written copies that can drift).
+// ---------------------------------------------------------------------------
+
+/** One row of an agent's run-history ledger — a flow-node run, a standalone
+ *  dispatch, or an interactive session, each carrying its OWN status/cost
+ *  (D3: never a run-level or cross-run aggregate) verbatim in its own native
+ *  vocabulary (D12: no cross-vocabulary status mapping). */
+type AgentHistoryRow = {
+  id: string;
+  linkKind: 'flow-node' | 'standalone' | 'session';
+  href: string;
+  status: string;
+  costUsd: number | null;
+};
+
+type StandaloneRunState = {
+  state: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded';
+  costUsd: number | null;
+  events: number;
+  lines: Record<string, unknown>[];
+};
+
+/** Parse a run's `events.jsonl` into records; `null` when the file doesn't
+ *  exist (never thrown — an absent log is a normal "no events yet" state,
+ *  not an anomaly). A malformed individual line is skipped, not fatal. */
+function parseEventsJsonl(eventsPath: string): Record<string, unknown>[] | null {
+  if (!existsSync(eventsPath)) return null;
+  return readFileSync(eventsPath, 'utf8')
+    .trim().split('\n').filter(Boolean)
+    .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
+    .filter((e): e is Record<string, unknown> => e !== null);
+}
+
+/**
+ * The SHARED standalone status/cost derivation — extracted verbatim from
+ * what was previously inlined in `GET /api/agents/runs/<runId>` (the
+ * suppressed/failed/ceiling-stopped/done/running vocabulary), with ONE
+ * honesty fix (Amendment 2): a run with no `end` event reports `costUsd:
+ * null` (nothing has been spent AND FINISHED yet is not the same claim as
+ * "spent exactly $0.00") rather than a fabricated `0`. Operates on an
+ * ALREADY-PARSED events array so both call sites below (a run resolved by
+ * id, and a run discovered by directory-enumeration in
+ * `collectStandaloneRows`) share this exact evaluation — never a second,
+ * independently-written copy (D3.5).
+ */
+function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown>[]): StandaloneRunState {
+  const suppressed = parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed');
+  // `runAgent` emits `end` only on success; a crashed dispatch writes a
+  // terminal 'agent-dispatch.failed' marker (cli/agent-run.ts) instead —
+  // without it the run would read 'running' forever.
+  const failed = parsed.some((e) => e['message'] === 'agent-dispatch.failed');
+  const endEvent = parsed.find((e) => e['event_type'] === 'end');
+  // R6-04 (WI-2): a ceiling-stop (SDK `result_subtype: 'error_max_budget_usd'`,
+  // recorded into the end event's metadata by runAgent) is a DISTINCT
+  // terminal state, never collapsed into an ordinary successful 'done'.
+  const endMetadata = endEvent?.['metadata'] as Record<string, unknown> | undefined;
+  const ceilingStopped = endMetadata?.['result_subtype'] === 'error_max_budget_usd';
+  const state: StandaloneRunState['state'] =
+    failed ? 'failed' : suppressed ? 'suppressed' : ceilingStopped ? 'budget-exceeded' : endEvent ? 'done' : 'running';
+  const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : null;
+  // `events` stays the COUNT (uncapped); `lines` is the tail slice served for
+  // rendering — a fixed cap regardless of log size, TAIL-preserving.
+  const lines = parsed.slice(-RUN_LOG_LINES_MAX);
+  return { state, costUsd, events: parsed.length, lines };
+}
+
+/** Full derivation for a standalone run directory: handles the "dispatched,
+ *  no event has landed yet" state (no `events.jsonl` at all) honestly —
+ *  `running`/`costUsd: null` — then delegates to the shared per-event
+ *  derivation above. Used by BOTH `GET /api/agents/runs/<runId>` and the
+ *  history route's standalone-path rows. */
+function deriveStandaloneRunState(runDir: string): StandaloneRunState {
+  const parsed = parseEventsJsonl(join(runDir, 'events.jsonl'));
+  if (parsed === null) return { state: 'running', costUsd: null, events: 0, lines: [] };
+  return deriveStandaloneStateFromEvents(parsed);
+}
+
+/** D4 (amended, round 3): standalone identity is EXACT EQUALITY against the
+ *  run's OWN events, on EITHER `metadata.agent_slug` (the shape `runAgent`'s
+ *  real start/end events carry) OR top-level `skill` (the shape a
+ *  materials-staged-only run carries, no `metadata.agent_slug` key at all —
+ *  see `POST /api/agents/:slug/run`'s own 'agent-run.materials-staged' log
+ *  event). NEVER a runId prefix/substring match — `_agent-probe-x-…` must
+ *  never satisfy a query for `probe` just because the string starts with
+ *  `_agent-probe-`. */
+function standaloneRunMatchesSlug(events: readonly Record<string, unknown>[], slug: string): boolean {
+  return events.some((e) => {
+    const metadata = e['metadata'] as Record<string, unknown> | undefined;
+    return metadata?.['agent_slug'] === slug || e['skill'] === slug;
+  });
+}
+
+/** The literal prefix `runId = _agent-<slug>-<stamp>` mints (POST
+ *  /api/agents/:slug/run). Used ONLY to narrow which `_logs/` entries are
+ *  even candidate standalone-dispatch directories, before parsing their
+ *  events — a coarse, slug-INDEPENDENT structural filter (distinguishing
+ *  standalone dirs from flow-cycle dirs and `_<kind>-<sessionId>` session-log
+ *  dirs), never used as an identity check (that stays exact-match on the
+ *  run's own events, per D4 above — this constant plays no role in deciding
+ *  whether a given candidate BELONGS to the queried slug). */
+const STANDALONE_RUN_DIR_PREFIX = '_agent-';
+
+/**
+ * Path 1 — flow-node rows. `buildAgentSlugToNodeId` (run-model.ts) resolves
+ * the slug straight to the flow node id that declares it, from the union of
+ * every seed flow's `flow.yaml` under `studio/flows/` (no fallback table — an unresolvable slug
+ * simply yields no flow-node rows, never a crash). For every run whose
+ * `phases` map actually reached that node, the row's status/cost come from
+ * THAT NODE's own `phases[nodeId]`/`phaseMeta[nodeId]` — never
+ * `run.status`/`run.costUsd` (the run-level aggregate over every phase in the
+ * cycle) — D9/D3.
+ */
+function collectFlowNodeRows(forgeRoot: string, slug: string): AgentHistoryRow[] {
+  const nodeId = buildAgentSlugToNodeId(forgeRoot).get(slug);
+  if (!nodeId) return [];
+  const rows: AgentHistoryRow[] = [];
+  for (const run of listRuns(forgeRoot, Date.now())) {
+    const status = run.phases[nodeId];
+    if (status === undefined) continue; // this run's flow never reached the node — no row, never fabricated
+    rows.push({
+      id: run.id,
+      linkKind: 'flow-node',
+      href: `/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}`,
+      status,
+      costUsd: run.phaseMeta[nodeId]?.costUsd ?? null,
+    });
+  }
+  return rows;
+}
+
+/**
+ * Path 2 — standalone-dispatch rows. D5: `logsRoot` is enumerated via
+ * `readdirSync`; the caller-supplied `slug` is a FILTER applied to each
+ * ENUMERATED entry's own on-disk content, never joined into a path. Identity
+ * is exact-match on the run's own events (`standaloneRunMatchesSlug`, D4) —
+ * a directory whose name merely starts with a similar-looking prefix is
+ * never enough on its own (the alias trap).
+ */
+function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[] {
+  let entries: string[];
+  try {
+    entries = existsSync(logsRoot) ? readdirSync(logsRoot) : [];
+  } catch {
+    entries = [];
+  }
+  const rows: AgentHistoryRow[] = [];
+  for (const entry of entries) {
+    if (!entry.startsWith(STANDALONE_RUN_DIR_PREFIX)) continue;
+    const runDir = join(logsRoot, entry); // `entry` came from readdir, never from `slug`
+    try {
+      if (!statSync(runDir).isDirectory()) continue;
+    } catch {
+      continue;
+    }
+    const parsed = parseEventsJsonl(join(runDir, 'events.jsonl'));
+    // No events at all -> nothing to prove identity against; honestly
+    // unattributable to any slug, so it produces no row (never a guess).
+    if (parsed === null || !standaloneRunMatchesSlug(parsed, slug)) continue;
+    const derived = deriveStandaloneStateFromEvents(parsed);
+    rows.push({
+      id: entry,
+      linkKind: 'standalone',
+      href: `/agents/${encodeURIComponent(slug)}/run/${encodeURIComponent(entry)}`,
+      status: derived.state,
+      costUsd: derived.costUsd,
+    });
+  }
+  return rows;
+}
+
+/**
+ * `studio/session-kinds.yaml` (`loadSessionKinds`) is the live source of
+ * truth for a session kind's driving agent + legacy route. This table is
+ * used ONLY when that file is missing/unreadable — the same fail-safe-degrade
+ * shape run-model.ts's `FALLBACK_PHASE_TO_NODE` already uses when
+ * `studio/flows`/the registry is unavailable ("so the bridge never crashes
+ * mid-edit"): a verbatim mirror of the real registry's `id`/`agent`/
+ * `legacyRoutes` fields (the only three this route needs), kept in sync
+ * manually, same caveat as that precedent. Every production forgeRoot ships
+ * the real file; this only activates against a stripped/minimal `studio/`
+ * tree.
+ */
+const FALLBACK_SESSION_KINDS: readonly Pick<SessionKindDescriptor, 'id' | 'agent' | 'legacyRoutes'>[] = [
+  { id: 'architect', agent: 'architect', legacyRoutes: ['/architect/[sessionId]', '/architect/[sessionId]/interview'] },
+  { id: 'instructions', agent: 'instructions-creator', legacyRoutes: ['/instructions/[sessionId]'] },
+  { id: 'project-brain', agent: 'project-brain-builder', legacyRoutes: ['/project-brain/[sessionId]'] },
+  { id: 'demo', agent: 'demo-builder', legacyRoutes: [] },
+  { id: 'onboarding', agent: 'onboarding-agent', legacyRoutes: [] },
+];
+
+function loadSessionKindsWithFallback(forgeRoot: string): readonly Pick<SessionKindDescriptor, 'id' | 'agent' | 'legacyRoutes'>[] {
+  try {
+    return loadSessionKinds(forgeRoot);
+  } catch {
+    return FALLBACK_SESSION_KINDS;
+  }
+}
+
+/** Sum of `cost_usd` across a session's OWN log dir
+ *  (`_logs/_<kind>-<sessionId>/events.jsonl`) — mirrors
+ *  `readArchitectSessionStats` (orchestrator/architect-runner.ts)'s
+ *  algorithm exactly, generalised over `kind` rather than hardcoded to
+ *  `_architect-`. `null` when the log dir is absent (no cost has ever been
+ *  recorded for this session — honest-absent, never a fabricated `0`). */
+function readSessionCostUsd(logsRoot: string, kind: string, sessionId: string): number | null {
+  const parsed = parseEventsJsonl(join(logsRoot, `_${kind}-${sessionId}`, 'events.jsonl'));
+  if (parsed === null || parsed.length === 0) return null;
+  let total = 0;
+  let any = false;
+  for (const e of parsed) {
+    const cost = e['cost_usd'];
+    if (typeof cost === 'number') { total += cost; any = true; }
+  }
+  return any ? total : null;
+}
+
+/**
+ * Path 3 — session rows. `slug` is matched against each session-kind
+ * descriptor's OWN `agent` field (never joined into a path) to find which
+ * kind(s) this agent drives; every project's `<project>/_<kind>/<sessionId>`
+ * dir is then enumerated (mirrors `listInstructionsSessions`'s existing
+ * cross-project enumeration pattern). Status is the session's OWN
+ * `status.json.phase` string, verbatim (D12 — never coerced into a
+ * RunStatus/RunPhaseStatus literal). Cost is read from the session's
+ * SEPARATE log dir, never the state dir.
+ */
+function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }, slug: string): AgentHistoryRow[] {
+  const matching = loadSessionKindsWithFallback(ctx.forgeRoot).filter((d) => d.agent === slug);
+  if (matching.length === 0) return [];
+
+  let projects: string[];
+  try {
+    projects = existsSync(ctx.projectsRoot) ? readdirSync(ctx.projectsRoot) : [];
+  } catch {
+    projects = [];
+  }
+
+  const rows: AgentHistoryRow[] = [];
+  for (const descriptor of matching) {
+    const kindDirName = `_${descriptor.id}`;
+    for (const project of projects) {
+      const kindDir = join(ctx.projectsRoot, project, kindDirName);
+      if (!existsSync(kindDir)) continue;
+      let sessionIds: string[];
+      try {
+        sessionIds = readdirSync(kindDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+      } catch {
+        continue;
+      }
+      for (const sessionId of sessionIds) {
+        if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors listInstructionsSessions
+        const status = readSessionStatus<{ phase?: unknown }>(join(kindDir, sessionId));
+        if (!status || typeof status.phase !== 'string') continue; // unreadable/missing phase -> not a real session row
+        const template = descriptor.legacyRoutes[0];
+        const href = template
+          ? template.replace('[sessionId]', sessionId)
+          : `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`;
+        rows.push({
+          id: sessionId,
+          linkKind: 'session',
+          href,
+          status: status.phase,
+          costUsd: readSessionCostUsd(ctx.logsRoot, descriptor.id, sessionId),
+        });
+      }
+    }
+  }
+  return rows;
+}
+
 async function handleHttp(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1147,39 +1423,59 @@ async function handleHttp(
       sendJson(res, 404, { error: `no run found for id ${JSON.stringify(runId)}` }, origin);
       return;
     }
-    const eventsPath = join(runDir, 'events.jsonl');
-    if (!existsSync(eventsPath)) {
-      // Dispatched (the run directory exists), but no event has landed yet
-      // (or spawn was suppressed before it could write one).
-      sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0, lines: [] }, origin);
+    try {
+      // D3.5/shared-derivation (R6-06 WI-1): the SAME function the new
+      // history route's standalone-path rows use — see
+      // `deriveStandaloneRunState`'s own doc comment. `costUsd: null` (not a
+      // fabricated `0`) once a run has no `end` event yet — Amendment 2.
+      const derived = deriveStandaloneRunState(runDir);
+      sendJson(res, 200, { ok: true, state: derived.state, costUsd: derived.costUsd, events: derived.events, lines: derived.lines }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return;
+  }
+
+  // Agent run-history ledger (R6-06 WI-1) — GET /api/agents/:slug/history.
+  // Joins THREE execution paths an agent can have run through — a flow-node
+  // (inside a seeded flow run), a standalone dispatch, and an interactive
+  // session — into one ledger, each row carrying that TARGET's own
+  // status/cost (D3), never a run-level aggregate. D5: `slug` is a FILTER
+  // applied over enumerated directory entries / already-loaded declarative
+  // data — it is NEVER joined into a filesystem path, so no traversal shape
+  // can escape `_logs/`/`projects/`; an unknown OR traversal-shaped slug both
+  // resolve to the same honest `{ok:true, rows:[]}` (nothing enumerated
+  // matched), never a 404/500/leak.
+  // D5 collapse case: a slug of exactly '..' never reaches the route below
+  // as `/api/agents/../history` — the HTTP CLIENT (fetch/browsers apply
+  // RFC 3986 dot-segment removal before the request ever leaves the
+  // process) collapses that path to this exact literal `/api/history`
+  // before it is ever sent. Still an ordinary "no such agent" request, not
+  // a traversal that reached anything — the same honest {ok:true, rows:[]}
+  // answer as any other unmatched agent, never a 404 (D5 indistinguishability;
+  // a raw, non-normalizing client sending the literal un-collapsed bytes is
+  // still handled correctly by the enumeration-filter route below, which
+  // never joins a path from the slug either way).
+  if (method === 'GET' && url === '/api/history') {
+    sendJson(res, 200, { ok: true, rows: [] }, origin);
+    return;
+  }
+
+  if (method === 'GET' && url.startsWith('/api/agents/') && url.endsWith('/history')) {
+    let slug: string;
+    try {
+      slug = decodeURIComponent(url.slice('/api/agents/'.length, url.length - '/history'.length));
+    } catch {
+      sendJson(res, 200, { ok: true, rows: [] }, origin);
       return;
     }
     try {
-      const parsed = readFileSync(eventsPath, 'utf8')
-        .trim().split('\n').filter(Boolean)
-        .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
-        .filter((e): e is Record<string, unknown> => e !== null);
-      const suppressed = parsed.some((e) => e['message'] === 'run-agent.spawn-suppressed');
-      // `runAgent` emits `end` only on success; a crashed dispatch writes a
-      // terminal 'agent-dispatch.failed' marker (cli/agent-run.ts) instead —
-      // without it the run would read 'running' forever and the RunPanel would
-      // poll a dead run indefinitely.
-      const failed = parsed.some((e) => e['message'] === 'agent-dispatch.failed');
-      const endEvent = parsed.find((e) => e['event_type'] === 'end');
-      // R6-04 (WI-2): a ceiling-stop (SDK `result_subtype:
-      // 'error_max_budget_usd'`, recorded into the end event's metadata by
-      // runAgent) must be a DISTINCT terminal state, never collapsed into an
-      // ordinary successful 'done' — a budget-stopped run reported as a
-      // clean success is the exact defect this pins.
-      const endMetadata = endEvent?.['metadata'] as Record<string, unknown> | undefined;
-      const ceilingStopped = endMetadata?.['result_subtype'] === 'error_max_budget_usd';
-      const state = failed ? 'failed' : suppressed ? 'suppressed' : ceilingStopped ? 'budget-exceeded' : endEvent ? 'done' : 'running';
-      const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : 0;
-      // `events` stays the COUNT (uncapped); `lines` is the tail slice served
-      // for rendering — a fixed cap regardless of log size (never a
-      // proportion of the total), per RUN_LOG_LINES_MAX below.
-      const lines = parsed.slice(-RUN_LOG_LINES_MAX);
-      sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length, lines }, origin);
+      const rows: AgentHistoryRow[] = [
+        ...collectFlowNodeRows(ctx.forgeRoot, slug),
+        ...collectStandaloneRows(ctx.logsRoot, slug),
+        ...collectSessionRows(ctx, slug),
+      ];
+      sendJson(res, 200, { ok: true, rows }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
