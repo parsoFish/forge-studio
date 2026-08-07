@@ -427,3 +427,125 @@ test('deriveFlowLedgerRows: each row carries its OWN narrativeKinds — a neighb
   expect(rowA?.narrativeKinds).toEqual(['gate-fails', 'merged']);
   expect(rowB?.narrativeKinds).toEqual(['merged']);
 });
+
+// ---------------------------------------------------------------------------
+// ROUND 4 — THE CANONICAL SEGMENT ORDER. Round 3 honestly left this hole
+// open: no test pinned the ORDER `deriveFlowLedgerSegments` emits segments
+// in (the journey beat deliberately asserts kind MEMBERSHIP as a set). An
+// implementation keyed off event-arrival order instead of the flow's own
+// topology could render "dev 3/3 → merged → 3 findings (1 blocker, 1
+// major)" — a finding appearing AFTER the merge, chronologically impossible
+// — and it would still pass every test above.
+//
+// SANITY-CHECKED against the real flow definition before pinning anything
+// (studio/flows/forge-develop/flow.yaml, read this round): nodes
+// `dev -> demo -> adversarial-review -> review(gate:verdict)`, plus the
+// async `on: merged -> reflector` trigger (finalize-merged.ts dispatches the
+// reflect agent post-merge, outside the flow run itself). That is EXACTLY
+// the order this initiative's task brief specified:
+//   1. work-items      (dev node's fan-out)
+//   2. gate-fails       (dev node's own quality-gate retries — D9)
+//   3. review-findings  (adversarial-review node)
+//   4. gate-waiting/failed (the run's terminal-ish state at/around the
+//                           `review` verdict gate)
+//   5. merged           (confirmed remote PR merge)
+//   6. reflection-lost  (async, post-merge reflect crash/budget/kill)
+// No contradiction found — the flow's own declared node sequence agrees
+// with the brief's order, so nothing needed correcting.
+//
+// ONE COMBINATION IN THE BRIEF CANNOT ACTUALLY OCCUR, and is deliberately
+// NOT fabricated here: `gate-waiting` and `failed` both derive from
+// `run.status` (`'gated'` and `'failed'` respectively — see the segments
+// tests above, `deriveFlowLedgerSegments: gateNote/failNote/reflectionLost
+// feed their own segments verbatim, each independently`), and `merged`
+// ALSO derives from `run.status` (`'complete'`, D10). `Run.status` is a
+// single scalar (`RunStatus`, studio-client.ts) — a run cannot simultaneously
+// BE `'gated'`/`'failed'` AND `'complete'`. The existing pinned test above
+// ("a NOT-complete run ... never carries a merged segment") already proves
+// this for every non-complete status. So a run that reaches `merged` can
+// NEVER also carry `gate-waiting` or `failed` — slot 4 of the canonical
+// order is only ever populated on a run that does NOT reach slot 5. The
+// maximal REALISTIC "all applicable kinds at once" fixture is therefore the
+// five kinds that CAN co-occur on one `'complete'` run: work-items,
+// gate-fails, review-findings, merged, reflection-lost (a merged run can
+// have had dev retries, a review with findings the operator accepted at
+// verdict, and a reflection that later crashed — every one of those is an
+// independently-established real co-occurrence above). Fabricating a sixth/
+// seventh segment into this fixture (`gate-waiting` or `failed` alongside
+// `merged`) would teach an implementer a contract that can never be
+// exercised by a real run — exactly the "fixture that could never exist"
+// the task brief warns against.
+// ---------------------------------------------------------------------------
+
+test("deriveFlowLedgerSegments: THE CANONICAL ORDER — a single run exhibiting every REALISTICALLY co-occurring segment kind (work-items, gate-fails, review-findings, merged, reflection-lost) emits them in the flow's own chronology, not event-arrival order", () => {
+  // KILLS: (1) an implementation that checks `run.status` FIRST and appends
+  // `merged` ahead of the dev/review derivation (e.g. `if (status ===
+  // 'complete') segments.push({kind:'merged'})` at the top of the function,
+  // before walking `phaseMeta`) — would emit `merged` first, chronologically
+  // impossible (a PR cannot merge before its own dev fan-out or review ran).
+  // (2) an implementation that assembles segments by iterating
+  // `Object.keys(run.phaseMeta)` in whatever order those keys were inserted
+  // — insertion order tracks EVENT ARRIVAL in the source log (a spawn-retry
+  // event on 'adversarial-review' can be logged before the final 'dev'
+  // gate-fail event), NOT the flow's declared topology, so it could put
+  // `review-findings` ahead of `gate-fails` even though `dev` genuinely ran
+  // first. This is the realistic way this class of bug arrives (per the
+  // task brief), not a contrived one — `phaseMeta` is a plain object built
+  // up incrementally as events stream in, and `Object.keys` iteration order
+  // for string keys is insertion order, not any topological guarantee.
+  const run = baseRun({
+    status: 'complete',
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'complete' },
+    ],
+    phaseMeta: {
+      // Deliberately inserted OUT of topological order (adversarial-review
+      // before dev) so a derivation that trusted insertion order instead of
+      // the flow's own node sequence would be caught red-handed.
+      'adversarial-review': withFindings(meta(), { total: 3, blocker: 1, major: 1, minor: 1, info: 0 }),
+      dev: meta({ retries: 2 }),
+    },
+    reflectionLost: 'crash',
+  } as Partial<Run>);
+
+  expect(deriveFlowLedgerSegments(run)).toEqual([
+    { kind: 'work-items', done: 3, total: 3 },
+    { kind: 'gate-fails', count: 2 },
+    { kind: 'review-findings', total: 3, blocker: 1, major: 1, minor: 1, info: 0 },
+    { kind: 'merged' },
+    { kind: 'reflection-lost', cause: 'crash' },
+  ]);
+});
+
+test("deriveFlowLedgerRows: THE CANONICAL ORDER, companion — narrative and narrativeKinds are derived from the SAME row for the fixture above, so the human-readable string and the machine surface cannot disagree about the arc's sequence", () => {
+  // KILLS: a `narrativeKinds` implementation that re-derives segments with a
+  // SEPARATE call (which could reorder independently of `narrative`'s own
+  // `renderNarrative(segments)` call — e.g. one path walks `phaseMeta` via
+  // `Object.keys` while the other walks a topologically-ordered list) —
+  // reading BOTH fields off one `rowOut` proves they came from the one
+  // `deriveFlowLedgerSegments(run)` call D11 requires (see this file's
+  // header + the ROUND 3 section above). Reuses the exact fixture (and its
+  // independently-pinned segment order) from the `deriveFlowLedgerSegments`
+  // test immediately above, the same citation pattern the ROUND 3
+  // `narrativeKinds mirrors...` test already established for the D10
+  // headline arc.
+  const run = baseRun({
+    status: 'complete',
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'complete' },
+    ],
+    phaseMeta: {
+      'adversarial-review': withFindings(meta(), { total: 3, blocker: 1, major: 1, minor: 1, info: 0 }),
+      dev: meta({ retries: 2 }),
+    },
+    reflectionLost: 'crash',
+  } as Partial<Run>);
+
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.narrative).toBe('dev 3/3 → gate failed ×2 → 3 findings (1 blocker, 1 major) → merged → reflection lost: crash');
+  expect(rowOut.narrativeKinds).toEqual(['work-items', 'gate-fails', 'review-findings', 'merged', 'reflection-lost']);
+});
