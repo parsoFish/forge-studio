@@ -376,3 +376,54 @@ test('deriveFlowLedgerRows: an in-flight (not-yet-complete) run still renders na
   const [rowOut] = deriveFlowLedgerRows([run]);
   expect(rowOut.narrative).toBeNull();
 });
+
+// ---------------------------------------------------------------------------
+// ROUND 3 (D11) — narrativeKinds: the MACHINE surface companion to
+// `narrative`, populated HERE (the row-assembly layer) from the SAME
+// `deriveFlowLedgerSegments(run)` call that already produces `narrative` —
+// never a second, independently-derived list that could drift from it.
+// ---------------------------------------------------------------------------
+
+test('deriveFlowLedgerRows: narrativeKinds mirrors the row\'s own segments\' kinds, in the SAME order as narrative — one derivation, two views of it', () => {
+  // KILLS: an implementation that derives `narrativeKinds` from a SEPARATE
+  // call/re-derivation of segments (which could disagree with the one that
+  // produced `narrative` — e.g. after a mid-flight D9 status change) instead
+  // of the same `deriveFlowLedgerSegments(run)` array already computed for
+  // this row. Reuses the D10 headline arc's own fixture (work-items then
+  // merged) so the expected order is independently pinned by an EXISTING
+  // test (`deriveFlowLedgerSegments: THE HEADLINE ARC`, above) rather than
+  // invented fresh here.
+  const run = baseRun({
+    status: 'complete',
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'complete' },
+    ],
+  });
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.narrative).toBe('dev 3/3 → merged');
+  expect(rowOut.narrativeKinds).toEqual(['work-items', 'merged']);
+});
+
+test('deriveFlowLedgerRows: an empty segment list (narrative: null) pairs with narrativeKinds: [] — never a non-empty kinds list beside a null narrative, or vice versa', () => {
+  // KILLS: an implementation that leaves narrativeKinds populated (or
+  // partially populated) when narrative itself fell through to the honest-
+  // null branch — the two fields must never disagree about whether there is
+  // anything to report.
+  const run = baseRun({ id: 'in-flight', status: 'active' });
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.narrative).toBeNull();
+  expect(rowOut.narrativeKinds).toEqual([]);
+});
+
+test('deriveFlowLedgerRows: each row carries its OWN narrativeKinds — a neighbour\'s kinds never bleed across rows (same isolation guarantee as narrative, above)', () => {
+  const gatedFails = baseRun({ id: 'a', phaseMeta: { dev: meta({ retries: 2 }) }, startedAt: '2026-01-01T00:00:00Z' });
+  const clean = baseRun({ id: 'b', startedAt: '2026-01-02T00:00:00Z' });
+  const rows = deriveFlowLedgerRows([gatedFails, clean]);
+
+  const rowA = rows.find((r) => r.id === 'a');
+  const rowB = rows.find((r) => r.id === 'b');
+  expect(rowA?.narrativeKinds).toEqual(['gate-fails', 'merged']);
+  expect(rowB?.narrativeKinds).toEqual(['merged']);
+});

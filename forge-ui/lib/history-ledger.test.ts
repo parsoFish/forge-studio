@@ -33,6 +33,9 @@
  *     when: string;              // raw ISO `run.startedAt`, or '' if absent (D7)
  *     what: string;
  *     narrative: string | null;  // renderNarrative(segments) — D3
+ *     narrativeKinds: string[];  // ROUND 3, D11 below — the MACHINE surface:
+ *                                // segments.map(s => s.kind), same order as
+ *                                // narrative's segments; [] iff narrative===null
  *     status: RunStatus;         // the REAL vocabulary — D4
  *     costUsd: number;           // run.costUsd, never re-summed — D8
  *     href: string;              // caller-computed — D2, the reuse seam
@@ -102,9 +105,56 @@
  *         when `workItems.length > 0` — the same honest-omit discipline D3
  *         already establishes for the five round-1 kinds.
  *
- *   COMPILE-TIME-BACKSTOP CAVEAT (discovered this round, applies to BOTH the
- *   type-level exhaustiveness test below and the sibling FIELD-PARITY pin in
- *   studio-client.test.ts): `forge-ui/tsconfig.json` itself excludes
+ *   D11 (ROUND 3 — resolves the joiner ambiguity round 2 correctly probed and
+ *     left open, see the EXHAUSTIVE battery's "failed alone with an
+ *     arrow-shaped note" fixture below): `gate-waiting`/`failed` segments
+ *     embed free text from the run (`run.gateNote`/`run.failNote`) that this
+ *     module does not author and cannot constrain — so a note containing the
+ *     SAME sequence `renderNarrative` uses to JOIN segments (' → ') makes the
+ *     rendered narrative string ambiguous to split back apart. The closed-
+ *     vocabulary guarantee (D3) was closed at the segment-KIND level but open
+ *     at the note-CONTENT level. Two independent surfaces close it, and every
+ *     consumer picks the one it actually needs:
+ *
+ *       1. MACHINE surface (authoritative) — `LedgerRow.narrativeKinds`
+ *          (added to the type above) carries the segment KINDS as closed,
+ *          structured data — `segments.map(s => s.kind)`, same order as the
+ *          segments that produced `narrative`. Automation, journey beats and
+ *          any future DOM consumer (`data-narrative-kinds` on
+ *          `HistoryLedger.tsx`, pinned in `./history-ledger-render.test.ts`)
+ *          assert on THIS array, never by parsing the rendered human string —
+ *          it cannot carry free-typed prose because its elements are always
+ *          one of the seven closed `LedgerSegment['kind']` literals, the same
+ *          closed union the EXHAUSTIVE type-level test below pins.
+ *       2. HUMAN surface — `renderSegment` NEUTRALIZES the joiner sequence
+ *          inside a free-text note before interpolating it (the joiner
+ *          character sequence, not the note's information, is what gets
+ *          defused — see the dedicated sanitization test below, right after
+ *          the main renderSegment battery). With that fix, the "arrow-shaped
+ *          note" fixture in the EXHAUSTIVE battery passes for the RIGHT
+ *          reason — its note no longer contains a piece that can be mistaken
+ *          for a segment boundary — and stays a genuine regression lock
+ *          rather than something to delete or weaken.
+ *
+ *     Neither existing test was weakened to reach this: the adversarial
+ *     fixture stays, `assertOnlyKnownVocabulary` stays exactly as strict.
+ *
+ *   COMPILE-TIME-BACKSTOP CAVEAT (discovered round 2, RE-VERIFIED round 3).
+ *
+ *   PLAIN STATEMENT for the next reader, up front: the "exhaustive switch"
+ *   test below is an IN-EDITOR AID ONLY. It is not part of any CI step and
+ *   not part of any gate. It type-checks in your editor's TS language service
+ *   or a manually-run `tsc`, nowhere else. The RUNTIME half of that same
+ *   test — the sample-based equality loop — IS the enforced contract (via
+ *   `npm run test:ui`), and only for the samples it already lists. Do not
+ *   trust the switch statement's mere existence as proof anything is
+ *   actually gated — an unlabelled compile-time "backstop" that no gate runs
+ *   is decoration, not protection.
+ *
+ *   The rest of this note is the evidence trail for that statement. Applies
+ *   to BOTH the type-level exhaustiveness test below and the sibling
+ *   FIELD-PARITY pin in studio-client.test.ts: `forge-ui/tsconfig.json`
+ *   itself excludes
  *   `**\/*.test.ts` (`"exclude": ["node_modules", "**\/*.test.ts"]`,
  *   deliberately, per its own inline comment), and the ROOT `tsconfig.json`'s
  *   `include` never lists `forge-ui/**` at all — so NEITHER `tsc` (root
@@ -168,6 +218,38 @@ test('renderSegment: each of the SEVEN known segment kinds renders its exact, pi
   expect(renderSegment({ kind: 'work-items', done: 1, total: 3 })).toBe('dev 1/3');
 });
 
+test('ROUND 3 (D11): renderSegment NEUTRALIZES a joiner sequence (" → ") embedded in a free-text note — the closed-vocabulary guarantee is closed at the CONTENT level, not just per-kind', () => {
+  // KILLS: `renderSegment` implementations that interpolate `note` verbatim
+  // (e.g. template-literal `` `failed: ${note}` `` with no sanitization) — a
+  // note containing the exact sequence `renderNarrative` uses to JOIN
+  // segments (' → ') makes the rendered narrative string ambiguous to split
+  // back apart into its segments. This is EXACTLY the defect the EXHAUSTIVE
+  // battery's "failed alone with an arrow-shaped note" fixture below (label:
+  // 'failed alone with an arrow-shaped note (must not be mistaken for a
+  // joiner)') exists to catch — a naive interpolator makes that fixture fail,
+  // for the right reason (see D11 in the header for the two-surface
+  // resolution: this test pins the HUMAN surface half; the MACHINE surface
+  // half — `narrativeKinds` — is pinned in `./history-ledger-render.test.ts`).
+  //
+  // Neutralized to ' - ' (a sequence that can never be mistaken for the
+  // narrative's own joiner): the note's INFORMATION survives byte-for-byte
+  // apart from the joiner substitution; only the arrow sequence is defused.
+  expect(renderSegment({ kind: 'failed', note: 'pipeline → CI step 3 timed out' }))
+    .toBe('failed: pipeline - CI step 3 timed out');
+  expect(renderSegment({ kind: 'gate-waiting', note: 'blocked → needs review' }))
+    .toBe('gated: blocked - needs review');
+  // Defense in depth: a note with NO surrounding spaces around the arrow
+  // (narrower than the narrative's own ' → ' joiner, but still visually a
+  // joiner-shaped character to a reader, and still enough to desynchronize a
+  // naive split(' → ') if it happened to land adjacent to other spacing) must
+  // not survive into rendered output either — no bare '→' character at all.
+  expect(renderSegment({ kind: 'failed', note: 'a→b' })).not.toContain('→');
+  // A note with NO arrow at all is untouched — sanitization must not mangle
+  // ordinary notes (KILLS an overzealous global replace that corrupts
+  // unrelated punctuation, e.g. stripping all hyphens or dashes).
+  expect(renderSegment({ kind: 'failed', note: 'CI red on merge' })).toBe('failed: CI red on merge');
+});
+
 test('renderNarrative: segments join with " → ", in the array order given (join, not re-sort)', () => {
   // KILLS: a narrative composer that alphabetizes/re-orders segments
   // instead of trusting caller-supplied order, and one that uses a
@@ -225,6 +307,22 @@ function assertOnlyKnownVocabulary(narrative: string | null, label: string): voi
   }
 }
 
+// ROUND 3 (D11) NOTE on the 'failed alone with an arrow-shaped note' fixture
+// below: round 2 correctly identified that this fixture FAILS against any
+// implementation that interpolates `note` raw — `renderSegment` would yield
+// "failed: pipeline → CI step 3 timed out", which `assertOnlyKnownVocabulary`
+// splits on ' → ' into ["failed: pipeline", "CI step 3 timed out"], and the
+// second piece matches no VOCAB_PATTERN. That finding was correctly reported
+// rather than silently fixed. KILLS (this round): the fixture is deliberately
+// left UNCHANGED and `assertOnlyKnownVocabulary` is deliberately left exactly
+// as strict — resolving this by deleting the fixture or loosening the
+// assertion would discard the finding. The actual fix lives in
+// `renderSegment` itself (pinned by the dedicated sanitization test right
+// after the main renderSegment battery, above): the joiner sequence inside a
+// free-text note is neutralized before interpolation, so THIS fixture now
+// passes for the RIGHT reason (its note no longer contains an unescaped
+// joiner) and becomes a genuine regression lock against a future
+// implementation that forgets to sanitize.
 test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures matches the closed vocabulary — no free-typed prose can leak through', () => {
   const battery: Array<{ label: string; segments: LedgerSegment[] }> = [
     { label: 'all seven at once (worst case)', segments: [
@@ -255,6 +353,11 @@ test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures 
 });
 
 test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY seven members — this file fails to typecheck if an eighth is added without updating this pin', () => {
+  // PLAIN STATEMENT (round 3, re-verified — see the header's
+  // "COMPILE-TIME-BACKSTOP CAVEAT" for the full evidence trail): this switch
+  // is an IN-EDITOR AID ONLY, not a CI gate, not any gate. Only the RUNTIME
+  // loop at the bottom of this test is actually enforced. Read on for why.
+  //
   // A compile-time backstop to the runtime battery above: TypeScript's
   // exhaustiveness checking means the `default` branch below only typechecks
   // if `seg` has been narrowed to `never` — i.e. every LedgerSegment member

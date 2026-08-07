@@ -46,7 +46,25 @@
  *                  `deriveFlowLedgerRows`'s job, Task 3 — this component
  *                  trusts its input order, D2's "the component renders
  *                  whatever it is given" extended to ordering too)
- *                [data-ledger-narrative]  ONLY when row.narrative !== null
+ *                [data-ledger-narrative]      ONLY when row.narrative !== null
+ *                [data-narrative-kinds]        ONLY when row.narrativeKinds
+ *                                               is non-empty (paired 1:1 with
+ *                                               data-ledger-narrative — see
+ *                                               ROUND 3 (D11) below)
+ *
+ * ROUND 3 (D11) — `data-narrative-kinds` is the MACHINE surface for the row's
+ * narrative: `row.narrativeKinds.join(',')`, verbatim, in array order —
+ * NEVER re-derived by parsing `row.narrative`'s human string (that string can
+ * embed neutralized-but-still-freeform note text — see `./history-ledger.
+ * test.ts`'s D11 note — so parsing it back apart is exactly the fragile
+ * approach this attribute exists to make unnecessary). Its elements are
+ * always one of the seven CLOSED `LedgerSegment['kind']` literals — the
+ * closed-vocabulary guarantee itself is enforced upstream, at the type level
+ * and by `./history-ledger.test.ts`'s own EXHAUSTIVE battery (this
+ * component's job is purely mechanical: join whatever closed-kind array it
+ * is handed, verbatim). Automation, journey beats (R6-05 Task B,
+ * `scripts/journeys/flows-run.mjs`) and any future consumer assert on THIS
+ * attribute, never on `data-ledger-narrative`'s human string.
  *
  * `data-ledger-cost-usd` is `.toFixed(2)`, matching the established
  * `data-phase-cost-usd`/`data-wi-cost-usd` 2-decimal convention
@@ -80,6 +98,7 @@ function row(over: Partial<LedgerRow> = {}): LedgerRow {
     when: '2026-01-01T00:00:00Z',
     what: 'Ship the ledger',
     narrative: 'gate failed ×2',
+    narrativeKinds: ['gate-fails'], // ROUND 3 (D11) — paired 1:1 with `narrative`
     status: 'complete',
     costUsd: 3.5,
     href: '/flows/forge-develop/run/2026-01-01T00-00-00_INIT-a',
@@ -249,6 +268,66 @@ test('a row with narrative: null emits NO narrative attribute — honest-empty, 
   const html = render({ rows: [row({ id: 'a', narrative: null })] });
   const markup = rowMarkup(html, 'a');
   expect(markup).not.toContain('data-ledger-narrative');
+});
+
+// ---------------------------------------------------------------------------
+// ROUND 3 (D11) — data-narrative-kinds: the MACHINE surface. Automation and
+// journey beats assert on THIS, never by parsing data-ledger-narrative's
+// human string (see the header note above for the full rationale).
+// ---------------------------------------------------------------------------
+
+test('D11: data-narrative-kinds carries row.narrativeKinds verbatim, comma-joined, in the ARRAY ORDER GIVEN — the component never re-derives it from the human narrative string', () => {
+  // KILLS: a component that parses `row.narrative` (splitting on ' → ' or
+  // similar) to reconstruct the kinds instead of trusting the caller-supplied
+  // `narrativeKinds` array directly — exactly the D2 "renders whatever it is
+  // given, verbatim" discipline already pinned for `href`, extended here. The
+  // narrative TEXT below is a sentinel that does NOT correspond to the kinds
+  // (deliberately mismatched) — a parse-the-string implementation would
+  // produce something other than the exact kinds list asserted here, proving
+  // this attribute is sourced from `narrativeKinds`, not from `narrative`.
+  const html = render({
+    rows: [row({
+      id: 'a',
+      narrative: 'SENTINEL TEXT UNRELATED TO THE KINDS BELOW',
+      narrativeKinds: ['work-items', 'review-findings', 'merged'],
+    })],
+  });
+  expect(rowMarkup(html, 'a')).toContain('data-narrative-kinds="work-items,review-findings,merged"');
+});
+
+test('D11: data-narrative-kinds preserves the given order — a re-sorted/alphabetized rendering would desync it from data-ledger-narrative\'s own segment order', () => {
+  // KILLS: `[...kinds].sort().join(',')` or any other reordering — the whole
+  // point of this attribute is that its Nth element corresponds to the Nth
+  // segment in the human narrative; alphabetizing ('failed' < 'gate-fails' <
+  // 'merged' < 'work-items') would silently break that correspondence for
+  // any narrative whose kinds aren't already alphabetical.
+  const html = render({
+    rows: [row({ id: 'a', narrative: 'x', narrativeKinds: ['merged', 'gate-fails', 'failed'] })],
+  });
+  expect(rowMarkup(html, 'a')).toContain('data-narrative-kinds="merged,gate-fails,failed"');
+});
+
+test('D11: a row with narrativeKinds: [] (paired with narrative: null) emits NO data-narrative-kinds attribute — honest-empty, matching data-ledger-narrative\'s own omission', () => {
+  // KILLS: `data-narrative-kinds=""` standing in for "nothing to say" — the
+  // same honest-omit discipline `data-ledger-narrative`'s own null-handling
+  // test above already establishes, applied to the machine surface too.
+  const html = render({ rows: [row({ id: 'a', narrative: null, narrativeKinds: [] })] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).not.toContain('data-narrative-kinds');
+});
+
+test('D11: all seven closed-vocabulary kinds render as their exact literal strings, comma-joined — this component never transforms/renames a kind', () => {
+  // Not a re-test of the CLOSED-vocabulary guarantee itself (that a free-typed
+  // eighth kind can never be produced is enforced upstream, at the type level
+  // and by `./history-ledger.test.ts`'s own EXHAUSTIVE battery) — this proves
+  // ONLY that when this component is handed the seven real kind literals, it
+  // reproduces them byte-for-byte (no casing change, no synonym substitution,
+  // no JSON-stringify quoting that would break a naive `split(',')` consumer).
+  const allSeven = ['work-items', 'gate-fails', 'review-findings', 'gate-waiting', 'failed', 'merged', 'reflection-lost'];
+  const html = render({ rows: [row({ id: 'a', narrative: 'x', narrativeKinds: allSeven })] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).toContain(`data-narrative-kinds="${allSeven.join(',')}"`);
+  expect(markup).not.toContain('"['); // no JSON-array quoting leaking into the attribute
 });
 
 // ---------------------------------------------------------------------------
