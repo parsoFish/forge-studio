@@ -478,20 +478,35 @@ test('PRECEDENCE: a NaN-shaped ceiling (the string "NaN", the only wire-represen
 // exercised against genuinely-produced output, not a guessed shape.
 //
 // `FORGE_DRY_BRIDGE=1` is set globally for this shared bridge (see (B)
-// above) — but `runAgent`'s self-lifecycle path checks that var
-// UNCONDITIONALLY, even with an injected queryFn, and would short-circuit
-// BEFORE ever calling it. Each direct `runAgent()` call below therefore
-// temporarily unsets it for the duration of that one call.
+// above) — but `runAgent`'s self-lifecycle path checks
+// `FORGE_DRY_BRIDGE`/`FORGE_ARCHITECT_NO_SPAWN` UNCONDITIONALLY, even with an
+// injected queryFn, and would short-circuit BEFORE ever calling it. BOTH
+// vars, not just the one this file happens to set itself — CI
+// (`.github/workflows/ci.yml`) sets `FORGE_ARCHITECT_NO_SPAWN=1` for the
+// whole test job, independently of anything this file does. A helper that
+// only unset `FORGE_DRY_BRIDGE` (this file's pre-existing local var) would
+// pass on a developer machine, where NO_SPAWN is not ambient, and fail in
+// CI, where it is — exactly the failure mode this file's own header warns
+// against, and exactly what happened on the first real CI run. Each direct
+// `runAgent()` call below therefore unsets BOTH vars for the duration of
+// that one call, restoring in a `finally` — mirrors
+// `orchestrator/run-agent-ceiling.test.ts`'s identical
+// `withoutSpawnSuppressionEnv()` helper (same name, redefined locally since
+// that file does not export it).
 // ---------------------------------------------------------------------------
 
 const ROOT = process.cwd();
 
-function withoutDryBridgeEnv(): () => void {
-  const prior = process.env.FORGE_DRY_BRIDGE;
+function withoutSpawnSuppressionEnv(): () => void {
+  const priorNoSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN;
+  const priorDryBridge = process.env.FORGE_DRY_BRIDGE;
+  delete process.env.FORGE_ARCHITECT_NO_SPAWN;
   delete process.env.FORGE_DRY_BRIDGE;
   return () => {
-    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
-    else process.env.FORGE_DRY_BRIDGE = prior;
+    if (priorNoSpawn === undefined) delete process.env.FORGE_ARCHITECT_NO_SPAWN;
+    else process.env.FORGE_ARCHITECT_NO_SPAWN = priorNoSpawn;
+    if (priorDryBridge === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = priorDryBridge;
   };
 }
 
@@ -529,7 +544,7 @@ function ceilingStopQueryFn(costUsd: number): StreamQueryFn {
 }
 
 test('GET /api/agents/runs/<runId>: an ordinary successful run reports state "done" (control, established BEFORE the ceiling-stop case below so the two cannot silently collapse into the same value)', async () => {
-  const restore = withoutDryBridgeEnv();
+  const restore = withoutSpawnSuppressionEnv();
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
     const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'));
@@ -555,7 +570,7 @@ test('GET /api/agents/runs/<runId>: an ordinary successful run reports state "do
 });
 
 test('GET /api/agents/runs/<runId>: a ceiling-stopped run reports a state DISTINCT from "done", with the real runaway cost (not zero) — kills "a budget-stopped run is reported as a clean success"', async () => {
-  const restore = withoutDryBridgeEnv();
+  const restore = withoutSpawnSuppressionEnv();
   try {
     const defs = listAgentDefinitions(join(ROOT, 'skills'));
     const def = oneShotClone(getFixtureDef(defs, 'project-scoped-review'));
