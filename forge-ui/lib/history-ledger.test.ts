@@ -250,6 +250,61 @@ test('ROUND 3 (D11): renderSegment NEUTRALIZES a joiner sequence (" → ") embed
   expect(renderSegment({ kind: 'failed', note: 'CI red on merge' })).toBe('failed: CI red on merge');
 });
 
+test('ROUND 5: renderSegment NEUTRALIZES the joiner sequence in reflection-lost\'s `cause` too — the same free-text field as gate-waiting/failed, left unguarded by ROUND 3', () => {
+  // KILLS: the CURRENT implementation (history-ledger.ts:72-76) — `case
+  // 'reflection-lost': return \`reflection lost: ${seg.cause}\`;` —
+  // interpolates `seg.cause` RAW, unlike its two siblings just above
+  // (`gate-waiting`/`failed`, both call `neutralizeJoiner(seg.note)` first).
+  // This is the campaign's "the fix ships its own instance of the defect it
+  // closed" class: D11 (ROUND 3, see the test just above this one and the
+  // header) closed the joiner-ambiguity hole for exactly TWO of the THREE
+  // free-text-bearing segment kinds and never extended it to
+  // `reflection-lost`. The `assertOnlyKnownVocabulary` battery below was
+  // built precisely to catch this class, but until this round had no
+  // `reflection-lost` fixture containing an arrow, so it missed this
+  // instance — see the battery addition below.
+  //
+  // FALLBACK CHOSEN: identical to `gate-waiting`/`failed` — the same
+  // `neutralizeJoiner` (history-ledger.ts:48-50, `note.split('→').join('-')`)
+  // applied to `seg.cause`, so 'crash → retry loop' becomes
+  // 'crash - retry loop', matching the ROUND 3 test's own expected values
+  // above byte-for-byte in style.
+  //
+  // REACHABILITY (honest): NOT wire-reachable today. Every real
+  // `reflection-lost` cause is one of a fixed short label set (`crash`,
+  // `interrupted`, `manifest-unreadable`, `budget-exhausted`, `max-turns`,
+  // `error`, `brain-gate-failed`) — none contain '→'. Fixed anyway because
+  // this module is the declared SHARED SEAM the next initiative (R6-06)
+  // reuses against a different data source (module header, lines 1-15), and
+  // a module whose docstring's closed-vocabulary promise (D11) silently
+  // covers two of three free-text kinds is exactly the kind of latent gap
+  // this campaign keeps paying for once real data diverges from today's
+  // fixed labels.
+  expect(renderSegment({ kind: 'reflection-lost', cause: 'crash → retry loop' }))
+    .toBe('reflection lost: crash - retry loop');
+});
+
+test('ROUND 5: renderNarrative — reflection-lost with an arrow-shaped cause must not desynchronize a narrative into a THIRD piece', () => {
+  // KILLS: same root cause as the test above, demonstrated at the
+  // `renderNarrative` level exactly as the adversarial review reproduced
+  // it. A 2-segment narrative (work-items, reflection-lost) whose cause
+  // contains ' → ' currently renders as
+  // "dev 1/2 → reflection lost: crash → retry loop", which splits on the
+  // narrative's own joiner (' → ') into THREE pieces
+  // (['dev 1/2', 'reflection lost: crash', 'retry loop']) instead of two —
+  // the exact ambiguity D11 exists to prevent, reproduced live against the
+  // CURRENT implementation (confirmed via direct execution before writing
+  // this test).
+  // REACHABILITY: same honest caveat as the test above — not reachable via
+  // the one real caller today; fixed because this is the shared seam.
+  const narrative = renderNarrative([
+    { kind: 'work-items', done: 1, total: 2 },
+    { kind: 'reflection-lost', cause: 'crash → retry loop' },
+  ]);
+  expect(narrative).toBe('dev 1/2 → reflection lost: crash - retry loop');
+  expect(narrative?.split(' → ')).toHaveLength(2);
+});
+
 test('renderNarrative: segments join with " → ", in the array order given (join, not re-sort)', () => {
   // KILLS: a narrative composer that alphabetizes/re-orders segments
   // instead of trusting caller-supplied order, and one that uses a
@@ -339,6 +394,17 @@ test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures 
     { label: 'gate-waiting alone with punctuation in the note', segments: [{ kind: 'gate-waiting', note: 'AC-2 not met; awaiting fix' }] },
     { label: 'failed alone with an arrow-shaped note (must not be mistaken for a joiner)', segments: [{ kind: 'failed', note: 'pipeline → CI step 3 timed out' }] },
     { label: 'reflection-lost alone', segments: [{ kind: 'reflection-lost', cause: 'interrupted' }] },
+    // ROUND 5 — closes the exact gap named in this battery's own header
+    // comment ("the closed-vocabulary mechanism actually covers the kind it
+    // currently misses"): the ORIGINAL battery had a 'failed alone with an
+    // arrow-shaped note' fixture (above) and a 'gate-waiting' one (D11,
+    // ROUND 3), but never one for `reflection-lost` — the THIRD free-text-
+    // bearing kind. See the dedicated renderSegment/renderNarrative tests
+    // above for the full KILLS detail; this entry is what makes THIS
+    // EXHAUSTIVE test itself (not just the dedicated tests) fail against the
+    // unguarded implementation, the same way the pre-existing 'failed'
+    // fixture already does for its own kind.
+    { label: 'ROUND 5: reflection-lost alone with an arrow-shaped cause (must not be mistaken for a joiner)', segments: [{ kind: 'reflection-lost', cause: 'crash → retry loop' }] },
     // ROUND 2 (D10) — the two positive-arc kinds, standalone.
     { label: 'merged alone', segments: [{ kind: 'merged' }] },
     { label: 'work-items alone, all done', segments: [{ kind: 'work-items', done: 3, total: 3 }] },
@@ -460,6 +526,57 @@ test('sortLedgerRowsNewestFirst: returns a NEW array — the input is never muta
   expect(input.map((r) => r.id)).toEqual(inputCopyIds); // original order untouched
 });
 
+test('ROUND 5: sortLedgerRowsNewestFirst — a MALFORMED (non-empty, unparsable) `when` sorts LAST too, not just an empty string', () => {
+  // KILLS: the CURRENT implementation (history-ledger.ts:136-137) — `const
+  // aMs = a.when ? new Date(a.when).getTime() : null;` — only special-cases
+  // the EMPTY string. A truthy-but-unparsable string ('garbage') does NOT
+  // take the `: null` branch, so `new Date('garbage').getTime()` (NaN)
+  // flows straight into the `bMs - aMs` comparator. This is the EXACT bug
+  // the function's own docstring (history-ledger.ts:130-132, "A row with no
+  // `when` ... sorts LAST, never first ... could land an unstarted run at
+  // the top of 'most recent' history") promises never happens — reproduced
+  // directly by running this exact `[...rows].sort()` call against this
+  // repo's Node runtime before writing this test: the malformed row lands
+  // FIRST, not last.
+  // FALLBACK CHOSEN: same as the empty-string case immediately above (and
+  // pinned by the sibling test right above this one) — an unparsable `when`
+  // is treated as `null` and sorted LAST, matching the docstring's own
+  // stated contract rather than inventing a new rule.
+  // REACHABILITY (honest): NOT wire-reachable today — the only caller
+  // (flow-ledger.ts) feeds `run.startedAt ?? ''`, whose sole producer is
+  // `new Date().toISOString()`, always either empty or parseable. Fixed
+  // anyway because this module is the declared SHARED SEAM the next
+  // initiative (R6-06) reuses against a different data source, and a
+  // docstring that lies about its own contract is exactly what this
+  // campaign keeps paying for.
+  const rows = [
+    row({ id: 'bad', when: 'garbage' }),
+    row({ id: 'old', when: '2020-01-01T00:00:00Z' }),
+    row({ id: 'new', when: '2026-08-07T00:00:00Z' }),
+  ];
+  expect(sortLedgerRowsNewestFirst(rows).map((r) => r.id)).toEqual(['new', 'old', 'bad']);
+});
+
+test('ROUND 5: sortLedgerRowsNewestFirst — a WHITESPACE-ONLY `when` (e.g. \' \') is a THIRD instance of the same root cause and also sorts LAST', () => {
+  // KILLS: the same root cause as the malformed-`when` test above, via a
+  // different value shape — a whitespace-only string is TRUTHY in
+  // JavaScript (`'   ' ? x : y` takes the truthy branch), so it bypasses
+  // the `: null` guard exactly like 'garbage' does, and
+  // `new Date('   ').getTime()` is also NaN. Verified directly (not
+  // assumed): reproducing this file's exact sort call with a 3-row fixture
+  // shaped identically to the malformed-`when` repro above lands the
+  // whitespace row FIRST — this is not a hypothetical extrapolation, it
+  // reproduces the identical front-of-list placement.
+  // REACHABILITY: same honest caveat as the test above — not reachable via
+  // the one real caller today; fixed because this is the shared seam.
+  const rows = [
+    row({ id: 'ws', when: '   ' }),
+    row({ id: 'old', when: '2020-01-01T00:00:00Z' }),
+    row({ id: 'new', when: '2026-08-07T00:00:00Z' }),
+  ];
+  expect(sortLedgerRowsNewestFirst(rows).map((r) => r.id)).toEqual(['new', 'old', 'ws']);
+});
+
 // ---------------------------------------------------------------------------
 // formatWhen — deterministic, locale/wall-clock independent (D7)
 // ---------------------------------------------------------------------------
@@ -524,4 +641,36 @@ test('formatWhen: pinned bucket boundaries (minutes/hours/days ago)', () => {
   expect(formatWhen(new Date(now - 5 * 60_000).toISOString(), now)).toBe('5m ago');
   expect(formatWhen(new Date(now - 3 * 3_600_000).toISOString(), now)).toBe('3h ago');
   expect(formatWhen(new Date(now - 2 * 86_400_000).toISOString(), now)).toBe('2d ago');
+});
+
+test('ROUND 5: formatWhen — an unparsable (non-empty) `iso` returns the SAME honest placeholder as an absent one, never a fabricated "NaNd ago"', () => {
+  // KILLS: the CURRENT implementation (history-ledger.ts:161) — `if (!iso)
+  // return '—';` — which only special-cases the falsy (empty-string/
+  // undefined) case. A non-empty but unparsable ISO string flows straight
+  // past that guard into `new Date(iso).getTime()` (NaN), and NaN
+  // propagates through the minute/hour/day bucket arithmetic
+  // (history-ledger.ts:163-169) to print the literal string "NaNd ago" —
+  // reproduced directly against this exact function body before writing
+  // this test. This is precisely the "Invalid Date leak" the function's own
+  // docstring (history-ledger.ts:156-158, "never a fabricated time or an
+  // `Invalid Date` leak") promises never happens.
+  // FALLBACK CHOSEN: '—' — the SAME sentinel this function already returns
+  // for the falsy/absent case (history-ledger.ts:161, and pinned by the
+  // "honest placeholder" test above), read directly from the existing
+  // source rather than inventing a new one.
+  // REACHABILITY (honest): NOT wire-reachable today — the only caller feeds
+  // `run.startedAt ?? ''`, whose sole producer is `new
+  // Date().toISOString()`. Fixed anyway because this module is the declared
+  // shared seam R6-06 reuses, and the docstring must not lie about its own
+  // contract.
+  const now = Date.now();
+  expect(formatWhen('not-a-date', now)).toBe('—');
+});
+
+test('ROUND 5: formatWhen — a WHITESPACE-ONLY `iso` is a THIRD instance of the same root cause and also returns \'—\'', () => {
+  // KILLS: same root cause as the test above — '   ' is truthy so bypasses
+  // `if (!iso)`, and `new Date('   ').getTime()` is also NaN, producing the
+  // same fabricated "NaNd ago". Verified directly before writing this test.
+  const now = Date.now();
+  expect(formatWhen('   ', now)).toBe('—');
 });
