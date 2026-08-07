@@ -23,6 +23,11 @@
  * agent, or a real session-entry link (or an explicit no-entry-point state,
  * never a fabricated href) for an interactive one.
  *
+ * R6-01 WI-4 adds one more read-only block to the SAME panel: the standing
+ * triggers that already target this agent (`StandingTriggers.tsx`, fed by the
+ * parent page's `GET /api/triggers` fetch) — provenance an operator needs
+ * before deciding whether to dispatch by hand.
+ *
  * The client-side materials/cost-ceiling gates
  * (`../../../lib/run-panel-view.ts`) are a CONVENIENCE MIRROR of the
  * server's own checks (cli/ui-bridge.ts) — the server remains the
@@ -50,6 +55,8 @@ import {
   resolveCostCeilingForDispatch,
   resolveCeilingFieldValue,
 } from '@/lib/run-panel-view';
+import { StandingTriggers } from './StandingTriggers';
+import type { StandingTrigger } from '@/lib/standing-triggers';
 
 const RUN_PANEL_STYLE: CSSProperties = {
   border: '1px solid var(--line)',
@@ -92,6 +99,16 @@ type Props = {
    *  `null`/absent renders the explicit no-entry-point state, never a
    *  fabricated link. */
   sessionEntryHref?: string | null;
+  /** R6-01 WI-4: the FULL unfiltered `GET /api/triggers` roster, fetched by
+   *  the parent page and threaded down whole — filtering to this agent
+   *  happens in `StandingTriggers` itself, never at a call site.
+   *
+   *  Optional because the pinned `lib/run-panel-render.test.ts` constructs
+   *  this component without it; absent renders the honest empty state rather
+   *  than throwing. The real caller (app/agents/[id]/page.tsx) ALWAYS passes
+   *  it — an absent prop here would silently understate an agent's wiring,
+   *  so it must not become a normal way to mount this panel. */
+  standingTriggers?: StandingTrigger[];
 };
 
 export function RunPanel({
@@ -104,6 +121,7 @@ export function RunPanel({
   defaultCostCeilingUsd,
   costCeilingEnforceable,
   sessionEntryHref = null,
+  standingTriggers = [],
 }: Props) {
   const [project, setProject] = useState('');
   const [inputsText, setInputsText] = useState('');
@@ -150,6 +168,14 @@ export function RunPanel({
     return () => { active = false; clearInterval(id); };
   }, [runId]);
 
+  // R6-01 WI-4: what already starts this agent WITHOUT an operator is a fact
+  // about the agent, not about its dispatchability — so it renders on BOTH
+  // branches below, including the interactive early return. (`reflector`,
+  // the one agent a standing trigger targets today, declares `surface: both`
+  // → `interactive: false`, so it takes the main branch; an interactive agent
+  // must not lose the list to an early return regardless.)
+  const standingTriggersList = <StandingTriggers agentSlug={slug} triggers={standingTriggers} />;
+
   if (interactive) {
     return (
       <section data-component="run-panel" data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
@@ -163,6 +189,7 @@ export function RunPanel({
             Interactive agent — no reachable session entry point yet.
           </p>
         )}
+        {standingTriggersList}
       </section>
     );
   }
@@ -327,6 +354,8 @@ export function RunPanel({
           </div>
         </div>
       )}
+
+      {standingTriggersList}
     </section>
   );
 }

@@ -304,6 +304,32 @@ function RunCard({
           reflection lost: {run.reflectionLost}
         </div>
       )}
+
+      {/* R6-01 WI-2 (F4): click-through to this run's own standalone detail
+          page (D1: /flows/[id]/run/[runId]). The flow id comes from the run
+          itself (run.flowId) rather than whichever monitor happens to be
+          rendering this rail, since a threaded run's own flow-of-record can
+          differ from the currently-viewed monitor. Placed LAST and with its
+          own stopPropagation (same established pattern as the "Open gate →"
+          anchor above) so it neither hijacks the card's existing onClick
+          (in-page SELECT, several already-shipped journey beats depend on
+          it) nor shifts ahead of that anchor in DOM order for a gated row —
+          a `[data-run-id][data-run-status="gated"] a` selector elsewhere
+          must keep matching "Open gate →" first. */}
+      <a
+        href={`/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}`}
+        onClick={(e) => e.stopPropagation()}
+        data-action="open-run-detail"
+        style={{
+          marginTop: 2,
+          alignSelf: 'flex-start',
+          fontSize: 10.5,
+          color: 'var(--faint)',
+          textDecoration: 'none',
+        }}
+      >
+        Run detail →
+      </a>
     </div>
   );
 }

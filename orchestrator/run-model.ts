@@ -58,6 +58,18 @@ export type RunPhaseMeta = {
   retries: number;
   model?: string;
   lastProgressAt?: string;          // ISO — UI computes "Nm ago"
+  /**
+   * R6-01 WI-1 F1: ISO timestamp of the LATEST event attributed to this node
+   * by eventToNodeId, over EVERY EventType — unlike lastProgressAt (above),
+   * NOT filtered to PROGRESS_EVENT_TYPES. A node narrating exclusively via
+   * `log`/`error` events (7 of 11 EventType members are excluded from
+   * lastProgressAt) still advances this field, so the Studio phase drawer's
+   * log-refresh signal (forge-ui/lib/phase-log-refresh.ts) has something to
+   * key off even when no tool/file/test/iteration progress has occurred.
+   * Computed in run-model-derive.ts's computeLastEventAt, reusing the same
+   * per-node event bucket (built via eventToNodeId) as lastProgressAt.
+   */
+  lastEventAt?: string;
   wedged?: boolean;                 // no tool progress ≥30 min while active|retrying
   iter?: number;
   iterBudget?: number;

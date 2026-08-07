@@ -416,6 +416,76 @@ inventory rather than one shared page-level contract:
   actually completes; a suppressed spawn (dry-bridge / no-spawn harness seam)
   never reaches that point, so `data-ceiling-set` correctly reads `false`
   even for a dispatch that carried a ceiling on the wire.
+- **`/flows/[id]/run/[runId]` — the flow run-detail page (R6-01-F4/F5,
+  2026-08-07).** The dig-in for ONE flow run, live or archived, reached from a
+  `RunRail` row's `[data-action="open-run-detail"]` anchor on the flow monitor.
+  A thin client shell (`app/flows/[id]/run/[runId]/page.tsx`) resolves the run
+  and hands props to the pure `FlowRunDetail` component. **Everything on this
+  page is DERIVED from the event log; nothing is stored** (ADR-008) — reading
+  a run writes no file.
+
+  The route has **THREE** resolved states, not two, and each renders a
+  `main[data-page="flow-run"]` landmark (the element type is load-bearing —
+  journey selectors key on `main`, and the render tests assert attributes
+  only, so they cannot see it):
+  - in flight — `[data-page="flow-run"][data-run-id][data-page-ready="false"]`;
+  - **`[data-run-resolution="unresolved"]`** — the bridge was unreachable, or
+    answered 5xx / a non-404 4xx / a malformed 2xx. Renders NEITHER the
+    timeline NOR the not-found body. This state exists because collapsing it
+    into "not found" would render a transient network error as an
+    authoritative claim about the run ("this run never existed"). `found` is
+    decided by HTTP **status**, before the body is ever inspected;
+  - resolved — `[data-page="flow-run"][data-run-id][data-flow-id]
+    [data-run-found="true"|"false"][data-run-status]`. `found:false` (the
+    server's honest 404 for a runId that never existed) renders only
+    `[data-component="run-not-found"]`.
+
+  A found run renders: `[data-section="run-trigger"]` with the reserved
+  provenance vocabulary above (omitted entirely when the run has no trigger);
+  `[data-section="run-timeline"]` with **one
+  `[data-timeline-row="true"][data-node-id][data-status][data-phase-cost-usd]
+  [data-node-expanded]` row per FLOW-DEFINITION node** — every node, in
+  `flow.yaml` order, including gate-only nodes and nodes that never ran (a
+  timeline derived from the events present would silently vanish them);
+  `[data-node-note]` **only** when that node has a derived note; and
+  `[data-section="review-findings"]` through the shared `ReviewFindingsPanel`
+  (its own existing contract, not a fork).
+
+  Three honesty constraints are contractual here, each pinned by a test:
+  - `data-phase-cost-usd` is **exactly** `run.phaseMeta[node].costUsd`,
+    `.toFixed(2)` (matching `FlowTopology`'s phase hexes). It is never
+    re-summed from events — a phase with an iteration loop restates its
+    dollars on rollup `end` events, and this codebase has twice shipped a
+    2–3× inflation that way — and the run-level total never appears on a row.
+    Note the architect phase logs `cost_usd: 0` on every completion event, so
+    a per-node architect cost undercounts **by construction**.
+  - `[data-node-note]` is **derived**, never free-typed: `delivered ·
+    iterations · retries · wedged`, fixed order, absent facts omitted rather
+    than rendered as zeroes.
+  - **no per-finding `state` is rendered.** The design mockup shows an
+    `open|fixed` column; `ReviewFinding` has no such field and no producer
+    exists, so rendering one would assert a fact the system cannot know.
+
+  **F5 — per-node logs.** Clicking a row toggles
+  `[data-node-expanded="true"]` and renders
+  `[data-section="node-detail"][data-detail-for-node="<nodeId>"]` (a distinct
+  attribute — never a second `data-node-id`, which would break row lookups)
+  containing the **shared** `RunLog`: `[data-component="run-log"]` with one
+  `[data-log-line="true"][data-log-kind="think"|"tool"|"out"]` per event,
+  mapped by `forge-ui/lib/run-log-line.ts` — the SAME component and mapper
+  `/agents/[id]/run/[runId]` uses. One component, two surfaces.
+
+  That reuse required a wire change: the classified phase-log endpoint
+  computes the **drawer's** own 6-kind vocabulary server-side and drops the
+  raw `event_type`, which `deriveLogLine` needs. So
+  `GET /api/runs/<id>/phases/<node>/log` gained an additive **`raw=1`** mode
+  (mirroring its own `stderr=1` convention) returning that node's unclassified
+  event records. **`PhaseDrawer` never passes `raw=1`** and its
+  `{at,kind,text,detail}` contract is unchanged — guarded by a regression test.
+  `[data-section="node-outputs"][data-outputs-count]` is **honestly always
+  `0`** with `[data-component="node-outputs-empty"]`: no per-node artifact
+  source exists (`artifactsReady` is run-level and keyed by artifact TYPE),
+  and attributing it to a node would be run-level data worn as per-node fact.
 - **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
   just redirects to the first registered project
   (`[data-page="projects-index"]` while empty/loading). The project page is
@@ -816,24 +886,33 @@ inventory rather than one shared page-level contract:
   `/skills/[id]` uses — `[data-component="file-package"][data-file-count][data-active-file]`,
   per-tab `[data-file-tab][data-file-path]` — the whole scaffold's file tree,
   tabbed, kind-agnostic reuse (shared with R2-10-F3).
-- **Trigger provenance — named, not yet attached (R2-08-F4, 2026-08-07).**
-  `GET /api/runs` / `GET /api/runs/<id>` now surface an optional
-  `run.trigger: {kind, source, scope}` — derived, never stored; a run with no
-  derivable provenance carries no `trigger` key at all. A new read-only
+- **Trigger provenance — named by R2-08-F4, now PARTLY ATTACHED (amended
+  R6-01, 2026-08-07).** `GET /api/runs` / `GET /api/runs/<id>` surface an
+  optional `run.trigger: {kind, source, scope}` — derived, never stored; a run
+  with no derivable provenance carries no `trigger` key at all. A read-only
   `GET /api/triggers` lists every declared `FlowTrigger` across the whole flow
   roster as `{on, target, projects, sourceFlowId}`, `projects: null`
   (unscoped) kept distinct from `projects: []` (scoped to nothing) on the
   wire. Per ADR-027's R2-08 amendment ("the `data-*` vocabulary is named by
-  R2-08-F4 and attached by the consuming surfaces"), the vocabulary this wire
-  data will render through is named here as the contract only — **no
-  attribute below is attached to any DOM element by this initiative**: a
-  run's own trigger renders `[data-trigger-kind][data-trigger-source]
-  [data-trigger-scope]` (`data-trigger-scope=""` when `scope` is `null`); a
-  standing-trigger row (the `/api/triggers` listing) renders
-  `[data-standing-trigger][data-trigger-kind][data-trigger-target]
-  [data-trigger-scope-count]`. The consuming surfaces — R6-04-F2 kickoff,
-  R6-01-F4 run detail, R6-05/R6-06 ledgers — attach them when they render
-  this data.
+  R2-08-F4 and attached by the consuming surfaces"):
+  - a **run's own trigger** renders `[data-trigger-kind][data-trigger-source]
+    [data-trigger-scope]` (`data-trigger-scope=""` when `scope` is `null` —
+    an unscoped trigger is a real, distinct state, never omitted and never
+    stringified as `"null"`). **ATTACHED by R6-01-F4** on the flow run-detail
+    page, inside `[data-section="run-trigger"]`; a run with no `trigger` key
+    renders no trigger section at all.
+  - a **standing-trigger row** (the `/api/triggers` listing) renders
+    `[data-standing-trigger][data-trigger-kind][data-trigger-target]
+    [data-trigger-scope-count]`. **ATTACHED by R6-01's rider** (R6-04's
+    parked WI-6) on the agent kickoff panel.
+
+  ⚑ **This paragraph previously read "no attribute below is attached to any
+  DOM element by this initiative"** — true when R2-08-F4 wrote it, and stale
+  the moment the first consuming surface landed. Corrected here rather than
+  left to rot, because a `data-*` contract doc that misreports which half of
+  itself is live is worse than no doc: automation trusts it. **R6-05/R6-06
+  ledgers are the remaining unattached consumers** — this bullet is the place
+  to amend when they land.
 
 The shared status vocabularies:
 

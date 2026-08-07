@@ -34,6 +34,14 @@ const ROUTES = [
   { path: '/projects', name: 'projects index' },
   { path: '/projects/new', name: 'project onboarding' },
   { path: '/flows/forge-develop', name: 'flow monitor (seed)' },
+  // R6-01 WI-2 (F4): the flow-run analogue of the agent-run entry above — an
+  // UNKNOWN runId on a REAL seed flow (forge-develop) must render the honest
+  // not-found surface (FlowRunDetail's `found:false` branch), not a Next 404
+  // and not a fabricated all-pending timeline. RED until F4 lands the route
+  // (app/flows/[id]/run/[runId] does not exist on disk yet) — correct AT-first
+  // ordering, mirroring how the agent-run entry above was added ahead of its
+  // own route (R6-04).
+  { path: '/flows/forge-develop/run/nonexistent-run-e2e-deadpath', name: 'flow run detail (unknown runId — 404/not-found)' },
   { path: '/flows/new', name: 'flow builder (new)' },
   { path: '/knowledge', name: 'knowledge' },
   { path: '/knowledge/new', name: 'knowledge base (new)' },

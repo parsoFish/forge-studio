@@ -36,6 +36,7 @@ import {
   fetchStudioFlows,
   fetchStarters,
   fetchStudioProjects,
+  fetchStandingTriggers,
   saveAgent,
   requestInstructionsDraft,
   type Agent,
@@ -45,6 +46,7 @@ import {
   type Flow,
   type Project,
 } from '@/lib/studio-client';
+import type { StandingTrigger } from '@/lib/standing-triggers';
 import { fetchConnections, type ConnectionWire } from '@/lib/connection-client';
 import { unreadyBoundConnections, blockedRunMessage, type BoundConnectionRef } from '@/lib/connection-library-view';
 import {
@@ -268,6 +270,12 @@ export default function AgentBuilderPage() {
   // never a literal in RunPanel.tsx).
   const [projects, setProjects] = useState<Project[]>([]);
   const [defaultCostCeilingUsd, setDefaultCostCeilingUsd] = useState(0);
+  // R6-01 WI-4: every standing trigger declared across the flow roster
+  // (GET /api/triggers), fetched ONCE and threaded to RunPanel whole. The
+  // roster is agent-independent, so it rides in the same load() as flows /
+  // projects / catalog rather than being re-fetched per agent; the filter to
+  // "targets THIS agent" lives in StandingTriggers.tsx, never here.
+  const [standingTriggers, setStandingTriggers] = useState<StandingTrigger[]>([]);
   const [state,   setState]   = useState<AgentState>({ ...EMPTY_STATE });
   const [dirty,   setDirty]   = useState(false);
   const [ready,   setReady]   = useState(false);
@@ -394,12 +402,13 @@ export default function AgentBuilderPage() {
 
     async function load() {
       try {
-        const [agentsMeta, c, f, s, p] = await Promise.all([
+        const [agentsMeta, c, f, s, p, tr] = await Promise.all([
           fetchStudioAgentsWithMeta(),
           fetchStudioCatalog(),
           fetchStudioFlows(),
           fetchStarters(),
           fetchStudioProjects(),
+          fetchStandingTriggers(),
         ]);
         if (signal.cancelled) return;
         const a = agentsMeta.agents;
@@ -408,6 +417,7 @@ export default function AgentBuilderPage() {
         setFlows(f);
         setStarters(s);
         setProjects(p);
+        setStandingTriggers(tr);
         setDefaultCostCeilingUsd(agentsMeta.defaultCostCeilingUsd);
 
         // load the agent for this slug
@@ -781,6 +791,7 @@ export default function AgentBuilderPage() {
             defaultCostCeilingUsd={defaultCostCeilingUsd}
             costCeilingEnforceable={state.costCeilingEnforceable}
             sessionEntryHref={sessionEntryHrefForAgent(state.slug)}
+            standingTriggers={standingTriggers}
           />
           <UsedInFlows agentSlug={state.slug} flows={flows} />
         </aside>

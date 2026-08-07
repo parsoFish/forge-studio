@@ -13,6 +13,11 @@
 import { Cron } from 'croner';
 
 import { resolveBridgeUrl } from './bridge-client';
+// R6-01 WI-4: the standing-trigger wire type + its boundary validation live
+// in their own module (with the agent-selection rule they belong to); this
+// module only adds the fetch. The import is one-way — standing-triggers.ts
+// never imports back from here.
+import { parseStandingTriggers, type StandingTrigger } from './standing-triggers';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes
@@ -26,6 +31,10 @@ export type RunPhaseMeta = {
   retries: number;
   model?: string;
   lastProgressAt?: string;
+  /** R6-01 WI-1 F1: mirrors orchestrator/run-model.ts's RunPhaseMeta.lastEventAt
+   *  — latest event of ANY type attributed to this node (unlike lastProgressAt,
+   *  not filtered to progress types). Drives lib/phase-log-refresh.ts. */
+  lastEventAt?: string;
   wedged?: boolean;
   iter?: number;
   iterBudget?: number;
@@ -64,6 +73,20 @@ export type Run = {
    * run carries just its own flow id.
    */
   flowLineage: string[];
+  /**
+   * R2-08-F4 (ADR-027 amendment) / R6-01 WI-2: what started this run —
+   * mirrors `orchestrator/run-model.ts`'s `Run.trigger` verbatim. Absent
+   * when the run carries no derivable provenance (a plain
+   * architect-originated run) — NEVER a fabricated default. `kind` is left
+   * as `string` rather than importing `TriggerKindId` (an orchestrator-side
+   * type this client-only module cannot pull in — see this file's header
+   * for the re-declare-client-side convention).
+   */
+  trigger?: {
+    kind: string;
+    source: string;
+    scope: string | null;
+  };
 };
 
 export type AgentRuntime = {
@@ -546,6 +569,10 @@ export function parseRun(raw: unknown): Run {
     failNote:      r.failNote,
     workItems:     r.workItems     ?? [],
     flowLineage:   r.flowLineage   ?? [],
+    // R6-01 WI-2: carried through, never defaulted — an absent `trigger` key
+    // must stay absent (declared-data-fails-open guard: this field was
+    // parsed and served end-to-end already, then silently dropped here).
+    ...(r.trigger !== undefined ? { trigger: r.trigger } : {}),
   };
 }
 
@@ -660,6 +687,25 @@ export async function fetchStarterFlow(): Promise<Flow | null> {
 export async function fetchStudioFlows(): Promise<Flow[]> {
   const body = await studioGet<{ flows: Flow[] }>('/api/studio/flows', { flows: [] });
   return body.flows;
+}
+
+/**
+ * R6-01 WI-4 — fetch every standing trigger declared across the whole flow
+ * roster (`GET /api/triggers`, a pure read).
+ *
+ * Shares this module's `studioGet` error convention exactly like
+ * `fetchStudioFlows`/`fetchStudioProjects`: no bridge configured, a non-2xx,
+ * or a thrown fetch all degrade to the empty fallback instead of rejecting,
+ * so one unavailable endpoint can never reject a caller's `Promise.all` and
+ * blank the surfaces fed by the sibling fetches.
+ *
+ * The rows are validated at this boundary (`parseStandingTriggers`) rather
+ * than cast, because they are rendered inside the agent page's React tree —
+ * an unvalidated malformed row would throw during render.
+ */
+export async function fetchStandingTriggers(): Promise<StandingTrigger[]> {
+  const body = await studioGet<{ triggers?: unknown }>('/api/triggers', { triggers: [] });
+  return parseStandingTriggers(body.triggers);
 }
 
 /** Fetch all projects. */

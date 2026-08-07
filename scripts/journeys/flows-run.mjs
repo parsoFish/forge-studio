@@ -1626,6 +1626,314 @@ export const journey = defineJourney({
         },
       },
       {
+        id: 'flows-run-detail-reachable',
+        title: 'Flow run-detail — reachable from the monitor run rail (R6-01 WI-2 F4)',
+        narration: 'The same gated run\'s own standalone detail page — every node on the flow with its own real cost and status, not just the ones a live monitor happens to be showing — reached from the SAME run-rail row every earlier beat in this run has already been clicking.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── R6-01 WI-2 (F4): flow run-detail — reachable + the destination's own contract ──
+              console.log('\n[R6-01 WI-2] Flow run-detail — reachable from the monitor run rail');
+              // Re-use the SAME gated run (CYCLE_ID2) monitor-deep-dive seeded, BEFORE
+              // drawer-live-tail's own SAME-render mutation flips the review node to
+              // 'failed' — this beat runs between the two, so every fact asserted below
+              // is against the fixture's UNMUTATED state.
+              //
+              // MEASURED, NOT INVENTED (task report): a real listRuns() pass driven
+              // over a byte-for-byte copy of this exact studioEvent() sequence, against
+              // the REAL studio/flows/forge-develop/flow.yaml on disk (not a synthetic
+              // stand-in), reports:
+              //   run.status="gated", run.gate="review"
+              //   dev=complete/$0.48  demo=complete/$0.11
+              //   adversarial-review=complete/$0.06  review=active/$0.00
+              // (the run-level costUsd=1.02 is their sum + architect 0.22 + pm 0.15 —
+              // never itself attributed to a node, the standing defect class flow-run-
+              // timeline.test.ts pins at the derivation layer).
+              await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
+              const runRow = page.locator(`[data-run-id="${CYCLE_ID2}"]`).first();
+              check((await runRow.count()) > 0, `monitor: run rail row [data-run-id="${CYCLE_ID2}"] present (the reachability starting point)`);
+
+              // GROUNDED PROBE, NOT AN INVENTED SELECTOR: `git grep` across
+              // forge-ui/components + forge-ui/app for any href/onClick reaching a
+              // standalone .../run/[runId] page finds NOTHING — not even for the
+              // ALREADY-SHIPPED analogous surface, app/agents/[id]/run/[runId]/page.tsx
+              // (R6-04): that page's own journey beat (agents.mjs) reaches it via
+              // page.goto ONLY, never a click. So there is no precedent anywhere in this
+              // codebase for "click a rail row, land on a standalone run page" to copy a
+              // selector from. Rather than invent one, this PROBES for a link inside the
+              // real row and reports the result honestly either way, then proves the
+              // load-bearing half of F4 — the destination page's own contract — via
+              // direct navigation, matching the codebase's own established pattern for
+              // this exact class of page.
+              const detailLink = runRow.locator(`a[href*="/run/${CYCLE_ID2}"]`).first();
+              const hasDetailLink = (await detailLink.count()) > 0;
+              check(
+                hasDetailLink,
+                `monitor: run row carries a click-through link to its own run-detail page (a[href*="/run/<id>"]) — if this reads false, the detail page is reachable ONLY by direct URL today, the same still-open gap already measured on the analogous /agents/[id]/run/[runId] surface (R6-04); this beat falls back to direct navigation either way so the destination contract below still gets proven`,
+              );
+              if (hasDetailLink) {
+                await detailLink.click();
+                try {
+                  await page.waitForFunction(
+                    (needle) => location.pathname.includes(needle),
+                    `/flows/forge-develop/run/${CYCLE_ID2}`,
+                    { timeout: 10000 },
+                  );
+                  check(true, 'monitor: clicking the run row\'s detail link navigates to /flows/forge-develop/run/<id>');
+                } catch {
+                  check(false, `monitor: clicking the run row's detail link navigates to /flows/forge-develop/run/<id> (got ${page.url()})`);
+                }
+              } else {
+                await page.goto(watch.uiUrl + `/flows/forge-develop/run/${CYCLE_ID2}`, { waitUntil: 'domcontentloaded' });
+              }
+
+              // From here on, whichever way we arrived — the destination page's OWN
+              // contract, pinned by forge-ui/lib/flow-run-detail-render.test.ts's
+              // RESERVED data-* vocabulary (R6-01 WI-2 round 1): [data-page="flow-run"]
+              // [data-run-id][data-run-found][data-run-status][data-flow-id] on <main>,
+              // [data-section="run-timeline"] containing [data-timeline-row="true"]
+              // [data-node-id][data-status][data-phase-cost-usd] rows.
+              try {
+                await page.waitForSelector('main[data-page="flow-run"][data-run-found="true"]', { timeout: 20000 });
+                check(true, 'run-detail: [data-page="flow-run"][data-run-found="true"] renders for a real, gated run');
+              } catch {
+                check(false, 'run-detail: [data-page="flow-run"][data-run-found="true"] renders for a real, gated run — route/page not implemented yet');
+                return; // nothing further is measurable without the page
+              }
+              await caption(page, 'Every node on the flow — not just the ones that happen to be running — with its own real cost and status.');
+              await frame(page, 'r6-01wi2-run-detail', 'R6-01 WI-2 — the flow run-detail page: every node, its own real cost and status, reached from the monitor run rail', { key: true });
+
+              const attrs = await page.evaluate(() => {
+                const main = document.querySelector('main[data-page="flow-run"]');
+                return main
+                  ? {
+                      runId: main.getAttribute('data-run-id'),
+                      flowId: main.getAttribute('data-flow-id'),
+                      runStatus: main.getAttribute('data-run-status'),
+                    }
+                  : null;
+              });
+              check(attrs !== null && attrs.runId === CYCLE_ID2, `run-detail: data-run-id matches the run navigated to (got ${JSON.stringify(attrs)})`);
+              check(attrs !== null && attrs.flowId === 'forge-develop', `run-detail: data-flow-id="forge-develop" (got ${JSON.stringify(attrs)})`);
+              // MEASURED (task report probe): the real derived run.status is "gated" —
+              // matches flows-run-gate-control's own sibling assertion on the SAME
+              // CYCLE_ID2 fixture, so the two beats cannot silently drift apart.
+              check(attrs !== null && attrs.runStatus === 'gated', `run-detail: data-run-status="gated" — the real derived status, not a live-looking default (got ${JSON.stringify(attrs)})`);
+
+              check(await page.locator('[data-section="run-timeline"]').count() > 0, 'run-detail: [data-section="run-timeline"] renders');
+              const rows = await page.evaluate(() =>
+                Array.from(document.querySelectorAll('[data-timeline-row="true"]')).map((el) => ({
+                  nodeId: el.getAttribute('data-node-id'),
+                  status: el.getAttribute('data-status'),
+                  cost: el.getAttribute('data-phase-cost-usd'),
+                })));
+              check(
+                rows.map((r) => r.nodeId).join(',') === 'dev,demo,adversarial-review,review',
+                `run-detail: timeline rows follow the flow definition's own node order, dev→demo→adversarial-review→review (got "${rows.map((r) => r.nodeId).join(',')}")`,
+              );
+              // MEASURED per-node facts (same probe) — each node's OWN authoritative
+              // cost, never the run's $1.02 total borrowed onto one row.
+              const expectRow = (nodeId, status, cost) => {
+                const row = rows.find((r) => r.nodeId === nodeId);
+                check(
+                  row !== undefined && row.status === status && row.cost === cost,
+                  `run-detail: node "${nodeId}" reports status="${status}" cost="${cost}" (got ${JSON.stringify(row ?? null)})`,
+                );
+              };
+              expectRow('dev', 'complete', '0.48');
+              expectRow('demo', 'complete', '0.11');
+              expectRow('adversarial-review', 'complete', '0.06');
+              expectRow('review', 'active', '0.00');
+
+              // ── R6-01 WI-3 (F5): node click-through — that node's OWN log lines,
+              // through the SHARED RunLog renderer (deriveLogLine, think|tool|out) ──
+              // MEASURED, NOT INVENTED: the 'dev' row's own 6 raw seeded events
+              // (developer-loop start/log(gate.pass WI-1)/end(WI-1)/log(gate.pass
+              // WI-2)/end(WI-2)/end(ralph.end $0.48)) all fall outside
+              // deriveLogLine's TOOL_TYPES/THINK_TYPES sets, so every derived line
+              // is kind="out" — this beat proves reachability + real content, not
+              // the tool/think classification split (already exhaustively pinned
+              // at the unit level, forge-ui/lib/flow-node-log.test.ts +
+              // flow-run-node-log-render.test.ts). `end` ignores `message`
+              // entirely (deriveLogLine's own textFor), so only the LAST end event
+              // (cost-bearing) renders the "$0.4800" text — the two earlier
+              // WI-scoped end events render as plain "end · developer-loop".
+              const devRow = page.locator('[data-timeline-row="true"][data-node-id="dev"]').first();
+              check((await devRow.count()) > 0, 'run-detail: [data-timeline-row="true"][data-node-id="dev"] present to click');
+              if ((await devRow.count()) > 0) {
+                await devRow.click();
+                try {
+                  await page.waitForSelector('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="true"]', { timeout: 10000 });
+                  check(true, 'run-detail: clicking the dev row expands it (data-node-expanded="true")');
+                } catch {
+                  check(false, 'run-detail: clicking the dev row expands it (data-node-expanded="true") — click-through not implemented yet');
+                }
+                const expandedNow = (await page.locator('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="true"]').count()) > 0;
+                if (expandedNow) {
+                  await sleep(ACT);
+                  await frame(page, 'r6-01wi3-node-log', 'R6-01 WI-3 — a run-detail node expanded: that node\'s own log lines, through the shared RunLog renderer', { key: true });
+
+                  const detail = page.locator('[data-section="node-detail"][data-detail-for-node="dev"]').first();
+                  check((await detail.count()) > 0, 'run-detail: [data-section="node-detail"][data-detail-for-node="dev"] renders once expanded');
+
+                  // The SAME renderer R6-04's standalone run view already ships —
+                  // reused, not forked (this initiative's own D2/substrate note).
+                  const runLog = detail.locator('[data-component="run-log"]').first();
+                  check((await runLog.count()) > 0, 'run-detail: the expanded node composes the SHARED RunLog ([data-component="run-log"])');
+                  const logLineCount = await detail.locator('[data-log-line="true"]').count();
+                  check(logLineCount >= 6, `run-detail: dev's own 6 seeded events all render as log lines (got ${logLineCount})`);
+                  const outKindCount = await detail.locator('[data-log-line="true"][data-log-kind="out"]').count();
+                  check(outKindCount === logLineCount, `run-detail: every dev log line classifies as kind="out" via the shared deriveLogLine (got ${outKindCount}/${logLineCount})`);
+                  const detailText = await detail.evaluate((el) => el.textContent ?? '');
+                  check(detailText.includes('gate.pass'), 'run-detail: dev\'s own real log content ("gate.pass") is visible, not a summary');
+                  check(detailText.includes('$0.4800'), 'run-detail: the cost-bearing terminal event\'s real cost renders ("$0.4800")');
+
+                  // Typed outputs (F5's other half): honestly empty — measured
+                  // (D6⇒D7, this initiative's own ledger ruling): no per-node
+                  // artifact data source exists (artifactsReady is run-level, keyed
+                  // by artifact TYPE, never attributable to a node). A non-empty
+                  // node-outputs section here would be exactly the
+                  // never-populating-surface / declared-data-fails-open defect
+                  // this campaign keeps finding and refusing.
+                  const outputsSection = detail.locator('[data-section="node-outputs"]').first();
+                  check((await outputsSection.count()) > 0, 'run-detail: [data-section="node-outputs"] renders on the expanded node');
+                  if ((await outputsSection.count()) > 0) {
+                    const outputsCount = await outputsSection.getAttribute('data-outputs-count');
+                    check(outputsCount === '0', `run-detail: dev's typed-outputs count is honestly "0" — no per-node artifact source exists (got "${outputsCount}")`);
+                    check((await detail.locator('[data-component="node-outputs-empty"]').count()) > 0, 'run-detail: the honest-empty outputs state renders ([data-component="node-outputs-empty"])');
+                  }
+
+                  // Collapse-on-reclick — an F5 AC implied by "click-through", not
+                  // just "click-open": re-clicking the SAME row must not leave two
+                  // node-detail panels stacked, nor strand the row permanently open.
+                  await devRow.click();
+                  try {
+                    await page.waitForSelector('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="false"]', { timeout: 8000 });
+                    check(true, 'run-detail: re-clicking the dev row collapses it back (data-node-expanded="false")');
+                  } catch {
+                    check(false, 'run-detail: re-clicking the dev row collapses it back (data-node-expanded="false")');
+                  }
+                }
+              }
+
+        },
+      },
+      {
+        id: 'flows-run-drawer-live-tail',
+        title: 'Flow monitor — the phase-log drawer stays live for non-progress events (R6-01 WI-1)',
+        narration: 'A node whose events so far are only "start"/"log" lines — never a tool_use/file_change/test_run/iteration, the only four event types that move lastProgressAt (orchestrator/run-model-derive.ts PROGRESS_EVENT_TYPES) — still gets its open drawer refreshed the moment it emits a brand-new line, over the SAME WebSocket the page already holds. No new emission path: the line is appended to the running run\'s own events.jsonl, exactly as a real agent would, and the existing 200ms poll-tail + broadcast (cli/ui-bridge.ts) carries it to the page.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-01] Flow monitor — phase-log drawer live-refresh on a non-progress event');
+              // Re-use the SAME gated run (CYCLE_ID2) the monitor-deep-dive beat seeded
+              // above. review-loop (-> flow node "review", CANONICAL_PHASE_OVERRIDES,
+              // orchestrator/run-model.ts:171) received only a 'start' event and a
+              // 'log' event ('reviewer.pr-opened') — NEITHER is in PROGRESS_EVENT_TYPES —
+              // so this node's lastProgressAt has never been set at all.
+              await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
+              const reviewHex = page.locator('[data-node-id="review"]').first();
+              let drawerOpened = false;
+              if ((await reviewHex.count()) > 0) {
+                await reviewHex.click();
+                try {
+                  await page.waitForFunction(
+                    () => document.querySelector('#phase-drawer')?.getAttribute('data-drawer-open') === 'true',
+                    null, { timeout: 8000 },
+                  );
+                  drawerOpened = true;
+                  check(true, 'drawer-live: clicking the review hex opens the drawer (data-drawer-open="true")');
+                } catch {
+                  check(false, 'drawer-live: review hex opens drawer');
+                }
+              } else {
+                check(false, 'drawer-live: [data-node-id="review"] hex present to click');
+              }
+              if (!drawerOpened) return;
+              await sleep(ACT);
+              // Baseline (unaffected by the WI-1 fix): the already-seeded
+              // 'reviewer.pr-opened' line is visible on first open via the existing
+              // identity-keyed fetch (DrawerBody Effect 1) — establishes the drawer
+              // itself is wired to real data before testing the LIVE half below.
+              const baselineText = await page.evaluate(() => document.querySelector('#phase-drawer')?.textContent ?? '');
+              check(baselineText.includes('reviewer.pr-opened'),
+                'drawer-live: initial open shows the already-seeded review-loop log line (baseline)');
+              // The live gap this beat pins: append ONE MORE 'log' line to review-loop
+              // while the drawer stays open, WITHOUT closing/reopening it or changing
+              // any of Effect 1's dependencies (cycleId/nodeId/stderrOnly/wiId all
+              // unchanged) and WITHOUT the event moving lastProgressAt (Effect 2's own
+              // trigger). A drawer that is genuinely live must surface this new line
+              // anyway, sourced from the page's existing WebSocket tail — no new
+              // emission path, no manual refetch.
+              const marker = `review.LIVE-TAIL-${Date.now()}`;
+              studioEvent('review-loop', 'log', marker);
+              try {
+                await page.waitForFunction(
+                  (needle) => (document.querySelector('#phase-drawer')?.textContent ?? '').includes(needle),
+                  marker, { timeout: 6000 },
+                );
+                check(true, `drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker "${marker}")`);
+              } catch {
+                const stillThere = await page.evaluate(() => document.querySelector('#phase-drawer')?.textContent ?? '');
+                check(stillThere.includes(marker),
+                  `drawer-live: a NEW review-loop log line posted while the drawer stayed open must appear without closing/reopening it (marker "${marker}" not found — the drawer never re-fetched because this event type never moves lastProgressAt)`);
+              }
+              await frame(page, 'r6-01-drawer-live-tail', 'R6-01 — the phase-log drawer refreshes on a brand-new line even though it is a non-progress event type');
+
+              // ── R6-01 WI-1 amendment: the SAME-RENDER race ─────────────────────────
+              // `refreshActiveRun` (app/flows/[id]/page.tsx) refetches the WHOLE Run on
+              // every WebSocket event for this cycle. A node's FINAL event can therefore
+              // advance lastEventAt AND flip that node's own status to a terminal value
+              // (complete/failed, deriveNodeStatuses) in the SAME React render. The
+              // pre-amendment guard read `isTerminal` AFTER the transition had already
+              // landed and skipped the fetch outright — so the drawer kept the
+              // second-to-last snapshot, silently dropping the one line that says how
+              // (or why) the node ended. For a failed node that dropped line is
+              // precisely the reason it failed — the standing "operator iterates blind
+              // because the output exists but is not surfaced" complaint this whole
+              // feature answers. Drive that exact transition with the drawer still open:
+              // one more review-loop event that is BOTH the node's terminal event AND
+              // carries a distinguishable message.
+              //
+              // event_type:'end' + metadata.status:'failed' hits endMetaIndicatesFailure
+              // (orchestrator/run-model-derive.ts) — this flips ONLY the review NODE's
+              // own status (deriveNodeStatuses is per-node). run.status stays
+              // queue-state-derived ('gated', from the manifest's ready-for-review
+              // directory) — untouched, so the sibling flows-run-gate-control beat's
+              // data-run-status="gated" check (same CYCLE_ID2 fixture) is unaffected;
+              // likewise run.gate (findGateNodeId: "whichever node the LAST event
+              // attributes to") stays "review" either way, since review-loop's events
+              // are already the newest in this log.
+              const beforeStatus = await page.evaluate(() =>
+                document.querySelector('[data-node-id="review"]')?.getAttribute('data-status') ?? null);
+              const finalMarker = `review.VERDICT-FAILED-${Date.now()}`;
+              studioEvent('review-loop', 'end', finalMarker, { metadata: { status: 'failed' } });
+
+              try {
+                await page.waitForFunction(
+                  () => document.querySelector('[data-node-id="review"]')?.getAttribute('data-status') === 'failed',
+                  null, { timeout: 8000 },
+                );
+                check(true, `drawer-live: the review hex's own data-status transitions to "failed" in this same step (was "${beforeStatus}") — confirms the SAME-render race is genuinely exercised, not merely asserted`);
+              } catch {
+                const got = await page.evaluate(() =>
+                  document.querySelector('[data-node-id="review"]')?.getAttribute('data-status') ?? '(absent)');
+                check(false, `drawer-live: the review hex must transition to data-status="failed" for this case to exercise the SAME-render race (was "${beforeStatus}", got "${got}")`);
+              }
+
+              try {
+                await page.waitForFunction(
+                  (needle) => (document.querySelector('#phase-drawer')?.textContent ?? '').includes(needle),
+                  finalMarker, { timeout: 6000 },
+                );
+                check(true, `drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker "${finalMarker}")`);
+              } catch {
+                const stillThere = await page.evaluate(() => document.querySelector('#phase-drawer')?.textContent ?? '');
+                check(stillThere.includes(finalMarker),
+                  `drawer-live: the node's OWN terminal (failed) line must appear in the still-open drawer without closing/reopening it (marker "${finalMarker}" not found — the terminal-transition render skipped the fetch because isTerminal was already true by the time the effect body ran)`);
+              }
+              await frame(page, 'r6-01b-drawer-live-terminal', 'R6-01 — the drawer surfaces a node\'s own terminal (failed) line even though that SAME event flips the node to terminal status in the same render');
+        },
+      },
+      {
         id: 'flows-run-start-run-cta',
         title: `Engine — start-run CTA (${SCRATCH_FLOW}, no runs)`,
         narration: `On the from-scratch ${SCRATCH_FLOW} flow — never yet run — the Start Run button is live and enabled, proving the engine can launch any authored flow directly from the UI, not only the seeded production ones.`,

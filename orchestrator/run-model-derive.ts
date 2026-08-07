@@ -165,6 +165,12 @@ export function buildNodeMeta(
   // Progress tracking (lastProgressAt, wedged)
   const { lastProgressAt, wedged } = computeProgress(events, nowMs);
 
+  // Live-log freshness (R6-01 WI-1 F1): over EVERY event in this node's own
+  // bucket (already attributed via eventToNodeId, same bucket lastProgressAt
+  // reads) — NOT filtered to PROGRESS_EVENT_TYPES, so a node narrating only
+  // via 'log'/'error' events still reports freshness.
+  const lastEventAt = computeLastEventAt(events);
+
   // Iteration tracking (dev node)
   const { iter, iterBudget } = computeIterations(nodeId, events, iterationBudget);
 
@@ -182,6 +188,7 @@ export function buildNodeMeta(
 
   if (model !== undefined) meta.model = model;
   if (lastProgressAt !== undefined) meta.lastProgressAt = lastProgressAt;
+  if (lastEventAt !== undefined) meta.lastEventAt = lastEventAt;
   if (brainReads > 0) meta.brainReads = brainReads;
   if (iter !== undefined) meta.iter = iter;
   if (iterBudget !== undefined) meta.iterBudget = iterBudget;
@@ -238,6 +245,23 @@ export function computeProgress(
 
   const ageMs = nowMs - new Date(lastProgressAt).getTime();
   return { lastProgressAt, wedged: ageMs >= WEDGE_THRESHOLD_MS };
+}
+
+/**
+ * R6-01 WI-1 F1: the latest `started_at` across ALL events in this node's
+ * bucket — deliberately unfiltered (unlike computeProgress's
+ * PROGRESS_EVENT_TYPES gate), since the whole point of this field is to
+ * advance on 'log'/'error'/'start'/etc events that lastProgressAt ignores.
+ * Same lexicographic-max-over-ISO-strings technique as computeProgress.
+ */
+export function computeLastEventAt(events: readonly EventLogEntry[]): string | undefined {
+  let lastEventAt: string | undefined;
+  for (const e of events) {
+    if (lastEventAt === undefined || e.started_at > lastEventAt) {
+      lastEventAt = e.started_at;
+    }
+  }
+  return lastEventAt;
 }
 
 export function computeIterations(

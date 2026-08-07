@@ -9,7 +9,7 @@
  *   GET /api/runs                           → { runs: Run[] }
  *   GET /api/runs?flow=<id>                 → { runs: Run[] } (filtered)
  *   GET /api/runs/<id>                      → { run: Run }
- *   GET /api/runs/<id>/phases/<node>/log    → { lines } (stderr=1 to filter)
+ *   GET /api/runs/<id>/phases/<node>/log    → { lines } (stderr=1 to filter; raw=1 for the node's own raw EventLogEntry records, R6-01 WI-3/F5)
  *   GET /api/triggers                       → { triggers: {on,target,projects,sourceFlowId}[] } (R2-08-F4)
  *   GET /api/studio/agents                  → { agents: (AgentDefinition & { capability: AgentCapabilityDescriptor })[] }
  *   GET /api/studio/flows                   → { flows: FlowDefinition[] }
@@ -470,6 +470,14 @@ export async function handleStudioRoutes(
       const qs = parseQuery(rawUrl);
       const stderrOnly = qs.get('stderr') === '1';
       const wiId = qs.get('wiId') ?? '';
+      // R6-01 WI-3 (F5): raw=1 mirrors the stderr=1 convention above — an
+      // additive mode on this SAME route, never a new URL. It returns the
+      // node's own raw EventLogEntry records (event_type preserved) instead
+      // of the classifyEvent-derived {kind,text,at,detail} shape, so the
+      // client's shared deriveLogLine (forge-ui/lib/run-log-line.ts) has the
+      // fields it needs. D2: PhaseDrawer never passes this, and the
+      // classified path below is untouched when raw=1 is absent.
+      const rawMode = qs.get('raw') === '1';
 
       // Guard against path traversal via a crafted runId.
       const safeLogsBase = resolve(ctx.logsRoot);
@@ -504,6 +512,18 @@ export async function handleStudioRoutes(
       // dev-loop log. Events already carry metadata.work_item_id.
       if (wiId) {
         nodeEvents = nodeEvents.filter((e) => e.metadata?.work_item_id === wiId);
+      }
+
+      if (rawMode) {
+        // The node's OWN raw events, event_type intact — same node filter,
+        // same last-200 cap as the classified path, but never run through
+        // classifyEvent. This is exactly the array already computed above.
+        let rawLines = nodeEvents;
+        if (rawLines.length > 200) {
+          rawLines = rawLines.slice(rawLines.length - 200);
+        }
+        sendJson(res, 200, { lines: rawLines }, origin);
+        return true;
       }
 
       let lines = nodeEvents.map(classifyEvent);
