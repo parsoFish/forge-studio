@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { fetchPhaseLog } from '@/lib/studio-client';
 import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
 import { phaseLogRefreshSignal } from '@/lib/phase-log-refresh';
@@ -257,13 +257,39 @@ function DrawerBody({
   // below — this amendment does not widen its semantics.
   const logRefreshSignal = phaseLogRefreshSignal(run, nodeId);
 
-  // Effect 2 — live refresh: re-fetch IN PLACE (no flicker) while the phase is
-  // still running, keyed on logRefreshSignal so we refetch on each new
-  // attributed event (any type), not just tool-progress ticks. Terminal
-  // phases (complete/failed) keep their final snapshot.
-  const isTerminal = status === 'complete' || status === 'failed';
+  // R6-01 WI-1 F2: the (identity, signal) pair the lines currently on screen
+  // were fetched for. Written ONLY inside Effect 2 (never during render —
+  // StrictMode double-invokes render, so a render-phase write would record a
+  // fetch that never happened).
+  const lastFetchedRef = useRef<{ identity: string; signal: string } | null>(null);
+
+  // Effect 2 — live refresh: re-fetch IN PLACE (no flicker) whenever a NEW
+  // event has been attributed to this node since the lines on screen were
+  // fetched, keyed on logRefreshSignal so we refetch on each new attributed
+  // event (any type), not just tool-progress ticks.
+  //
+  // The guard is "has the signal moved since our last fetch", NOT "is the node
+  // still running". `refreshActiveRun` (app/flows/[id]/page.tsx) refetches the
+  // WHOLE Run on every WebSocket event for the active run, so a node's FINAL
+  // event advances lastEventAt AND flips that node's own status to
+  // complete/failed in the SAME React render. A `status === 'complete' ||
+  // 'failed'` early-return therefore already reads terminal by the time this
+  // body runs, and drops precisely the line that says how — or, for a failed
+  // node, WHY — the node ended. A terminal node still cannot spin: the signal
+  // is run.phaseMeta[nodeId].lastEventAt, which stops advancing once no further
+  // event is attributed to the node, so the deps stop changing and the ref
+  // comparison short-circuits any run that does happen.
   useEffect(() => {
-    if (!logRefreshSignal || isTerminal) return;
+    const identity = JSON.stringify([cycleId, nodeId, stderrOnly, isWi, wiId ?? null]);
+    const prev = lastFetchedRef.current;
+    lastFetchedRef.current = { identity, signal: logRefreshSignal };
+    // First run for this identity. Effect 1's deps ARE this identity, so it
+    // re-ran in this same commit and has already cleared + fetched this node's
+    // log at this same signal value — fetching again here would double-fetch
+    // the same content (and race Effect 1's setLogLines).
+    if (prev === null || prev.identity !== identity) return;
+    // Same identity and nothing new since the lines on screen were fetched.
+    if (prev.signal === logRefreshSignal) return;
     const signal = { cancelled: false };
     void (async () => {
       try {
@@ -273,7 +299,7 @@ function DrawerBody({
       } catch { /* best-effort */ }
     })();
     return () => { signal.cancelled = true; };
-  }, [logRefreshSignal, cycleId, nodeId, stderrOnly, isWi, wiId, isTerminal]);
+  }, [logRefreshSignal, cycleId, nodeId, stderrOnly, isWi, wiId]);
   const livenessColor = useLivenessColor(lastProgressAt, status);
   const livenessText = useLivenessText(lastProgressAt, status);
 
