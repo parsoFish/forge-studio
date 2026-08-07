@@ -1626,6 +1626,127 @@ export const journey = defineJourney({
         },
       },
       {
+        id: 'flows-run-detail-reachable',
+        title: 'Flow run-detail — reachable from the monitor run rail (R6-01 WI-2 F4)',
+        narration: 'The same gated run\'s own standalone detail page — every node on the flow with its own real cost and status, not just the ones a live monitor happens to be showing — reached from the SAME run-rail row every earlier beat in this run has already been clicking.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── R6-01 WI-2 (F4): flow run-detail — reachable + the destination's own contract ──
+              console.log('\n[R6-01 WI-2] Flow run-detail — reachable from the monitor run rail');
+              // Re-use the SAME gated run (CYCLE_ID2) monitor-deep-dive seeded, BEFORE
+              // drawer-live-tail's own SAME-render mutation flips the review node to
+              // 'failed' — this beat runs between the two, so every fact asserted below
+              // is against the fixture's UNMUTATED state.
+              //
+              // MEASURED, NOT INVENTED (task report): a real listRuns() pass driven
+              // over a byte-for-byte copy of this exact studioEvent() sequence, against
+              // the REAL studio/flows/forge-develop/flow.yaml on disk (not a synthetic
+              // stand-in), reports:
+              //   run.status="gated", run.gate="review"
+              //   dev=complete/$0.48  demo=complete/$0.11
+              //   adversarial-review=complete/$0.06  review=active/$0.00
+              // (the run-level costUsd=1.02 is their sum + architect 0.22 + pm 0.15 —
+              // never itself attributed to a node, the standing defect class flow-run-
+              // timeline.test.ts pins at the derivation layer).
+              await openStudioMonitor(page, watch, 'forge-develop', CYCLE_ID2);
+              const runRow = page.locator(`[data-run-id="${CYCLE_ID2}"]`).first();
+              check((await runRow.count()) > 0, `monitor: run rail row [data-run-id="${CYCLE_ID2}"] present (the reachability starting point)`);
+
+              // GROUNDED PROBE, NOT AN INVENTED SELECTOR: `git grep` across
+              // forge-ui/components + forge-ui/app for any href/onClick reaching a
+              // standalone .../run/[runId] page finds NOTHING — not even for the
+              // ALREADY-SHIPPED analogous surface, app/agents/[id]/run/[runId]/page.tsx
+              // (R6-04): that page's own journey beat (agents.mjs) reaches it via
+              // page.goto ONLY, never a click. So there is no precedent anywhere in this
+              // codebase for "click a rail row, land on a standalone run page" to copy a
+              // selector from. Rather than invent one, this PROBES for a link inside the
+              // real row and reports the result honestly either way, then proves the
+              // load-bearing half of F4 — the destination page's own contract — via
+              // direct navigation, matching the codebase's own established pattern for
+              // this exact class of page.
+              const detailLink = runRow.locator(`a[href*="/run/${CYCLE_ID2}"]`).first();
+              const hasDetailLink = (await detailLink.count()) > 0;
+              check(
+                hasDetailLink,
+                `monitor: run row carries a click-through link to its own run-detail page (a[href*="/run/<id>"]) — if this reads false, the detail page is reachable ONLY by direct URL today, the same still-open gap already measured on the analogous /agents/[id]/run/[runId] surface (R6-04); this beat falls back to direct navigation either way so the destination contract below still gets proven`,
+              );
+              if (hasDetailLink) {
+                await detailLink.click();
+                try {
+                  await page.waitForFunction(
+                    (needle) => location.pathname.includes(needle),
+                    `/flows/forge-develop/run/${CYCLE_ID2}`,
+                    { timeout: 10000 },
+                  );
+                  check(true, 'monitor: clicking the run row\'s detail link navigates to /flows/forge-develop/run/<id>');
+                } catch {
+                  check(false, `monitor: clicking the run row's detail link navigates to /flows/forge-develop/run/<id> (got ${page.url()})`);
+                }
+              } else {
+                await page.goto(watch.uiUrl + `/flows/forge-develop/run/${CYCLE_ID2}`, { waitUntil: 'domcontentloaded' });
+              }
+
+              // From here on, whichever way we arrived — the destination page's OWN
+              // contract, pinned by forge-ui/lib/flow-run-detail-render.test.ts's
+              // RESERVED data-* vocabulary (R6-01 WI-2 round 1): [data-page="flow-run"]
+              // [data-run-id][data-run-found][data-run-status][data-flow-id] on <main>,
+              // [data-section="run-timeline"] containing [data-timeline-row="true"]
+              // [data-node-id][data-status][data-phase-cost-usd] rows.
+              try {
+                await page.waitForSelector('main[data-page="flow-run"][data-run-found="true"]', { timeout: 20000 });
+                check(true, 'run-detail: [data-page="flow-run"][data-run-found="true"] renders for a real, gated run');
+              } catch {
+                check(false, 'run-detail: [data-page="flow-run"][data-run-found="true"] renders for a real, gated run — route/page not implemented yet');
+                return; // nothing further is measurable without the page
+              }
+              await caption(page, 'Every node on the flow — not just the ones that happen to be running — with its own real cost and status.');
+              await frame(page, 'r6-01wi2-run-detail', 'R6-01 WI-2 — the flow run-detail page: every node, its own real cost and status, reached from the monitor run rail');
+
+              const attrs = await page.evaluate(() => {
+                const main = document.querySelector('main[data-page="flow-run"]');
+                return main
+                  ? {
+                      runId: main.getAttribute('data-run-id'),
+                      flowId: main.getAttribute('data-flow-id'),
+                      runStatus: main.getAttribute('data-run-status'),
+                    }
+                  : null;
+              });
+              check(attrs !== null && attrs.runId === CYCLE_ID2, `run-detail: data-run-id matches the run navigated to (got ${JSON.stringify(attrs)})`);
+              check(attrs !== null && attrs.flowId === 'forge-develop', `run-detail: data-flow-id="forge-develop" (got ${JSON.stringify(attrs)})`);
+              // MEASURED (task report probe): the real derived run.status is "gated" —
+              // matches flows-run-gate-control's own sibling assertion on the SAME
+              // CYCLE_ID2 fixture, so the two beats cannot silently drift apart.
+              check(attrs !== null && attrs.runStatus === 'gated', `run-detail: data-run-status="gated" — the real derived status, not a live-looking default (got ${JSON.stringify(attrs)})`);
+
+              check(await page.locator('[data-section="run-timeline"]').count() > 0, 'run-detail: [data-section="run-timeline"] renders');
+              const rows = await page.evaluate(() =>
+                Array.from(document.querySelectorAll('[data-timeline-row="true"]')).map((el) => ({
+                  nodeId: el.getAttribute('data-node-id'),
+                  status: el.getAttribute('data-status'),
+                  cost: el.getAttribute('data-phase-cost-usd'),
+                })));
+              check(
+                rows.map((r) => r.nodeId).join(',') === 'dev,demo,adversarial-review,review',
+                `run-detail: timeline rows follow the flow definition's own node order, dev→demo→adversarial-review→review (got "${rows.map((r) => r.nodeId).join(',')}")`,
+              );
+              // MEASURED per-node facts (same probe) — each node's OWN authoritative
+              // cost, never the run's $1.02 total borrowed onto one row.
+              const expectRow = (nodeId, status, cost) => {
+                const row = rows.find((r) => r.nodeId === nodeId);
+                check(
+                  row !== undefined && row.status === status && row.cost === cost,
+                  `run-detail: node "${nodeId}" reports status="${status}" cost="${cost}" (got ${JSON.stringify(row ?? null)})`,
+                );
+              };
+              expectRow('dev', 'complete', '0.48');
+              expectRow('demo', 'complete', '0.11');
+              expectRow('adversarial-review', 'complete', '0.06');
+              expectRow('review', 'active', '0.00');
+
+        },
+      },
+      {
         id: 'flows-run-drawer-live-tail',
         title: 'Flow monitor — the phase-log drawer stays live for non-progress events (R6-01 WI-1)',
         narration: 'A node whose events so far are only "start"/"log" lines — never a tool_use/file_change/test_run/iteration, the only four event types that move lastProgressAt (orchestrator/run-model-derive.ts PROGRESS_EVENT_TYPES) — still gets its open drawer refreshed the moment it emits a brand-new line, over the SAME WebSocket the page already holds. No new emission path: the line is appended to the running run\'s own events.jsonl, exactly as a real agent would, and the existing 200ms poll-tail + broadcast (cli/ui-bridge.ts) carries it to the page.',

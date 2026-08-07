@@ -18,12 +18,12 @@
  * journey module, not just assumed):
  *   · stand-up-onboard before flows-author — flows-author's seeded-run beat
  *     (J5) reads the project stand-up-onboard onboards (J4_PROJECT) on disk.
- *   · flows-run (all 24 beats, in file-declared order) before roadmap —
+ *   · flows-run (all 29 beats, in file-declared order) before roadmap —
  *     roadmap-tab reads the shared cycle log's work-items-snapshot AFTER
  *     flows-run-approve-merge has moved the manifest into `done/`; roadmap
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
- *     monitor-deep-dive / start-run-cta / gate-control, which stay inside the
- *     flows-run journey itself) has completed.
+ *     monitor-deep-dive / detail-reachable / start-run-cta / gate-control,
+ *     which stay inside the flows-run journey itself) has completed.
  * Every other journey (skills, hooks, templates, connections, agents,
  * knowledge, demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
@@ -255,6 +255,7 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-reflect'],
   ['flows-run', 'flows-run-reflect-automated'],
   ['flows-run', 'flows-run-monitor-deep-dive'],
+  ['flows-run', 'flows-run-detail-reachable'],
   ['flows-run', 'flows-run-drawer-live-tail'],
   ['flows-run', 'flows-run-start-run-cta'],
   ['flows-run', 'flows-run-gate-control'],
