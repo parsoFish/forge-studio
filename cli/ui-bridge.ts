@@ -138,6 +138,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { listRuns, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
 import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -782,12 +783,33 @@ type StandaloneRunState = {
   lines: Record<string, unknown>[];
 };
 
-/** Parse a run's `events.jsonl` into records; `null` when the file doesn't
- *  exist (never thrown — an absent log is a normal "no events yet" state,
- *  not an anomaly). A malformed individual line is skipped, not fatal. */
-function parseEventsJsonl(eventsPath: string): Record<string, unknown>[] | null {
-  if (!existsSync(eventsPath)) return null;
-  return readFileSync(eventsPath, 'utf8')
+/**
+ * Guarded parse of `<root>/<entryName>/events.jsonl` (R6-06 round 6,
+ * adversarial-containment-review — replaces the former unguarded
+ * `parseEventsJsonl(eventsPath: string)`, which called plain
+ * `existsSync`/`readFileSync` on a path built from an ENTRY NAME the caller
+ * read off disk via `readdirSync` — a directory symlink at `entryName`, a
+ * file symlink at the `events.jsonl` leaf, or a hardlinked leaf were all
+ * silently followed and served. `entryName` is a SINGLE directory-entry name
+ * (never a multi-segment path — every caller below passes one literal
+ * `readdirSync`-sourced or registry-derived name), so `resolveGuardedPath`'s
+ * per-segment identity walk plus its `nlink===1` leaf check close all three
+ * shapes (symlinked entry dir, symlinked leaf, hardlinked leaf) in one choke
+ * point. `root` MUST be a fixed, config-derived constant (logsRoot) per
+ * `resolveGuardedPath`'s own contract — see its module docstring's
+ * root-folding warning; NEVER fold `entryName` into `root` before calling
+ * this.
+ *
+ * `null` covers BOTH "the file doesn't exist yet" (a legitimate no-events-
+ * yet run) AND "the guard rejected this entry" (a poisoned symlink/hardlink)
+ * — collapsed into the exact same outcome so a poisoned entry is never
+ * distinguishable from an absent one to any caller (the no-oracle rule).
+ * A malformed individual JSONL line is skipped, not fatal — unchanged from
+ * the prior behaviour. */
+function parseGuardedEventsJsonl(root: string, entryName: string): Record<string, unknown>[] | null {
+  const guarded = resolveGuardedPath(root, [entryName, 'events.jsonl']);
+  if (!guarded.ok || !guarded.exists) return null;
+  return readFileSync(guarded.realPath, 'utf8')
     .trim().split('\n').filter(Boolean)
     .map((l) => { try { return JSON.parse(l) as Record<string, unknown>; } catch { return null; } })
     .filter((e): e is Record<string, unknown> => e !== null);
@@ -827,12 +849,16 @@ function deriveStandaloneStateFromEvents(parsed: readonly Record<string, unknown
 }
 
 /** Full derivation for a standalone run directory: handles the "dispatched,
- *  no event has landed yet" state (no `events.jsonl` at all) honestly —
- *  `running`/`costUsd: null` — then delegates to the shared per-event
- *  derivation above. Used by BOTH `GET /api/agents/runs/<runId>` and the
- *  history route's standalone-path rows. */
-function deriveStandaloneRunState(runDir: string): StandaloneRunState {
-  const parsed = parseEventsJsonl(join(runDir, 'events.jsonl'));
+ *  no event has landed yet" state (no `events.jsonl` at all, OR a poisoned
+ *  entry the guard rejected — both collapse to the same honest "no events
+ *  observed" outcome, never a leak) honestly — `running`/`costUsd: null` —
+ *  then delegates to the shared per-event derivation above. Used by BOTH
+ *  `GET /api/agents/runs/<runId>` and the history route's standalone-path
+ *  rows. Takes `logsRoot` + the run's own directory NAME (never a
+ *  pre-joined path) so the guarded parse below can identity-check that name
+ *  as its own path segment (R6-06 round 6). */
+function deriveStandaloneRunState(logsRoot: string, runEntryName: string): StandaloneRunState {
+  const parsed = parseGuardedEventsJsonl(logsRoot, runEntryName);
   if (parsed === null) return { state: 'running', costUsd: null, events: 0, lines: [] };
   return deriveStandaloneStateFromEvents(parsed);
 }
@@ -897,6 +923,17 @@ function collectFlowNodeRows(forgeRoot: string, slug: string): AgentHistoryRow[]
  * is exact-match on the run's own events (`standaloneRunMatchesSlug`, D4) —
  * a directory whose name merely starts with a similar-looking prefix is
  * never enough on its own (the alias trap).
+ *
+ * R6-06 round 6: the actual READ of each enumerated entry's `events.jsonl`
+ * goes through `parseGuardedEventsJsonl` — `entry` is an untrusted NAME read
+ * off disk (`readdirSync`'s result, not chosen by this function), and a
+ * symlinked entry dir / symlinked `events.jsonl` / hardlinked `events.jsonl`
+ * were all previously followed by a plain `statSync`+`existsSync`+
+ * `readFileSync` chain with zero identity or nlink check. The guard's
+ * "absent" collapse also subsumes the old explicit `isDirectory()` check —
+ * a non-directory `entry` simply has no valid `events.jsonl` path beneath
+ * it, so the guarded parse returns `null` for it exactly as it does for "no
+ * events yet", with no separate check needed.
  */
 function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[] {
   let entries: string[];
@@ -908,15 +945,10 @@ function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[
   const rows: AgentHistoryRow[] = [];
   for (const entry of entries) {
     if (!entry.startsWith(STANDALONE_RUN_DIR_PREFIX)) continue;
-    const runDir = join(logsRoot, entry); // `entry` came from readdir, never from `slug`
-    try {
-      if (!statSync(runDir).isDirectory()) continue;
-    } catch {
-      continue;
-    }
-    const parsed = parseEventsJsonl(join(runDir, 'events.jsonl'));
-    // No events at all -> nothing to prove identity against; honestly
-    // unattributable to any slug, so it produces no row (never a guess).
+    const parsed = parseGuardedEventsJsonl(logsRoot, entry); // `entry` came from readdir, never from `slug`
+    // No events at all (or a poisoned/rejected entry — indistinguishable by
+    // design) -> nothing to prove identity against; honestly unattributable
+    // to any slug, so it produces no row (never a guess, never a leak).
     if (parsed === null || !standaloneRunMatchesSlug(parsed, slug)) continue;
     const derived = deriveStandaloneStateFromEvents(parsed);
     rows.push({
@@ -935,9 +967,15 @@ function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[
  *  `readArchitectSessionStats` (orchestrator/architect-runner.ts)'s
  *  algorithm exactly, generalised over `kind` rather than hardcoded to
  *  `_architect-`. `null` when the log dir is absent (no cost has ever been
- *  recorded for this session — honest-absent, never a fabricated `0`). */
+ *  recorded for this session — honest-absent, never a fabricated `0`).
+ *  `_${kind}-${sessionId}` is ONE literal directory-entry name (a hyphen
+ *  join, not a path separator), so it passes through the SAME guarded
+ *  choke point as every other standalone-shaped log dir (R6-06 round 6) —
+ *  `kind` comes from the live session-kind registry and `sessionId` from
+ *  `readdirSync` in `collectSessionRows`, neither trusted enough to read
+ *  through unguarded. */
 function readSessionCostUsd(logsRoot: string, kind: string, sessionId: string): number | null {
-  const parsed = parseEventsJsonl(join(logsRoot, `_${kind}-${sessionId}`, 'events.jsonl'));
+  const parsed = parseGuardedEventsJsonl(logsRoot, `_${kind}-${sessionId}`);
   if (parsed === null || parsed.length === 0) return null;
   let total = 0;
   let any = false;
@@ -946,6 +984,46 @@ function readSessionCostUsd(logsRoot: string, kind: string, sessionId: string): 
     if (typeof cost === 'number') { total += cost; any = true; }
   }
   return any ? total : null;
+}
+
+/**
+ * Guarded read of `<projectsRoot>/<project>/<kindDirName>/<sessionId>/status.json`
+ * (R6-06 round 6 — replaces the former direct `readSessionStatus(join(kindDir,
+ * sessionId))` call, a plain `existsSync`/`readFileSync` with zero identity
+ * or nlink check).
+ *
+ * `project`, `kindDirName`, `sessionId` each arrive as their OWN element of
+ * `resolveGuardedPath`'s `segments[]` — never folded into `root` — so the
+ * per-segment IDENTITY walk catches a symlinked `_<kind>` dir (the P0: a
+ * malicious project's `_<kind>` pointing at a victim project's) at the
+ * segment it actually lives at, regardless of which `sessionId` is being
+ * tried; a symlinked `status.json` leaf fails the same walk one segment
+ * later; a hardlinked `status.json` leaf is caught by the guard's
+ * `nlink===1` check once the whole chain otherwise resolves. This is the
+ * SAME shared `resolveGuardedPath` this file's task brief names as the
+ * repo's intended guard for this shape — attacked directly (root-folding,
+ * intermediate-segment symlink, hardlinked leaf, legitimate near-miss
+ * names) before being wired in here; see the task report for the executed
+ * results.
+ *
+ * `root` (`projectsRoot`) is a fixed, config-derived constant
+ * (`resolveProjectsDir`), never request-derived — satisfying
+ * `resolveGuardedPath`'s own root-trust contract. A rejected guard, an
+ * absent leaf, and a malformed/non-object JSON body all collapse into the
+ * SAME `null` — indistinguishable outcomes, per the no-oracle rule this
+ * route's other two collectors already follow. */
+function readGuardedSessionStatus(projectsRoot: string, project: string, kindDirName: string, sessionId: string): { phase?: unknown } | null {
+  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
+  if (!guarded.ok || !guarded.exists) return null;
+  try {
+    const parsed: unknown = JSON.parse(readFileSync(guarded.realPath, 'utf8'));
+    if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as { phase?: unknown };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -987,8 +1065,8 @@ function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logs
       }
       for (const sessionId of sessionIds) {
         if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors listInstructionsSessions
-        const status = readSessionStatus<{ phase?: unknown }>(join(kindDir, sessionId));
-        if (!status || typeof status.phase !== 'string') continue; // unreadable/missing phase -> not a real session row
+        const status = readGuardedSessionStatus(ctx.projectsRoot, project, kindDirName, sessionId);
+        if (!status || typeof status.phase !== 'string') continue; // unreadable/missing/escaping/hardlinked phase -> not a real session row
         const template = descriptor.legacyRoutes[0];
         const href = template
           ? template.replace('[sessionId]', sessionId)
@@ -1394,8 +1472,17 @@ async function handleHttp(
       sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
       return;
     }
-    const runDir = join(ctx.logsRoot, runId);
-    if (!existsSync(runDir)) {
+    // R6-06 round 6: this route's `runId` reaches `_logs/<runId>` the SAME
+    // way an enumerated history-route entry does — `isSafeRunId` gates
+    // charset/shape only, never containment, so a poisoned `_logs/<runId>`
+    // (a directory symlink, mirroring escape 1) would previously have been
+    // followed by a plain `existsSync`. Guarded here with the SAME
+    // `resolveGuardedPath` choke point `deriveStandaloneRunState` now uses
+    // internally for the leaf — a rejected guard and a genuinely absent
+    // directory both collapse into the SAME 404 (never dispatched), never a
+    // distinguishable error.
+    const runDirGuard = resolveGuardedPath(ctx.logsRoot, [runId]);
+    if (!runDirGuard.ok || !runDirGuard.exists) {
       sendJson(res, 404, { error: `no run found for id ${JSON.stringify(runId)}` }, origin);
       return;
     }
@@ -1404,7 +1491,7 @@ async function handleHttp(
       // history route's standalone-path rows use — see
       // `deriveStandaloneRunState`'s own doc comment. `costUsd: null` (not a
       // fabricated `0`) once a run has no `end` event yet — Amendment 2.
-      const derived = deriveStandaloneRunState(runDir);
+      const derived = deriveStandaloneRunState(ctx.logsRoot, runId);
       sendJson(res, 200, { ok: true, state: derived.state, costUsd: derived.costUsd, events: derived.events, lines: derived.lines }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
