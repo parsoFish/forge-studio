@@ -26,6 +26,11 @@ const ROUTES = [
   { path: '/', name: 'library' },
   { path: '/agents/new', name: 'agent-builder (new)' },
   { path: '/agents/developer-ralph', name: 'agent detail (real shipped agent)' },
+  // R6-04 WI-4: an UNKNOWN runId (never dispatched) — proves the honest
+  // 404/not-found degradation (RunView.tsx's `found:false` branch), not a
+  // happy path that would need a live, just-dispatched run this read-only
+  // sweep never creates.
+  { path: '/agents/developer-ralph/run/nonexistent-run-e2e-deadpath', name: 'agent run view (unknown runId — 404/not-found)' },
   { path: '/projects', name: 'projects index' },
   { path: '/projects/new', name: 'project onboarding' },
   { path: '/flows/forge-develop', name: 'flow monitor (seed)' },

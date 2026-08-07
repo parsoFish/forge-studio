@@ -117,6 +117,15 @@ import {
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
 import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
+import {
+  agentAcceptsMaterial,
+  materialKindForFilename,
+  MAX_MATERIALS_COUNT,
+  MAX_MATERIAL_BYTES,
+  MAX_MATERIALS_TOTAL_BYTES,
+} from '../orchestrator/studio/materials.ts';
+import { stageMaterials, MaterialsStagingError } from './materials-staging.ts';
+import type { AgentDefinition } from '../orchestrator/studio/types.ts';
 import { skillsDir, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
@@ -125,11 +134,16 @@ import {
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
+// R6-04 WI-4 — GET /api/agents/runs/<runId>'s `lines` field cap. A fixed
+// cap (not a proportion of the log size) so a runaway log is never served
+// whole; the TAIL (most-recently-written lines) is preserved when capping,
+// so a long-running run's log view never looks frozen at dispatch.
+const RUN_LOG_LINES_MAX = 500;
 // Feature #8 — daemon-stall liveness. Mirrors orchestrator/scheduler.ts's
 // staleHeartbeatMs default (5min). The UI flips to `daemon-stalled` only at a
 // GENEROUS multiple of that so a slow-but-alive cycle never false-alarms — the
@@ -1104,16 +1118,40 @@ async function handleHttp(
   // the run's `_logs/<runId>/events.jsonl` and reports {state, costUsd, events}
   // so the agent-page RunPanel shows live status + cost (the F1 "events/cost
   // visible" AC) without a bespoke per-agent monitor.
+  //
+  // R6-04 WI-4: also reports `lines` — the run's own parsed event records,
+  // capped to RUN_LOG_LINES_MAX and TAIL-preserving (most-recently-written
+  // lines survive the cap, not the earliest ones) — so the standalone run
+  // view can render a live log off this SAME poll rather than a second
+  // endpoint or re-reading the JSONL file client-side. `state`/`costUsd`/
+  // `events` keep their EXACT current meaning (`events` stays the COUNT,
+  // uncapped) — both response call sites below (the early return when no
+  // events file exists yet, and the main JSONL-parsing path) return `lines`
+  // so the shape never differs between branches of this one endpoint.
+  //
+  // R6-04 D22 follow-up: a genuinely unknown runId (no `_logs/<runId>`
+  // directory at all — never dispatched) now 404s instead of fabricating
+  // `state: 'running'`, so `RunView.tsx`'s `found:false` prop actually has a
+  // real signal to key off. This check is deliberately keyed off the RUN
+  // DIRECTORY, not `events.jsonl` — a real, freshly-dispatched run's
+  // directory exists before its first event lands, and that case must keep
+  // reporting 200/`running`/`lines: []`, not 404.
   if (method === 'GET' && url.startsWith('/api/agents/runs/')) {
     const runId = decodeURIComponent(url.slice('/api/agents/runs/'.length));
     if (!isSafeRunId(runId)) {
       sendJson(res, 400, { error: `invalid runId: ${JSON.stringify(runId)}` }, origin);
       return;
     }
-    const eventsPath = join(ctx.logsRoot, runId, 'events.jsonl');
+    const runDir = join(ctx.logsRoot, runId);
+    if (!existsSync(runDir)) {
+      sendJson(res, 404, { error: `no run found for id ${JSON.stringify(runId)}` }, origin);
+      return;
+    }
+    const eventsPath = join(runDir, 'events.jsonl');
     if (!existsSync(eventsPath)) {
-      // Dispatched but no event yet (or spawn suppressed with no log dir).
-      sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0 }, origin);
+      // Dispatched (the run directory exists), but no event has landed yet
+      // (or spawn was suppressed before it could write one).
+      sendJson(res, 200, { ok: true, state: 'running', costUsd: 0, events: 0, lines: [] }, origin);
       return;
     }
     try {
@@ -1128,9 +1166,20 @@ async function handleHttp(
       // poll a dead run indefinitely.
       const failed = parsed.some((e) => e['message'] === 'agent-dispatch.failed');
       const endEvent = parsed.find((e) => e['event_type'] === 'end');
-      const state = failed ? 'failed' : suppressed ? 'suppressed' : endEvent ? 'done' : 'running';
+      // R6-04 (WI-2): a ceiling-stop (SDK `result_subtype:
+      // 'error_max_budget_usd'`, recorded into the end event's metadata by
+      // runAgent) must be a DISTINCT terminal state, never collapsed into an
+      // ordinary successful 'done' — a budget-stopped run reported as a
+      // clean success is the exact defect this pins.
+      const endMetadata = endEvent?.['metadata'] as Record<string, unknown> | undefined;
+      const ceilingStopped = endMetadata?.['result_subtype'] === 'error_max_budget_usd';
+      const state = failed ? 'failed' : suppressed ? 'suppressed' : ceilingStopped ? 'budget-exceeded' : endEvent ? 'done' : 'running';
       const costUsd = typeof endEvent?.['cost_usd'] === 'number' ? (endEvent['cost_usd'] as number) : 0;
-      sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length }, origin);
+      // `events` stays the COUNT (uncapped); `lines` is the tail slice served
+      // for rendering — a fixed cap regardless of log size (never a
+      // proportion of the total), per RUN_LOG_LINES_MAX below.
+      const lines = parsed.slice(-RUN_LOG_LINES_MAX);
+      sendJson(res, 200, { ok: true, state, costUsd, events: parsed.length, lines }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -1152,7 +1201,7 @@ async function handleHttp(
       return;
     }
     try {
-      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown };
+      const body = (await readJson(req)) as { project?: unknown; inputs?: unknown; materials?: unknown; costCeilingUsd?: unknown };
       // Resolve + validate against the live roster (unknown/interactive → 400).
       let def: ReturnType<typeof resolveDispatchableAgent>;
       try {
@@ -1207,8 +1256,139 @@ async function handleHttp(
           inputs[k] = v;
         }
       }
+      // R6-04 WI-2 — the per-kickoff cost ceiling. Fail-closed, THREE ordered
+      // stages (round 8, T1 ruling on validation precedence):
+      //   1. shape/type — non-number or non-finite. Must win over everything
+      //      else: we should never reason about whether a malformed value is
+      //      "enforceable" or "in bounds".
+      //   2. enforceability — a property of the AGENT, invariant under the
+      //      value (only `runtime.loopStrategy: 'one-shot'` agents can honor
+      //      a ceiling via options.maxBudgetUsd, orchestrator/run-agent.ts's
+      //      runOneShotSpawn; the legacy invocation path, 14 of 19 real
+      //      dispatchable roster agents, has no budget concept at all). This
+      //      wins over bounds: a bounds message ("must be <= N") implies "use
+      //      a smaller number" as a remedy, but for a legacy-path agent NO
+      //      value is acceptable — a message naming an unusable remedy is
+      //      actively misleading. Mirrors the SAME guard `runAgent` itself
+      //      enforces (defense-in-depth: this route is not the only entry
+      //      point — `forge agent dispatch --cost-ceiling-usd` never passes
+      //      through it).
+      //   3. bounds — a property of the VALUE: <= 0 or above
+      //      MAX_KICKOFF_COST_CEILING_USD. Exactly-at-the-max is accepted
+      //      (inclusive boundary); one unit over is refused.
+      // All three 400 BEFORE runId is minted / spawnAgentDispatch is ever
+      // called — no run is spawned on a refused ceiling.
+      let costCeilingUsd: number | undefined;
+      if (body.costCeilingUsd !== undefined) {
+        const v = body.costCeilingUsd;
+        if (typeof v !== 'number' || !Number.isFinite(v)) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return;
+        }
+        if (def.runtime.loopStrategy !== 'one-shot') {
+          sendJson(
+            res,
+            400,
+            {
+              error:
+                `costCeilingUsd: ceiling not enforceable for this agent's loop strategy ` +
+                `(agent "${slug}" declares ${JSON.stringify(def.runtime.loopStrategy)} — an operator ` +
+                `cost ceiling can only be enforced for loopStrategy: 'one-shot')`,
+            },
+            origin,
+          );
+          return;
+        }
+        if (v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return;
+        }
+        costCeilingUsd = v;
+      }
+      // R6-04-F2 WI-1 — materials contract enforcement, the agent-kickoff
+      // upload seam. ALL validation happens here, alongside `inputs` above,
+      // BEFORE `runId` is minted below: a refused request never reaches the
+      // point where a run directory could exist at all, which is what makes
+      // "nothing written on refusal" true BY CONSTRUCTION rather than by a
+      // compensating delete. `def` (the agent's declared `materials:`) is
+      // already resolved above; the kind for every entry is derived
+      // SERVER-SIDE (`materialKindForFilename`) — a client-supplied `kind`
+      // field, if present, is never read.
+      const materialsValidation = validateMaterialsField(body.materials, def);
+      if (!materialsValidation.ok) {
+        sendJson(res, 400, { error: materialsValidation.error }, origin);
+        return;
+      }
       const runId = `_agent-${slug}-${newRunStamp()}`;
-      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs);
+      // Staging happens AFTER runId is minted (it needs a run dir to write
+      // into) and BEFORE spawnAgentDispatch (so the spawned agent process
+      // can see the files). A `MaterialsStagingError` here is a SERVER-side
+      // anomaly, not a client-attributable refusal — every client-fixable
+      // problem already 400'd above, and the client cannot plant a
+      // symlink/hardlink under a runId it never knew in advance — so it
+      // falls through to the route's normal catch below, which maps it to a
+      // 500 via the existing `sanitizeError`, not a hand-rolled sanitiser.
+      if (materialsValidation.entries.length > 0) {
+        const runDir = join(ctx.logsRoot, runId);
+        // `runId` is server-minted (just above) and `ctx.logsRoot` is
+        // config-derived — both trusted, neither built from untrusted
+        // input — so realizing the run's own directory here is safe.
+        // Still applying `isSafeRunId` defensively before the mkdir below,
+        // mirroring the SAME check this file already runs on this SAME
+        // value at its other two sites (spawnAgentDispatch ~line 1789,
+        // the run-status route ~line 1118) — guard-symmetry, so a future
+        // change to `newRunStamp()`/the slug regex can't quietly turn this
+        // THIRD site into the one that skips it. A server-minted id
+        // failing its own safety check is a server anomaly, not a client
+        // mistake, so it's raised as MaterialsStagingError -> the route's
+        // existing 500 path, never a 400.
+        if (!isSafeRunId(runId)) {
+          throw new MaterialsStagingError('materials: refused to stage — unsafe run id');
+        }
+        // This is the run's FIRST artifact: under FORGE_DRY_BRIDGE,
+        // spawnAgentDispatch below never runs, so nothing else creates
+        // `runDir` before `stageMaterials`/`resolveGuardedPath` need it to
+        // already exist.
+        mkdirSync(runDir, { recursive: true });
+        stageMaterials(
+          runDir,
+          materialsValidation.entries.map((m) => ({ filename: m.filename, bytes: m.bytes })),
+        );
+        // Record REFERENCES ONLY (relative path + derived kind) on the run's
+        // own event log — never the bytes (forge-wide rule: the event log
+        // logs refs, never contents).
+        createLogger(runId, ctx.logsRoot).emit({
+          initiative_id: runId,
+          phase: 'orchestrator',
+          skill: slug,
+          // NOT 'start' — `runAgent` (orchestrator/run-agent.ts:297) already
+          // emits the run's real lifecycle `start` event when the spawned
+          // process runs; a second `start` here would double up the
+          // lifecycle terminal for the same runId (wrong "when did this run
+          // begin" answers, an inflated events count on the status route).
+          // This is a supplementary record, not a lifecycle boundary — 'log'
+          // is the established shape for that (mirrors
+          // 'run-agent.spawn-suppressed', also a non-lifecycle `log` event).
+          event_type: 'log',
+          input_refs: materialsValidation.entries.map((m) => `materials/${m.filename}`),
+          output_refs: [],
+          message: 'agent-run.materials-staged',
+          metadata: {
+            materials: materialsValidation.entries.map((m) => ({ path: `materials/${m.filename}`, kind: m.kind })),
+          },
+        });
+      }
+      spawnAgentDispatch(ctx.forgeRoot, slug, runId, project, inputs, undefined, costCeilingUsd);
       sendJson(
         res,
         200,
@@ -1216,6 +1396,17 @@ async function handleHttp(
         origin,
       );
     } catch (err) {
+      // A MaterialsStagingError (thrown by stageMaterials) lands here too —
+      // deliberately: it maps to the SAME 500 + sanitizeError() as every
+      // other unexpected failure on this route, not a hand-rolled second
+      // sanitiser. See the staging call above for why a staging throw is a
+      // server-state anomaly rather than a client-attributable 400. Worth a
+      // distinct server-side log line, though, since this specific path
+      // means containment refused a write under a runId only the server
+      // ever knew — an environment fault, never a client mistake.
+      if (err instanceof MaterialsStagingError) {
+        console.error(`POST /api/agents/:slug/run: materials staging failed: ${err.message}`);
+      }
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return;
@@ -1396,6 +1587,161 @@ const SAFE_AGENT_SLUG_RE = /^[a-z0-9][a-z0-9-]*$/;
 const SAFE_PROJECT_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
 /** Run-input keys are freer (camelCase like `northStar`) but still flag-safe. */
 const SAFE_INPUT_KEY_RE = /^[A-Za-z0-9_][A-Za-z0-9_-]*$/;
+/** R6-04-F2 WI-1 contract point 3 — a `materials:` upload's `filename` must
+ *  be a single safe path-segment NAME: alnum-first (bans dotfiles like
+ *  `.env` and the `..foo`/`.`/`..` shapes outright — no traversal token is
+ *  needed for any of those to be refused), then alnum plus SPACE, `.`, `_`,
+ *  `-`, `(`, `)`, `[`, `]` (no `/`, no `\`, no `%`, no NUL/control chars,
+ *  never decoded — this field is a JSON string VALUE, never a URL segment),
+ *  max 128 chars total.
+ *
+ *  ROUND 3 WIDENING (adversarial review): the original class
+ *  (`[A-Za-z0-9._-]` only) rejected the filenames operators' own machines
+ *  produce by DEFAULT — `Screen Shot 2026-08-07 at 10.32.15 AM.png` (macOS
+ *  screenshot), `data (1).csv` (browser duplicate-download suffix),
+ *  `Meeting Notes.pdf` — on this feature's headline use case (attaching a
+ *  screenshot). Space/`(`/`)`/`[`/`]` were added to the TAIL class only; the
+ *  leading-character rule, the length cap, and every excluded character
+ *  (`/`, `\`, `%`, NUL, control chars) are UNCHANGED from round 1/2.
+ *
+ *  ATTACK-THE-FIX (personally attempted before accepting this widening, not
+ *  just watched pass): a literal `..` substring embedded via the newly
+ *  allowed brackets/parens (e.g. `photo [..] (backup)..png`) is safe and
+ *  correctly ACCEPTED — there is no `/` anywhere, so it is one opaque
+ *  segment name, never a path boundary, exactly `studio-path-guard.ts`'s own
+ *  established `..foo`-is-legitimate precedent; `/`, `\`, `%`, NUL, and
+ *  control characters are all still excluded by the class itself (adding
+ *  space/parens/brackets to the tail did not touch the exclusion list); a
+ *  name that is only dots/spaces (no alnum at all) is still refused by the
+ *  alnum-first rule, unchanged.
+ *
+ *  Deliberately STILL ASCII-only — non-ASCII (e.g. `résumé.pdf`) is REFUSED,
+ *  not an oversight of the widening: filesystem unicode normalization
+ *  differs by platform (macOS tends toward NFD, Linux does not), so one
+ *  logical name can be two different on-disk byte sequences, and
+ *  `resolveGuardedPath`'s realpath-identity comparison would behave
+ *  differently per platform for the SAME input — fail-closed-and-consistent
+ *  beats convenient-and-platform-dependent.
+ *
+ *  Deliberately STRICTER than, and NOT reused from, `studio-path-guard.ts`'s
+ *  `isSafeSegment` (which allows `..foo` but not space/parens/brackets at
+ *  all) — this is a narrower, purpose-built contract for an untrusted
+ *  upload name, not a relaxation of the shared guard's rule. */
+const MATERIAL_FILENAME_RE = /^[A-Za-z0-9][A-Za-z0-9 ()._[\]-]{0,127}$/;
+
+/** Comma-separated, declaration-order rendering of an agent's declared
+ *  materials kinds for a refusal message — the literal `(none)` when the
+ *  agent declares nothing at all (R6-04-F2 WI-1, exact wording pinned by
+ *  `cli/ui-bridge-agent-run-materials.test.ts`). */
+function declaredMaterialKindsClause(declared: readonly string[]): string {
+  return declared.length > 0 ? declared.join(', ') : '(none)';
+}
+
+/** Exact refusal text for a filename whose extension derives NO material
+ *  kind at all (`materialKindForFilename` returned `undefined`). Wording is
+ *  pinned character-for-character by the acceptance tests — do not reword. */
+function materialsNoKindMessage(filename: string, slug: string, declared: readonly string[]): string {
+  return `materials: "${filename}" maps to no material kind; agent "${slug}" declares: ${declaredMaterialKindsClause(declared)}`;
+}
+
+/** Exact refusal text for a filename that DOES derive a kind, but one the
+ *  agent has not declared (`agentAcceptsMaterial` returned `false`). Wording
+ *  is pinned character-for-character by the acceptance tests — do not
+ *  reword. */
+function materialsUndeclaredKindMessage(filename: string, kind: string, slug: string, declared: readonly string[]): string {
+  return `materials: "${filename}" is ${kind}; agent "${slug}" declares: ${declaredMaterialKindsClause(declared)}`;
+}
+
+/** Decode `raw` as base64 and require it to ROUND-TRIP back to the exact
+ *  same string. Node's base64 decoder is lenient — it silently drops stray
+ *  invalid characters instead of throwing — so "does `Buffer.from` throw"
+ *  is not a valid validity check on its own; only a successful round-trip
+ *  proves `raw` was genuinely, exactly base64. Returns `undefined` (never
+ *  throws) on any mismatch. */
+function decodeStrictBase64(raw: string): Buffer | undefined {
+  const buf = Buffer.from(raw, 'base64');
+  return buf.toString('base64') === raw ? buf : undefined;
+}
+
+type ValidatedMaterial = { filename: string; bytes: Buffer; kind: string };
+type MaterialsValidation = { ok: true; entries: ValidatedMaterial[] } | { ok: false; error: string };
+
+/**
+ * Validate one `POST /api/agents/:slug/run` request body's `materials`
+ * field end to end (R6-04-F2 WI-1, contract points 2-8): shape, filename
+ * charset, duplicate-within-request, strict base64, the three caps, and —
+ * the headline behaviour — the kind gate itself. The kind for every entry
+ * is derived SERVER-SIDE via `materialKindForFilename`; nothing here ever
+ * reads a client-supplied `kind` field, so one can never influence the
+ * outcome in either direction (acceptance test: a lying `kind` can neither
+ * bypass the gate nor cause a false refusal).
+ *
+ * Pure and synchronous — no filesystem I/O, no partial state. Returns
+ * either the fully-validated, decoded entries ready for `stageMaterials`,
+ * or a single `error` string ready to send as a 400. `materials` absent (or
+ * `[]`) returns `{ ok: true, entries: [] }` — contract point 1,
+ * byte-identical to today's behaviour.
+ */
+function validateMaterialsField(rawMaterials: unknown, def: AgentDefinition): MaterialsValidation {
+  if (rawMaterials === undefined) return { ok: true, entries: [] };
+  if (!Array.isArray(rawMaterials)) {
+    return { ok: false, error: 'materials: must be an array' };
+  }
+  if (rawMaterials.length > MAX_MATERIALS_COUNT) {
+    return { ok: false, error: `materials: at most ${MAX_MATERIALS_COUNT} materials per request (got ${rawMaterials.length})` };
+  }
+
+  const declared = def.materials ?? [];
+  const seenFilenames = new Set<string>();
+  const entries: ValidatedMaterial[] = [];
+  let totalBytes = 0;
+
+  for (const raw of rawMaterials) {
+    if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+      return { ok: false, error: 'materials: each entry must be an object with filename and contentBase64' };
+    }
+    const entry = raw as Record<string, unknown>;
+
+    if (typeof entry.filename !== 'string') {
+      return { ok: false, error: 'materials: filename must be a string' };
+    }
+    const filename = entry.filename;
+    if (!MATERIAL_FILENAME_RE.test(filename)) {
+      return { ok: false, error: `materials: invalid filename ${JSON.stringify(filename)}` };
+    }
+    if (typeof entry.contentBase64 !== 'string') {
+      return { ok: false, error: `materials: "${filename}" contentBase64 must be a string` };
+    }
+    if (seenFilenames.has(filename)) {
+      return { ok: false, error: `materials: duplicate filename "${filename}" in one request` };
+    }
+    seenFilenames.add(filename);
+
+    const bytes = decodeStrictBase64(entry.contentBase64);
+    if (!bytes) {
+      return { ok: false, error: `materials: "${filename}" contentBase64 is not valid base64` };
+    }
+    if (bytes.length > MAX_MATERIAL_BYTES) {
+      return { ok: false, error: `materials: "${filename}" exceeds the per-file size cap (${MAX_MATERIAL_BYTES} bytes)` };
+    }
+    totalBytes += bytes.length;
+    if (totalBytes > MAX_MATERIALS_TOTAL_BYTES) {
+      return { ok: false, error: `materials: total size exceeds the request cap (${MAX_MATERIALS_TOTAL_BYTES} bytes)` };
+    }
+
+    const kind = materialKindForFilename(filename);
+    if (!kind) {
+      return { ok: false, error: materialsNoKindMessage(filename, def.slug, declared) };
+    }
+    if (!agentAcceptsMaterial(def, kind)) {
+      return { ok: false, error: materialsUndeclaredKindMessage(filename, kind, def.slug, declared) };
+    }
+
+    entries.push({ filename, bytes, kind });
+  }
+
+  return { ok: true, entries };
+}
 
 /** R4-16 — GET /api/demo-builder/generation/<project>/<sid>/<n>/<filename>
  *  path segments. `n` is a bounded digit string (mirrors a generation number,
@@ -1554,16 +1900,25 @@ function newRunStamp(): string {
 }
 
 /**
- * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
- * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
- * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
- * never bubbles into the request). slug/runId/project are pre-validated by the
- * route; input keys are re-checked here (defense-in-depth) so no arg injects a
- * flag. Input VALUES are arbitrary — safe as a single `k=v` arg since spawn()
- * runs no shell.
+ * Pure argv builder for `forge agent dispatch <slug> --run-id <runId> [...]`
+ * (R6-04 WI-2 extraction, mirrors `parseAgentDispatchArgs`'s pure argv PARSER
+ * on the other side of the CLI boundary, cli/agent-run.ts). Extracted from
+ * `spawnAgentDispatch` so the argv-building itself becomes independently
+ * testable (no spawn, no mock) — this function has no side effects and
+ * performs no safety checks of its own (`spawnAgentDispatch` still owns the
+ * `isSafeRunId`/`SAFE_AGENT_SLUG_RE` refusal, unchanged, before ever calling
+ * this). Returns EXACTLY the array `cmdAgentDispatch`'s `rest` parameter
+ * expects (`[slug, '--run-id', runId, ...optional flags]`) — NOT the full
+ * node-invocation array; `spawnAgentDispatch` still prepends the
+ * process-invocation boilerplate (`--experimental-strip-types`,
+ * `orchestrator/cli.ts`, `agent`, `dispatch`) around this helper's output.
+ *
+ * Input keys are filtered through `SAFE_INPUT_KEY_RE` here (defense-in-depth,
+ * unchanged from before this extraction) so no arg injects a flag. Input
+ * VALUES are arbitrary — safe as a single `k=v` arg since `spawn()` runs no
+ * shell.
  */
-function spawnAgentDispatch(
-  forgeRoot: string,
+export function buildAgentDispatchArgs(
   slug: string,
   runId: string,
   project?: string,
@@ -1580,19 +1935,50 @@ function spawnAgentDispatch(
    *  guards its own write through it regardless.
    */
   sessionDir?: string,
-): void {
-  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
-  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
-    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
-    return;
-  }
-  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', slug, '--run-id', runId];
+  /** R6-04 (WI-2) — the operator's per-kickoff cost ceiling, already
+   *  validated (finite, > 0, <= MAX_KICKOFF_COST_CEILING_USD) by the route
+   *  before this is ever called. */
+  costCeilingUsd?: number,
+): string[] {
+  const args = [slug, '--run-id', runId];
   if (project) args.push('--project', project);
   for (const [k, v] of Object.entries(inputs ?? {})) {
     if (!SAFE_INPUT_KEY_RE.test(k)) continue;
     args.push('--input', `${k}=${v}`);
   }
   if (sessionDir) args.push('--session-dir', sessionDir);
+  if (costCeilingUsd !== undefined) args.push('--cost-ceiling-usd', String(costCeilingUsd));
+  return args;
+}
+
+/**
+ * Spawn `forge agent dispatch <slug> --run-id <runId> [--project <p>] [--input
+ * k=v …]` detached — the generic sibling of `spawnAgentTurn` (R2-01-F3
+ * dispatch half). Dry-bridge / no-spawn guarded; best-effort (a spawn error
+ * never bubbles into the request). slug/runId/project are pre-validated by the
+ * route; input keys are re-checked in `buildAgentDispatchArgs` (defense-in-
+ * depth) so no arg injects a flag.
+ */
+function spawnAgentDispatch(
+  forgeRoot: string,
+  slug: string,
+  runId: string,
+  project?: string,
+  inputs?: Record<string, string>,
+  sessionDir?: string,
+  costCeilingUsd?: number,
+): void {
+  // Argv construction is pure (no I/O, no side effects) — safe to build
+  // above the spawn-suppression early-return below, so it stays observable
+  // as ordinary function composition rather than something only a real spawn
+  // attempt could exercise.
+  const dispatchArgs = buildAgentDispatchArgs(slug, runId, project, inputs, sessionDir, costCeilingUsd);
+  if (process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()) return;
+  if (!isSafeRunId(runId) || !SAFE_AGENT_SLUG_RE.test(slug)) {
+    console.error(`spawnAgentDispatch: unsafe slug/runId, refusing to spawn: ${JSON.stringify({ slug, runId })}`);
+    return;
+  }
+  const args = ['--experimental-strip-types', 'orchestrator/cli.ts', 'agent', 'dispatch', ...dispatchArgs];
   try {
     const logDir = join(forgeRoot, '_logs', runId);
     mkdirSync(logDir, { recursive: true });

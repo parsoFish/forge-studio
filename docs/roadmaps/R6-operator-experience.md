@@ -56,6 +56,64 @@ attention strip; architect re-run lands as R4-11-F5. Raw `events.jsonl` is
 the only mid-cycle log surface — "painful mid-cycle" (standing
 iteration-refinement target 1).
 
+### R6-B5 Agent kickoff panel + standalone run view (R6-04, 2026-08-07)
+
+Four work items closed R6-04's three features. **Materials upload (WI-1,
+F2):** `POST /api/agents/:slug/run` accepts `materials: [{filename,
+contentBase64}]`; the kind is derived SERVER-side against
+`MATERIAL_EXTENSION_TO_KIND` (`orchestrator/studio/materials.ts`) — a
+client-supplied kind is never read — and gated against the target agent's
+declared `materials:` (`agentAcceptsMaterial`, R2-B11's previously-uncalled
+gate — this is its first production caller). Accepted uploads stage under
+`_logs/<runId>/materials/` (`cli/materials-staging.ts`, guarded via
+`resolveGuardedPath`, check-then-write with zero partial writes on refusal)
+and are recorded on the run's own event log as REFERENCES only
+(`{path, kind}`, the `agent-run.materials-staged` log event) — contents are
+never logged, never rendered, never round-tripped back through any read
+surface. **Per-kickoff cost ceiling (WI-2, F2):** `costCeilingUsd` threads
+to the SDK's own `maxBudgetUsd` (`orchestrator/run-agent.ts`) — forge does
+not enforce it in-process itself. **Enforced ONLY for `loopStrategy:
+'one-shot'` agents** (4 of 19 real dispatchable roster agents today:
+project-manager, reflector, adversarial-review, demo-agent) and **REFUSED**
+(400, three ordered stages — shape, then enforceability, then bounds — before
+a runId is ever minted) for every other agent; `costCeilingEnforceable`
+(`orchestrator/studio/derive.ts` `agentCapabilityDescriptor()`) is the
+server-computed fact both the route and the UI key off, never a client
+guess. **Kickoff panel (WI-3, F1+F2 shell):** the existing
+`[data-section="agent-run"]` panel (`RunPanel.tsx`) expands IN PLACE — a
+real project `<select>` (was free text), the materials-attach section
+scoped to the agent's own declared kinds, and an editable ceiling that
+disables + explains itself when unenforceable — all nine pre-existing
+`data-*` attributes byte-preserved. **F1's interactive-agent routing**
+(`SESSION_ENTRY_HREF_BY_SLUG`, `app/agents/[id]/page.tsx`) is built and
+unit-pinned but **not demonstrated end-to-end**: zero agents in the live
+roster are `surface: interactive` with a real, reachable session-entry
+route today (architect itself resolves via a different, pre-existing gate
+table, not this mechanism). **R6-04-F2's standing-triggers listing
+(R2-08-F4) is NOT shipped** — parked pending that initiative's own read
+API. **Standalone run view (WI-4, F3):** new route
+`/agents/[id]/run/[runId]`; a shared `RunLog` renderer
+(`components/studio/RunLog.tsx`, deliberately reusable for a future
+per-node flow log, R6-01-F5) maps the real 11-member `EventType` union onto
+a `think | tool | out` display vocabulary; materials render as
+path+kind references only (structurally — the component destructures
+nothing else); a typed-outputs section renders — **honestly always empty
+today**, since no data source exists yet for a generic dispatched agent's
+artifact outputs (out of scope for this initiative, tracked as future
+work). A runId with no `_logs/<runId>` directory at all (never dispatched)
+404s rather than fabricating a `running` state (D22). Journey coverage:
+`scripts/journeys/agents.mjs`'s `agents-kickoff-*` arc (8 beats) is the
+only proof of the kickoff panel's dispatch wiring and the run view's fetch
+wiring — no jsdom in this repo, so no unit test can exercise either click
+path — covering the disabled/annotated ceiling on a non-enforceable agent,
+an out-of-contract material refused naming the declared kinds, the actual
+dispatch request intercepted at the wire (project/ceiling/material) and
+cross-checked against the staged file on disk, and the run view rendering
+log lines / cost / a material reference while never leaking the material's
+real content, checked in both the DOM and the raw API response.
+`scripts/e2e-deadpaths.mjs` covers the new route's honest 404 path with an
+unknown runId.
+
 ## Planned initiatives
 
 ### R6-01 Run-observability depth
@@ -186,7 +244,7 @@ iteration-refinement target 1).
 
 ### R6-04 Run kickoff & consolidation (one Run button)
 
-- **Status:** planned  ·  **Wave:** 5 (module: agent-kickoff+run)
+- **Status:** implemented (2026-08-07 — as-built facts in R6-B5)  ·  **Wave:** 5 (module: agent-kickoff+run)
 - **Depends on:** R2-01-F3 (dispatch host, landed), R2-02 (capability
   descriptor drives session-vs-kickoff), R2-09-F1 (`materials:` declaration —
   this surface is its named enforcement point), R2-08-F4 (soft — trigger
@@ -397,3 +455,14 @@ R4-11-F4 attention strip during real multi-project operation.
   headers annotated with their wave-5 features; R6-08 gains the soft R1-06
   edge + the mockup-lint-names-are-illustrative rule (real `brain-lint.ts`
   list wins, ~10 checks not 9); both-sides edges added on R6-01/03/05.
+- 2026-08-07 — **R6-04 implemented** (branch `feat/r6-04-run-kickoff`, WI-1
+  through WI-4 — as-built facts in new baseline R6-B5). Materials upload +
+  per-kickoff cost ceiling (enforced only for `loopStrategy: 'one-shot'`
+  agents, refused for the rest) + the expanded kickoff panel + the
+  standalone run view all ship; F1's interactive routing is built but not
+  demonstrated end-to-end (no interactive agent in the live roster); the
+  standing-triggers listing (R2-08-F4) is parked, not shipped; run-view
+  typed outputs are honestly empty pending a real data source. Journey
+  coverage added: `scripts/journeys/agents.mjs`'s `agents-kickoff-*` arc (8
+  beats) + a new `scripts/e2e-deadpaths.mjs` route for the run view's 404
+  path.

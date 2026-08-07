@@ -1,5 +1,5 @@
 import { execFileSync } from 'node:child_process';
-import { readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
@@ -115,6 +115,49 @@ const MATERIALS_AGENT_SKILL_PATH = join(FORGE_ROOT, 'skills', MATERIALS_AGENT_SL
 function cleanMaterialsAgent() {
   try { rmSync(join(FORGE_ROOT, 'skills', MATERIALS_AGENT_SLUG), { recursive: true, force: true }); } catch { /* */ }
 }
+
+// ── R6-04 kickoff arc: cost ceiling, materials-at-kickoff, expanded RunPanel,
+// standalone run view ───────────────────────────────────────────────────────
+// journey-kickoff-agent is its OWN throwaway scratch fixture (mirrors
+// MATERIALS_AGENT_SLUG's create-and-destroy-itself precedent above): none of
+// the 4 real one-shot loopStrategy agents (project-manager, reflector,
+// adversarial-review, demo-agent — the ONLY runtime shape whose
+// costCeilingEnforceable server fact, orchestrator/studio/derive.ts, reads
+// true) declares `materials:`, so proving the kickoff panel's ceiling AND
+// materials-attach TOGETHER needs a fixture that declares both. Unlike
+// SCRATCH_AGENT_SLUG/MATERIALS_AGENT_SLUG (each fully created-and-cleaned
+// inside ONE beat), this fixture spans SEVEN beats (agents-kickoff-build-
+// fixture through agents-kickoff-run-view) — RUN_ORDER has no per-beat
+// try/catch (see this file's own header on the edit-agent arc), so
+// exportKickoffAgentCleanup below is also called from scripts/e2e-journey.mjs's
+// top-level finally as a crash-safe backstop, mirroring
+// restoreDeveloperRalphSkill's own precedent for the same reason.
+const KICKOFF_AGENT_SLUG = 'journey-kickoff-agent';
+const KICKOFF_AGENT_NAME = 'Journey Kickoff Agent';
+const KICKOFF_AGENT_SKILL_PATH = join(FORGE_ROOT, 'skills', KICKOFF_AGENT_SLUG, 'SKILL.md');
+export function cleanKickoffAgent() {
+  try { rmSync(join(FORGE_ROOT, 'skills', KICKOFF_AGENT_SLUG), { recursive: true, force: true }); } catch { /* */ }
+}
+// mdtoc, not the mockup's "gitpulse" — the one real project committed INSIDE
+// forge's own repo (CLAUDE.md), always present for this harness regardless of
+// FORGE_E2E_PROJECT; gitpulse is a genuinely separate, independent repo this
+// harness never checks out.
+const KICKOFF_PROJECT_ID = 'mdtoc';
+// A real fixture already committed for mdtoc's own acceptance evidence (the
+// SAME file journey-fixtures.mjs's ACC_FIXTURE names) — .md resolves to the
+// 'documents' kind (orchestrator/studio/materials.ts), the ONE kind the
+// fixture agent declares, so attaching it is the ACCEPTED path.
+const KICKOFF_MATERIAL_ACCEPTED = join(FORGE_ROOT, 'projects', KICKOFF_PROJECT_ID, 'test', 'fixtures', 'release-notes.md');
+// package.json — a real repo file whose extension (.json) resolves to the
+// 'data-files' kind, a kind the fixture agent never declares — the REFUSED
+// path, naming the declared kind set in its own error text.
+const KICKOFF_MATERIAL_REFUSED = join(FORGE_ROOT, 'package.json');
+// Set by agents-kickoff-dispatch, read by agents-kickoff-run-view two beats
+// later (both run in the SAME node process, RUN_ORDER's sequential drive
+// loop) — module-scoped rather than threaded through ctx because ctx is
+// rebuilt fresh per beat (mirrors pmSkillStash/drSkillStash's own module-
+// local pattern above).
+let kickoffRunId = null;
 
 // ── HTML5 DataTransfer DnD helper (agent-builder catalog → skill drop zone) ─
 // Mirrors CatalogPalette.handleDragStart (sets text/plain=item.id +
@@ -936,6 +979,316 @@ export const journey = defineJourney({
                 'Edit-agent — a fresh reload reads the declared materials back from the real SKILL.md');
 
               cleanMaterialsAgent();
+        },
+      },
+      {
+        id: 'agents-kickoff-ceiling-disabled',
+        title: 'Kickoff — the cost ceiling disables itself when it cannot be enforced',
+        narration: 'The per-kickoff cost ceiling (R6-04 WI-2) is enforced ONLY for a loopStrategy: \'one-shot\' agent — the SDK\'s own maxBudgetUsd path, not something forge enforces in-process — and refused for every other agent. developer-ralph runs the ralph dev-loop strategy, not one-shot, so its ceiling field renders disabled with the reason spelled out — never a silently-ignored input the operator might believe is doing something.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — ceiling disabled for a non-enforceable agent (developer-ralph)');
+              await page.goto(watch.uiUrl + '/agents/developer-ralph', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              const dispatchable = await page.evaluate(() =>
+                document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-dispatchable') ?? null);
+              check(dispatchable === 'true',
+                `agents-kickoff: developer-ralph is a real dispatchable non-interactive agent (data-run-dispatchable="${dispatchable}")`);
+              const enforceable = await page.evaluate(() =>
+                document.querySelector('[data-component="cost-ceiling"] [data-ceiling-enforceable]')?.getAttribute('data-ceiling-enforceable') ?? null);
+              check(enforceable === 'false',
+                `agents-kickoff: developer-ralph's ceiling reads [data-ceiling-enforceable="false"] — loopStrategy: ralph, not one-shot (got "${enforceable}")`);
+              const inputDisabled = await page.locator('[data-run-cost-ceiling]').isDisabled().catch(() => false);
+              check(inputDisabled, 'agents-kickoff: the ceiling [data-run-cost-ceiling] input is actually disabled, not just annotated');
+              const explanation = await page.evaluate(() =>
+                document.querySelector('[data-component="ceiling-explanation"]')?.textContent ?? '');
+              check(explanation.toLowerCase().includes('loop strategy') && explanation.toLowerCase().includes("can't enforce"),
+                `agents-kickoff: the disabled ceiling names WHY, not just that it's off (got "${explanation.slice(0, 120)}")`);
+              await frame(page, 'ak-0-ceiling-disabled',
+                'Kickoff — a legacy-path agent (ralph loop strategy) shows the ceiling disabled, with the reason spelled out');
+        },
+      },
+      {
+        id: 'agents-kickoff-build-fixture',
+        title: 'Kickoff — build the one-shot, materials-declaring fixture agent',
+        narration: 'None of the 4 real one-shot agents declares materials, so proving the kickoff panel\'s cost-ceiling AND materials-attach together needs its own scratch agent: blank, one declared kind (documents), loopStrategy set to one-shot via the SAME runtime picker the scratch-build beat already exercises for SDK/model.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — build the fixture agent (materials + one-shot)');
+              cleanKickoffAgent();
+              await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              await page.locator('[data-starter-option="blank"]').click();
+              await page.waitForSelector('#purpose-input', { timeout: 10000 });
+              await page.locator('input.agent-name-input').fill(KICKOFF_AGENT_NAME);
+              await page.locator('#purpose-input').fill(
+                'Prove the kickoff panel dispatches with the operator-chosen project, ceiling, and material.');
+              await page.locator('#process-input').fill(
+                'Read whatever material was attached at kickoff. Nothing further required for this fixture.');
+              await sleep(THINK);
+
+              await page.locator('[data-material="documents"]').click();
+              const materialsCount = await page.evaluate(() =>
+                document.querySelector('[data-section="materials"]')?.getAttribute('data-materials-count') ?? '(absent)');
+              check(materialsCount === '1', `agents-kickoff: the fixture declares exactly one material kind, documents (got "${materialsCount}")`);
+
+              await page.locator('[data-action="toggle-advanced"]').first().click().catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="advanced"]')?.getAttribute('data-advanced-open') === 'true',
+                null, { timeout: 5000 },
+              ).catch(() => {});
+              await page.locator('[data-loop-strategy="one-shot"]').click();
+              const loopActive = await page.evaluate(() =>
+                document.querySelector('[data-loop-strategy="one-shot"]')?.getAttribute('data-active') ?? null);
+              check(loopActive === 'true', `agents-kickoff: loopStrategy one-shot picked in the runtime picker (data-active="${loopActive}")`);
+
+              await page.locator('[data-action="save-agent"]').click();
+              const landed = await waitForFile(KICKOFF_AGENT_SKILL_PATH, 12000);
+              check(landed, `agents-kickoff: saving writes skills/${KICKOFF_AGENT_SLUG}/SKILL.md`);
+              const savedText = landed ? readFileSync(KICKOFF_AGENT_SKILL_PATH, 'utf8') : '';
+              check(savedText.includes('loopStrategy: one-shot'), 'agents-kickoff: the saved SKILL.md carries loopStrategy: one-shot');
+              check(savedText.includes('materials:') && savedText.includes('- documents'), 'agents-kickoff: the saved SKILL.md declares materials: [documents]');
+              await frame(page, 'ak-1-fixture-saved', 'Kickoff — the fixture agent saved: one-shot loop strategy + documents declared');
+        },
+      },
+      {
+        id: 'agents-kickoff-entry',
+        title: 'Kickoff — reopen the fixture agent from its real library card',
+        narration: 'Not a direct URL: the operator lands on the freshly saved agent through its own home-page card (LibraryCard.tsx) — the real entry point every agent page is reached through, and the same click the run-agent mockup story scripts as "click the agent card".',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — reopen the fixture agent via its library card');
+              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              const card = page.locator(`[data-card-type="agent"][data-card-id="${KICKOFF_AGENT_SLUG}"]`);
+              const cardPresent = (await card.count()) > 0;
+              check(cardPresent, `agents-kickoff: the freshly saved fixture agent has a real library card (data-card-id="${KICKOFF_AGENT_SLUG}")`);
+              if (cardPresent) await card.click();
+              await page.waitForFunction(
+                (slug) => document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') === slug,
+                KICKOFF_AGENT_SLUG, { timeout: 15000 },
+              ).catch(() => {});
+              const agentId = await page.evaluate(() =>
+                document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
+              check(agentId === KICKOFF_AGENT_SLUG, `agents-kickoff: the card click lands on the fixture agent's own page (data-agent-id="${agentId}")`);
+              const enforceable = await page.evaluate(() =>
+                document.querySelector('[data-component="cost-ceiling"] [data-ceiling-enforceable]')?.getAttribute('data-ceiling-enforceable') ?? null);
+              check(enforceable === 'true', `agents-kickoff: on reload the server-computed costCeilingEnforceable reads true for this one-shot agent (got "${enforceable}")`);
+              await frame(page, 'ak-2-entry', 'Kickoff — the fixture agent reopened from its own library card; ceiling now enforceable');
+        },
+      },
+      {
+        id: 'agents-kickoff-materials-refused',
+        title: 'Kickoff — an out-of-contract material is refused, naming the declared kinds',
+        narration: 'The client-side gate (run-panel-view.ts) mirrors the server\'s own check — never the authority, but an immediate, correctly-worded refusal instead of a round trip. Attaching a real repo file of an UNdeclared kind (package.json → data-files; the fixture declares only documents) is refused, and the refusal names the agent\'s actual declared kinds rather than a generic "not allowed".',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — an out-of-contract material is refused');
+              const declared = await page.evaluate(() =>
+                document.querySelector('[data-section="materials-attach"]')?.getAttribute('data-materials-declared') ?? '');
+              check(declared === 'documents', `agents-kickoff: the run surface declares exactly the kinds the agent carries (got "${declared}")`);
+              await page.locator('[data-run-materials-input]').setInputFiles(KICKOFF_MATERIAL_REFUSED);
+              await sleep(THINK);
+              const errorText = await page.evaluate(() =>
+                document.querySelector('[data-section="materials-attach"] p')?.textContent ?? '');
+              check(errorText.includes('data-files') && errorText.includes('documents'),
+                `agents-kickoff: the refusal names both the file's real kind and the agent's declared kinds (got "${errorText}")`);
+              await frame(page, 'ak-3-material-refused', 'Kickoff — package.json (data-files) refused against an agent that only declares documents');
+        },
+      },
+      {
+        id: 'agents-kickoff-set-project',
+        title: 'Kickoff — bind the run to a project and set an explicit cost ceiling',
+        narration: '"A run binds to a project, with explicit inputs and limits" — the real project select (GET /api/studio/projects, never a hardcoded list) picks mdtoc; the now-enabled ceiling input takes an explicit operator value.',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — select project + set cost ceiling');
+              await page.locator('[data-run-project]').selectOption(KICKOFF_PROJECT_ID);
+              const projectVal = await page.locator('[data-run-project]').inputValue();
+              check(projectVal === KICKOFF_PROJECT_ID, `agents-kickoff: the project select carries "${KICKOFF_PROJECT_ID}" (got "${projectVal}")`);
+              const ceilingInput = page.locator('[data-run-cost-ceiling]');
+              const ceilingDisabled = await ceilingInput.isDisabled();
+              check(!ceilingDisabled, 'agents-kickoff: the ceiling input is enabled for this one-shot fixture agent');
+              await ceilingInput.fill('3.5');
+              const ceilingVal = await ceilingInput.inputValue();
+              check(ceilingVal === '3.5', `agents-kickoff: the ceiling input carries the operator's value (got "${ceilingVal}")`);
+              await frame(page, 'ak-4-project-ceiling', 'Kickoff — project bound (mdtoc), explicit cost ceiling set ($3.50)');
+        },
+      },
+      {
+        id: 'agents-kickoff-attach-material',
+        title: 'Kickoff — attach a material of a declared kind',
+        narration: 'A real, already-committed project fixture (mdtoc\'s own test/fixtures/release-notes.md, the same file this walkthrough\'s acceptance evidence names) stands in for the mockup\'s "user report screenshot" — a real file the agent\'s declared documents kind actually accepts.',
+        drive: async (ctx) => {
+              const { page, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — attach a declared-kind material');
+              await page.locator('[data-run-materials-input]').setInputFiles(KICKOFF_MATERIAL_ACCEPTED);
+              await sleep(THINK);
+              const errorAfterAccepted = await page.evaluate(() =>
+                document.querySelector('[data-section="materials-attach"] p')?.textContent ?? '');
+              check(errorAfterAccepted === '', `agents-kickoff: attaching a declared-kind file clears any prior refusal (got "${errorAfterAccepted}")`);
+              await frame(page, 'ak-5-material-attached', 'Kickoff — release-notes.md (documents, declared) attached, no refusal');
+        },
+      },
+      {
+        id: 'agents-kickoff-dispatch',
+        title: 'Kickoff — Run actually carries the chosen project, ceiling, and material',
+        narration: 'The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx\'s own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client\'s own claim. No terminal state is reachable under this harness\'s no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route\'s `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — Run dispatches with the chosen values (wire-level proof)');
+              let capturedBody = null;
+              const onRequest = (req) => {
+                if (req.method() === 'POST' && req.url().endsWith(`/api/agents/${encodeURIComponent(KICKOFF_AGENT_SLUG)}/run`)) {
+                  try { capturedBody = JSON.parse(req.postData() ?? '{}'); } catch { /* not JSON */ }
+                }
+              };
+              page.on('request', onRequest);
+              await page.locator('[data-action="run-agent"]').click();
+              let runId = '';
+              try {
+                await page.waitForFunction(
+                  () => (document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-id') ?? '').length > 0,
+                  null, { timeout: 10000 },
+                );
+                runId = await page.evaluate(() => document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-id') ?? '');
+              } catch { /* dispatch did not surface a runId in time */ }
+              page.off('request', onRequest);
+              check(runId.length > 0, `agents-kickoff: clicking Run dispatches — a runId is returned (got "${runId}")`);
+
+              check(capturedBody !== null, 'agents-kickoff: the actual POST /api/agents/:slug/run request body was captured');
+              if (capturedBody) {
+                check(capturedBody.project === KICKOFF_PROJECT_ID,
+                  `agents-kickoff: the wire request carries project="${KICKOFF_PROJECT_ID}" (got ${JSON.stringify(capturedBody.project)})`);
+                check(capturedBody.costCeilingUsd === 3.5,
+                  `agents-kickoff: the wire request carries costCeilingUsd=3.5 (got ${JSON.stringify(capturedBody.costCeilingUsd)})`);
+                const materials = Array.isArray(capturedBody.materials) ? capturedBody.materials : [];
+                check(
+                  materials.length === 1 && materials[0]?.filename === 'release-notes.md' &&
+                    typeof materials[0]?.contentBase64 === 'string' && materials[0].contentBase64.length > 0,
+                  `agents-kickoff: the wire request carries the attached material, base64-encoded (got ${JSON.stringify(materials.map((m) => m?.filename))})`,
+                );
+              }
+              await frame(page, 'ak-6-dispatched', 'Kickoff — Run clicked; the request wire-carries project, ceiling, and material');
+
+              if (runId) kickoffRunId = runId;
+
+              // Server-side proof, independent of the client's own claim: the
+              // material actually landed on disk under this run's own dir.
+              let stagedOnDisk = false;
+              if (runId) {
+                for (let t = 0; t < 20 && !stagedOnDisk; t += 1) {
+                  stagedOnDisk = existsSync(join(FORGE_ROOT, '_logs', runId, 'materials', 'release-notes.md'));
+                  if (!stagedOnDisk) await sleep(250);
+                }
+              }
+              check(stagedOnDisk, 'agents-kickoff: the attached material is actually staged under _logs/<runId>/materials/ on disk');
+
+              // NOT a wait for a terminal state — this seam structurally never
+              // reaches one. `spawnAgentDispatch` (cli/ui-bridge.ts) returns
+              // BEFORE the child `agent dispatch` process is ever spawned
+              // whenever FORGE_ARCHITECT_NO_SPAWN=1 or FORGE_DRY_BRIDGE=1 (both
+              // set on this harness's own bridge process, scripts/e2e-
+              // journey.mjs's startWatch) — so `runAgent()` never runs, never
+              // emits `start`/`end`, and never emits the
+              // `run-agent.spawn-suppressed` log event the status route's
+              // `suppressed` branch keys off. The run's ONLY event is the
+              // route's own synchronous materials-staged bookkeeping (already
+              // proven above), so `state` stays `running` forever — by
+              // construction, not a timing fluke. What this DOES prove: the
+              // dispatched runId is a real, resolvable identity on the SAME
+              // shared status surface the run view (next beat) reads —
+              // checked independently against the server, not the client's
+              // own DOM state.
+              let statusOk = false;
+              let statusState = '';
+              if (runId) {
+                try {
+                  const res = await fetch(`${watch.bridgeUrl}/api/agents/runs/${encodeURIComponent(runId)}`);
+                  statusOk = res.ok;
+                  const body = await res.json().catch(() => ({}));
+                  statusState = typeof body.state === 'string' ? body.state : '';
+                } catch { /* leave statusOk false */ }
+              }
+              check(statusOk && statusState === 'running',
+                `agents-kickoff: the dispatched run is a real, resolvable identity on the shared status surface — GET /api/agents/runs/:runId resolves ok with state:"running", the honest non-terminal state this no-spawn seam produces (got ok=${statusOk}, state="${statusState}")`);
+              const domStatus = await page.evaluate(() => document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-status') ?? '');
+              check(domStatus === 'running',
+                `agents-kickoff: the kickoff panel's own poll reflects the same state (data-run-status="${domStatus}")`);
+        },
+      },
+      {
+        id: 'agents-kickoff-run-view',
+        title: 'Kickoff — the standalone run view renders the log, cost, and material as a reference',
+        narration: 'Navigating to the new /agents/[id]/run/[runId] route — the log renders the ONE real event this no-spawn seam ever produces for this run (the route\'s own materials-staged bookkeeping; the child dispatch process that would emit start/end/spawn-suppressed never runs at all, agents-kickoff-dispatch\'s own comment), the cost section renders (0, since no end event ever lands), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. The ceiling provenance honestly reads "not recorded" for the same structural reason — the wire-level proof one beat ago is what proves the ceiling was actually dispatched, not this section.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[R6-04] Kickoff — the standalone run view');
+              if (!kickoffRunId) {
+                check(false, 'agents-kickoff-run-view: a runId was captured by the prior dispatch beat');
+                return;
+              }
+              await page.goto(watch.uiUrl + `/agents/${KICKOFF_AGENT_SLUG}/run/${kickoffRunId}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agent-run"]')?.hasAttribute('data-run-found') ?? false,
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              const found = await page.evaluate(() => document.querySelector('[data-page="agent-run"]')?.getAttribute('data-run-found') ?? null);
+              check(found === 'true', `agents-kickoff-run-view: the run view finds a real dispatch record for this runId (got "${found}")`);
+
+              // NOT a "≥N lines" count — measured: this no-spawn seam produces
+              // EXACTLY ONE event for this run (the route's own synchronous
+              // materials-staged bookkeeping; the child `agent dispatch`
+              // process that would add start/end/spawn-suppressed never
+              // spawns at all, agents-kickoff-dispatch's own comment).
+              // Asserting the SPECIFIC real event (by kind + message) is
+              // stronger than a count and can't silently drift if the seam's
+              // event shape changes.
+              const logLines = page.locator('[data-log-line="true"]');
+              const logLineCount = await logLines.count();
+              check(logLineCount === 1,
+                `agents-kickoff-run-view: exactly one real event line renders under this no-spawn seam (got ${logLineCount})`);
+              const firstLineKind = await logLines.first().getAttribute('data-log-kind').catch(() => null);
+              const firstLineText = await logLines.first().innerText().catch(() => '');
+              check(firstLineKind === 'out' && firstLineText.includes('agent-run.materials-staged'),
+                `agents-kickoff-run-view: that one line IS the real materials-staged bookkeeping event (data-log-kind="${firstLineKind}", text="${firstLineText}")`);
+
+              const costAttr = await page.evaluate(() => document.querySelector('[data-page="agent-run"]')?.getAttribute('data-run-cost') ?? null);
+              check(costAttr !== null, `agents-kickoff-run-view: the cost section renders (data-run-cost="${costAttr}")`);
+
+              const materialRef = page.locator('[data-material-ref="materials/release-notes.md"][data-material-kind="documents"]');
+              check((await materialRef.count()) > 0, 'agents-kickoff-run-view: the attached material renders as a path+kind reference (materials/release-notes.md, documents)');
+              const materialText = await materialRef.innerText().catch(() => '');
+              check(!materialText.includes('Aurora Telemetry') && !materialText.includes('sentinel-7f3a9c'),
+                'agents-kickoff-run-view: the rendered material reference never leaks the real file\'s own content');
+
+              // Independent proof the API itself never ships the bytes either
+              // — not just that this component chooses not to render them.
+              let apiCarriesNoContent = false;
+              try {
+                const res = await fetch(`${watch.bridgeUrl}/api/agents/runs/${encodeURIComponent(kickoffRunId)}`);
+                const bodyText = await res.text();
+                apiCarriesNoContent = res.ok && !bodyText.includes('contentBase64') && !bodyText.includes('Aurora Telemetry');
+              } catch { /* leave false */ }
+              check(apiCarriesNoContent, 'agents-kickoff-run-view: GET /api/agents/runs/:runId itself never carries material bytes, only the {path,kind} reference');
+
+              const ceilingSet = await page.evaluate(() =>
+                document.querySelector('[data-component="ceiling-provenance"]')?.getAttribute('data-ceiling-set') ?? null);
+              check(ceilingSet === 'false',
+                `agents-kickoff-run-view: the ceiling provenance honestly reads "not recorded" under the no-spawn seam, not fabricated (got "${ceilingSet}")`);
+
+              await frame(page, 'ak-7-run-view', 'Kickoff — the standalone run view: log, cost, and the material as a reference only');
+
+              cleanKickoffAgent();
         },
       },
     ],

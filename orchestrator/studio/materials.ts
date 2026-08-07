@@ -93,3 +93,102 @@ export function agentAcceptsMaterial(def: AgentDefinition | null | undefined, ki
   if (!(MATERIAL_KINDS as readonly string[]).includes(kind)) return false;
   return def.materials.includes(kind);
 }
+
+/**
+ * Extension → kind table for `materialKindForFilename` (R6-04-F2, WI-1: the
+ * agent-kickoff upload seam — this gate's first real caller). A closed
+ * ALLOWLIST, not a denylist: every extension not listed here derives
+ * `undefined`, including several that would otherwise "obviously" fit a
+ * kind. Deliberately excluded (see `materialKindForFilename`'s own comment
+ * for the reasoning, kept there rather than here since that is where a
+ * future reader will look to "fix" the gap): `.svg`.
+ */
+const MATERIAL_EXTENSION_TO_KIND: Readonly<Record<string, MaterialKind>> = Object.freeze({
+  // images
+  png: 'images', jpg: 'images', jpeg: 'images', gif: 'images', webp: 'images',
+  // documents
+  md: 'documents', txt: 'documents', pdf: 'documents', docx: 'documents',
+  // audio
+  mp3: 'audio', wav: 'audio', m4a: 'audio', ogg: 'audio', flac: 'audio',
+  // data-files
+  json: 'data-files', csv: 'data-files', tsv: 'data-files', yaml: 'data-files', yml: 'data-files', ndjson: 'data-files',
+});
+
+/**
+ * Derive a `MaterialKind` from a filename's EXTENSION alone (R6-04-F2
+ * contract point 4) — the kind a client-supplied upload maps to is always
+ * computed server-side from this function, never trusted from a
+ * client-supplied `kind` field. Case-insensitive; the LAST extension wins
+ * (`notes.tar.gz` inspects `.gz`, not `.tar`); no extension (or a filename
+ * ending in a bare `.` with nothing after it) yields `undefined`.
+ *
+ * This is an ALLOWLIST: any extension not explicitly present in
+ * `MATERIAL_EXTENSION_TO_KIND` yields `undefined`, including several that
+ * would "obviously" seem to fit a kind (`.zip`, `.html`, `.js`, ...) — an
+ * unrecognized extension is refused, not guessed at.
+ *
+ * DELIBERATE EXCLUSION — `.svg` is NOT mapped to `images`, even though an
+ * SVG is visually an image and every other common image extension is
+ * listed. SVG is an ACTIVE-CONTENT format: it can embed `<script>` and
+ * other executable content, and a run view may later render an accepted
+ * "images" material directly (e.g. an `<img>`/inline preview). Accepting
+ * `.svg` into the same bucket as inert raster images would hand an
+ * attacker-controlled upload a route to script execution in whatever
+ * surface renders it. A future reader WILL be tempted to "fix" this as a
+ * missing image extension — it is not a gap, it is the point. Do not add
+ * `svg` to the images list above without re-litigating that render-time
+ * threat model first.
+ */
+export function materialKindForFilename(filename: string): MaterialKind | undefined {
+  const lastDot = filename.lastIndexOf('.');
+  if (lastDot === -1 || lastDot === filename.length - 1) return undefined;
+  const ext = filename.slice(lastDot + 1).toLowerCase();
+  return MATERIAL_EXTENSION_TO_KIND[ext];
+}
+
+/**
+ * Caps for one agent-kickoff `materials:` upload (R6-04-F2 contract point
+ * 6), derived from the bridge's fixed request-body ceiling
+ * (`MAX_BODY_BYTES = 1 MiB`, `cli/ui-bridge.ts` ~line 3207) rather than
+ * picked as round numbers in isolation. This module stays `fs`-free (it is
+ * the vocabulary owner, imported by the loader/lint/wire projection too) and
+ * deliberately does NOT import `MAX_BODY_BYTES` — it is a module-private
+ * constant in a `cli/` module or a mirrored literal, and `orchestrator/` must
+ * not depend on `cli/` (the established import direction). The relationship
+ * is instead documented here, in numbers, and pinned by a drift test
+ * (`materials.test.ts`) asserting `MAX_MATERIALS_TOTAL_BYTES < MAX_BODY_BYTES`
+ * against a literal mirror.
+ *
+ * Why the numbers below leave real headroom, not just enough to scrape
+ * under the ceiling: a base64 encoding inflates DECODED bytes by 4/3
+ * (`ceil(n/3)*4`), and the JSON request body then wraps every material in
+ * envelope punctuation (`filename`/`contentBase64` keys, quotes, commas) on
+ * top of that, alongside whatever else the route's body already carries
+ * (`inputs`, `project`). A cap picked at, say, 90% of `MAX_BODY_BYTES` would
+ * already be over the ceiling once base64 inflation alone is accounted for
+ * — the decoded cap has to be well below `MAX_BODY_BYTES`, not merely below
+ * it.
+ *
+ * `MAX_MATERIALS_TOTAL_BYTES` is fixed at exactly HALF of the 1 MiB body
+ * ceiling (512 KiB decoded). At that boundary, base64 inflation alone
+ * consumes `ceil(524288/3)*4 = 699052` bytes — ~66.7% of the 1 MiB ceiling —
+ * leaving ~349 KiB (~33%) of headroom for JSON envelope overhead and every
+ * other body field. That is comfortably more than the few hundred bytes
+ * even `MAX_MATERIALS_COUNT` filenames/punctuation could ever add.
+ */
+export const MAX_MATERIALS_TOTAL_BYTES = 512 * 1024; // 524288 decoded bytes — half of the 1 MiB body ceiling
+
+/**
+ * Per-file cap: half of `MAX_MATERIALS_TOTAL_BYTES`, so no single file can
+ * alone exhaust an entire request's material budget — at least two
+ * meaningfully-sized files must be nameable within one request's total cap.
+ */
+export const MAX_MATERIAL_BYTES = 256 * 1024; // 262144 decoded bytes
+
+/**
+ * Cap on the number of materials in a single request. A small, fixed count
+ * — a kickoff upload is meant to hand an agent a handful of reference
+ * files, not act as a bulk-upload channel; `MAX_MATERIALS_TOTAL_BYTES`
+ * already bounds the aggregate size regardless of count.
+ */
+export const MAX_MATERIALS_COUNT = 8;

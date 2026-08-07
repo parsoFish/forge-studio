@@ -232,27 +232,41 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
   }
 }
 
+/** Parsed shape of `forge agent dispatch <slug> --run-id <id> [...]`'s argv
+ *  (the `rest` array `cmdAgentDispatch` receives, slug-first — mirrors what
+ *  `buildAgentDispatchArgs`, cli/ui-bridge.ts, emits). `inputs` is always a
+ *  (possibly empty) object; `project`/`sessionDir`/`costCeilingUsd` are
+ *  ABSENT (not present-as-`undefined`) when their flag was not given. */
+export type ParsedAgentDispatchArgs = {
+  slug: string;
+  runId: string;
+  project?: string;
+  inputs: Record<string, string>;
+  sessionDir?: string;
+  costCeilingUsd?: number;
+};
+
 /**
- * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
- * [--session-dir <abs>]` — the generic standalone-run path for a
- * NON-interactive roster agent (R2-01-F3 dispatch half). Unlike `forge agent
- * run` (the four bespoke interactive turn-runners in `AGENT_RUNNERS`), this
- * resolves ANY studio agent def by slug and runs it once through the F1
- * `runAgent` primitive via `dispatchAgentRun`. This is the CLI the bridge's
- * `POST /api/agents/:slug/run` spawns detached (mirroring `spawnAgentTurn`),
- * so the run's events/cost land under `_logs/<run-id>/` for the monitor.
+ * Pure argv parser for `forge agent dispatch` (R6-04 WI-2 extraction, mirrors
+ * `buildAgentDispatchArgs`'s pure argv BUILDER on the other side of the CLI
+ * boundary). THROWS a plain `Error` synchronously for a missing slug, a
+ * missing `--run-id`, a malformed `--input` (no `=`), or a `--cost-ceiling-usd`
+ * value that does not parse to a finite number — `cmdAgentDispatch` below
+ * catches these and re-renders them into the exact `forge agent dispatch: …`
+ * console text + exit(2) it always has, so this extraction is a pure
+ * refactor of where the parsing LIVES, not a change to what an operator sees.
  *
- * `--session-dir <abs>` (R4-17, D7, optional) — when given, the terminal
- * phase (`complete`/`failed`) is written into that dir's `status.json` when
- * this dispatch ends. See `writeSessionTerminalPhase` above.
+ * Deliberately does NOT validate `costCeilingUsd`'s business bounds (`<= 0`,
+ * above `MAX_KICKOFF_COST_CEILING_USD`) — those are independently owned and
+ * already enforced at the bridge-route layer before this process is ever
+ * spawned; this parser's only job is "is this string a valid finite number
+ * at all". Does NOT check project existence either — that stays I/O,
+ * `cmdAgentDispatch`'s job, not this pure function's.
  */
-export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promise<void> {
+export function parseAgentDispatchArgs(rest: string[]): ParsedAgentDispatchArgs {
   const slug = rest[0];
   if (!slug || slug.startsWith('--')) {
-    console.error('forge agent dispatch: missing <slug>');
-    console.error('Usage: forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v ...]');
-    process.exit(2);
-    return;
+    throw new Error('missing <slug>');
   }
   const flags = rest.slice(1);
   const flagValue = (name: string): string | undefined => {
@@ -261,17 +275,13 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
   };
   const runId = flagValue('--run-id');
   if (!runId) {
-    console.error('forge agent dispatch: --run-id <id> is required');
-    process.exit(2);
-    return;
+    throw new Error('--run-id <id> is required');
   }
-  const projectArg = flagValue('--project');
-  const project = projectArg
-    ? { name: projectArg, repoPath: resolve('projects', projectArg) }
-    : undefined;
+  const project = flagValue('--project');
   // R4-17, D6/D7 — optional; see `writeSessionTerminalPhase`'s header for
   // the round-1 BLOCKER fix: it now refuses a `--session-dir` outside
-  // `forgeRoot` (already a parameter here — no extra resolution needed).
+  // `forgeRoot` (a `cmdAgentDispatch` parameter — no extra resolution needed
+  // here).
   const sessionDir = flagValue('--session-dir');
 
   // `--input k=v` may repeat; each is surfaced as prompt DATA (never instructions).
@@ -281,19 +291,87 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       const kv = flags[i + 1] ?? '';
       const eq = kv.indexOf('=');
       if (eq <= 0) {
-        console.error(`forge agent dispatch: --input expects k=v, got ${JSON.stringify(kv)}`);
-        process.exit(2);
-        return;
+        throw new Error(`--input expects k=v, got ${JSON.stringify(kv)}`);
       }
       inputs[kv.slice(0, eq)] = kv.slice(eq + 1);
     }
   }
+
+  const costCeilingRaw = flagValue('--cost-ceiling-usd');
+  let costCeilingUsd: number | undefined;
+  if (costCeilingRaw !== undefined) {
+    const parsedCeiling = Number(costCeilingRaw);
+    if (!Number.isFinite(parsedCeiling)) {
+      throw new Error(`--cost-ceiling-usd expects a finite number, got ${JSON.stringify(costCeilingRaw)}`);
+    }
+    costCeilingUsd = parsedCeiling;
+  }
+
+  return {
+    slug,
+    runId,
+    ...(project !== undefined ? { project } : {}),
+    inputs,
+    ...(sessionDir !== undefined ? { sessionDir } : {}),
+    ...(costCeilingUsd !== undefined ? { costCeilingUsd } : {}),
+  };
+}
+
+/**
+ * `forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v]
+ * [--session-dir <abs>] [--cost-ceiling-usd <usd>]` — the generic
+ * standalone-run path for a NON-interactive roster agent (R2-01-F3 dispatch
+ * half). Unlike `forge agent run` (the four bespoke interactive
+ * turn-runners in `AGENT_RUNNERS`), this resolves ANY studio agent def by
+ * slug and runs it once through the F1 `runAgent` primitive via
+ * `dispatchAgentRun`. This is the CLI the bridge's `POST /api/agents/:slug/run`
+ * spawns detached (mirroring `spawnAgentTurn`), so the run's events/cost land
+ * under `_logs/<run-id>/` for the monitor.
+ *
+ * `--session-dir <abs>` (R4-17, D7, optional) — when given, the terminal
+ * phase (`complete`/`failed`) is written into that dir's `status.json` when
+ * this dispatch ends. See `writeSessionTerminalPhase` above.
+ *
+ * `--cost-ceiling-usd <usd>` (R6-04, WI-2, optional) — the operator's
+ * per-kickoff cost ceiling, threaded to `dispatchAgentRun`'s
+ * `kickoffCeilingUsd` (which itself wins over the agent's own declared
+ * budget — see `orchestrator/run-agent.ts`).
+ *
+ * `deps.dispatch` (R6-04, WI-2, round 4, optional) — test-injection only,
+ * mirrors `RunContext.queryFn`/`ctx.probeConnection`'s existing seam
+ * (`orchestrator/run-agent.ts`). Defaults to the real `dispatchAgentRun`;
+ * every production call site omits it, so behaviour is unchanged.
+ */
+export async function cmdAgentDispatch(
+  rest: string[],
+  forgeRoot: string,
+  deps?: { dispatch?: typeof dispatchAgentRun },
+): Promise<void> {
+  let parsed: ParsedAgentDispatchArgs;
+  try {
+    parsed = parseAgentDispatchArgs(rest);
+  } catch (err) {
+    const msg = (err as Error).message;
+    console.error(`forge agent dispatch: ${msg}`);
+    if (msg === 'missing <slug>') {
+      console.error('Usage: forge agent dispatch <slug> --run-id <id> [--project <name>] [--input k=v ...]');
+    }
+    process.exit(2);
+    return;
+  }
+  const { slug, runId, project: projectArg, inputs, sessionDir, costCeilingUsd } = parsed;
+
+  const project = projectArg
+    ? { name: projectArg, repoPath: resolve('projects', projectArg) }
+    : undefined;
 
   if (project && !existsSync(project.repoPath)) {
     console.error(`forge agent dispatch: project root not found: ${project.repoPath}`);
     process.exit(2);
     return;
   }
+
+  const dispatch = deps?.dispatch ?? dispatchAgentRun;
 
   try {
     // R4-10-F3 isolation surface: the two band-guard node agents (demo-agent /
@@ -313,12 +391,13 @@ export async function cmdAgentDispatch(rest: string[], forgeRoot: string): Promi
       return;
     }
 
-    const out = await dispatchAgentRun({
+    const out = await dispatch({
       slug,
       skillsDir: skillsDir(forgeRoot),
       runId,
       project,
       inputs: Object.keys(inputs).length > 0 ? inputs : undefined,
+      ...(costCeilingUsd !== undefined ? { kickoffCeilingUsd: costCeilingUsd } : {}),
     });
     const { result } = out;
     if (result.suppressed) {

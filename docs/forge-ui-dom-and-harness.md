@@ -343,6 +343,79 @@ inventory rather than one shared page-level contract:
   described" and "Reachable" rows were deliberately NOT added, because neither
   can ever read false for a loaded agent and a readiness row that cannot fail is
   decoration.
+- **`/agents/[id]` kickoff panel expansion (R6-04, 2026-08-07).** The
+  existing `[data-section="agent-run"]` panel (above) is expanded IN PLACE —
+  all nine pre-existing `data-*` attributes on it stay byte-identical. A real
+  project `<select data-run-project>` replaces the old free-text input, its
+  `<option>` values sourced from the real `GET /api/studio/projects` (never a
+  hardcoded list). `[data-component="cost-ceiling"]` wraps
+  `[data-ceiling-enforceable="true"|"false"]`, which itself wraps the
+  `<input data-run-cost-ceiling>` — **disabled** whenever `false` — plus,
+  only when disabled, `[data-component="ceiling-explanation"]` naming WHY
+  (the agent's `loopStrategy` cannot enforce one). `costCeilingEnforceable`
+  is a server-computed fact (`orchestrator/studio/derive.ts`
+  `agentCapabilityDescriptor().costCeilingEnforceable`, true iff
+  `runtime.loopStrategy === 'one-shot'`) threaded through as-is, never
+  re-derived client-side — **the cost ceiling is enforced ONLY for
+  `loopStrategy: 'one-shot'` agents (the SDK's own `maxBudgetUsd` path, not
+  something forge enforces in-process) and REFUSED (400, before a runId is
+  ever minted) for every other agent**, 4 of the 19 real dispatchable roster
+  agents today. A materials-attach section,
+  `[data-section="materials-attach"][data-materials-declared="<comma-joined
+  kinds>"]`, wraps a real `<input type="file" multiple data-run-materials-input>`
+  — offering exactly the agent's own declared `materials:` kinds, never the
+  full vocabulary; an out-of-contract or oversized attachment is refused
+  client-side (a convenience mirror of the server's own authoritative check,
+  `forge-ui/lib/run-panel-view.ts`) with an inline `<p>` naming both the
+  file's real kind and the agent's declared kinds (no dedicated `data-*` on
+  that message itself — select it via
+  `[data-section="materials-attach"] p`). Clicking
+  `[data-action="run-agent"]` now POSTs `costCeilingUsd` (only when
+  enforceable) and `materials: [{filename, contentBase64}]` (WI-1/WI-2)
+  alongside the pre-existing `project`/`inputs` fields; materials are staged
+  under `_logs/<runId>/materials/` and recorded on the run's own event log
+  as **references only** (`{path, kind}` — filename + server-derived kind,
+  never bytes, never logged or rendered).
+- **`/agents/[id]/run/[runId]` — the standalone run view (R6-04 WI-4,
+  2026-08-07).** A thin client shell (`app/agents/[id]/run/[runId]/page.tsx`)
+  fetches `GET /api/agents/runs/:runId` and renders the pure, props-driven
+  `RunView` component. While the fetch is in flight the shell renders
+  `[data-page="agent-run"][data-run-id][data-page-ready="false"]` only; once
+  resolved, `RunView`'s own root takes over and carries
+  `[data-page="agent-run"][data-run-id][data-run-state][data-run-cost]
+  [data-run-found="true"|"false"]` — **note this loaded state carries no
+  `data-page-ready="true"` companion at all** (a genuine, as-built departure
+  from every other route's `data-page-ready` convention; a journey/automation
+  waiting on this route must key off `[data-run-found]`'s mere presence, not
+  a `data-page-ready` flip). `found:false` (no `_logs/<runId>` directory
+  exists — never dispatched, the R6-04 D22 404 case) renders ONLY
+  `[data-component="run-not-found"]`, suppressing every other section even if
+  the caller supplied non-empty data. `found:true` renders four sections:
+  `[data-section="run-log"]` wrapping the shared `RunLog` component
+  (`components/studio/RunLog.tsx`, also reusable for a future per-node flow
+  log) — `[data-component="run-log"]` with one
+  `[data-log-line="true"][data-log-kind="think"|"tool"|"out"]` per event
+  (mapped from the real 11-member `EventType` union by
+  `forge-ui/lib/run-log-line.ts`; `[data-component="run-log-empty"]` when
+  none have landed yet); `[data-section="run-materials"][data-materials-count]`
+  — `[data-component="run-materials-empty"]` when none, else one
+  `<li data-material-ref="<path>" data-material-kind="<kind>">` per material,
+  **path + kind only, structurally never contents** (the component
+  destructures only those two fields — anything else on the object is
+  unreachable here, and the underlying API response never carries a
+  `contentBase64` field either); `[data-component="ceiling-provenance"]
+  [data-ceiling-set="true"|"false"]` — `data-ceiling-usd` + a formatted `$X.XX`
+  when set, `[data-component="ceiling-not-recorded"]` when not; and
+  `[data-section="run-outputs"][data-outputs-count]` (typed outputs as
+  collapsed-by-default `<details data-output-id>` cards) — **honestly always
+  `0`/empty today**, since there is no wired data source yet for a generic
+  dispatched agent's artifact outputs (`forge-ui/lib/run-view-client.ts`'s
+  own header). The ceiling recorded on `data-ceiling-set` reflects the
+  terminal `end` event's `metadata.kickoff_ceiling_usd`
+  (`orchestrator/run-agent.ts`) — written only when the underlying SDK call
+  actually completes; a suppressed spawn (dry-bridge / no-spawn harness seam)
+  never reaches that point, so `data-ceiling-set` correctly reads `false`
+  even for a dispatch that carried a ceiling on the wire.
 - **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
   just redirects to the first registered project
   (`[data-page="projects-index"]` while empty/loading). The project page is

@@ -53,7 +53,7 @@ import { resolveGuardedPath } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickoffCeilingUsd } from '../orchestrator/config.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
@@ -549,10 +549,21 @@ export async function handleStudioRoutes(
       const agents = listAgentDefinitions(skillsDir);
       // R2-02-F1: thread the server-computed capability descriptor onto each
       // agent's wire payload — no capability fact may exist only in UI code.
+      // R6-04 (WI-2): `defaultCostCeilingUsd` is RUN-LEVEL policy (read from
+      // forge.config.json's `runs.defaultCostCeilingUsd`, falling back to
+      // the named `DEFAULT_KICKOFF_COST_CEILING_USD` constant) — served as a
+      // TOP-LEVEL sibling of `agents`, never nested onto a per-agent object,
+      // which would falsely assert the default is agent-specific.
+      const defaultCostCeilingUsd = resolveDefaultKickoffCeilingUsd(
+        loadConfig(defaultConfigPath(ctx.forgeRoot)),
+      );
       sendJson(
         res,
         200,
-        { agents: agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) })) },
+        {
+          agents: agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) })),
+          defaultCostCeilingUsd,
+        },
         origin,
       );
     } catch (err) {
