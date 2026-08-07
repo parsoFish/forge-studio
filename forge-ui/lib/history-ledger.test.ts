@@ -218,6 +218,83 @@ test('renderSegment: each of the SEVEN known segment kinds renders its exact, pi
   expect(renderSegment({ kind: 'work-items', done: 1, total: 3 })).toBe('dev 1/3');
 });
 
+// ---------------------------------------------------------------------------
+// R6-06 (D6/D7) — the segment vocabulary EXTENDS additively: an EIGHTH
+// member, {kind:'standalone'}. A standalone worker dispatch (R6-06's own
+// execution path — cli/ui-bridge-agent-history.test.ts) carries no run-level
+// facts to narrate (no work-items/gate-fails/review-findings/merged/etc — it
+// isn't a flow run at all), so this is a bare, context-free POSITIVE marker
+// the mockup puts in the row's free-text `sub` column, per D7 — never a
+// bespoke badge (no view file renders one for it). Lowercase, no
+// punctuation, matching the established style of the other positive-arc
+// kind ('merged').
+// ---------------------------------------------------------------------------
+
+test("R6-06 D6/D7: renderSegment renders the EIGHTH segment kind, {kind:'standalone'}, as the exact literal string 'standalone'", () => {
+  // KILLS: the CURRENT implementation's `default` branch (history-ledger.ts's
+  // `renderSegment`, `const exhaustive: never = seg; return exhaustive;`) —
+  // called with a kind the switch doesn't recognise, this literally returns
+  // the raw segment OBJECT, not a string, so `.toBe('standalone')` fails for
+  // the right reason against HEAD. Cast needed because the current
+  // `LedgerSegment` type doesn't include this member yet (D6: adding a
+  // member requires updating the type — an implementer's job, not this
+  // test's; the cast lets this file pin the RUNTIME contract ahead of the
+  // type update, same technique flow-ledger.test.ts already uses for
+  // `run.trigger` before its type existed).
+  expect(renderSegment({ kind: 'standalone' } as LedgerSegment)).toBe('standalone');
+});
+
+// ---------------------------------------------------------------------------
+// R6-06 ROUND 2 — the vocabulary widens AGAIN: a NINTH member,
+// {kind:'in-flow'; flowId}, and a TENTH, {kind:'node-errors'; count}.
+//
+// Round 1 measured (correctly) that none of the ORIGINAL seven kinds has a
+// legitimate source in a generic flow-NODE's own `RunPhaseMeta`, and
+// concluded a generic node's narrative stays `null` forever. The
+// measurement was right; the conclusion was incomplete — it left the
+// ledger's headline outcome column blank for exactly the rows an operator
+// most wants summarised (see `agent-ledger.test.ts`'s corrected header for
+// the full re-measurement). Two more facts ARE honestly available from a
+// flow-node row's own data, independent of which node it is:
+//
+//   - `in-flow` — every flow-node row's own `run.flowId`, always present
+//     (`Run.flowId: string`, non-optional — `studio-client.ts:55`) — the
+//     mockup's own opening beat for an agent-history row is literally "in
+//     forge-develop · …" (`mockups/studio-endstate-v2/data.jsx:294-297`,
+//     `AGENT_HISTORY.developer`). Lowercase 'in', matching this file's own
+//     established lowercase-no-punctuation style for positive-arc kinds
+//     ('merged', 'standalone') rather than the mockup's literal "STANDALONE"
+//     caps (already deliberately not carried over for 'standalone' either).
+//   - `node-errors` — a NON-`dev` node's own `retries` (an `error`-typed
+//     event count — `run-model-derive.ts:161-163`), when > 0. The rule that
+//     `retries` is a GATE signal only on the `dev` node (D9) forbids calling
+//     this a *gate* outcome; it does not forbid calling it what it actually
+//     is — a real, counted fact about that node's own execution. Explicitly
+//     NEVER emitted for `dev` (gate-fails owns that number there — the
+//     positive-control tests below pin the two kinds as mutually exclusive
+//     by node, not just independently truthy).
+// ---------------------------------------------------------------------------
+
+test("R6-06 ROUND 2: renderSegment renders the NINTH segment kind, {kind:'in-flow', flowId}, as 'in <flowId>' — the mockup's own opening beat for an agent-history row (AGENT_HISTORY.developer's 'in forge-develop · …')", () => {
+  // KILLS: the `default` branch returning the raw object (same mechanism as
+  // the 'standalone' test above) — legitimate RED against HEAD, which has
+  // neither this kind nor a case for it.
+  expect(renderSegment({ kind: 'in-flow', flowId: 'forge-architect' } as LedgerSegment)).toBe('in forge-architect');
+  expect(renderSegment({ kind: 'in-flow', flowId: 'forge-develop' } as LedgerSegment)).toBe('in forge-develop');
+});
+
+test("R6-06 ROUND 2: renderSegment renders the TENTH segment kind, {kind:'node-errors', count}, as 'errored ×N' — NEVER the word 'gate' (that vocabulary is gate-fails' alone, D9)", () => {
+  expect(renderSegment({ kind: 'node-errors', count: 2 } as LedgerSegment)).toBe('errored ×2');
+  expect(renderSegment({ kind: 'node-errors', count: 1 } as LedgerSegment)).toBe('errored ×1');
+  // Never the gate-fails wording — a node-errors segment describing the SAME
+  // shape of fact (a retry count) as gate-fails must render with visibly
+  // DIFFERENT text, since D9 forbids calling a non-dev node's error count a
+  // gate outcome. Guards against a copy-paste that reuses gate-fails' exact
+  // string for the new kind.
+  expect(renderSegment({ kind: 'node-errors', count: 2 } as LedgerSegment)).not.toBe(renderSegment({ kind: 'gate-fails', count: 2 }));
+  expect(renderSegment({ kind: 'node-errors', count: 2 } as LedgerSegment)).not.toContain('gate');
+});
+
 test('ROUND 3 (D11): renderSegment NEUTRALIZES a joiner sequence (" → ") embedded in a free-text note — the closed-vocabulary guarantee is closed at the CONTENT level, not just per-kind', () => {
   // KILLS: `renderSegment` implementations that interpolate `note` verbatim
   // (e.g. template-literal `` `failed: ${note}` `` with no sanitization) — a
@@ -352,6 +429,11 @@ const VOCAB_PATTERNS: RegExp[] = [
   /^reflection lost: .+$/,
   /^merged$/,
   /^dev \d+\/\d+$/,
+  // R6-06 (D6/D7) — the eighth kind. See the dedicated test above.
+  /^standalone$/,
+  // R6-06 ROUND 2 — the ninth and tenth kinds. See the dedicated tests above.
+  /^in [a-z0-9-]+$/,
+  /^errored ×\d+$/,
 ];
 
 function assertOnlyKnownVocabulary(narrative: string | null, label: string): void {
@@ -411,6 +493,31 @@ test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures 
     { label: 'work-items alone, partial progress (an in-flight run)', segments: [{ kind: 'work-items', done: 1, total: 3 }] },
     { label: 'the headline round-2 arc: dev fan-out then merged, nothing exceptional', segments: [{ kind: 'work-items', done: 3, total: 3 }, { kind: 'merged' }] },
     { label: 'empty (nothing to say)', segments: [] },
+    // R6-06 (D6/D7) — the eighth kind. Pinned ALONE only, deliberately: a
+    // standalone worker dispatch is not a flow run at all, so it can never
+    // ALSO carry a work-items/gate-fails/review-findings/merged/
+    // reflection-lost fact (those are all flow-run-scoped, per
+    // flow-ledger.ts's own derivation) — combining {kind:'standalone'} with
+    // any other kind in one fixture would teach an implementer a combination
+    // that can never occur in production, exactly the "fixture that could
+    // never exist" this campaign has already refused elsewhere (see
+    // flow-ledger.test.ts's own "ONE COMBINATION IN THE BRIEF CANNOT
+    // ACTUALLY OCCUR" note for the established precedent this mirrors).
+    { label: 'R6-06: standalone alone', segments: [{ kind: 'standalone' }] as LedgerSegment[] },
+    // R6-06 ROUND 2 — the ninth/tenth kinds, `agent-ledger.ts`'s own
+    // per-NODE derivation (`deriveAgentNodeLedgerSegments`). These CAN
+    // co-occur with each other (unlike 'standalone', which never co-occurs
+    // with anything) because a single flow-node row's own segments are
+    // `in-flow` (always) plus AT MOST ONE of {gate-fails (dev only),
+    // node-errors (every other node)} plus review-findings
+    // (adversarial-review only, independent of retries) — see
+    // `agent-ledger.test.ts` for the full per-node derivation contract this
+    // vocabulary-level battery only needs to prove RENDERS, not derives.
+    { label: 'R6-06 ROUND 2: in-flow alone (a generic node, nothing else to report)', segments: [{ kind: 'in-flow', flowId: 'forge-architect' }] as LedgerSegment[] },
+    { label: 'R6-06 ROUND 2: in-flow + gate-fails (the dev node, inside a flow)', segments: [{ kind: 'in-flow', flowId: 'forge-develop' }, { kind: 'gate-fails', count: 2 }] as LedgerSegment[] },
+    { label: 'R6-06 ROUND 2: in-flow + node-errors (a non-dev node with error retries)', segments: [{ kind: 'in-flow', flowId: 'forge-architect' }, { kind: 'node-errors', count: 3 }] as LedgerSegment[] },
+    { label: 'R6-06 ROUND 2: in-flow + review-findings (adversarial-review, no retries)', segments: [{ kind: 'in-flow', flowId: 'forge-develop' }, { kind: 'review-findings', total: 2, blocker: 0, major: 1, minor: 1, info: 0 }] as LedgerSegment[] },
+    { label: 'R6-06 ROUND 2: in-flow + node-errors + review-findings (adversarial-review with BOTH retries AND findings — the canonical-order case)', segments: [{ kind: 'in-flow', flowId: 'forge-develop' }, { kind: 'node-errors', count: 1 }, { kind: 'review-findings', total: 2, blocker: 0, major: 1, minor: 1, info: 0 }] as LedgerSegment[] },
   ];
 
   for (const { label, segments } of battery) {
@@ -418,7 +525,7 @@ test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures 
   }
 });
 
-test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY seven members — this file fails to typecheck if an eighth is added without updating this pin', () => {
+test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY TEN members (R6-06 D6/D7 added "standalone"; R6-06 ROUND 2 added "in-flow"/"node-errors") — this file fails to typecheck if an eleventh is added without updating this pin', () => {
   // PLAIN STATEMENT (round 3, re-verified — see the header's
   // "COMPILE-TIME-BACKSTOP CAVEAT" for the full evidence trail): this switch
   // is an IN-EDITOR AID ONLY, not a CI gate, not any gate. Only the RUNTIME
@@ -451,13 +558,30 @@ test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY seven members — this 
       case 'reflection-lost': return renderSegment(seg);
       case 'merged': return renderSegment(seg);
       case 'work-items': return renderSegment(seg);
+      // R6-06 (D6/D7) — the eighth member.
+      case 'standalone': return renderSegment(seg);
+      // R6-06 ROUND 2 — the ninth and tenth members.
+      case 'in-flow': return renderSegment(seg);
+      case 'node-errors': return renderSegment(seg);
       default: return assertNever(seg);
     }
   }
-  // Runtime half: prove `exhaustiveRender` (this test's own closed switch)
-  // agrees with the REAL exported `renderSegment` for one instance of each
-  // kind — if the real function's vocabulary ever drifts from this pinned
-  // switch, this assertion (not just the typecheck) catches it too.
+  // Runtime half — HONEST CAVEAT (re-verified this round): because every
+  // case above does nothing but forward to the real `renderSegment`, this
+  // loop's `.toBe()` comparison is calling the SAME function with the SAME
+  // input on both sides — it is a tautology for whatever `renderSegment`
+  // currently returns, string or not (a pure function called twice with the
+  // same argument returns the same value by construction). Its actual
+  // signal is narrower than the comment above ("agrees with the real
+  // renderSegment") implies: what it REALLY proves is that `exhaustiveRender`
+  // does not fall through to the `default: assertNever(seg)` throw for any
+  // listed sample — i.e. this TEST FILE's own switch has a case for every
+  // kind in `samples`. Kept exactly as the prior rounds authored it
+  // (unchanged pattern, only extended) rather than silently strengthened,
+  // per this campaign's discipline against modifying an existing pinned
+  // test's assertion shape while "just adding a case" — the type-level
+  // exhaustiveness check above (in-editor only, not gate-enforced — see the
+  // header's CAVEAT) remains the real reason this test exists.
   const samples: LedgerSegment[] = [
     { kind: 'gate-fails', count: 1 },
     { kind: 'review-findings', total: 1, blocker: 0, major: 0, minor: 1, info: 0 },
@@ -466,11 +590,41 @@ test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY seven members — this 
     { kind: 'reflection-lost', cause: 'crash' },
     { kind: 'merged' },
     { kind: 'work-items', done: 2, total: 3 },
+    // R6-06 (D6/D7) — the eighth member. Cast needed until the real
+    // LedgerSegment type union is updated (same reasoning as the dedicated
+    // renderSegment test above).
+    { kind: 'standalone' } as LedgerSegment,
+    // R6-06 ROUND 2 — the ninth and tenth members. Same cast-until-typed
+    // reasoning.
+    { kind: 'in-flow', flowId: 'forge-architect' } as LedgerSegment,
+    { kind: 'node-errors', count: 2 } as LedgerSegment,
   ];
   for (const s of samples) {
     expect(exhaustiveRender(s)).toBe(renderSegment(s));
   }
 });
+
+// ---------------------------------------------------------------------------
+// R6-06 (D8/D12) — NOTE, not a test: `LedgerRow` gains two OPTIONAL fields
+// (`linkKind?: 'flow-node' | 'standalone' | 'session'`, `trigger?: {kind,
+// source, scope}`) and `status` WIDENS from `RunStatus` alone to a closed
+// union of THREE vocabularies (RunStatus | RunPhaseStatus |
+// 'running'|'done'|'failed'|'suppressed'|'budget-exceeded' | string — a
+// session's own status.json phase). None of that changes any function in
+// THIS file's behaviour (`renderNarrative`/`sortLedgerRowsNewestFirst`/
+// `formatWhen` never read `.status`/`.linkKind`/`.trigger` at all — they are
+// generic over the ROW SHAPE, per D2's original "surface-agnostic" design),
+// so there is nothing new to pin here at the runtime level. The BEHAVIOURAL
+// pins for these fields live where they are actually produced/consumed:
+//   - `agent-ledger.test.ts` — linkKind/trigger/widened-status VALUES
+//     (deriveAgentLedgerRows, the new R6-06 caller).
+//   - `flow-ledger.test.ts` — trigger attachment on the EXISTING caller
+//     (D8: "trigger attachment on BOTH ledgers") + the byte-identical-when-
+//     absent regression lock.
+//   - `history-ledger-render.test.ts` — HistoryLedger.tsx's new conditional
+//     `data-*` attributes for linkKind/trigger, and the SAME byte-identical-
+//     when-absent pin at the DOM layer.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // sortLedgerRowsNewestFirst — pure, immutable, missing-`when` handling
