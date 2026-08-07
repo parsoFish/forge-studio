@@ -132,16 +132,38 @@
  *   dev/adversarial-review node, but the shared engine must not silently
  *   break for one that someday does).
  */
-import { test, expect } from 'vitest';
+import { test, expect, vi, afterEach } from 'vitest';
+import * as React from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+
+// ROUND 5 (defect pinning, D1): `fetchAgentHistory` calls `resolveBridgeUrl()`
+// (./bridge-client.ts) before ever reaching the pure resolver. Under this
+// repo's `environment: 'node'` vitest config, the REAL `resolveBridgeUrl`
+// always returns `''` (its own `typeof window !== 'undefined'` SSR guard at
+// bridge-client.ts:93-94 trips with no `window` global) — so testing
+// `fetchAgentHistory`'s actual `fetch()` call requires replacing
+// `resolveBridgeUrl` with a fixed base URL. `vi.mock()` calls are hoisted by
+// vitest to the top of the module regardless of textual position, so this is
+// safe declared here, before the `./agent-ledger.ts` import below. Verified
+// this mock actually intercepts the extension-less `from './bridge-client'`
+// import inside agent-ledger.ts (Vite/vitest match by RESOLVED file path, not
+// specifier text) via a throwaway scratch test before writing the real
+// assertions below — confirmed the real `fetch()` call is reached, not the
+// no-bridge sentinel short-circuit.
+vi.mock('./bridge-client.ts', () => ({
+  resolveBridgeUrl: vi.fn(async () => 'http://bridge.test'),
+}));
 
 import {
   deriveAgentNodeLedgerSegments,
   deriveAgentLedgerRows,
   resolveAgentHistoryFromResponse,
+  fetchAgentHistory,
   type AgentFlowNodeRunEntry,
   type AgentStandaloneRunEntry,
   type AgentSessionRunEntry,
 } from './agent-ledger.ts';
+import { HistoryLedger, type HistoryLedgerProps } from '@/components/studio/HistoryLedger';
 import type { LedgerRow } from './history-ledger.ts';
 import type { Run, RunPhaseMeta } from './studio-client.ts';
 
@@ -489,4 +511,278 @@ test('D10 KILL: a two-state resolver ported from studio-client.ts\'s convention 
 test('D10: a 403 (a real client error, but not the literal 404 the server contract documents) resolves to "unresolved", NOT "not-found" — not-found is keyed to the exact status code, not a generic 4xx bucket', () => {
   const r = resolveAgentHistoryFromResponse(403, null);
   expect(r.kind).toBe('unresolved');
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ROUND 5, DEFECT 1 — the IMPURE WRAPPER (`fetchAgentHistory`) reads
+// `res.json()` unconditionally, BEFORE inspecting `res.status`. The
+// docstring above (agent-ledger.ts:216-218) promises "status decides FIRST,
+// before body is ever inspected, in both directions — a 404 wins even over
+// a plausible-looking body". True of the PURE resolver
+// (`resolveAgentHistoryFromResponse`, already exhaustively pinned above);
+// FALSE of this wrapper: a 404 with a non-JSON body (the ordinary shape of
+// a real 404 — a framework HTML error page, e.g. Next.js's own default 404
+// page) makes `res.json()` throw a `SyntaxError`, the outer `try/catch`
+// swallows it, and the wrapper resolves via the sentinel
+// `resolveAgentHistoryFromResponse(0, null)` — status `0` is neither `404`
+// nor a 2xx, so the pure resolver (correctly, for ITS contract) returns
+// `'unresolved'`. The caller then sees `'unresolved'` for what is actually
+// the authoritative "this agent has no history" fact — the exact
+// mis-resolution D10's own "a 404 wins even over a plausible-looking body"
+// promise exists to prevent, now happening one layer up from where D10
+// pinned it.
+//
+// Reproduced directly (not merely asserted) via a real `fetchAgentHistory`
+// call with `resolveBridgeUrl` mocked to a fixed base and `fetch` stubbed —
+// see the `vi.mock('./bridge-client.ts', ...)` above this file's imports.
+// ═══════════════════════════════════════════════════════════════════════
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+/** Stub `global.fetch` for exactly one call, returning `{status, json}` —
+ *  `json` may reject to simulate a non-JSON body (SyntaxError), matching
+ *  what a real `res.json()` does against an HTML error page. */
+function stubFetchOnce(response: { status: number; json: () => Promise<unknown> }): void {
+  vi.stubGlobal('fetch', vi.fn(async () => response));
+}
+
+test('DEFECT 1 RED: fetchAgentHistory — a 404 with a NON-JSON body (res.json() throws, the ordinary shape of a real 404 HTML error page) must still resolve to {kind:"not-found"} — status decides FIRST, per the docstring\'s own promise, not "whichever branch survives res.json()"', async () => {
+  // KILLS: `const body = await res.json(); return resolveAgentHistoryFromResponse(res.status, body);`
+  // (the current implementation, agent-ledger.ts:250-252) — `res.json()`
+  // throws before `res.status` (404) is ever consulted, the throw is caught
+  // by the OUTER catch (agent-ledger.ts:253), and the wrapper falls through
+  // to the sentinel `resolveAgentHistoryFromResponse(0, null)` ->
+  // `{kind:'unresolved'}`. Reproduced by execution: the current
+  // implementation returns `{kind:'unresolved'}` here, not `{kind:'not-found'}`.
+  stubFetchOnce({ status: 404, json: () => { throw new SyntaxError('Unexpected token < in JSON at position 0'); } });
+  const result = await fetchAgentHistory('some-agent');
+  expect(result).toEqual({ kind: 'not-found' });
+});
+
+test('DEFECT 1 REGRESSION LOCK: fetchAgentHistory — 404 with a VALID JSON body still resolves to not-found (this control already passes today; a fix must not break it)', async () => {
+  stubFetchOnce({ status: 404, json: async () => ({ error: 'not found' }) });
+  const result = await fetchAgentHistory('some-agent');
+  expect(result).toEqual({ kind: 'not-found' });
+});
+
+test('DEFECT 1 REGRESSION LOCK: fetchAgentHistory — 500 with an HTML body (res.json() throws) resolves to unresolved (already correct today; a fix must not break it)', async () => {
+  stubFetchOnce({ status: 500, json: () => { throw new SyntaxError('Unexpected token < in JSON at position 0'); } });
+  const result = await fetchAgentHistory('some-agent');
+  expect(result).toEqual({ kind: 'unresolved' });
+});
+
+test('DEFECT 1 REGRESSION LOCK: fetchAgentHistory — a thrown fetch() (network failure) resolves to unresolved (already correct today; a fix must not break it)', async () => {
+  vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('fetch failed'); }));
+  const result = await fetchAgentHistory('some-agent');
+  expect(result).toEqual({ kind: 'unresolved' });
+});
+
+test('DEFECT 1 REGRESSION LOCK: fetchAgentHistory — 200 with malformed (unparseable) JSON resolves to unresolved (already correct today; a fix must not break it)', async () => {
+  stubFetchOnce({ status: 200, json: () => { throw new SyntaxError('Unexpected end of JSON input'); } });
+  const result = await fetchAgentHistory('some-agent');
+  expect(result).toEqual({ kind: 'unresolved' });
+});
+
+test('DEFECT 1 REGRESSION LOCK: fetchAgentHistory — 200 with well-formed JSON of the WRONG shape (no rows array) resolves to unresolved (already correct today; a fix must not break it)', async () => {
+  stubFetchOnce({ status: 200, json: async () => ({ notRows: [] }) });
+  const result = await fetchAgentHistory('some-agent');
+  expect(result).toEqual({ kind: 'unresolved' });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ROUND 5, DEFECT 2 — the resolver does ZERO per-row shape validation.
+// `resolveAgentHistoryFromResponse`'s 2xx branch checks only
+// `Array.isArray(rows)`, then does a bare `rows as LedgerRow[]` — any
+// element shape is accepted as `'found'`. Reproduced by the reviewer
+// feeding resolver-accepted rows into the REAL `HistoryLedger` component:
+//   - `costUsd: "5.00"` (a string) -> render throws (`row.costUsd.toFixed is
+//     not a function`, HistoryLedger.tsx:150/117 both call `.toFixed(2)`
+//     unconditionally once `row.costUsd !== null`)
+//   - `costUsd` absent/`undefined` -> the component's own `!== null` guard
+//     does not catch `undefined` -> render throws the same way
+//   - a row of just `{status: 'complete'}` -> accepted as `found` with no
+//     complaint at all
+//
+// CHOSEN BEHAVIOUR (pinned below, per this round's brief): a response
+// carrying ANY structurally invalid row is rejected WHOLESALE as
+// `{kind:'unresolved'}` — never a silently shortened "drop the bad ones,
+// keep the good ones" list. A silently shortened list is its own kind of
+// lie (an agent's history looking shorter than it really is, with no signal
+// that anything was dropped), and this codebase's standing rule (CLAUDE.md)
+// is to fail fast and never silently swallow. `'unresolved'` is also
+// already the exact bucket this resolver uses for every other "the 2xx
+// contract wasn't honoured" anomaly (a missing `rows` key, a non-array
+// `rows`) — a malformed ROW is the same class of anomaly one level deeper,
+// not a new third thing.
+//
+// VALIDATION RULES pinned below (per this round's brief):
+//   - every row's `id`/`when`/`what`/`href` must be a `string`
+//   - `narrative` must be `string | null`; `narrativeKinds` a `string[]`
+//   - `costUsd` must be `number | null` — NEVER a string, NEVER `undefined`
+//     (this is the exact field the reviewer's two crashing repros hit)
+//   - `status` vocabulary is CLOSED per `linkKind`, per the module's own
+//     documented per-path contract: `linkKind:'flow-node'` -> RunPhaseStatus
+//     (`pending|active|complete|retrying|failed`); `linkKind:'standalone'`
+//     -> `running|done|failed|suppressed|budget-exceeded`. `linkKind:
+//     'session'` is deliberately OPEN (any string) — session `phase` is
+//     closed per runner but open across the four-and-growing runners this
+//     module aggregates, so a closed union there would be dishonest, per
+//     this round's own measured ruling; a fix must NOT start rejecting a
+//     legitimate novel session phase string.
+// ═══════════════════════════════════════════════════════════════════════
+
+const NOW_MS = new Date('2026-01-01T03:00:00Z').getTime();
+
+function validFlowNodeRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'flow-row', when: '2026-01-01T00:00:00Z', what: 'Ship the ledger',
+    narrative: 'in forge-architect', narrativeKinds: ['in-flow'],
+    status: 'complete', costUsd: 2.5, href: '/flows/forge-architect/run/flow-row',
+    linkKind: 'flow-node',
+    ...over,
+  };
+}
+
+function validStandaloneRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'solo-row', when: '2026-01-01T00:00:00Z', what: 'solo dispatch',
+    narrative: 'standalone', narrativeKinds: ['standalone'],
+    status: 'done', costUsd: 1, href: '/agents/solo/run/solo-row',
+    linkKind: 'standalone',
+    ...over,
+  };
+}
+
+function validSessionRow(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    id: 'sess-row', when: '2026-01-01T00:00:00Z', what: 'architect session',
+    narrative: null, narrativeKinds: [],
+    status: 'interviewing', costUsd: null, href: '/architect/sess-row',
+    linkKind: 'session',
+    ...over,
+  };
+}
+
+test('DEFECT 2 RED: a row with costUsd as a STRING ("5.00") — the reviewer\'s first repro — must NOT be accepted as found', () => {
+  // KILLS: `Array.isArray(rows) ? {kind:'found', rows} : {kind:'unresolved'}`
+  // (the current implementation) — it has no per-row check at all, so this
+  // structurally-invalid row sails through as `'found'`. Rendered through
+  // the REAL component (proven below, DEFECT 2 EVIDENCE), this row throws.
+  const body = { rows: [validFlowNodeRow({ costUsd: '5.00' })] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('unresolved');
+});
+
+test('DEFECT 2 RED: a row with costUsd MISSING (undefined) — the reviewer\'s second repro; the component\'s own `!== null` guard does not catch this — must NOT be accepted as found', () => {
+  const badRow = validFlowNodeRow();
+  delete badRow.costUsd;
+  const body = { rows: [badRow] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('unresolved');
+});
+
+test('DEFECT 2 RED: a row of just {status: "complete"} — the reviewer\'s third repro, every other required field absent — must NOT be accepted as found', () => {
+  const body = { rows: [{ status: 'complete' }] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('unresolved');
+});
+
+test('DEFECT 2 RED, CHOSEN BEHAVIOUR: ONE invalid row among otherwise-valid rows rejects the WHOLE response as unresolved — never a silently shortened "drop the bad one, keep the rest" list', () => {
+  // KILLS both the current (no validation at all) implementation AND a
+  // plausible alternative fix that filters rows instead of rejecting the
+  // response — that alternative would return `{kind:'found', rows:[the one
+  // valid row]}` here, which this exact-kind assertion also catches (a
+  // `'found'` result would fail this `.toBe('unresolved')`).
+  const body = { rows: [validFlowNodeRow(), validStandaloneRow({ costUsd: '3.00' })] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('unresolved');
+});
+
+test('DEFECT 2 RED, STATUS VOCAB: a flow-node row with a status OUTSIDE RunPhaseStatus\'s closed set (e.g. "bogus") is rejected — the per-path status vocabulary is enforced, not just presence/type', () => {
+  const body = { rows: [validFlowNodeRow({ status: 'bogus' })] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('unresolved');
+});
+
+test('DEFECT 2 RED, STATUS VOCAB: a standalone row with a status OUTSIDE its own closed set (e.g. "queued", not one of running|done|failed|suppressed|budget-exceeded) is rejected', () => {
+  const body = { rows: [validStandaloneRow({ status: 'queued' })] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('unresolved');
+});
+
+test('DEFECT 2 REGRESSION LOCK (openness must survive the fix): a SESSION row\'s status is a deliberately-open, non-forge-controlled string ("interviewing") and must still be accepted as found — session status is NOT a closed vocabulary', () => {
+  // KILLS an over-eager fix that closes the session status vocabulary too
+  // (e.g. reusing the standalone or RunPhaseStatus set for every linkKind) —
+  // this module's own header (D12) and this round's brief are both explicit
+  // that session `status` is carried verbatim, never coerced/validated
+  // against a closed set, because it is genuinely open across a growing set
+  // of runners.
+  const body = { rows: [validSessionRow({ status: 'some-brand-new-runner-phase' })] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('found');
+  if (result.kind === 'found') expect(result.rows[0].status).toBe('some-brand-new-runner-phase');
+});
+
+test('DEFECT 2 REGRESSION LOCK: fully valid rows across all three linkKinds (flow-node/standalone/session) are still accepted as found, verbatim — the new validation must not reject legitimate data', () => {
+  const body = { rows: [validFlowNodeRow(), validStandaloneRow(), validSessionRow()] };
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('found');
+  if (result.kind === 'found') {
+    expect(result.rows).toHaveLength(3);
+    expect(result.rows.map((r) => r.linkKind)).toEqual(['flow-node', 'standalone', 'session']);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DEFECT 2 EVIDENCE + INTEGRATION — the REAL HistoryLedger component, not
+// just the resolver's return value. Proves WHY the rejections above matter
+// (the component genuinely crashes on these shapes today) and closes the
+// loop the task brief requires: "a caller must never receive a `found` row
+// that crashes the component."
+// ---------------------------------------------------------------------------
+
+function renderRows(rows: LedgerRow[]): string {
+  const props: HistoryLedgerProps = { rows, nowMs: NOW_MS };
+  return renderToStaticMarkup(React.createElement(HistoryLedger as never, props as never));
+}
+
+test('DEFECT 2 EVIDENCE: the REAL HistoryLedger component throws when given a row with costUsd as a string — reproduces the reviewer\'s "row.costUsd.toFixed is not a function" crash directly, bypassing the resolver entirely. This is WHY defect 2\'s rejection above is required, not optional', () => {
+  const crashingRow = validFlowNodeRow({ costUsd: '5.00' }) as unknown as LedgerRow;
+  expect(() => renderRows([crashingRow])).toThrow(/toFixed/);
+});
+
+test('DEFECT 2 EVIDENCE: the REAL HistoryLedger component throws when given a row with costUsd undefined — the component\'s `row.costUsd !== null` guard does not catch `undefined`, so it still calls `.toFixed` on it', () => {
+  const crashingRow = validFlowNodeRow() as unknown as LedgerRow;
+  delete (crashingRow as unknown as Record<string, unknown>).costUsd;
+  expect(() => renderRows([crashingRow])).toThrow(/toFixed/);
+});
+
+test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands back as "found", rendering them through the REAL HistoryLedger component must never throw — run against all three of the reviewer\'s reproduced malformed shapes plus the mixed-valid-and-invalid body', () => {
+  // KILLS the current implementation: it marks every one of these `'found'`
+  // today, and — proven by the EVIDENCE tests just above — at least one of
+  // these exact shapes genuinely crashes the real component when rendered,
+  // so the `not.toThrow()` branch below fails against the CURRENT resolver.
+  // A correct fix makes every one of these `'unresolved'` instead, so the
+  // `found`/`renderRows` branch is never reached for bad data at all — but
+  // the `not.toThrow()` assertion is kept live here (rather than asserting
+  // only `unresolved`) as the general safety net the brief requires: ANY
+  // future malformed shape this list doesn't yet anticipate still can't
+  // slip a crashing row past this test, because rendering whatever the
+  // resolver DOES call "found" is always exercised, unconditionally.
+  const malformedBodies: unknown[] = [
+    { rows: [validFlowNodeRow({ costUsd: '5.00' })] },
+    { rows: [(() => { const r = validFlowNodeRow(); delete r.costUsd; return r; })()] },
+    { rows: [{ status: 'complete' }] },
+    { rows: [validFlowNodeRow(), validStandaloneRow({ costUsd: '3.00' })] },
+  ];
+  for (const body of malformedBodies) {
+    const result = resolveAgentHistoryFromResponse(200, body);
+    if (result.kind === 'found') {
+      expect(() => renderRows(result.rows)).not.toThrow();
+    } else {
+      expect(result.kind).toBe('unresolved');
+    }
+  }
 });
