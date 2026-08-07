@@ -19,7 +19,9 @@ import {
   parseRunInputs,
   parseMaterials,
   parseInstructionsDraftResponse,
+  parseRun,
 } from './studio-client';
+import type { Run } from './studio-client';
 
 test('parseRunInputs: one key:value per line → inputs map; blanks ignored', () => {
   expect(parseRunInputs('repo: ./projects/foo\nnorthStar: ship X\n\n')).toEqual({
@@ -227,4 +229,89 @@ test('parseInstructionsDraftResponse: derivation: [] (an array, not {sources: [.
 test('parseInstructionsDraftResponse: derivation: {sources: "nope"} (sources present but not an array) is a parse FAILURE', () => {
   const result = parseInstructionsDraftResponse(200, { ok: true, draft: '# Draft\n', derivation: { sources: 'nope' } });
   expect(result.ok).toBe(false);
+});
+
+// ---------------------------------------------------------------------------
+// parseRun — the declared-data-fails-open defect, applied to reflectionLost
+// (R6-05 Task 2)
+//
+// MEASURED: `Run` (studio-client.ts:46-90) DECLARES both `reflectionLost?:
+// string` and `reflectionLostNote?: string` — carried for R6-01's RunRail
+// card (components/studio/RunRail.tsx:293-306 already reads
+// `run.reflectionLost`/`run.reflectionLostNote` off a parsed Run and renders
+// them). But `parseRun` (studio-client.ts:552-577) enumerates its return
+// object's fields explicitly and does NOT list `reflectionLost` or
+// `reflectionLostNote` anywhere in that list — so a raw server payload
+// carrying either field has it silently dropped before RunRail (or any
+// other consumer, including R6-05's own ledger) ever sees it. This is the
+// SAME "declared-data-fails-open" class `parseRun`'s own header comment
+// already names for `trigger` (studio-client.ts:572-575, "an absent
+// `trigger` key must stay absent... this field was parsed and served
+// end-to-end, then silently dropped here") — reflectionLost/
+// reflectionLostNote are two more fields in that exact same boat, just not
+// yet fixed. `parseCapability`'s explicit-undefined-on-malformed contract
+// (this file, "undefined/absent input returns undefined") is the sibling
+// discipline: a value that IS present must be carried, not defaulted away.
+// ---------------------------------------------------------------------------
+
+function baseRawRun(over: Partial<Run> = {}): Run {
+  return {
+    id: 'CYCLE-r6-05-parseRun',
+    flowId: 'forge-develop',
+    initiativeId: 'INIT-r6-05',
+    initiative: 'ParseRun probe',
+    status: 'complete',
+    origin: 'architect',
+    costUsd: 1.0,
+    phases: {},
+    phaseMeta: {},
+    artifactsReady: {},
+    workItems: [],
+    flowLineage: ['forge-develop'],
+    ...over,
+  };
+}
+
+test('parseRun carries reflectionLost + reflectionLostNote through to the client, instead of dropping them (declared-data-fails-open)', () => {
+  // KILLS the CURRENT state of parseRun: it does not list either field, so
+  // both are silently discarded even though a real reflector crash/budget/
+  // max-turns loss is exactly what these fields exist to surface honestly
+  // (RunRail.tsx:293's "reflection lost" amber note — 2.10 reflection
+  // honesty). A cycle whose reflection genuinely crashed must not read back
+  // through parseRun as if nothing were lost.
+  const raw = baseRawRun({ reflectionLost: 'crash', reflectionLostNote: 'reflector process exited with SIGSEGV mid brain-write' });
+  const parsed = parseRun(raw);
+
+  expect(parsed.reflectionLost).toBe('crash');
+  expect(parsed.reflectionLostNote).toBe('reflector process exited with SIGSEGV mid brain-write');
+});
+
+test('parseRun leaves reflectionLost/reflectionLostNote ABSENT for a run that carries neither — never coerced to "" or a fabricated cause', () => {
+  // KILLS: `reflectionLost: r.reflectionLost ?? ''` (or any other default),
+  // which would make every ordinary, never-reflection-lost run carry a
+  // truthy-looking (or falsy-but-present) field — RunRail's
+  // `{run.reflectionLost && (...)}` guard treats an empty string as falsy
+  // today, so this specific defect happens to be inert on THAT one consumer,
+  // but a `''` key present where the type says "absent when not lost" is
+  // still a lie any OTHER consumer (this initiative's own ledger narrative,
+  // Task 3) could trip on.
+  const raw = baseRawRun();
+  const parsed = parseRun(raw);
+
+  expect('reflectionLost' in parsed).toBe(false);
+  expect('reflectionLostNote' in parsed).toBe(false);
+  expect(parsed.reflectionLost).toBeUndefined();
+  expect(parsed.reflectionLostNote).toBeUndefined();
+});
+
+test('parseRun carries reflectionLost independently of reflectionLostNote — a lost reflection with no note is not silently paired away', () => {
+  // KILLS: an implementation that only carries the pair together (e.g. `if
+  // (r.reflectionLost && r.reflectionLostNote)`), which would hide a real
+  // loss whenever the note happens to be absent. The two fields are declared
+  // independently optional on the type; the parse must respect that.
+  const raw = baseRawRun({ reflectionLost: 'max-turns' });
+  const parsed = parseRun(raw);
+
+  expect(parsed.reflectionLost).toBe('max-turns');
+  expect('reflectionLostNote' in parsed).toBe(false);
 });
