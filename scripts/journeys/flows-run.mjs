@@ -1744,6 +1744,77 @@ export const journey = defineJourney({
               expectRow('adversarial-review', 'complete', '0.06');
               expectRow('review', 'active', '0.00');
 
+              // ── R6-01 WI-3 (F5): node click-through — that node's OWN log lines,
+              // through the SHARED RunLog renderer (deriveLogLine, think|tool|out) ──
+              // MEASURED, NOT INVENTED: the 'dev' row's own 6 raw seeded events
+              // (developer-loop start/log(gate.pass WI-1)/end(WI-1)/log(gate.pass
+              // WI-2)/end(WI-2)/end(ralph.end $0.48)) all fall outside
+              // deriveLogLine's TOOL_TYPES/THINK_TYPES sets, so every derived line
+              // is kind="out" — this beat proves reachability + real content, not
+              // the tool/think classification split (already exhaustively pinned
+              // at the unit level, forge-ui/lib/flow-node-log.test.ts +
+              // flow-run-node-log-render.test.ts). `end` ignores `message`
+              // entirely (deriveLogLine's own textFor), so only the LAST end event
+              // (cost-bearing) renders the "$0.4800" text — the two earlier
+              // WI-scoped end events render as plain "end · developer-loop".
+              const devRow = page.locator('[data-timeline-row="true"][data-node-id="dev"]').first();
+              check((await devRow.count()) > 0, 'run-detail: [data-timeline-row="true"][data-node-id="dev"] present to click');
+              if ((await devRow.count()) > 0) {
+                await devRow.click();
+                try {
+                  await page.waitForSelector('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="true"]', { timeout: 10000 });
+                  check(true, 'run-detail: clicking the dev row expands it (data-node-expanded="true")');
+                } catch {
+                  check(false, 'run-detail: clicking the dev row expands it (data-node-expanded="true") — click-through not implemented yet');
+                }
+                const expandedNow = (await page.locator('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="true"]').count()) > 0;
+                if (expandedNow) {
+                  await sleep(ACT);
+                  await frame(page, 'r6-01wi3-node-log', 'R6-01 WI-3 — a run-detail node expanded: that node\'s own log lines, through the shared RunLog renderer');
+
+                  const detail = page.locator('[data-section="node-detail"][data-detail-for-node="dev"]').first();
+                  check((await detail.count()) > 0, 'run-detail: [data-section="node-detail"][data-detail-for-node="dev"] renders once expanded');
+
+                  // The SAME renderer R6-04's standalone run view already ships —
+                  // reused, not forked (this initiative's own D2/substrate note).
+                  const runLog = detail.locator('[data-component="run-log"]').first();
+                  check((await runLog.count()) > 0, 'run-detail: the expanded node composes the SHARED RunLog ([data-component="run-log"])');
+                  const logLineCount = await detail.locator('[data-log-line="true"]').count();
+                  check(logLineCount >= 6, `run-detail: dev's own 6 seeded events all render as log lines (got ${logLineCount})`);
+                  const outKindCount = await detail.locator('[data-log-line="true"][data-log-kind="out"]').count();
+                  check(outKindCount === logLineCount, `run-detail: every dev log line classifies as kind="out" via the shared deriveLogLine (got ${outKindCount}/${logLineCount})`);
+                  const detailText = await detail.evaluate((el) => el.textContent ?? '');
+                  check(detailText.includes('gate.pass'), 'run-detail: dev\'s own real log content ("gate.pass") is visible, not a summary');
+                  check(detailText.includes('$0.4800'), 'run-detail: the cost-bearing terminal event\'s real cost renders ("$0.4800")');
+
+                  // Typed outputs (F5's other half): honestly empty — measured
+                  // (D6⇒D7, this initiative's own ledger ruling): no per-node
+                  // artifact data source exists (artifactsReady is run-level, keyed
+                  // by artifact TYPE, never attributable to a node). A non-empty
+                  // node-outputs section here would be exactly the
+                  // never-populating-surface / declared-data-fails-open defect
+                  // this campaign keeps finding and refusing.
+                  const outputsSection = detail.locator('[data-section="node-outputs"]').first();
+                  check((await outputsSection.count()) > 0, 'run-detail: [data-section="node-outputs"] renders on the expanded node');
+                  if ((await outputsSection.count()) > 0) {
+                    const outputsCount = await outputsSection.getAttribute('data-outputs-count');
+                    check(outputsCount === '0', `run-detail: dev's typed-outputs count is honestly "0" — no per-node artifact source exists (got "${outputsCount}")`);
+                    check((await detail.locator('[data-component="node-outputs-empty"]').count()) > 0, 'run-detail: the honest-empty outputs state renders ([data-component="node-outputs-empty"])');
+                  }
+
+                  // Collapse-on-reclick — an F5 AC implied by "click-through", not
+                  // just "click-open": re-clicking the SAME row must not leave two
+                  // node-detail panels stacked, nor strand the row permanently open.
+                  await devRow.click();
+                  try {
+                    await page.waitForSelector('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="false"]', { timeout: 8000 });
+                    check(true, 'run-detail: re-clicking the dev row collapses it back (data-node-expanded="false")');
+                  } catch {
+                    check(false, 'run-detail: re-clicking the dev row collapses it back (data-node-expanded="false")');
+                  }
+                }
+              }
+
         },
       },
       {
