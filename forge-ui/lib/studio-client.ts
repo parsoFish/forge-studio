@@ -73,6 +73,20 @@ export type Run = {
    * run carries just its own flow id.
    */
   flowLineage: string[];
+  /**
+   * R2-08-F4 (ADR-027 amendment) / R6-01 WI-2: what started this run —
+   * mirrors `orchestrator/run-model.ts`'s `Run.trigger` verbatim. Absent
+   * when the run carries no derivable provenance (a plain
+   * architect-originated run) — NEVER a fabricated default. `kind` is left
+   * as `string` rather than importing `TriggerKindId` (an orchestrator-side
+   * type this client-only module cannot pull in — see this file's header
+   * for the re-declare-client-side convention).
+   */
+  trigger?: {
+    kind: string;
+    source: string;
+    scope: string | null;
+  };
 };
 
 export type AgentRuntime = {
@@ -555,6 +569,10 @@ export function parseRun(raw: unknown): Run {
     failNote:      r.failNote,
     workItems:     r.workItems     ?? [],
     flowLineage:   r.flowLineage   ?? [],
+    // R6-01 WI-2: carried through, never defaulted — an absent `trigger` key
+    // must stay absent (declared-data-fails-open guard: this field was
+    // parsed and served end-to-end already, then silently dropped here).
+    ...(r.trigger !== undefined ? { trigger: r.trigger } : {}),
   };
 }
 
