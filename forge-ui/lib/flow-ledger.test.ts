@@ -42,6 +42,22 @@
  *   `run.reflectionLost` are already-derived, already-consumed-elsewhere
  *   fields (RunRail.tsx:239-248 gateNote, :276-287 failNote, :293-306
  *   reflectionLost/reflectionLostNote) — read here verbatim, not re-derived.
+ *
+ * (ROUND 2, D10 — merged) `run.status === 'complete'` implies a
+ *   CONFIRMED remote PR merge — traced this round to `_queue/merged/` and
+ *   `_queue/done/`'s single production writer chain
+ *   (`orchestrator/phases/closure.ts:334`'s `terminalMove(..., 'merged')`,
+ *   gated on `confirmPrMerged` — `orchestrator/pr.ts:778`, fails closed —
+ *   `promoteMergedToDone`'s two callers are equally gated); `run-model.ts`'s
+ *   `QUEUE_STATE_TO_RUN_STATUS` maps both dirs to `'complete'`. See
+ *   `history-ledger.test.ts`'s D10 header note for the full trail.
+ *
+ * (ROUND 2, D10 — work-items) `run.workItems` (already on the client `Run`
+ *   type, already carried verbatim by `parseRun`) feeds a `done`/`total`
+ *   count — `done` is the count of `status === 'complete'` entries, `total`
+ *   is `.length`. Measured non-fabricated: `orchestrator/run-model.test.ts`'s
+ *   real-fixture test (a genuine archived cycle's 501-line event log)
+ *   asserts `run.workItems?.length === 5`, and passes.
  */
 import { test, expect } from 'vitest';
 
@@ -99,7 +115,13 @@ test("D9 TRAP: a NON-dev node's retries (a real error count, e.g. adversarial-re
   // rendering "gate failed ×4" for it would misreport what actually
   // happened. The task brief names this exact defect verbatim: "A test that
   // lets 'review N gate fails' pass is a defect."
-  const run = baseRun({ phaseMeta: { 'adversarial-review': meta({ retries: 4 }) } });
+  // status: 'active' (round 2, D10) — deliberately NOT the baseRun() default
+  // 'complete': this test's own point is isolated to D9 (retries never
+  // masquerade as gate-fails/findings), and the strict `toEqual([])` below
+  // would otherwise also have to account for the new `merged` segment
+  // (round 2 adds it whenever status === 'complete') — an unrelated concern
+  // that has its own dedicated coverage below.
+  const run = baseRun({ status: 'active', phaseMeta: { 'adversarial-review': meta({ retries: 4 }) } });
   const segments = deriveFlowLedgerSegments(run);
 
   expect(segments.find((s) => s.kind === 'gate-fails')).toBeUndefined();
@@ -173,9 +195,100 @@ test('deriveFlowLedgerSegments: gateNote/failNote/reflectionLost feed their own 
   expect(deriveFlowLedgerSegments(lostReflection)).toContainEqual({ kind: 'reflection-lost', cause: 'crash' });
 });
 
-test('deriveFlowLedgerSegments: an ordinary run (no gate/fail/reflection-loss/retries/findings) produces an EMPTY segment list, not a placeholder', () => {
-  const run = baseRun();
+test('deriveFlowLedgerSegments: an ordinary NOT-YET-COMPLETE run (no gate/fail/reflection-loss/retries/findings/merge) produces an EMPTY segment list, not a placeholder', () => {
+  // status: 'active' — the "nothing true to say yet" case (D3's null-is-
+  // honest rule stays reachable). A 'complete' run is covered by the very
+  // next test — see that test's header for why 'complete' is no longer
+  // empty as of round 2 (D10).
+  const run = baseRun({ status: 'active' });
   expect(deriveFlowLedgerSegments(run)).toEqual([]);
+});
+
+test("deriveFlowLedgerSegments ROUND 2 (D10) HEADLINE FIX: a cleanly COMPLETE run (no gate/fail/reflection-loss/retries/findings, no workItems) now produces {kind:'merged'} — round 1 rendered this exact case as an empty narrative, the initiative's own headline column blank for the runs an operator most wants summarised", () => {
+  // KILLS: an implementation that still treats 'complete' as just another
+  // "nothing exceptional happened" status (round 1's shape, now a defect —
+  // see history-ledger.test.ts's D10 note for the confirmPrMerged trace
+  // proving status 'complete' ⟹ a confirmed remote PR merge, so 'merged' is
+  // a grounded fact, not decoration).
+  const run = baseRun({ status: 'complete' });
+  expect(deriveFlowLedgerSegments(run)).toEqual([{ kind: 'merged' }]);
+});
+
+test('deriveFlowLedgerSegments: a NOT-complete run (gated/active/planned/failed) never carries a merged segment — merged is earned by status, not fabricated for an in-flight or failed run', () => {
+  // KILLS: an implementation that emits `merged` unconditionally, or keys it
+  // off something OTHER than the run's own status field (e.g. "any run with
+  // no failNote").
+  for (const status of ['planned', 'active', 'gated', 'failed'] as const) {
+    const run = baseRun({ status });
+    expect(deriveFlowLedgerSegments(run).find((s) => s.kind === 'merged')).toBeUndefined();
+  }
+});
+
+// ---------------------------------------------------------------------------
+// deriveFlowLedgerSegments — ROUND 2 (D10): work-items, the mockup's own
+// opening beat. Sourced from run.workItems (already client-visible, already
+// carried verbatim by parseRun) — done/total are COUNTED (a status tally,
+// not a dollar re-summation, so this is a different act from D8's rule),
+// never fabricated when workItems is empty/absent.
+// ---------------------------------------------------------------------------
+
+test('deriveFlowLedgerSegments: a populated workItems array feeds a work-items segment — done counts ONLY status===\'complete\', total is .length', () => {
+  const run = baseRun({
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'retrying' },
+    ],
+  });
+  expect(deriveFlowLedgerSegments(run)).toContainEqual({ kind: 'work-items', done: 2, total: 3 });
+});
+
+test('deriveFlowLedgerSegments: an empty workItems array produces NO work-items segment — never a fabricated "dev 0/0"', () => {
+  const run = baseRun({ workItems: [] });
+  expect(deriveFlowLedgerSegments(run).find((s) => s.kind === 'work-items')).toBeUndefined();
+});
+
+test('deriveFlowLedgerSegments: workItems left undefined (never even fetched) produces NO work-items segment', () => {
+  const run = baseRun({ workItems: undefined });
+  expect(deriveFlowLedgerSegments(run).find((s) => s.kind === 'work-items')).toBeUndefined();
+});
+
+test('deriveFlowLedgerSegments: work-items "done" only counts \'complete\' — pending/active/retrying/failed WIs all count toward total but NOT done', () => {
+  // KILLS: a derivation that counts anything-not-'pending' as done (would
+  // wrongly credit a 'retrying'/'failed' WI), or that counts total from
+  // something other than the array's own length.
+  const run = baseRun({
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'active' },
+      { id: 'WI-3', status: 'pending' },
+      { id: 'WI-4', status: 'failed' },
+    ],
+  });
+  expect(deriveFlowLedgerSegments(run)).toContainEqual({ kind: 'work-items', done: 1, total: 4 });
+});
+
+test('deriveFlowLedgerSegments: THE HEADLINE ARC — populated workItems + a completed run renders work-items BEFORE merged (the mockup\'s own worked example opens on the dev fan-out, closes on merged)', () => {
+  const run = baseRun({
+    status: 'complete',
+    workItems: [
+      { id: 'WI-1', status: 'complete' },
+      { id: 'WI-2', status: 'complete' },
+      { id: 'WI-3', status: 'complete' },
+    ],
+  });
+  expect(deriveFlowLedgerSegments(run)).toEqual([
+    { kind: 'work-items', done: 3, total: 3 },
+    { kind: 'merged' },
+  ]);
+});
+
+test('deriveFlowLedgerSegments: a merged run whose reflection was lost carries BOTH segments, merged BEFORE reflection-lost (mirrors the real event order — closure.ts moves merged/->done/ THEN reflection runs and can crash, R4-11-F1)', () => {
+  const run = baseRun({ reflectionLost: 'crash' } as Partial<Run>); // status stays 'complete' (baseRun default)
+  expect(deriveFlowLedgerSegments(run)).toEqual([
+    { kind: 'merged' },
+    { kind: 'reflection-lost', cause: 'crash' },
+  ]);
 });
 
 // ---------------------------------------------------------------------------
@@ -235,12 +348,31 @@ test('deriveFlowLedgerRows: an empty run list yields an empty row list, never a 
 test('deriveFlowLedgerRows: each row carries its OWN run\'s narrative — a neighbour\'s gate-fails never bleeds across rows', () => {
   // KILLS: a shared/hoisted segment computation that accidentally reuses
   // the previous row's segments (e.g. a loop variable capture bug).
+  //
+  // ROUND 2 (D10) UPDATE: both fixtures below default to `status: 'complete'`
+  // (baseRun()'s own default, unchanged) — round 1 pinned rowB's narrative as
+  // `null` here, which is EXACTLY the defect this round's headline fix
+  // closes (a merged run's narrative was empty). rowA now ALSO carries
+  // 'merged' (it was never gated away from status 'complete' either) — the
+  // row-isolation point this test exists for is unchanged: rowA's
+  // gate-fails still never leaks onto rowB.
   const gatedFails = baseRun({ id: 'a', phaseMeta: { dev: meta({ retries: 2 }) }, startedAt: '2026-01-01T00:00:00Z' });
   const clean = baseRun({ id: 'b', startedAt: '2026-01-02T00:00:00Z' });
   const rows = deriveFlowLedgerRows([gatedFails, clean]);
 
   const rowA = rows.find((r) => r.id === 'a');
   const rowB = rows.find((r) => r.id === 'b');
-  expect(rowA?.narrative).toBe('gate failed ×2');
-  expect(rowB?.narrative).toBeNull();
+  expect(rowA?.narrative).toBe('gate failed ×2 → merged');
+  expect(rowB?.narrative).toBe('merged');
+});
+
+test('deriveFlowLedgerRows: an in-flight (not-yet-complete) run still renders narrative: null — the null branch stays reachable, never filler', () => {
+  // KILLS: an implementation that, having grown the 'merged' segment,
+  // accidentally makes SOME segment fire for every run regardless of status
+  // — collapsing renderNarrative's honest-null branch to unreachable code
+  // (D3's "nothing true to say -> null, never filler" rule would then be
+  // untestable, exactly the risk round 2's own task brief calls out).
+  const run = baseRun({ id: 'in-flight', status: 'active' });
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.narrative).toBeNull();
 });

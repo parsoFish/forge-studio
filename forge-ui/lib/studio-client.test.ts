@@ -315,3 +315,104 @@ test('parseRun carries reflectionLost independently of reflectionLostNote — a 
   expect(parsed.reflectionLost).toBe('max-turns');
   expect('reflectionLostNote' in parsed).toBe(false);
 });
+
+// ---------------------------------------------------------------------------
+// parseRun — FIELD-PARITY PIN (R6-05 Task A, round 2)
+//
+// `parseRun` has now dropped a declared `Run` field on THREE separate
+// occasions: `trigger` (a prior initiative, fixed — see this file's header
+// comment on `parseRun`'s own `trigger` line, studio-client.ts:572-575),
+// then `reflectionLost` + `reflectionLostNote` (the two tests directly
+// above, this initiative). Each time, the field was declared on the client
+// `Run` type, served correctly by the bridge, and silently discarded at
+// parseRun's last hop — because `parseRun` enumerates its return object's
+// fields BY HAND, and a newly-added field is trivial to forget to list.
+//
+// FEASIBILITY, decided: closing the whole CLASS (not just another instance)
+// requires generalising "does parseRun carry every declared field" WITHOUT
+// hand-listing the fields again here — a second manually-maintained
+// enumeration would be exactly as forgettable as `parseRun`'s own. The
+// mechanism below avoids that: `raw` is typed `Required<Run>`. TypeScript's
+// `-?` mapped-type modifier strips every field's optionality, so this object
+// literal fails to typecheck unless EVERY key currently declared on `Run` is
+// present with a real value. When a fourth field is added to `Run`, this
+// fixture must grow to include it (or a human's editor/a manually-run `tsc`
+// flags it); once it's added here, the RUNTIME loop below picks it up
+// automatically — it iterates `Object.keys(raw)`, not a second hand-written
+// list — so extending coverage to a new field needs no test-CODE change,
+// only a fixture-VALUE addition. This is the same compile-time-backstop
+// idiom `history-ledger.test.ts`'s type-level exhaustiveness pin already
+// uses for a closed union, applied here to a record's fields instead.
+//
+// HONEST CAVEAT (measured this round, see `history-ledger.test.ts`'s D10
+// header note for the full trail): this compile-time backstop is NOT a CI
+// gate in this repo today. `forge-ui/tsconfig.json` excludes `**/*.test.ts`
+// from its own `include`, and the root `tsconfig.json` never lists
+// `forge-ui/**` — so neither `tsc` (root `npm run build`) nor `next build`
+// (forge-ui's own build) ever type-checks this file; verified directly by
+// running `npx tsc --noEmit -p forge-ui/tsconfig.json` unmodified (exits 0
+// despite sibling test files in this same round importing modules that do
+// not exist on disk) and then re-running with `include` widened to cover
+// test files, which immediately surfaces those exact errors. So a fourth
+// field added WITHOUT updating this fixture will not fail CI on its own —
+// but the RUNTIME loop below, which IS CI-enforced (`npm run test:ui`),
+// covers every field ALREADY present in the fixture today (all 20 of them,
+// including the two that are currently silently dropped), which is
+// strictly more than the two hand-picked instance tests above cover
+// individually, and it costs nothing extra to extend once a field is added
+// to the fixture for any reason (including just to satisfy the type error).
+//
+// NOT COVERED (deliberately, per the task brief): this pin proves parseRun
+// carries every declared FIELD through. It does NOT prove the client `Run`
+// type admits every VALUE the server can produce — `origin` is typed
+// `'architect' | 'human-directed'` here, and the fixture below literally
+// cannot assign `'triggered'` (which the server CAN produce, per
+// `orchestrator/run-model.ts`'s `VALID_ORIGINS`) without a compile error.
+// That is bead forge-cv9's separate defect (the type admitting every
+// server-produced VALUE, not whether a field survives parsing) —
+// deliberately not stretched into this pin.
+// ---------------------------------------------------------------------------
+
+test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type survives a fully-populated raw payload, verbatim', () => {
+  // KILLS: parseRun silently omitting ANY field from its return object's
+  // hand-enumerated field list — the exact defect class `trigger` and
+  // `reflectionLost`/`reflectionLostNote` both hit (see the two tests
+  // directly above). Fails at whichever specific key is dropped, current or
+  // future.
+  //
+  // Every field below is set to a value DIFFERENT from parseRun's own `??`
+  // fallback default (status/origin/costUsd), and every object/array field
+  // is non-empty, so a defaulted-instead-of-carried field cannot
+  // coincidentally match the expectation.
+  const raw: Required<Run> = {
+    id: 'CYCLE-field-parity-probe',
+    flowId: 'forge-develop',
+    initiativeId: 'INIT-field-parity',
+    initiative: 'Field parity probe',
+    status: 'complete',        // NOT parseRun's default ('planned')
+    origin: 'architect',       // NOT parseRun's default ('human-directed')
+    costUsd: 9.99,               // NOT parseRun's default (0)
+    startedAt: '2026-01-01T00:00:00Z',
+    phases: { dev: 'complete' },                        // non-empty (default would be {})
+    phaseMeta: { dev: { costUsd: 1.5, retries: 2 } },    // non-empty
+    artifactsReady: { plan: 'view' },                    // non-empty
+    gate: 'demo',
+    gateNote: 'needs you',
+    failedAt: '2026-01-02T00:00:00Z',
+    failNote: 'CI red on merge',
+    reflectionLost: 'crash',
+    reflectionLostNote: 'reflector process exited with SIGSEGV mid brain-write',
+    workItems: [
+      { id: 'WI-1', status: 'complete', costUsd: 1.2, task: 'do the thing', dependsOn: ['WI-0'], delivered: { files: 2, insertions: 10, commits: 1 } },
+    ],
+    flowLineage: ['forge-develop'],
+    trigger: { kind: 'schedule', source: 'cron', scope: null },
+  };
+
+  const parsed = parseRun(raw);
+
+  for (const key of Object.keys(raw) as (keyof Run)[]) {
+    expect(parsed[key], `field "${key}" was dropped (undefined) by parseRun`).not.toBeUndefined();
+    expect(parsed[key], `field "${key}" was mutated, not carried through verbatim`).toEqual(raw[key]);
+  }
+});

@@ -21,7 +21,9 @@
  *     | { kind: 'review-findings'; total: number; blocker: number; major: number; minor: number; info: number }
  *     | { kind: 'gate-waiting'; note: string }
  *     | { kind: 'failed'; note: string }
- *     | { kind: 'reflection-lost'; cause: string };
+ *     | { kind: 'reflection-lost'; cause: string }
+ *     | { kind: 'merged' }                                       // ROUND 2, D10 below
+ *     | { kind: 'work-items'; done: number; total: number };     // ROUND 2, D10 below
  *
  *   export function renderSegment(seg: LedgerSegment): string;
  *   export function renderNarrative(segments: LedgerSegment[]): string | null;
@@ -56,6 +58,77 @@
  *     explicit `nowMs`, never reads `Date.now()` or `toLocaleString()`
  *     internally.
  *   D8 — cost is `run.costUsd`, read never re-summed.
+ *
+ *   D10 (ROUND 2 amendment) — the round-1 vocabulary was ALL-EXCEPTIONAL: its
+ *     five kinds can only say what went WRONG, so a cleanly merged run (the
+ *     outcome an operator most wants summarised) rendered `null` — an empty
+ *     headline column for exactly the runs that succeeded. Two POSITIVE
+ *     segments close that gap:
+ *
+ *       - `{kind:'merged'}` -> `'merged'`. Grounded, not decorative: I traced
+ *         `_queue/done/` + `_queue/merged/` to their ONE production writer
+ *         chain — `terminalMove(..., 'merged')` (orchestrator/phases/
+ *         closure.ts:334) fires ONLY after `confirm(...)` (defaults to
+ *         `confirmPrMerged`, orchestrator/pr.ts:778) returns true, and
+ *         `confirmPrMerged` fails CLOSED (`gh pr view --json state` ==
+ *         'MERGED', false on every other outcome including `gh` itself being
+ *         absent). `promoteMergedToDone` (orchestrator/queue.ts:143) then
+ *         moves merged/ -> done/, with exactly two callers
+ *         (finalize-merged.ts:252, flow-runner.ts's execReflect via
+ *         phases/closure.ts:145), both themselves gated on that same
+ *         confirmed-merge boolean. `run-model.ts`'s
+ *         `QUEUE_STATE_TO_RUN_STATUS` maps BOTH `merged` and `done` to
+ *         `RunStatus: 'complete'` — no other writer of either directory
+ *         exists (grepped; the only other references are recovery/count
+ *         READS). So `run.status === 'complete' ⟹ a confirmed remote PR
+ *         merge`, independently re-verified this round.
+ *       - `{kind:'work-items'; done: number; total: number}` -> `'dev
+ *         N/M'`, sourced from `run.workItems` (never re-derived — a plain
+ *         count of `status === 'complete'` vs `.length`, not a dollar
+ *         re-summation, so this is a different act than the D8 rule it
+ *         sits beside). Measured non-fabricated per this campaign's
+ *         standing refusal precedent: `orchestrator/run-model.test.ts`'s
+ *         `complete-release-definition real fixture` test (a REAL 501-line
+ *         archived cycle event log, `orchestrator/run-model.fixtures/
+ *         complete-release-definition.events.jsonl`) asserts
+ *         `run.workItems?.length === 5` and passes (executed this round,
+ *         `node --test --experimental-strip-types orchestrator/
+ *         run-model.test.ts`, exit 0) — `deriveWorkItems`
+ *         (run-model-derive.ts:432) populates it whenever ANY dev-phase
+ *         event carries a `WI-*` `work_item_id`, which every real develop
+ *         cycle's PM/dev-loop phases do. Both segments are OMITTED (never
+ *         rendered as a zero/empty fact) when their source is empty —
+ *         `merged` only when `status === 'complete'`; `work-items` only
+ *         when `workItems.length > 0` — the same honest-omit discipline D3
+ *         already establishes for the five round-1 kinds.
+ *
+ *   COMPILE-TIME-BACKSTOP CAVEAT (discovered this round, applies to BOTH the
+ *   type-level exhaustiveness test below and the sibling FIELD-PARITY pin in
+ *   studio-client.test.ts): `forge-ui/tsconfig.json` itself excludes
+ *   `**\/*.test.ts` (`"exclude": ["node_modules", "**\/*.test.ts"]`,
+ *   deliberately, per its own inline comment), and the ROOT `tsconfig.json`'s
+ *   `include` never lists `forge-ui/**` at all — so NEITHER `tsc` (root
+ *   `npm run build`) NOR `next build` (forge-ui's own build, also part of
+ *   `npm run build`) ever type-checks this file. Verified directly this
+ *   round: `npx tsc --noEmit -p forge-ui/tsconfig.json` (forge-ui's real,
+ *   unmodified config) exits 0 with zero errors despite `flow-ledger.test.ts`
+ *   / `history-ledger-render.test.ts` importing modules that do not exist on
+ *   disk; re-running with `include` widened to cover test files immediately
+ *   surfaces those exact missing-module errors, confirming the EXCLUDE (not
+ *   some other cause) is what suppresses them. Net effect: the "exhaustive
+ *   switch" / "Required<T> fixture" compile-backstop pattern is a real,
+ *   useful signal to a human editing this file locally (an editor's TS
+ *   language service, or a manually-run broader `tsc`), but it is NOT a CI
+ *   gate in this repo today — CI's `npm run build` step will not fail if a
+ *   sixth/eighth `LedgerSegment` member (or a new `Run` field) is added
+ *   without updating the fixture here. The RUNTIME half of each such test
+ *   (the sample-based equality checks) IS CI-enforced via `npm run test:ui`,
+ *   but only for the KNOWN samples each test already lists — it cannot, by
+ *   construction, catch a member nobody has added a sample for yet. Flagging
+ *   for the coordinator: closing this for real needs a CI step that runs
+ *   `tsc` over forge-ui's test files too (out of scope for a test-writer to
+ *   add unilaterally — it is a build/CI-config change, not an acceptance
+ *   test).
  */
 import { test, expect } from 'vitest';
 
@@ -72,7 +145,7 @@ import {
 // renderSegment / renderNarrative — the closed vocabulary (D3)
 // ---------------------------------------------------------------------------
 
-test('renderSegment: each of the five known segment kinds renders its exact, pinned string', () => {
+test('renderSegment: each of the SEVEN known segment kinds renders its exact, pinned string', () => {
   // KILLS: a renderer that ignores `kind` and returns one generic string for
   // every segment, or that renders a DIFFERENT wording than the one other
   // surfaces already established (gate-fails mirrors D9's own literal
@@ -86,6 +159,13 @@ test('renderSegment: each of the five known segment kinds renders its exact, pin
   expect(renderSegment({ kind: 'gate-waiting', note: 'needs you' })).toBe('gated: needs you');
   expect(renderSegment({ kind: 'failed', note: 'CI red on merge' })).toBe('failed: CI red on merge');
   expect(renderSegment({ kind: 'reflection-lost', cause: 'crash' })).toBe('reflection lost: crash');
+  // ROUND 2 (D10) — the two POSITIVE-arc segments (see header). KILLS: a
+  // renderer with no case for these two kinds (falls through to `undefined`
+  // or throws), and one that fabricates punctuation/casing not pinned here
+  // ("Merged.", "MERGED", "dev: 3/3").
+  expect(renderSegment({ kind: 'merged' })).toBe('merged');
+  expect(renderSegment({ kind: 'work-items', done: 3, total: 3 })).toBe('dev 3/3');
+  expect(renderSegment({ kind: 'work-items', done: 1, total: 3 })).toBe('dev 1/3');
 });
 
 test('renderNarrative: segments join with " → ", in the array order given (join, not re-sort)', () => {
@@ -122,9 +202,9 @@ test('renderNarrative: a SINGLE segment renders with no arrow at all', () => {
 // failed" phrased for review — "A test that lets 'review N gate fails' pass
 // is a defect", quoted verbatim from the task brief). Every non-empty piece
 // of every rendered narrative, split on ' → ', must match ONE of exactly
-// five anchored patterns — proving no free-typed/authored prose, no sixth
-// segment kind, and no D9 violation can reach the rendered output across
-// this whole battery.
+// SEVEN anchored patterns (five round-1 + two round-2 positive-arc kinds,
+// D10) — proving no free-typed/authored prose, no eighth segment kind, and
+// no D9 violation can reach the rendered output across this whole battery.
 // ---------------------------------------------------------------------------
 
 const VOCAB_PATTERNS: RegExp[] = [
@@ -133,6 +213,8 @@ const VOCAB_PATTERNS: RegExp[] = [
   /^gated: .+$/,
   /^failed: .+$/,
   /^reflection lost: .+$/,
+  /^merged$/,
+  /^dev \d+\/\d+$/,
 ];
 
 function assertOnlyKnownVocabulary(narrative: string | null, label: string): void {
@@ -145,11 +227,13 @@ function assertOnlyKnownVocabulary(narrative: string | null, label: string): voi
 
 test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures matches the closed vocabulary — no free-typed prose can leak through', () => {
   const battery: Array<{ label: string; segments: LedgerSegment[] }> = [
-    { label: 'all five at once (worst case)', segments: [
+    { label: 'all seven at once (worst case)', segments: [
+      { kind: 'work-items', done: 2, total: 3 },
       { kind: 'gate-fails', count: 5 },
       { kind: 'review-findings', total: 9, blocker: 2, major: 3, minor: 4, info: 0 },
       { kind: 'gate-waiting', note: 'comment unresolved' },
       { kind: 'failed', note: 'scope violation' },
+      { kind: 'merged' },
       { kind: 'reflection-lost', cause: 'budget-exhausted' },
     ] },
     { label: 'gate-fails alone, count 1', segments: [{ kind: 'gate-fails', count: 1 }] },
@@ -157,6 +241,11 @@ test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures 
     { label: 'gate-waiting alone with punctuation in the note', segments: [{ kind: 'gate-waiting', note: 'AC-2 not met; awaiting fix' }] },
     { label: 'failed alone with an arrow-shaped note (must not be mistaken for a joiner)', segments: [{ kind: 'failed', note: 'pipeline → CI step 3 timed out' }] },
     { label: 'reflection-lost alone', segments: [{ kind: 'reflection-lost', cause: 'interrupted' }] },
+    // ROUND 2 (D10) — the two positive-arc kinds, standalone.
+    { label: 'merged alone', segments: [{ kind: 'merged' }] },
+    { label: 'work-items alone, all done', segments: [{ kind: 'work-items', done: 3, total: 3 }] },
+    { label: 'work-items alone, partial progress (an in-flight run)', segments: [{ kind: 'work-items', done: 1, total: 3 }] },
+    { label: 'the headline round-2 arc: dev fan-out then merged, nothing exceptional', segments: [{ kind: 'work-items', done: 3, total: 3 }, { kind: 'merged' }] },
     { label: 'empty (nothing to say)', segments: [] },
   ];
 
@@ -165,14 +254,22 @@ test('EXHAUSTIVE: every segment kind produced across a wide battery of fixtures 
   }
 });
 
-test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY five members — this file fails to typecheck if a sixth is added without updating this pin', () => {
+test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY seven members — this file fails to typecheck if an eighth is added without updating this pin', () => {
   // A compile-time backstop to the runtime battery above: TypeScript's
   // exhaustiveness checking means the `default` branch below only typechecks
   // if `seg` has been narrowed to `never` — i.e. every LedgerSegment member
-  // was handled by an EARLIER case. Adding a sixth variant to the real union
-  // without updating this switch makes `assertNever`'s argument type
-  // mismatch, failing `tsc`/`next build` (this repo's own real typecheck
-  // gate) even though vitest itself does not type-check .ts files.
+  // was handled by an EARLIER case. Adding an eighth variant to the real
+  // union without updating this switch makes `assertNever`'s argument type
+  // mismatch — a real error an editor's TS language service (or a manually
+  // run `tsc`) surfaces immediately. CAVEAT (measured this round, see the
+  // header's "COMPILE-TIME-BACKSTOP CAVEAT"): this does NOT actually fail
+  // `npm run build` in THIS repo's CI — `forge-ui/tsconfig.json` excludes
+  // `**/*.test.ts` from its own `include`, and the root `tsconfig.json`
+  // never lists `forge-ui/**`, so no CI step ever runs `tsc` over this file.
+  // Only the RUNTIME half below (which vitest DOES run in CI, `npm run
+  // test:ui`) is actually enforced — and, honestly, only for the samples
+  // listed, which is why round 2 adds the two new kinds to the `samples`
+  // array below rather than leaving them compile-only.
   function assertNever(x: never): never {
     throw new Error(`unhandled LedgerSegment kind: ${JSON.stringify(x)}`);
   }
@@ -183,6 +280,8 @@ test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY five members — this f
       case 'gate-waiting': return renderSegment(seg);
       case 'failed': return renderSegment(seg);
       case 'reflection-lost': return renderSegment(seg);
+      case 'merged': return renderSegment(seg);
+      case 'work-items': return renderSegment(seg);
       default: return assertNever(seg);
     }
   }
@@ -196,6 +295,8 @@ test('EXHAUSTIVE (type level): LedgerSegment has EXACTLY five members — this f
     { kind: 'gate-waiting', note: 'x' },
     { kind: 'failed', note: 'x' },
     { kind: 'reflection-lost', cause: 'crash' },
+    { kind: 'merged' },
+    { kind: 'work-items', done: 2, total: 3 },
   ];
   for (const s of samples) {
     expect(exhaustiveRender(s)).toBe(renderSegment(s));
