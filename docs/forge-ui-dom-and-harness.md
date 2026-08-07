@@ -41,7 +41,34 @@ inventory rather than one shared page-level contract:
   `data-hex-kind="phase"`. A single **flowLineage** run threads across
   chained flow definitions (`forge-architect` → `forge-develop` →
   `forge-reflect`) — each renders only its own slice of nodes, so
-  switching `/flows/<flowId>` changes which hexes appear. BUILD renders
+  switching `/flows/<flowId>` changes which hexes appear. MONITOR also
+  carries the **history ledger** (R6-05, `HistoryLedger.tsx`):
+  `[data-section="history-ledger"][data-ledger-count]`, with an explicit
+  `[data-component="history-ledger-empty"]` when a flow has no runs (never a
+  fabricated placeholder row). Each row is a real anchor —
+  `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]
+  [data-ledger-cost-usd][data-ledger-narrative][data-narrative-kinds]` — whose
+  `href` is its `/flows/[id]/run/[runId]` detail page. Notes on the vocabulary,
+  because each is load-bearing rather than stylistic:
+  - `data-run-when` is the **raw ISO** `run.startedAt`; the visible column is a
+    relative string computed from an explicitly-passed `nowMs`, never
+    `Date.now()` or `toLocaleString()` — an ambient-locale or wall-clock
+    dependence would make any journey assertion a flake.
+  - `data-ledger-cost-usd` is bare `.toFixed(2)` (no `$`; the `$` appears only
+    in display text) and is deliberately **not** `data-run-cost-usd`, which
+    `MonitorSummary.tsx` already emits at `.toFixed(4)` — reusing that name
+    would make one attribute mean two precisions.
+  - `data-narrative-kinds` is the **authoritative machine surface**: the
+    ordered, comma-joined segment kinds from a closed seven-member vocabulary
+    (`work-items · gate-fails · review-findings · gate-waiting · failed ·
+    merged · reflection-lost`). Automation asserts on THIS, never by parsing
+    `data-ledger-narrative`, whose two note-bearing kinds embed run-sourced
+    free text. Both come from one derivation call, so they cannot disagree
+    about order. Segment order is the run's chronology, not `phaseMeta` key
+    order (those keys are events-derived).
+  - Both narrative attributes are **omitted entirely** when a run has nothing
+    true to say — never rendered as `""`.
+  BUILD renders
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
   per-node `[data-flow-node][data-node-id][data-agent-ref]`, and
@@ -914,6 +941,19 @@ inventory rather than one shared page-level contract:
   ledgers are the remaining unattached consumers** — this bullet is the place
   to amend when they land.
 
+  ⚑ **R6-05 amendment (2026-08-08): the flow history ledger landed WITHOUT
+  attaching this vocabulary, deliberately.** Trigger provenance is not among
+  R6-05-F1's acceptance criteria, and the ledger row links to the run-detail
+  page, which already renders `[data-trigger-kind][data-trigger-source]
+  [data-trigger-scope]` (R6-01-F4) — so the provenance is one click away, not
+  lost. The reason for deferring rather than adding it here: `LedgerRow` is a
+  **shared** type that R6-06's agent ledger reuses, so adding `trigger` to it
+  when R6-06 lands attaches the vocabulary to BOTH ledger surfaces in one
+  change, instead of one now and one later with two chances to diverge.
+  **R6-06 is therefore the remaining unattached consumer, and it inherits this
+  bullet.** Recorded as a deliberate deferral with its reason rather than left
+  as a silently unmet intention.
+
 The shared status vocabularies:
 
 - **Pipeline/WI 5-state** — `pending | active | complete | retrying |
@@ -943,11 +983,11 @@ breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 12 user-story journeys in
+is a thin runner over 13 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `skills`, `hooks`, `templates`,
 `connections`, `stand-up-onboard`, `stand-up-create`, `knowledge`, `agents`,
-`flows-author`, `flows-run`, `roadmap`, `demo-builder` (RUN_ORDER's own
-sequence, `index.mjs`) — one file per journey (plus
+`flows-author`, `flows-run`, `roadmap`, `demo-builder`, `community`
+(RUN_ORDER's own sequence, `index.mjs`) — one file per journey (plus
 `index.mjs`, the registry/run-order module — not itself a journey), each
 mapping to a capability-diagram user story rather than a step of one
 linear cycle. The standalone `swap-runtime` journey was retired
