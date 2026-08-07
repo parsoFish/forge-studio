@@ -114,13 +114,80 @@ real content, checked in both the DOM and the raw API response.
 `scripts/e2e-deadpaths.mjs` covers the new route's honest 404 path with an
 unknown runId.
 
+### R6-B6 Run-observability depth: live drawer, run-detail page, per-node logs (R6-01 F1+F4+F5, 2026-08-07)
+
+**Partial absorption** — R6-01's F1, F4 and F5 landed in wave 5 batch C; F2
+(health/liveness strip) and F3 (activity-view verdict) remain `planned`, so
+the initiative entry stays open and this baseline covers only what shipped.
+
+**F1 — the hex drawer's phase log is genuinely live.** `RunPhaseMeta` gains an
+additive `lastEventAt`, derived in `orchestrator/run-model-derive.ts` over
+EVERY event attributed by the existing `eventToNodeId` — unlike
+`lastProgressAt`, which is filtered to `PROGRESS_EVENT_TYPES` and so excludes
+**7 of the 11** real `EventType` members. A node narrating only via
+`log`/`error` never re-fired the drawer's fetch before this. The client
+collapses to `phaseLogRefreshSignal(run, nodeId)`
+(`forge-ui/lib/phase-log-refresh.ts`) reading that server-attributed field —
+the attribution is NOT re-derived client-side, because only 4 of 12 phase
+strings equal their node id. **No new emission path**: the existing 200ms
+`events.jsonl` poll-tail + WebSocket broadcast (`cli/ui-bridge.ts`) carries
+it, so ADR-025's deferred items stay deferred. A same-render terminal
+transition no longer drops a node's final line (its `end`, or for a failed
+node its `error` — the one line that says why it failed).
+
+**F4 — `/flows/[id]/run/[runId]`, the run-detail page**, live AND archived
+(both flow through the same `listRuns` path; `findRun` IS
+`listRuns(...).find(...)`). One timeline row per FLOW-DEFINITION node in
+`flow.yaml` order — including gate-only nodes and nodes that never ran —
+with per-node status, cost, derived note and honestly-empty artifacts;
+trigger provenance on R2-08-F4's reserved vocabulary; findings through the
+existing `ReviewFindingsPanel`. Reachable from a `RunRail` row's
+`[data-action="open-run-detail"]` anchor. **Derived from the event log,
+nothing stored** (ADR-008) — pinned by a test proving two reads create no
+file. `parseRun` now carries `run.trigger` instead of silently dropping it at
+the last client hop.
+
+**F5 — per-node line-level logs** through the **shared** `RunLog` +
+`deriveLogLine` (`think|tool|out`) that `/agents/[id]/run/[runId]` already
+uses — one component, two surfaces, extended at the INPUT. That required an
+additive **`raw=1`** mode on `GET /api/runs/<id>/phases/<node>/log`
+(mirroring its own `stderr=1` convention): the classified response computes
+the drawer's separate 6-kind vocabulary server-side and drops the raw
+`event_type` that `deriveLogLine` needs. `PhaseDrawer` never passes `raw=1`
+and its contract is unchanged, guarded by a regression test.
+
+**Rider:** R6-04's parked WI-6 — the read-only standing-triggers list on the
+agent kickoff panel (`RunPanel.tsx`) from `GET /api/triggers` — landed here,
+attaching the `[data-standing-trigger]` half of R2-08-F4's reserved
+vocabulary. Verified against the live roster rather than assumed: exactly one
+real agent (`reflector`, via `forge-develop`'s `on: merged` trigger) is
+targeted today, so the surface populates for a real agent and honestly empties
+for every other.
+
+**Honest gaps, deliberately shipped as such** (each with no producer behind
+it, so rendering one would assert a fact the system cannot know): per-finding
+`state` is NOT rendered (`ReviewFinding` has no such field); per-node
+artifacts and typed outputs are **always empty** (`artifactsReady` is
+run-level and keyed by artifact TYPE); per-node cost undercounts the architect
+phase **by construction** (it logs `cost_usd: 0` on completion). R2-05-F2's
+composed-output slice was **measured and deferred**, not skipped: no
+`composed` artifact kind exists, 7/7 on-disk templates are `file`/`git-state`,
+`AgentDefinition` has no output-surface field, and 0/10 real agents declare
+one. Journey coverage: `scripts/journeys/flows-run.mjs`'s
+`flows-run-detail-reachable` (reachability + the full destination contract +
+node expand/collapse) and the extended `flows-run-drawer-live-tail`, plus a
+`scripts/e2e-deadpaths.mjs` route for the flow run-detail 404 path.
+
 ## Planned initiatives
 
 ### R6-01 Run-observability depth
 
-- **Status:** planned  ·  **Wave:** unsequenced pre-wave-5; **F1+F4+F5 = wave
-  5, batch C (module: flow-run-detail)** — F1 pulled in as F5's hard
-  precursor (same emission substrate); F2/F3 stay unsequenced
+- **Status:** **implemented (F1+F4+F5, 2026-08-07, wave 5 batch C — see
+  baseline R6-B6)**; **F2+F3 remain `planned`** (unsequenced — a health/
+  liveness strip and the activity-view verdict, neither in batch C's scope)
+  ·  **Wave:** unsequenced pre-wave-5; **F1+F4+F5 = wave 5, batch C (module:
+  flow-run-detail)** — F1 pulled in as F5's hard precursor (same emission
+  substrate); F2/F3 stay unsequenced
 - **Depends on:** —
 - **Context:** The three recorded observability gaps in R6-B3: silent hex
   drawers, the unresolved activity-view rework, and no durable health
@@ -466,3 +533,25 @@ R4-11-F4 attention strip during real multi-project operation.
   coverage added: `scripts/journeys/agents.mjs`'s `agents-kickoff-*` arc (8
   beats) + a new `scripts/e2e-deadpaths.mjs` route for the run view's 404
   path.
+- 2026-08-07 — **R6-01 F1+F4+F5 implemented** (branch
+  `feat/r6-01-run-detail`, wave 5 batch C; WI-1 drawer live-refresh · WI-2
+  run-detail page · WI-3 per-node logs · WI-4 the unparked R6-04 standing-
+  triggers rider · WI-5 duties — see baseline **R6-B6**). Status →
+  `implemented (F1+F4+F5)`; **F2+F3 stay `planned`**, unsequenced.
+  Additive API surface, disclosed for batch-C ratification: `RunPhaseMeta.
+  lastEventAt` and a `raw=1` mode on the existing per-node phase-log route
+  (no new route). `parseRun` now carries `run.trigger` — it was derived,
+  served and then dropped at the last client hop. `found` on the run-detail
+  page is decided by HTTP **status** in **three** states (found / not-found /
+  unresolved), so a bridge outage can never render as "this run never
+  existed". Measured-and-deferred rather than skipped: **R2-05-F2**'s
+  composed-output slice (no `composed` artifact kind; 7/7 templates
+  `file`/`git-state`; no output-surface field; 0/10 agents declare one).
+  Shipped honest gaps: no per-finding `state`, per-node artifacts/typed
+  outputs always empty, architect per-node cost undercounts by construction.
+  Residue filed: `forge-irn` (R6-04's `run-view-client.ts` collapses
+  bridge-down into "not found" — the same class this initiative closed for
+  flow runs) and `forge-7wc` (`PhaseDrawer` Effect 1 has no `catch`).
+  Also corrected here: the DOM-contract doc's trigger-provenance paragraph
+  still claimed "no attribute below is attached to any DOM element", stale
+  once the first consuming surface landed.

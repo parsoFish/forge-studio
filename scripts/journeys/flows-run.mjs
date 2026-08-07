@@ -1700,7 +1700,7 @@ export const journey = defineJourney({
                 return; // nothing further is measurable without the page
               }
               await caption(page, 'Every node on the flow — not just the ones that happen to be running — with its own real cost and status.');
-              await frame(page, 'r6-01wi2-run-detail', 'R6-01 WI-2 — the flow run-detail page: every node, its own real cost and status, reached from the monitor run rail');
+              await frame(page, 'r6-01wi2-run-detail', 'R6-01 WI-2 — the flow run-detail page: every node, its own real cost and status, reached from the monitor run rail', { key: true });
 
               const attrs = await page.evaluate(() => {
                 const main = document.querySelector('main[data-page="flow-run"]');
@@ -1770,7 +1770,7 @@ export const journey = defineJourney({
                 const expandedNow = (await page.locator('[data-timeline-row="true"][data-node-id="dev"][data-node-expanded="true"]').count()) > 0;
                 if (expandedNow) {
                   await sleep(ACT);
-                  await frame(page, 'r6-01wi3-node-log', 'R6-01 WI-3 — a run-detail node expanded: that node\'s own log lines, through the shared RunLog renderer');
+                  await frame(page, 'r6-01wi3-node-log', 'R6-01 WI-3 — a run-detail node expanded: that node\'s own log lines, through the shared RunLog renderer', { key: true });
 
                   const detail = page.locator('[data-section="node-detail"][data-detail-for-node="dev"]').first();
                   check((await detail.count()) > 0, 'run-detail: [data-section="node-detail"][data-detail-for-node="dev"] renders once expanded');
