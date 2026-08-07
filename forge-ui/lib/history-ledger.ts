@@ -72,8 +72,12 @@ export function renderSegment(seg: LedgerSegment): string {
     case 'reflection-lost':
       // Mirrors RunRail.tsx:304's existing "reflection lost: {cause}" wording
       // verbatim — a second phrasing for the same fact would be vocabulary
-      // drift D3 forbids.
-      return `reflection lost: ${seg.cause}`;
+      // drift D3 forbids. `cause` is free text this module does not author
+      // (same as `gate-waiting`/`failed`'s `note`), so it is neutralized
+      // before interpolation too (D11, ROUND 5) — the joiner sequence must
+      // never appear inside a segment's own content, or a narrative split
+      // back apart by " → " desynchronizes into an extra, spurious piece.
+      return `reflection lost: ${neutralizeJoiner(seg.cause)}`;
     default: {
       const exhaustive: never = seg;
       return exhaustive;
@@ -120,21 +124,47 @@ export type LedgerRow = {
 };
 
 // ---------------------------------------------------------------------------
-// sortLedgerRowsNewestFirst — pure, immutable, missing-`when` handling
+// parseWhenMs — the ONE seam shared by sortLedgerRowsNewestFirst/formatWhen
+// ---------------------------------------------------------------------------
+
+/**
+ * Turn a raw `when`/`iso` string into a valid epoch-ms, or `null` if it
+ * carries no usable time. `null` covers every "no real time" shape alike —
+ * absent, empty, whitespace-only, or genuinely unparsable — by validating
+ * the PARSE RESULT (`Number.isFinite`) rather than the input's truthiness.
+ * A truthy-but-unparsable string (`'garbage'`) or a whitespace-only one
+ * (`'   '`, itself truthy in JS) must be treated exactly like an absent
+ * value everywhere "do we have a real time" is asked — that was the shared
+ * root cause of two prior defects here (a truthiness guard standing in for
+ * a validity check), one per caller. Both callers below go through this
+ * single helper so the definition of "valid" can never diverge between
+ * them again.
+ */
+function parseWhenMs(raw: string | undefined): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (!trimmed) return null;
+  const ms = new Date(trimmed).getTime();
+  return Number.isFinite(ms) ? ms : null;
+}
+
+// ---------------------------------------------------------------------------
+// sortLedgerRowsNewestFirst — pure, immutable, missing/invalid-`when` handling
 // ---------------------------------------------------------------------------
 
 /**
  * Sort rows newest-`when`-first, returning a NEW array (never mutates the
  * input — the standing "return new objects, never mutate inputs" rule). A
- * row with no `when` (empty string) sorts LAST, never first — a naive
- * ascending sort of `''` parsed as a Date yields `NaN`, whose comparator
- * behaviour is implementation-defined and could land an unstarted run at
- * the top of "most recent" history.
+ * row with no USABLE `when` — empty, whitespace-only, or unparsable —
+ * sorts LAST, never first: a naive sort keyed on `new Date(x).getTime()`
+ * yields `NaN` for any of those shapes, and `NaN` comparator behaviour is
+ * implementation-defined, which could land such a row at the top of "most
+ * recent" history instead of the bottom.
  */
 export function sortLedgerRowsNewestFirst(rows: LedgerRow[]): LedgerRow[] {
   return [...rows].sort((a, b) => {
-    const aMs = a.when ? new Date(a.when).getTime() : null;
-    const bMs = b.when ? new Date(b.when).getTime() : null;
+    const aMs = parseWhenMs(a.when);
+    const bMs = parseWhenMs(b.when);
     if (aMs === null && bMs === null) return 0;
     if (aMs === null) return 1;
     if (bMs === null) return -1;
@@ -153,13 +183,15 @@ const DAY_MS = 86_400_000;
 /**
  * Format an ISO timestamp relative to an explicit `nowMs` — never reads
  * `Date.now()` or calls `toLocaleString()` internally (D7), so the result
- * is byte-identical regardless of process TZ/locale. A run with no
- * `startedAt` renders the honest placeholder `'—'`, never a fabricated
- * time or an `Invalid Date` leak.
+ * is byte-identical regardless of process TZ/locale. A run with no usable
+ * `startedAt` — absent, empty, whitespace-only, or unparsable — renders the
+ * honest placeholder `'—'`, never a fabricated time or an `Invalid Date`
+ * leak (validated via the same `parseWhenMs` seam `sortLedgerRowsNewestFirst`
+ * uses, so the two can never disagree on what counts as a real time).
  */
 export function formatWhen(iso: string | undefined, nowMs: number): string {
-  if (!iso) return '—';
-  const thenMs = new Date(iso).getTime();
+  const thenMs = parseWhenMs(iso);
+  if (thenMs === null) return '—';
   const diffMs = nowMs - thenMs;
   const diffMinutes = Math.floor(diffMs / MINUTE_MS);
   if (diffMinutes < 60) return `${diffMinutes}m ago`;
