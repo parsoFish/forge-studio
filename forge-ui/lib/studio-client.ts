@@ -26,6 +26,10 @@ export type RunPhaseMeta = {
   retries: number;
   model?: string;
   lastProgressAt?: string;
+  /** R6-01 WI-1 F1: mirrors orchestrator/run-model.ts's RunPhaseMeta.lastEventAt
+   *  — latest event of ANY type attributed to this node (unlike lastProgressAt,
+   *  not filtered to progress types). Drives lib/phase-log-refresh.ts. */
+  lastEventAt?: string;
   wedged?: boolean;
   iter?: number;
   iterBudget?: number;

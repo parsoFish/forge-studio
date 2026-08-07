@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { fetchPhaseLog } from '@/lib/studio-client';
 import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
+import { phaseLogRefreshSignal } from '@/lib/phase-log-refresh';
 
 // ---------------------------------------------------------------------------
 // PhaseDrawer — right slide-in panel showing per-phase detail.
@@ -248,13 +249,21 @@ function DrawerBody({
   }, [cycleId, nodeId, stderrOnly, isWi, wiId]);
 
   const lastProgressAt = meta?.lastProgressAt;
+  // R6-01 WI-1 F1: the log-refresh effect keys off lastEventAt (via this
+  // signal), not lastProgressAt — lastProgressAt only advances on
+  // tool_use/file_change/test_run/iteration (PROGRESS_EVENT_TYPES), so a node
+  // narrating purely via 'log'/'error' events never refetched its log pane.
+  // lastProgressAt itself is UNCHANGED and still drives the liveness dot/text
+  // below — this amendment does not widen its semantics.
+  const logRefreshSignal = phaseLogRefreshSignal(run, nodeId);
 
   // Effect 2 — live refresh: re-fetch IN PLACE (no flicker) while the phase is
-  // still running, keyed on lastProgressAt so we refetch on each tool-progress
-  // tick. Terminal phases (complete/failed) keep their final snapshot.
+  // still running, keyed on logRefreshSignal so we refetch on each new
+  // attributed event (any type), not just tool-progress ticks. Terminal
+  // phases (complete/failed) keep their final snapshot.
   const isTerminal = status === 'complete' || status === 'failed';
   useEffect(() => {
-    if (!lastProgressAt || isTerminal) return;
+    if (!logRefreshSignal || isTerminal) return;
     const signal = { cancelled: false };
     void (async () => {
       try {
@@ -264,7 +273,7 @@ function DrawerBody({
       } catch { /* best-effort */ }
     })();
     return () => { signal.cancelled = true; };
-  }, [lastProgressAt, cycleId, nodeId, stderrOnly, isWi, wiId, isTerminal]);
+  }, [logRefreshSignal, cycleId, nodeId, stderrOnly, isWi, wiId, isTerminal]);
   const livenessColor = useLivenessColor(lastProgressAt, status);
   const livenessText = useLivenessText(lastProgressAt, status);
 
