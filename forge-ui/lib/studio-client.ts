@@ -41,6 +41,13 @@ export type RunPhaseMeta = {
   brainReads?: number;
   delivered?: { files: number; insertions: number; commits: number };
   gateChecks?: { id: string; pass: boolean; detail?: string }[];
+  /**
+   * R6-05 WI-1: mirrors orchestrator/run-model.ts's RunPhaseMeta.findings —
+   * the adversarial-review node's finding counts, carried verbatim over the
+   * wire. Honest-absent: present only when a real review.findings.authored
+   * event fired (a genuine all-zero clean pass still populates it).
+   */
+  findings?: { total: number; blocker: number; major: number; minor: number; info: number };
 };
 
 export type Run = {
@@ -573,6 +580,14 @@ export function parseRun(raw: unknown): Run {
     // must stay absent (declared-data-fails-open guard: this field was
     // parsed and served end-to-end already, then silently dropped here).
     ...(r.trigger !== undefined ? { trigger: r.trigger } : {}),
+    // R6-05 WI-1: same declared-data-fails-open guard, applied to
+    // reflectionLost/reflectionLostNote — both are declared on the Run type
+    // and already consumed by RunRail.tsx, but were never listed here, so a
+    // real reflector crash/budget/max-turns loss was silently dropped before
+    // reaching the client. Each carried independently — a lost reflection
+    // with no note must not be paired away.
+    ...(r.reflectionLost !== undefined ? { reflectionLost: r.reflectionLost } : {}),
+    ...(r.reflectionLostNote !== undefined ? { reflectionLostNote: r.reflectionLostNote } : {}),
   };
 }
 

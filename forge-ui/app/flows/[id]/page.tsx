@@ -15,6 +15,8 @@ import { AgentPalette } from '@/components/studio/flow-builder/AgentPalette';
 import { FlowBuilderCanvas, rfNodesToFlow, rfEdgesToFlow, type CanvasHandle } from '@/components/studio/flow-builder/FlowBuilderCanvas';
 import { FlowHeader, type FlowHeaderState } from '@/components/studio/flow-builder/FlowHeader';
 import { FlowKickoff } from '@/components/studio/FlowKickoff';
+import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 
 // ---------------------------------------------------------------------------
 // Flow monitor page — /flows/[id]
@@ -606,6 +608,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 events={tailEvents}
                 activeRunId={view.activeRun?.id ?? null}
               />
+
+              {/* History ledger — every run this flow has ever had (all six
+                  `_queue/` states, already in `view.runs` via `fetchRuns()`;
+                  no additional fetch), not just the currently-active one. */}
+              <HistoryLedger rows={deriveFlowLedgerRows(view.runs)} nowMs={Date.now()} />
             </div>
           </>
         )}

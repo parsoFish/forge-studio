@@ -1388,6 +1388,74 @@ export const journey = defineJourney({
                 check(false, `monitor: run rail shows the cycle complete (got "${got}")`);
               }
 
+              // ── R6-05: flow monitor ledger — the JUST-ARCHIVED run's own row ──────────
+              // The spec's own AC (docs/roadmaps/R6-operator-experience.md:383-384):
+              // "journey beat asserts a row's narrative matches its run's event log."
+              // CYCLE_ID is now genuinely archived (queue: done/, status: complete,
+              // reflected) — exactly the shape the ledger renders. Every expectation
+              // below is MEASURED, not invented: replaying this beat's own exact event
+              // sequence through the REAL, unmodified orchestrator/run-model.ts
+              // aggregateRun() (a throwaway fixture, cleaned up immediately after)
+              // returned status:'complete', costUsd:3.98680145 (.toFixed(2)="3.99"),
+              // workItems WI-1/WI-2/WI-3 all 'complete' (dev 3/3 — D10's work-items
+              // segment), phaseMeta.dev.retries:0 (no gate.fail message anywhere in
+              // this cycle's dev-loop stream — no gate-fails segment, D9), and exactly
+              // one review.findings.authored event on the adversarial-review node
+              // (metadata {total:1,blocker:0,major:0,minor:1,info:0} — non-zero, so
+              // R6-05 Task 1's findings field, once populated, is non-empty and the
+              // review-findings segment renders). No gateNote/failNote/reflectionLost
+              // was ever produced for this run. So this row's narrative kinds are
+              // exactly {work-items, review-findings, merged} — no gate-fails,
+              // gate-waiting, failed, or reflection-lost. Asserted as a SET below (not
+              // a fixed sequence): no existing unit test (history-ledger.test.ts /
+              // flow-ledger.test.ts) pins an order between review-findings and
+              // work-items/merged, so this beat measures membership, the one thing
+              // actually pinned, rather than inventing an unverified order.
+              await openStudioMonitor(page, watch); // back to /flows/forge-develop, CYCLE_ID's own flow
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              await page.waitForSelector('[data-section="history-ledger"]', { timeout: 15000 }).catch(() => {});
+              check(
+                await page.locator('[data-section="history-ledger"]').count() > 0,
+                'R6-05: the flow monitor renders [data-section="history-ledger"]',
+              );
+              const ledgerRow = await page.evaluate((id) => {
+                const el = document.querySelector(`[data-ledger-row="true"][data-run-id="${id}"]`);
+                if (!el) return null;
+                return {
+                  href: el.getAttribute('href'),
+                  status: el.getAttribute('data-run-status'),
+                  costUsd: el.getAttribute('data-ledger-cost-usd'),
+                  kinds: el.getAttribute('data-narrative-kinds'),
+                };
+              }, CYCLE_ID);
+              check(ledgerRow !== null, `R6-05: the just-archived run (${CYCLE_ID}) has its own ledger row`);
+              if (ledgerRow) {
+                check(
+                  ledgerRow.href === `/flows/forge-develop/run/${CYCLE_ID}`,
+                  `R6-05: ledger row links to /flows/forge-develop/run/<id> (got "${ledgerRow.href}")`,
+                );
+                check(
+                  ledgerRow.status === 'complete',
+                  `R6-05: ledger row's data-run-status reads the run's own status (got "${ledgerRow.status}")`,
+                );
+                check(
+                  ledgerRow.costUsd === '3.99',
+                  `R6-05: ledger row's data-ledger-cost-usd matches the run's authoritative costUsd (measured 3.98680145 → "3.99", got "${ledgerRow.costUsd}")`,
+                );
+                const kinds = (ledgerRow.kinds ?? '').split(',').filter(Boolean);
+                const expectedKinds = ['work-items', 'review-findings', 'merged'];
+                const kindsMatch = kinds.length === expectedKinds.length && expectedKinds.every((k) => kinds.includes(k));
+                check(
+                  kindsMatch,
+                  `R6-05: ledger row's data-narrative-kinds is exactly {work-items, review-findings, merged} — measured from this cycle's real events (got "${ledgerRow.kinds}")`,
+                );
+              }
+              await caption(page, 'The history ledger — every archived run of this flow, its narrative machine-readable, not just a human string.');
+              await frame(page, 'r6-05-history-ledger', 'R6-05 — the flow monitor\'s history ledger: the just-archived run\'s own row, its narrative kinds pinned as structured data', { key: true });
+
               // CHAPTER CLIP 5 — run-reflect-complete: starts on the forge-reflect monitor,
               // selects the SAME CYCLE_ID's run card, then clicks the "Review reflection"
               // affordance the monitor surfaces once the persistent, server-derived

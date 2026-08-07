@@ -178,6 +178,64 @@ one. Journey coverage: `scripts/journeys/flows-run.mjs`'s
 node expand/collapse) and the extended `flows-run-drawer-live-tail`, plus a
 `scripts/e2e-deadpaths.mjs` route for the flow run-detail 404 path.
 
+### R6-B7 Flow monitor history ledger (R6-05-F1, 2026-08-08)
+
+The `/flows/[id]` monitor tab carries a per-flow **history ledger** in the
+shared vocabulary `when · what · outcome-narrative · status · cost`
+(`forge-ui/components/studio/HistoryLedger.tsx`,
+`[data-section="history-ledger"]`; per-row contract in
+[`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md)). Rows are
+**derived, never stored** (ADR-008) and need **no new fetch** — the page
+already holds every run for the flow, and `listRuns` walks all six
+`_queue/` states uncapped, so archived runs are already in hand. Each row is a
+real anchor to its R6-01-F4 detail page.
+
+**Built once, for two surfaces.** `forge-ui/lib/history-ledger.ts` is
+surface-agnostic (the `LedgerSegment` closed vocabulary, `renderSegment` /
+`renderNarrative`, `LedgerRow`, `sortLedgerRowsNewestFirst`, the deterministic
+`formatWhen`) and `forge-ui/lib/flow-ledger.ts` is the flow-specific caller.
+**The reuse seam is that `LedgerRow` carries its own `href`, computed by the
+caller** — so R6-06's agent ledger can point rows at three different
+destinations without touching shared code.
+
+**The outcome narrative is a closed, enumerated segment vocabulary**, not a
+prohibition on prose: seven kinds (`work-items · gate-fails · review-findings ·
+gate-waiting · failed · merged · reflection-lost`), each from a named producer,
+emitted in the run's **chronological** order (verified against
+`studio/flows/forge-develop/flow.yaml`, and explicitly NOT `phaseMeta` key
+order, which is events-derived). It has two surfaces: `data-narrative-kinds`
+is the authoritative machine surface; the rendered string is for humans, with
+the ` → ` joiner neutralised inside run-sourced free text so it stays
+decomposable. Supporting server fact: an additive optional
+`RunPhaseMeta.findings`, derived in `orchestrator/run-model-derive.ts` from the
+existing `review.findings.authored` event (latest-wins, `adversarial-review`
+node only, **honest-absent** when no such event exists — a genuine all-zero
+clean pass still populates it).
+
+**Grounded facts behind two segments, because both could have been fiction.**
+`merged` derives from `run.status === 'complete'`, which is honest: `_queue/done/`
+has exactly one production writer, behind `confirmPrMerged`, which returns true
+only on GitHub `state === 'MERGED'` and **fails closed** on every other outcome.
+`gate-fails` derives ONLY from the `dev` node, because `retries` there is
+`countGateFails` (a mechanical quality-gate outcome) while on every other node
+it counts any `error` event — spawn errors, budget exhaustion, scope violations
+— so sourcing it elsewhere would be a false claim about the run.
+
+**Also fixed here:** `parseRun` was dropping `reflectionLost` and
+`reflectionLostNote` — declared on both `Run` types, served by the bridge, and
+discarded at the last client hop (the third instance of that class after
+R6-01's `trigger`). A **field-parity pin** now asserts every field declared on
+the client `Run` type survives `parseRun`, so a fourth cannot silently drop.
+
+**Honest gaps shipped as gaps:** a gated/failed run whose note field is absent
+contributes no narrative segment (the `status` column still carries the fact);
+trigger provenance is deliberately not attached to ledger rows, deferred to
+R6-06 so both ledgers gain it in one change (reasoned in the DOM-contract doc);
+and per-finding severity beyond the counts stays on the detail page. Journey
+coverage: `scripts/journeys/flows-run.mjs`'s extended `flows-run-reflect`,
+whose expectations were **measured** against the fixture's real seeded events
+through the live `aggregateRun` rather than invented.
+
 ## Planned initiatives
 
 ### R6-01 Run-observability depth
@@ -362,7 +420,8 @@ node expand/collapse) and the extended `flows-run-drawer-live-tail`, plus a
 
 ### R6-05 Flow monitor ledger
 
-- **Status:** planned  ·  **Wave:** 5 (module: flows-home/monitor)
+- **Status:** implemented (2026-08-08) — see baseline **R6-B7**  ·  **Wave:** 5
+  (module: flows-home/monitor)
 - **Depends on:** R6-01-F4 (run-detail pages to link into). **Depended on
   by:** R6-06 (shared ledger components), R4-12-F2 (vocabulary reuse).
 - **Context:** Wave-5 cut. Mockup: the flows home/monitor carries a
@@ -555,3 +614,26 @@ R4-11-F4 attention strip during real multi-project operation.
   Also corrected here: the DOM-contract doc's trigger-provenance paragraph
   still claimed "no attribute below is attached to any DOM element", stale
   once the first consuming surface landed.
+- 2026-08-08 — **R6-05 implemented** (wave 5, batch C: the flow monitor
+  history ledger — see baseline **R6-B7**). Rows are derived from run models
+  the page already holds, so no fetch was added and ADR-008's
+  derived-never-stored posture holds by construction. The outcome narrative is
+  a **closed seven-kind segment vocabulary** in the run's chronological order,
+  with a machine surface (`data-narrative-kinds`) distinct from the human
+  string — the two note-bearing kinds embed run-sourced free text, so
+  automation asserts on kinds and the ` → ` joiner is neutralised inside notes.
+  Measured before building, and it changed the design: all three narrative
+  sources the spec named were unavailable on the client run model — `Run.gate`
+  carries no pass/fail, findings counts would have cost one fetch PER ROW, and
+  merge state has no field (`merged`/`done` both collapse to `complete`).
+  Resolved by deriving an additive optional `RunPhaseMeta.findings` from the
+  existing `review.findings.authored` event (disclosed for batch-C
+  ratification, the `lastEventAt` precedent) and by establishing that
+  `status === 'complete'` really does imply a confirmed merge. Components are
+  built once and shared: **R6-06 reuses them**, and `LedgerRow.href` is the
+  seam that lets it point rows elsewhere. Also fixed: `parseRun` was dropping
+  `reflectionLost`/`reflectionLostNote`, now closed by a **field-parity pin**
+  over every declared client `Run` field. Residue filed: `forge-opj` (no tsc
+  project typechecks `forge-ui/lib/*.test.ts`, so type-level pins cannot fail
+  in any gate), `forge-0u4` (the artifact route's filename dimension), and
+  `forge-cv9` (client `Run.origin` omits `'triggered'`).
