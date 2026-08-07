@@ -387,7 +387,10 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
       // invalid value; a non-string becomes '' (also lint-rejected).
       provider: (typeof w['provider'] === 'string' ? w['provider'] : '') as 'github' | 'gitea' | 'gitlab',
       events: Array.isArray(w['events'])
-        ? (w['events'] as unknown[]).filter((e): e is 'push' | 'release' => e === 'push' || e === 'release')
+        ? (w['events'] as unknown[]).filter(
+            (e): e is 'push' | 'release' | 'pull_request' | 'issues' =>
+              e === 'push' || e === 'release' || e === 'pull_request' || e === 'issues',
+          )
         : [],
       secretEnv: typeof w['secretEnv'] === 'string' ? w['secretEnv'] : '',
       ...(typeof w['secretEnvPrevious'] === 'string' ? { secretEnvPrevious: w['secretEnvPrevious'] } : {}),
@@ -399,6 +402,34 @@ function parseFlowTrigger(raw: unknown, file: string, index: number): FlowTrigge
   // R4-09-F3: reflect mode. Preserve the raw string (do NOT coerce) so the
   // `trigger-mode` enum lint can reach + reject an invalid value.
   if (typeof t['mode'] === 'string') out.mode = t['mode'] as FlowTrigger['mode'];
+  // R2-08-F1 (ADR-027 amendment): `projects:` — fail LOUD on a malformed
+  // declaration rather than silently coercing it away, unlike the lenient
+  // per-kind blocks above. A silently-dropped/mis-shaped scope is exactly the
+  // declared-data-fails-open antipattern this field exists to prevent, so
+  // this one throws at load instead of leaving it for lint to catch later.
+  // Absent stays absent (unscoped) — never defaulted to `[]` here.
+  if ('projects' in t) {
+    const rawProjects = t['projects'];
+    if (!Array.isArray(rawProjects)) {
+      throw new Error(
+        `${file}: triggers[${index}].projects must be an array of project ids (got ${typeof rawProjects})`,
+      );
+    }
+    const projects: string[] = [];
+    for (const p of rawProjects) {
+      if (typeof p !== 'string') {
+        throw new Error(
+          `${file}: triggers[${index}].projects entries must all be strings (got ${JSON.stringify(p)})`,
+        );
+      }
+      projects.push(p);
+    }
+    out.projects = projects;
+  }
+  // agent-complete only (R2-08-F2): preserve the raw string (do NOT coerce a
+  // non-string away) so the `trigger-agent-complete` lint can reach + reject
+  // a missing/malformed value rather than it silently meaning "fires for all".
+  if (typeof t['agent'] === 'string') out.agent = t['agent'];
   if (typeof t['note'] === 'string') out.note = t['note'];
   return out;
 }
@@ -759,6 +790,24 @@ export type DiscoveredProject = ProjectRef & {
 };
 
 /**
+ * R2-08-F1 (N1, round-4): the ONE normalizer for "directory/raw name → project
+ * id" — `discoverProjects` below is its original (and still primary) caller,
+ * but `forge studio lint`'s `trigger-projects` membership check validates
+ * `triggers[].projects` against IDS THIS FUNCTION PRODUCES. Every site that
+ * resolves an `eventProject` (a raw directory name / `ProjectBinding.name` /
+ * a flow's own `project:` field — none of which are guaranteed pre-normalized)
+ * MUST run it through this SAME function before comparing against a declared
+ * scope, or lint and dispatch silently read different evidence (rule 2) — a
+ * project directory like `My_Project` would validate fine but never
+ * dispatch-match. Extracted so there is exactly one regex to drift from, not
+ * a copy re-typed at each call site (the second copy would be the same
+ * defect one layer down).
+ */
+export function normalizeProjectId(name: string): string {
+  return name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+}
+
+/**
  * Scan `projectsDir` for project sub-directories. Pure + total: a missing or
  * unreadable projects root yields an empty list (a fresh box has no projects,
  * which is a working state, not an error). Entries are sorted by id so callers
@@ -780,7 +829,7 @@ export function discoverProjects(projectsDir: string, forgeRoot: string): Discov
   const root = resolve(forgeRoot);
   const found: DiscoveredProject[] = [];
   for (const name of entries) {
-    const id = name.toLowerCase().replace(/[^a-z0-9-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
+    const id = normalizeProjectId(name);
     if (!id) continue;
     const absPath = join(projectsDir, name);
     const rel = relative(root, absPath);

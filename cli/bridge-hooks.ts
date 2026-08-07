@@ -32,10 +32,13 @@ import { verifyWebhookSignature } from '../orchestrator/webhook-verify.ts';
 import {
   extractPushPayload,
   extractReleasePayload,
+  extractPullRequestPayload,
+  extractIssuePayload,
   TriggerPayloadInvalidError,
   type TriggerPayload,
 } from '../orchestrator/trigger-payload.ts';
 import { stageFlowRunRequest } from '../orchestrator/flow-run-requests.ts';
+import { resolveProjectIdForRepo } from '../orchestrator/project-config.ts';
 
 export type HookRoutesContext = { forgeRoot: string; queueRoot: string; logsRoot: string };
 
@@ -81,10 +84,21 @@ function firstHeader(
 type ResolvedHook = { flow: FlowDefinition; trigger: FlowTrigger; webhook: WebhookTriggerConfig };
 
 /**
- * Scan every registered flow for the `on: webhook` trigger whose
- * `webhook.id === hookId`. One malformed flow.yaml is skipped (try/catch per
- * flow) rather than 500ing every hook receipt — mirrors
- * `orchestrator/cron-triggers.ts`'s `scanDeclaredCronTriggers`.
+ * The `on:` kinds that resolve via a `webhook:` config block sharing the
+ * SAME `POST /api/hooks/:hookId` namespace (R2-08-F3: `pr-merged` /
+ * `issue-raised` are their OWN `on:` values — ADR-027's amendment — never a
+ * sub-event under `on: webhook`, but they reuse the existing receiver, so a
+ * hook id must be resolvable regardless of which of the three kinds declared
+ * it).
+ */
+const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']);
+
+/**
+ * Scan every registered flow for the `on: webhook` / `on: pr-merged` /
+ * `on: issue-raised` trigger whose `webhook.id === hookId`. One malformed
+ * flow.yaml is skipped (try/catch per flow) rather than 500ing every hook
+ * receipt — mirrors `orchestrator/cron-triggers.ts`'s
+ * `scanDeclaredCronTriggers`.
  */
 function findWebhookTrigger(forgeRoot: string, hookId: string): ResolvedHook | null {
   const root = resolve(forgeRoot);
@@ -96,7 +110,7 @@ function findWebhookTrigger(forgeRoot: string, hookId: string): ResolvedHook | n
       continue;
     }
     for (const trigger of flow.triggers) {
-      if (trigger.on === 'webhook' && trigger.webhook && trigger.webhook.id === hookId) {
+      if (WEBHOOK_FAMILY_KIND_IDS.has(trigger.on) && trigger.webhook && trigger.webhook.id === hookId) {
         return { flow, trigger, webhook: trigger.webhook };
       }
     }
@@ -104,12 +118,29 @@ function findWebhookTrigger(forgeRoot: string, hookId: string): ResolvedHook | n
   return null;
 }
 
-type ResolvedEvent = 'push' | 'release';
+type ResolvedEvent = 'push' | 'release' | 'pull_request' | 'issues';
+
+/**
+ * The event(s) each `on:` kind actually fires for — never a shared set, or a
+ * plain `on: webhook` trigger could silently accept a `pull_request` delivery
+ * (a header this receiver only means something for `on: pr-merged`) and vice
+ * versa.
+ */
+const EXPECTED_EVENTS_FOR_KIND: Readonly<Record<string, ReadonlySet<ResolvedEvent>>> = {
+  webhook: new Set(['push', 'release']),
+  'pr-merged': new Set(['pull_request']),
+  'issue-raised': new Set(['issues']),
+};
 
 /**
  * github/gitea send the event name verbatim (`x-*-event: push|release`);
  * gitlab sends human-readable values (`x-gitlab-event: Push Hook|Release
  * Hook`) that need mapping onto the same `push`/`release` vocabulary.
+ *
+ * R2-08-F3: `pull_request`/`issues` are resolved GITHUB ONLY — gitea/gitlab
+ * stay schema-reserved with zero stub handlers (no grounded payload shape
+ * for either), so this function deliberately never maps their headers onto
+ * these two event names, whatever a flow.yaml declares.
  */
 function resolveEventName(
   provider: WebhookTriggerConfig['provider'],
@@ -123,7 +154,9 @@ function resolveEventName(
   }
   const headerName = provider === 'gitea' ? 'x-gitea-event' : 'x-github-event';
   const raw = firstHeader(headers, headerName);
-  return raw === 'push' || raw === 'release' ? raw : null;
+  if (raw === 'push' || raw === 'release') return raw;
+  if (provider === 'github' && (raw === 'pull_request' || raw === 'issues')) return raw;
+  return null;
 }
 
 /**
@@ -197,7 +230,7 @@ async function processHookReceipt(
     sendJson(res, 404, { error: 'unknown hook' }, origin);
     return true;
   }
-  const { trigger, webhook } = found;
+  const { flow, trigger, webhook } = found;
 
   // 2. Raw body, capped, BEFORE any parsing — HMAC/token verification needs
   // the exact bytes the sender signed.
@@ -254,8 +287,12 @@ async function processHookReceipt(
   }
   const body = parsed as Record<string, unknown>;
 
-  // 5. Event resolution — unresolvable header or an event the declaration
-  // didn't subscribe to are both a plain 400 (kept simple; no 422 nuance).
+  // 5. Event resolution — unresolvable header, an event the declaration
+  // didn't subscribe to, or an event this trigger's OWN `on:` kind doesn't
+  // fire for are all a plain 400 (kept simple; no 422 nuance). The third
+  // check (R2-08-F3) matters once a hook id can be claimed by `pr-merged` /
+  // `issue-raised` too: without it a `pr-merged` trigger whose `webhook.events`
+  // was mis-declared to include `push` would silently accept a push delivery.
   const event = resolveEventName(webhook.provider, req.headers);
   if (!event) {
     console.warn(`bridge-hooks: unrecognised event header for hook "${hookId}"`);
@@ -267,6 +304,12 @@ async function processHookReceipt(
     sendJson(res, 400, { error: 'event not declared' }, origin);
     return true;
   }
+  const expectedEvents = EXPECTED_EVENTS_FOR_KIND[trigger.on];
+  if (!expectedEvents || !expectedEvents.has(event)) {
+    console.warn(`bridge-hooks: event "${event}" does not fire trigger kind "${trigger.on}" for hook "${hookId}"`);
+    sendJson(res, 400, { error: 'event not declared' }, origin);
+    return true;
+  }
 
   // 6. Extract the typed, extraction-validated payload.
   let payload: TriggerPayload;
@@ -274,7 +317,11 @@ async function processHookReceipt(
     payload =
       event === 'push'
         ? extractPushPayload(webhook.provider, body)
-        : extractReleasePayload(webhook.provider, body);
+        : event === 'release'
+          ? extractReleasePayload(webhook.provider, body)
+          : event === 'pull_request'
+            ? extractPullRequestPayload(body)
+            : extractIssuePayload(body);
   } catch (err) {
     if (err instanceof TriggerPayloadInvalidError) {
       console.warn(`bridge-hooks: invalid payload for hook "${hookId}": ${err.message}`);
@@ -292,13 +339,56 @@ async function processHookReceipt(
     return true;
   }
 
+  // 7b. R2-08-F3 kind-specific "did this actually happen" gate. A GitHub
+  // `pull_request` delivery covers every state transition (opened, closed,
+  // reopened, synchronized, …) — `pr-merged` fires ONLY on a genuine merge
+  // (`action:"closed"` AND `pull_request.merged:true`); a plain close is a
+  // SIBLING delivery to the SAME hook/event header that must never silently
+  // stage (kills an "any pull_request event" stub). Symmetric for
+  // `issue-raised`: only `action:"opened"` is a newly-raised issue. This is
+  // a legitimate no-op, not an error — 200, not 4xx/5xx.
+  if (trigger.on === 'pr-merged') {
+    const pr = (body['pull_request'] ?? {}) as Record<string, unknown>;
+    if (!(body['action'] === 'closed' && pr['merged'] === true)) {
+      sendJson(res, 200, { ok: true, staged: false, reason: 'pull request closed without merge' }, origin);
+      return true;
+    }
+  }
+  if (trigger.on === 'issue-raised' && body['action'] !== 'opened') {
+    sendJson(res, 200, { ok: true, staged: false, reason: 'issue action is not "opened"' }, origin);
+    return true;
+  }
+
   // 8. Stage only — no dispatch, no spawn (see the dry-bridge classification).
+  // R2-08-F1 (ADR-027 amendment): carry the trigger's own `projects:`
+  // declaration. R2-08-F3 closes the gap the ORIGINAL comment here flagged:
+  // `resolveProjectIdForRepo` is the real repo→forge-project-id mapping (an
+  // IDENTITY match against each project's declared `.forge/project.json`
+  // `repo:`, never the raw payload string) — applied uniformly to every
+  // webhook-family payload (push/release/pr-merged/issue-raised all carry
+  // `payload.repo`), not just the two new kinds. An unresolved/ambiguous repo
+  // still fails closed exactly as before (declared scope + unresolved project
+  // ⇒ typed skip at the drain, ADR-027 R2-08 amendment rule 3/4).
+  const eventProject = resolveProjectIdForRepo(ctx.forgeRoot, payload.repo);
   stageFlowRunRequest(
     {
       target: trigger.target,
       origin: 'webhook',
       triggeredBy: `webhook:${hookId}`,
+      // R2-08-F4: thread the DECLARING flow id (already resolved above by
+      // findWebhookTrigger) so trigger provenance can derive `source` from a
+      // real definition id — never the hook id `triggeredBy` carries.
+      sourceFlowId: flow.id,
+      // Adversarial-review fix (R2-08-F3): `origin: 'webhook'` above is the
+      // TRANSPORT (this receiver), never the KIND — `trigger.on` is the
+      // real, declaration-sourced registry id (`webhook` | `pr-merged` |
+      // `issue-raised`), read straight off the resolved trigger config, never
+      // from `payload`. Without this, all three kinds collapse onto
+      // `Run.trigger.kind === 'webhook'`.
+      triggerKind: trigger.on,
       payload,
+      ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
+      eventProject,
     },
     { queueRoot: ctx.queueRoot },
   );

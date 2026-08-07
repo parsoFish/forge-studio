@@ -35,6 +35,7 @@ import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
+import { loadFlowDefinition } from '../orchestrator/studio/registry.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -791,4 +792,146 @@ test('[security] version is always positive integer after write (monotonic)', as
 
   const written = readFileSync(join(forgeRoot, 'studio', 'flows', 'test-flow', 'flow.yaml'), 'utf8');
   assert.ok(written.includes('version: 4'), 'version on disk matches response');
+});
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (T3, R2-08-F1, round-3 addendum) — the WRITE-path
+// asymmetry an adversarial reviewer found: `checkFlowTriggers`'s
+// `trigger-projects` check (orchestrator/studio/validate-triggers.ts) is
+// gated behind `opts?.projectIds` (`if (trigger.projects !== undefined &&
+// opts?.projectIds)`), but the real `PUT /api/studio/flows/:id` handler
+// (cli/bridge-studio-writes.ts, ~line 1299) calls `validateFlow(merged,
+// agentsMap, { flowIds, flowProjectOf })` — NO `projectIds`. The sibling
+// `trigger-agent-complete` check twelve lines above is unconditional, so this
+// is a real asymmetry, not a shared limitation.
+//
+// Consequence: `triggers[].projects` reaches this route with ZERO shape or
+// membership validation — a bare string, a non-string array entry, or an
+// unknown project id all serialise to flow.yaml verbatim with a 200 and no
+// findings. The NEXT `loadFlowDefinition` call on that file throws (this same
+// T3 agent's own round-1 parse-level pin: a non-list/non-string-entry
+// `projects:` fails loud at load) — and every production consumer
+// (finalize-merged.ts's `on: merged` reflect dispatch among them) try/catches
+// flow-load failures and drops the WHOLE flow silently. A single bad Studio
+// save can silently stop reflection for that flow.
+//
+// validate.test.ts's existing trigger-projects tests call `validateFlow`
+// directly with a hand-built `opts.projectIds` — they would look identical
+// whether this real route passed `projectIds` or not. These tests close that
+// gap by driving the REAL PUT route.
+// ---------------------------------------------------------------------------
+
+/** A minimal valid flow.yaml body for PUT-creating a fresh flow, with one
+ *  `on: flow-complete` trigger whose `projects:` this test controls. */
+function makeScopedTriggerBody(projects: unknown): Record<string, unknown> {
+  return {
+    goal: 'Round-3 addendum: PUT-route projects: shape/membership validation.',
+    nodes: [{ id: 'architect', agent: 'test-agent' }, { id: 'review', gate: 'human' }],
+    edges: [{ from: 'architect', to: 'review', artifact: 'PLAN.md' }],
+    triggers: [
+      { on: 'flow-complete', target: { kind: 'agent', ref: 'test-agent' }, projects },
+    ],
+  };
+}
+
+test('(RED) [round-3 addendum] PUT with a VALID projects: array saves successfully and round-trips (positive control)', async () => {
+  mkdirSync(join(forgeRoot, 'projects', 'gitpulse'), { recursive: true });
+  const id = 'scoped-projects-valid';
+
+  const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse']));
+  // Read the body ONCE, unconditionally, before any assertion — a Response
+  // body can only be consumed once, and an assertion's message argument is
+  // evaluated eagerly (even when the assertion passes), so a `res.text()`/
+  // `res.json()` call inline in a message throws "Body has already been
+  // read" the moment anything downstream also reads it.
+  const bodyText = await res.text();
+  assert.equal(res.status, 200, `expected a valid projects: array to save — got ${res.status}: ${bodyText}`);
+
+  const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', id, 'flow.yaml'));
+  assert.deepEqual(
+    (flow.triggers[0] as unknown as { projects?: string[] }).projects,
+    ['gitpulse'],
+    'expected the valid projects: array to round-trip through the saved flow.yaml',
+  );
+});
+
+test('(RED) [round-3 addendum] PUT with triggers[].projects as a bare STRING (not an array) is refused, and the on-disk flow.yaml is unaffected', async () => {
+  mkdirSync(join(forgeRoot, 'projects', 'gitpulse'), { recursive: true });
+  const id = 'scoped-projects-bad-string';
+
+  // Establish a valid flow first (also proves the "still loads afterwards"
+  // claim below isn't vacuous — there is a real prior version to protect).
+  const createRes = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse']));
+  assert.equal(createRes.status, 200, 'setup: expected the initial valid flow to save');
+  const flowPath = join(forgeRoot, 'studio', 'flows', id, 'flow.yaml');
+  const originalYaml = readFileSync(flowPath, 'utf8');
+
+  const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody('gitpulse'));
+  const bodyText = await res.text();
+
+  assert.equal(
+    res.status,
+    400,
+    `expected a bare-string projects: to be REFUSED with a validation finding — got ${res.status}: ${bodyText}`,
+  );
+
+  // Assert the ARTIFACT, not just the status code: byte-unchanged, still loads.
+  const afterYaml = readFileSync(flowPath, 'utf8');
+  assert.equal(afterYaml, originalYaml, 'flow.yaml must be byte-unchanged after a refused save');
+  assert.doesNotThrow(() => loadFlowDefinition(flowPath), 'the flow must still load after a refused save');
+});
+
+test('(RED) [round-3 addendum] PUT with a non-string entry inside triggers[].projects is refused, and the on-disk flow.yaml is unaffected', async () => {
+  mkdirSync(join(forgeRoot, 'projects', 'gitpulse'), { recursive: true });
+  const id = 'scoped-projects-bad-entry';
+
+  const createRes = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse']));
+  assert.equal(createRes.status, 200, 'setup: expected the initial valid flow to save');
+  const flowPath = join(forgeRoot, 'studio', 'flows', id, 'flow.yaml');
+  const originalYaml = readFileSync(flowPath, 'utf8');
+
+  const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse', 42]));
+  const bodyText = await res.text();
+
+  assert.equal(
+    res.status,
+    400,
+    `expected a non-string projects: entry to be REFUSED with a validation finding — got ${res.status}: ${bodyText}`,
+  );
+
+  const afterYaml = readFileSync(flowPath, 'utf8');
+  assert.equal(afterYaml, originalYaml, 'flow.yaml must be byte-unchanged after a refused save');
+  assert.doesNotThrow(() => loadFlowDefinition(flowPath), 'the flow must still load after a refused save');
+});
+
+test('(RED) [round-3 addendum] PUT with an UNKNOWN project id in triggers[].projects is refused (trigger-projects), and the on-disk flow.yaml is unaffected', async () => {
+  mkdirSync(join(forgeRoot, 'projects', 'gitpulse'), { recursive: true });
+  const id = 'scoped-projects-bad-membership';
+
+  const createRes = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['gitpulse']));
+  assert.equal(createRes.status, 200, 'setup: expected the initial valid flow to save');
+  const flowPath = join(forgeRoot, 'studio', 'flows', id, 'flow.yaml');
+  const originalYaml = readFileSync(flowPath, 'utf8');
+
+  const res = await putJson(`${bridgeUrl}/api/studio/flows/${id}`, makeScopedTriggerBody(['ghost-project']));
+  // Read the body ONCE — the earlier bug here (Body has already been read)
+  // meant this test could never pass: `res.text()` was called unconditionally
+  // inside the assert message, THEN `res.json()` below tried to read the
+  // already-consumed body and always threw, regardless of what production did.
+  const bodyText = await res.text();
+
+  assert.equal(
+    res.status,
+    400,
+    `expected an unknown project id to be REFUSED (trigger-projects) — got ${res.status}: ${bodyText}. This is the real PUT route never threading discoverProjects()'s projectIds into validateFlow.`,
+  );
+  const body = JSON.parse(bodyText) as { findings?: Array<{ check: string }> };
+  assert.ok(
+    body.findings?.some((f) => f.check === 'trigger-projects'),
+    `expected a trigger-projects finding — got ${JSON.stringify(body.findings)}`,
+  );
+
+  const afterYaml = readFileSync(flowPath, 'utf8');
+  assert.equal(afterYaml, originalYaml, 'flow.yaml must be byte-unchanged after a refused save');
+  assert.doesNotThrow(() => loadFlowDefinition(flowPath), 'the flow must still load after a refused save');
 });

@@ -466,3 +466,162 @@ only what is **compared**, never what is **written**: a genuine change in either
 direction still forces the full re-serialize and still persists. **Any future
 optional array field added to this object model must be added to that rule**, or
 it silently re-breaks the guarantee for every agent that does not declare it.
+
+## Amendment (R2-08, 2026-08-07): `projects:` — per-project trigger scoping
+
+**A decision is taken here.** Unlike the R2-09 amendment above, this one adds a
+field that did not previously exist in any form and changes what a trigger
+declaration *means*, so it is a genuine amendment rather than a factual
+catch-up. Park-point: drafted by the R2-08 orchestrator, ratified by T1 before
+the field ships.
+
+### The problem this closes
+
+A trigger declaration is flow-level and has no project dimension
+(`orchestrator/flow-trigger.ts`, the R2-04/ADR-041 shape above). Every shipped
+flow declares `project: null` (`studio/flows/*/flow.yaml`) — flows are
+cross-project by construction, and the *only* production trigger declaration in
+the repo is forge-develop's `{on: merged, target: {kind: agent, ref:
+reflector}}`. So a `webhook` or `merged` trigger fires for **whatever project
+the event resolved to**, with no way to say "this one is for gitpulse only".
+The end-state mockup requires exactly that distinction — `demo-runner`: *"PR
+merged → refresh demo artifacts, per-project: betterado, gitpulse"*;
+`issue-triage`: *"issue raised → triage sweep, per-project: gitpulse"*
+(`mockups/studio-endstate-v2/data.jsx` `TRIGGERS`).
+
+### The field
+
+A trigger declaration gains **one optional field**, `projects:` — a list of
+project ids scoping which projects' events may fire this trigger. It sits at
+the top level of the trigger row alongside `on` and `target`, not inside a
+per-kind config block, because it is kind-independent: every kind resolves to a
+project or to nothing, and the scope means the same thing for all of them.
+**(Corrected 2026-08-07 — see the addendum at the end of this amendment: one kind,
+`merged`, is excluded, so "every kind" above is not literally true as shipped.)**
+
+```yaml
+triggers:
+  - on: pr-merged
+    target: { kind: agent, ref: demo-runner }
+    projects: [betterado, gitpulse]
+```
+
+Following the amendments above:
+
+1. **Absent means unscoped; declared-empty means nothing fires.** The two
+   states stay distinguishable on the definition and are **not** collapsed.
+   `projects: []` is a coherent operator statement ("scoped, currently to no
+   project") and must not silently mean "all projects" — that is the
+   declared-data-fails-open shape this campaign keeps finding. Absent is the
+   pre-existing cross-project behaviour and stays the default so no shipped
+   declaration changes meaning.
+2. **The dispatch point is the enforcement point; lint is defense in depth.**
+   The scope is enforced where a staged request is dispatched, and
+   `forge studio lint` reads **the same evidence the dispatcher reads** — the
+   declaration's `projects` list against the same project enumeration. Lint is
+   a second opinion on a decision the runtime already makes for itself; it is
+   never the only place the scope is honoured.
+3. **An out-of-scope event is a typed skip, never a silent drop.** The drain
+   emits a distinct, observable outcome for "resolved project is outside this
+   trigger's declared scope" — a first-class status alongside the existing
+   `skipped-concurrency` / `skipped-no-initiative` rows, not a `continue`. A
+   silently-broadened or silently-narrowed lookup under unattended execution is
+   the blast-radius antipattern recorded in
+   `brain/cycles/themes/silent-auto-discover-fallback-blast-radius.md`.
+4. **An unknown project id is a lint error, and a resolution miss fails
+   closed.** `forge studio lint` errors (the `surface/enum` shape used
+   throughout this ADR) when `projects:` names an id the project enumeration
+   does not contain. At runtime, an event whose project cannot be resolved does
+   **not** fall back to "any project" or to "unscoped" — it skips, typed. There
+   is no "undeclared ⇒ allow all" arm and no auto-discover arm anywhere.
+5. **A project id from an external payload is matched, never resolved into a
+   path.** ADR-041 §5 already forbids external text reaching id/path space
+   ("initiative ids for minted runs are generated from validated tokens only").
+   `projects:` extends that invariant rather than opening a hole in it: the
+   scope check is an **identity comparison against the declaration's own
+   list**, whose members are themselves validated against the project
+   enumeration. A payload-derived project id is never concatenated into a root,
+   never used to construct a filesystem path, and never widens the declared
+   set. (`adversarial-containment-review`'s root-folding and cross-object-alias
+   shapes are the two this rule is written against.)
+
+### Registry rows added in the same initiative (mechanical — ADR-041 §1 already decided this)
+
+R2-08-F3 adds `pr-merged` and `issue-raised` as `TRIGGER_KINDS` rows over the
+existing webhook receiver. Adding a row **exercises** ADR-041's registry-as-data
+decision rather than amending it, so no decision is re-opened. It is recorded
+here only because the R2-04 amendment above enumerates the vocabulary inline,
+and an un-updated enumeration in an ADR is a stale claim. `agent-complete`
+(R2-08-F2) likewise flips `status: reserved → shipped` within the row model
+ADR-041 §1 already defines.
+
+### Run-model trigger provenance (R2-08-F4) is derived, not stored
+
+A run exposes `trigger: {kind, source, scope}` — the registry kind, the
+declaration that fired (a definition id, never operator prose), and the
+resolved project id (or `null` when unscoped). It is **derived, never stored and
+never authored** — consistent with [ADR 008](./008-jsonl-event-log.md)'s
+one-source-of-truth rule (the event log is written once; readers aggregate from
+it): no new stored run object, no free-text field an agent or a surface can
+author.
+
+The derivation source differs by kind, because the kinds differ in whether a run
+is minted at all — recorded here precisely so the contract is not read as
+claiming a single mechanism it does not have:
+
+- **`cron` · `webhook` · `agent-complete`** originate a NEW run, so provenance
+  derives from the **staged request** that minted it.
+- **`flow-complete` · `merged`** mint nothing — chaining repoints the *same*
+  initiative and `merged` dispatches inline within the merged cycle — so
+  provenance derives from the already-shipped **`*.trigger-firing` event**
+  (`orchestrator/flow-runner.ts`, `orchestrator/finalize-merged.ts`), whose
+  `metadata: {on, target, source_flow}` carries exactly the closed triple's
+  inputs.
+
+Both sources are machine-written data; neither is prose. This is a factual
+correction to this amendment's own earlier wording ("derived from the staged
+request"), which was accurate for three of the five shipped kinds and would have
+been a stale claim for the other two. **The decision is unchanged** — provenance
+is derived, is a closed triple, and has no prose member. The `data-*` vocabulary is named by R2-08-F4 and attached
+by the consuming surfaces (R6-04-F2 kickoff, R6-01-F4 run detail, R6-05/R6-06
+ledgers) — this ADR records only that the shape is a closed triple with no
+prose member.
+
+### Addendum (2026-08-07): `on: merged` is EXCLUDED from `projects:` scoping
+
+**Mechanical corollary; records an exclusion, takes no new decision.** This
+addendum exists because the amendment above asserts the scope field "is
+kind-independent: every kind resolves to a project or to nothing" — and as
+shipped, that sentence is **false for one kind**. Correcting it rather than
+leaving it is the point: an ADR carrying a claim its own implementation does not
+honour is the failure this project keeps paying for.
+
+**The fact.** Rule 2 above names the **dispatch point** as the enforcement point,
+and every trigger kind reaches dispatch by staging a claimable `FlowRunRequest`
+that `drainFlowRunRequests` then scope-checks — except `merged`. `on: merged`
+dispatches **inline** from `orchestrator/finalize-merged.ts` via
+`resolveMergeAgentHandler`, never touching the staged-request seam, so the
+enforcement point never sees it. A `projects:`-scoped `on: merged` trigger would
+therefore be silently unenforced.
+
+**What ships instead.** `forge studio lint` **errors** when `projects:` is declared
+on an `on: merged` trigger. The gap is made *unauthorable* rather than left
+silently fail-open: an operator cannot declare a scope that would not be enforced.
+No product story is blocked — the per-project merged story in the end-state mockup
+(`demo-runner`: "PR merged → refresh demo artifacts, per-project: betterado,
+gitpulse") is the **`pr-merged`** kind, which originates through the webhook
+receiver and IS drain-enforced. `on: merged` is the internal reflect-chain trigger
+and has no per-project story.
+
+**Why it was not simply wired.** Wiring `finalize-merged`'s inline closure is a
+small change, and it was deliberately refused. It would have been the third
+per-mechanism patch of one class: the scope guarantee is asserted **globally**
+("dispatch is the ONE enforcement point") but implemented **per-mechanism**, so
+each dispatch mechanism that diverges from the staged-request seam silently escapes
+it. Patching a third site leaves the identical hole for the fourth. The durable fix
+— route `merged` through the claimable-request seam, or give the guarantee a single
+structural choke point every dispatch mechanism must pass — is tracked separately,
+with the re-entry condition being an actual per-project `merged` story.
+
+**Scope of this addendum:** `projects:` remains kind-independent for every shipped
+kind except `merged`. Nothing else in the amendment changes.

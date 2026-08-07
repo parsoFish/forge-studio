@@ -256,6 +256,16 @@ export function runStudioLint(root: string): StudioLintResult {
   // webhook.id → declaring flow dirs (R2-04 trigger-webhook-unique).
   const webhookIdsByFlow = new Map<string, string[]>();
 
+  // Projects (auto-discovered from disk — B1) computed HERE, ahead of flow
+  // validation below, so the `trigger-projects` check (R2-08-F1) can see the
+  // SAME project enumeration the runtime dispatcher resolves against (rule 2:
+  // "lint reads the same evidence the dispatcher reads"). The findings push
+  // for discovered-project shape stays down in section 4, in its original
+  // report position — only the computation moved earlier.
+  const projectsDir = resolveProjectsDir(root, loadConfig(defaultConfigPath(root)));
+  const discoveredProjects = discoverProjects(projectsDir, root);
+  const projectIds = new Set(discoveredProjects.map((p) => p.id));
+
   if (!existsSync(flowsDir)) {
     findings.push({
       level: 'error',
@@ -313,10 +323,18 @@ export function runStudioLint(root: string): StudioLintResult {
             message: `flow id "${flow.id}" must match its directory name "${dir}"`,
           });
         }
-        findings.push(...validateFlow(flow, agentMap, { flowIds, flowProjectOf }));
+        findings.push(...validateFlow(flow, agentMap, { flowIds, flowProjectOf, projectIds }));
         findings.push(...validateArtifactRef(flow, artifactTemplateIds));
         for (const trigger of flow.triggers) {
-          if (trigger.on === 'webhook' && trigger.webhook) {
+          // R2-08-F3: `pr-merged` / `issue-raised` reuse the SAME `webhook:`
+          // id namespace (POST /api/hooks/:hookId serves all three kinds) —
+          // a hook id collision across kinds is exactly as unresolvable as
+          // one within `on: webhook` alone (findWebhookTrigger returns only
+          // the first flow it scans), so it must be caught here too.
+          if (
+            (trigger.on === 'webhook' || trigger.on === 'pr-merged' || trigger.on === 'issue-raised') &&
+            trigger.webhook
+          ) {
             const claimants = webhookIdsByFlow.get(trigger.webhook.id) ?? [];
             claimants.push(dir);
             webhookIdsByFlow.set(trigger.webhook.id, claimants);
@@ -381,12 +399,11 @@ export function runStudioLint(root: string): StudioLintResult {
   // Zero projects is NOT an error (a fresh box has none). We scan the projects
   // root and validate: duplicate/invalid ids error; a dir missing its
   // `.forge/project.json` contract file warns (forge will skip it).
+  // (`projectsDir` / `discoveredProjects` / `projectIds` are computed earlier,
+  // ahead of section 2, so `trigger-projects` can consult them — see there.)
   // ------------------------------------------------------------------
 
-  const projectsDir = resolveProjectsDir(root, loadConfig(defaultConfigPath(root)));
-  const discoveredProjects = discoverProjects(projectsDir, root);
   findings.push(...validateDiscoveredProjects(discoveredProjects));
-  const projectIds = new Set(discoveredProjects.map((p) => p.id));
 
   // ------------------------------------------------------------------
   // 5. KB descriptors (brain/*/kb.yaml — absent = NOT an error)

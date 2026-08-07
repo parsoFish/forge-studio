@@ -33,8 +33,39 @@ const RESERVED_TRIGGER_KIND_IDS = new Set<string>(
 
 const WEBHOOK_ID_RE = /^[a-z0-9][a-z0-9-]*$/;
 const WEBHOOK_PROVIDERS = new Set(['github', 'gitea', 'gitlab']);
-const WEBHOOK_EVENTS = new Set(['push', 'release']);
 const SECRET_ENV_RE = /^[A-Z][A-Z0-9_]*$/;
+
+/**
+ * R2-08-F3: `pr-merged` / `issue-raised` reuse the SAME `webhook:` config
+ * shape `on: webhook` uses (own `on:` value, per ADR-027's amendment — never
+ * a sub-event under `on: webhook`), but each kind accepts only its OWN event
+ * name — never a shared set, or a `webhook` trigger could silently declare
+ * `events: [pull_request]` (a kind bridge-hooks.ts never resolves for it) and
+ * lint would wave it through.
+ */
+const WEBHOOK_EVENTS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
+  webhook: new Set(['push', 'release']),
+  'pr-merged': new Set(['pull_request']),
+  'issue-raised': new Set(['issues']),
+};
+/** The `on:` kinds that carry the `webhook:` config block (R2-08-F3). */
+const WEBHOOK_FAMILY_KIND_IDS = new Set(['webhook', 'pr-merged', 'issue-raised']);
+
+/**
+ * adversarial-review fix: `pr-merged`/`issue-raised` are GitHub-only by
+ * ruled design (`cli/bridge-hooks.ts`'s `resolveEventName` only maps
+ * `pull_request`/`issues` under `provider === 'github'` — gitea/gitlab stay
+ * schema-reserved with zero stub handlers). Without a matching lint
+ * restriction, a `provider: gitlab` (or `gitea`) declaration on either kind
+ * was lint-clean yet structurally could never fire — a dead declaration an
+ * operator could author with no warning. `on: webhook` keeps all three
+ * providers (push/release ARE shipped for gitea/gitlab).
+ */
+const WEBHOOK_PROVIDERS_BY_KIND: Readonly<Record<string, ReadonlySet<string>>> = {
+  webhook: WEBHOOK_PROVIDERS,
+  'pr-merged': new Set(['github']),
+  'issue-raised': new Set(['github']),
+};
 
 export type TriggerCheckOpts = {
   /** The full registered flow-id set — enables the target-flow existence check. */
@@ -47,6 +78,14 @@ export type TriggerCheckOpts = {
    * every flow, supplies it so the full check runs.
    */
   flowProjectOf?: (flowId: string) => string | null | undefined;
+  /**
+   * R2-08-F1: the full discovered-project id set (`discoverProjects`) —
+   * enables the `trigger-projects` check (an unknown id in `projects:` is a
+   * lint error). Mirrors `flowIds` exactly: omitted callers skip the check
+   * (a single-flow PUT that hasn't consulted the registry), studio-lint
+   * supplies it so lint reads the SAME evidence the dispatcher reads.
+   */
+  projectIds?: ReadonlySet<string>;
 };
 
 export function checkFlowTriggers(
@@ -165,58 +204,156 @@ export function checkFlowTriggers(
       findings.push(...checkTargetProject(obj, 'trigger-cron', flow, trigger.target, opts));
     }
 
-    // trigger-webhook
-    if (trigger.on === 'webhook') {
-      if (!trigger.webhook) {
-        findings.push(err(obj, 'trigger-webhook', 'webhook trigger requires a "webhook" block'));
+    // trigger-webhook: `on: webhook` REQUIRES a "webhook" block. `on: pr-merged`
+    // / `on: issue-raised` (R2-08-F3) reuse the SAME config shape but do NOT
+    // require it at this layer — only the bridge receiver needs one to be
+    // addressable; a bare project-event trigger is not itself a lint error
+    // (mirrors the F3 acceptance pin: a minimal pr-merged/issue-raised trigger
+    // with no webhook block must produce zero findings). When a webhook block
+    // IS present on any of the three kinds, its shape is validated identically
+    // — except `events`, checked against a KIND-SPECIFIC allowed set so an
+    // `on: webhook` row can never declare `events: [pull_request]` (a header
+    // bridge-hooks.ts never resolves for that kind) and vice versa.
+    if (trigger.on === 'webhook' && !trigger.webhook) {
+      findings.push(err(obj, 'trigger-webhook', 'webhook trigger requires a "webhook" block'));
+    }
+    if (trigger.webhook && WEBHOOK_FAMILY_KIND_IDS.has(trigger.on)) {
+      const wh = trigger.webhook;
+      const allowedEvents = WEBHOOK_EVENTS_BY_KIND[trigger.on] ?? WEBHOOK_EVENTS_BY_KIND.webhook;
+      const allowedProviders = WEBHOOK_PROVIDERS_BY_KIND[trigger.on] ?? WEBHOOK_PROVIDERS;
+      if (!WEBHOOK_ID_RE.test(wh.id)) {
+        findings.push(err(obj, 'trigger-webhook', `webhook.id "${wh.id}" does not match ${WEBHOOK_ID_RE}`));
+      }
+      if (!allowedProviders.has(wh.provider)) {
+        findings.push(
+          err(
+            obj,
+            'trigger-webhook',
+            `webhook.provider "${wh.provider}" must be one of ${[...allowedProviders].join('|')}` +
+              (trigger.on !== 'webhook'
+                ? ` for on:"${trigger.on}" (GitHub only — gitea/gitlab have no grounded payload shape)`
+                : ''),
+          ),
+        );
+      }
+      if (!Array.isArray(wh.events) || wh.events.length === 0) {
+        findings.push(err(obj, 'trigger-webhook', 'webhook.events must be non-empty'));
       } else {
-        const wh = trigger.webhook;
-        if (!WEBHOOK_ID_RE.test(wh.id)) {
-          findings.push(err(obj, 'trigger-webhook', `webhook.id "${wh.id}" does not match ${WEBHOOK_ID_RE}`));
-        }
-        if (!WEBHOOK_PROVIDERS.has(wh.provider)) {
-          findings.push(
-            err(
-              obj,
-              'trigger-webhook',
-              `webhook.provider "${wh.provider}" must be one of ${[...WEBHOOK_PROVIDERS].join('|')}`,
-            ),
-          );
-        }
-        if (!Array.isArray(wh.events) || wh.events.length === 0) {
-          findings.push(err(obj, 'trigger-webhook', 'webhook.events must be non-empty'));
-        } else {
-          for (const ev of wh.events) {
-            if (!WEBHOOK_EVENTS.has(ev)) {
-              findings.push(
-                err(
-                  obj,
-                  'trigger-webhook',
-                  `webhook.events entry "${ev}" must be one of ${[...WEBHOOK_EVENTS].join('|')}`,
-                ),
-              );
-            }
+        for (const ev of wh.events) {
+          if (!allowedEvents.has(ev)) {
+            findings.push(
+              err(
+                obj,
+                'trigger-webhook',
+                `webhook.events entry "${ev}" must be one of ${[...allowedEvents].join('|')} for on:"${trigger.on}"`,
+              ),
+            );
           }
         }
-        if (!SECRET_ENV_RE.test(wh.secretEnv)) {
-          findings.push(
-            err(obj, 'trigger-webhook', `webhook.secretEnv "${wh.secretEnv}" does not match ${SECRET_ENV_RE}`),
-          );
-        }
-        if (wh.secretEnvPrevious !== undefined && !SECRET_ENV_RE.test(wh.secretEnvPrevious)) {
-          findings.push(
-            err(
-              obj,
-              'trigger-webhook',
-              `webhook.secretEnvPrevious "${wh.secretEnvPrevious}" does not match ${SECRET_ENV_RE}`,
-            ),
-          );
-        }
-        if (!Array.isArray(wh.sources) || wh.sources.length === 0) {
-          findings.push(err(obj, 'trigger-webhook', 'webhook.sources must be non-empty'));
+      }
+      if (!SECRET_ENV_RE.test(wh.secretEnv)) {
+        findings.push(
+          err(obj, 'trigger-webhook', `webhook.secretEnv "${wh.secretEnv}" does not match ${SECRET_ENV_RE}`),
+        );
+      }
+      if (wh.secretEnvPrevious !== undefined && !SECRET_ENV_RE.test(wh.secretEnvPrevious)) {
+        findings.push(
+          err(
+            obj,
+            'trigger-webhook',
+            `webhook.secretEnvPrevious "${wh.secretEnvPrevious}" does not match ${SECRET_ENV_RE}`,
+          ),
+        );
+      }
+      if (!Array.isArray(wh.sources) || wh.sources.length === 0) {
+        findings.push(err(obj, 'trigger-webhook', 'webhook.sources must be non-empty'));
+      }
+    }
+    if (WEBHOOK_FAMILY_KIND_IDS.has(trigger.on)) {
+      findings.push(...checkTargetProject(obj, 'trigger-webhook', flow, trigger.target, opts));
+    }
+
+    // trigger-agent-complete (R2-08-F2, T1 ruling #1): `agent:` is REQUIRED on
+    // an `on: agent-complete` row — absent must never mean "fires for all"
+    // (the fail-open shape T1's ruling closed).
+    if (trigger.on === 'agent-complete' && !trigger.agent) {
+      findings.push(
+        err(
+          obj,
+          'trigger-agent-complete',
+          'agent-complete trigger requires a non-empty "agent" (the source agent slug whose completion fires this row) — absent never means "fires for all"',
+        ),
+      );
+    }
+    // adversarial-review fix: `agent-complete` mints a fresh run exactly like
+    // cron/webhook (fireAgentCompleteTriggers → stageFlowRunRequest →
+    // mintTriggeredInitiative), so its `flow` target needs the SAME target-flow
+    // project-binding requirement — missed when this check was added for
+    // cron/webhook only. Not silent at runtime (mintTriggeredInitiative's
+    // `no-project` status still fail-closes the mint), but a flow author
+    // authoring a project-less agent-complete target got no early warning.
+    if (trigger.on === 'agent-complete') {
+      findings.push(...checkTargetProject(obj, 'trigger-agent-complete', flow, trigger.target, opts));
+    }
+
+    // trigger-projects (R2-08-F1): `projects:` is kind-independent. SHAPE is
+    // checked UNCONDITIONALLY — independent of `opts.projectIds` — mirroring
+    // `trigger-agent-complete` twelve lines above: a hand-crafted PUT body
+    // (e.g. a bare string) must be refused even by a caller that never learns
+    // about `projectIds`. A bare string is itself a valid `for...of` target
+    // (it iterates CHARACTERS) — the membership loop below must never run
+    // against a malformed value, or a single bad string emits one nonsense
+    // finding per letter instead of one type error.
+    //
+    // EXCLUSION (R2-08 addendum, 2026-08-07, WI forge-f9g,
+    // docs/decisions/027-studio-object-model.md): `on: merged` is EXCLUDED
+    // from `projects:` scoping entirely — checked FIRST, before shape/
+    // membership, and exclusively (an `on:merged` row never falls through to
+    // those checks). `on: merged` dispatches INLINE from
+    // `orchestrator/finalize-merged.ts` via `resolveMergeAgentHandler` — it
+    // never stages a claimable `FlowRunRequest`, so `drainFlowRunRequests`'s
+    // scope enforcement (the ONE enforcement point every other kind reaches)
+    // never runs for it. A declared scope here — including `projects: []`,
+    // still a DECLARED scope, not an absent one — would therefore be
+    // silently unenforced, so it is made UNAUTHORABLE rather than left
+    // fail-open. Every OTHER kind (cron/webhook/pr-merged/issue-raised/
+    // agent-complete/flow-complete) all reach the drain and are unaffected.
+    if (trigger.projects !== undefined && trigger.on === 'merged') {
+      findings.push(
+        err(
+          obj,
+          'trigger-projects',
+          `"projects:" cannot be declared on an on:"merged" trigger — on:merged dispatches INLINE from finalize-merged.ts (resolveMergeAgentHandler), never staging a claimable request, so drainFlowRunRequests's "projects:" enforcement never runs for it; a declared scope (including an empty "projects: []") would be silently unenforced. Tracked as forge-f9g — remove "projects:", or use on:"pr-merged" (drain-enforced, per-project) instead.`,
+        ),
+      );
+    } else if (trigger.projects !== undefined) {
+      const shapeOk = Array.isArray(trigger.projects) && trigger.projects.every((p) => typeof p === 'string');
+      if (!shapeOk) {
+        findings.push(
+          err(
+            obj,
+            'trigger-projects',
+            `Trigger "projects" must be an array of strings — got ${JSON.stringify(trigger.projects)}`,
+          ),
+        );
+      } else if (opts?.projectIds) {
+        // MEMBERSHIP: any declared id must be a REAL discovered project. Lint
+        // reads the SAME evidence the dispatcher reads (rule 2): the same
+        // project enumeration (`discoverProjects`) threaded in as
+        // `opts.projectIds`. Omitted opt ⇒ skip, mirroring `flowIds`'s own
+        // precedent — only reachable once shape is already known-good.
+        for (const p of trigger.projects) {
+          if (!opts.projectIds.has(p)) {
+            findings.push(
+              err(
+                obj,
+                'trigger-projects',
+                `Trigger "projects" names "${p}", which is not a discovered project — must be one of ${[...opts.projectIds].join('|')}`,
+              ),
+            );
+          }
         }
       }
-      findings.push(...checkTargetProject(obj, 'trigger-webhook', flow, trigger.target, opts));
     }
 
     // trigger-shape: per-kind field coherence — cron/webhook fields are stray
@@ -229,9 +366,13 @@ export function checkFlowTriggers(
         err(obj, 'trigger-shape', `"concurrency" is only valid on cron triggers (got on:"${trigger.on}")`),
       );
     }
-    if (trigger.on !== 'webhook' && trigger.webhook !== undefined) {
+    if (!WEBHOOK_FAMILY_KIND_IDS.has(trigger.on) && trigger.webhook !== undefined) {
       findings.push(
-        err(obj, 'trigger-shape', `"webhook" block is only valid on webhook triggers (got on:"${trigger.on}")`),
+        err(
+          obj,
+          'trigger-shape',
+          `"webhook" block is only valid on webhook/pr-merged/issue-raised triggers (got on:"${trigger.on}")`,
+        ),
       );
     }
     // R4-09-F3: `mode` (reflect interactive|automated) is valid ONLY on an
@@ -262,9 +403,15 @@ export function checkFlowTriggers(
  * no registry), the check is skipped — studio-lint, which sees every flow,
  * runs it.
  */
+const TARGET_PROJECT_CHECK_LABEL: Readonly<Record<string, string>> = {
+  'trigger-cron': 'cron',
+  'trigger-webhook': 'webhook',
+  'trigger-agent-complete': 'agent-complete',
+};
+
 function checkTargetProject(
   obj: string,
-  check: 'trigger-cron' | 'trigger-webhook',
+  check: 'trigger-cron' | 'trigger-webhook' | 'trigger-agent-complete',
   flow: FlowDefinition,
   target: { kind: string; ref: string },
   opts: TriggerCheckOpts | undefined,
@@ -281,7 +428,7 @@ function checkTargetProject(
       err(
         obj,
         check,
-        `${check === 'trigger-cron' ? 'cron' : 'webhook'} trigger targets flow "${target.ref}", which has no project binding — external triggers mint runs against the TARGET flow's project`,
+        `${TARGET_PROJECT_CHECK_LABEL[check]} trigger targets flow "${target.ref}", which has no project binding — external triggers mint runs against the TARGET flow's project`,
       ),
     ];
   }

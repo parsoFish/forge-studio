@@ -17,7 +17,7 @@
  */
 
 import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
 import type {
   BuildProcess,
@@ -28,6 +28,9 @@ import type {
   ReleaseStepKind,
   ReleaseStepPhase,
 } from './studio/types.ts';
+import { REPO_RE } from './trigger-payload.ts';
+import { discoverProjects } from './studio/registry.ts';
+import { defaultConfigPath, loadConfig, resolveProjectsDir } from './config.ts';
 
 export type { DemoStep, DemoStepKind } from './studio/types.ts';
 export { DEMO_STEP_KINDS } from './studio/types.ts';
@@ -242,6 +245,16 @@ export type ProjectConfig = {
    * checkable obligation. Fail-closed when malformed. Absent ⇒ no build clause.
    */
   buildProcess?: BuildProcess;
+  /**
+   * R2-08-F3 — the project's `owner/name` GitHub full name, the repo→project
+   * mapping declaration `resolveProjectIdForRepo` reads for the `pr-merged` /
+   * `issue-raised` project-event trigger kinds. Optional — absent means this
+   * project can never match a project-event trigger (fail-closed; no
+   * auto-discover / directory-name fallback anywhere). Validated by the SAME
+   * `REPO_RE` `orchestrator/trigger-payload.ts` uses to extract a payload's
+   * repo — never a second, hand-copied regex.
+   */
+  repo?: string;
 };
 
 /**
@@ -402,6 +415,7 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
   const artifactRoot = parseArtifactRoot(obj.artifactRoot);
   const releaseProcess = parseReleaseProcess(obj.releaseProcess);
   const buildProcess = parseBuildProcess(obj.buildProcess);
+  const repo = parseRepo(obj.repo);
 
   return {
     testProcess,
@@ -422,7 +436,76 @@ export function validateProjectConfig(raw: unknown): ProjectConfig {
     ...(artifactRoot !== undefined ? { artifactRoot } : {}),
     ...(releaseProcess !== undefined ? { releaseProcess } : {}),
     ...(buildProcess !== undefined ? { buildProcess } : {}),
+    ...(repo !== undefined ? { repo } : {}),
   };
+}
+
+/**
+ * Parse + validate the optional `repo` field ("owner/name"). Fail-closed:
+ * present-but-malformed throws (mirrors every other project.json field —
+ * silently ignoring or coercing a bad value would let a project THINK it is
+ * wired to a repo it never validly declared). Validated by the SAME `REPO_RE`
+ * `orchestrator/trigger-payload.ts` exports and payload extraction already
+ * uses — never a second, hand-copied regex (R2-08-F3 anti-duplication rule).
+ */
+function parseRepo(v: unknown): string | undefined {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || !REPO_RE.test(v)) {
+    throw new Error(
+      `project-config: repo must be a valid "owner/name" string matching ${REPO_RE} when present (got ${JSON.stringify(v)})`,
+    );
+  }
+  return v;
+}
+
+/**
+ * R2-08-F3 (the crux) — resolve a webhook payload's `owner/repo` string to a
+ * REAL project id from the enumeration (`discoverProjects` /
+ * `normalizeProjectId`, `orchestrator/studio/registry.ts`) — NEVER the raw
+ * payload string, never a raw/un-normalized directory name.
+ *
+ * Resolution is a pure IDENTITY match against each discovered project's
+ * declared `repo:` (this module's own `loadProjectConfig`, so the SAME
+ * `REPO_RE` validation `parseRepo` above already applied backs every
+ * candidate). No auto-discover arm, no directory-name/tail fallback: an
+ * undeclared `repo` can never match. Ambiguity — two projects declaring the
+ * SAME repo — fails closed too (`null`), never an arbitrary
+ * first/last-wins pick.
+ *
+ * CONTAINMENT: `repo` is compared, never propagated into a path. A malformed
+ * `repo` (fails `REPO_RE`) is rejected BEFORE any directory scan even starts
+ * — the untrusted string never reaches the filesystem in any form. The scan
+ * itself only ever touches the REAL, already-enumerated project directories
+ * `discoverProjects` returns (fixed, trusted roots); `repo` never becomes a
+ * path segment anywhere in this function.
+ *
+ * Best-effort per project: a project whose `.forge/project.json` fails to
+ * load (malformed, unrelated to `repo`) is skipped rather than crashing
+ * resolution for an event about a DIFFERENT project — mirrors
+ * `cli/bridge-hooks.ts`'s `findWebhookTrigger` per-flow try/catch precedent.
+ */
+export function resolveProjectIdForRepo(forgeRoot: string, repo: string): string | null {
+  if (!REPO_RE.test(repo)) return null;
+  const root = resolve(forgeRoot);
+  const projectsDir = resolveProjectsDir(root, loadConfig(defaultConfigPath(root)));
+  const discovered = discoverProjects(projectsDir, root);
+
+  let matchedId: string | null = null;
+  let matchCount = 0;
+  for (const proj of discovered) {
+    if (!proj.hasConfig) continue;
+    let cfg: ProjectConfig | null;
+    try {
+      cfg = loadProjectConfig(proj.absPath);
+    } catch {
+      continue; // a malformed sibling project must not break resolution for THIS event
+    }
+    if (cfg?.repo === repo) {
+      matchCount++;
+      matchedId = proj.id;
+    }
+  }
+  return matchCount === 1 ? matchedId : null;
 }
 
 /**

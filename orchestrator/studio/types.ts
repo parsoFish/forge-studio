@@ -190,7 +190,13 @@ export type WebhookTriggerConfig = {
   id: string;
   /** github/gitea share the X-Hub-Signature-256 HMAC scheme; gitlab is a static token header. */
   provider: 'github' | 'gitea' | 'gitlab';
-  events: Array<'push' | 'release'>;
+  /**
+   * `pull_request`/`issues` (R2-08-F3) back the `on: pr-merged` /
+   * `on: issue-raised` kinds and are GitHub-only in practice (the bridge
+   * never resolves either header for gitea/gitlab — no grounded payload
+   * shape); `push`/`release` back `on: webhook`.
+   */
+  events: Array<'push' | 'release' | 'pull_request' | 'issues'>;
   /** Env-var NAME holding the shared secret (^[A-Z][A-Z0-9_]*$). */
   secretEnv: string;
   /** Optional previous-secret env-var name — rotation via verifyWithFallback. */
@@ -225,6 +231,21 @@ export type FlowTrigger = {
   webhook?: WebhookTriggerConfig;
   /** R4-09-F3: reflect-agent (on:merged) only. Absent ⇒ interactive. */
   mode?: TriggerMode;
+  /**
+   * R2-08-F1 (ADR-027 amendment): kind-independent per-project scoping.
+   * Absent ⇒ unscoped (fires for any resolved project — the pre-existing
+   * behaviour). A declared `[]` ⇒ scoped to nothing. The two states are NEVER
+   * collapsed into each other — `loadFlowDefinition` preserves the
+   * distinction and `drainFlowRunRequests` enforces it.
+   */
+  projects?: string[];
+  /**
+   * agent-complete only (R2-08-F2): the source agent slug whose completion
+   * fires this row, matched by strict identity (never prefix/substring).
+   * Absent is a lint error (`trigger-agent-complete`) — it must never mean
+   * "fires for all".
+   */
+  agent?: string;
   note?: string;
 };
 

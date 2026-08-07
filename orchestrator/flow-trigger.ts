@@ -22,6 +22,7 @@
  * tests assert firing without touching the queue or spawning an agent.
  */
 import type { FlowDefinition, FlowTrigger } from './studio/types.ts';
+import { stageFlowRunRequest } from './flow-run-requests.ts';
 
 /**
  * The trigger-kind registry (ADR-041): rows-as-data, one per `on:` vocabulary
@@ -31,9 +32,18 @@ import type { FlowDefinition, FlowTrigger } from './studio/types.ts';
  * the id, but `validateFlow` errors (`trigger-kind-reserved`) until the owning
  * roadmap item ships the runtime. No stubs anywhere.
  * - `flow-complete` — the flow reached terminal SUCCESS (fired by the flow-runner).
- * - `agent-complete` — reserved (R2-01/R4-09 standalone-agent lifecycle).
+ * - `agent-complete` — a standalone (non-flow) agent run completed (R2-08-F2:
+ *   fired by `fireAgentCompleteTriggers`, scanning the flow roster for rows
+ *   whose `agent:` identity-matches the completed slug).
  * - `merged` — the flow's PR was merged + finalized (fired by finalize-merged,
  *   async + post-run; the flow itself terminated earlier at `ready-for-review`).
+ * - `pr-merged` — a GitHub pull request was merged (R2-08-F3: signature-verified
+ *   receipt on the bridge's EXISTING /api/hooks/:hookId route, own `on:` value
+ *   carrying its own `webhook:` config block — never a sub-event under
+ *   `on: webhook`; fire = stage). GitHub only; gitlab/gitea stay schema-reserved
+ *   with zero stub handlers until a real payload shape grounds one.
+ * - `issue-raised` — a GitHub issue was opened (R2-08-F3, same receiver + GitHub-only
+ *   scope as `pr-merged`).
  * - `manual` — reserved (kickoff-kind unification).
  * - `cron` — temporal (croner-armed in the scheduler; fire = stage a request).
  * - `webhook` — external (signature-verified receipt on the bridge; fire = stage).
@@ -41,8 +51,10 @@ import type { FlowDefinition, FlowTrigger } from './studio/types.ts';
  */
 export const TRIGGER_KINDS = [
   { id: 'flow-complete', origin: 'platform', status: 'shipped', fires: 'lifecycle' },
-  { id: 'agent-complete', origin: 'platform', status: 'reserved', fires: 'lifecycle' },
+  { id: 'agent-complete', origin: 'platform', status: 'shipped', fires: 'lifecycle' },
   { id: 'merged', origin: 'ootb', status: 'shipped', fires: 'lifecycle' },
+  { id: 'pr-merged', origin: 'ootb', status: 'shipped', fires: 'external' },
+  { id: 'issue-raised', origin: 'ootb', status: 'shipped', fires: 'external' },
   { id: 'manual', origin: 'platform', status: 'reserved', fires: 'operator' },
   { id: 'cron', origin: 'platform', status: 'shipped', fires: 'temporal' },
   { id: 'webhook', origin: 'platform', status: 'shipped', fires: 'external' },
@@ -88,6 +100,66 @@ export async function fireFlowTriggers(
     deps.onFire?.(trigger);
     await deps.dispatch(trigger, event);
     fired.push(trigger);
+  }
+  return fired;
+}
+
+export type FireAgentCompleteTriggersOpts = {
+  queueRoot?: string;
+  /** R2-08-F1: the completed agent run's own project (T1 ruling), carried
+   *  onto every staged request as `eventProject`. Absent ⇒ unresolved
+   *  (a standalone run with no project binding). */
+  eventProject?: string;
+};
+
+/**
+ * R2-08-F2 — fire every `on: 'agent-complete'` row (across the given flow
+ * roster) whose `agent:` config identity-matches `completedAgentSlug`, the
+ * source agent that just completed a standalone run. Firing STAGES a
+ * claimable flow-run request via `stageFlowRunRequest` — this function never
+ * dispatches; dispatch stays exclusively in the guarded daemon sweep
+ * (`drainFlowRunRequests`, ADR-041 §3).
+ *
+ * Matching is strict identity (`===`), never prefix/substring/case-insensitive
+ * — `agent: 'developer'` must not fire for a completed slug of
+ * `'developer-ralph'` or `'x/developer'`. A row with `agent` absent (a lint
+ * error — `trigger-agent-complete`) can never match any real slug, so it
+ * fails closed at runtime too, defense in depth alongside the lint.
+ *
+ * Mirrors `fireFlowTriggers`'s own "no match → []" contract: a flow roster
+ * with no agent-complete row for this slug fires nothing.
+ */
+export async function fireAgentCompleteTriggers(
+  flows: Array<Pick<FlowDefinition, 'id' | 'triggers'>>,
+  completedAgentSlug: string,
+  opts: FireAgentCompleteTriggersOpts = {},
+): Promise<FlowTrigger[]> {
+  const fired: FlowTrigger[] = [];
+  let offsetMs = 0;
+  for (const flow of flows) {
+    for (const trigger of flow.triggers) {
+      if (trigger.on !== 'agent-complete') continue;
+      if (trigger.agent !== completedAgentSlug) continue;
+      fired.push(trigger);
+      // stageFlowRunRequest's filename is keyed on `target.ref` + `createdAt`
+      // with no collision-uniquification (unlike mintTriggeredInitiative's
+      // idExistsInQueue loop) — a strictly-increasing timestamp per fire in
+      // this same call guarantees distinct files when two rows share a target.
+      const createdAt = new Date(Date.now() + offsetMs++).toISOString();
+      stageFlowRunRequest(
+        {
+          target: trigger.target,
+          origin: 'agent-complete',
+          triggeredBy: `agent-complete:${completedAgentSlug}`,
+          sourceAgent: completedAgentSlug,
+          createdAt,
+          // R2-08-F1: absent stays absent — never coerce `undefined` to `[]`.
+          ...(trigger.projects !== undefined ? { projects: trigger.projects } : {}),
+          ...(opts.eventProject !== undefined ? { eventProject: opts.eventProject } : {}),
+        },
+        { queueRoot: opts.queueRoot },
+      );
+    }
   }
   return fired;
 }

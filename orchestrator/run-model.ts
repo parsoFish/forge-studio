@@ -27,9 +27,11 @@
 import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseManifest } from './manifest.ts';
+import type { InitiativeManifest } from './manifest.ts';
 import type { EventLogEntry } from './logging.ts';
 import type { QueueState } from './queue.ts';
-import { loadFlowDefinition, listAgentDefinitions } from './studio/registry.ts';
+import { loadFlowDefinition, listAgentDefinitions, normalizeProjectId } from './studio/registry.ts';
+import type { TriggerKindId } from './flow-trigger.ts';
 import { skillsDir as toSkillsDir } from './skill-path.ts';
 import {
   deriveNodeStatuses,
@@ -70,7 +72,7 @@ export type Run = {
   initiativeId: string;
   initiative: string;                // manifest title
   status: RunStatus;
-  origin: 'architect' | 'human-directed';
+  origin: 'architect' | 'human-directed' | 'triggered';
   costUsd: number;
   startedAt?: string;
   phases: Record<string, RunPhaseStatus>;       // keyed by FLOW NODE id
@@ -100,6 +102,21 @@ export type Run = {
    * own slice. A single-flow run carries just its own flow id.
    */
   flowLineage: string[];
+  /**
+   * R2-08-F4 (ADR-027 amendment): what started this run — a closed triple,
+   * derived and never stored/authored. Absent when the run carries no
+   * derivable provenance (a plain architect-originated run) — NEVER a
+   * fabricated default. See `deriveTrigger` below for the two derivation
+   * sources (cron/webhook/agent-complete mint a manifest carrying
+   * `trigger_kind`/`trigger_source`/`trigger_scope`; flow-complete/merged
+   * mint nothing, so their provenance comes from the run's own
+   * `*.trigger-firing` event instead).
+   */
+  trigger?: {
+    kind: TriggerKindId;
+    source: string;
+    scope: string | null;
+  };
 };
 
 // ---------------------------------------------------------------------------
@@ -115,8 +132,14 @@ export type Run = {
 // correct — an unknowable archival flow is not editable.
 const FALLBACK_FLOW_ID = 'unknown';
 
-/** Valid origin values for a Run — anything else defaults to 'architect'. */
-const VALID_ORIGINS = new Set(['architect', 'human-directed']);
+/**
+ * Valid origin values for a Run — anything else defaults to 'architect'.
+ * R2-08-F4 fidelity fix: `'triggered'` (manifest.ts's own
+ * `InitiativeOrigin`) belongs in this set too — it was previously silently
+ * coerced to `'architect'` here, which made a triggered run indistinguishable
+ * from an autonomous architect one.
+ */
+const VALID_ORIGINS = new Set(['architect', 'human-directed', 'triggered']);
 
 /**
  * Queue dir name → RunStatus.
@@ -562,6 +585,9 @@ function buildRun(args: {
     isStale,
   });
 
+  // --- Trigger provenance (R2-08-F4) ---
+  const trigger = deriveTrigger(manifest, events);
+
   return {
     id: cycleId,
     // ADR-028 / J5: associate the run with the flow its manifest names, so a
@@ -586,6 +612,7 @@ function buildRun(args: {
       ? { reflectionLost: reflectionLoss.cause, reflectionLostNote: reflectionLoss.note }
       : {}),
     ...(workItems.length > 0 ? { workItems } : {}),
+    ...(trigger !== undefined ? { trigger } : {}),
   };
 }
 
@@ -606,6 +633,70 @@ function findOrigin(events: readonly EventLogEntry[]): string | undefined {
     if (e.message === 'cycle.start' && typeof origin === 'string') {
       return origin;
     }
+  }
+  return undefined;
+}
+
+/**
+ * R2-08-F4: find the run's own `*.trigger-firing` event — the ONLY source
+ * flow-complete (flow-runner.ts) / merged (finalize-merged.ts) provenance
+ * has, since chaining/merged-dispatch never mint a fresh manifest (they
+ * repoint or run inline within the SAME initiative). Both emitters write the
+ * identical `metadata: { on, target, source_flow }` shape; `on` IS the
+ * TriggerKindId string ('flow-complete' | 'merged') and `source_flow` is the
+ * declaring flow id — never operator prose, never payload text. The first
+ * matching event wins (a run fires at most one trigger per cycle in
+ * practice; this mirrors `findOrigin`'s own first-match convention).
+ */
+function findTriggerFiringEvent(events: readonly EventLogEntry[]): { on: string; sourceFlow: string } | undefined {
+  for (const e of events) {
+    if (e.message !== 'flow-runner.trigger-firing' && e.message !== 'finalize.trigger-firing') continue;
+    const on = e.metadata?.on;
+    const sourceFlow = e.metadata?.source_flow;
+    if (typeof on === 'string' && typeof sourceFlow === 'string') {
+      return { on, sourceFlow };
+    }
+  }
+  return undefined;
+}
+
+/**
+ * R2-08-F4 (ADR-027 amendment): derive `Run.trigger`. Two independent
+ * sources, because the shipped kinds differ in whether a run is minted at
+ * all (see the module-level `Run.trigger` doc):
+ *
+ *   1. cron / webhook / agent-complete originate a NEW run — provenance was
+ *      persisted onto THIS SAME manifest at mint time
+ *      (`mintTriggeredInitiative`'s `trigger_kind`/`trigger_source`/
+ *      `trigger_scope`).
+ *   2. flow-complete / merged mint nothing — provenance comes from the run's
+ *      own `*.trigger-firing` event instead; `scope` is the run's OWN
+ *      project (there is no separate "event project" to resolve — the
+ *      dispatch runs inline within/against this exact initiative), read
+ *      through the SAME `normalizeProjectId` every other project-id
+ *      comparison in the codebase uses.
+ *
+ * Absent provenance (a plain architect-originated run) returns `undefined`
+ * — never a fabricated placeholder.
+ */
+function deriveTrigger(
+  manifest: Pick<InitiativeManifest, 'trigger_kind' | 'trigger_source' | 'trigger_scope' | 'project'>,
+  events: readonly EventLogEntry[],
+): Run['trigger'] {
+  if (manifest.trigger_kind && manifest.trigger_source) {
+    return {
+      kind: manifest.trigger_kind as TriggerKindId,
+      source: manifest.trigger_source,
+      scope: manifest.trigger_scope ?? null,
+    };
+  }
+  const firing = findTriggerFiringEvent(events);
+  if (firing) {
+    return {
+      kind: firing.on as TriggerKindId,
+      source: firing.sourceFlow,
+      scope: manifest.project ? normalizeProjectId(manifest.project) : null,
+    };
   }
   return undefined;
 }
@@ -678,6 +769,11 @@ function findNewestCycleId(root: string, initiativeId: string): string | null {
 
 function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
   const origin: Run['origin'] = VALID_ORIGINS.has(manifest.origin) ? (manifest.origin as Run['origin']) : 'architect';
+  // R2-08-F4: a planned (pending) run has no cycle log yet, so only the
+  // manifest-persisted branch of deriveTrigger can ever match here (a
+  // flow-complete/merged run always already has events by the time it
+  // exists at all — see the module-level Run.trigger doc).
+  const trigger = deriveTrigger(manifest, []);
   return {
     id: manifest.initiative_id,
     flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
@@ -691,6 +787,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
     artifactsReady: {},
     // A planned run hasn't executed any phase yet → lineage is just its own flow.
     flowLineage: [manifest.flow_id ?? FALLBACK_FLOW_ID].filter((f) => f !== FALLBACK_FLOW_ID),
+    ...(trigger !== undefined ? { trigger } : {}),
   };
 }
 

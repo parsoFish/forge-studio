@@ -39,6 +39,69 @@ function idToken(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 24) || 'run';
 }
 
+/**
+ * R2-08-F4 (ADR-027 amendment; round-2 correction): derive the
+ * trigger-provenance fields to persist on the minted manifest, from the
+ * staged request alone — never from `req.payload` (free-text/external data;
+ * the attacker-payload acceptance test pins that `trigger` never carries
+ * payload text). `source` is always a DEFINITION id:
+ *   - `agent-complete` → the completed agent's own slug (`sourceAgent`).
+ *   - `webhook`        → ONLY `sourceFlowId` — the declaring flow, threaded
+ *     by the caller (bridge-hooks.ts's `findWebhookTrigger` resolves it;
+ *     `triggeredBy` deliberately stays the hook-id slug `webhook:<hookId>`
+ *     for its own readers, and a hook id is NOT a definition id). NO
+ *     fallback: a webhook request with no resolved declaring flow has no
+ *     honest provenance at all — `null`, never a degraded trigger whose
+ *     `source` is a hook-id slug (round-2 ruling; the earlier fallback that
+ *     stripped `webhook:` off `triggeredBy` produced exactly that forbidden
+ *     shape and is deleted).
+ *   - `cron`           → prefers `sourceFlowId` (every real
+ *     `cron-triggers.ts` fire sets it, for the same one-mechanism-per-field
+ *     reason as webhook); falls back to recovering the declaring flow id
+ *     from `triggeredBy`'s own `cron:<declaringFlowId>` shape when absent.
+ *     This fallback is NOT the webhook one reinstated: a cron `triggeredBy`
+ *     prefix genuinely IS the declaring flow id (cron-triggers.ts's
+ *     `makeFireFn` writes `cron:${d.flowId}` — documented intent, correct by
+ *     construction), where a webhook `triggeredBy` prefix is a hook id,
+ *     never a flow id.
+ * Only these three origins ever reach this function (drainFlowRunRequests
+ * routes chaining's `origin: 'trigger'` through `enqueueFlowRun` instead,
+ * never through mint). Returns `null` when no honest source is derivable at
+ * all — never a fabricated placeholder.
+ *
+ * `kind` (adversarial-review fix, R2-08-F3): reads `req.triggerKind` — the
+ * DECLARATION's own `on:` value — falling back to `req.origin` only when
+ * absent. `origin` alone is NOT `kind`: it describes the mint/transport
+ * mechanism, and `origin: 'webhook'` now covers THREE distinct registry
+ * kinds (`webhook`, `pr-merged`, `issue-raised` all share the
+ * signature-verified `/api/hooks/:hookId` receiver — R2-08-F3). Reading
+ * `req.origin` directly here would collapse all three onto the single
+ * reported value `'webhook'`, contradicting ADR-027's "kind: the registry
+ * id, the declaration that fired" contract. `cron`/`agent-complete` origins
+ * stay unambiguously 1:1 with their registry kind (there is no `on: cron`
+ * sub-vocabulary), so their real callers never need to set `triggerKind` —
+ * the fallback covers them exactly as before. NEVER sourced from
+ * `req.payload` (external/attacker data) — same exclusion `source` above
+ * already honours.
+ */
+function deriveTriggerFields(req: FlowRunRequest): { kind: string; source: string; scope?: string } | null {
+  let source: string | undefined;
+  if (req.origin === 'agent-complete') {
+    source = req.sourceAgent;
+  } else if (req.origin === 'webhook') {
+    source = req.sourceFlowId;
+  } else if (req.origin === 'cron') {
+    const prefix = 'cron:';
+    source = req.sourceFlowId ?? (req.triggeredBy.startsWith(prefix) ? req.triggeredBy.slice(prefix.length) : undefined);
+  }
+  if (!source) return null;
+  return {
+    kind: req.triggerKind ?? req.origin,
+    source,
+    ...(req.eventProject !== undefined && req.eventProject !== null ? { scope: req.eventProject } : {}),
+  };
+}
+
 export function mintTriggeredInitiative(
   req: FlowRunRequest,
   opts: { queueRoot?: string; forgeRoot?: string; logsRoot?: string } = {},
@@ -48,7 +111,7 @@ export function mintTriggeredInitiative(
     const flowId = req.target.ref;
     const flow = loadFlowDefinition(join(forgeRoot, 'studio', 'flows', flowId, 'flow.yaml'));
     if (!flow.project) {
-      return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook)` };
+      return { status: 'no-project', detail: `flow "${flowId}" has no project binding — external triggers need one (lint: trigger-cron/trigger-webhook/trigger-agent-complete)` };
     }
     const cfg = loadConfig(defaultConfigPath(forgeRoot));
     const projectRepoPath = join(resolveProjectsDir(forgeRoot, cfg), flow.project);
@@ -92,6 +155,11 @@ export function mintTriggeredInitiative(
       initiativeId = `${baseId}-${n}`;
     }
 
+    // R2-08-F4: trigger provenance, derived from the staged request alone
+    // and persisted onto the manifest's own frontmatter (never a new stored
+    // object — run-model.ts reads it straight off this SAME manifest).
+    const triggerFields = deriveTriggerFields(req);
+
     const manifest: InitiativeManifest = {
       initiative_id: initiativeId,
       project: flow.project,
@@ -102,6 +170,13 @@ export function mintTriggeredInitiative(
       phase: 'pending',
       origin: 'triggered',
       flow_id: flowId,
+      ...(triggerFields
+        ? {
+            trigger_kind: triggerFields.kind,
+            trigger_source: triggerFields.source,
+            ...(triggerFields.scope !== undefined ? { trigger_scope: triggerFields.scope } : {}),
+          }
+        : {}),
       body: [
         `# ${initiativeId}`,
         '',

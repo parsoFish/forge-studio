@@ -201,3 +201,42 @@ test('drain does NOT skip an origination request when the active triggered run t
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TEST (T3, R2-08-F2 pin #13) — the TRUE current agent-target seam
+// behaviour, pinned BEFORE F2 ships so an implementer's comment rewrite
+// cannot silently claim it already dispatches. This is green-on-arrival: it
+// characterises `defaultStartAgentRun`'s existing default (module doc: "R4-09
+// seam: dispatch a standalone-agent target. Default throws (request retained)
+// until the reflect cutover wires it"). It must stay green after F1/F2 ship —
+// neither feature touches the `target.kind: 'agent'` default itself; F2 only
+// makes `agent-complete` a fireable EVENT KIND (see flow-trigger.test.ts /
+// agent-complete-trigger.test.ts), which stages `target.kind: 'flow'`
+// requests, not agent ones.
+// ---------------------------------------------------------------------------
+
+test('(green-on-arrival) [F2 #13] target.kind: "agent" with no injected startAgentRun returns status "error" and RETAINS the request file on disk', () => {
+  const root = setup();
+  try {
+    stageFlowRunRequest(
+      { target: { kind: 'agent', ref: 'reflector' }, origin: 'trigger', triggeredBy: 'x', sourceInitiativeId: 'INIT-agent-target', createdAt: '2026-08-07T00-00-00' },
+      { queueRoot: root },
+    );
+    const results = drainFlowRunRequests({ queueRoot: root });
+
+    assert.equal(results.length, 1);
+    assert.equal(
+      results[0].status,
+      'error',
+      `expected the default (uninjected) startAgentRun to surface as status "error" — got ${JSON.stringify(results[0])}. Kills an implementer's comment rewrite that silently changes this default (auto-dispatch, silent drop, or a different status) instead of deliberately wiring startAgentRun.`,
+    );
+    assert.match(results[0].detail ?? '', /R4-09|no standalone-agent dispatch|retained/i);
+    assert.equal(
+      listFlowRunRequests({ queueRoot: root }).length,
+      1,
+      'the request file must be RETAINED on disk (never dropped) so the next sweep can retry/inspect it',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
