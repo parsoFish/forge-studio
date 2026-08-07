@@ -136,6 +136,43 @@ currently-passing beat, and its two conversational-drafting steps are NOT
 pre-excluded because R4-15/R4-17 may make them genuinely real on the R2-10
 shell. Full reasoning is recorded on the registry entry itself.
 
+### R2-B12 Triggers runtime — per-project scoping, agent-complete, project events, provenance (R2-08, 2026-08-07)
+
+Triggers became per-project and gained two lifecycle/domain kinds. A trigger
+declaration carries `projects?: string[]`, enforced at **one** point —
+`drainFlowRunRequests` — and mirrored (never replaced) by `forge studio lint`'s
+`trigger-projects` check reading the same `discoverProjects` evidence. Absent
+means unscoped, `[]` means scoped to nothing, and the two are never collapsed;
+an out-of-scope event produces the typed `skipped-out-of-scope` drain status
+rather than a silent drop. `normalizeProjectId` (`orchestrator/studio/registry.ts`)
+is the single project-id derivation both lint and dispatch use, so they cannot
+disagree.
+
+`agent-complete` is live: `fireAgentCompleteTriggers` (`orchestrator/flow-trigger.ts`)
+fires from `dispatchAgentRun`'s real, non-suppressed completion and matches a
+**required** `agent:` source selector by strict identity. `pr-merged` and
+`issue-raised` are `origin: 'ootb'` rows over the existing signature-verified
+webhook receiver; `.forge/project.json` gained optional `repo: "owner/name"`
+(validated by the same `REPO_RE` as the webhook allowlist) and
+`resolveProjectIdForRepo` (`orchestrator/project-config.ts`) maps a payload repo
+to a project **id from the enumeration** by identity — undeclared fails closed,
+duplicate declarations resolve to `null`. GitHub-only, structurally (provider-gated,
+not header-trusting) and at lint time.
+
+A run records what started it: `trigger: {kind, source, scope}` on the `Run`
+model — derived from the staged request where a run is minted, and from the
+`*.trigger-firing` event where it is not (`flow-complete`/`merged` mint nothing).
+`Run.origin` gained `'triggered'`, which previously collapsed to `'architect'`.
+`GET /api/triggers` exposes standing declarations. The `data-*` vocabulary is
+named in `docs/forge-ui-dom-and-harness.md` and attached by the consuming
+surfaces, not here.
+
+**Two exclusions, recorded rather than papered over.** `on: merged` dispatches
+inline from `finalize-merged.ts` and never reaches the drain, so `projects:` on
+it is refused by lint — naming the reason and `forge-f9g` — rather than accepted
+and silently unenforced. And gitlab/gitea project events stay schema-reserved
+with zero stubs, because their payload shapes could not be corpus-grounded.
+
 ## Planned initiatives
 
 ### R2-01 Agent-as-runnable primitive
@@ -373,7 +410,48 @@ shell. Full reasoning is recorded on the registry entry itself.
 
 ### R2-08 Triggers runtime (per-project scoping + agent-complete + project events)
 
-- **Status:** planned  ·  **Wave:** 5 (module: triggers-runtime) — operator decision 5, 2026-08-03: ONE successor initiative to R2-04, not per-kind slices
+- **Status:** **implemented** (2026-08-07 — as-built in R2-B12; F1/F2/F3/F4 met their ACs, with two scope exclusions recorded honestly: `on: merged` is excluded from `projects:` scoping and made unauthorable rather than silently unenforced — `forge-f9g`; and F3's project-event kinds ship **GitHub-only**, gitlab/gitea schema-reserved with zero stubs because their payload shapes could not be corpus-grounded)  ·  **Wave:** 5 (module: triggers-runtime) — operator decision 5, 2026-08-03: ONE successor initiative to R2-04, not per-kind slices
+- **Implemented-notes (2026-08-07, ADR-027 R2-08 amendment + addendum):**
+  - **F1 — built.** `projects?: string[]` on a trigger declaration, enforced at
+    the `drainFlowRunRequests` **dispatch point** (the ONE enforcement point) and
+    mirrored by `forge studio lint`'s `trigger-projects` check reading the SAME
+    evidence (`discoverProjects`). Absent ⇒ unscoped; `[]` ⇒ scoped to nothing —
+    never collapsed. Out-of-scope yields the typed `skipped-out-of-scope` drain
+    status, surfaced in results and `notify`, never a silent drop. All four
+    production `stageFlowRunRequest` sites carry `projects`/`eventProject`;
+    `normalizeProjectId` (`studio/registry.ts`) is the ONE project-id derivation
+    shared by lint and dispatch.
+  - **F2 — built.** `agent-complete` flipped `reserved → shipped`;
+    `fireAgentCompleteTriggers` fires from the real `dispatchAgentRun` completion
+    (non-suppressed only), matching a **required** `agent:` source selector by
+    strict identity — a row without it is a lint error, never "fires for all".
+    Staging only; dispatch stays in the guarded daemon sweep. The stale
+    "throws until R4-09" header comment in `flow-run-requests.ts` is deleted and
+    replaced with the true state (R4-09's reflect dispatch is a different,
+    inline seam in `finalize-merged.ts`; this queue has no production
+    `startAgentRun` injector).
+  - **F3 — built.** `pr-merged` / `issue-raised` as `origin: 'ootb'` registry
+    rows over the existing webhook receiver. `.forge/project.json` gains optional
+    **`repo: "owner/name"`**, validated by the SAME `REPO_RE` the webhook
+    allowlist uses; `resolveProjectIdForRepo` matches by identity and returns the
+    **enumeration id**, never the payload string. Undeclared `repo` fails closed;
+    two projects declaring the same repo resolve to `null`, never an arbitrary
+    pick. GitHub-only, enforced structurally (a forged `x-github-event` on a
+    gitlab-provider row still 400s) and now also at lint time.
+  - **F4 — built, data side only.** `trigger: {kind, source, scope}` on the run
+    model, derived — from the staged request for the kinds that mint
+    (`cron`/`webhook`/`agent-complete`) and from the already-shipped
+    `*.trigger-firing` event for the kinds that do not (`flow-complete`/`merged`).
+    `Run.origin` gains `'triggered'` (it previously collapsed silently to
+    `'architect'`). `GET /api/triggers` surfaces standing declarations
+    (`projects: null` = unscoped vs `[]` = scoped to nothing). The `data-*`
+    vocabulary is **named** in `docs/forge-ui-dom-and-harness.md` and attached
+    nowhere — rendering belongs to R6-04-F2 / R6-01-F4 / R6-05 / R6-06.
+  - **Filed residue:** `forge-f9g` (`on: merged` bypasses the drain enforcement
+    point — its durable fix is a structural choke point, not a fourth
+    per-mechanism patch), `forge-76y` (hand-built `FlowRunRequest` fixtures drift
+    from production staging shape, keeping two correct-valued fallback arms
+    alive).
 - **Depends on:** R2-04 (the 7-kind registry + HMAC webhook machinery this extends). **Depended on by:** R6-04 *(soft — kickoff renders F4's provenance)*, R6-01/R6-05/R6-06 *(soft — same, run detail + ledgers)*, R4-20 *(soft — on-completion chaining)*.
 - **Context:** Wave-5 cut. The mockup makes triggers first-class **and per-project** (`TRIGGERS` in `data.jsx`): the same flow/agent triggers differently per project (`demo-runner`: "PR merged → refresh demo artifacts, per-project: betterado, gitpulse"; `issue-triage`: "issue raised → triage sweep, per-project: gitpulse"), agents chain on completion (`adversarial-review`: "auto — when the Developer node completes"; `brain-tune`: "auto — when a forge-develop run completes"), and every builder/kickoff/live-run surface shows what starts a run and what started THIS run. As-built (verified 2026-08-03 review pass; the ADR-041 state lives in R2-04's implemented-notes — R2-B4's original text predates it): `TRIGGER_KINDS` ships **4 kinds live** — `flow-complete | merged | cron | webhook`; `manual`, `agent-complete` and `feed` are **reserved rows** (parse ok, lint-error on use — `trigger-kind-reserved`, `orchestrator/flow-trigger.ts:29-46`). Agent-**target** dispatch is a different seam and is already LIVE — `startAgentRun` in `orchestrator/flow-run-requests.ts:181-183` is the production reflect path (`on: merged → target {kind: agent, ref: reflector}`); the file-header comment "throws until R4-09" (`flow-run-requests.ts:22`) is stale and retires here. Trigger declarations are flow-level with no per-project scoping. **Acceptance references:** mockup journeys `run-agent-demo-runner` (project-hook trigger), `run-agent-reflector` + `run-flow-brain-tune` (on-complete chain), `run-flow` (manual kickoff) — the 27-journey set deliberately covers all three trigger framings. **As-built baseline:** `as-built-inventory.md` §6.
 - **Features:**
@@ -675,3 +753,11 @@ prior-art research) demonstrably bottlenecks the linear flow.
   fail-closed refusal now; R2-11 is the enforcement work that relaxes it
   per-agent. Unwaved platform continuity — outside wave-5 closure, pulled at
   need.
+
+- 2026-08-07 — **R2-08 implemented** (wave-5 batch C, lane α). Per-project
+  trigger scoping, `agent-complete` lit up, `pr-merged`/`issue-raised` project
+  events, and trigger provenance on the run model. Status flipped
+  `planned → implemented`; as-built absorbed into **R2-B12**. ADR-027 gained the
+  R2-08 amendment (`projects:`), a factual correction to its derivation-source
+  wording, and an addendum recording the `on: merged` exclusion. Residue filed:
+  `forge-f9g`, `forge-76y`.
