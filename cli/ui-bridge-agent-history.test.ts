@@ -36,6 +36,23 @@
  *     (line ~1139) derives `state`/`costUsd` from exactly this shape; D3.5
  *     below pins that the NEW route reuses that SAME derivation rather than
  *     re-implementing it.
+ *   - ⚑ ROUND 3 (Amendment 1) — the above is NOT the only reachable identity
+ *     shape. `POST /api/agents/:slug/run` (ui-bridge.ts:1332-1391) mints
+ *     `runId` and, when materials are attached, SYNCHRONOUSLY (before the
+ *     response is sent) `mkdirSync`s the run dir and emits exactly ONE `log`
+ *     event of its own (`agent-run.materials-staged`, ui-bridge.ts:
+ *     1370-1389): `skill: slug` at the top level, `metadata: {materials:
+ *     [...]}` — NO `agent_slug` key anywhere. `spawnAgentDispatch`
+ *     (ui-bridge.ts:1976) then returns BEFORE the child `agent dispatch`
+ *     process is ever spawned whenever `FORGE_ARCHITECT_NO_SPAWN=1` —
+ *     forge's OWN universal test/journey convention (this file's own
+ *     `before()` below sets it; `scripts/e2e-journey.mjs`'s `startWatch`
+ *     sets it on every bridge any journey ever drives) — so `runAgent`'s
+ *     start/end events (the ones carrying `metadata.agent_slug`) NEVER get
+ *     written for a run produced this way. Measured for REAL by
+ *     `scripts/journeys/agents.mjs`'s `agents-kickoff-dispatch` beat (a real
+ *     browser click through a real bridge, not a fixture) — see that file's
+ *     "LOUD FINDING" comment. See the amended D4 below.
  *   - `EventLogEntry.cost_usd` (orchestrator/logging.ts:78) is a TOP-LEVEL
  *     field, never nested under `metadata` — every fixture below places it
  *     there.
@@ -50,9 +67,18 @@
  *
  * D-DECISIONS PINNED HERE (verbatim from the task brief):
  *   D3  — status/cost come from that TARGET's own record, never an aggregate.
- *   D4  — standalone identity from the run's OWN `metadata.agent_slug`
- *         events, never a runId-prefix match (the 'probe' vs 'probe-x' alias
- *         trap below is THE test for this).
+ *   D4  — ⚑ AMENDED ROUND 3: standalone identity is exact equality against
+ *         the run's OWN events on EITHER `metadata.agent_slug` OR `skill`
+ *         (both are producer-set fields on that run's own log; both are
+ *         identity, not membership) — NEVER a runId-prefix/substring match
+ *         (the 'probe' vs 'probe-x' alias trap below, and its skill-only-
+ *         shape sibling, are THE tests for this). The original round-1/2
+ *         language pinned `metadata.agent_slug` as the SOLE source; round 3
+ *         found (via `scripts/journeys/agents.mjs`'s real, un-fixtured
+ *         `agents-kickoff-dispatch` run) that this makes a real dispatch
+ *         structurally invisible in its own history — a test that encoded
+ *         that would pin the defect as the contract. `skill` is now an
+ *         equally-valid identity source, exact-match only.
  *   D5  — the caller-supplied slug is a FILTER over enumerated entries,
  *         never a path segment — no new path join takes untrusted input.
  *   D9  — a flow-node row's status/narrative derive from THAT NODE's own
@@ -173,7 +199,15 @@ function seedEventsJsonl(cycleId: string, initId: string, events: Partial<Ev>[])
 /** A standalone dispatch dir, `_logs/_agent-<slug>-<stamp>/events.jsonl` —
  *  mirrors `runAgent`'s REAL emitted shape (orchestrator/run-agent.ts:320-382):
  *  a `start` event carrying `metadata.agent_slug`, an `end` event carrying
- *  the SAME `metadata.agent_slug` plus a top-level `cost_usd`. */
+ *  the SAME `metadata.agent_slug` plus a top-level `cost_usd`. This is the
+ *  shape a genuinely UNSUPPRESSED production spawn produces (both `skill`
+ *  AND `metadata.agent_slug` present, per `runAgent`'s own `logger.emit`
+ *  calls) — none of this repo's own test/journey harnesses ever reach it
+ *  (they all set `FORGE_ARCHITECT_NO_SPAWN=1`), but it is real production
+ *  ground, not hypothetical, so it stays pinned. See
+ *  `seedSuppressedMaterialsOnlyRun` below for the OTHER reachable shape —
+ *  the one this repo's own harnesses (including this file) actually
+ *  produce. */
 function seedStandaloneRun(runId: string, agentSlug: string, costUsd: number): void {
   const dir = join(forgeRoot, '_logs', runId);
   mkdirSync(dir, { recursive: true });
@@ -192,12 +226,57 @@ function seedStandaloneRun(runId: string, agentSlug: string, costUsd: number): v
   writeFileSync(join(dir, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
 }
 
-/** A dispatched-but-not-yet-started standalone run — the run dir exists (a
- *  real dispatch happened) but no event has landed yet. Honest-absent cost
- *  case (never a fabricated $0.00 that could be confused with "genuinely
- *  spent exactly zero and finished"). */
-function seedEmptyStandaloneRun(runId: string): void {
-  mkdirSync(join(forgeRoot, '_logs', runId), { recursive: true });
+/** ⚑ ROUND 3 (Amendment 2) — round 1's original `seedEmptyStandaloneRun`
+ *  (a run dir with LITERALLY ZERO events) is REMOVED here, not kept. It was
+ *  measured to be unreachable through `POST /api/agents/:slug/run` under
+ *  `FORGE_ARCHITECT_NO_SPAWN=1` — forge's own universal test/journey
+ *  convention (this file's `before()` sets it; every journey harness sets
+ *  it too; see the header comment above). Concretely, from
+ *  `cli/ui-bridge.ts`:
+ *    - WITHOUT materials: the route never `mkdirSync`s a run dir at all —
+ *      that call lives inside `if (materialsValidation.entries.length > 0)`
+ *      (ui-bridge.ts:1341-1362). `spawnAgentDispatch`'s OWN `mkdirSync`
+ *      (line 1984) is also unreached: its `FORGE_ARCHITECT_NO_SPAWN`
+ *      early-return (line 1976) fires first. Net: no directory, ever.
+ *    - WITH materials: `mkdirSync(runDir)`, `stageMaterials`, and the ONE
+ *      `agent-run.materials-staged` `log` event (lines 1341-1389) all run
+ *      SYNCHRONOUSLY in the SAME request handler, before the 200 response
+ *      is ever sent (line 1392). By the time any client — including a
+ *      concurrent `/history` poll — could observe the directory, it
+ *      already has exactly one event. There is no window, racy or
+ *      otherwise, where the directory exists with zero events under this
+ *      env convention.
+ *  A truly zero-event directory IS possible in a genuinely unsuppressed
+ *  production spawn (`FORGE_ARCHITECT_NO_SPAWN` unset) — `spawnAgentDispatch`
+ *  itself `mkdirSync`s the dir synchronously (line 1984) before handing off
+ *  to a DETACHED child process that writes its first event asynchronously
+ *  moments later — but reproducing that here would mean actually spawning a
+ *  real Claude Code process, which no test or journey in this repo does.
+ *  Pinning the old zero-event fixture would therefore pin a state that
+ *  cannot exist under this repo's own operating convention — a fixture that
+ *  could never exist teaches an implementer the wrong contract. Regrounded
+ *  below on the state that IS reachable: exactly one materials-staged event,
+ *  no `end` — a real suppressed run where cost genuinely IS absent. */
+
+/** A REAL, reachable suppressed-standalone run: `_logs/<runId>/events.jsonl`
+ *  with EXACTLY the one `agent-run.materials-staged` `log` event
+ *  `POST /api/agents/:slug/run` itself writes when materials are attached
+ *  (ui-bridge.ts:1370-1389) and nothing else — no `start`, no `end`. Carries
+ *  identity via `skill: agentSlug` ONLY; `metadata` has no `agent_slug` key
+ *  at all, mirroring the real shape `scripts/journeys/agents.mjs`'s
+ *  `agents-kickoff-dispatch` beat measured off a real browser-driven
+ *  dispatch (its own "LOUD FINDING" comment). */
+function seedSuppressedMaterialsOnlyRun(runId: string, agentSlug: string): void {
+  const dir = join(forgeRoot, '_logs', runId);
+  mkdirSync(dir, { recursive: true });
+  const event = {
+    event_id: 'EV_0', cycle_id: runId, initiative_id: runId, phase: 'orchestrator', skill: agentSlug,
+    event_type: 'log', started_at: '2026-01-01T00:00:00.000Z',
+    input_refs: ['materials/example.md'], output_refs: [],
+    message: 'agent-run.materials-staged',
+    metadata: { materials: [{ path: 'materials/example.md', kind: 'documents' }] },
+  };
+  writeFileSync(join(dir, 'events.jsonl'), JSON.stringify(event) + '\n');
 }
 
 /** A real architect SESSION — mirrors `scripts/lib/journey-fixtures.mjs`'s
@@ -409,15 +488,63 @@ test('D4/D3: a standalone row carries linkKind "standalone", href /agents/<slug>
   assert.equal(row!.status, 'done');
 });
 
-test('honest-absent cost: a dispatched-but-not-yet-started standalone run reports costUsd: null, never a fabricated 0.00 that could be mistaken for "spent exactly zero and finished"', async () => {
-  const runId = '_agent-empty-2026-03-01T00-00-00-000-dddd';
-  seedEmptyStandaloneRun(runId);
-  const { body } = await getJson('/api/agents/empty/history');
-  const rows = (body as { rows: { id: string; costUsd: number | null; status: string }[] }).rows;
+test('AMENDMENT 1+2: a REAL, reachable suppressed-standalone run — identity via `skill` ONLY (no `metadata.agent_slug` anywhere) — is found in its own agent\'s history, with the honest-absent costUsd: null and status "running" (never a fabricated 0)', async () => {
+  // KILLS (Amendment 1, THE headline fix): any implementation that keys
+  // standalone identity STRICTLY off `metadata.agent_slug` — the ORIGINAL
+  // D4 language this round amends. This run's `metadata` is
+  // `{materials:[...]}` only; there is no `agent_slug` key on its one and
+  // only event. A metadata.agent_slug-only reader finds ZERO matching
+  // events for slug 'matonly' and the row is silently absent — exactly the
+  // defect `scripts/journeys/agents.mjs`'s `agents-kickoff-dispatch` beat
+  // measured off a REAL browser-driven dispatch (not a hypothetical; see
+  // its "LOUD FINDING" comment). Only an implementation reading
+  // `metadata.agent_slug` OR `skill` passes.
+  // KILLS (Amendment 2, honest-absent cost, reachable ground): a fabricated
+  // 0 instead of null for a run with no `end` event — this run genuinely
+  // has not finished (one bookkeeping `log` event only, no terminal event
+  // of any kind), so reporting 0 would misreport "spent nothing and
+  // finished" for a run that hasn't finished. Unlike round 1's removed
+  // zero-event fixture, THIS state is deterministically reachable through
+  // the real route (see `seedSuppressedMaterialsOnlyRun`'s doc comment) —
+  // no fabricated fixture, no race required.
+  const runId = '_agent-matonly-2026-06-01T00-00-00-000-ffff';
+  seedSuppressedMaterialsOnlyRun(runId, 'matonly');
+  const { status, body } = await getJson('/api/agents/matonly/history');
+  assert.equal(status, 200);
+  const rows = (body as { rows: { id: string; linkKind: string; costUsd: number | null; status: string }[] }).rows;
   const row = rows.find((r) => r.id === runId);
-  assert.ok(row);
-  assert.equal(row!.status, 'running');
-  assert.equal(row!.costUsd, null, `an in-flight run with no end event has NO recorded cost yet — costUsd must be null, not 0 (got ${JSON.stringify(row!.costUsd)})`);
+  assert.ok(row, `expected the skill-only run to be found by slug 'matonly' — metadata.agent_slug is absent on this run's ONLY event, got rows ${JSON.stringify(rows)}`);
+  assert.equal(row!.linkKind, 'standalone');
+  assert.equal(row!.status, 'running', 'no end event landed yet — the honest non-terminal status');
+  assert.equal(row!.costUsd, null, `no end event landed yet — costUsd must be null, not a fabricated 0 (got ${JSON.stringify(row!.costUsd)})`);
+});
+
+test('AMENDMENT 1 ALIAS TRAP (skill-only shape): a skill-only run for "skalias-x" must not bleed into "skalias"\'s history, even though its runId starts with "_agent-skalias-" — proves prefix-matching stays banned on the `skill` identity source too, not just `metadata.agent_slug`', async () => {
+  // KILLS: `event.skill.startsWith(slug)` (or `runId.startsWith('_agent-'+
+  // slug+'-')`) applied to the skill-only shape specifically. An
+  // implementer could plausibly write CORRECT exact-match on
+  // `metadata.agent_slug` (passing the original alias trap below) but
+  // sloppy prefix logic on the `skill` fallback added for Amendment 1,
+  // since the skill-only path is the newer, less-battle-tested code path.
+  // Exact match on BOTH identity sources is the only implementation that
+  // passes this AND its positive-control sibling.
+  const skAliasRunId = '_agent-skalias-2026-06-02T00-00-00-000-1111';
+  const skAliasXRunId = '_agent-skalias-x-2026-06-02T00-05-00-000-2222';
+  seedSuppressedMaterialsOnlyRun(skAliasRunId, 'skalias');
+  seedSuppressedMaterialsOnlyRun(skAliasXRunId, 'skalias-x');
+
+  const { body } = await getJson('/api/agents/skalias/history');
+  const rows = (body as { rows: { id: string }[] }).rows;
+  const ids = rows.map((r) => r.id);
+  assert.ok(ids.includes(skAliasRunId), `expected 'skalias's own run in its history, got ${JSON.stringify(ids)}`);
+  assert.ok(!ids.includes(skAliasXRunId), `'skalias-x's run must NEVER appear in 'skalias's history (skill-only alias trap) — got ${JSON.stringify(ids)}`);
+});
+
+test('AMENDMENT 1 positive control (skill-only shape): agent "skalias-x" queried directly DOES see its own run (proves the skill-only filter isn\'t just refusing everything)', async () => {
+  const skAliasXRunId = '_agent-skalias-x-2026-06-02T00-05-00-000-2222';
+  const { body } = await getJson('/api/agents/skalias-x/history');
+  const rows = (body as { rows: { id: string }[] }).rows;
+  assert.ok(rows.some((r) => r.id === skAliasXRunId), `expected 'skalias-x' to see its own run, got ${JSON.stringify(rows)}`);
 });
 
 // ---------------------------------------------------------------------------
