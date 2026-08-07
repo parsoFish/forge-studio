@@ -139,6 +139,24 @@ export function renderNarrative(segments: LedgerSegment[]): string | null {
  * "never coerced into a RunStatus/RunPhaseStatus literal — carried verbatim,
  * not mapped"), so the trailing `string` covers it — never a fabricated
  * mapping onto one of the other three vocabularies.
+ *
+ * ⚑ R6-06 Task 4b — this trailing `| string` is DELIBERATE, not an
+ * oversight, and it is measured, not lazy: a session's `phase` is closed PER
+ * RUNNER (e.g. `ArchitectPhase`, `orchestrator/architect-runner.ts:101`) but
+ * OPEN across the four-and-growing runners `agent-ledger.ts` aggregates
+ * session rows from, so closing this type-level union would make the type
+ * itself dishonest (it would have to enumerate every runner's phase set and
+ * stay in permanent lockstep with each new one). Because a trailing `string`
+ * absorbs every literal listed before it, THIS TYPE CANNOT FAIL A TYPE
+ * CHECK for any status value, on ANY `linkKind` — it is not the enforcement
+ * point. The three vocabularies above ARE enforced, at runtime, by
+ * `agent-ledger.ts`'s `isValidLedgerRow`/`isStatusValidForLinkKind`
+ * (`resolveAgentHistoryFromResponse`'s per-row validation, Task 4): a
+ * flow-node row's status must be a real `RunPhaseStatus`, a standalone row's
+ * must be one of its own five literals, and ONLY a session row's status is
+ * left open, on purpose. A type that can never fail, with no comment saying
+ * so, reads as an oversight to the next person — this paragraph is that
+ * comment.
  */
 export type LedgerRowStatus =
   | RunStatus

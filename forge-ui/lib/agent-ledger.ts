@@ -212,6 +212,65 @@ export type AgentHistoryResolution =
   | { kind: 'not-found' }
   | { kind: 'unresolved' };
 
+// ---------------------------------------------------------------------------
+// Task 4 — per-row runtime validation. `Array.isArray(rows)` alone says
+// nothing about what's INSIDE the array; the server's own 200 contract can
+// still arrive with a structurally broken row (wrong-typed `costUsd`, an
+// absent field, a status outside the row's own closed vocabulary) and this
+// resolver is the ONE seam that stands between that wire body and the real
+// `HistoryLedger` component, which crashes on exactly this shape
+// (`row.costUsd.toFixed is not a function` — its `!== null` guard does not
+// catch `undefined` either). See agent-ledger.test.ts's DEFECT 2 battery.
+// ---------------------------------------------------------------------------
+
+/** Mirrors `RunPhaseStatus` (studio-client.ts) exactly. Duplicated as a
+ *  runtime array because a TS union has no runtime membership check of its
+ *  own — same precedent as session-kinds.ts's `SESSION_STAGES`
+ *  (`Object.freeze([...] as const)`), kept in sync by hand. */
+const FLOW_NODE_STATUSES = Object.freeze(['pending', 'active', 'complete', 'retrying', 'failed'] as const);
+
+/** Mirrors `AgentStandaloneRunEntry['status']` above exactly. */
+const STANDALONE_STATUSES = Object.freeze(['running', 'done', 'failed', 'suppressed', 'budget-exceeded'] as const);
+
+/**
+ * `status`'s closed vocabulary is CHOSEN BY `linkKind` (D8/D12): a flow-node
+ * row against `RunPhaseStatus`, a standalone row against its own five-member
+ * set, and a session row against nothing at all — deliberately OPEN, because
+ * a session's `phase` is closed per RUNNER but open across the four-and-
+ * growing runners this module aggregates (history-ledger.ts's `LedgerRowStatus`
+ * doc explains the same thing from the type side). An unrecognised/missing
+ * `linkKind` has no vocabulary to check against at all, so it is rejected —
+ * every row this route actually emits always carries one of the three.
+ */
+function isStatusValidForLinkKind(linkKind: unknown, status: string): boolean {
+  if (linkKind === 'flow-node') return (FLOW_NODE_STATUSES as readonly string[]).includes(status);
+  if (linkKind === 'standalone') return (STANDALONE_STATUSES as readonly string[]).includes(status);
+  if (linkKind === 'session') return true;
+  return false;
+}
+
+/**
+ * Structural + status-vocabulary validation for ONE wire row. Every check
+ * mirrors the VALIDATION RULES documented in agent-ledger.test.ts's DEFECT 2
+ * preamble verbatim: `id`/`when`/`what`/`href` are strings; `narrative` is
+ * `string | null`; `narrativeKinds` is a `string[]`; `costUsd` is
+ * `number | null` (never a string, never `undefined` — the reviewer's two
+ * crashing repros); `status` must belong to its row's own closed vocabulary.
+ */
+function isValidLedgerRow(row: unknown): row is LedgerRow {
+  if (!row || typeof row !== 'object') return false;
+  const r = row as Record<string, unknown>;
+  if (typeof r.id !== 'string') return false;
+  if (typeof r.when !== 'string') return false;
+  if (typeof r.what !== 'string') return false;
+  if (typeof r.href !== 'string') return false;
+  if (r.narrative !== null && typeof r.narrative !== 'string') return false;
+  if (!Array.isArray(r.narrativeKinds) || !r.narrativeKinds.every((k) => typeof k === 'string')) return false;
+  if (r.costUsd !== null && typeof r.costUsd !== 'number') return false;
+  if (typeof r.status !== 'string' || !isStatusValidForLinkKind(r.linkKind, r.status)) return false;
+  return true;
+}
+
 /**
  * Pure: status decides FIRST, before body is ever inspected, in both
  * directions — a 404 wins even over a plausible-looking body, and a 2xx
@@ -221,6 +280,12 @@ export type AgentHistoryResolution =
  * `'unresolved'` — NEITHER a positive nor a negative fact, so a caller never
  * renders a transient outage as the authoritative "this agent has no
  * history".
+ *
+ * Task 4: once `rows` is confirmed to be an array, EVERY element must pass
+ * `isValidLedgerRow` or the WHOLE response is rejected as `'unresolved'` —
+ * never a silently shortened "drop the bad one, keep the rest" list (a
+ * shortened history is its own kind of lie; see the DEFECT 2 "CHOSEN
+ * BEHAVIOUR" test).
  */
 export function resolveAgentHistoryFromResponse(status: number, body: unknown): AgentHistoryResolution {
   if (status === 404) return { kind: 'not-found' };
@@ -229,7 +294,8 @@ export function resolveAgentHistoryFromResponse(status: number, body: unknown): 
     const parsed = body && typeof body === 'object' ? (body as { rows?: unknown }) : undefined;
     const rows = parsed?.rows;
     if (!Array.isArray(rows)) return { kind: 'unresolved' };
-    return { kind: 'found', rows: rows as LedgerRow[] };
+    if (!rows.every(isValidLedgerRow)) return { kind: 'unresolved' };
+    return { kind: 'found', rows };
   }
 
   return { kind: 'unresolved' };
@@ -237,18 +303,32 @@ export function resolveAgentHistoryFromResponse(status: number, body: unknown): 
 
 /**
  * Fetch + resolve one agent slug's history. No bridge configured, OR a
- * thrown `fetch()`, OR a thrown/failed `res.json()` all resolve via the pure
- * resolver above called with the sentinel `status: 0` (never a real
- * 2xx/404) and `body: null` — mirrors `fetchFlowRunDetail`'s own convention;
- * not pinned by a test (no jsdom/mocked-fetch harness in this repo for this
- * seam — the same documented gap that helper carries).
+ * thrown `fetch()` itself, resolves via the pure resolver above called with
+ * the sentinel `status: 0` (never a real 2xx/404) and `body: null` — mirrors
+ * `fetchFlowRunDetail`'s own convention.
+ *
+ * Task 3: `res.status` is read into the resolver UNCONDITIONALLY — a failed
+ * `res.json()` (the ordinary shape of a real 404, a framework HTML error
+ * page) only clears the BODY, never the status, so status still decides
+ * first exactly as this module's own docstring above promises. The former
+ * bug called `res.json()` unconditionally and let a thrown parse error
+ * escape to the OUTER catch, which discards `res.status` entirely and
+ * resolves via the sentinel status 0 — turning an authoritative 404 into
+ * `'unresolved'` (ROUND 5 DEFECT 1, agent-ledger.test.ts). The body is still
+ * always attempted here (never left undrained) — only the FAILURE is
+ * contained locally instead of being allowed to erase `res.status`.
  */
 export async function fetchAgentHistory(slug: string): Promise<AgentHistoryResolution> {
   const base = await resolveBridgeUrl();
   if (!base) return resolveAgentHistoryFromResponse(0, null);
   try {
     const res = await fetch(`${base}/api/agents/${encodeURIComponent(slug)}/history`);
-    const body = await res.json();
+    let body: unknown = null;
+    try {
+      body = await res.json();
+    } catch {
+      body = null;
+    }
     return resolveAgentHistoryFromResponse(res.status, body);
   } catch {
     return resolveAgentHistoryFromResponse(0, null);

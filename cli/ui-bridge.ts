@@ -137,7 +137,7 @@ import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { listRuns, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
-import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -930,34 +930,6 @@ function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[
   return rows;
 }
 
-/**
- * `studio/session-kinds.yaml` (`loadSessionKinds`) is the live source of
- * truth for a session kind's driving agent + legacy route. This table is
- * used ONLY when that file is missing/unreadable — the same fail-safe-degrade
- * shape run-model.ts's `FALLBACK_PHASE_TO_NODE` already uses when
- * `studio/flows`/the registry is unavailable ("so the bridge never crashes
- * mid-edit"): a verbatim mirror of the real registry's `id`/`agent`/
- * `legacyRoutes` fields (the only three this route needs), kept in sync
- * manually, same caveat as that precedent. Every production forgeRoot ships
- * the real file; this only activates against a stripped/minimal `studio/`
- * tree.
- */
-const FALLBACK_SESSION_KINDS: readonly Pick<SessionKindDescriptor, 'id' | 'agent' | 'legacyRoutes'>[] = [
-  { id: 'architect', agent: 'architect', legacyRoutes: ['/architect/[sessionId]', '/architect/[sessionId]/interview'] },
-  { id: 'instructions', agent: 'instructions-creator', legacyRoutes: ['/instructions/[sessionId]'] },
-  { id: 'project-brain', agent: 'project-brain-builder', legacyRoutes: ['/project-brain/[sessionId]'] },
-  { id: 'demo', agent: 'demo-builder', legacyRoutes: [] },
-  { id: 'onboarding', agent: 'onboarding-agent', legacyRoutes: [] },
-];
-
-function loadSessionKindsWithFallback(forgeRoot: string): readonly Pick<SessionKindDescriptor, 'id' | 'agent' | 'legacyRoutes'>[] {
-  try {
-    return loadSessionKinds(forgeRoot);
-  } catch {
-    return FALLBACK_SESSION_KINDS;
-  }
-}
-
 /** Sum of `cost_usd` across a session's OWN log dir
  *  (`_logs/_<kind>-<sessionId>/events.jsonl`) — mirrors
  *  `readArchitectSessionStats` (orchestrator/architect-runner.ts)'s
@@ -987,7 +959,11 @@ function readSessionCostUsd(logsRoot: string, kind: string, sessionId: string): 
  * SEPARATE log dir, never the state dir.
  */
 function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logsRoot: string }, slug: string): AgentHistoryRow[] {
-  const matching = loadSessionKindsWithFallback(ctx.forgeRoot).filter((d) => d.agent === slug);
+  // `loadSessionKinds` throws on a missing/unreadable `studio/session-kinds.yaml`
+  // — that is a misconfigured studio and must fail loudly (no fallback table:
+  // CLAUDE.md "Never do"), so the error is left to propagate to this route's
+  // existing 500 handler below rather than degrading to a stale mirror.
+  const matching = loadSessionKinds(ctx.forgeRoot).filter((d) => d.agent === slug);
   if (matching.length === 0) return [];
 
   let projects: string[];
@@ -1446,21 +1422,14 @@ async function handleHttp(
   // can escape `_logs/`/`projects/`; an unknown OR traversal-shaped slug both
   // resolve to the same honest `{ok:true, rows:[]}` (nothing enumerated
   // matched), never a 404/500/leak.
-  // D5 collapse case: a slug of exactly '..' never reaches the route below
-  // as `/api/agents/../history` — the HTTP CLIENT (fetch/browsers apply
-  // RFC 3986 dot-segment removal before the request ever leaves the
-  // process) collapses that path to this exact literal `/api/history`
-  // before it is ever sent. Still an ordinary "no such agent" request, not
-  // a traversal that reached anything — the same honest {ok:true, rows:[]}
-  // answer as any other unmatched agent, never a 404 (D5 indistinguishability;
-  // a raw, non-normalizing client sending the literal un-collapsed bytes is
-  // still handled correctly by the enumeration-filter route below, which
-  // never joins a path from the slug either way).
-  if (method === 'GET' && url === '/api/history') {
-    sendJson(res, 200, { ok: true, rows: [] }, origin);
-    return;
-  }
-
+  // D5 collapse case: a slug of exactly '..' never reaches this route as
+  // `/api/agents/../history` via `fetch()` — the HTTP CLIENT (browsers/undici
+  // apply RFC 3986 dot-segment removal before the request ever leaves the
+  // process) collapses that path client-side. A raw, non-normalizing client
+  // sending the literal un-collapsed bytes `GET /api/agents/../history` still
+  // reaches the enumeration-filter route below with slug '..' and is handled
+  // correctly there — no path is ever joined from the slug either way, so no
+  // dedicated handler for the collapsed literal `/api/history` is needed.
   if (method === 'GET' && url.startsWith('/api/agents/') && url.endsWith('/history')) {
     let slug: string;
     try {
