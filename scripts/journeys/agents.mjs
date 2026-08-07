@@ -1142,7 +1142,7 @@ export const journey = defineJourney({
       {
         id: 'agents-kickoff-dispatch',
         title: 'Kickoff — Run actually carries the chosen project, ceiling, and material',
-        narration: 'The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx\'s own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run reaching a real terminal state) rather than trusting the client\'s own claim.',
+        narration: 'The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx\'s own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client\'s own claim. No terminal state is reachable under this harness\'s no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route\'s `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — Run dispatches with the chosen values (wire-level proof)');
@@ -1193,34 +1193,45 @@ export const journey = defineJourney({
               }
               check(stagedOnDisk, 'agents-kickoff: the attached material is actually staged under _logs/<runId>/materials/ on disk');
 
-              // The run reaches a real terminal state — the harness's no-spawn
-              // seam suppresses the SDK call itself, not the route's own
-              // materials-staging + event-log work (run-agent.ts's dry-bridge
-              // branch returns BEFORE the SDK call, same as every other
-              // agent-run beat's "spawn stubbed" precedent above).
-              let terminalStatus = '';
+              // NOT a wait for a terminal state — this seam structurally never
+              // reaches one. `spawnAgentDispatch` (cli/ui-bridge.ts) returns
+              // BEFORE the child `agent dispatch` process is ever spawned
+              // whenever FORGE_ARCHITECT_NO_SPAWN=1 or FORGE_DRY_BRIDGE=1 (both
+              // set on this harness's own bridge process, scripts/e2e-
+              // journey.mjs's startWatch) — so `runAgent()` never runs, never
+              // emits `start`/`end`, and never emits the
+              // `run-agent.spawn-suppressed` log event the status route's
+              // `suppressed` branch keys off. The run's ONLY event is the
+              // route's own synchronous materials-staged bookkeeping (already
+              // proven above), so `state` stays `running` forever — by
+              // construction, not a timing fluke. What this DOES prove: the
+              // dispatched runId is a real, resolvable identity on the SAME
+              // shared status surface the run view (next beat) reads —
+              // checked independently against the server, not the client's
+              // own DOM state.
+              let statusOk = false;
+              let statusState = '';
               if (runId) {
                 try {
-                  await page.waitForFunction(
-                    () => {
-                      const st = document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-status');
-                      return st !== null && st !== 'running' && st !== 'idle';
-                    },
-                    null, { timeout: 20000 },
-                  );
-                  terminalStatus = await page.evaluate(() => document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-status') ?? '');
-                } catch { /* still running past the timeout */ }
+                  const res = await fetch(`${watch.bridgeUrl}/api/agents/runs/${encodeURIComponent(runId)}`);
+                  statusOk = res.ok;
+                  const body = await res.json().catch(() => ({}));
+                  statusState = typeof body.state === 'string' ? body.state : '';
+                } catch { /* leave statusOk false */ }
               }
-              check(terminalStatus === 'suppressed',
-                `agents-kickoff: the run reaches a real terminal status under the harness's no-spawn seam (got "${terminalStatus}")`);
+              check(statusOk && statusState === 'running',
+                `agents-kickoff: the dispatched run is a real, resolvable identity on the shared status surface — GET /api/agents/runs/:runId resolves ok with state:"running", the honest non-terminal state this no-spawn seam produces (got ok=${statusOk}, state="${statusState}")`);
+              const domStatus = await page.evaluate(() => document.querySelector('[data-section="agent-run"]')?.getAttribute('data-run-status') ?? '');
+              check(domStatus === 'running',
+                `agents-kickoff: the kickoff panel's own poll reflects the same state (data-run-status="${domStatus}")`);
         },
       },
       {
         id: 'agents-kickoff-run-view',
         title: 'Kickoff — the standalone run view renders the log, cost, and material as a reference',
-        narration: 'Navigating to the new /agents/[id]/run/[runId] route — the log lines render, the cost section renders (0 under the suppressed spawn), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. Under this harness\'s no-spawn seam the SDK call that would record the ceiling onto the run\'s terminal event never runs, so the ceiling provenance honestly reads "not recorded" here — the wire-level proof one beat ago is what proves the ceiling was actually dispatched, not this section.',
+        narration: 'Navigating to the new /agents/[id]/run/[runId] route — the log renders the ONE real event this no-spawn seam ever produces for this run (the route\'s own materials-staged bookkeeping; the child dispatch process that would emit start/end/spawn-suppressed never runs at all, agents-kickoff-dispatch\'s own comment), the cost section renders (0, since no end event ever lands), and the attached material shows as a path+kind REFERENCE only: the real file\'s own content never appears in the DOM, and the raw API response the page reads never carries the base64 bytes either. The ceiling provenance honestly reads "not recorded" for the same structural reason — the wire-level proof one beat ago is what proves the ceiling was actually dispatched, not this section.',
         drive: async (ctx) => {
-              const { page, watch, frame, check, countAtLeast } = ctx;
+              const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — the standalone run view');
               if (!kickoffRunId) {
                 check(false, 'agents-kickoff-run-view: a runId was captured by the prior dispatch beat');
@@ -1234,7 +1245,22 @@ export const journey = defineJourney({
               const found = await page.evaluate(() => document.querySelector('[data-page="agent-run"]')?.getAttribute('data-run-found') ?? null);
               check(found === 'true', `agents-kickoff-run-view: the run view finds a real dispatch record for this runId (got "${found}")`);
 
-              await countAtLeast(page, '[data-log-line="true"]', 2, 'agents-kickoff-run-view: the run log renders ≥2 real event lines');
+              // NOT a "≥N lines" count — measured: this no-spawn seam produces
+              // EXACTLY ONE event for this run (the route's own synchronous
+              // materials-staged bookkeeping; the child `agent dispatch`
+              // process that would add start/end/spawn-suppressed never
+              // spawns at all, agents-kickoff-dispatch's own comment).
+              // Asserting the SPECIFIC real event (by kind + message) is
+              // stronger than a count and can't silently drift if the seam's
+              // event shape changes.
+              const logLines = page.locator('[data-log-line="true"]');
+              const logLineCount = await logLines.count();
+              check(logLineCount === 1,
+                `agents-kickoff-run-view: exactly one real event line renders under this no-spawn seam (got ${logLineCount})`);
+              const firstLineKind = await logLines.first().getAttribute('data-log-kind').catch(() => null);
+              const firstLineText = await logLines.first().innerText().catch(() => '');
+              check(firstLineKind === 'out' && firstLineText.includes('agent-run.materials-staged'),
+                `agents-kickoff-run-view: that one line IS the real materials-staged bookkeeping event (data-log-kind="${firstLineKind}", text="${firstLineText}")`);
 
               const costAttr = await page.evaluate(() => document.querySelector('[data-page="agent-run"]')?.getAttribute('data-run-cost') ?? null);
               check(costAttr !== null, `agents-kickoff-run-view: the cost section renders (data-run-cost="${costAttr}")`);
