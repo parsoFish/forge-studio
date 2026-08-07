@@ -180,6 +180,10 @@ export function buildNodeMeta(
   // GateChecks (unifier node — from unifier.gate.sub-check messages)
   const gateChecks = nodeId === 'unifier' ? findGateChecks(events) : undefined;
 
+  // Findings (R6-05 WI-1: adversarial-review node only — from
+  // review.findings.authored events, latest wins, honest-absent otherwise)
+  const findings = nodeId === 'adversarial-review' ? findFindings(events) : undefined;
+
   const meta: RunPhaseMeta = {
     costUsd,
     retries,
@@ -194,6 +198,7 @@ export function buildNodeMeta(
   if (iterBudget !== undefined) meta.iterBudget = iterBudget;
   if (delivered !== undefined) meta.delivered = delivered;
   if (gateChecks !== undefined && gateChecks.length > 0) meta.gateChecks = gateChecks;
+  if (findings !== undefined) meta.findings = findings;
 
   return meta;
 }
@@ -423,6 +428,37 @@ export function findGateChecks(
     }
   }
   return checks;
+}
+
+/**
+ * R6-05 WI-1: the adversarial-review node's finding-count summary, derived
+ * from the LATEST `review.findings.authored` event on this node's own event
+ * bucket (never summed across retries, never the first/stale one — a
+ * re-review's counts supersede the earlier pass's). Extracts ONLY the five
+ * numeric count fields by name — never a spread of the event's metadata —
+ * so the event's `path`/`head_sha`/`agent_slug` string keys can never leak
+ * into what must be a pure numeric summary (orchestrator/phases/
+ * adversarial-review.ts:330-332 emits all seven keys on the wire).
+ */
+export function findFindings(
+  events: readonly EventLogEntry[],
+): { total: number; blocker: number; major: number; minor: number; info: number } | undefined {
+  let result: { total: number; blocker: number; major: number; minor: number; info: number } | undefined;
+  for (const e of events) {
+    if (e.message !== 'review.findings.authored' || !e.metadata) continue;
+    const m = e.metadata;
+    const { total, blocker, major, minor, info } = m;
+    if (
+      typeof total === 'number' &&
+      typeof blocker === 'number' &&
+      typeof major === 'number' &&
+      typeof minor === 'number' &&
+      typeof info === 'number'
+    ) {
+      result = { total, blocker, major, minor, info };
+    }
+  }
+  return result;
 }
 
 // ---------------------------------------------------------------------------

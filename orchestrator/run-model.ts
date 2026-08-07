@@ -76,6 +76,17 @@ export type RunPhaseMeta = {
   brainReads?: number;
   delivered?: { files: number; insertions: number; commits: number };
   gateChecks?: { id: string; pass: boolean; detail?: string }[];  // unifier node, M1-3 events
+  /**
+   * R6-05 WI-1: the adversarial-review node's finding counts, derived
+   * verbatim from the LATEST `review.findings.authored` event on this node
+   * (orchestrator/phases/adversarial-review.ts:332). Only the five COUNT
+   * fields — the event's `path`/`head_sha`/`agent_slug` metadata keys never
+   * leak in. Honest-absent: no event -> no key, never a fabricated
+   * `{total:0,...}`; a genuine all-zero clean pass DOES populate it (the
+   * event fired), matching the `gateChecks` guard's own convention of gating
+   * on fact-presence rather than truthiness.
+   */
+  findings?: { total: number; blocker: number; major: number; minor: number; info: number };
 };
 
 export type Run = {
