@@ -300,9 +300,28 @@ test("the note is derived from THIS node's own phaseMeta fields, verbatim", () =
 test('note segments compose deterministically from the node\'s own fields, in a fixed order', () => {
   // KILLS: a note whose content varies with anything other than this node's
   // phaseMeta (ordering by object-key iteration, locale, or a random/LLM
-  // source). Same input twice ⇒ byte-identical output; and every real field
-  // buildNodeMeta can populate appears in the documented order:
-  //   delivered · iterations · retries · wedged · gate checks
+  // source). Same input twice ⇒ byte-identical output.
+  //
+  // The note's field list is a FIXED, DELIBERATE SUBSET of what
+  // `buildNodeMeta` can populate, in this order: delivered · iterations ·
+  // retries · wedged. Two other real fields are measured to exist and are
+  // DELIBERATELY EXCLUDED, not forgotten: `model` and `brainReads`
+  // (populated conditionally by buildNodeMeta,
+  // orchestrator/run-model-derive.ts:189,192) carry no note segment —
+  // widening the note to include them is a product decision this test does
+  // not make.
+  //
+  // A third field, `gateChecks`, is excluded for a DIFFERENT reason: it is
+  // UNREACHABLE, not merely omitted. `buildNodeMeta` populates `gateChecks`
+  // only when `nodeId === 'unifier'` (run-model-derive.ts:181), but no seed
+  // flow declares a `unifier` node — `studio/flows/forge-develop/flow.yaml`'s
+  // own header records the monolithic unifier node's retirement (R4-10-F1,
+  // ADR-039/040): the live flow is `dev → demo → adversarial-review →
+  // review`. Since `deriveFlowRunTimeline` sources its rows from
+  // `flow.nodes`, no row with `nodeId === 'unifier'` can ever exist, for any
+  // run including archived ones — so a gate-checks segment could never be
+  // exercised by this derivation. Do not restore it without a seed flow that
+  // actually declares a `unifier` node.
   const run = archivedRun({
     phaseMeta: {
       dev: meta({
@@ -312,11 +331,6 @@ test('note segments compose deterministically from the node\'s own fields, in a 
         iter: 3,
         iterBudget: 10,
         delivered: { files: 4, insertions: 120, commits: 2 },
-        gateChecks: [
-          { id: 'tests', pass: true },
-          { id: 'lint', pass: true },
-          { id: 'build', pass: false },
-        ],
       }),
     },
   });
@@ -324,7 +338,7 @@ test('note segments compose deterministically from the node\'s own fields, in a 
   const first = deriveFlowRunTimeline(flow, run);
   const second = deriveFlowRunTimeline(flow, run);
 
-  expect(rowFor(first, 'dev').note).toBe('4 files · +120 · 2 commits · iter 3/10 · 2 retries · wedged · gates 2/3');
+  expect(rowFor(first, 'dev').note).toBe('4 files · +120 · 2 commits · iter 3/10 · 2 retries · wedged');
   expect(rowFor(second, 'dev').note).toBe(rowFor(first, 'dev').note);
 });
 
