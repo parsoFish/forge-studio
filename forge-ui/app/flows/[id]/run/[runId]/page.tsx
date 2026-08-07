@@ -27,6 +27,14 @@
  * jsdom / `@testing-library/react` in this repo. A real-browser journey
  * beat (`scripts/journeys/flows-run.mjs`'s `flows-run-detail-reachable`)
  * proves the rest end to end.
+ *
+ * R6-01 WI-3 (F5): node click-through. A row click toggles `expandedNodeId`
+ * (re-clicking the SAME row collapses it — no state is left permanently
+ * open) and, on first expand only, fetches that node's own raw log via
+ * `lib/flow-node-log.ts`'s `fetchNodeLog` and caches it in `nodeLogLines`
+ * keyed by nodeId — a node already cached is never re-fetched. Both pieces
+ * of state live HERE, not on `FlowRunDetail`, which stays a pure,
+ * props-driven renderer (its own header).
  */
 
 import { useEffect, useState } from 'react';
@@ -36,8 +44,10 @@ import { StudioNav } from '@/components/StudioNav';
 import { FlowRunDetail } from '@/components/studio/FlowRunDetail';
 import { deriveFlowRunTimeline } from '@/lib/flow-run-timeline';
 import { fetchFlowRunDetail, fetchReviewFindings, type FlowRunDetailResolution } from '@/lib/flow-run-detail-client';
+import { fetchNodeLog } from '@/lib/flow-node-log';
 import { fetchFlow, type Flow, type Run } from '@/lib/studio-client';
 import type { ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import type { RunLogLine } from '@/lib/run-log-line';
 
 const EMPTY_FLOW: Flow = { id: '', name: '', goal: '', nodes: [], edges: [], triggers: [] };
 
@@ -55,6 +65,12 @@ export default function FlowRunPage() {
   // app/agents/[id]/run/[runId]/page.tsx's own `loaded` precedent).
   const [loaded, setLoaded] = useState(false);
 
+  // R6-01 WI-3 (F5): which row is expanded (null = none), and each expanded
+  // node's own log lines, cached by nodeId so re-collapsing/re-expanding the
+  // SAME node never re-fetches.
+  const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
+  const [nodeLogLines, setNodeLogLines] = useState<Record<string, RunLogLine[]>>({});
+
   useEffect(() => {
     let cancelled = false;
     setLoaded(false);
@@ -71,6 +87,22 @@ export default function FlowRunPage() {
     void load();
     return () => { cancelled = true; };
   }, [flowId, runId]);
+
+  // Toggle a row's expand state; fetch that node's own raw log on first
+  // expand only — a node already cached in `nodeLogLines` is never
+  // re-fetched, and re-clicking the SAME row collapses it back.
+  function handleNodeClick(nodeId: string) {
+    if (expandedNodeId === nodeId) {
+      setExpandedNodeId(null);
+      return;
+    }
+    setExpandedNodeId(nodeId);
+    if (nodeLogLines[nodeId] === undefined) {
+      void fetchNodeLog(runId, nodeId).then((lines) => {
+        setNodeLogLines((prev) => ({ ...prev, [nodeId]: lines }));
+      });
+    }
+  }
 
   if (!loaded) {
     return (
@@ -111,7 +143,17 @@ export default function FlowRunPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh', background: 'var(--bg)' }}>
       <StudioNav />
-      <FlowRunDetail runId={runId} found={found} flow={flow} run={run} rows={rows} findings={findings} />
+      <FlowRunDetail
+        runId={runId}
+        found={found}
+        flow={flow}
+        run={run}
+        rows={rows}
+        findings={findings}
+        expandedNodeId={expandedNodeId}
+        nodeLogLines={nodeLogLines}
+        onNodeClick={handleNodeClick}
+      />
     </div>
   );
 }

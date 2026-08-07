@@ -13,9 +13,29 @@
  *   [data-component="run-not-found"]                     the honest 404 body
  *   [data-section="run-timeline"]                         the timeline container
  *   [data-timeline-row="true"][data-node-id][data-status][data-phase-cost-usd]
+ *     gains [data-node-expanded="true"|"false"]           (R6-01 WI-3 / F5, additive)
  *   [data-node-note]                                      ONLY when note != null
  *   [data-section="run-trigger"][data-trigger-kind][data-trigger-source][data-trigger-scope]
  *   [data-section="review-findings"]                      ReviewFindingsPanel's OWN contract
+ *
+ * R6-01 WI-3 (F5) — node click-through, ADDITIVE, only when `expandedNodeId`
+ * matches a row's own nodeId:
+ *   [data-section="node-detail"][data-detail-for-node]     the expanded panel
+ *     -- deliberately NOT `data-node-id`: that attribute is the EXACT-MATCH
+ *        anchor `./flow-run-detail-render.test.ts`'s own `rowMarkup()`
+ *        keys off (`html.indexOf('data-node-id="<id>"')`); a second element
+ *        carrying the same value, ahead of the row in markup order, would
+ *        silently break that pinned helper for every one of its tests.
+ *     [data-section="node-log"]  wrapping the composed, UNFORKED `<RunLog>`
+ *       -> RunLog's OWN contract, reused verbatim:
+ *          [data-component="run-log"|"run-log-empty"][data-log-line="true"][data-log-kind]
+ *     [data-section="node-outputs"][data-outputs-count]
+ *       -> [data-component="node-outputs-empty"] when count is 0 — honestly
+ *          always 0 today: `row.artifacts` (`lib/flow-run-timeline.ts`) is
+ *          the only legitimate per-node output source and it is always `[]`
+ *          (no per-node artifact data exists anywhere in the run model —
+ *          `run.artifactsReady` is run-level, keyed by artifact TYPE, and is
+ *          NEVER read here to fabricate a per-node entry).
  *
  * `data-phase-cost-usd` is `.toFixed(2)`, matching FlowTopology's own
  * `data-phase-cost-usd={(hex.costUsd ?? 0).toFixed(2)}` verbatim.
@@ -25,9 +45,13 @@
  * through the EXISTING `ReviewFindingsPanel`, never a forked renderer.
  */
 
+import { Fragment } from 'react';
+
 import { ReviewFindingsPanel, type ReviewFindingsDoc } from '@/components/ReviewFindingsPanel';
+import { RunLog } from '@/components/studio/RunLog';
 import type { Flow, Run } from '@/lib/studio-client';
 import type { FlowRunTimelineRow } from '@/lib/flow-run-timeline';
+import type { RunLogLine } from '@/lib/run-log-line';
 
 export type FlowRunDetailProps = {
   runId: string;
@@ -36,9 +60,33 @@ export type FlowRunDetailProps = {
   run: Run | null;
   rows: FlowRunTimelineRow[];
   findings: ReviewFindingsDoc | null;
+  /** R6-01 WI-3 / F5 — which row (if any) is expanded. Optional/defaulted so
+   *  every existing caller (WI-2's own pinned render tests) that never sets
+   *  it keeps rendering exactly as before: fully collapsed. */
+  expandedNodeId?: string | null;
+  /** Cached node log lines, keyed by nodeId — already resolved via
+   *  `lib/flow-node-log.ts`'s `resolveNodeLogFromResponse`/`deriveLogLine`.
+   *  A missing key is treated the same as an empty array (RunLog's own
+   *  honest-empty state), never a throw. */
+  nodeLogLines?: Record<string, RunLogLine[]>;
+  /** Invoked with a row's nodeId when that row is clicked. The actual
+   *  expand/collapse + fetch-on-demand STATE lives in the page shell
+   *  (`app/flows/[id]/run/[runId]/page.tsx`) — this component stays pure and
+   *  props-driven, only reporting the click. */
+  onNodeClick?: (nodeId: string) => void;
 };
 
-export function FlowRunDetail({ runId, found, flow, run, rows, findings }: FlowRunDetailProps) {
+export function FlowRunDetail({
+  runId,
+  found,
+  flow,
+  run,
+  rows,
+  findings,
+  expandedNodeId = null,
+  nodeLogLines = {},
+  onNodeClick,
+}: FlowRunDetailProps) {
   const flowId = flow?.id ?? run?.flowId ?? '';
 
   return (
@@ -69,7 +117,12 @@ export function FlowRunDetail({ runId, found, flow, run, rows, findings }: FlowR
       ) : (
         <>
           <RunTrigger run={run} />
-          <RunTimeline rows={rows} />
+          <RunTimeline
+            rows={rows}
+            expandedNodeId={expandedNodeId}
+            nodeLogLines={nodeLogLines}
+            onNodeClick={onNodeClick}
+          />
           <ReviewFindingsPanel doc={findings} />
         </>
       )}
@@ -106,40 +159,116 @@ function RunTrigger({ run }: { run: Run | null }) {
 
 /** One row per flow node, in the flow definition's own order — every fact
  *  on a row comes from that node's own derived data (`FlowRunTimelineRow`),
- *  never re-derived or borrowed from a neighbour/the run total. */
-function RunTimeline({ rows }: { rows: FlowRunTimelineRow[] }) {
+ *  never re-derived or borrowed from a neighbour/the run total. R6-01 WI-3
+ *  (F5): a row also reports its own expand state (`data-node-expanded`) and,
+ *  when expanded, is followed by that node's own detail panel — never a
+ *  sibling row's. */
+function RunTimeline({
+  rows,
+  expandedNodeId,
+  nodeLogLines,
+  onNodeClick,
+}: {
+  rows: FlowRunTimelineRow[];
+  expandedNodeId: string | null;
+  nodeLogLines: Record<string, RunLogLine[]>;
+  onNodeClick?: (nodeId: string) => void;
+}) {
   return (
     <section data-section="run-timeline" style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
       <h3 style={{ margin: '0 0 4px', fontSize: 13 }}>Timeline</h3>
-      {rows.map((row) => (
-        <div
-          key={row.nodeId}
-          data-timeline-row="true"
-          data-node-id={row.nodeId}
-          data-status={row.status}
-          data-phase-cost-usd={row.costUsd.toFixed(2)}
-          {...(row.note !== null ? { 'data-node-note': row.note } : {})}
-          style={{
-            display: 'flex',
-            alignItems: 'baseline',
-            gap: 10,
-            padding: '8px 12px',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-          }}
-        >
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 140 }}>{row.nodeId}</span>
-          <span className="status-dot" data-status={row.status} />
-          <span style={{ fontSize: 11, color: 'var(--dim)' }}>{row.status}</span>
-          <span style={{ fontSize: 11, color: 'var(--faint)' }}>{row.agent ?? 'gate'}</span>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--dim)' }}>
-            ${row.costUsd.toFixed(2)}
-          </span>
-          {row.note !== null && (
-            <span style={{ fontSize: 11.5, color: 'var(--dim)' }}>{row.note}</span>
-          )}
-        </div>
-      ))}
+      {rows.map((row) => {
+        const expanded = row.nodeId === expandedNodeId;
+        return (
+          <Fragment key={row.nodeId}>
+            <div
+              data-timeline-row="true"
+              data-node-id={row.nodeId}
+              data-status={row.status}
+              data-phase-cost-usd={row.costUsd.toFixed(2)}
+              data-node-expanded={expanded ? 'true' : 'false'}
+              {...(row.note !== null ? { 'data-node-note': row.note } : {})}
+              onClick={() => onNodeClick?.(row.nodeId)}
+              style={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 10,
+                padding: '8px 12px',
+                border: '1px solid var(--line)',
+                borderRadius: 6,
+                cursor: onNodeClick ? 'pointer' : undefined,
+              }}
+            >
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, minWidth: 140 }}>{row.nodeId}</span>
+              <span className="status-dot" data-status={row.status} />
+              <span style={{ fontSize: 11, color: 'var(--dim)' }}>{row.status}</span>
+              <span style={{ fontSize: 11, color: 'var(--faint)' }}>{row.agent ?? 'gate'}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--dim)' }}>
+                ${row.costUsd.toFixed(2)}
+              </span>
+              {row.note !== null && (
+                <span style={{ fontSize: 11.5, color: 'var(--dim)' }}>{row.note}</span>
+              )}
+            </div>
+            {expanded && (
+              <NodeDetail
+                nodeId={row.nodeId}
+                lines={nodeLogLines[row.nodeId] ?? []}
+                outputsCount={row.artifacts.length}
+              />
+            )}
+          </Fragment>
+        );
+      })}
     </section>
+  );
+}
+
+/** The expanded detail panel behind one timeline row (R6-01 WI-3 / F5): that
+ *  node's OWN log, through the shared, unforked `RunLog`, and its typed
+ *  outputs — honestly empty today (see this file's own header: no per-node
+ *  artifact data source exists anywhere in the run model). */
+function NodeDetail({
+  nodeId,
+  lines,
+  outputsCount,
+}: {
+  nodeId: string;
+  lines: RunLogLine[];
+  outputsCount: number;
+}) {
+  return (
+    <div
+      data-section="node-detail"
+      data-detail-for-node={nodeId}
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        padding: '10px 12px',
+        marginTop: -2,
+        border: '1px solid var(--line)',
+        borderTop: 'none',
+        borderRadius: '0 0 6px 6px',
+        background: 'var(--surface-2, transparent)',
+      }}
+    >
+      <section data-section="node-log" style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+        <h4 style={{ margin: 0, fontSize: 11.5, color: 'var(--faint)', textTransform: 'uppercase' }}>Log</h4>
+        <RunLog lines={lines} />
+      </section>
+      <section
+        data-section="node-outputs"
+        data-outputs-count={outputsCount}
+        style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+      >
+        <h4 style={{ margin: 0, fontSize: 11.5, color: 'var(--faint)', textTransform: 'uppercase' }}>Outputs</h4>
+        {outputsCount === 0 ? (
+          <div data-component="node-outputs-empty" className="muted" style={{ fontStyle: 'italic', fontSize: 12 }}>
+            No typed outputs for this node.
+          </div>
+        ) : null}
+      </section>
+    </div>
   );
 }
