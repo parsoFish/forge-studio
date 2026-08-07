@@ -136,7 +136,7 @@ import {
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
-import { listRuns, buildAgentSlugToNodeId } from '../orchestrator/run-model.ts';
+import { listRuns, buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 
@@ -764,17 +764,32 @@ async function withReviewCommentLock(
 // ONE function, never two independently-written copies that can drift).
 // ---------------------------------------------------------------------------
 
-/** One row of an agent's run-history ledger — a flow-node run, a standalone
- *  dispatch, or an interactive session, each carrying its OWN status/cost
- *  (D3: never a run-level or cross-run aggregate) verbatim in its own native
- *  vocabulary (D12: no cross-vocabulary status mapping). */
-type AgentHistoryRow = {
-  id: string;
-  linkKind: 'flow-node' | 'standalone' | 'session';
-  href: string;
-  status: string;
-  costUsd: number | null;
-};
+/**
+ * One row of an agent's run-history ledger — a flow-node run, a standalone
+ * dispatch, or an interactive session, each carrying its OWN status/cost
+ * (D3: never a run-level or cross-run aggregate) verbatim in its own native
+ * vocabulary (D12: no cross-vocabulary status mapping).
+ *
+ * R6-06 ROUND 8/9 fix: `id`/`status`/`costUsd`/`href`/`linkKind` are the
+ * PRE-EXISTING fields (kept byte-identical — every node test written
+ * against Task 1's original acceptance battery, `cli/ui-bridge-agent-
+ * history.test.ts`, still reads them directly and must keep passing). The
+ * defect this round fixes is that the CLIENT (`forge-ui/lib/agent-ledger.ts`)
+ * never received the raw per-path FACTS it needs to derive `when`/`what`/
+ * `narrative` itself — so each variant now ALSO carries exactly what its own
+ * client-side entry type (`AgentFlowNodeRunEntry`/`AgentStandaloneRunEntry`/
+ * `AgentSessionRunEntry`, agent-ledger.ts) declares: the full `run`+`nodeId`
+ * for a flow-node row (the client derives status/cost/narrative from THAT,
+ * never from this row's own `status`/`costUsd` — those two stay here only
+ * because deleting them would break the pre-existing acceptance battery,
+ * not because the client reads them), or `when`+`what` for standalone/
+ * session rows. Purely ADDITIVE — no existing consumer of the original five
+ * fields observes any change.
+ */
+type AgentHistoryRow =
+  | { id: string; linkKind: 'flow-node'; href: string; status: string; costUsd: number | null; run: Run; nodeId: string }
+  | { id: string; linkKind: 'standalone'; href: string; status: string; costUsd: number | null; when: string; what: string }
+  | { id: string; linkKind: 'session'; href: string; status: string; costUsd: number | null; when: string; what: string };
 
 type StandaloneRunState = {
   state: 'running' | 'done' | 'failed' | 'suppressed' | 'budget-exceeded';
@@ -911,6 +926,12 @@ function collectFlowNodeRows(forgeRoot: string, slug: string): AgentHistoryRow[]
       href: `/flows/${encodeURIComponent(run.flowId)}/run/${encodeURIComponent(run.id)}`,
       status,
       costUsd: run.phaseMeta[nodeId]?.costUsd ?? null,
+      // R6-06 ROUND 8/9: the client's `AgentFlowNodeRunEntry` derives its own
+      // when/what/narrative from the FULL run + which node — the same `run`
+      // GET /api/runs already ships verbatim (D2 reuse), never a second,
+      // independently-trimmed copy.
+      run,
+      nodeId,
     });
   }
   return rows;
@@ -951,39 +972,57 @@ function collectStandaloneRows(logsRoot: string, slug: string): AgentHistoryRow[
     // to any slug, so it produces no row (never a guess, never a leak).
     if (parsed === null || !standaloneRunMatchesSlug(parsed, slug)) continue;
     const derived = deriveStandaloneStateFromEvents(parsed);
+    // R6-06 ROUND 9 MEASUREMENT: `when` is this run's own FIRST event's
+    // `started_at` — the same `parsed` array already in hand, no second
+    // read. `what` is honestly absent server-side (run-agent.ts's own
+    // events carry only the agent's own identity, never a project/task
+    // description — a measured NEGATIVE RESULT, not a design choice), so
+    // the agent's own slug is the smallest non-fabricated string available.
+    const firstStartedAt = parsed[0]?.['started_at'];
     rows.push({
       id: entry,
       linkKind: 'standalone',
       href: `/agents/${encodeURIComponent(slug)}/run/${encodeURIComponent(entry)}`,
       status: derived.state,
       costUsd: derived.costUsd,
+      when: typeof firstStartedAt === 'string' ? firstStartedAt : '',
+      what: slug,
     });
   }
   return rows;
 }
 
-/** Sum of `cost_usd` across a session's OWN log dir
- *  (`_logs/_<kind>-<sessionId>/events.jsonl`) — mirrors
- *  `readArchitectSessionStats` (orchestrator/architect-runner.ts)'s
- *  algorithm exactly, generalised over `kind` rather than hardcoded to
- *  `_architect-`. `null` when the log dir is absent (no cost has ever been
- *  recorded for this session — honest-absent, never a fabricated `0`).
- *  `_${kind}-${sessionId}` is ONE literal directory-entry name (a hyphen
- *  join, not a path separator), so it passes through the SAME guarded
- *  choke point as every other standalone-shaped log dir (R6-06 round 6) —
- *  `kind` comes from the live session-kind registry and `sessionId` from
- *  `readdirSync` in `collectSessionRows`, neither trusted enough to read
- *  through unguarded. */
-function readSessionCostUsd(logsRoot: string, kind: string, sessionId: string): number | null {
+/** Cost + `when` facts read from a session's OWN log dir
+ *  (`_logs/_<kind>-<sessionId>/events.jsonl`) — ONE guarded parse serving
+ *  BOTH facts (replaces the former cost-only `readSessionCostUsd`, R6-06
+ *  ROUND 9: `when` needs the exact same array, so a second guarded read for
+ *  it would be a redundant re-parse of the same file, not a second
+ *  independent cost summation — the "read never re-summed" rule is about
+ *  `costUsd` specifically, unaffected here since the summation itself is
+ *  unchanged). `costUsd` mirrors `readArchitectSessionStats`
+ *  (orchestrator/architect-runner.ts)'s summing algorithm exactly,
+ *  generalised over `kind` rather than hardcoded to `_architect-`; `null`
+ *  when the log dir is absent (no cost has ever been recorded for this
+ *  session — honest-absent, never a fabricated `0`). `when` is the FIRST
+ *  event's own `started_at` (R6-06 ROUND 9 measurement) — `''` (the same
+ *  honest-absent sentinel `flow-ledger.ts`'s own `run.startedAt ?? ''`
+ *  convention uses, D7) when no event carries one. `_${kind}-${sessionId}`
+ *  is ONE literal directory-entry name (a hyphen join, not a path
+ *  separator), so it passes through the SAME guarded choke point as every
+ *  other standalone-shaped log dir (R6-06 round 6) — `kind` comes from the
+ *  live session-kind registry and `sessionId` from `readdirSync` in
+ *  `collectSessionRows`, neither trusted enough to read through unguarded. */
+function readSessionLogFacts(logsRoot: string, kind: string, sessionId: string): { costUsd: number | null; when: string } {
   const parsed = parseGuardedEventsJsonl(logsRoot, `_${kind}-${sessionId}`);
-  if (parsed === null || parsed.length === 0) return null;
+  if (parsed === null || parsed.length === 0) return { costUsd: null, when: '' };
   let total = 0;
   let any = false;
   for (const e of parsed) {
     const cost = e['cost_usd'];
     if (typeof cost === 'number') { total += cost; any = true; }
   }
-  return any ? total : null;
+  const firstStartedAt = parsed[0]['started_at'];
+  return { costUsd: any ? total : null, when: typeof firstStartedAt === 'string' ? firstStartedAt : '' };
 }
 
 /**
@@ -1071,12 +1110,21 @@ function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logs
         const href = template
           ? template.replace('[sessionId]', sessionId)
           : `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`;
+        // R6-06 ROUND 9 MEASUREMENT: `what` is the session-kind descriptor's
+        // OWN `title` (e.g. 'Planning session') — a per-KIND, not per-
+        // instance, label; `readGuardedSessionStatus`'s narrowed return type
+        // doesn't expose the per-instance `project` field today, so a richer
+        // "title · project" combination is a genuine (out-of-scope) future
+        // change, not something already flowing (see the task report).
+        const logFacts = readSessionLogFacts(ctx.logsRoot, descriptor.id, sessionId);
         rows.push({
           id: sessionId,
           linkKind: 'session',
           href,
           status: status.phase,
-          costUsd: readSessionCostUsd(ctx.logsRoot, descriptor.id, sessionId),
+          costUsd: logFacts.costUsd,
+          when: logFacts.when,
+          what: descriptor.title,
         });
       }
     }

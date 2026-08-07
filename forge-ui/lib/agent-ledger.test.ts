@@ -665,17 +665,84 @@ function validSessionRow(over: Record<string, unknown> = {}): Record<string, unk
   };
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// ROUND 9 — the three `valid*Row()` builders directly above encode the
+// SUPERSEDED pre-reconciliation contract (a pre-derived `LedgerRow`: `id/
+// when/what/narrative/narrativeKinds/status/costUsd/href/linkKind`). Under
+// the RATIFIED target contract (see this file's ROUND 8 section below, and
+// `agent-ledger.ts`'s own module header), the wire carries per-path ENTRIES
+// — `{run, nodeId, href}` for flow-node, `{id, href, when, what, status,
+// costUsd, trigger?}` for standalone/session — each tagged with `linkKind`,
+// never a pre-derived `narrative`/`narrativeKinds`. A flow-node ROW fixture
+// (`validFlowNodeRow()`) has NEITHER `run` NOR `nodeId` — the two fields an
+// entry-validating resolver actually requires — so it is structurally
+// invalid as a flow-node wire item REGARDLESS of any other field on it.
+// Any assertion that a `validFlowNodeRow()`-shaped item resolves `found` is
+// therefore UNSATISFIABLE by any correct entry-validating implementation —
+// this is the exact contradiction this round's task brief names at
+// agent-ledger.test.ts:728 (pre-migration line number). The three builders
+// below are the entry-shaped counterparts, used to migrate every `found`-
+// asserting (or proof-value-bearing) fixture below that rested on the
+// superseded row shape. `valid*Row()` themselves are KEPT, unchanged —
+// they remain correct fixtures for the DEFECT 2 EVIDENCE/INTEGRATION tests
+// further below, which render an ACTUAL POST-DERIVATION `LedgerRow` through
+// the real `HistoryLedger` component (a different layer entirely — a row
+// really does have this shape once `deriveAgentLedgerRows` has run; only
+// the WIRE/resolver-level tests needed to migrate).
+function validFlowNodeEntry(over: Record<string, unknown> = {}): Record<string, unknown> {
+  const run = baseRun({ phases: { architect: 'complete' }, phaseMeta: { architect: meta({ costUsd: 2.5 }) } });
+  return {
+    linkKind: 'flow-node', run, nodeId: 'architect',
+    href: `/flows/${run.flowId}/run/${run.id}`,
+    ...over,
+  };
+}
+
+function validStandaloneEntry(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    linkKind: 'standalone', id: 'solo-row', href: '/agents/solo/run/solo-row',
+    when: '2026-01-01T00:00:00.000Z', what: 'solo', status: 'done', costUsd: 1,
+    ...over,
+  };
+}
+
+function validSessionEntry(over: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    linkKind: 'session', id: 'sess-row', href: '/architect/sess-row',
+    when: '2026-01-01T00:00:00.000Z', what: 'Planning session', status: 'interviewing', costUsd: null,
+    ...over,
+  };
+}
+
 test('DEFECT 2 RED: a row with costUsd as a STRING ("5.00") — the reviewer\'s first repro — must NOT be accepted as found', () => {
   // KILLS: `Array.isArray(rows) ? {kind:'found', rows} : {kind:'unresolved'}`
   // (the current implementation) — it has no per-row check at all, so this
   // structurally-invalid row sails through as `'found'`. Rendered through
   // the REAL component (proven below, DEFECT 2 EVIDENCE), this row throws.
+  //
+  // ROUND 9 NOTE (left UNCHANGED, not migrated — see the report): under the
+  // entry contract `validFlowNodeRow()` is ALSO invalid for an unrelated
+  // reason (no `run`/`nodeId` at all — a flow-node entry has no top-level
+  // `costUsd` field to corrupt in the first place; the equivalent honest
+  // corruption target would be nested, `run.phaseMeta.architect.costUsd`).
+  // The assertion below stays TRUE either way (still `'unresolved'`), so
+  // this is not the line-728 class of CONTRADICTION — but it no longer
+  // isolates costUsd-type validation specifically for the flow-node path;
+  // that reason is now dominated by the missing `run`/`nodeId`. Left as-is
+  // rather than retargeted to a nested-field corruption, which would pin a
+  // NEW, ungrounded validation-depth requirement this round's brief does not
+  // authorize (see report: no precedent elsewhere in this codebase for deep
+  // per-field `Run` validation on receipt — `studio-client.ts`'s `fetchRuns`
+  // normalizes via `parseRun`, it does not reject).
   const body = { rows: [validFlowNodeRow({ costUsd: '5.00' })] };
   const result = resolveAgentHistoryFromResponse(200, body);
   expect(result.kind).toBe('unresolved');
 });
 
 test('DEFECT 2 RED: a row with costUsd MISSING (undefined) — the reviewer\'s second repro; the component\'s own `!== null` guard does not catch this — must NOT be accepted as found', () => {
+  // ROUND 9 NOTE: same as the test immediately above — left unchanged, still
+  // correctly `'unresolved'`, now dominated by the missing `run`/`nodeId`
+  // rather than the missing `costUsd` specifically.
   const badRow = validFlowNodeRow();
   delete badRow.costUsd;
   const body = { rows: [badRow] };
@@ -695,18 +762,49 @@ test('DEFECT 2 RED, CHOSEN BEHAVIOUR: ONE invalid row among otherwise-valid rows
   // response — that alternative would return `{kind:'found', rows:[the one
   // valid row]}` here, which this exact-kind assertion also catches (a
   // `'found'` result would fail this `.toBe('unresolved')`).
-  const body = { rows: [validFlowNodeRow(), validStandaloneRow({ costUsd: '3.00' })] };
+  //
+  // ROUND 9 MIGRATION: the flow-node half is now `validFlowNodeEntry()` (a
+  // GENUINELY valid flow-node entry — has `run`/`nodeId`/`href`), not
+  // `validFlowNodeRow()`. Before this migration, `validFlowNodeRow()` was
+  // ALSO invalid under the entry contract (no `run`/`nodeId`) — meaning
+  // BOTH halves of the body were invalid, and the test's own documented
+  // purpose ("ONE invalid row among otherwise-VALID rows") was no longer
+  // actually demonstrated (the assertion stayed numerically true only
+  // because an all-invalid body is unresolved too, not because a genuinely
+  // valid item survived alongside an invalid one). This migration restores
+  // the test's real proof value: one truly valid entry (flow-node) next to
+  // one genuinely invalid one (standalone, bad costUsd type) still rejects
+  // the whole response.
+  const body = { rows: [validFlowNodeEntry(), validStandaloneEntry({ costUsd: '3.00' })] };
   const result = resolveAgentHistoryFromResponse(200, body);
   expect(result.kind).toBe('unresolved');
 });
 
 test('DEFECT 2 RED, STATUS VOCAB: a flow-node row with a status OUTSIDE RunPhaseStatus\'s closed set (e.g. "bogus") is rejected — the per-path status vocabulary is enforced, not just presence/type', () => {
+  // ROUND 9 NOTE (left UNCHANGED, not migrated — see the report): a
+  // flow-node ENTRY has no top-level `status` field at all — status is
+  // ALWAYS derived from `run.phases[nodeId]`, never carried directly on the
+  // wire (agent-ledger.ts's own `deriveFlowNodeRow`). `validFlowNodeRow({
+  // status: 'bogus' })` is therefore dominated by the SAME missing-run/
+  // nodeId defect as the costUsd tests above, for the same reason: this
+  // round does not invent a new nested (`run.phases[nodeId]`) validation
+  // requirement, since nothing in the task brief or existing codebase
+  // precedent grounds how deep entry validation should reach into `run`.
+  // The assertion stays TRUE (still `'unresolved'`) either way.
   const body = { rows: [validFlowNodeRow({ status: 'bogus' })] };
   const result = resolveAgentHistoryFromResponse(200, body);
   expect(result.kind).toBe('unresolved');
 });
 
 test('DEFECT 2 RED, STATUS VOCAB: a standalone row with a status OUTSIDE its own closed set (e.g. "queued", not one of running|done|failed|suppressed|budget-exceeded) is rejected', () => {
+  // ROUND 9: left on `validStandaloneRow()`, NOT migrated to
+  // `validStandaloneEntry()` — unlike the flow-node cases above, a
+  // standalone ENTRY genuinely has a top-level `status` field, and
+  // `validStandaloneRow({status:'queued'})` already carries every OTHER
+  // required standalone-entry field (id/href/when/what/costUsd) correctly
+  // typed — its two extra fields (`narrative`/`narrativeKinds`) are inert
+  // noise a reasonable validator ignores, not a second source of rejection.
+  // This test was ALREADY precise under the entry contract; nothing to fix.
   const body = { rows: [validStandaloneRow({ status: 'queued' })] };
   const result = resolveAgentHistoryFromResponse(200, body);
   expect(result.kind).toBe('unresolved');
@@ -719,14 +817,54 @@ test('DEFECT 2 REGRESSION LOCK (openness must survive the fix): a SESSION row\'s
   // that session `status` is carried verbatim, never coerced/validated
   // against a closed set, because it is genuinely open across a growing set
   // of runners.
-  const body = { rows: [validSessionRow({ status: 'some-brand-new-runner-phase' })] };
+  //
+  // ROUND 9 MIGRATION: `validSessionRow()` -> `validSessionEntry()`. This
+  // fixture was NOT structurally unsatisfiable either way (a session entry's
+  // required fields — id/href/when/what/status/costUsd — are all present on
+  // `validSessionRow()` too, so this specific assertion was never
+  // contradictory). Migrated anyway for WIRE-SHAPE HONESTY (Task 3, "keep
+  // the round-8 pins coherent"): the ratified contract's own first bullet is
+  // "no pre-derived narrative" on the wire, and `validSessionRow()` still
+  // carries `narrative`/`narrativeKinds` — fields the real server would
+  // never send. Using the entry builder here removes that stale artifact so
+  // every `found`-asserting fixture in this file now describes a REALISTIC
+  // wire body, not just a technically-tolerated one.
+  const body = { rows: [validSessionEntry({ status: 'some-brand-new-runner-phase' })] };
   const result = resolveAgentHistoryFromResponse(200, body);
   expect(result.kind).toBe('found');
   if (result.kind === 'found') expect(result.rows[0].status).toBe('some-brand-new-runner-phase');
 });
 
-test('DEFECT 2 REGRESSION LOCK: fully valid rows across all three linkKinds (flow-node/standalone/session) are still accepted as found, verbatim — the new validation must not reject legitimate data', () => {
-  const body = { rows: [validFlowNodeRow(), validStandaloneRow(), validSessionRow()] };
+test('DEFECT 2 REGRESSION LOCK: fully valid entries across all three linkKinds (flow-node/standalone/session) are still accepted as found, verbatim — the new validation must not reject legitimate data', () => {
+  // ═══════════════════════════════════════════════════════════════════════
+  // ROUND 9, TASK 1 — THE NAMED CONTRADICTION, RESOLVED. Pre-migration, this
+  // test read:
+  //   const body = { rows: [validFlowNodeRow(), validStandaloneRow(), validSessionRow()] };
+  //   ... expect(result.kind).toBe('found');
+  // `validFlowNodeRow()` is a pre-derived LedgerRow — `{id, when, what,
+  // narrative, narrativeKinds, status, costUsd, href, linkKind:'flow-node'}`
+  // — carrying NEITHER `run` NOR `nodeId`, the two fields the RATIFIED entry
+  // contract actually requires for a flow-node wire item (`agent-ledger.ts`'s
+  // own `AgentFlowNodeRunEntry = {run, nodeId, href}`; see this file's
+  // ROUND 8 section immediately below). Once the resolver validates ENTRIES
+  // (ROUND 8's own ruling — the sibling PIN test right after this one), a
+  // `validFlowNodeRow()`-shaped item can NEVER pass validation, for any
+  // implementation, correct or not: this test's `found` assertion and the
+  // ROUND 8 PIN test's `found` assertion (both already in this file) were
+  // MUTUALLY UNSATISFIABLE — no single resolver implementation could ever
+  // make both green. That is the exact defect class this campaign exists to
+  // refuse: a test file with two assertions that cannot both be true is not
+  // a spec, it is a coin flip on which one the ruler notices first.
+  //
+  // RULING (this round, operator-authorized — see task brief): this test
+  // encoded the SUPERSEDED pre-reconciliation contract. It migrates to the
+  // entry shape, preserving its intent EXACTLY — valid input across all
+  // three link kinds is accepted `found`, verbatim — expressed in entries
+  // instead of pre-derived rows. This is an amendment because the CONTRACT
+  // changed (ROUND 8 ratified it), not a weakening: the assertion strength
+  // (found, all 3 linkKinds, verbatim) is unchanged.
+  // ═══════════════════════════════════════════════════════════════════════
+  const body = { rows: [validFlowNodeEntry(), validStandaloneEntry(), validSessionEntry()] };
   const result = resolveAgentHistoryFromResponse(200, body);
   expect(result.kind).toBe('found');
   if (result.kind === 'found') {
@@ -771,11 +909,19 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
   // future malformed shape this list doesn't yet anticipate still can't
   // slip a crashing row past this test, because rendering whatever the
   // resolver DOES call "found" is always exercised, unconditionally.
+  // ROUND 9: entry 4 mirrors the "CHOSEN BEHAVIOUR" test above — migrated to
+  // `validFlowNodeEntry()` + `validStandaloneEntry({costUsd:'3.00'})` for the
+  // same reason (a genuinely-valid item next to a genuinely-invalid one).
+  // Entries 1-2 are left on `validFlowNodeRow(...)` — same ROUND 9 NOTE as
+  // the "DEFECT 2 RED" costUsd tests above: this is a general SAFETY NET
+  // (any malformed shape must never slip a crash past the resolver), which
+  // holds regardless of WHY a given shape is rejected, so leaving them
+  // unmigrated does not weaken what this specific test proves.
   const malformedBodies: unknown[] = [
     { rows: [validFlowNodeRow({ costUsd: '5.00' })] },
     { rows: [(() => { const r = validFlowNodeRow(); delete r.costUsd; return r; })()] },
     { rows: [{ status: 'complete' }] },
-    { rows: [validFlowNodeRow(), validStandaloneRow({ costUsd: '3.00' })] },
+    { rows: [validFlowNodeEntry(), validStandaloneEntry({ costUsd: '3.00' })] },
   ];
   for (const body of malformedBodies) {
     const result = resolveAgentHistoryFromResponse(200, body);
@@ -785,4 +931,250 @@ test('DEFECT 2 INTEGRATION: whatever rows resolveAgentHistoryFromResponse hands 
       expect(result.kind).toBe('unresolved');
     }
   }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// ROUND 8 — SHIPPED-BLIND DEFECT: `GET /api/agents/:slug/history` returns a
+// PERFECT 200 (`{ok:true, rows:[{id,linkKind,href,status,costUsd}]}`) —
+// every one of the 43 tests above is green, and so is every test in
+// `cli/ui-bridge-agent-history.test.ts` — yet the real page never leaves
+// `[data-component="history-ledger-unresolved"]`. Why every test above is
+// blind to it: they all construct `LedgerRow`-shaped bodies DIRECTLY
+// (`validFlowNodeRow()` etc. already carry `narrative`/`narrativeKinds`/
+// `when`/`what` — exactly the fields the real server has never sent), so
+// none of them can see a wire body that is honest about what the server
+// actually emits. This section closes that gap.
+//
+// RULING (this round): the server emits per-entry FACTS
+// (`AgentFlowNodeRunEntry`/`AgentStandaloneRunEntry`/`AgentSessionRunEntry`,
+// imported above — read verbatim, nothing invented); the client derives
+// `narrative`/`when`/`what`/`linkKind` via `deriveAgentLedgerRows`, already
+// exhaustively pinned above. `resolveAgentHistoryFromResponse` must
+// therefore validate ENTRIES and call `deriveAgentLedgerRows` — not accept
+// an already-derived `LedgerRow` (today's actual behaviour, and every
+// `validFlowNodeRow()`-shaped fixture above's implicit assumption).
+//
+// WIRE ENVELOPE ASSUMED BELOW (no spec pins this — flagged, not invented
+// from nothing): `{rows: WireEntry[]}`, each item tagged with the SAME
+// `linkKind` discriminator the server already emits TODAY
+// (`AgentHistoryRow.linkKind`, cli/ui-bridge.ts:773), carrying that path's
+// OWN entry fields verbatim alongside it. Chosen because it changes the
+// LEAST about the current, already-shipped wire contract (same top-level
+// `rows` array, same `linkKind` tag) while fixing exactly the defect (raw
+// facts instead of pre-derived narrative). A correct implementation may
+// reasonably choose a different envelope (e.g. three separate top-level
+// arrays mirroring `deriveAgentLedgerRows`'s own `{flowNodeEntries,
+// standaloneEntries, sessionEntries}` parameter shape) — if so, ONLY this
+// section's envelope-construction needs updating; the requirement it
+// proves (the resolver must call `deriveAgentLedgerRows` on raw entries,
+// never accept pre-derived narrative) does not change with the envelope.
+//
+// The `CAPTURED_TODAY_*` constants below are MIRRORED, not hand-invented —
+// transcribed verbatim from `cli/ui-bridge-agent-history.test.ts`'s "ROUND
+// 8 CAPTURE + DRIFT GUARD" tests, which hit the REAL route via a REAL
+// in-process bridge (that file cannot import this one — see its own
+// comment on the extensionless-import ESM failure, verified by attempting
+// it directly). If those node tests ever go red, these constants are STALE
+// and MUST be updated in the SAME change, or this pin silently stops
+// proving anything about the real wire.
+// ═══════════════════════════════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════════════════════════════
+// ROUND 9, TASK 2 — MEASUREMENT: grounding `when`/`what` per path. Round 8
+// flagged two of its six values (`what: 'r8solo'`, `what: 'Planning
+// session'`, in the PIN test just below) as its "own reasoned, flagged
+// choice, not a verified contract". This section re-measures ALL SIX (when
+// + what × three paths) against real server data AND the mockup's own
+// design intent (`mockups/studio-endstate-v2/data.jsx`'s `AGENT_HISTORY`),
+// per this round's brief. CONCLUSION UP FRONT: both flagged values were
+// ALREADY correct — nothing below changes the PIN test's literals. What
+// changes is their status, from "unverified guess" to "measured fact",
+// with the evidence trail on record.
+//
+// FLOW-NODE — when: `run.startedAt`; what: `run.initiative`. MEASURED,
+// already correct in round 8. `GET /api/runs` ships the full `Run` —
+// confirmed live by `cli/ui-bridge-agent-history.test.ts`'s own "ROUND 8
+// CAPTURE + DRIFT GUARD (flow-node)" test, which asserts `run.startedAt`/
+// `run.initiative`/`run.flowId` directly off a REAL response body from a
+// REAL in-process bridge. `forge-ui/lib/flow-ledger.ts:126` already derives
+// `what: run.initiative` for the sibling flow-monitor ledger — the SAME
+// fact, same field, an established precedent this round confirms rather
+// than invents. Matches the mockup's own design intent too: every
+// `AGENT_HISTORY` flow-linked row's `what` leads with an initiative/project
+// identifier (data.jsx:294-297, e.g. `'betterado INIT-12 · WI-3/4 task_group
+// filters'`) — richer than the bare `run.initiative` (it also packs in
+// WI/iteration detail with no server-side source), but `run.initiative` is
+// the correct, honestly-available FIRST component of that same idea.
+//
+// STANDALONE — when: the run's own first-event `started_at`. MEASURED,
+// already correct in round 8: `collectStandaloneRows` (cli/ui-bridge.ts:938)
+// parses the run's `events.jsonl` into `parsed` before deriving state/cost
+// — that array's own first event's `started_at` is honestly in hand. The
+// PIN test's `'2026-01-01T00:00:00.000Z'` is exactly
+// `seedStandaloneRun`'s own hardcoded start-event timestamp
+// (cli/ui-bridge-agent-history.test.ts:255).
+// what: NEGATIVE RESULT — measured this round, genuinely absent server-side.
+// A standalone run's own events (`orchestrator/run-agent.ts:320-382`) carry
+// only `phase: 'orchestrator'`, `skill: <agentSlug>`, `metadata:
+// {agent_phase, agent_slug}` — every one of these RE-STATES the agent's own
+// identity (already known: it is the very slug being queried), never a
+// project/initiative/task description. `initiative_id` on these events
+// falls back to the run's own id when nothing binds it (`run-agent.ts:313`)
+// — not human-readable, not a real "what". The mockup's own richer
+// standalone `what` values (data.jsx:295 `'gitpulse · WI-2 standalone'`,
+// :309 `'betterado · PR #61 merged → refresh'`) bake in PROJECT + task
+// context a plain standalone dispatch's own event log does not carry today
+// — an honest gap, not something to fabricate here (per this round's own
+// instruction: "if a fact genuinely is not available... drop its
+// contribution and report the measurement"). Since `what` is a REQUIRED
+// `string` on the ALREADY-SHIPPED `AgentStandaloneRunEntry` type (this is a
+// tests-only round — that type is production code and stays untouched), the
+// honest-absence signal cannot be `undefined`/omission; the agent's own
+// slug (round 8's `'r8solo'`) is the smallest non-fabricated string that
+// remains — CONFIRMED, not invented: it is the ONLY fact available, not a
+// preferred pick among several.
+//
+// SESSION — when: the session's own first-event `started_at` from its
+// `_<kind>-<sessionId>/events.jsonl` log dir. MEASURED, already correct in
+// round 8 — the PIN test's `'2026-01-01T00:10:00.000Z'` is exactly
+// `seedArchitectSession`'s own hardcoded start-event timestamp
+// (cli/ui-bridge-agent-history.test.ts:337).
+// what: `session-kinds.yaml`'s matching descriptor's OWN `title` field.
+// MEASURED, CONFIRMED this round by reading the REAL, live
+// `studio/session-kinds.yaml` (not merely the test's own verbatim-copied
+// fixture): the `architect` descriptor's `title` is, byte-for-byte,
+// `Planning session` (`studio/session-kinds.yaml:17`) — exactly round 8's
+// choice. `loadSessionKinds` (already called by `collectSessionRows`,
+// cli/ui-bridge.ts:1044) has this value in hand for free — no new read
+// required to emit it. JUDGEMENT CALL, NOT PINNED (flagged for the ruler,
+// not silently decided): the mockup's own session `what` values (data.jsx:
+// 305-306, e.g. `'betterado roadmap refresh'`) are RICHER per-INSTANCE
+// narratives than a per-KIND static title, and a session's own
+// `status.json` genuinely carries a `project` field alongside `phase`
+// (seeded by `seedArchitectSession`, cli/ui-bridge-agent-history.test.ts:
+// 330) that COULD be combined with the title for a closer mockup match
+// (e.g. `"Planning session · gitpulse"`) — but `readGuardedSessionStatus`
+// (cli/ui-bridge.ts:1015) currently narrows its own return type to `{phase?:
+// unknown}` and `collectSessionRows` never reads `project` out of it today,
+// so surfacing it would be a genuine (small) production change, not a
+// value already flowing. That combination is a NEW design decision this
+// round does NOT invent or pin; the bare kind title is the smallest,
+// already-measured, already-correct fact, kept as-is.
+// ═══════════════════════════════════════════════════════════════════════
+
+const CAPTURED_TODAY_FLOW_NODE_ROW = {
+  id: '2026-01-01T00-00-00_INIT-r8-flow-1', linkKind: 'flow-node',
+  href: '/flows/forge-architect/run/2026-01-01T00-00-00_INIT-r8-flow-1',
+  status: 'complete', costUsd: 3.5,
+};
+const CAPTURED_TODAY_STANDALONE_ROW = {
+  id: '_agent-r8solo-2026-07-02T00-00-00-000-r8r8', linkKind: 'standalone',
+  href: '/agents/r8solo/run/_agent-r8solo-2026-07-02T00-00-00-000-r8r8',
+  status: 'done', costUsd: 6.25,
+};
+const CAPTURED_TODAY_SESSION_ROW = {
+  id: '2026-07-03T00-00-00-sess-r8', linkKind: 'session',
+  href: '/architect/2026-07-03T00-00-00-sess-r8',
+  status: 'drafting', costUsd: 2.0,
+};
+
+test('ROUND 8, NEGATIVE (item 2 — defect cannot silently return): a response carrying rows shaped like the CURRENT (wrong) server output — {id,linkKind,href,status,costUsd}, no when/what/narrativeKinds — must NOT resolve found, for all three linkKinds. Already true today (isValidLedgerRow rejects the missing fields) and MUST stay true post-fix: kills a cheap "fix" that loosens isValidLedgerRow to default when/what/narrativeKinds instead of switching to entries + deriveAgentLedgerRows', () => {
+  for (const row of [CAPTURED_TODAY_FLOW_NODE_ROW, CAPTURED_TODAY_STANDALONE_ROW, CAPTURED_TODAY_SESSION_ROW]) {
+    const result = resolveAgentHistoryFromResponse(200, { rows: [row] });
+    expect(result.kind).not.toBe('found');
+  }
+});
+
+test('ROUND 8 ⚑ THE PIN (item 1, round-trip; item 3, per-path — all three linkKinds in ONE body): a wire body carrying the ENTRY shapes agent-ledger.ts declares, tagged with linkKind, resolves found via the REAL resolveAgentHistoryFromResponse, with rows IDENTICAL to calling deriveAgentLedgerRows directly on the same entries — proves the resolver is wired to DERIVE, not to accept pre-derived rows. RED today: the current resolver treats each item as an already-derived LedgerRow — isValidLedgerRow rejects the flow-node item outright (no id/when/what/narrative — only run/nodeId/href/linkKind) and the standalone/session items too (no narrative/narrativeKinds) — so every item fails validation and the whole response resolves unresolved, never found', () => {
+  // Entry facts below are the SAME real facts captured live in
+  // cli/ui-bridge-agent-history.test.ts's ROUND 8 tests (run.id/flowId/
+  // initiative/startedAt/phases/phaseMeta for the flow-node path; the fixed
+  // event timestamps `seedStandaloneRun`/`seedArchitectSession` always write
+  // for standalone/session `when`) — NOT invented.
+  //
+  // ROUND 9 (Task 2 — see the MEASUREMENT block above `CAPTURED_TODAY_*`
+  // for the full trail): `what: 'r8solo'` and `what: 'Planning session'`
+  // were round 8's own "reasoned, flagged choice, not a verified contract".
+  // Both are now MEASURED and CONFIRMED, not merely reasoned: 'r8solo' (the
+  // agent's own slug) is a proven NEGATIVE RESULT — no richer per-instance
+  // "what" exists anywhere in a standalone run's own event log
+  // (`orchestrator/run-agent.ts:320-382`), so the slug remains the only
+  // non-fabricated string available, not a preferred pick among several.
+  // 'Planning session' is verified byte-for-byte against the REAL, live
+  // `studio/session-kinds.yaml:17` (`title: Planning session` on the
+  // `architect` descriptor) — not just this file's own verbatim-copied test
+  // fixture. Neither value changes; only their status does.
+  const flowNodeEntry: AgentFlowNodeRunEntry = {
+    run: baseRun({
+      id: '2026-01-01T00-00-00_INIT-r8-flow-1',
+      flowId: 'forge-architect',
+      initiative: 'INIT-r8-flow-1',
+      startedAt: '2026-07-01T09:00:00.000Z',
+      phases: { architect: 'complete' },
+      phaseMeta: { architect: meta({ costUsd: 3.5 }) },
+    }),
+    nodeId: 'architect',
+    href: CAPTURED_TODAY_FLOW_NODE_ROW.href,
+  };
+  const standaloneEntry: AgentStandaloneRunEntry = {
+    id: CAPTURED_TODAY_STANDALONE_ROW.id,
+    href: CAPTURED_TODAY_STANDALONE_ROW.href,
+    when: '2026-01-01T00:00:00.000Z',
+    what: 'r8solo',
+    status: 'done',
+    costUsd: 6.25,
+  };
+  const sessionEntry: AgentSessionRunEntry = {
+    id: CAPTURED_TODAY_SESSION_ROW.id,
+    href: CAPTURED_TODAY_SESSION_ROW.href,
+    when: '2026-01-01T00:10:00.000Z',
+    what: 'Planning session',
+    status: 'drafting',
+    costUsd: 2.0,
+  };
+
+  const body = {
+    rows: [
+      { linkKind: 'flow-node', ...flowNodeEntry },
+      { linkKind: 'standalone', ...standaloneEntry },
+      { linkKind: 'session', ...sessionEntry },
+    ],
+  };
+
+  const result = resolveAgentHistoryFromResponse(200, body);
+  expect(result.kind).toBe('found');
+
+  const expectedRows = deriveAgentLedgerRows({
+    flowNodeEntries: [flowNodeEntry],
+    standaloneEntries: [standaloneEntry],
+    sessionEntries: [sessionEntry],
+  });
+  if (result.kind === 'found') {
+    // The resolver's output must be IDENTICAL to calling deriveAgentLedgerRows
+    // directly — not merely "found", and not a second, independently
+    // re-derived narrative that happens to look similar today.
+    expect(result.rows).toEqual(expectedRows);
+
+    expect(result.rows.map((r) => r.linkKind).sort()).toEqual(['flow-node', 'session', 'standalone']);
+    const flowRow = result.rows.find((r) => r.linkKind === 'flow-node')!;
+    expect(flowRow.when).toBe('2026-07-01T09:00:00.000Z');
+    expect(flowRow.what).toBe('INIT-r8-flow-1');
+    expect(flowRow.narrative).toBe('in forge-architect');
+    expect(flowRow.status).toBe('complete');
+    expect(flowRow.costUsd).toBe(3.5);
+    const soloRow = result.rows.find((r) => r.linkKind === 'standalone')!;
+    expect(soloRow.when).toBe('2026-01-01T00:00:00.000Z');
+    expect(soloRow.narrative).toBe('standalone');
+    expect(soloRow.costUsd).toBe(6.25);
+    const sessRow = result.rows.find((r) => r.linkKind === 'session')!;
+    expect(sessRow.when).toBe('2026-01-01T00:10:00.000Z');
+    expect(sessRow.narrative).toBeNull();
+    expect(sessRow.status).toBe('drafting');
+  }
+});
+
+test('ROUND 8, VACUOUS-EMPTY STAYS HONEST (item 4): {rows: []} still resolves found with zero rows under the SAME resolver this section pins — this is the ONE case every implementation (including the current, defective one) already gets right; the two tests above are what actually prove non-empty works, so this passing alone must never be read as evidence of that', () => {
+  const result = resolveAgentHistoryFromResponse(200, { rows: [] });
+  expect(result.kind).toBe('found');
+  if (result.kind === 'found') expect(result.rows).toEqual([]);
 });

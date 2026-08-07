@@ -50,7 +50,13 @@ import {
   type LedgerSegment,
   type LedgerRowTrigger,
 } from './history-ledger';
-import type { Run } from './studio-client';
+// R6-06 ROUND 8/9 fix: `parseRun` is the SAME normalizer `GET /api/runs`'s
+// own client already trusts to turn a raw wire `Run` into the typed shape
+// (D2 reuse) — used below to defend `deriveAgentLedgerRows` against a
+// structurally-incomplete `run` object (e.g. a missing `phases`/`phaseMeta`
+// key would otherwise throw inside `deriveFlowNodeRow`/
+// `deriveAgentNodeLedgerSegments`, not merely render oddly).
+import { parseRun, type Run } from './studio-client';
 
 // ---------------------------------------------------------------------------
 // Entry shapes — one per execution path, already-resolved by the caller
@@ -213,62 +219,82 @@ export type AgentHistoryResolution =
   | { kind: 'unresolved' };
 
 // ---------------------------------------------------------------------------
-// Task 4 — per-row runtime validation. `Array.isArray(rows)` alone says
-// nothing about what's INSIDE the array; the server's own 200 contract can
-// still arrive with a structurally broken row (wrong-typed `costUsd`, an
-// absent field, a status outside the row's own closed vocabulary) and this
-// resolver is the ONE seam that stands between that wire body and the real
-// `HistoryLedger` component, which crashes on exactly this shape
-// (`row.costUsd.toFixed is not a function` — its `!== null` guard does not
-// catch `undefined` either). See agent-ledger.test.ts's DEFECT 2 battery.
+// ROUND 8/9 — the wire carries per-path ENTRIES (raw facts: `run`+`nodeId`
+// for flow-node; `id/href/when/what/status/costUsd[/trigger]` for
+// standalone/session), never a pre-derived `LedgerRow` — see this module's
+// header + agent-ledger.test.ts's ROUND 8/9 sections for the full ruling.
+// Each wire item is tagged with `linkKind`; this resolver validates the
+// ENTRY shape for that linkKind, then calls the REAL `deriveAgentLedgerRows`
+// to produce rows. `Array.isArray(rows)` alone says nothing about what's
+// INSIDE the array; the server's own 200 contract can still arrive with a
+// structurally broken item (wrong-typed `costUsd`, an absent field, a
+// status outside the row's own closed vocabulary) and this resolver is the
+// ONE seam that stands between that wire body and the real `HistoryLedger`
+// component, which crashes on exactly this shape (`row.costUsd.toFixed is
+// not a function` — its `!== null` guard does not catch `undefined`
+// either). See agent-ledger.test.ts's DEFECT 2 battery.
 // ---------------------------------------------------------------------------
 
-/** Mirrors `RunPhaseStatus` (studio-client.ts) exactly. Duplicated as a
+/** Mirrors `AgentStandaloneRunEntry['status']` exactly. Duplicated as a
  *  runtime array because a TS union has no runtime membership check of its
  *  own — same precedent as session-kinds.ts's `SESSION_STAGES`
  *  (`Object.freeze([...] as const)`), kept in sync by hand. */
-const FLOW_NODE_STATUSES = Object.freeze(['pending', 'active', 'complete', 'retrying', 'failed'] as const);
-
-/** Mirrors `AgentStandaloneRunEntry['status']` above exactly. */
 const STANDALONE_STATUSES = Object.freeze(['running', 'done', 'failed', 'suppressed', 'budget-exceeded'] as const);
 
-/**
- * `status`'s closed vocabulary is CHOSEN BY `linkKind` (D8/D12): a flow-node
- * row against `RunPhaseStatus`, a standalone row against its own five-member
- * set, and a session row against nothing at all — deliberately OPEN, because
- * a session's `phase` is closed per RUNNER but open across the four-and-
- * growing runners this module aggregates (history-ledger.ts's `LedgerRowStatus`
- * doc explains the same thing from the type side). An unrecognised/missing
- * `linkKind` has no vocabulary to check against at all, so it is rejected —
- * every row this route actually emits always carries one of the three.
- */
-function isStatusValidForLinkKind(linkKind: unknown, status: string): boolean {
-  if (linkKind === 'flow-node') return (FLOW_NODE_STATUSES as readonly string[]).includes(status);
-  if (linkKind === 'standalone') return (STANDALONE_STATUSES as readonly string[]).includes(status);
-  if (linkKind === 'session') return true;
-  return false;
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/** Mirrors `LedgerRowTrigger` (history-ledger.ts) exactly — validated here
+ *  because `HistoryLedger.tsx` reads `row.trigger.kind`/`.source`/`.scope`
+ *  unconditionally once `row.trigger !== undefined`: the SAME class of
+ *  crash DEFECT 2 already named for `costUsd` (self-attack: is there the
+ *  same defect one layer down?). */
+function isValidTrigger(t: unknown): t is LedgerRowTrigger {
+  return isRecord(t) && typeof t.kind === 'string' && typeof t.source === 'string' && (t.scope === null || typeof t.scope === 'string');
 }
 
 /**
- * Structural + status-vocabulary validation for ONE wire row. Every check
- * mirrors the VALIDATION RULES documented in agent-ledger.test.ts's DEFECT 2
- * preamble verbatim: `id`/`when`/`what`/`href` are strings; `narrative` is
- * `string | null`; `narrativeKinds` is a `string[]`; `costUsd` is
- * `number | null` (never a string, never `undefined` — the reviewer's two
- * crashing repros); `status` must belong to its row's own closed vocabulary.
+ * A flow-node wire entry needs `run` (a non-null, non-array object —
+ * normalised via `parseRun` below, D2 reuse) plus `nodeId`/`href` as
+ * strings. Deliberately SHALLOW: no per-field validation reaches inside
+ * `run` itself — there is no precedent anywhere in this codebase for that
+ * (`studio-client.ts`'s `fetchRuns` normalizes a raw `Run` via `parseRun`,
+ * it does not reject one), and inventing a new nested-validation
+ * requirement here is out of scope for this fix (see the task report).
  */
-function isValidLedgerRow(row: unknown): row is LedgerRow {
-  if (!row || typeof row !== 'object') return false;
-  const r = row as Record<string, unknown>;
-  if (typeof r.id !== 'string') return false;
-  if (typeof r.when !== 'string') return false;
-  if (typeof r.what !== 'string') return false;
-  if (typeof r.href !== 'string') return false;
-  if (r.narrative !== null && typeof r.narrative !== 'string') return false;
-  if (!Array.isArray(r.narrativeKinds) || !r.narrativeKinds.every((k) => typeof k === 'string')) return false;
-  if (r.costUsd !== null && typeof r.costUsd !== 'number') return false;
-  if (typeof r.status !== 'string' || !isStatusValidForLinkKind(r.linkKind, r.status)) return false;
-  return true;
+function isValidFlowNodeEntry(e: Record<string, unknown>): boolean {
+  return isRecord(e.run) && typeof e.nodeId === 'string' && typeof e.href === 'string';
+}
+
+/** `status` is validated against `AgentStandaloneRunEntry`'s own closed
+ *  five-member vocabulary (D12) — never widened, never mapped. */
+function isValidStandaloneEntry(e: Record<string, unknown>): boolean {
+  return (
+    typeof e.id === 'string' &&
+    typeof e.href === 'string' &&
+    typeof e.when === 'string' &&
+    typeof e.what === 'string' &&
+    (e.costUsd === null || typeof e.costUsd === 'number') &&
+    typeof e.status === 'string' &&
+    (STANDALONE_STATUSES as readonly string[]).includes(e.status) &&
+    (e.trigger === undefined || isValidTrigger(e.trigger))
+  );
+}
+
+/** A session's own `status.json` phase is a deliberately OPEN vocabulary
+ *  (D12) — closed per runner, open across the four-and-growing runners this
+ *  module aggregates — so `status` is checked for TYPE only, never against
+ *  a closed set. */
+function isValidSessionEntry(e: Record<string, unknown>): boolean {
+  return (
+    typeof e.id === 'string' &&
+    typeof e.href === 'string' &&
+    typeof e.when === 'string' &&
+    typeof e.what === 'string' &&
+    (e.costUsd === null || typeof e.costUsd === 'number') &&
+    typeof e.status === 'string'
+  );
 }
 
 /**
@@ -281,21 +307,61 @@ function isValidLedgerRow(row: unknown): row is LedgerRow {
  * renders a transient outage as the authoritative "this agent has no
  * history".
  *
- * Task 4: once `rows` is confirmed to be an array, EVERY element must pass
- * `isValidLedgerRow` or the WHOLE response is rejected as `'unresolved'` —
- * never a silently shortened "drop the bad one, keep the rest" list (a
- * shortened history is its own kind of lie; see the DEFECT 2 "CHOSEN
- * BEHAVIOUR" test).
+ * ROUND 8/9: once `rows` is confirmed to be an array, EVERY element must
+ * validate as a well-formed ENTRY for its own declared `linkKind` (an
+ * unrecognised/missing `linkKind` has no vocabulary to check against at
+ * all, so it is rejected too) or the WHOLE response is rejected as
+ * `'unresolved'` — never a silently shortened "drop the bad one, keep the
+ * rest" list (a shortened history is its own kind of lie; see the DEFECT 2
+ * "CHOSEN BEHAVIOUR" test). Once every item validates, the collected
+ * per-path entries are handed to the REAL `deriveAgentLedgerRows` — the
+ * derivation half of this module, previously unreached from this resolver
+ * (the shipped-blind defect this round fixes).
  */
 export function resolveAgentHistoryFromResponse(status: number, body: unknown): AgentHistoryResolution {
   if (status === 404) return { kind: 'not-found' };
 
   if (status >= 200 && status < 300) {
     const parsed = body && typeof body === 'object' ? (body as { rows?: unknown }) : undefined;
-    const rows = parsed?.rows;
-    if (!Array.isArray(rows)) return { kind: 'unresolved' };
-    if (!rows.every(isValidLedgerRow)) return { kind: 'unresolved' };
-    return { kind: 'found', rows };
+    const rawRows = parsed?.rows;
+    if (!Array.isArray(rawRows)) return { kind: 'unresolved' };
+
+    const flowNodeEntries: AgentFlowNodeRunEntry[] = [];
+    const standaloneEntries: AgentStandaloneRunEntry[] = [];
+    const sessionEntries: AgentSessionRunEntry[] = [];
+
+    for (const raw of rawRows) {
+      if (!isRecord(raw)) return { kind: 'unresolved' };
+      if (raw.linkKind === 'flow-node') {
+        if (!isValidFlowNodeEntry(raw)) return { kind: 'unresolved' };
+        flowNodeEntries.push({ run: parseRun(raw.run), nodeId: raw.nodeId as string, href: raw.href as string });
+      } else if (raw.linkKind === 'standalone') {
+        if (!isValidStandaloneEntry(raw)) return { kind: 'unresolved' };
+        standaloneEntries.push({
+          id: raw.id as string,
+          href: raw.href as string,
+          when: raw.when as string,
+          what: raw.what as string,
+          status: raw.status as AgentStandaloneRunEntry['status'],
+          costUsd: raw.costUsd as number | null,
+          ...(raw.trigger !== undefined ? { trigger: raw.trigger as LedgerRowTrigger } : {}),
+        });
+      } else if (raw.linkKind === 'session') {
+        if (!isValidSessionEntry(raw)) return { kind: 'unresolved' };
+        sessionEntries.push({
+          id: raw.id as string,
+          href: raw.href as string,
+          when: raw.when as string,
+          what: raw.what as string,
+          status: raw.status as string,
+          costUsd: raw.costUsd as number | null,
+        });
+      } else {
+        return { kind: 'unresolved' };
+      }
+    }
+
+    return { kind: 'found', rows: deriveAgentLedgerRows({ flowNodeEntries, standaloneEntries, sessionEntries }) };
   }
 
   return { kind: 'unresolved' };

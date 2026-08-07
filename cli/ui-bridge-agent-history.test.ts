@@ -860,3 +860,159 @@ test('D5: after every traversal probe above, the route is still healthy for a no
   assert.equal(status, 200);
   assert.ok(Array.isArray((body as { rows: unknown[] }).rows));
 });
+
+// ═══════════════════════════════════════════════════════════════════════
+// ROUND 8 (history) — SHIPPED-BLIND DEFECT the round-trip capture below
+// would have caught. 4074 node tests + 715 vitest tests + 825/826 journey
+// checks were green while this route's real 200 response was rejected by
+// the real client resolver on EVERY request: `forge-ui/lib/agent-ledger.ts`'s
+// `isValidLedgerRow` required `when`/`what`/`narrativeKinds` on every row;
+// this route emitted none of them — only the pre-existing
+// `{id,linkKind,href,status,costUsd}` five. The 43 tests in
+// `agent-ledger.test.ts` construct `LedgerRow` objects DIRECTLY (never
+// through a captured wire body), and this file's own battery never fed a
+// captured body through the client resolver either (it only asserted
+// server-side shape) — the gap sat exactly at the seam between the two
+// files, invisible to both.
+//
+// ROUND 10 — THE DEFECT IS NOW FIXED, not merely documented. The wire (see
+// `AgentHistoryRow`, line ~789) now carries, ADDITIVELY, the raw per-path
+// facts the client needs to derive `when`/`what`/`narrative` itself: the
+// full `run`+`nodeId` for a flow-node row, `when`+`what` for a
+// standalone/session row. The three tests below were the "ROUND 8 CAPTURE +
+// DRIFT GUARD" battery — by construction (`assert.deepEqual(row,
+// {5-field-literal})`, "and NOTHING ELSE") they went RED the instant the fix
+// landed, because the fix's whole point is to add fields that literal
+// forbids. That RED was correct behaviour, not a regression: it is this
+// exact guard firing on a deliberate, intentional contract change. This
+// round re-captures each literal LIVE against the fixed route (same
+// discipline as round 8 — a real in-process bridge, a real HTTP request,
+// never a hand-typed guess) and renames/re-comments each test to describe
+// the CURRENT contract it now pins, not the historical defect. See each
+// test's own comment for what specifically changed and why.
+//
+// The ROUND 8 "MIRRORED into agent-ledger.test.ts's own constants" claim
+// below is now VOID and not replaced with an equivalent obligation: that
+// file's `CAPTURED_TODAY_*` constants are frozen, on purpose, to the OLD
+// five-field shape forever — they are the fixture for a NEGATIVE control
+// ("a row shaped like the defect must still fail validation"), not a mirror
+// of today's wire shape, so they never needed to change when this file's
+// captures below did. Per this round's task instructions,
+// `forge-ui/lib/agent-ledger.test.ts` is untouched (verified unmodified —
+// see `git status` at the end of this round). This file still cannot import
+// the client resolver directly: `forge-ui/lib/*.ts` uses extensionless
+// relative imports (`from './bridge-client'`, no `.ts`), which Node's ESM
+// loader — even under `--experimental-strip-types` — refuses to resolve
+// outside forge-ui's own bundler-mode toolchain (verified directly in round
+// 8: `node --experimental-strip-types` against a one-line script importing
+// `forge-ui/lib/agent-ledger.ts` throws `ERR_MODULE_NOT_FOUND` on its own
+// `./bridge-client` import) — unchanged this round, so the cross-file split
+// stands.
+// ═══════════════════════════════════════════════════════════════════════
+
+test('CONTRACT (flow-node): the REAL /api/agents/:slug/history response for a flow-node run is the pre-existing {id,linkKind,href,status,costUsd} PLUS the full run+nodeId, and no other top-level key — captured live. `run` is asserted byte-identical to the SAME run as served by GET /api/runs (proves reuse of the real Run, not a second hand-rolled copy) rather than pinned to a frozen literal, because Run (orchestrator/run-model.ts) is a large, actively-growing type (flowLineage/trigger/findings/lastEventAt were each added in recent rounds) — freezing its full shape here would make this guard fail on every unrelated Run-type addition, not just on an actual regression of THIS route\'s own contract', async () => {
+  const initId = 'INIT-r8-flow-1';
+  const cycleId = `2026-01-01T00-00-00_${initId}`;
+  seedManifest('done', initId, cycleId, 'forge-architect');
+  seedEventsJsonl(cycleId, initId, [
+    { phase: 'architect', event_type: 'start', started_at: '2026-07-01T09:00:00.000Z' },
+    { phase: 'architect', event_type: 'end', started_at: '2026-07-01T09:05:00.000Z', cost_usd: 3.5 },
+  ]);
+
+  const { status, body } = await getJson('/api/agents/architect/history');
+  assert.equal(status, 200);
+  const rows = (body as { rows: Record<string, unknown>[] }).rows;
+  const row = rows.find((r) => r.id === cycleId);
+  assert.ok(row, `expected a flow-node row for ${cycleId}, got ${JSON.stringify(rows)}`);
+
+  // Exact-shape discipline on the ENVELOPE: exactly these seven keys, never
+  // more, never fewer. KILLS a regression back to the pre-fix five-field
+  // shape (missing run/nodeId — the original defect returning) AND an
+  // implementation that tacks on some OTHER stray field never declared by
+  // `AgentHistoryRow`'s flow-node variant.
+  assert.deepEqual(
+    Object.keys(row!).sort(),
+    ['costUsd', 'href', 'id', 'linkKind', 'nodeId', 'run', 'status'].sort(),
+    `flow-node row has the wrong key set — got ${JSON.stringify(Object.keys(row!).sort())}`,
+  );
+
+  // Exact pin on every field this route computes ITSELF (never varies with
+  // Run's own internal evolution) — same discipline as round 8, restated for
+  // the current contract.
+  assert.deepEqual({
+    id: row!.id, linkKind: row!.linkKind, href: row!.href, status: row!.status, costUsd: row!.costUsd, nodeId: row!.nodeId,
+  }, {
+    id: cycleId, linkKind: 'flow-node', href: `/flows/forge-architect/run/${cycleId}`, status: 'complete', costUsd: 3.5, nodeId: 'architect',
+  }, `flow-node row's own fields drifted: ${JSON.stringify(row)}`);
+
+  // `run` is present and object-shaped (not a bare id/string reference).
+  assert.ok(row!.run && typeof row!.run === 'object' && !Array.isArray(row!.run), `row.run must be a Run object, got ${JSON.stringify(row!.run)}`);
+  const run = row!.run as Record<string, unknown>;
+
+  // A handful of identity-critical facts pinned directly, for a sharp
+  // failure message if the WRONG run ever got attached to this row.
+  assert.equal(run['id'], cycleId, 'row.run.id must be the same run as row.id');
+  assert.equal(run['flowId'], 'forge-architect', 'row.run.flowId must match the href it also drives');
+  assert.equal((run['phases'] as Record<string, unknown> | undefined)?.['architect'], row!.status, "D9: the embedded run's own phases[nodeId] must agree with the row's flat status field — same fact, not two independently-computed answers");
+
+  // THE reuse proof: GET /api/runs — the PRE-EXISTING Run-over-the-wire
+  // route flow-ledger.ts's own client (fetchRuns) already consumes — must
+  // serve the BYTE-IDENTICAL run object for this cycle. This is what
+  // actually proves "reuses the real Run" rather than "assembled a
+  // similar-looking one": an implementation that hand-trims or
+  // re-derives its own partial Run for this route would diverge from
+  // /api/runs's own answer and fail here, while a legitimate future Run
+  // field addition changes BOTH sides identically and never fails this
+  // check — the brittleness a frozen literal would have had is gone.
+  const runsRes = await getJson('/api/runs');
+  const runsRows = (runsRes.body as { runs: Record<string, unknown>[] }).runs;
+  const canonicalRun = runsRows.find((r) => r.id === cycleId);
+  assert.ok(canonicalRun, `expected GET /api/runs to include ${cycleId}, got ${JSON.stringify(runsRows.map((r) => r.id))}`);
+  assert.deepEqual(row!.run, canonicalRun, `row.run must be byte-identical to GET /api/runs's own entry for ${cycleId} — a second, independently-built copy would drift here even if it looks similar today: ${JSON.stringify(row!.run)} vs ${JSON.stringify(canonicalRun)}`);
+});
+
+test('CONTRACT (standalone): the REAL /api/agents/:slug/history response for a standalone run is the pre-existing {id,linkKind,href,status,costUsd} PLUS `when` (the run\'s own first-event started_at) and `what` (the agent slug — the only honest fact a standalone run\'s own events carry, per ROUND 9\'s measurement) — and NOTHING ELSE. Captured live, not hand-written. Full deepEqual stays the right assertion here (unlike the flow-node row above): every field is a flat scalar this route computes/reads directly, none is a large, independently-evolving nested type', async () => {
+  const runId = '_agent-r8solo-2026-07-02T00-00-00-000-r8r8';
+  seedStandaloneRun(runId, 'r8solo', 6.25);
+
+  const { status, body } = await getJson('/api/agents/r8solo/history');
+  assert.equal(status, 200);
+  const rows = (body as { rows: Record<string, unknown>[] }).rows;
+  const row = rows.find((r) => r.id === runId);
+  assert.ok(row, `expected a standalone row for ${runId}, got ${JSON.stringify(rows)}`);
+
+  // KILLS: a regression back to the pre-fix five-field shape (the original
+  // shipped-blind defect returning); a `when` sourced from anything other
+  // than this run's own first event (e.g. "now", or the `end` event's
+  // timestamp); a `what` that isn't the bare agent slug (e.g. a fabricated
+  // description this run's events never actually carried); and any stray
+  // extra field beyond these seven (deepEqual fails on either side having a
+  // key the other lacks).
+  assert.deepEqual(row, {
+    id: runId, linkKind: 'standalone',
+    href: `/agents/r8solo/run/${runId}`,
+    status: 'done', costUsd: 6.25,
+    when: '2026-01-01T00:00:00.000Z', what: 'r8solo',
+  }, `captured standalone row drifted from the current contract: ${JSON.stringify(row)}`);
+});
+
+test('CONTRACT (session): the REAL /api/agents/:slug/history response for a session row is the pre-existing {id,linkKind,href,status,costUsd} PLUS `when` (the session\'s own first-event started_at from its `_<kind>-<sessionId>/events.jsonl` log dir) and `what` (the matching session-kind descriptor\'s own `title`, e.g. "Planning session") — and NOTHING ELSE. Captured live, not hand-written. Full deepEqual stays correct here for the same reason as the standalone row: every field is a flat scalar, nothing nested/growing', async () => {
+  seedArchitectSession('proj-r8', '2026-07-03T00-00-00-sess-r8', 'drafting', 2.0);
+  const { status, body } = await getJson('/api/agents/architect/history');
+  assert.equal(status, 200);
+  const rows = (body as { rows: Record<string, unknown>[] }).rows;
+  const row = rows.find((r) => r.id === '2026-07-03T00-00-00-sess-r8');
+  assert.ok(row, `expected a session row, got ${JSON.stringify(rows)}`);
+
+  // KILLS: a regression back to the pre-fix five-field shape; a `when`
+  // sourced from the session's status.json `updated_at` instead of the
+  // log dir's own first event; a `what` that is the session id, the raw
+  // session-kind id ('architect'), or any string other than the
+  // descriptor's own human-readable `title`; and any stray extra field.
+  assert.deepEqual(row, {
+    id: '2026-07-03T00-00-00-sess-r8', linkKind: 'session',
+    href: '/architect/2026-07-03T00-00-00-sess-r8',
+    status: 'drafting', costUsd: 2.0,
+    when: '2026-01-01T00:10:00.000Z', what: 'Planning session',
+  }, `captured session row drifted from the current contract: ${JSON.stringify(row)}`);
+});
