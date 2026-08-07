@@ -370,6 +370,49 @@ inventory rather than one shared page-level contract:
   described" and "Reachable" rows were deliberately NOT added, because neither
   can ever read false for a loaded agent and a readiness row that cannot fail is
   decoration.
+- **`/agents/[id]` agent history ledger (R6-06, 2026-08-08).** The agent page's
+  right-hand column gains a per-agent run-history ledger below `UsedInFlows`,
+  rendered by the SAME shared `HistoryLedger.tsx` the flow monitor uses — so
+  the row contract (`[data-section="history-ledger"][data-ledger-count]`, the
+  `[data-component="history-ledger-empty"]` honest empty, and each row's
+  `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]
+  [data-ledger-cost-usd][data-ledger-narrative][data-narrative-kinds]`) is
+  documented once under `/flows/[id]` above and is **not restated here**; only
+  what is genuinely different is below. Select it as
+  `[data-page="agents"] [data-section="history-ledger"]`. Notes, each
+  load-bearing rather than stylistic:
+  - **`data-ledger-link-kind`** (`flow-node | standalone | session`) is emitted
+    **only on agent-ledger rows** — flow-ledger rows never set it, because a
+    flow ledger's rows are all one kind by construction. It exists because the
+    feature's whole point is that a row links **where the run actually
+    happened**: a flow node's run detail (`/flows/<flowId>/run/<runId>`), a
+    standalone dispatch (`/agents/<slug>/run/<runId>`), or a session. Asserting
+    on `href` string prefixes would be a drifty proxy for the thing being
+    claimed, so the link kind is structured state in its own right.
+  - **`data-ledger-cost-usd` is OMITTED, not zeroed, when a cost genuinely does
+    not exist** (a session with no execution log yet). A fabricated `0.00`
+    would be a false claim about the run; the attribute's absence is the honest
+    signal. Callers must treat "absent" and `"0.00"` as different facts.
+  - **`data-run-status` carries the target's OWN vocabulary, verbatim, and it
+    differs per link kind** — flow-node rows use `RunPhaseStatus`
+    (`pending|active|complete|retrying|failed`), standalone rows use
+    `running|done|failed|suppressed|budget-exceeded`, and session rows carry
+    that session's own `status.json` phase string. **There is deliberately no
+    mapping onto one vocabulary**: there is no honest `RunPhaseStatus` for
+    `suppressed` or for `interviewing`, and inventing one would be a false
+    claim about the target. Session status is intentionally OPEN because a
+    session's phase is closed per runner but open across the four-and-growing
+    runners this surface aggregates; the closed vocabularies are enforced at
+    runtime by `agent-ledger.ts`'s wire validator, not by the type.
+  - **Three fetch outcomes render three distinguishable states**, because a
+    failed fetch and an empty history are different operator facts:
+    `[data-component="history-ledger-loading"]` before the first response,
+    `[data-component="history-ledger-unresolved"]` when the fetch failed, and
+    the ledger section itself (with the component's own
+    `[data-component="history-ledger-empty"]`) when the agent genuinely has no
+    runs. Automation must not treat "unresolved" as "no history".
+  - A brand-new unsaved agent (`/agents/new`) renders **no section at all** —
+    there is no slug yet, so there is no state to report.
 - **`/agents/[id]` kickoff panel expansion (R6-04, 2026-08-07).** The
   existing `[data-section="agent-run"]` panel (above) is expanded IN PLACE —
   all nine pre-existing `data-*` attributes on it stay byte-identical. A real
@@ -953,6 +996,20 @@ inventory rather than one shared page-level contract:
   **R6-06 is therefore the remaining unattached consumer, and it inherits this
   bullet.** Recorded as a deliberate deferral with its reason rather than left
   as a silently unmet intention.
+
+  ✅ **R6-06 amendment (2026-08-08): DISCHARGED — the vocabulary is now attached
+  to BOTH ledgers in one change, exactly as the deferral promised.** `LedgerRow`
+  gained an OPTIONAL `trigger`, set verbatim from `run.trigger` by
+  `flow-ledger.ts` and from the run/entry by `agent-ledger.ts`; `HistoryLedger`
+  emits `[data-trigger-kind][data-trigger-source][data-trigger-scope]` **only
+  when `row.trigger !== undefined`**, so a run without a trigger renders no
+  trigger attributes at all rather than empty ones — an absent trigger and an
+  unscoped trigger are different facts and must not read alike. A trigger that
+  IS present but unscoped emits `data-trigger-scope=""` (`scope ?? ''`), which
+  is the honest rendering of "triggered, no scope", not a missing attribute.
+  The conditional shape is also what keeps every pre-R6-06 flow-ledger row
+  **byte-identical**, which is pinned by its own regression test — adding a
+  shared field must not perturb the surface that already shipped.
 
 The shared status vocabularies:
 
