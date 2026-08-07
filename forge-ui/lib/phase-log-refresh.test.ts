@@ -4,72 +4,79 @@
  * exist yet — every import below is a legitimate RED (module not found)
  * until the implementer creates it with the exact export this file names.
  *
- * BACKGROUND (measured, not assumed — see the task's evidence trail):
+ * AMENDED (round 2) — the FIRST version of this file attributed a
+ * `tailEvents` entry to a node via `event.phase === nodeId`, a naive
+ * client-side re-derivation of the attribution the codebase's OWN
+ * authoritative resolver (`eventToNodeId`, `orchestrator/
+ * run-model-derive.ts`) does NOT do. Measured against the live flow set
+ * (`buildNodeMapping`/`buildAgentSlugToNodeId` over `studio/flows/`): only
+ * 4 of 12 real phase strings equal their node id (architect, demo, review,
+ * unifier) — `developer-loop -> dev` (the busiest node of every real
+ * cycle), `project-manager -> pm`, `review-loop -> review`, `reflector ->
+ * reflect` all differ. An implementer conforming exactly to the old tests
+ * would have shipped F1 non-functional for exactly the nodes operators
+ * watch most, with a fully green suite — client-side re-implementation of
+ * an attribution that already has one correct, server-side implementation
+ * is the wrong fix (the SAME trap that inflated per-node cost 2-3x in this
+ * codebase before it was fixed, per `orchestrator/run-model-derive.ts`'s
+ * own `sumAuthoritativeCostUsd` comment).
  *
- *   `PhaseDrawer.tsx`'s live-refresh effect (DrawerBody, Effect 2,
- *   `components/studio/PhaseDrawer.tsx:256-267`) re-fetches the phase log
- *   ONLY when `meta.lastProgressAt` changes. `lastProgressAt` is derived by
- *   `orchestrator/run-model-derive.ts`'s `PROGRESS_EVENT_TYPES`:
+ * THE FIX moves attribution server-side: `RunPhaseMeta` gains an additive
+ * `lastEventAt?: string`, computed over EVERY event `eventToNodeId`
+ * attributes to a node (not filtered to `PROGRESS_EVENT_TYPES`, unlike its
+ * sibling `lastProgressAt`) — pinned at the server/derivation layer by
+ * `orchestrator/run-model-last-event-at.test.ts` (a NEW sibling file, this
+ * same amendment). This file's job shrinks to match: `tailEvents` is
+ * DROPPED from the signature entirely — the function reads the
+ * already-server-attributed `run.phaseMeta[nodeId]?.lastEventAt`, no
+ * client-side event scanning at all.
  *
- *     PROGRESS_EVENT_TYPES = new Set(['tool_use', 'file_change', 'test_run', 'iteration'])
- *
- *   ...verified by reading that file verbatim (line 31). `orchestrator/
- *   logging.ts`'s real `EventType` union has 11 members; the 7 NOT in that
- *   set — start / end / log / error / phase_transition / agent_heartbeat /
- *   brain-query — never move `lastProgressAt`, so a node that emits (say) a
- *   `log`-typed line (the reasoning-stream / narration channel —
- *   `cli/bridge-studio.ts`'s `classifyEvent` routes `event_type:'log'` +
- *   `metadata.kind:'reasoning'` to the `reasoning` display kind) or an
- *   `error`-typed line NEVER triggers Effect 2. Confirmed by execution
- *   (`GET /api/runs/<id>/phases/<node>/log` DOES return every one of the 11
- *   event types with nothing dropped server-side — see the WI-1 report's
- *   [exec] (a) — so this is purely a client-side staleness bug: new lines
- *   exist and are servable, the drawer just never asks for them again).
- *
- * `phaseLogRefreshSignal` is the new pure derivation the drawer's Effect 2
- * will key on INSTEAD OF (or alongside) `lastProgressAt`, computed from data
- * the page already holds — `tailEvents`, the rolling last-100 array every
- * flow-monitor page already receives over the existing WebSocket
- * (`app/flows/[id]/page.tsx:160-183`) — no new emission path, per the task
- * brief's explicit constraint.
+ * `refreshActiveRun` (`forge-ui/app/flows/[id]/page.tsx`) already re-fetches
+ * the full `Run` on every WebSocket `event` message for the active run (see
+ * that file's `onMessage` handler: `if (currentRun && msg.cycleId ===
+ * currentRun.id) { ...; void refreshActiveRun(signal, currentRun.id); }`)
+ * — confirmed by reading the file directly, not assumed. So a
+ * server-attributed `lastEventAt` becomes fresh on the page's existing
+ * `activeRun` state with NO new fetch, poll, or emission path: the drawer
+ * just needs to key its refresh effect on this new field instead of
+ * `lastProgressAt`.
  *
  * ASSUMED EXPORT from `./phase-log-refresh.ts`:
  *
- *   export function phaseLogRefreshSignal(
- *     run: Run,
- *     nodeId: string,
- *     tailEvents: EventLogEntry[],
- *   ): string
+ *   export function phaseLogRefreshSignal(run: Run, nodeId: string): string
  *
  * CONTRACT pinned below (the implementer may pick any internal shape that
- * satisfies these three observable behaviours):
+ * satisfies these observable behaviours):
  *
- *   1. The returned string CHANGES when `tailEvents` gains a new event
- *      whose `phase === nodeId` and whose `event_type` is OUTSIDE
- *      PROGRESS_EVENT_TYPES (e.g. 'log' or 'error') — this is the exact gap
- *      above; a signal that ignores such an event is the wrong
- *      implementation this test class kills.
- *   2. The returned string does NOT change when the only new event in
- *      `tailEvents` belongs to a DIFFERENT node (`phase !== nodeId`) — a
- *      signal that changes on ANY new event system-wide would cause a
- *      refetch storm (every open drawer re-fetching on every other node's
- *      tick); this is the wrong implementation this test class kills.
- *   3. The returned string is STABLE (identical) across two calls with
- *      equal `run`/`nodeId`/`tailEvents` and no new qualifying event — a
- *      signal seeded with `Date.now()`/`Math.random()`/array identity would
- *      cause the drawer to refetch on every render regardless of whether
- *      anything new arrived; that is the wrong implementation this test
- *      class kills.
+ *   1. The returned string CHANGES when `run.phaseMeta[nodeId].lastEventAt`
+ *      changes — even when `lastProgressAt` does NOT change (that is
+ *      exactly the gap this field exists to close). A signal still keyed
+ *      on `lastProgressAt` is the wrong implementation this kills.
+ *   2. The returned string does NOT change when a DIFFERENT node's
+ *      `lastEventAt` changes — a signal that reads the whole `phaseMeta`
+ *      record indiscriminately would cause every open drawer to refetch on
+ *      every other node's tick (a refetch storm); this is the wrong
+ *      implementation this kills.
+ *   3. The returned string is STABLE across two calls with an equal `run`/
+ *      `nodeId` and no change — kills a signal seeded with `Date.now()` /
+ *      `Math.random()` / object identity.
+ *   4. A node with NO `lastEventAt` (absent from `phaseMeta`, or present
+ *      but the field itself undefined) still returns a stable, non-
+ *      throwing string across repeat calls — kills a crash/`undefined`
+ *      return on a phase that hasn't emitted anything attributable yet
+ *      (e.g. a `pending` node).
+ *   5. An unknown `nodeId` (not a key of `run.phaseMeta` at all) does not
+ *      throw — kills an implementation that assumes `phaseMeta[nodeId]` is
+ *      always present.
  *
  * RUN: npx vitest run lib/phase-log-refresh.test.ts   (from forge-ui/)
  */
 
 import { test, expect } from 'vitest';
-import type { EventLogEntry } from './bridge-client.ts';
-import type { Run } from './studio-client.ts';
+import type { Run, RunPhaseMeta } from './studio-client.ts';
 import { phaseLogRefreshSignal } from './phase-log-refresh.ts';
 
-function makeRun(overrides: Partial<Run> = {}): Run {
+function makeRun(phaseMeta: Record<string, RunPhaseMeta> = {}): Run {
   return {
     id: 'CYCLE-1',
     flowId: 'forge-develop',
@@ -79,58 +86,62 @@ function makeRun(overrides: Partial<Run> = {}): Run {
     origin: 'architect',
     costUsd: 0,
     phases: {},
-    phaseMeta: {},
+    phaseMeta,
     artifactsReady: {},
-    ...overrides,
   };
 }
 
-function ev(overrides: Partial<EventLogEntry> & { phase: string; event_type: string }): EventLogEntry {
-  return {
-    event_id: `EV-${Math.random().toString(36).slice(2)}`,
-    initiative_id: 'INIT-1',
-    started_at: '2026-08-07T00:00:00.000Z',
-    skill: overrides.phase,
-    ...overrides,
-  } as EventLogEntry;
+function meta(overrides: Partial<RunPhaseMeta> = {}): RunPhaseMeta {
+  return { costUsd: 0, retries: 0, ...overrides };
 }
 
-test('a new "log"-typed event for the selected node changes the signal — kills a signal that only reacts to PROGRESS_EVENT_TYPES (tool_use/file_change/test_run/iteration), reproducing the exact stale-pane defect this feature exists to fix', () => {
-  const run = makeRun();
-  const before = phaseLogRefreshSignal(run, 'demo', []);
-  const logEvent = ev({ phase: 'demo', event_type: 'log', message: 'demo.working-on-ac-2', event_id: 'EV-LOG-1' });
-  const after = phaseLogRefreshSignal(run, 'demo', [logEvent]);
+test('the signal changes when lastEventAt changes for the selected node, even though lastProgressAt does NOT change — kills a signal still keyed on lastProgressAt (the exact gap lastEventAt exists to close: a "log"/"error"-only node whose lastProgressAt never moves)', () => {
+  const before = phaseLogRefreshSignal(
+    makeRun({ dev: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }) }),
+    'dev',
+  );
+  const after = phaseLogRefreshSignal(
+    makeRun({ dev: meta({ lastEventAt: '2026-08-07T00:00:02.000Z' }) }), // lastProgressAt absent in BOTH calls
+    'dev',
+  );
   expect(after).not.toBe(before);
 });
 
-test('a new "error"-typed event for the selected node ALSO changes the signal — kills a hardcoded single-type check (e.g. `=== "log"`) that happens to catch the "log" case above but not "error"', () => {
-  const run = makeRun();
-  const before = phaseLogRefreshSignal(run, 'demo', []);
-  const errorEvent = ev({ phase: 'demo', event_type: 'error', message: 'Transient tool failure', event_id: 'EV-ERR-1' });
-  const after = phaseLogRefreshSignal(run, 'demo', [errorEvent]);
-  expect(after).not.toBe(before);
-});
-
-test('a new event for a DIFFERENT node does not change the signal for the selected node — kills a signal derived from tailEvents.length (or any other node-blind aggregate), which would refetch every open drawer on every event system-wide', () => {
-  const run = makeRun();
-  const before = phaseLogRefreshSignal(run, 'demo', []);
-  const otherNodeEvent = ev({ phase: 'adversarial-review', event_type: 'log', message: 'review.findings.authored', event_id: 'EV-OTHER-1' });
-  const after = phaseLogRefreshSignal(run, 'demo', [otherNodeEvent]);
+test('the signal does NOT change when a DIFFERENT node\'s lastEventAt changes — kills a signal derived from the whole phaseMeta record indiscriminately, which would refetch every open drawer on every other node\'s tick', () => {
+  const before = phaseLogRefreshSignal(
+    makeRun({
+      dev: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }),
+      pm: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }),
+    }),
+    'dev',
+  );
+  const after = phaseLogRefreshSignal(
+    makeRun({
+      dev: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }), // dev's own meta UNCHANGED
+      pm: meta({ lastEventAt: '2026-08-07T00:05:00.000Z' }),  // only pm's changed
+    }),
+    'dev',
+  );
   expect(after).toBe(before);
 });
 
-test('the signal is stable across two calls with equal inputs and no new qualifying event — kills a signal seeded with Date.now()/Math.random()/array identity, which would refetch on every render regardless of whether anything new arrived', () => {
-  const run = makeRun();
-  const tailEvents = [
-    ev({ phase: 'demo', event_type: 'tool_use', message: 'Read', event_id: 'EV-TOOL-1' }),
-  ];
-  const first = phaseLogRefreshSignal(run, 'demo', tailEvents);
-  const second = phaseLogRefreshSignal(run, 'demo', [...tailEvents]); // fresh array, equal content
+test('the signal is stable across two calls with equal run/nodeId and no change — kills a signal seeded with Date.now()/Math.random()/object identity, which would refetch on every render regardless of whether anything new arrived', () => {
+  const run = makeRun({ dev: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }) });
+  const first = phaseLogRefreshSignal(run, 'dev');
+  const second = phaseLogRefreshSignal(makeRun({ dev: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }) }), 'dev'); // fresh object, equal content
   expect(second).toBe(first);
 });
 
-test('the return type is a string — kills an implementation returning a non-string (object/number) that would break a useEffect dependency-array comparison the drawer relies on', () => {
-  const run = makeRun();
-  const result = phaseLogRefreshSignal(run, 'demo', []);
-  expect(typeof result).toBe('string');
+test('a node with no lastEventAt at all (present in phaseMeta but the field is undefined) returns a stable, non-throwing string across repeat calls — kills a crash or an undefined return for a phase that has not emitted anything attributable yet', () => {
+  const run = makeRun({ dev: meta() }); // no lastEventAt
+  const first = phaseLogRefreshSignal(run, 'dev');
+  const second = phaseLogRefreshSignal(run, 'dev');
+  expect(typeof first).toBe('string');
+  expect(second).toBe(first);
+});
+
+test('an unknown nodeId (absent from phaseMeta entirely) does not throw and returns a string — kills an implementation that assumes phaseMeta[nodeId] is always present', () => {
+  const run = makeRun({ dev: meta({ lastEventAt: '2026-08-07T00:00:01.000Z' }) });
+  expect(() => phaseLogRefreshSignal(run, 'nonexistent-node')).not.toThrow();
+  expect(typeof phaseLogRefreshSignal(run, 'nonexistent-node')).toBe('string');
 });
