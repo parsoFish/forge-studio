@@ -769,3 +769,31 @@ genuinely "planned but not yet built".
   making the legacy path enforce (refusal relaxes per-agent as it lands).
   Added to the outside-wave-5-closure list (platform continuity, pulled at
   need).
+
+- 2026-08-08 — **Batch-C exit: gate-green, closure criteria UNMET and converted
+  to named batch-D WI rows.** Batch C merged five initiatives (#93–#97) plus
+  two kickoff mints (#91, #92) and its exit gate block is fully green on
+  `e9598e76` (build · 4077/4077 node under CI env *and* plain · 718/718 UI ·
+  841/841 journey checks over 117 beats · 28 routes · sinks ratchet 421,
+  **down** from 422 because a containment fix removed a sink · parity
+  27/4/20/3 · every lint and docs check clean). Its **functional-closure
+  criteria are not met and are recorded as such**: of six required closure
+  journeys exactly one flipped honestly (`run-agent`, 5/15 ported with 10
+  decision-cited exclusions); `run-flow`, `run-agent-developer`,
+  `run-agent-adversarial-review`, `run-agent-demo-runner` and
+  `run-agent-reflector` stand at **zero ported beats**, and none of the three
+  trigger framings is demonstrated as its own acceptance reference
+  (`R2-runnable-componentry.md` §R2-08) defines demonstration. Root cause is
+  **ownership, not capability** — R7-02-F3 built the parity registry and
+  disclaimed the ports as "each batch's journey-sync duty", so every closure
+  criterion had a duty but no WI, no initiative and no actor. Each is now a
+  named batch-D WI row in beads. Three defects that no initiative owned were
+  filed at the same time: the trigger-kind UI mirror omits three **shipped**
+  kinds (`agent-complete`, `pr-merged`, `issue-raised` — authorable nowhere,
+  and the direct reason two framings cannot be demonstrated), R6-04-F2's
+  flow-kickoff half is neither built nor excluded on an initiative marked
+  `implemented`, and the standalone agent run view attaches no trigger
+  provenance. Batch D therefore opens with a **filled exit table** — one row
+  per criterion naming its producing WI — per the batch-C retro's first
+  recommendation; a criterion with no named producer is deleted, not carried
+  as aspiration.

@@ -764,6 +764,43 @@ test('real counts are derived: ported + pending + excluded === total', () => {
   assert.equal(ported + pending + excluded, total);
 });
 
+// ── registry honesty: a note may not claim coverage it does not have ────────
+//
+// Added at batch-C exit (2026-08-08). The registry shipped PRE-LOADED with
+// five forward-looking notes reading "batch C's port covers the … surfaces
+// the story walks" beside a DERIVED count of 0 ported beats. Nobody authored
+// those claims during the batch and nobody updated them, so the instrument
+// built to keep the campaign honest was itself printing coverage prose over a
+// zero — the declared-data-fails-open shape, inside the honesty tool.
+//
+// The rule this pins: a registry note may describe what a story WALKS, what
+// is EXCLUDED, or what is SCHEDULED, but it may not assert that a port
+// "covers" anything while that story's derived ported-beat count is 0.
+
+test('registry honesty: no story with 0 ported beats claims its port "covers" anything', () => {
+  const stories = parseMockupStories(realMockupSource());
+  const parity = deriveParity({
+    registry: STORY_REGISTRY,
+    mockupStories: stories,
+    journeys: JOURNEYS,
+    runOrder: RUN_ORDER,
+  });
+  const COVERAGE_CLAIM = /\bport covers\b|\bport\s+covers\s+the\b/i;
+  const offenders: string[] = [];
+  for (const row of parity.entries) {
+    if (row.portedBeatCount > 0) continue;
+    const entry = STORY_REGISTRY.find((e) => e.story === row.story);
+    if (entry?.note && COVERAGE_CLAIM.test(entry.note)) {
+      offenders.push(`${row.story} (${row.portedBeatCount} ported beats, note claims coverage)`);
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    `registry notes claim a port that the derived counts do not support:\n  ${offenders.join('\n  ')}`,
+  );
+});
+
 // ── parseMockupStories: must fail fast, not hang ────────────────────────────
 //
 // Placed LAST and deliberately isolated: against the current implementation
