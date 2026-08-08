@@ -63,7 +63,7 @@ below. The dev-loop and reviewer correctly do NOT read the brain.)
 - Major architectural changes (touch an ADR? ask).
 - New external dependencies (every dep is a maintenance liability — justify it).
 - Cross-project breaking changes.
-- Anything that increases the surface area of `orchestrator/` (we explicitly cap this).
+- Anything that increases the surface area of `orchestrator/` (we explicitly cap this). The cap governs `orchestrator/` only — see [ADR 042](./docs/decisions/042-surface-cap-scope-and-testability.md) for the three ratified boundaries (`cli/` routes are not capped; additive-optional fields on exported types are disclose-not-park; a pure function with an explicit error contract may be exported for direct tests).
 
 ## Never do
 

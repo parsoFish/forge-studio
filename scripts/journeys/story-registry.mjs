@@ -53,18 +53,24 @@ const DECISION_R3_04_D2_R3_07_D8 =
   'composition.tools validates against and CatalogPalette renders from — a ' +
   'dispatch-affecting migration, not a browse-surface addition)';
 
-// T1 ruling 2026-08-06 (batch B). `create-agent` mockup steps 3-4 —
-// conversational new-agent drafting — are a DELIBERATE divergence from the
-// mockup, not an unbuilt gap: R2-09 rejected them with two named owners
-// (R4-15, R4-17), both assessed and neither owns them, no wave-5 initiative
-// builds them, and the shipped alternative is the curated StarterPicker.
+// T1 ruling 2026-08-06 (batch B), operator-RATIFIED 2026-08-08 (batch-D open).
+// `create-agent` mockup steps 3-4 — conversational new-agent drafting — are a
+// DELIBERATE divergence from the mockup, not an unbuilt gap: R2-09 rejected them
+// with two named owners (R4-15, R4-17), both assessed and neither owns them, no
+// wave-5 initiative builds them, and the shipped alternative is the curated
+// StarterPicker. The "mockup gets updated" clause of §6 is now DISCHARGED — the
+// mockup was corrected 2026-08-08: mockups/studio-endstate-v2/views-agents.jsx
+// renders the StarterPicker panel (data-j=starter-issue-triage / starter-blank),
+// and journeys-data.jsx create-agent steps 3-4 pick a starter instead of typing
+// into a draft prompt. Mockup, roadmap and this registry now agree.
 // Recorded permanently (a citation into the campaign dir would be a dangling
 // citation — `_wave5/` is gitignored).
 const DECISION_CREATE_AGENT_DRAFTING =
   'docs/roadmaps/README.md "Batch-B disposition — conversational agent ' +
-  'drafting (2026-08-06, T1 ruling)" — EXCLUDED under §6 (roadmap wins over ' +
-  'the mockup; the mockup gets updated), because both named owners assessed ' +
-  'and neither owns it and the shipped alternative is the StarterPicker';
+  'drafting (2026-08-06, T1 ruling; operator-ratified 2026-08-08)" — EXCLUDED ' +
+  'under §6 (roadmap wins over the mockup; mockup corrected 2026-08-08 to show ' +
+  'the StarterPicker), because both named owners assessed and neither owns it ' +
+  'and the shipped alternative is the StarterPicker';
 
 // R6-04 (this initiative's own baseline, 2026-08-07) — cited by every
 // run-agent exclusion below rather than a separate ADR, since these are

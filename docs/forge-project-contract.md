@@ -497,6 +497,14 @@ in git via force-add (C2). Contains both Studio object fields (Face A) and
 operational-clause fields (Face B). The authoritative type is `ProjectConfig`
 in `orchestrator/project-config.ts`.
 
+**Optional `repo: "owner/name"`** (R2-08-F3) identifies the project's GitHub
+repository so provider webhook events (`pr-merged`, `issue-raised`) can resolve
+to a forge project. Fail-closed by design: a project that omits `repo` never
+matches a project-event trigger, and an `owner/name` claimed by two projects
+resolves to neither (ambiguity → no match). Validated against the single
+`REPO_RE` vocabulary shared with `orchestrator/trigger-payload.ts`; the
+field-level source of truth is `docs/schemas/project-config.schema.json`.
+
 ### Forge-owned central artifacts + the in-repo `<artifactRoot>` scope
 
 Brain 3 and durable cycle history are **forge-owned and central** — they live in
