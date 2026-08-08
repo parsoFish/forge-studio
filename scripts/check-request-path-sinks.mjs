@@ -225,6 +225,29 @@ export const DESIGNATED_UNGUARDED_FUNCTIONS = {
     defModule: 'orchestrator/demo-builder-runner.ts',
     why: 'Bare join of projectRoot + "_demo" + request-derived sessionId; no per-segment containment.',
   },
+  // SEC-04 completeness (bd forge-arch): the architect module was systematically
+  // missed by the first pass — three consumers reached architect session dirs
+  // through its OWN bespoke reader/builders with no containment. Designating
+  // them closes that blind spot: a future reachable caller of any of these now
+  // trips the ratchet unless it first routes the request-derived project +
+  // sessionId through resolveGuardedPath (per-segment identity + charset +
+  // symlink; refuse/skip on ANY escape) and hands the GUARDED dir to the reader.
+  readStatus: {
+    defModule: 'orchestrator/architect-runner.ts',
+    why: 'Reads status.json from a caller-supplied architect sessionDir; no containment of its own — the dir it is handed must already be resolveGuardedPath-guarded (GET /api/architect/sessions disclosed an out-of-root status.json through this + a symlinked _architect).',
+  },
+  sessionPaths: {
+    defModule: 'cli/architect-plan.ts',
+    why: 'Bare resolve(projectRoot, "_architect", sessionId) — folds a request-derived sessionId into a session-dir path with no per-segment containment; callers must guard "_architect" + sessionId as their own segments before reading through it (the architect runner leg read an out-of-root status.json through this).',
+  },
+  _architectSessionDir: {
+    defModule: 'cli/bridge-studio-runs.ts',
+    why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId (the plan-verdict routes\' private copy); folds untrusted segments into a path with no guard — a valid-charset project+sessionId still resolves through a symlinked _architect (AT-47).',
+  },
+  _readStatus: {
+    defModule: 'cli/bridge-studio-runs.ts',
+    why: 'Reads (and its sibling _writeStatus mutates) status.json from a caller-supplied architect sessionDir (the plan-verdict routes\' private copy); no containment of its own — the dir must already be guarded.',
+  },
 };
 
 /** Sink-token suffix that namespaces a caller-count row so it flows through

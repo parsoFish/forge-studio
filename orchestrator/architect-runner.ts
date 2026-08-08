@@ -61,6 +61,7 @@ import {
   type InterviewRound,
 } from '../cli/architect-plan.ts';
 import { loadBrainIndex } from '../cli/brain-index.ts';
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import {
   serializeManifest,
   parseManifest,
@@ -207,14 +208,35 @@ export async function runArchitectTurn(
   input: RunArchitectTurnInput,
 ): Promise<RunArchitectTurnResult> {
   const paths = sessionPaths(input.projectRoot, input.sessionId);
+  // SEC-04 runner leg: contain the session dir BEFORE the first read. The
+  // kind-dir (`_architect`) and `sessionId` each arrive as their OWN guarded
+  // segment against `projectRoot` — never folded into the bare
+  // `resolve(projectRoot, '_architect', sessionId)` that `sessionPaths`
+  // builds and `readStatus` would then follow out of the project subtree. A
+  // traversing `sessionId` (`../`) OR a symlinked `_architect` dir resolves to
+  // a containment reject, and the runner REFUSES rather than disclose (or
+  // mutate) an out-of-root `status.json`. The other three interactive runners
+  // (instructions / project-brain / demo) were contained in the SEC-04 fix;
+  // the architect's runner leg was missed — this closes it.
+  const guarded = resolveGuardedPath(input.projectRoot, ['_architect', input.sessionId]);
+  if (!guarded.ok) {
+    throw new Error(
+      `architect runner: session dir failed containment (${guarded.reason}). Has the session been started?`,
+    );
+  }
   const status = readStatus(paths.sessionDir);
   if (!status) {
     // ARCH-6 idempotency: a rejected session is moved to _architect/_archived/.
     // A repeat reject turn then finds no live status.json — if the archived copy
     // was a rejected session, treat the turn as a no-op rather than throwing.
-    const archived = readStatus(
-      resolve(input.projectRoot, '_architect', '_archived', input.sessionId),
-    );
+    // The archived read is a SECOND request-derived path construction — contain
+    // it the same way (a symlinked `_archived` must not disclose out-of-root).
+    const archivedGuard = resolveGuardedPath(input.projectRoot, [
+      '_architect',
+      '_archived',
+      input.sessionId,
+    ]);
+    const archived = archivedGuard.ok ? readStatus(archivedGuard.realPath) : null;
     if (archived?.phase === 'rejected') {
       return { phase: 'rejected', wrote: [] };
     }
@@ -1422,11 +1444,22 @@ export function listArchitectSessions(projectsRoot: string): ArchitectStatus[] {
   const out: ArchitectStatus[] = [];
   if (!existsSync(projectsRoot)) return out;
   for (const project of safeReaddir(projectsRoot)) {
-    const archDir = join(projectsRoot, project, '_architect');
-    if (!existsSync(archDir)) continue;
+    // SEC-04: guard the `_architect` dir as its OWN segment against the fixed
+    // `projectsRoot` base — a symlinked `projects/<p>/_architect` (a plain
+    // 120000 blob committable to a project repo) resolves to an identity
+    // mismatch and yields NO enumeration/disclosure. This was THE reproduced
+    // escape: `GET /api/architect/sessions` enumerated an out-of-root session
+    // and disclosed its status.json (idea / session_id / project_repo_path).
+    const archGuard = resolveGuardedPath(projectsRoot, [project, '_architect']);
+    if (!archGuard.ok) continue;
+    const archDir = archGuard.realPath;
     for (const sid of safeReaddir(archDir)) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      const status = readStatus(join(archDir, sid));
+      // Guard each session id as its own segment too — a symlinked `<sid>`
+      // resolving out of root is refused, never read.
+      const sidGuard = resolveGuardedPath(projectsRoot, [project, '_architect', sid]);
+      if (!sidGuard.ok) continue;
+      const status = readStatus(sidGuard.realPath);
       if (status) out.push(status);
     }
   }

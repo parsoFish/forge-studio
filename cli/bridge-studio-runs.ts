@@ -42,6 +42,7 @@ import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
@@ -627,6 +628,21 @@ export async function applyPlanVerdict(
     return;
   }
 
+  // SEC-04 (AT-47): the SLUG_RE/SAFE_ID_RE charset gates above are defense in
+  // depth, but charset does NOT catch a symlinked `_architect` DIR — a
+  // valid-charset project+sessionId can still resolve, through the symlink, to
+  // an out-of-root session whose status.json would be read AND mutated (a
+  // reject rewrites phase:'rejected'). Gate every subsequent read/write on a
+  // per-segment IDENTITY guard of project + `_architect` + sessionId (each its
+  // own segment against the fixed projectsRoot base); any escape — a symlinked
+  // `_architect`, a cross-object alias — collapses to a 404, indistinguishable
+  // from a genuinely missing session (no oracle). Only once the guard has
+  // proven the bare-joined `dir` is contained is it safe to read/write.
+  const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_architect', sessionId]);
+  if (!guarded.ok) {
+    sendJson(res, 404, { error: 'session not found', sessionId }, origin);
+    return;
+  }
   const dir = _architectSessionDir(ctx.projectsRoot, project, sessionId);
   if (!_readStatus(dir)) {
     sendJson(res, 404, { error: 'session not found', sessionId }, origin);
