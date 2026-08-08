@@ -262,7 +262,12 @@ export const STORY_REGISTRY = [
       'column in README §4. Its surface (flow builder, hex canvas, ' +
       'ArtifactPicker edges) is verified aligned by R4-B13, so the port ' +
       'is a pure journey-sync duty with no product work; assigned to C ' +
-      'as the only batch owning flows-pillar modules.',
+      'as the only batch owning flows-pillar modules. MEASURED at ' +
+      'batch-C exit (2026-08-08): NOT ported — 0 of 11 beats, and the ' +
+      'only zero whose producer is already complete on main. It was ' +
+      'never a pack exit criterion, so it is recorded as batch C\u2019s ' +
+      'unpaid journey-sync debt rather than reassigned; flows-author ' +
+      'has 3 beats against 11 mockup steps. Filed as bd forge-9ir.',
   },
   {
     story: 'edit-flow',
@@ -284,8 +289,11 @@ export const STORY_REGISTRY = [
     note:
       "Flow topology verified aligned by R4-B13; the mockup's extra " +
       '"Initiative intake" node is presentation of the existing queue ' +
-      "claim, not a new flow node. Batch C's port covers the " +
-      'kickoff/run-detail/monitor surfaces the story walks.',
+      "claim, not a new flow node. MEASURED at batch-C exit (2026-08-08): " +
+      'batch C did NOT port this story — 0 of 21 beats. The run surfaces it ' +
+      'walks shipped (R6-04/R6-01/R6-05), but the flow-kickoff half of ' +
+      'R6-04-F2 is neither built nor excluded, and the story also opens on ' +
+      'R4-12/R4-13 (batch D). Port filed as a batch-D WI (bd forge-tuy).',
   },
   {
     story: 'run-agent',
@@ -586,8 +594,10 @@ export const STORY_REGISTRY = [
     excluded: null,
     note:
       'Agent itself verified aligned by R4-B13 (ralph loop, per-WI ' +
-      "fanout, write-first continuity); batch C's port covers the " +
-      'run/kickoff/monitor surfaces the story walks.',
+      "fanout, write-first continuity). MEASURED at batch-C exit (2026-08-08): " +
+      'batch C did NOT port this story — 0 of 10 beats. No product work is ' +
+      'needed; it is a journey-sync duty on a seeded _logs/<runId> fixture. ' +
+      'Filed as a batch-D WI (bd forge-11w).',
   },
   {
     story: 'run-agent-adversarial-review',
@@ -596,8 +606,10 @@ export const STORY_REGISTRY = [
     excluded: null,
     note:
       'Agent itself verified aligned by R4-B13 (refute-first findings ' +
-      "feeding the verdict gate); batch C's port covers the " +
-      'run/kickoff/monitor surfaces the story walks.',
+      "feeding the verdict gate). MEASURED at batch-C exit (2026-08-08): " +
+      'batch C did NOT port this story — 0 of 6 beats. Blocked on the ' +
+      'standalone run view attaching no trigger provenance. Filed as a ' +
+      'batch-D WI (bd forge-928).',
   },
   {
     story: 'run-agent-demo-runner',
@@ -608,7 +620,10 @@ export const STORY_REGISTRY = [
       'Agent itself verified aligned by R4-B13 (project-demo-skill ' +
       'execution with actual-resource evidence; the showcase-page delta ' +
       'is R4-14 and the project-hook trigger delta is R2-08); batch C\'s ' +
-      'port covers the run/kickoff/monitor surfaces the story walks.',
+      'MEASURED at batch-C exit (2026-08-08): batch C did NOT port this ' +
+      'story — 0 of 6 beats. It is also trigger framing 2 of 3 ' +
+      '(project-hook), blocked on the SHIPPED_TRIGGER_KINDS UI mirror ' +
+      'omitting pr-merged. Filed as a batch-D WI (bd forge-gu8).',
   },
   {
     story: 'run-agent-reflector',
@@ -618,8 +633,10 @@ export const STORY_REGISTRY = [
     note:
       'Agent itself verified aligned by R4-B13 (outside-the-cycle ' +
       'reflection into the brains on the merged trigger; the brain-tune ' +
-      "flow packaging delta is R4-20); batch C's port covers the " +
-      'run/kickoff/monitor surfaces the story walks.',
+      "flow packaging delta is R4-20). MEASURED at batch-C exit (2026-08-08): " +
+      'batch C did NOT port this story — 0 of 6 beats. Cheapest of the four ' +
+      'agent ports; covers the on-complete-chain framing (merged half). ' +
+      'Filed as a batch-D WI (bd forge-1ge).',
   },
   {
     story: 'run-agent-demo-design',
