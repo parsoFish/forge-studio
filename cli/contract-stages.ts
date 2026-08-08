@@ -271,11 +271,35 @@ export function deriveContractStages(input: {
     return { ok: false, error: { message: `unknown project "${projectId}"` } };
   }
 
-  let config: ProjectConfig | null;
-  try {
-    config = loadProjectConfig(projectDir);
-  } catch (err) {
-    return { ok: false, error: { message: err instanceof Error ? err.message : String(err) } };
+  // SEC-04 leaf-tail: `loadProjectConfig` raw-reads `<projectDir>/.forge/
+  // project.json` (`join` + `readFileSync`, NO per-leaf realpath — unlike
+  // `safeReadFileInSession`, which realpath-contains every leaf it reads, so the
+  // instructions/demo/roadmap rows are already symlink-safe). `projectDir` is
+  // already realpath-contained under `projectsRoot` (`resolveContainedProjectDir`
+  // above), so it is a TRUSTED root here — pass IT to `guardedFile`, never the
+  // `projectsRoot`+`projectId` pair, so the projectId (already resolved) is NOT
+  // re-run through the per-segment identity check and AT-28's symlink-back-inside
+  // acceptance stays intact. Require the `.forge/project.json` leaf itself to pass
+  // the guard before trusting the config read: a symlinked/hardlinked leaf (proven
+  // to leak the OUTSIDE file's gate command into the `contract` row otherwise)
+  // collapses to `null`, indistinguishable from a genuinely-absent config — both
+  // the safe "not onboarded yet" outcome (`config = null`). A CONTAINED-but-
+  // malformed project.json still reaches `loadProjectConfig` and fails the whole
+  // derivation closed, unchanged.
+  //
+  // Residual (disclosed, same trust tier as this module's other realpath-not-
+  // atomic notes): once the leaf is proven contained, `loadProjectConfig` also
+  // raw-reads the `.forge/quality_gate_cmd` sidecar; a symlinked SIDECAR could
+  // still fold cmd tokens in when project.json omits `cmd`. Closing that needs the
+  // guard inside `loadProjectConfig` (a shared hot-path function, many callers) —
+  // out of scope for this leaf-tail pass; tracked as an open concern.
+  let config: ProjectConfig | null = null;
+  if (guardedFile(projectDir, ['.forge', 'project.json'], 'read') !== null) {
+    try {
+      config = loadProjectConfig(projectDir);
+    } catch (err) {
+      return { ok: false, error: { message: err instanceof Error ? err.message : String(err) } };
+    }
   }
 
   const rows: ContractStageRow[] = [

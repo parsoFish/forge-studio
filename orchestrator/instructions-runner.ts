@@ -230,10 +230,20 @@ export async function runInstructionsTurn(
   let phase = status.phase;
 
   if (phase === 'interviewing') {
-    const interview = readAnswerRounds(sessionDir);
+    // SEC-04 leaf: answers.json READ routed through the guard (leaf included) — a
+    // symlinked answers.json inside the real, contained session dir collapses to
+    // [] rather than leaking out-of-root content into the interview prompt.
+    const interview = readAnswerRounds(input.projectRoot, dirSegments);
     const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
-      const questionsPath = writeQuestions(sessionDir, decision.questions);
+      // SEC-04 leaf: questions.json WRITE routed through the guard (leaf
+      // included); a symlinked/escaping leaf ⇒ null ⇒ the runner refuses.
+      const questionsPath = writeQuestions(input.projectRoot, dirSegments, decision.questions);
+      if (questionsPath === null) {
+        throw new Error(
+          'instructions runner: questions.json write failed containment (symlinked/escaping leaf) — refusing to write.',
+        );
+      }
       writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
       logger.emit({
         initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
@@ -249,7 +259,7 @@ export async function runInstructionsTurn(
   }
 
   if (phase === 'drafting') {
-    result = await runDraftStep({ input, sessionDir, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText });
+    result = await runDraftStep({ input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText });
   } else if (phase === 'finalizing') {
     result = runFinalizeStep({ input, sessionDir, status, logger, initiativeId });
   } else if (phase === 'rejected') {
@@ -367,7 +377,6 @@ const DRAFT_SCHEMA = {
 
 async function runDraftStep(args: {
   input: RunInstructionsTurnInput;
-  sessionDir: string;
   status: InstructionsStatus;
   queryFn: QueryFn;
   logger: EventLogger;
@@ -377,8 +386,9 @@ async function runDraftStep(args: {
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
 }): Promise<RunInstructionsTurnResult> {
-  const { input, sessionDir, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
-  const interview = readAnswerRounds(sessionDir);
+  const { input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
+  // SEC-04 leaf: answers.json READ routed through the guard (leaf included).
+  const interview = readAnswerRounds(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
   const feedback = readFeedback(input.projectRoot, input.sessionId);
   const skill = loadSkillPrompt(input.skillPromptPath);
 

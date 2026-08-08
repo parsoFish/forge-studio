@@ -53,3 +53,6 @@ jobs:
 
       - name: Request-path sinks ratchet check
         run: node scripts/check-request-path-sinks.mjs
+
+      - name: Raw-fs guarded def-use lint (SEC-04)
+        run: node scripts/check-raw-fs-guarded.mjs
