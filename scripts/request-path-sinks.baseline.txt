@@ -122,13 +122,13 @@ cli/ui-bridge.ts spawn 2
 cli/ui-bridge.ts statSync 7
 cli/ui-bridge.ts writeFileSync 2
 orchestrator/agent-dispatch.ts readdirSync 1
-orchestrator/architect-runner.ts existsSync 13
+orchestrator/architect-runner.ts existsSync 10
 orchestrator/architect-runner.ts mkdirSync 4
 orchestrator/architect-runner.ts readdirSync 4
-orchestrator/architect-runner.ts readFileSync 12
+orchestrator/architect-runner.ts readFileSync 9
 orchestrator/architect-runner.ts rmSync 1
 orchestrator/architect-runner.ts sessionPaths@caller 1
-orchestrator/architect-runner.ts writeFileSync 8
+orchestrator/architect-runner.ts writeFileSync 6
 orchestrator/brain-paths.ts existsSync 1
 orchestrator/brain-paths.ts readFileSync 1
 orchestrator/claim-validator.ts existsSync 2
@@ -309,8 +309,8 @@ orchestrator/project-brain-builder-runner.ts readFileSync 1
 orchestrator/project-brain-seed.ts existsSync 2
 orchestrator/project-brain-seed.ts mkdirSync 2
 orchestrator/project-brain-seed.ts writeFileSync 1
-orchestrator/project-config.ts existsSync 3
-orchestrator/project-config.ts readFileSync 3
+orchestrator/project-config.ts existsSync 1
+orchestrator/project-config.ts readFileSync 1
 orchestrator/project-create.ts existsSync 1
 orchestrator/project-create.ts mkdirSync 1
 orchestrator/project-create.ts readdirSync 2

@@ -61,7 +61,7 @@ import {
   type InterviewRound,
 } from '../cli/architect-plan.ts';
 import { loadBrainIndex } from '../cli/brain-index.ts';
-import { resolveGuardedPath, guardedFile } from '../cli/studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
 import {
   serializeManifest,
   parseManifest,
@@ -331,7 +331,7 @@ export async function runArchitectTurn(
   // Interview phase — may flow straight through to drafting when ready.
   let phase = status.phase;
   if (phase === 'interviewing') {
-    const interview = readInterview(paths.sessionDir);
+    const interview = readInterview(input.projectRoot, input.sessionId);
     const decision = await runInterviewStep({
       status,
       interview,
@@ -343,7 +343,7 @@ export async function runArchitectTurn(
       onText,
     });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
-      const questionsPath = writeQuestions(paths.sessionDir, decision.questions);
+      const questionsPath = writeQuestions(input.projectRoot, input.sessionId, decision.questions);
       writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
       logger.emit({
         initiative_id: `architect-session-${input.sessionId}`,
@@ -373,17 +373,24 @@ export async function runArchitectTurn(
     // stay honest — no findings file means no explore block, ever).
     // Fail-open covers BOTH the empty-output case and a thrown stream/SDK
     // error: the stage is advisory enrichment and never bricks the session.
-    try {
-      rmSync(edgeCasesPath(paths.sessionDir), { force: true });
-    } catch {
-      /* best-effort — a stale file that survives is overwritten on success */
+    // SEC-04 leaf: resolve the stale `edge-cases.json` through the guard before
+    // removing it — never rm THROUGH a symlinked/escaping leaf (null ⇒ absent or
+    // out-of-root, both a safe no-op).
+    const staleEdge = guardedFile(input.projectRoot, ['_architect', input.sessionId, 'edge-cases.json'], 'read');
+    if (staleEdge) {
+      try {
+        rmSync(staleEdge, { force: true });
+      } catch {
+        /* best-effort — a stale file that survives is overwritten on success */
+      }
     }
     let findings: ExploreFindings | null = null;
     let exploreCrash: string | null = null;
     try {
       findings = await runExploreStep({
         status,
-        sessionDir: paths.sessionDir,
+        projectRoot: input.projectRoot,
+        sessionId: input.sessionId,
         queryFn,
         skillPromptPath: input.skillPromptPath,
         brainIndex,
@@ -609,15 +616,20 @@ const EXPLORE_SCHEMA = {
   required: ['edgeCases', 'brainConstraints', 'exploreSummary'],
 };
 
+/** Pure path builder — the ONLY remaining use is the non-fs event-log
+ *  `output_refs` string (no bytes flow through it). Every ACTUAL read/write/rm
+ *  of `edge-cases.json` routes the leaf through `guardedFile` instead. */
 export function edgeCasesPath(sessionDir: string): string {
   return join(sessionDir, 'edge-cases.json');
 }
 
-export function readExploreFindings(sessionDir: string): ExploreFindings | null {
-  const p = edgeCasesPath(sessionDir);
-  if (!existsSync(p)) return null;
+/** SEC-04: the `edge-cases.json` leaf rides through the guard (read mode); a
+ *  symlinked leaf collapses to `null`, indistinguishable from absent. */
+export function readExploreFindings(projectsRoot: string, sessionId: string): ExploreFindings | null {
+  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'edge-cases.json']);
+  if (raw === null) return null;
   try {
-    return JSON.parse(readFileSync(p, 'utf8')) as ExploreFindings;
+    return JSON.parse(raw) as ExploreFindings;
   } catch {
     return null;
   }
@@ -633,7 +645,8 @@ export function readExploreFindings(sessionDir: string): ExploreFindings | null 
  */
 async function runExploreStep(args: {
   status: ArchitectStatus;
-  sessionDir: string;
+  projectRoot: string;
+  sessionId: string;
   queryFn: QueryFn;
   skillPromptPath?: string;
   brainIndex?: string;
@@ -641,9 +654,9 @@ async function runExploreStep(args: {
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
 }): Promise<ExploreFindings | null> {
-  const { status, sessionDir, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
+  const { status, projectRoot, sessionId, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
   const skill = loadSkillPrompt(skillPromptPath);
-  const interview = readInterview(sessionDir);
+  const interview = readInterview(projectRoot, sessionId);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(operator drafted directly)_';
@@ -718,7 +731,11 @@ async function runExploreStep(args: {
     brainConstraints,
     exploreSummary: typeof output.exploreSummary === 'string' ? output.exploreSummary : '',
   };
-  writeFileSync(edgeCasesPath(sessionDir), JSON.stringify(findings, null, 2));
+  // SEC-04 leaf: persist through the guard (write mode). A symlinked/escaping
+  // `edge-cases.json` leaf is refused (null) — this stage is advisory
+  // enrichment, so a refused write is fail-open (findings still returned for
+  // THIS turn; the draft step simply finds no persisted explore block).
+  guardedWriteFile(projectRoot, ['_architect', sessionId, 'edge-cases.json'], JSON.stringify(findings, null, 2));
   return findings;
 }
 
@@ -813,7 +830,7 @@ async function runDraftStep(args: {
   onText?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText } = args;
-  const interview = readInterview(paths.sessionDir);
+  const interview = readInterview(input.projectRoot, input.sessionId);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
   const prompt = [
@@ -845,7 +862,7 @@ async function runDraftStep(args: {
     ...(resolvedDecisions
       ? ['', 'Resolved design decisions (bake these into the manifests):', resolvedDecisions]
       : []),
-    ...renderExploreBlock(readExploreFindings(paths.sessionDir)),
+    ...renderExploreBlock(readExploreFindings(input.projectRoot, input.sessionId)),
     '',
     'Produce one or more coherent, releasable initiatives. For each: a kebab ' +
       '`slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), ' +
@@ -969,7 +986,7 @@ async function runDraftStep(args: {
     })
     .map((p) => ({ path: p, summary: 'consulted during architect draft' }));
 
-  const exploreFindings = readExploreFindings(paths.sessionDir);
+  const exploreFindings = readExploreFindings(input.projectRoot, input.sessionId);
   const session: ArchitectSession = {
     session_id: status.session_id,
     project: status.project,
@@ -1063,7 +1080,7 @@ async function runFinalizeCompletenessCritic(args: {
     metadata: { session_id: input.sessionId },
   });
 
-  const interviewSummary = renderInterviewSummary(readInterview(paths.sessionDir));
+  const interviewSummary = renderInterviewSummary(readInterview(input.projectRoot, input.sessionId));
   const planMarkdown = existsSync(paths.planPath) ? readFileSync(paths.planPath, 'utf8') : null;
   const manifestsSummary = buildManifestsSummary(paths.manifestsDir);
 
@@ -1153,7 +1170,7 @@ async function runFinalizeStep(args: {
   onText?: (text: string) => void;
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, logger } = args;
-  const resolved = readResolvedDecisions(paths.sessionDir);
+  const resolved = readResolvedDecisions(input.projectRoot, input.sessionId);
 
   // DETERMINISTIC FINALIZE (#3, 2026-06-01). "Approve" must promote EXACTLY the
   // plan the operator saw. Previously this ran a SECOND LLM draft with the
@@ -1459,20 +1476,38 @@ function writeArchitectStatus(projectRoot: string, sessionId: string, status: Ar
   }
 }
 
-function writeQuestions(sessionDir: string, questions: ArchitectQuestion[]): string {
-  const p = join(sessionDir, 'questions.json');
-  writeFileSync(p, JSON.stringify(questions, null, 2));
+// SEC-04 leaf: `questions.json`/`answers.json`/`edge-cases.json`/`feedback.md`
+// each ride the WHOLE `<projectsRoot>/_architect/<sessionId>/<leaf>` path
+// (leaf included) through `guardedFile` — the trusted `projectsRoot` root plus
+// the request-derived `sessionId` as its OWN segment (never folded into root).
+// A symlinked/hardlinked LEAF inside a genuinely real, contained session dir is
+// refused: writes throw (fail closed, runner contract), reads collapse to
+// empty/null (no out-of-root disclosure). Replaces the former raw
+// `join(sessionDir, leaf)` helpers that guarded neither dir nor leaf.
+function writeQuestions(projectsRoot: string, sessionId: string, questions: ArchitectQuestion[]): string {
+  const p = guardedWriteFile(
+    projectsRoot,
+    ['_architect', sessionId, 'questions.json'],
+    JSON.stringify(questions, null, 2),
+  );
+  if (p === null) {
+    throw new Error(
+      'architect runner: questions.json write failed containment (symlinked/escaping leaf) — refusing to write.',
+    );
+  }
   return p;
 }
 
 /** Read every `answers.json` round into a flat `InterviewRound[]`. The bridge
  *  appends rounds; this flattens them into the `ArchitectSession.interview`
- *  shape the renderer expects. */
-export function readInterview(sessionDir: string): InterviewRound[] {
-  const p = join(sessionDir, 'answers.json');
-  if (!existsSync(p)) return [];
+ *  shape the renderer expects. SEC-04: the `answers.json` leaf rides through the
+ *  guard (read mode) so a symlinked leaf discloses nothing — a rejected or
+ *  absent file both collapse to `[]`. */
+export function readInterview(projectsRoot: string, sessionId: string): InterviewRound[] {
+  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'answers.json']);
+  if (raw === null) return [];
   try {
-    const parsed = JSON.parse(readFileSync(p, 'utf8')) as AnswerRound[] | AnswerRound;
+    const parsed = JSON.parse(raw) as AnswerRound[] | AnswerRound;
     const rounds = Array.isArray(parsed) ? parsed : [parsed];
     const out: InterviewRound[] = [];
     for (const r of rounds) {
@@ -1488,10 +1523,10 @@ export function readInterview(sessionDir: string): InterviewRound[] {
 
 /** Read `feedback.md` into a markdown block the draft step bakes into the
  *  regenerated manifests. Returns the trimmed content or null if absent/empty. */
-function readResolvedDecisions(sessionDir: string): string | null {
-  const fbPath = join(sessionDir, 'feedback.md');
-  if (!existsSync(fbPath)) return null;
-  const fb = readFileSync(fbPath, 'utf8').trim();
+function readResolvedDecisions(projectsRoot: string, sessionId: string): string | null {
+  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'feedback.md']);
+  if (raw === null) return null;
+  const fb = raw.trim();
   return fb || null;
 }
 
@@ -1515,9 +1550,13 @@ export function listArchitectSessions(projectsRoot: string): ArchitectStatus[] {
       if (sid.startsWith('_')) continue; // skip _archived/
       // Guard each session id as its own segment too — a symlinked `<sid>`
       // resolving out of root is refused, never read.
-      const sidGuard = resolveGuardedPath(projectsRoot, [project, '_architect', sid]);
-      if (!sidGuard.ok) continue;
-      const status = readStatus(sidGuard.realPath);
+      // SEC-04 leaf: route the WHOLE `<sid>/status.json` path (leaf included)
+      // through the guard — the earlier pass guarded the sid DIR but read the
+      // status.json leaf raw via `readStatus(sidGuard.realPath)`, so a symlinked
+      // `status.json` inside a real, contained sid dir still disclosed an
+      // out-of-root file. `guardedReadStatus` refuses that leaf (null), so it is
+      // never enumerated.
+      const status = guardedReadStatus(projectsRoot, [project, '_architect', sid]);
       if (status) out.push(status);
     }
   }

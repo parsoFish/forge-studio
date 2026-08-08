@@ -151,6 +151,50 @@ test('A7 (GREEN): a name enumerated from readdirSync(<trusted>) is server-source
   assert.deepEqual(analyzeModule(text, 'cli/metrics.ts'), []);
 });
 
+test('A9 (RED): a NEW raw leaf-append onto a bare session-dir PARAM trips the interprocedural rule', () => {
+  // The exact architect-runner shape that shipped: a helper takes a pre-joined
+  // `sessionDir` (the caller laundered a request id into it) and raw-appends a
+  // leaf. The request-taint scan cannot see it (sessionDir is not a taint token),
+  // so WITHOUT the dir-param rule this is a false negative — the SEC-04 hole.
+  const text = fn(
+    'export function readFoo(sessionDir) {',
+    "  const p = join(sessionDir, 'foo.json');",
+    '  if (!existsSync(p)) return null;',
+    "  return readFileSync(p, 'utf8');",
+    '}',
+  );
+  const findings = analyzeModule(text, 'orchestrator/architect-runner.ts');
+  assert.equal(findings.length, 2, 'both the existsSync probe and the readFileSync leaf-append fire');
+  for (const f of findings) {
+    assert.equal(f.kind, 'dir-param-leaf-append');
+    assert.match(f.why, /session-dir param "sessionDir"/);
+  }
+});
+
+test('A9b (GREEN twin): the SAME read routed through the guarded sibling is NOT a finding', () => {
+  // Swap-the-fix proof for A9: identical but for routing the leaf through the
+  // guard — the RED is caused by the raw leaf-append and nothing else.
+  const text = fn(
+    'export function readFoo(projectsRoot, sessionId) {',
+    "  const raw = guardedReadFile(projectsRoot, ['_architect', sessionId, 'foo.json']);",
+    '  if (raw === null) return null;',
+    '  return raw;',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'orchestrator/architect-runner.ts'), []);
+});
+
+test('A9c (GREEN): a BARE session-dir param with no leaf appended does NOT fire (the dir is the sibling ratchet\'s remit, only the leaf is this rule\'s)', () => {
+  // Kills a dir-param rule implemented as taint on the bare name, which would
+  // mis-fire on every `existsSync(sessionDir)`/`mkdirSync(sessionDir)` probe.
+  const text = fn(
+    'export function ensure(sessionDir) {',
+    '  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'orchestrator/interactive-session.ts'), []);
+});
+
 test('A8: a sink-shaped call on a comment line is not counted', () => {
   const text = fn(
     'export function handle(body) {',

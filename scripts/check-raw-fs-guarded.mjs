@@ -160,6 +160,19 @@ export const REQUEST_TAINT_BARE = new Set([
  *  NOT used to prove a path safe (a non-tainted path passes by default). */
 const TRUSTED_ROOTS = new Set(['logsRoot', 'projectsRoot', 'forgeRoot', 'FORGE_ROOT', '__dirname', 'queuePaths', 'ctx']);
 
+/** Session-dir-shaped PARAMETER names (the INTERPROCEDURAL leaf-append vector).
+ *  A helper `f(sessionDir){ readFileSync(join(sessionDir,'leaf')) }` whose caller
+ *  built `sessionDir` from a request id is the exact SEC-04 shape the architect
+ *  module shipped: the taint is laundered through the caller's `join`, so the
+ *  bare param name carries no in-function taint token and the request-taint scan
+ *  cannot see it (which is WHY `sessionDir` is excluded from REQUEST_TAINT_BARE —
+ *  tainting the bare name would also mis-fire on every `existsSync(sessionDir)`
+ *  probe). This set powers a SEPARATE rule (dirParamLeafAppend) that fires ONLY
+ *  when a LEAF is appended onto such an unresolved param — never on the bare dir
+ *  itself. Kept surgically tight (the session-dir param name these modules use);
+ *  a guard-bound base is NOT here (identIsGuardBound already owns that). */
+export const DIR_PARAM_NAMES = new Set(['sessionDir']);
+
 /** Request-handling modules in scope. The explicit singletons plus every
  *  non-test cli/bridge-studio*.ts (the `cli/bridge-studio*.ts` glob in the
  *  charter). Computed against `root` so a fixture tree supplies its own. */
@@ -394,6 +407,38 @@ function isGuardTerminal(expr, line, cleanedLines) {
   return false;
 }
 
+/** Is the path expression a LEAF-APPEND onto an UNRESOLVED session-dir PARAM?
+ *  Returns the base param name (a finding) or null. Handles the two live shapes:
+ *    - INLINE:  `join(sessionDir, 'x')` / `resolve(sessionDir, x)` at the sink.
+ *    - VIA-CONST: `const p = join(sessionDir, file); readFileSync(p)` — resolve
+ *      the sink's bare ident through ONE binding to reach the inline join.
+ *  A bare `sessionDir` with NOTHING appended (`existsSync(sessionDir)`) returns
+ *  null — the dir itself is the sibling ratchet's remit, only the appended LEAF
+ *  is this rule's. A param is "unresolved" iff findBinding is null (it came from
+ *  the caller — a function parameter/import); a guard-bound base is deliberately
+ *  NOT matched here (identIsGuardBound already flags leaf-append below a guard).
+ *  Template `${dir}/leaf` is NOT covered (cleanStructure blanks the literal tail
+ *  outside `${}`); the modules in scope use join()/resolve(). */
+function dirParamLeafAppend(expr, line, cleanedLines, depth = 0) {
+  if (depth > 6) return null;
+  const e = expr.trim();
+  // inline join/resolve whose FIRST arg is a bare ident + at least one more segment
+  const m = /^(?:join|resolve)\(\s*([A-Za-z_$][\w$]*)\s*,/.exec(e);
+  if (m) {
+    const base = m[1];
+    if (DIR_PARAM_NAMES.has(base) && !TRUSTED_ROOTS.has(base) && findBinding(cleanedLines, base, line) === null) {
+      return base;
+    }
+    return null;
+  }
+  // sink opens a bare ident — follow ONE binding to a join/resolve (via-const shape)
+  if (/^[A-Za-z_$][\w$]*$/.test(e)) {
+    const binding = findBinding(cleanedLines, e, line);
+    if (binding) return dirParamLeafAppend(binding.rhs, line, cleanedLines, depth + 1);
+  }
+  return null;
+}
+
 /** Analyze one module's text; return findings [{ file, line, sink, path, why }]. */
 export function analyzeModule(text, relFile) {
   const cleaned = cleanStructure(text);
@@ -424,11 +469,18 @@ export function analyzeModule(text, relFile) {
       if (!guardBase && identIsGuardBound(id.full, id.head, lineIdx, cleanedLines)) guardBase = id.full;
       if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines)) taintTok = id.full;
     }
-    if (!guardBase && !taintTok) continue; // request-independent → safe
+    // (3) DIR-PARAM LEAF-APPEND — the interprocedural shape: a leaf appended onto
+    // an unresolved session-dir param (the caller laundered the request id into
+    // the dir). Fires only when guardBase/taintTok did not already catch it.
+    const dirParamBase = !guardBase && !taintTok ? dirParamLeafAppend(path, lineIdx, cleanedLines) : null;
+    if (!guardBase && !taintTok && !dirParamBase) continue; // request-independent → safe
+    const kind = guardBase ? 'leaf-append' : taintTok ? 'tainted' : 'dir-param-leaf-append';
     const why = guardBase
       ? `leaf-append below guarded value "${guardBase}" — the appended leaf is NOT guarded (route the FULL path incl. leaf through guardedFile)`
-      : `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`;
-    findings.push({ file: relFile, line: lineIdx + 1, sink, path: path.replace(/\s+/g, ' ').slice(0, 120), kind: guardBase ? 'leaf-append' : 'tainted', why });
+      : taintTok
+        ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`
+        : `leaf-append onto unresolved session-dir param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
+    findings.push({ file: relFile, line: lineIdx + 1, sink, path: path.replace(/\s+/g, ' ').slice(0, 120), kind, why });
   }
   return findings;
 }
@@ -541,11 +593,25 @@ export const ALLOWLIST = [
   { file: 'cli/ui-bridge.ts', line: 3998, sink: 'existsSync',
     reason: 'BOOL-PROBE: existsSync(join(repoPath, ".forge","demo","demo.lock.json")) picks the create/update mode default; body.project was already proven contained by resolveDemoSessionDir above; boolean-only, no bytes flow.' },
 
+  // ---- orchestrator/interactive-session.ts ----
+  { file: 'orchestrator/interactive-session.ts', line: 243, sink: 'existsSync',
+    reason: 'RETAINED-RAW-PRIMITIVE: readSessionStatus(sessionDir) — a DESIGNATED_UNGUARDED_FUNCTION superseded by the leaf-guarded sibling guardedReadSessionStatus(projectsRoot, dirSegments). NO production route calls the raw primitive (every session route resolves projectsRoot+segments through resolveGuardedPath and uses the guarded sibling — see the in-file SEC-04 notes). Boolean probe on join(sessionDir, file); a future raw caller trips the sibling caller-count ratchet.' },
+  { file: 'orchestrator/interactive-session.ts', line: 245, sink: 'readFileSync',
+    reason: 'RETAINED-RAW-PRIMITIVE: readSessionStatus(sessionDir) — same as line 243; reads only after the existsSync probe, only from an already-guarded dir handed by the (now guarded-sibling-only) call path. Superseded primitive kept as the base + for tests.' },
+  { file: 'orchestrator/interactive-session.ts', line: 262, sink: 'writeFileSync',
+    reason: 'RETAINED-RAW-PRIMITIVE: writeSessionStatus(sessionDir) — a DESIGNATED_UNGUARDED_FUNCTION superseded by the leaf-guarded guardedWriteSessionStatus. NO production route writes through the raw primitive; a future reachable caller trips the sibling ratchet.' },
+
   // ---- orchestrator/architect-runner.ts ----
-  { file: 'orchestrator/architect-runner.ts', line: 1557, sink: 'existsSync',
+  { file: 'orchestrator/architect-runner.ts', line: 1407, sink: 'existsSync',
+    reason: 'RETAINED-RAW-PRIMITIVE: readStatus(sessionDir) — superseded by the leaf-guarded sibling guardedReadStatus(projectsRoot, dirSegments). listArchitectSessions now routes the status.json LEAF through guardedReadStatus, so NO production caller hands a request-derived dir to the raw primitive (the remaining callers are architect-runner.test.ts constructing their own trusted tmp dirs). readStatus is a DESIGNATED_UNGUARDED_FUNCTION — a future reachable caller trips the sibling caller-count ratchet (check-request-path-sinks). Boolean probe on join(sessionDir, "status.json").' },
+  { file: 'orchestrator/architect-runner.ts', line: 1409, sink: 'readFileSync',
+    reason: 'RETAINED-RAW-PRIMITIVE: readStatus(sessionDir) — same as line 1407; reads status.json only after the existsSync probe, and only from test-supplied trusted dirs (production uses the leaf-guarded guardedReadStatus). Superseded primitive, kept as the base + for tests.' },
+  { file: 'orchestrator/architect-runner.ts', line: 1418, sink: 'writeFileSync',
+    reason: 'RETAINED-RAW-PRIMITIVE: writeStatus(sessionDir) — superseded by the leaf-guarded guardedWriteStatus. NO production caller (the runner writes via writeArchitectStatus → guardedWriteStatus); only architect-runner.test.ts calls the raw primitive on its own trusted tmp dirs. A future reachable caller trips the sibling ratchet.' },
+  { file: 'orchestrator/architect-runner.ts', line: 1596, sink: 'existsSync',
     reason: 'LOG-READ: readArchitectSessionStats — `_architect-<sessionId>/events.jsonl` single segment under resolve(logsRoot) (trusted); sessionId is the architect session id (SAFE_ID_RE convention at creation); best-effort stats (returns null on any error). Boolean.' },
-  { file: 'orchestrator/architect-runner.ts', line: 1559, sink: 'readFileSync',
-    reason: 'LOG-READ: as line 1557 — reads only the internal architect event log for cost/duration stats (symlink-blind residual disclosed in openConcerns).' },
+  { file: 'orchestrator/architect-runner.ts', line: 1598, sink: 'readFileSync',
+    reason: 'LOG-READ: as line 1596 — reads only the internal architect event log for cost/duration stats (symlink-blind residual disclosed in openConcerns).' },
 ];
 
 function keyOf(f) {

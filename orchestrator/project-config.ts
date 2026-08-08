@@ -18,6 +18,7 @@
 
 import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { guardedReadFile } from '../cli/studio-path-guard.ts';
 import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
 import type {
   BuildProcess,
@@ -315,14 +316,16 @@ export function readAgentInstructionsFile(
   projectRoot: string,
 ): { file: string; content: string } | null {
   for (const file of AGENT_INSTRUCTION_FILES) {
-    const p = join(projectRoot, file);
-    if (!existsSync(p)) continue;
-    try {
-      const content = readFileSync(p, 'utf8').trim();
-      if (content) return { file, content };
-    } catch {
-      /* treat unreadable as absent */
-    }
+    // SEC-04 leaf: route the WHOLE `<projectRoot>/<file>` path (leaf included)
+    // through the guard — `projectRoot` is the TRUSTED root, the instruction
+    // filename its own segment. A symlinked/hardlinked AGENTS.md/CLAUDE.md is
+    // refused (null, same as absent/unreadable), never disclosed as the
+    // project's `instructions`. Was a raw `join`+`readFileSync` — the exact
+    // guard-the-config-but-read-the-instructions-leaf-raw hole SEC-04 closes.
+    const raw = guardedReadFile(projectRoot, [file]);
+    if (raw === null) continue;
+    const content = raw.trim();
+    if (content) return { file, content };
   }
   return null;
 }
@@ -335,16 +338,18 @@ export function readAgentInstructionsFile(
  * already consumes the sidecar (`cli/preflight.ts readQualityGateCmd`).
  */
 export function readQualityGateSidecar(projectRoot: string): string[] | null {
-  try {
-    const sidecarPath = join(projectRoot, QUALITY_GATE_SIDECAR_REL_PATH);
-    if (!existsSync(sidecarPath)) return null;
-    const raw = readFileSync(sidecarPath, 'utf8').trim();
-    if (raw === '') return null;
-    const argv = raw.split(/\s+/).filter((t) => t.length > 0);
-    return argv.length > 0 ? argv : null;
-  } catch {
-    return null;
-  }
+  // SEC-04 leaf: route the WHOLE `.forge/quality_gate_cmd` path (leaf included)
+  // through the guard — `projectRoot` is the TRUSTED root, `.forge` +
+  // `quality_gate_cmd` its own segments (split from the REL_PATH constant, never
+  // a second hardcoded literal). A symlinked sidecar is refused (null), so an
+  // out-of-root file's cmd tokens can NEVER fold into testProcess.local.cmd when
+  // project.json omits `cmd`. Was a raw `join`+`readFileSync`.
+  const raw = guardedReadFile(projectRoot, QUALITY_GATE_SIDECAR_REL_PATH.split('/'));
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  if (trimmed === '') return null;
+  const argv = trimmed.split(/\s+/).filter((t) => t.length > 0);
+  return argv.length > 0 ? argv : null;
 }
 
 /**
