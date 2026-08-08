@@ -16,7 +16,6 @@
  * the JSON-schema file is the operator-facing reference.
  */
 
-import { existsSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { guardedReadFile } from '../cli/studio-path-guard.ts';
 import { DEMO_STEP_KINDS, RELEASE_STEP_KINDS, RELEASE_STEP_PHASES } from './studio/types.ts';
@@ -264,22 +263,27 @@ export type ProjectConfig = {
  * (callers depend on the throw to enforce fail-closed scheduling).
  */
 export function loadProjectConfig(projectRoot: string): ProjectConfig | null {
-  const path = join(projectRoot, PROJECT_CONFIG_REL_PATH);
-  if (!existsSync(path)) return null;
-  let raw: string;
-  try {
-    raw = readFileSync(path, 'utf8');
-  } catch (err) {
-    throw new Error(
-      `project-config: cannot read ${path}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-  }
+  // SEC-04 leaf (residual #1, WIRE-REACHABLE via POST /api/verdict send-back →
+  // loadProjectConfig(manifest.project_repo_path)): route the WHOLE
+  // `<projectRoot>/.forge/project.json` path — LEAF INCLUDED — through the guard.
+  // `projectRoot` is the TRUSTED root: the verdict send-back validates it with
+  // isContainedProjectRepoPath BEFORE this call; contract-stages realpath-contains
+  // it; resolveProjectIdForRepo passes only discovered project dirs. `.forge` +
+  // `project.json` ride as their OWN segments (split from the REL_PATH constant,
+  // never a second hardcoded literal). A symlinked `.forge/project.json` leaf — or
+  // a symlinked `.forge` dir — inside the blessed projectRoot fails the guard's
+  // per-segment identity walk → guardedReadFile returns null → treated as absent
+  // (config null, fail-closed), NEVER read out of root. Was a raw
+  // existsSync+join+readFileSync that FOLLOWED such a symlink — the exact
+  // guard-the-dir/read-the-leaf-raw hole SEC-04 closes.
+  const raw = guardedReadFile(projectRoot, PROJECT_CONFIG_REL_PATH.split('/'));
+  if (raw === null) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
     throw new Error(
-      `project-config: ${path} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
+      `project-config: ${join(projectRoot, PROJECT_CONFIG_REL_PATH)} is not valid JSON: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
   // Single-source the local gate from the `.forge/quality_gate_cmd` sidecar

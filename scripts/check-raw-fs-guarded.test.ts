@@ -27,6 +27,7 @@ import {
   ALLOWLIST,
   RAW_FS_SINKS,
   REQUEST_TAINT_BARE,
+  DIR_PARAM_NAMES,
 } from './check-raw-fs-guarded.mjs';
 // Namespace import so probing a not-yet-built export yields `undefined` rather
 // than an ESM link-time crash that takes the whole file down.
@@ -167,7 +168,7 @@ test('A9 (RED): a NEW raw leaf-append onto a bare session-dir PARAM trips the in
   assert.equal(findings.length, 2, 'both the existsSync probe and the readFileSync leaf-append fire');
   for (const f of findings) {
     assert.equal(f.kind, 'dir-param-leaf-append');
-    assert.match(f.why, /session-dir param "sessionDir"/);
+    assert.match(f.why, /dir-shaped param "sessionDir"/);
   }
 });
 
@@ -193,6 +194,137 @@ test('A9c (GREEN): a BARE session-dir param with no leaf appended does NOT fire 
     '}',
   );
   assert.deepEqual(analyzeModule(text, 'orchestrator/interactive-session.ts'), []);
+});
+
+// ---- Capability 1: URL-derived taint (the phase-log blind spot) ----
+
+test('A10 (RED): a URL-derived id (decodeURIComponent(url.match(re)[1])) reaching a raw readFileSync is a finding', () => {
+  // Kills: a taint model that does not treat url/rawUrl as request sources — the
+  // exact phase-log escape (runId laundered out of the request URL through
+  // match + decodeURIComponent, so no HTTP-member/curated-id token is visible).
+  const text = fn(
+    'export function handlePhaseLog(rawUrl) {',
+    '  const url = pathOnly(rawUrl);',
+    '  const m = url.match(ROUTE_RE);',
+    '  const runId = decodeURIComponent(m[1]);',
+    '  const safeBase = resolve(logsRoot);',
+    "  const eventsPath = resolve(safeBase, runId, 'events.jsonl');",
+    "  return readFileSync(eventsPath, 'utf8');",
+    '}',
+  );
+  const findings = analyzeModule(text, 'cli/bridge-studio.ts');
+  assert.equal(findings.length, 1, 'exactly one finding');
+  assert.equal(findings[0].sink, 'readFileSync');
+  assert.equal(findings[0].kind, 'tainted');
+});
+
+test('A10b (RED): url.split("/") slicing also taints', () => {
+  // The second common shape named in the charter (const seg = url.split('/')[k]).
+  const text = fn(
+    'export function handle(rawUrl, body) {',
+    '  const url = pathOnly(rawUrl);',
+    '  const seg = url.split(SEP)[3];',
+    "  writeFileSync(join(projectsRoot, seg, 'x.json'), String(body));",
+    '}',
+  );
+  const findings = analyzeModule(text, 'cli/ui-bridge.ts');
+  assert.equal(findings.length, 1);
+  assert.equal(findings[0].sink, 'writeFileSync');
+  assert.equal(findings[0].kind, 'tainted');
+});
+
+test('A11 (GREEN twin): the SAME URL-derived read routed through guardedFile is NOT a finding', () => {
+  // Swap-the-fix proof for A10: identical but for routing the FULL path through
+  // the guard, making the readFileSync path guard-terminal.
+  const text = fn(
+    'export function handlePhaseLog(rawUrl) {',
+    '  const url = pathOnly(rawUrl);',
+    '  const m = url.match(ROUTE_RE);',
+    '  const runId = decodeURIComponent(m[1]);',
+    "  const g = guardedFile(logsRoot, [runId, 'events.jsonl'], 'read');",
+    '  if (g === null) return null;',
+    "  return readFileSync(g, 'utf8');",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/bridge-studio.ts'), []);
+});
+
+test('A11b (GREEN): a `url` bound from a NON-request value stays clean (binding-wins, no over-fire)', () => {
+  // Guards against seeding url/rawUrl as always-tainted HEADS: a variable that
+  // merely happens to be named `url` but is built from a trusted constant must
+  // not fire, or the broadened taint would explode the allowlist.
+  const text = fn(
+    'export function fetchRemote(repo) {',
+    '  const url = repo.configuredMirror;',
+    "  return existsSync(join(logsRoot, url, 'cache.json'));",
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/ui-bridge.ts'), []);
+});
+
+// ---- Capability 2: broadened dir-param leaf-append (loadProjectConfig shape) ----
+
+test('A12 (RED): a leaf raw-appended onto an unresolved projectRoot param (loadProjectConfig shape) is a finding', () => {
+  // Kills: a dir-param rule that only knew "sessionDir" — the exact
+  // loadProjectConfig(projectRoot) -> join(projectRoot, ".forge/project.json")
+  // leaf-append escape (residual #1).
+  const text = fn(
+    'export function loadProjectConfig(projectRoot) {',
+    "  const p = join(projectRoot, '.forge', 'project.json');",
+    '  if (!existsSync(p)) return null;',
+    "  return readFileSync(p, 'utf8');",
+    '}',
+  );
+  const findings = analyzeModule(text, 'orchestrator/project-config.ts');
+  assert.equal(findings.length, 2, 'both the existsSync probe and the readFileSync leaf-append fire');
+  for (const f of findings) {
+    assert.equal(f.kind, 'dir-param-leaf-append');
+    assert.match(f.why, /dir-shaped param "projectRoot"/);
+  }
+});
+
+test('A13 (GREEN twin): the SAME projectRoot read routed through guardedReadFile is NOT a finding', () => {
+  // Swap-the-fix proof for A12.
+  const text = fn(
+    'export function loadProjectConfig(projectRoot) {',
+    "  const raw = guardedReadFile(projectRoot, ['.forge', 'project.json']);",
+    '  if (raw === null) return null;',
+    '  return raw;',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'orchestrator/project-config.ts'), []);
+});
+
+test('A14 (GREEN): a BARE dir-shaped param probe (existsSync(projectRoot), no leaf) does NOT fire', () => {
+  // The charter's explicit false-positive control: broadening to projectRoot/dir/
+  // root/base must NOT taint the bare name — only a LEAF-APPEND fires. A bare
+  // existence probe on the dir itself is the sibling ratchet's remit.
+  const text = fn(
+    'export function ensureProject(projectRoot) {',
+    '  if (!existsSync(projectRoot)) return false;',
+    '  return true;',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/bridge-studio-writes.ts'), []);
+});
+
+test('A15 (GREEN): a leaf-append over a DESTRUCTURED for-of loop var (trusted collection) does NOT fire', () => {
+  // Regression lock for the FP the broadened `dir` name surfaced: `dir` from
+  // `for (const [dir, status] of stateDirs)` is a SERVER-enumerated loop var, not
+  // a caller-supplied param. findBinding must resolve the destructure to its
+  // (trusted) collection so the dir-param rule does not cry wolf.
+  const text = fn(
+    'export function scan(projectId) {',
+    '  const stateDirs = [[queuePaths.inFlight, S1], [queuePaths.done, S2]];',
+    '  for (const [dir, status] of stateDirs) {',
+    '    for (const file of readdirSync(dir)) {',
+    "      const raw = readFileSync(join(dir, file), 'utf8');",
+    '      handle(raw);',
+    '    }',
+    '  }',
+    '}',
+  );
+  assert.deepEqual(analyzeModule(text, 'cli/bridge-studio.ts'), []);
 });
 
 test('A8: a sink-shaped call on a comment line is not counted', () => {
@@ -327,6 +459,10 @@ test('C3: the real handling-module set is present and includes the charter modul
   }
   assert.ok(mods.some((m) => m.startsWith('cli/bridge-studio')), 'the cli/bridge-studio*.ts glob must be in scope');
   assert.ok(!mods.some((m) => m.endsWith('.test.ts')), 'no *.test.ts in scope');
+  // SEC-04 blind-spot #b: the delegated config-loader helper is now in scope so
+  // its interprocedural leaf-append (loadProjectConfig -> join(projectRoot,
+  // ".forge/project.json")) is visible to the ratchet.
+  assert.ok(mods.includes('orchestrator/project-config.ts'), 'the config-loader helper must be in scope');
 });
 
 test('C4: every real allowlist row is well-formed (file, line, a reason, and an audited sink)', () => {
@@ -348,4 +484,10 @@ test('the export surface is present (registry probes)', () => {
   assert.equal(typeof (lint as Record<string, unknown>).runLint, 'function');
   assert.ok((lint as Record<string, unknown>).ALLOWLIST);
   assert.ok(REQUEST_TAINT_BARE.has('sessionId') && REQUEST_TAINT_BARE.has('slug'));
+  // Capability 1: the URL-derived roots are seeded taint sources.
+  assert.ok(REQUEST_TAINT_BARE.has('url') && REQUEST_TAINT_BARE.has('rawUrl'), 'url/rawUrl are request-taint roots');
+  // Capability 2: the dir-param set is broadened beyond sessionDir.
+  for (const n of ['sessionDir', 'projectRoot', 'projectDir', 'dir', 'root', 'base', 'repoPath']) {
+    assert.ok(DIR_PARAM_NAMES.has(n), `dir-shaped param "${n}" is recognized`);
+  }
 });

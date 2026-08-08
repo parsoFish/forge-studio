@@ -24,9 +24,12 @@
  *
  *   (1) TAINTED-UNGUARDED — a governing identifier of the path resolves (same
  *       function) to a request-derived SOURCE — an HTTP member (`body.*`,
- *       `params.*`, `query.*`, `req.*`) or a curated request-derived id name
- *       (sessionId, slug, filename, cycleId, initId, runId, repoPath,
- *       project_repo_path, projectId) — and the path is NOT guard-terminal.
+ *       `params.*`, `query.*`, `req.*`), a curated request-derived id name
+ *       (sessionId, slug, cycleId, runId, initiativeId, repoPath,
+ *       project_repo_path, projectId), or a URL-DERIVED root (`url`, `rawUrl`, and
+ *       anything BINDING-WINS launders out of them — `decodeURIComponent(m[1])`
+ *       where `m = url.match(re)`, `url.split('/')[k]`) — and the path is NOT
+ *       guard-terminal.
  *
  *   (2) LEAF-APPEND-BELOW-GUARD — the path appends onto a guard-produced value
  *       (`join(<g>, 'leaf')`, `` `${g}/leaf` ``, `resolve(<g>, x)`), so the
@@ -144,6 +147,21 @@ export const REQUEST_TAINT_BARE = new Set([
   'repoPath',
   'project_repo_path',
   'projectId',
+  // URL-DERIVED request roots (SEC-04 taint blind-spot #a). `rawUrl` is the raw
+  // request URL — the standard bridge handler param; `url` is its path portion
+  // (`const url = pathOnly(rawUrl)`). Every request id in these modules is
+  // laundered out of one of the two: `const id = decodeURIComponent(m[1])` where
+  // `m = url.match(re)`, or `const seg = url.split('/')[k]`. Because taint is
+  // BINDING-WINS, seeding the two URL roots is sufficient — the
+  // id → decodeURIComponent → match → url → rawUrl chain resolves through the
+  // intermediate bindings with NO per-shape special-casing of match/decode/split.
+  // A `url` bound from a NON-request value stays clean (binding-wins classifies by
+  // RHS); only an UNRESOLVED `url`/`rawUrl` (the handler param) or one bound off
+  // the request falls through to tainted. WHY BARE, NOT HEADS: a member off the
+  // URL (`url.length`) is not itself a path, so unlike `body`/`params` these seed
+  // at the base and defer to binding-wins.
+  'url',
+  'rawUrl',
 ]);
 // Deliberately EXCLUDED, with cause (each is dominantly SERVER-enumerated in
 // these modules, so tainting the bare name mis-fires while adding nothing a real
@@ -160,18 +178,33 @@ export const REQUEST_TAINT_BARE = new Set([
  *  NOT used to prove a path safe (a non-tainted path passes by default). */
 const TRUSTED_ROOTS = new Set(['logsRoot', 'projectsRoot', 'forgeRoot', 'FORGE_ROOT', '__dirname', 'queuePaths', 'ctx']);
 
-/** Session-dir-shaped PARAMETER names (the INTERPROCEDURAL leaf-append vector).
- *  A helper `f(sessionDir){ readFileSync(join(sessionDir,'leaf')) }` whose caller
- *  built `sessionDir` from a request id is the exact SEC-04 shape the architect
- *  module shipped: the taint is laundered through the caller's `join`, so the
- *  bare param name carries no in-function taint token and the request-taint scan
- *  cannot see it (which is WHY `sessionDir` is excluded from REQUEST_TAINT_BARE —
- *  tainting the bare name would also mis-fire on every `existsSync(sessionDir)`
- *  probe). This set powers a SEPARATE rule (dirParamLeafAppend) that fires ONLY
- *  when a LEAF is appended onto such an unresolved param — never on the bare dir
- *  itself. Kept surgically tight (the session-dir param name these modules use);
- *  a guard-bound base is NOT here (identIsGuardBound already owns that). */
-export const DIR_PARAM_NAMES = new Set(['sessionDir']);
+/** Dir-shaped PARAMETER names (the INTERPROCEDURAL leaf-append vector). A helper
+ *  `f(<dir>){ readFileSync(join(<dir>,'leaf')) }` whose caller built `<dir>` from
+ *  a request id is the exact SEC-04 shape the architect module — and
+ *  `loadProjectConfig(projectRoot)` (`join(projectRoot,'.forge','project.json')`) —
+ *  shipped: the taint is laundered through the caller's `join`, so the bare param
+ *  carries no in-function taint token and the request-taint scan cannot see it
+ *  (which is WHY these names are NOT in REQUEST_TAINT_BARE — tainting the bare
+ *  name would mis-fire on every `existsSync(<dir>)` probe). This set powers a
+ *  SEPARATE rule (dirParamLeafAppend) that fires ONLY when a LEAF is appended onto
+ *  such a param AND the param is UNRESOLVED (a function parameter / import —
+ *  `findBinding` null; the value came from the caller) — never on the bare dir
+ *  itself, and never on a locally-RESOLVED dir (`const dir = resolve(<trusted>)`
+ *  is request-independent, has a binding, and does not fire). A guard-bound base
+ *  is NOT here (identIsGuardBound already owns leaf-append-below-a-guard).
+ *  Broadened beyond `sessionDir` (SEC-04 taint blind-spot #b) to the dir-shaped
+ *  names these modules pass a caller-built directory under; `repoPath` is ALSO in
+ *  REQUEST_TAINT_BARE (taint dominates — it fires even on a bare probe), listed
+ *  here for completeness of the dir-param vector. */
+export const DIR_PARAM_NAMES = new Set([
+  'sessionDir',
+  'projectRoot',
+  'projectDir',
+  'dir',
+  'root',
+  'base',
+  'repoPath',
+]);
 
 /** Request-handling modules in scope. The explicit singletons plus every
  *  non-test cli/bridge-studio*.ts (the `cli/bridge-studio*.ts` glob in the
@@ -188,6 +221,13 @@ export function targetModules(root = FORGE_ROOT) {
     'orchestrator/instructions-runner.ts',
     'orchestrator/project-brain-builder-runner.ts',
     'orchestrator/demo-builder-runner.ts',
+    // Not a request handler itself — the shared config-loader HELPER that
+    // multiple request routes DELEGATE their `.forge/project.json` read to
+    // (bridge-studio-runs verdict send-back -> loadProjectConfig(projectRepoPath),
+    // contract-stages, preflight). It is the interprocedural leaf-append SITE for
+    // blind-spot #b: `join(projectRoot, '.forge', 'project.json')` on an
+    // unresolved param, invisible unless the helper's own body is scanned.
+    'orchestrator/project-config.ts',
   ];
   const cliDir = join(root, 'cli');
   const glob = [];
@@ -326,12 +366,23 @@ const BOUNDARY_RE = /^(\}|(export\s+)?(async\s+)?function\b|(export\s+)?(const|l
 function findBinding(cleanedLines, name, fromLine) {
   const nameRe = new RegExp(`(?:const|let)\\s+${name}\\s*=\\s*(.+?);?\\s*$`);
   const forRe = new RegExp(`\\bfor\\s*\\(\\s*(?:const|let)\\s+${name}\\s+of\\s+(.+?)\\s*\\)`);
-  const declHereRe = new RegExp(`(?:const|let)\\s+${name}\\b|\\bfor\\s*\\(\\s*(?:const|let)\\s+${name}\\b`);
+  // DESTRUCTURED for-of — `for (const [dir, status] of coll)` /
+  // `for (const { initId } of coll)` binds `name` as an ELEMENT of `coll`. Such a
+  // var is a SERVER-enumerated loop var, NOT a caller-supplied param: without this
+  // it reads as `findBinding === null` (unresolved), which mis-fires the dir-param
+  // rule on a leaf-append below a trusted loop var (e.g. `join(dir, file)` over a
+  // trusted `stateDirs`). Binding it to the collection lets the taint/dir-param
+  // checks classify it by the collection's origin (trusted ⇒ no finding), the
+  // same no-false-positive discipline the simple-for-of case (A7) already has.
+  const forDestrRe = new RegExp(`\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{][^\\]}]*\\b${name}\\b[^\\]}]*[\\]}]\\s+of\\s+(.+?)\\s*\\)`);
+  const declHereRe = new RegExp(`(?:const|let)\\s+${name}\\b|\\bfor\\s*\\(\\s*(?:const|let)\\s*[\\[{]?[^\\]})]*\\b${name}\\b`);
   const limit = Math.max(0, fromLine - BACKSCAN_LIMIT);
   for (let i = fromLine; i >= limit; i--) {
     const line = cleanedLines[i];
     const forM = forRe.exec(line);
     if (forM) return { kind: 'for', rhs: forM[1].trim() };
+    const forDestrM = forDestrRe.exec(line);
+    if (forDestrM) return { kind: 'for', rhs: forDestrM[1].trim() };
     const m = nameRe.exec(line);
     if (m) return { kind: 'const', rhs: m[1].trim() };
     // Boundary: a column-0 structural line that ISN'T our own binding stops the
@@ -407,18 +458,21 @@ function isGuardTerminal(expr, line, cleanedLines) {
   return false;
 }
 
-/** Is the path expression a LEAF-APPEND onto an UNRESOLVED session-dir PARAM?
- *  Returns the base param name (a finding) or null. Handles the two live shapes:
- *    - INLINE:  `join(sessionDir, 'x')` / `resolve(sessionDir, x)` at the sink.
- *    - VIA-CONST: `const p = join(sessionDir, file); readFileSync(p)` — resolve
+/** Is the path expression a LEAF-APPEND onto an UNRESOLVED dir-shaped PARAM
+ *  (DIR_PARAM_NAMES)? Returns the base param name (a finding) or null. Handles the
+ *  two live shapes:
+ *    - INLINE:  `join(projectRoot, 'x')` / `resolve(sessionDir, x)` at the sink.
+ *    - VIA-CONST: `const p = join(projectRoot, file); readFileSync(p)` — resolve
  *      the sink's bare ident through ONE binding to reach the inline join.
- *  A bare `sessionDir` with NOTHING appended (`existsSync(sessionDir)`) returns
- *  null — the dir itself is the sibling ratchet's remit, only the appended LEAF
- *  is this rule's. A param is "unresolved" iff findBinding is null (it came from
- *  the caller — a function parameter/import); a guard-bound base is deliberately
- *  NOT matched here (identIsGuardBound already flags leaf-append below a guard).
- *  Template `${dir}/leaf` is NOT covered (cleanStructure blanks the literal tail
- *  outside `${}`); the modules in scope use join()/resolve(). */
+ *  A bare `<dir>` with NOTHING appended (`existsSync(projectRoot)`) returns null —
+ *  the dir itself is the sibling ratchet's remit, only the appended LEAF is this
+ *  rule's. A param is "unresolved" iff findBinding is null (it came from the
+ *  caller — a function parameter/import); a locally-RESOLVED base (`const dir =
+ *  resolve(<trusted>)`, findBinding non-null) is request-independent and does NOT
+ *  match; a guard-bound base is deliberately NOT matched here (identIsGuardBound
+ *  already flags leaf-append below a guard). Template `${dir}/leaf` is NOT covered
+ *  (cleanStructure blanks the literal tail outside `${}`); the modules in scope
+ *  use join()/resolve(). */
 function dirParamLeafAppend(expr, line, cleanedLines, depth = 0) {
   if (depth > 6) return null;
   const e = expr.trim();
@@ -470,7 +524,7 @@ export function analyzeModule(text, relFile) {
       if (!taintTok && identIsTainted(id.full, id.head, lineIdx, cleanedLines)) taintTok = id.full;
     }
     // (3) DIR-PARAM LEAF-APPEND — the interprocedural shape: a leaf appended onto
-    // an unresolved session-dir param (the caller laundered the request id into
+    // an unresolved dir-shaped param (the caller laundered the request id into
     // the dir). Fires only when guardBase/taintTok did not already catch it.
     const dirParamBase = !guardBase && !taintTok ? dirParamLeafAppend(path, lineIdx, cleanedLines) : null;
     if (!guardBase && !taintTok && !dirParamBase) continue; // request-independent → safe
@@ -479,7 +533,7 @@ export function analyzeModule(text, relFile) {
       ? `leaf-append below guarded value "${guardBase}" — the appended leaf is NOT guarded (route the FULL path incl. leaf through guardedFile)`
       : taintTok
         ? `request/project-derived path via "${taintTok}" reaches raw ${sink} unguarded`
-        : `leaf-append onto unresolved session-dir param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
+        : `leaf-append onto unresolved dir-shaped param "${dirParamBase}" — the caller's dir may be contained but the appended leaf rides raw (route the FULL path incl. leaf through guardedFile / the guarded sibling)`;
     findings.push({ file: relFile, line: lineIdx + 1, sink, path: path.replace(/\s+/g, ' ').slice(0, 120), kind, why });
   }
   return findings;
@@ -612,6 +666,41 @@ export const ALLOWLIST = [
     reason: 'LOG-READ: readArchitectSessionStats — `_architect-<sessionId>/events.jsonl` single segment under resolve(logsRoot) (trusted); sessionId is the architect session id (SAFE_ID_RE convention at creation); best-effort stats (returns null on any error). Boolean.' },
   { file: 'orchestrator/architect-runner.ts', line: 1598, sink: 'readFileSync',
     reason: 'LOG-READ: as line 1596 — reads only the internal architect event log for cost/duration stats (symlink-blind residual disclosed in openConcerns).' },
+
+  // =========================================================================
+  // SEC-04 lint-completion — NEWLY-ENUMERATED sinks. Each row below is a sink
+  // the COMPLETED lint now catches (url-derived taint + broadened dir-param +
+  // project-config.ts in scope) that the prior lint MISSED. Two honest classes:
+  //   • GUARD-NEXT — a real symlink-blind / raw-leaf READ (or its boolean pair)
+  //     with no realpath containment; delete the row when the sink is guarded.
+  //   • RETAIN — already contained by a mechanism the scanner cannot see (an
+  //     id-charset gate + realpath choke-point, isSafeRunId, a boolean-only
+  //     existence probe that MUST NOT be guarded lest it false-reject an
+  //     idempotent skip, or a symlink-BLIND internal _logs event-log READ whose
+  //     only containment is an id-charset/lexical-startsWith gate — the
+  //     disclosed-_logs-symlink residual, disposed UNIFORMLY with the rest of
+  //     the log-read family below, never a split treatment); sibling-consistent
+  //     with the existing rows.
+  //
+  // SEC-04 residual #1 (loadProjectConfig, orchestrator/project-config.ts) is
+  // now GUARDED (guardedReadFile(projectRoot, ['.forge','project.json'])) — its
+  // former GUARD-NEXT rows are deleted (the sinks no longer exist), pinned by
+  // cli/sec04-loadprojectconfig-containment.test.ts.
+  // ---- RETAIN: symlink-blind internal _logs event-log reads (disclosed residual) ----
+  { file: 'cli/bridge-studio.ts', line: 519, sink: 'readFileSync',
+    reason: 'LOG-READ (SEC-04 residual #2, disposed UNIFORMLY with the _logs log-read family — kbs.ts:173/175, bridge-studio.ts:411/413, architect-runner.ts:1596/1598): phase-log GET /api/runs/<runId>/phases/<node>/log reads readFileSync(resolve(logsRoot, runId, "events.jsonl")). runId is URL-derived but behind a lexical resolve()+startsWith(logsRoot+sep) gate (line 502) that BLOCKS .. traversal (resolve normalizes, startsWith rejects escape) — symlink-BLIND like the SAFE_ID_RE-gated family, same residual class. NOT wire-reachable: the _logs/<runId> symlink precondition is unplantable via any route (nothing writes attacker-chosen symlinks under _logs). Allowlisted (not guarded) so the whole _logs event-read family stays uniform — no split treatment; the migrate-to-guardedFile follow-up for the family is echoed in openConcerns.' },
+  { file: 'cli/bridge-studio.ts', line: 506, sink: 'existsSync',
+    reason: 'LOG-READ (SEC-04 residual #2, boolean pair of line 519): existsSync(eventsPath) on the same lexically-resolved, .. -blocked, symlink-blind URL-derived path — boolean 404 probe, no bytes flow. Same disclosed-_logs-symlink residual as line 519; uniform with the log-read family.' },
+  // ---- GUARD-NEXT: route the FULL path (incl. leaf) through the guard ----
+  { file: 'cli/bridge-studio.ts', line: 1236, sink: 'readFileSync',
+    reason: 'GUARD-NEXT (SEC-04, caught by broadened dir-param): tryReadWorkItemDir(dir) reads readFileSync(join(dir, file)); its callers pass snapshotDir=join(logsRoot, cycleId, "work-items-snapshot") and liveDir=join(forgeRoot, "_worktrees", initId, ".forge","work-items") — the DIR is built from request-derived cycleId/initId by lexical join with NO realpath containment (the WI-*.md leaf is readdir-enumerated). Symlink-blind coverage gap (full route-reachability not traced this stage). NEXT: route the dir+leaf through guardedReadDir/guardedReadFile; delete when guarded.' },
+  // ---- RETAIN: contained by a mechanism the scanner can\'t see (confirm next stage) ----
+  { file: 'cli/bridge-studio-kbs.ts', line: 605, sink: 'existsSync',
+    reason: 'RETAIN (contained + boolean): DELETE /api/studio/kbs/:id — id is URL-derived (newly tainted) but SLUG_RE-gated at line 595 (blocks / and ..), and dir = resolveKbBrainDir(forgeRoot, id) runs the per-segment realpath identity walk (choke-point containment, line 609-611 note) returning null on any escape; existsSync(dir) is a boolean 404 probe, no bytes flow. Same manifest-path-guard category as the isContainedWorktreePath rows above.' },
+  { file: 'cli/ui-bridge.ts', line: 1788, sink: 'mkdirSync',
+    reason: 'RETAIN (isSafeRunId-gated logdir-create): runId = `_agent-${slug}-${newRunStamp()}` with slug URL-derived (newly tainted), but isSafeRunId(runId) (SAFE_RUN_ID_RE + explicit .. check) THROWS at line 1781 BEFORE this recursive mkdir of the run\'s own log dir under trusted ctx.logsRoot — the SAME deliberate guard-symmetry check its already-allowlisted siblings at 1992/2393 carry.' },
+  { file: 'cli/bridge-studio-writes.ts', line: 141, sink: 'existsSync',
+    reason: 'RETAIN (boolean probe — MUST NOT guard): checkContractArtifactContainment(projectRoot) — projectRoot isContainedProjectRepoPath-validated at the route (line 835, per the 854/919 rows) before this Phase-1 checker; existsSync(join(projectRoot, ".forge","project.json")) is a boolean gate that RUNS resolveGuardedPath when the file is ABSENT (no bytes flow). Guarding an idempotent existence probe would false-reject; newly visible only because projectRoot is now a dir-shaped param.' },
 ];
 
 function keyOf(f) {
