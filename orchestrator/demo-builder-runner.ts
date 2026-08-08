@@ -52,6 +52,7 @@ import {
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
 import { modelForSpec } from './phase-agent.ts';
@@ -168,8 +169,11 @@ export type RunDemoBuilderTurnResult = {
   lockPath?: string;
 };
 
+/** The kind-dir under a project root that holds demo-builder sessions. */
+const DEMO_KIND_DIR = '_demo';
+
 export function demoSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, '_demo', sessionId);
+  return join(projectRoot, DEMO_KIND_DIR, sessionId);
 }
 
 // ---------------------------------------------------------------------------
@@ -179,7 +183,17 @@ export function demoSessionDir(projectRoot: string, sessionId: string): string {
 export async function runDemoBuilderTurn(
   input: RunDemoBuilderTurnInput,
 ): Promise<RunDemoBuilderTurnResult> {
-  const sessionDir = demoSessionDir(input.projectRoot, input.sessionId);
+  // SEC-04 runner leg: contain the session dir before the first read — `sessionId`
+  // and the kind-dir arrive as their own guarded segments against the projectRoot
+  // base, so a traversal sessionId or a symlinked `_demo` resolves to a reject and
+  // the runner REFUSES rather than read out-of-root content.
+  const guarded = resolveGuardedPath(input.projectRoot, [DEMO_KIND_DIR, input.sessionId]);
+  if (!guarded.ok) {
+    throw new Error(
+      `demo-builder runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
+    );
+  }
+  const sessionDir = guarded.realPath;
   const status = readSessionStatus<DemoBuilderStatus>(sessionDir);
   if (!status) {
     throw new Error(

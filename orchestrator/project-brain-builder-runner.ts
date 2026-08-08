@@ -23,6 +23,7 @@ import {
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
@@ -73,8 +74,11 @@ export type RunProjectBrainTurnResult = {
   themes?: string[];
 };
 
+/** The kind-dir under a project root that holds project-brain sessions. */
+const PROJECT_BRAIN_KIND_DIR = '_project-brain';
+
 export function projectBrainSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, '_project-brain', sessionId);
+  return join(projectRoot, PROJECT_BRAIN_KIND_DIR, sessionId);
 }
 
 function stagingThemesDir(sessionDir: string): string {
@@ -93,7 +97,17 @@ function loadSkillPrompt(skillPromptPath: string | undefined, forgeRoot: string)
 export async function runProjectBrainTurn(
   input: RunProjectBrainTurnInput,
 ): Promise<RunProjectBrainTurnResult> {
-  const sessionDir = projectBrainSessionDir(input.projectRoot, input.sessionId);
+  // SEC-04 runner leg: contain the session dir before the first read — `sessionId`
+  // and the kind-dir arrive as their own guarded segments against the projectRoot
+  // base, so a traversal sessionId or a symlinked `_project-brain` resolves to a
+  // reject and the runner REFUSES rather than read out-of-root content.
+  const guarded = resolveGuardedPath(input.projectRoot, [PROJECT_BRAIN_KIND_DIR, input.sessionId]);
+  if (!guarded.ok) {
+    throw new Error(
+      `project-brain runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
+    );
+  }
+  const sessionDir = guarded.realPath;
   const status = readSessionStatus<ProjectBrainStatus>(sessionDir);
   if (!status) {
     throw new Error(`project-brain runner: no status.json at ${sessionDir}. Has the session been started?`);

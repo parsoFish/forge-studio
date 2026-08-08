@@ -80,7 +80,7 @@ import { URL } from 'node:url';
 import { startBridge } from './ui-bridge.ts';
 import { projectBrainSessionDir } from '../orchestrator/project-brain-builder-runner.ts';
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
-import { demoSessionDir, DEMO_HTML_REL_PATH } from '../orchestrator/demo-builder-runner.ts';
+import { demoSessionDir } from '../orchestrator/demo-builder-runner.ts';
 import type { DemoBuilderStatus } from '../orchestrator/demo-builder-runner.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' } as const;

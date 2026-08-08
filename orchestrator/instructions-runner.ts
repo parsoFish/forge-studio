@@ -40,6 +40,7 @@ import {
   type InterviewAnswer,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 import { withStudioWrite } from './project-repo-tx.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
@@ -139,8 +140,11 @@ export type RunInstructionsTurnResult = {
 
 const DEFAULT_MAX_INTERVIEW_ROUNDS = 4;
 
+/** The kind-dir under a project root that holds instructions sessions. */
+const INSTRUCTIONS_KIND_DIR = '_instructions';
+
 export function instructionsSessionDir(projectRoot: string, sessionId: string): string {
-  return join(projectRoot, '_instructions', sessionId);
+  return join(projectRoot, INSTRUCTIONS_KIND_DIR, sessionId);
 }
 
 // ---------------------------------------------------------------------------
@@ -150,7 +154,19 @@ export function instructionsSessionDir(projectRoot: string, sessionId: string): 
 export async function runInstructionsTurn(
   input: RunInstructionsTurnInput,
 ): Promise<RunInstructionsTurnResult> {
-  const sessionDir = instructionsSessionDir(input.projectRoot, input.sessionId);
+  // SEC-04 runner leg: the session dir must be CONTAINED before the first read.
+  // `sessionId` (and the kind-dir) each arrive as their own guarded path segment
+  // against the projectRoot base — never folded into a bare `join` that
+  // `readSessionStatus` would then follow out of the project subtree. A traversal
+  // sessionId or a symlinked `_instructions` resolves to a containment reject,
+  // and the runner REFUSES rather than disclose out-of-root content.
+  const guarded = resolveGuardedPath(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
+  if (!guarded.ok) {
+    throw new Error(
+      `instructions runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
+    );
+  }
+  const sessionDir = guarded.realPath;
   const status = readSessionStatus<InstructionsStatus>(sessionDir);
   if (!status) {
     throw new Error(

@@ -249,10 +249,15 @@ test('POST /api/architect/rerun: an unsafe (path-traversal) sessionId is refused
       body: JSON.stringify({ project: 'demo', sessionId: unsafeSessionId }),
     });
     const json = await res.json();
-    // Best-effort: session bookkeeping (the 200 + read) still succeeds even
-    // though the spawn itself was refused (spawnAgentTurn's fire-and-forget
-    // contract), mirroring the other spawn routes' documented behaviour.
-    assert.equal(res.status, 200, JSON.stringify(json));
+    // SEC-04 (bd forge-ebj): the `<real>/../<real>` sessionId is an
+    // escape-and-return shape (adversarial-containment-review catalogue) — a
+    // `/`-bearing, multi-segment id that round-trips in-root. It is now
+    // REFUSED at the route boundary by the per-segment identity guard (4xx),
+    // BEFORE spawnAgentTurn is ever reached, rather than accepted at 200 and
+    // relying solely on isSafeRunId to block the spawn. The security outcome
+    // this test asserts — no spawn log dir for an unsafe id — is preserved and
+    // is now guaranteed by the earlier, stronger boundary rejection.
+    assert.ok(res.status >= 400 && res.status < 500, `expected a 4xx boundary rejection, got ${res.status}: ${JSON.stringify(json)}`);
     const logsEntries = existsSync(join(forgeRoot, '_logs')) ? readdirSync(join(forgeRoot, '_logs')) : [];
     assert.ok(
       !logsEntries.some((e) => e.startsWith(`_architect-${realSid}`)),

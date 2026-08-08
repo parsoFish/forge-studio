@@ -36,7 +36,7 @@ import {
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
@@ -98,12 +98,10 @@ import {
   type ArchitectQuestion,
 } from '../orchestrator/architect-runner.ts';
 import {
-  instructionsSessionDir,
   DRAFT_FILENAME,
   type InstructionsStatus,
 } from '../orchestrator/instructions-runner.ts';
 import {
-  demoSessionDir,
   DEMO_HTML_REL_PATH,
   GENERATIONS_DIRNAME,
   type DemoBuilderStatus,
@@ -111,7 +109,6 @@ import {
 import { safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import { resolveContainedProjectDir } from './contract-stages.ts';
 import {
-  projectBrainSessionDir,
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
@@ -2253,41 +2250,24 @@ function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId:
   const sessionIdReason = invalidGenerationSessionIdReason(sessionId);
   if (sessionIdReason) return { ok: false, reason: sessionIdReason };
 
-  const projectDir = join(projectsRoot, project);
-  let realProjectDir: string;
-  try {
-    realProjectDir = realpathSync(projectDir);
-  } catch {
-    return { ok: false, reason: `project "${project}" was not found under the projects root` };
-  }
-
-  // The candidate session dir may not exist yet (the CREATE case) — walk up
-  // to the closest EXISTING ancestor and prove THAT is contained, per the
-  // header note above.
-  const candidate = demoSessionDir(projectDir, sessionId);
-  let ancestor = candidate;
-  while (!existsSync(ancestor)) {
-    const parent = dirname(ancestor);
-    if (parent === ancestor) {
-      return { ok: false, reason: `session dir for project "${project}", sessionId "${sessionId}" could not be resolved` };
-    }
-    ancestor = parent;
-  }
-  let realAncestor: string;
-  try {
-    realAncestor = realpathSync(ancestor);
-  } catch {
-    return { ok: false, reason: `session dir for project "${project}", sessionId "${sessionId}" could not be resolved` };
-  }
-  if (realAncestor !== realProjectDir && !realAncestor.startsWith(realProjectDir + sep)) {
+  // SEC-04 (bd forge-ebj) — MIGRATED off the bespoke realpath baseline onto the
+  // shared per-segment IDENTITY guard. `project` now arrives as its OWN element
+  // of `segments[]`, NEVER folded into a realpath baseline: the previous check
+  // realpath'd `join(projectsRoot, project)` FIRST and compared against THAT,
+  // so when `project` itself was a SYMLINK the baseline WAS the escaped
+  // location and the `startsWith` was tautological (root-folding — verbatim
+  // from the adversarial-containment-review catalogue; the charset shape was
+  // already guarded by the two reason-checks above, but the symlinked-first-
+  // segment shape was not). `resolveGuardedPath` walks project → `_demo` →
+  // sessionId, identity-checking each; the session dir may not exist yet (the
+  // `/start` create case), which it handles by walking to the deepest existing
+  // ancestor and reassembling the literal tail. A missing dir and an escaping
+  // symlink both collapse to a single generic reason (no oracle).
+  const guarded = resolveGuardedPath(projectsRoot, [project, '_demo', sessionId]);
+  if (!guarded.ok) {
     return { ok: false, reason: `sessionId "${sessionId}" for project "${project}" resolves outside the project directory` };
   }
-
-  // Splice any not-yet-existing tail segments (plain literal names — see
-  // header note) back onto the resolved ancestor, so a fresh `/start` gets a
-  // real, fully-resolved dir it can `mkdirSync` under.
-  const tail = relative(ancestor, candidate);
-  return { ok: true, dir: tail === '' ? realAncestor : join(realAncestor, tail) };
+  return { ok: true, dir: guarded.realPath };
 }
 
 /** Timestamp stamp + short random suffix for a generated run id
@@ -2391,6 +2371,37 @@ function spawnAgentDispatch(
 
 function architectSessionDir(projectsRoot: string, project: string, sessionId: string): string {
   return join(projectsRoot, project, '_architect', sessionId);
+}
+
+/**
+ * SEC-04 (bd forge-ebj) — the ONE containment choke point for the bridge's
+ * request-derived session-dir families (architect / instructions /
+ * project-brain / demo). `project` and `sessionId` arrive from request input
+ * (a JSON body value OR a decoded URL segment); `kindDirName` is a fixed
+ * literal (`_architect` / `_instructions` / `_project-brain` / `_demo`). Each
+ * untrusted value is passed as its OWN element of `resolveGuardedPath`'s
+ * `segments[]` (cli/studio-path-guard.ts) — NEVER folded into `root` — so the
+ * per-segment IDENTITY walk catches every escape shape from the
+ * adversarial-containment-review catalogue: a `/`-, `.`- or `..`-laden segment,
+ * a symlinked `<project>` / `_<kind>` / `<sessionId>`, a cross-object same-root
+ * alias, and a hardlinked leaf.
+ *
+ * Returns the fully-resolved, contained dir, or `null` on ANY escape — a
+ * missing dir and an escaping symlink both collapse to `null`, so the caller's
+ * response is indistinguishable between "wrong id" and "blocked escape" (no
+ * oracle). The leaf may legitimately NOT exist yet (the `/start` create case),
+ * so existence is NOT required here; every read route separately returns 404
+ * when its `status.json` / file is subsequently found absent, and every write
+ * route mkdirs under a dir this function already proved contained.
+ */
+function guardedSessionDir(
+  projectsRoot: string,
+  project: string,
+  kindDirName: string,
+  sessionId: string,
+): string | null {
+  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId]);
+  return guarded.ok ? guarded.realPath : null;
 }
 
 /** R4-17, D8 — renders the operator's own onboarding-start `inputs` verbatim
@@ -2571,16 +2582,26 @@ async function handleArchitect(
       sendJson(res, 400, { error: 'expected /api/architect/file/<project>/<sid>/<filename>' }, origin);
       return true;
     }
-    const base = architectSessionDir(ctx.projectsRoot, project, sessionId) + sep;
-    const requested = join(architectSessionDir(ctx.projectsRoot, project, sessionId), filename);
-    if (!requested.startsWith(base)) {
+    // SEC-04 (bd forge-ebj) — the old `startsWith(base)` check was
+    // self-defeating: `base` and `requested` were BOTH built from the same
+    // untrusted `project`/`sessionId`, so a traversal in either was invisible
+    // to the comparison (`join` only normalises `..` inside `filename`).
+    // Resolve the WHOLE path — project, `_architect`, sessionId AND the
+    // filename segments — through the per-segment identity guard; `!ok` (any
+    // escape) and `!exists` (contained but absent) both collapse to 404.
+    const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_architect', sessionId, ...filename.split('/')]);
+    if (!guarded.ok) {
+      // A containment escape (traversed project/sessionId, or a `..`/absolute
+      // filename) — rejected BEFORE any existence probe, so out-of-root
+      // existence is never leaked.
       sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return true;
     }
-    if (!existsSync(requested)) {
+    if (!guarded.exists) {
       sendJson(res, 404, { error: 'file not found', project, sessionId, filename }, origin);
       return true;
     }
+    const requested = guarded.realPath;
     try {
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
@@ -2611,7 +2632,14 @@ async function handleArchitect(
         return true;
       }
       const sessionId = newArchitectSessionId();
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, sessionId);
+      // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+write: a traversal
+      // `project` must create NOTHING out of root (the old code wrote
+      // idea.md=body.idea to `<outside>/_architect/<sid>/`).
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', sessionId);
+      if (!dir) {
+        sendJson(res, 400, { error: 'invalid project' }, origin);
+        return true;
+      }
       mkdirSync(dir, { recursive: true });
       writeFileSync(join(dir, 'idea.md'), body.idea);
       const status: ArchitectStatus = {
@@ -2646,7 +2674,13 @@ async function handleArchitect(
         sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
         return true;
       }
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      // SEC-04 — guard BEFORE the lockfile.lock (which would otherwise create
+      // a `.lock` at an out-of-root traversed path) and before any read/write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
       // R4-04 review finding: guard + serialize like applyPlanVerdict — the
       // interview→exploring→drafting turn is longer now, and an answer
       // landing mid-turn would yank a live session back to 'interviewing'
@@ -2702,7 +2736,13 @@ async function handleArchitect(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      // SEC-04 — guard the request-derived session dir before resolving/reading
+      // it: a traversal `project` must not resolve to an out-of-root session.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
       const status = readStatus(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
@@ -2774,7 +2814,12 @@ function listInstructionsSessions(projectsRoot: string): InstructionsStatus[] {
     } catch { continue; }
     for (const sid of sids) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      const status = readSessionStatus<InstructionsStatus>(instructionsSessionDir(join(projectsRoot, project), sid));
+      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
+      // symlinked `_instructions` (git-plantable inside any onboarded project's
+      // own repo) cannot fold this enumeration onto a victim dir outside root.
+      const dir = guardedSessionDir(projectsRoot, project, '_instructions', sid);
+      if (!dir) continue;
+      const status = readSessionStatus<InstructionsStatus>(dir);
       if (status) out.push(status);
     }
   }
@@ -2800,12 +2845,15 @@ async function handleInstructions(
       if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureInstructionsTail(s.session_id);
     }
     const sessions = statuses.map((s) => {
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, s.project), s.session_id);
+      // SEC-04 — resolve through the shared guard (the enumeration is already
+      // guarded, so this is the same contained dir; keeps this file free of
+      // bare request-derived session-dir builders).
+      const dir = guardedSessionDir(ctx.projectsRoot, s.project, '_instructions', s.session_id);
       const questions =
-        s.phase === 'awaiting-answers'
+        dir && s.phase === 'awaiting-answers'
           ? readJsonFile<InterviewQuestion[]>(join(dir, 'questions.json'))
           : null;
-      const draftUrl = existsSync(join(dir, DRAFT_FILENAME))
+      const draftUrl = dir && existsSync(join(dir, DRAFT_FILENAME))
         ? `/api/instructions/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/${encodeURIComponent(DRAFT_FILENAME)}`
         : null;
 
@@ -2852,16 +2900,21 @@ async function handleInstructions(
       sendJson(res, 400, { error: 'expected /api/instructions/file/<project>/<sid>/<filename>' }, origin);
       return true;
     }
-    const base = instructionsSessionDir(join(ctx.projectsRoot, project), sessionId) + sep;
-    const requested = join(instructionsSessionDir(join(ctx.projectsRoot, project), sessionId), filename);
-    if (!requested.startsWith(base)) {
+    // SEC-04 — same self-defeating `startsWith(base)` defect as the architect
+    // /file route; resolve the whole path (project, `_instructions`, sessionId,
+    // filename) through the per-segment identity guard instead.
+    const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_instructions', sessionId, ...filename.split('/')]);
+    if (!guarded.ok) {
+      // A containment escape — rejected BEFORE any existence probe, so
+      // out-of-root existence is never leaked.
       sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return true;
     }
-    if (!existsSync(requested)) {
+    if (!guarded.exists) {
       sendJson(res, 404, { error: 'file not found', project, sessionId, filename }, origin);
       return true;
     }
+    const requested = guarded.realPath;
     try {
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
@@ -2900,7 +2953,13 @@ async function handleInstructions(
       const mode: 'init' | 'edit' =
         body.mode ?? (readAgentInstructionsFile(repoPath) ? 'edit' : 'init');
       const sessionId = newArchitectSessionId();
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), sessionId);
+      // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write: a traversal
+      // `project` must create no out-of-root `_instructions` session.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', sessionId);
+      if (!dir) {
+        sendJson(res, 400, { error: 'invalid project' }, origin);
+        return true;
+      }
       mkdirSync(dir, { recursive: true });
       writeSessionStatus<InstructionsStatus>(dir, {
         session_id: sessionId,
@@ -2929,7 +2988,12 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      // SEC-04 — guard the request-derived session dir before any read/write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
       const status = readSessionStatus<InstructionsStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
@@ -2960,7 +3024,12 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
         return true;
       }
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      // SEC-04 — guard the request-derived session dir before any read/write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
       const status = readSessionStatus<InstructionsStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
@@ -2994,7 +3063,12 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
         return true;
       }
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      // SEC-04 — guard the request-derived session dir before any read/write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
       const status = readSessionStatus<InstructionsStatus>(dir);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
@@ -3047,16 +3121,25 @@ function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
     let sids: string[];
     try { sids = readdirSync(base); } catch { continue; }
     for (const sid of sids) {
-      const status = readSessionStatus<ProjectBrainStatus>(projectBrainSessionDir(join(projectsRoot, project), sid));
+      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
+      // symlinked `_project-brain` cannot fold this enumeration onto a victim
+      // dir outside root.
+      const dir = guardedSessionDir(projectsRoot, project, '_project-brain', sid);
+      if (!dir) continue;
+      const status = readSessionStatus<ProjectBrainStatus>(dir);
       if (status) out.push(status);
     }
   }
   return out;
 }
 
-/** R1-3b — the staged theme files (name + content) for a session under review. */
-function readStagedThemes(projectsRoot: string, project: string, sessionId: string): Array<{ name: string; content: string }> {
-  const dir = join(projectBrainSessionDir(join(projectsRoot, project), sessionId), 'themes');
+/** R1-3b — the staged theme files (name + content) for a session under review.
+ *  Takes an ALREADY-guarded, contained session dir (SEC-04): the caller
+ *  resolves `<projectsRoot>/<project>/_project-brain/<sessionId>` through
+ *  `guardedSessionDir` first, so the request-derived `project`/`sessionId` can
+ *  never fold a traversal into this `join`. */
+function readStagedThemes(sessionDir: string): Array<{ name: string; content: string }> {
+  const dir = join(sessionDir, 'themes');
   if (!existsSync(dir)) return [];
   const out: Array<{ name: string; content: string }> = [];
   let files: string[];
@@ -3109,7 +3192,12 @@ function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
     } catch { continue; }
     for (const sid of sids) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      const status = readSessionStatus<DemoBuilderStatus>(demoSessionDir(join(projectsRoot, project), sid));
+      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
+      // symlinked `_demo` cannot fold this enumeration onto a victim dir
+      // outside root.
+      const dir = guardedSessionDir(projectsRoot, project, '_demo', sid);
+      if (!dir) continue;
+      const status = readSessionStatus<DemoBuilderStatus>(dir);
       if (status) out.push(status);
     }
   }
@@ -3506,9 +3594,19 @@ async function handleDemoBuilder(
   {
     const themesMatch = url.match(/^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/);
     if (method === 'GET' && themesMatch) {
+      // SEC-04 — the route regex captures `[^/]+` per segment, so a
+      // `%2F`-smuggled `..` survives the real-slash boundary and only becomes a
+      // `/` at decodeURIComponent time. DECODE FIRST, then guard the decoded
+      // segments through the per-segment identity walk — an escaping
+      // project/sessionId resolves to null and discloses no out-of-root theme.
       const project = decodeURIComponent(themesMatch[1]);
       const sessionId = decodeURIComponent(themesMatch[2]);
-      sendJson(res, 200, { themes: readStagedThemes(ctx.projectsRoot, project, sessionId) }, origin);
+      const dir = guardedSessionDir(ctx.projectsRoot, project, '_project-brain', sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
+        return true;
+      }
+      sendJson(res, 200, { themes: readStagedThemes(dir) }, origin);
       return true;
     }
   }
@@ -3525,7 +3623,12 @@ async function handleDemoBuilder(
       }
       const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       const sessionId = newArchitectSessionId();
-      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), sessionId);
+      // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', sessionId);
+      if (!dir) {
+        sendJson(res, 400, { error: 'invalid project' }, origin);
+        return true;
+      }
       mkdirSync(dir, { recursive: true });
       writeSessionStatus<ProjectBrainStatus>(dir, {
         session_id: sessionId, project: body.project, project_repo_path: repoPath,
@@ -3540,7 +3643,9 @@ async function handleDemoBuilder(
     try {
       const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string };
       if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
-      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      // SEC-04 — guard the request-derived session dir before any read/write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', body.sessionId);
+      if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       const status = readSessionStatus<ProjectBrainStatus>(dir);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       writeFileSync(join(dir, 'prompt.md'), body.brief ?? '');
@@ -3556,7 +3661,9 @@ async function handleDemoBuilder(
       const approve = url.endsWith('/approve');
       const body = (await readJson(req)) as { project?: string; sessionId?: string };
       if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
-      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
+      // SEC-04 — guard the request-derived session dir before any read/write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', body.sessionId);
+      if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       const status = readSessionStatus<ProjectBrainStatus>(dir);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
       writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: approve ? 'committing' : 'abandoned' });
