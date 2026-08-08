@@ -208,17 +208,19 @@ function AgentBuilder({ agentId, go, toast }) {
 
         <div className="def-body">
           {isNew ? (
-            <Panel title="Interactive creation — the Creation Agent builds this with you">
+            <Panel title="Start from a starter — pick a curated agent, or start blank">
               <p className="muted" style={{ margin: 0, fontSize: 13 }}>
-                A new agent starts as a conversation: describe the job, and the creation agent assembles skills,
-                tools, triggers, templates and instructions from the library — then you refine the zones directly.
+                A new agent begins from a curated starter or a blank spec, then you refine the zones directly.
+                Studio ships no agent-authoring agent — the curated StarterPicker is the entry point.
               </p>
               <div className="row" style={{ marginTop: 12 }}>
-                <input className="input" data-j="draft-prompt" value={prompt} onChange={e => setPrompt(e.target.value)}
-                  placeholder="e.g. “An agent that triages incoming issues and files initiative candidates…”" />
-                <button className="btn btn-primary" data-j="draft-btn" style={{ whiteSpace: 'nowrap' }}
-                  onClick={() => { window.setSCN({ newAgentStage: 1 }); toast('Draft assembled from the library — refine the zones below'); }}>
-                  Draft it
+                <button className="btn btn-primary" data-j="starter-issue-triage" style={{ whiteSpace: 'nowrap' }}
+                  onClick={() => { window.setSCN({ newAgentStage: 1 }); toast('Started from the issue-triage starter — refine the zones below'); }}>
+                  Issue triage starter
+                </button>
+                <button className="btn" data-j="starter-blank" style={{ whiteSpace: 'nowrap' }}
+                  onClick={() => { window.setSCN({ newAgentStage: 1 }); toast('Blank agent — sensible defaults; refine the zones below'); }}>
+                  Blank agent
                 </button>
               </div>
             </Panel>

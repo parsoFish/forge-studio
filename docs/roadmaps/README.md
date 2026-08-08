@@ -714,12 +714,18 @@ registry + parity view; §4 story-beat parity rule).
   R3-06-F3 scaffold vision-promotion recorded; R3 acceptance-refs folded
   per-initiative; cut-table dep column normalized.
 
-### Batch-B disposition — conversational agent drafting (2026-08-06, T1 ruling)
+### Batch-B disposition — conversational agent drafting (2026-08-06, T1 ruling; operator-ratified 2026-08-08)
 
 **Decision: `create-agent` mockup steps 3-4 (`draft-prompt` → `draft-btn`, "a new
 agent starts as a description of the job… and the creation agent assembles a
 draft from the library") are EXCLUDED — a deliberate divergence from the mockup,
 not an unbuilt gap.**
+
+**Ratified + mockup corrected 2026-08-08 (batch-D open).** The §6 "mockup gets
+updated" clause is now discharged: `mockups/studio-endstate-v2/views-agents.jsx`
+renders the StarterPicker panel (`data-j=starter-issue-triage` / `starter-blank`)
+and `journeys-data.jsx` create-agent steps 3-4 pick a starter instead of typing
+into a draft prompt. Mockup, roadmap and the parity registry now agree.
 
 Grounds. R2-09 rejected conversational new-agent drafting (its D10 reject #4) but
 deferred the disposition with two named owners: R4-15 and R4-17. **Both assessed

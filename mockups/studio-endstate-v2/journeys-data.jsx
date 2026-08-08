@@ -57,8 +57,8 @@ const JOURNEYS = {
     steps: [
       { cap: 'Agents home — the OOTB eight, plus yours.', goto: '#/agents', ms: 2600 },
       { cap: 'New agent.', click: '[data-j=new-agent-btn]', ms: 2600 },
-      { cap: 'A new agent starts as a description of the job…', type: ['[data-j=draft-prompt]', 'Triage incoming issues into initiative candidates'], ms: 2600 },
-      { cap: '…and the creation agent assembles a draft from the library.', click: '[data-j=draft-btn]', ms: 3200 },
+      { cap: 'A new agent starts from a curated starter — Studio ships no agent-authoring agent.', hover: '[data-j=starter-issue-triage]', ms: 2600 },
+      { cap: 'Pick one (or blank); its zones land ready to refine directly.', click: '[data-j=starter-issue-triage]', ms: 3200 },
       { cap: 'Instructions come drafted too — the agent’s single source of intent.', hover: '[data-j=agent-instructions]', ms: 3400 },
       { cap: 'Refine the zones directly — click or drag any catalog chip in.', click: '[data-j=cat-security-review]', ms: 2800 },
       { cap: 'It lands in the matching zone; the spec preview updates live.', hover: '[data-j=zone-skills]', ms: 2800 },
