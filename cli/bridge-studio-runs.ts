@@ -42,13 +42,7 @@ import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
-import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
-// SEC-04 serialized foundation: the guarded full-path (leaf-included) primitives
-// are imported here so Phase-1 route appliers switch session/status call sites
-// onto them WITHOUT editing this header (avoids header merge conflicts across
-// parallel appliers). The `void` below only satisfies `noUnusedLocals` until the
-// first applier wires a real call site; the first applier deletes this one line.
-void [guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir];
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
 import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,
@@ -95,18 +89,24 @@ export type ReleaseFinalizeHookInput = {
 // Architect session helpers (private copies — avoids circular import from ui-bridge)
 // ---------------------------------------------------------------------------
 
-function _architectSessionDir(projectsRoot: string, project: string, sessionId: string): string {
-  return join(projectsRoot, project, '_architect', sessionId);
+// SEC-04 (bd forge-ebj): both helpers take the TRUSTED `projectsRoot` plus the
+// request-derived session directory segments (`project`, `'_architect'`,
+// `sessionId`) as their OWN `segments[]` elements — never folded into the root —
+// and route the WHOLE path, `status.json` leaf included, through the guarded
+// primitives, so a symlinked/hardlinked `status.json` leaf inside an otherwise
+// real, identity-verified session dir is refused (the "guard the dir,
+// raw-append the leaf" hole SEC-04 closes). `_readStatus` returns `null` (its
+// existing "unavailable" contract) on a containment rejection; `_writeStatus`
+// returns the written path, or `null` when the guard refuses the write (the
+// write never happens — fail closed).
+function _readStatus(projectsRoot: string, dirSegments: readonly string[]): ArchitectStatus | null {
+  const raw = guardedReadFile(projectsRoot, [...dirSegments, 'status.json']);
+  if (raw === null) return null;
+  try { return JSON.parse(raw) as ArchitectStatus; } catch { return null; }
 }
 
-function _readStatus(dir: string): ArchitectStatus | null {
-  const path = join(dir, 'status.json');
-  if (!existsSync(path)) return null;
-  try { return JSON.parse(readFileSync(path, 'utf8')) as ArchitectStatus; } catch { return null; }
-}
-
-function _writeStatus(dir: string, status: ArchitectStatus): void {
-  writeFileSync(join(dir, 'status.json'), JSON.stringify(status, null, 2));
+function _writeStatus(projectsRoot: string, dirSegments: readonly string[], status: ArchitectStatus): string | null {
+  return guardedWriteFile(projectsRoot, [...dirSegments, 'status.json'], JSON.stringify(status, null, 2));
 }
 
 /** Spawn one architect-runner turn as a detached child.
@@ -644,13 +644,19 @@ export async function applyPlanVerdict(
   // `_architect`, a cross-object alias — collapses to a 404, indistinguishable
   // from a genuinely missing session (no oracle). Only once the guard has
   // proven the bare-joined `dir` is contained is it safe to read/write.
-  const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_architect', sessionId]);
+  const dirSegments: readonly string[] = [project, '_architect', sessionId];
+  const guarded = resolveGuardedPath(ctx.projectsRoot, dirSegments);
   if (!guarded.ok) {
     sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     return;
   }
-  const dir = _architectSessionDir(ctx.projectsRoot, project, sessionId);
-  if (!_readStatus(dir)) {
+  // Use the guard's realpath-verified directory for the lockfile mutex below —
+  // never a bare `_architectSessionDir()` re-derive that discards the
+  // containment result. Every leaf read/write under it rides the guard, leaf
+  // included, via `_readStatus`/`_writeStatus`/`guardedWriteFile` (SEC-04), not
+  // a raw `join(dir, leaf)`.
+  const dir = guarded.realPath;
+  if (!_readStatus(ctx.projectsRoot, dirSegments)) {
     sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     return;
   }
@@ -669,7 +675,7 @@ export async function applyPlanVerdict(
     return;
   }
   try {
-    const status = _readStatus(dir);
+    const status = _readStatus(ctx.projectsRoot, dirSegments);
     if (!status) {
       sendJson(res, 404, { error: 'session not found', sessionId }, origin);
       return;
@@ -686,18 +692,38 @@ export async function applyPlanVerdict(
 
     const spawnTurn = ctx.spawnArchitectTurnFn ?? _spawnArchitectTurn;
 
+    // A guarded write refusal (a symlinked/hardlinked leaf inside the otherwise
+    // real, identity-verified session dir) collapses to the same 404 as a
+    // genuinely missing session — no oracle, and NOTHING is written / no turn
+    // spawned.
+    const refuse = (): void => sendJson(res, 404, { error: 'session not found', sessionId }, origin);
     if (kind === 'approve') {
       if (rationale) {
-        writeFileSync(join(dir, 'feedback.md'), rationale.trim() + '\n');
+        if (guardedWriteFile(ctx.projectsRoot, [...dirSegments, 'feedback.md'], rationale.trim() + '\n') === null) {
+          refuse();
+          return;
+        }
       }
-      _writeStatus(dir, { ...status, phase: 'finalizing' });
+      if (_writeStatus(ctx.projectsRoot, dirSegments, { ...status, phase: 'finalizing' }) === null) {
+        refuse();
+        return;
+      }
       spawnTurn(ctx.forgeRoot, project, sessionId);
     } else if (kind === 'revise') {
-      writeFileSync(join(dir, 'feedback.md'), (rationale ?? '').trim() + '\n');
-      _writeStatus(dir, { ...status, phase: 'interviewing', round: status.round + 1 });
+      if (guardedWriteFile(ctx.projectsRoot, [...dirSegments, 'feedback.md'], (rationale ?? '').trim() + '\n') === null) {
+        refuse();
+        return;
+      }
+      if (_writeStatus(ctx.projectsRoot, dirSegments, { ...status, phase: 'interviewing', round: status.round + 1 }) === null) {
+        refuse();
+        return;
+      }
       spawnTurn(ctx.forgeRoot, project, sessionId);
     } else {
-      _writeStatus(dir, { ...status, phase: 'rejected' });
+      if (_writeStatus(ctx.projectsRoot, dirSegments, { ...status, phase: 'rejected' }) === null) {
+        refuse();
+        return;
+      }
     }
     ctx.broadcastArchitectChanged();
     // R5-01-F1 stub-actions: approve/revise spawn a turn (reject never does),

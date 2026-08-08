@@ -4,10 +4,11 @@
  * monitor.
  */
 
-import { readFileSync, existsSync, readdirSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, readdirSync } from 'node:fs';
+import { resolve } from 'node:path';
 import type { EventLogEntry, Phase } from '../orchestrator/logging.ts';
 import { isAuthoritativeCostEvent, phasesWithIterationEvents } from '../orchestrator/event-cost.ts';
+import { guardedReadFile } from './studio-path-guard.ts';
 
 export type CycleMetrics = {
   cycle_id: string;
@@ -43,11 +44,22 @@ export type SkillMetrics = {
 };
 
 export function summariseCycle(cycleId: string, logsDir = '_logs'): CycleMetrics {
-  const path = join(resolve(logsDir), cycleId, 'events.jsonl');
-  if (!existsSync(path)) {
+  // SEC-04 (bd forge-ebj, GET /api/cost/<cycleId>): `cycleId` is request-derived
+  // and was previously folded straight into `join(resolve(logsDir), cycleId,
+  // 'events.jsonl')` with no per-segment containment — a `%2F`-smuggled
+  // `../../..` escaped `_logs` entirely, and a symlinked `events.jsonl` leaf (or
+  // `_logs/<cycleId>` dir) was FOLLOWED off-root. Route the whole path — leaf
+  // included — through `guardedReadFile`: `logsDir` is the TRUSTED root, and
+  // `cycleId` rides as its OWN `segments[]` element (never folded into root), so
+  // the per-segment identity walk + `nlink` leaf check reject both escapes. A
+  // rejected path collapses to `null` indistinguishably from a genuinely absent
+  // events.jsonl (no oracle) — both yield the empty-cycle summary the caller
+  // already handled for a missing log.
+  const raw = guardedReadFile(logsDir, [cycleId, 'events.jsonl'], 'utf8');
+  if (raw === null) {
     return emptyCycle(cycleId);
   }
-  const events = readFileSync(path, 'utf8')
+  const events = raw
     .split('\n')
     .filter(Boolean)
     .map((line) => JSON.parse(line) as EventLogEntry);

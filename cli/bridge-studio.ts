@@ -25,7 +25,7 @@
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { basename, join, resolve, sep } from 'node:path';
 
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
@@ -51,7 +51,7 @@ import {
 import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
 import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
 import { agentCapabilityDescriptor } from '../orchestrator/studio/derive.ts';
 import type { FlowDefinition } from '../orchestrator/studio/types.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
@@ -59,7 +59,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, resolveDefaultKickof
 import { deriveContractStages } from './contract-stages.ts';
 import { isSdkAvailable } from '../loops/_adapters/registry.ts';
 import { parseManifest } from '../orchestrator/manifest.ts';
-import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
+import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
 import { getPaths } from '../orchestrator/queue.ts';
@@ -290,21 +290,38 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 
   return discovered.map((ref) => {
     const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path };
+    // SEC-04 (bd forge-ebj): every read of a per-project leaf rides `guardedFile`
+    // against the TRUSTED `projectsDir` root, with the on-disk project directory
+    // NAME (`basename(ref.absPath)`, not the API-facing normalized id) as its OWN
+    // `segments[]` element — never folded into the root. A project dir that is a
+    // symlink escaping `projectsDir`, or a symlinked/hardlinked leaf
+    // (`AGENTS.md`/`demo.lock.json`/`project.json`) inside an otherwise real
+    // dir, is refused (`null`) rather than followed off-root. Replaces the
+    // former raw `readAgentInstructionsFile(ref.absPath)` + `existsSync`/
+    // `readFileSync(join(ref.absPath, …))` sinks that resolved the leaf outside
+    // any per-segment identity guard.
+    const dirName = basename(ref.absPath);
     // Instructions are single-sourced from the project's AGENTS.md (Stage A):
     // when it exists, its content IS the instructions and the UI binds read-only
     // to it. Read it BEFORE the no-config early-return — an AGENTS.md can precede
     // a full `.forge/project.json` (so a half-onboarded project still surfaces it).
-    const agentFile = readAgentInstructionsFile(ref.absPath);
-    if (agentFile) {
-      result.instructions = agentFile.content;
-      result.instructionsSource = agentFile.file as 'AGENTS.md' | 'CLAUDE.md';
+    for (const file of AGENT_INSTRUCTION_FILES) {
+      const content = guardedReadFile(projectsDir, [dirName, file]);
+      if (content !== null && content.trim()) {
+        result.instructions = content.trim();
+        result.instructionsSource = file as 'AGENTS.md' | 'CLAUDE.md';
+        break;
+      }
     }
+    const agentFile = result.instructions !== undefined;
     // Locked-demo state (read regardless of project.json) — the demo-builder lock.
-    result.hasLockedDemo = existsSync(join(ref.absPath, '.forge', 'demo', 'demo.lock.json'));
+    result.hasLockedDemo =
+      guardedFile(projectsDir, [dirName, '.forge', 'demo', 'demo.lock.json'], 'read') !== null;
     if (!ref.hasConfig) return result;
-    const projectJsonPath = join(ref.absPath, '.forge', 'project.json');
+    const projectJsonRaw = guardedReadFile(projectsDir, [dirName, '.forge', 'project.json']);
+    if (projectJsonRaw === null) return result; // absent, unreadable, or containment-refused
     try {
-      const raw = JSON.parse(readFileSync(projectJsonPath, 'utf8')) as Record<string, unknown>;
+      const raw = JSON.parse(projectJsonRaw) as Record<string, unknown>;
       if (typeof raw.name === 'string' && raw.name.trim()) result.name = raw.name.trim();
       if (typeof raw.northStar === 'string') result.northStar = raw.northStar;
       if (typeof raw.kb === 'string') result.kb = raw.kb;

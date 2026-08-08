@@ -42,7 +42,6 @@ import {
   mkdtempSync,
   rmSync,
   writeFileSync,
-  existsSync,
   symlinkSync,
   lstatSync,
 } from 'node:fs';

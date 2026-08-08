@@ -218,25 +218,26 @@ export async function runArchitectTurn(
   // mutate) an out-of-root `status.json`. The other three interactive runners
   // (instructions / project-brain / demo) were contained in the SEC-04 fix;
   // the architect's runner leg was missed — this closes it.
-  const guarded = resolveGuardedPath(input.projectRoot, ['_architect', input.sessionId]);
+  const architectDirSegments = ['_architect', input.sessionId];
+  const guarded = resolveGuardedPath(input.projectRoot, architectDirSegments);
   if (!guarded.ok) {
     throw new Error(
       `architect runner: session dir failed containment (${guarded.reason}). Has the session been started?`,
     );
   }
-  const status = readStatus(paths.sessionDir);
+  // SEC-04 leaf: route the status.json READ through the guarded sibling (leaf
+  // included) so a symlinked/hardlinked status.json inside the real, contained
+  // `_architect/<sid>` dir is refused too — not just a symlinked/traversing dir.
+  const status = guardedReadStatus(input.projectRoot, architectDirSegments);
   if (!status) {
     // ARCH-6 idempotency: a rejected session is moved to _architect/_archived/.
     // A repeat reject turn then finds no live status.json — if the archived copy
     // was a rejected session, treat the turn as a no-op rather than throwing.
     // The archived read is a SECOND request-derived path construction — contain
     // it the same way (a symlinked `_archived` must not disclose out-of-root).
-    const archivedGuard = resolveGuardedPath(input.projectRoot, [
-      '_architect',
-      '_archived',
-      input.sessionId,
-    ]);
-    const archived = archivedGuard.ok ? readStatus(archivedGuard.realPath) : null;
+    // SEC-04 leaf: route the archived status.json READ through the guarded
+    // sibling (leaf included) too — a symlinked archived status leaf is refused.
+    const archived = guardedReadStatus(input.projectRoot, ['_architect', '_archived', input.sessionId]);
     if (archived?.phase === 'rejected') {
       return { phase: 'rejected', wrote: [] };
     }
@@ -343,7 +344,7 @@ export async function runArchitectTurn(
     });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       const questionsPath = writeQuestions(paths.sessionDir, decision.questions);
-      writeStatus(paths.sessionDir, { ...status, phase: 'awaiting-answers' });
+      writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
       logger.emit({
         initiative_id: `architect-session-${input.sessionId}`,
         phase: 'architect',
@@ -360,7 +361,7 @@ export async function runArchitectTurn(
     }
     // Ready — the explicit exploration stage runs before drafting (R4-04-F4).
     phase = 'exploring';
-    writeStatus(paths.sessionDir, { ...status, phase: 'exploring' });
+    writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'exploring' });
   }
 
   if (phase === 'exploring') {
@@ -413,7 +414,7 @@ export async function runArchitectTurn(
       },
     });
     phase = 'drafting';
-    writeStatus(paths.sessionDir, { ...status, phase: 'drafting' });
+    writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'drafting' });
   }
 
   if (phase === 'drafting') {
@@ -982,7 +983,7 @@ async function runDraftStep(args: {
   };
 
   const planPath = writePlanDoc(session, input.projectRoot);
-  writeStatus(paths.sessionDir, { ...status, phase: 'awaiting-verdict' });
+  writeArchitectStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
     initiative_id: `architect-session-${input.sessionId}`,
@@ -1222,7 +1223,7 @@ async function runFinalizeStep(args: {
     // Persist the one-shot flag durably BEFORE promotion (all three outcomes:
     // findings, clean, crashed) — a crash inside promoteManifests below must
     // not re-arm the critic on the operator's retry turn.
-    writeStatus(paths.sessionDir, workingStatus);
+    writeArchitectStatus(input.projectRoot, input.sessionId, workingStatus);
     if (criticResult.blockPromotion) {
       return { phase: 'awaiting-verdict', wrote: [] };
     }
@@ -1241,7 +1242,7 @@ async function runFinalizeStep(args: {
     if (initId) mintAndPersistManifestCycleId(writtenManifestPaths[i], initId);
   }
 
-  writeStatus(paths.sessionDir, { ...workingStatus, phase: 'committed' });
+  writeArchitectStatus(input.projectRoot, input.sessionId, { ...workingStatus, phase: 'committed' });
 
   logger.emit({
     initiative_id: writtenInitiativeIds[0] ?? `architect-session-${input.sessionId}`,
@@ -1441,6 +1442,21 @@ export function guardedWriteStatus(
   mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
   return p;
+}
+
+/**
+ * SEC-04 leaf: the architect runner's own guarded status.json write. Routes the
+ * WHOLE `<projectRoot>/_architect/<sid>/status.json` path (leaf included)
+ * through the guard and THROWS (fail closed — the runner contract, never a
+ * silent skip) if the leaf escapes.
+ */
+function writeArchitectStatus(projectRoot: string, sessionId: string, status: ArchitectStatus): void {
+  const p = guardedWriteStatus(projectRoot, ['_architect', sessionId], status);
+  if (p === null) {
+    throw new Error(
+      'architect runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
+    );
+  }
 }
 
 function writeQuestions(sessionDir: string, questions: ArchitectQuestion[]): string {

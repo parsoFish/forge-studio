@@ -30,8 +30,8 @@ import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
 import {
   runStructuredTurn,
-  readSessionStatus,
-  writeSessionStatus,
+  guardedReadSessionStatus,
+  guardedWriteSessionStatus,
   writeQuestions,
   readAnswerRounds,
   makeHeartbeatWriter,
@@ -40,7 +40,7 @@ import {
   type InterviewAnswer,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { resolveGuardedPath, guardedReadFile, guardedWriteFile } from '../cli/studio-path-guard.ts';
 import { withStudioWrite } from './project-repo-tx.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
@@ -160,14 +160,21 @@ export async function runInstructionsTurn(
   // `readSessionStatus` would then follow out of the project subtree. A traversal
   // sessionId or a symlinked `_instructions` resolves to a containment reject,
   // and the runner REFUSES rather than disclose out-of-root content.
-  const guarded = resolveGuardedPath(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
+  const dirSegments = [INSTRUCTIONS_KIND_DIR, input.sessionId];
+  const guarded = resolveGuardedPath(input.projectRoot, dirSegments);
   if (!guarded.ok) {
     throw new Error(
       `instructions runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
     );
   }
   const sessionDir = guarded.realPath;
-  const status = readSessionStatus<InstructionsStatus>(sessionDir);
+  // SEC-04 leaf: route the status.json READ through the guarded sibling so a
+  // symlinked/hardlinked status.json leaf inside the (real, contained) session
+  // dir is refused too — not just a symlinked/traversing dir. `projectRoot` is
+  // the trusted root; the kind-dir + `sessionId` ride as their own guarded
+  // segments (see the guard's root-trust contract). A rejected leaf collapses
+  // to null and the runner refuses rather than read/act on out-of-root content.
+  const status = guardedReadSessionStatus<InstructionsStatus>(input.projectRoot, dirSegments);
   if (!status) {
     throw new Error(
       `instructions runner: no status.json at ${sessionDir}. Has the session been started?`,
@@ -227,7 +234,7 @@ export async function runInstructionsTurn(
     const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       const questionsPath = writeQuestions(sessionDir, decision.questions);
-      writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-answers' });
+      writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-answers' });
       logger.emit({
         initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
         event_type: 'log', input_refs: [], output_refs: [questionsPath],
@@ -238,7 +245,7 @@ export async function runInstructionsTurn(
       return { phase: 'awaiting-answers', wrote: [questionsPath], questions: decision.questions };
     }
     phase = 'drafting';
-    writeSessionStatus(sessionDir, { ...status, phase: 'drafting' });
+    writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'drafting' });
   }
 
   if (phase === 'drafting') {
@@ -246,7 +253,7 @@ export async function runInstructionsTurn(
   } else if (phase === 'finalizing') {
     result = runFinalizeStep({ input, sessionDir, status, logger, initiativeId });
   } else if (phase === 'rejected') {
-    writeSessionStatus(sessionDir, { ...status, phase: 'rejected' });
+    writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'rejected' });
     result = { phase: 'rejected', wrote: [] };
   } else {
     // Waiting/terminal phase — no actionable work this turn.
@@ -372,7 +379,7 @@ async function runDraftStep(args: {
 }): Promise<RunInstructionsTurnResult> {
   const { input, sessionDir, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
   const interview = readAnswerRounds(sessionDir);
-  const feedback = readFeedback(sessionDir);
+  const feedback = readFeedback(input.projectRoot, input.sessionId);
   const skill = loadSkillPrompt(input.skillPromptPath);
 
   const editContext = editContextLines(status);
@@ -427,10 +434,20 @@ async function runDraftStep(args: {
   const composedIds = (output?.composed_seed_ids ?? []).filter((id) => matchedIds.has(id));
   const footer = composedSeedsFooter(composedIds);
 
-  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-  const draftPath = join(sessionDir, DRAFT_FILENAME);
-  writeFileSync(draftPath, `${agentsMd}\n${footer}`);
-  writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-verdict' });
+  // SEC-04 leaf: route the AGENTS.draft.md write through the guard (leaf
+  // included) so a symlinked/hardlinked draft leaf cannot escape the session
+  // dir. guardedWriteFile mkdirs the parent, so the manual mkdir is gone.
+  const draftPath = guardedWriteFile(
+    input.projectRoot,
+    [INSTRUCTIONS_KIND_DIR, input.sessionId, DRAFT_FILENAME],
+    `${agentsMd}\n${footer}`,
+  );
+  if (draftPath === null) {
+    throw new Error(
+      'instructions runner: AGENTS.draft.md write failed containment (symlinked/escaping leaf) — refusing to write.',
+    );
+  }
+  writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-verdict' });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
@@ -455,12 +472,18 @@ function runFinalizeStep(args: {
 }): RunInstructionsTurnResult {
   const { sessionDir, status, logger, initiativeId, input } = args;
   const draftPath = join(sessionDir, DRAFT_FILENAME);
-  if (!existsSync(draftPath)) {
+  // SEC-04 leaf: route the draft READ through the guard (leaf included) — a
+  // symlinked AGENTS.draft.md pointing out of root collapses to null (no
+  // oracle: absent and rejected are indistinguishable) and finalize refuses.
+  const content = guardedReadFile(
+    input.projectRoot,
+    [INSTRUCTIONS_KIND_DIR, input.sessionId, DRAFT_FILENAME],
+  );
+  if (content === null) {
     throw new Error(
-      `instructions runner: cannot finalize — no draft at ${draftPath}. Draft before approving.`,
+      `instructions runner: cannot finalize — no readable draft at ${draftPath}. Draft before approving.`,
     );
   }
-  const content = readFileSync(draftPath, 'utf8');
   const agentsPath = join(status.project_repo_path, 'AGENTS.md');
   if (!existsSync(status.project_repo_path)) {
     mkdirSync(status.project_repo_path, { recursive: true });
@@ -473,7 +496,7 @@ function runFinalizeStep(args: {
     () => writeFileSync(agentsPath, content.endsWith('\n') ? content : `${content}\n`),
     ['AGENTS.md'],
   );
-  writeSessionStatus(sessionDir, { ...status, phase: 'committed' });
+  writeInstructionsStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
@@ -507,12 +530,33 @@ function editContextLines(status: InstructionsStatus): string[] {
   ];
 }
 
-/** Read `feedback.md` (operator revision notes) — trimmed content or null. */
-function readFeedback(sessionDir: string): string | null {
-  const p = join(sessionDir, 'feedback.md');
-  if (!existsSync(p)) return null;
-  const fb = readFileSync(p, 'utf8').trim();
-  return fb || null;
+/**
+ * SEC-04 leaf: guarded status.json write. Routes the WHOLE
+ * `<projectRoot>/<kind>/<sid>/status.json` path (leaf included) through the
+ * containment guard and THROWS (fail closed — the runner contract, never a
+ * silent skip) if the leaf escapes.
+ */
+function writeInstructionsStatus(
+  projectRoot: string,
+  sessionId: string,
+  status: InstructionsStatus,
+): void {
+  const p = guardedWriteSessionStatus(projectRoot, [INSTRUCTIONS_KIND_DIR, sessionId], status);
+  if (p === null) {
+    throw new Error(
+      'instructions runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
+    );
+  }
+}
+
+/** Read `feedback.md` (operator revision notes) — trimmed content or null.
+ *  SEC-04 leaf: routed through the guard (leaf included), so a symlinked
+ *  feedback.md pointing out of root collapses to null. */
+function readFeedback(projectRoot: string, sessionId: string): string | null {
+  const fb = guardedReadFile(projectRoot, [INSTRUCTIONS_KIND_DIR, sessionId, 'feedback.md']);
+  if (fb === null) return null;
+  const trimmed = fb.trim();
+  return trimmed || null;
 }
 
 const MAX_REASONING_TEXT = 400;

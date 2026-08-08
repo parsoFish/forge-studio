@@ -51,7 +51,7 @@
  * report for the full note.
  */
 
-import { existsSync, realpathSync } from 'node:fs';
+import { realpathSync } from 'node:fs';
 import { join, sep } from 'node:path';
 
 import { SESSION_STAGES } from '../orchestrator/studio/session-kinds.ts';
@@ -63,7 +63,7 @@ import {
 } from '../orchestrator/studio/session-transcript.ts';
 import { loadProjectConfig, AGENT_INSTRUCTION_FILES, type ProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
-import { projectBrainDir } from '../orchestrator/brain-paths.ts';
+import { guardedFile } from './studio-path-guard.ts';
 
 export type { ContractStageRow, ContractStageStatus } from '../orchestrator/studio/session-transcript.ts';
 
@@ -222,24 +222,22 @@ const BRAIN_PROFILE_FILENAME = 'profile.md';
 function deriveRoadmapRow(projectDir: string, forgeRoot: string, projectId: string): ContractStageRow {
   const body = safeReadFileInSession(projectDir, ROADMAP_REL_PATH);
 
-  // Honest statement of what protects this read, corrected after round-2
-  // review flagged the previous comment as overstating the code. There is NO
-  // containment check here. What holds is: (1) `projectId` is SLUG_RE +
-  // length-cap validated by `deriveContractStages` before any row-deriver
-  // runs, so the STRING cannot carry `/`, `\` or `..`; (2) `brain/` is
-  // forge-owned, not project-repo content, so planting a symlink under it
-  // needs forge-repo write access — a strictly higher bar than the
-  // project-repo content that reaches the other rows; (3) `existsSync` is
-  // boolean-only, so even a counterfactual escape leaks a presence fact, never
-  // file content. The try/catch fails CLOSED to `absent` on a hostile
-  // filesystem condition. This is charset validation plus a narrow sink, NOT
-  // a containment guard, and it is recorded as such rather than dressed up.
-  let profilePresent = false;
-  try {
-    profilePresent = existsSync(join(projectBrainDir(forgeRoot, projectId), BRAIN_PROFILE_FILENAME));
-  } catch {
-    profilePresent = false;
-  }
+  // SEC-04 (bd forge-ebj): the brain-profile presence probe now rides
+  // `guardedFile` in read mode against the TRUSTED `forgeRoot` root, with
+  // `projectId` (already SLUG_RE + length-cap validated by
+  // `deriveContractStages`) as its OWN `segments[]` element — never folded into
+  // the root — alongside the fixed `brain`/`projects`/`profile.md` literals.
+  // `guardedFile` walks every segment with a realpath identity check + `nlink`
+  // leaf check, so a symlinked `brain/projects/<projectId>` dir or a
+  // symlinked/hardlinked `profile.md` leaf is refused (collapses to `null`)
+  // rather than followed off-root — and it still leaks only a boolean presence
+  // fact, never file content. (Unlike `resolveContainedProjectDir` above, the
+  // project-repo path guard here is a NON-existence-oracle presence check on a
+  // forge-owned tree, so the stricter per-segment identity semantics carry no
+  // AT-28-style symlink-back-inside acceptance requirement.) `guardedFile`
+  // never throws; a rejection is `null` == absent.
+  const profilePresent =
+    guardedFile(forgeRoot, ['brain', 'projects', projectId, BRAIN_PROFILE_FILENAME], 'read') !== null;
   const profileRelPath = `brain/projects/${projectId}/${BRAIN_PROFILE_FILENAME}`;
   const detail = [`brain profile: ${profilePresent ? 'present' : 'absent'} (${profileRelPath})`];
   const source = profilePresent ? `${ROADMAP_REL_PATH} + ${profileRelPath}` : ROADMAP_REL_PATH;

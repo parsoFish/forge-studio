@@ -39,20 +39,20 @@
  * observe (or worsen) the half-restored window.
  */
 
-import { existsSync, mkdirSync, readFileSync, readdirSync, realpathSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve, sep } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
 import {
   runAgentTurn,
-  readSessionStatus,
-  writeSessionStatus,
+  guardedReadSessionStatus,
+  guardedWriteSessionStatus,
   makeHeartbeatWriter,
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedReadDir } from '../cli/studio-path-guard.ts';
 import { makeToolEventSink } from './tool-event-emit.ts';
 import { ensureStudioBranch, commitStudioChange } from './project-repo-tx.ts';
 import { modelForSpec } from './phase-agent.ts';
@@ -187,14 +187,19 @@ export async function runDemoBuilderTurn(
   // and the kind-dir arrive as their own guarded segments against the projectRoot
   // base, so a traversal sessionId or a symlinked `_demo` resolves to a reject and
   // the runner REFUSES rather than read out-of-root content.
-  const guarded = resolveGuardedPath(input.projectRoot, [DEMO_KIND_DIR, input.sessionId]);
+  const dirSegments = [DEMO_KIND_DIR, input.sessionId];
+  const guarded = resolveGuardedPath(input.projectRoot, dirSegments);
   if (!guarded.ok) {
     throw new Error(
       `demo-builder runner: no status.json — session dir failed containment (${guarded.reason}). Has the session been started?`,
     );
   }
   const sessionDir = guarded.realPath;
-  const status = readSessionStatus<DemoBuilderStatus>(sessionDir);
+  // SEC-04 leaf: route the status.json READ through the guarded sibling (leaf
+  // included) so a symlinked status.json inside the real, contained session dir
+  // is refused too. projectRoot trusted; kind-dir + sessionId ride as guarded
+  // segments. A rejected leaf collapses to null → the runner refuses.
+  const status = guardedReadSessionStatus<DemoBuilderStatus>(input.projectRoot, dirSegments);
   if (!status) {
     throw new Error(
       `demo-builder runner: no status.json at ${sessionDir}. Has the session been started?`,
@@ -242,7 +247,7 @@ export async function runDemoBuilderTurn(
   } else if (status.phase === 'locking') {
     result = runLockStep({ input, sessionDir, status, logger, initiativeId });
   } else if (status.phase === 'abandoned') {
-    writeSessionStatus(sessionDir, { ...status, phase: 'abandoned' });
+    writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'abandoned' });
     result = { phase: 'abandoned', wrote: [] };
   } else {
     // awaiting-review / locked — no actionable work this turn.
@@ -273,10 +278,10 @@ async function runGenerateStep(args: {
   onHeartbeat: () => void;
   onText: (text: string) => void;
 }): Promise<RunDemoBuilderTurnResult> {
-  const { input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText } = args;
+  const { input, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText } = args;
   const skill = loadSkillPrompt(input.skillPromptPath, forgeRoot);
   const baseCss = readBaseCss(forgeRoot);
-  const feedback = readFeedback(sessionDir);
+  const feedback = readFeedback(input.projectRoot, input.sessionId);
 
   // Composition: the demoProcess may reference demo-element kinds from the forge
   // library. When it does, the demo is COMPOSED of project-side element-skills the
@@ -352,10 +357,15 @@ async function runGenerateStep(args: {
   // <sessionDir>/generations/<iteration>/ (D4/D5) — byte copies (Buffer, not
   // utf8 decode/re-encode) so a later lock-time restore is byte-identical.
   // Snapshots ACCUMULATE: this never touches an earlier generation's dir.
-  const genDir = join(sessionDir, GENERATIONS_DIRNAME, String(status.iteration));
-  mkdirSync(genDir, { recursive: true });
-  writeFileSync(join(genDir, GENERATION_DEMO_FILENAME), readFileSync(demoPath));
-  writeFileSync(join(genDir, GENERATION_SKILL_FILENAME), readFileSync(requiredSkillPath));
+  // SEC-04 leaf: each snapshot leaf under <sessionDir>/generations/<n>/ is
+  // written through the guard (leaf included) so a symlinked snapshot slot
+  // cannot escape; the demoPath/skillPath READS are repo-side (project-repo
+  // root) byte copies (Buffer) preserved for byte-identical lock-time restore.
+  const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(status.iteration)];
+  const demoSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'generation DEMO.html snapshot');
+  writeFileSync(demoSnapPath, readFileSync(demoPath));
+  const skillSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_SKILL_FILENAME], 'generation SKILL.md snapshot');
+  writeFileSync(skillSnapPath, readFileSync(requiredSkillPath));
   // feedback.md at TURN END (D8) — the runner never clears it, so this is
   // read fresh rather than reusing the pre-turn `feedback` value, matching
   // the literal "at turn end" contract even though the two are identical
@@ -363,14 +373,15 @@ async function runGenerateStep(args: {
   const generationMeta = {
     iteration: status.iteration,
     createdAt: new Date().toISOString(),
-    feedback: readFeedback(sessionDir),
+    feedback: readFeedback(input.projectRoot, input.sessionId),
     targetElement: target ?? null,
     composed,
     skillRelPath: requiredSkillRel,
   };
-  writeFileSync(join(genDir, GENERATION_META_FILENAME), `${JSON.stringify(generationMeta, null, 2)}\n`);
+  const metaSnapPath = guardedGenerationWritePath(input.projectRoot, [...genSegs, GENERATION_META_FILENAME], 'generation meta.json');
+  writeFileSync(metaSnapPath, `${JSON.stringify(generationMeta, null, 2)}\n`);
 
-  writeSessionStatus(sessionDir, { ...status, phase: 'awaiting-review' });
+  writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'awaiting-review' });
   logger.emit({
     initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
     event_type: 'log', input_refs: [], output_refs: [requiredSkillPath, demoPath], cost_usd: costUsd,
@@ -408,12 +419,16 @@ function runLockStep(args: {
   // flipped, repo files untouched (declared-data-fails-open is exactly the
   // antipattern this guards against; it must never silently lock the latest).
   if (status.selectedGeneration !== undefined) {
-    const meta = readGenerationSnapshotMeta(sessionDir, status.selectedGeneration);
+    const genSegs = [DEMO_KIND_DIR, input.sessionId, GENERATIONS_DIRNAME, String(status.selectedGeneration)];
+    const meta = readGenerationSnapshotMeta(input.projectRoot, input.sessionId, status.selectedGeneration);
     const genDir = join(sessionDir, GENERATIONS_DIRNAME, String(status.selectedGeneration));
-    const snapshotDemoPath = join(genDir, GENERATION_DEMO_FILENAME);
-    const snapshotSkillPath = join(genDir, GENERATION_SKILL_FILENAME);
-    if (meta === null || !existsSync(snapshotDemoPath) || !existsSync(snapshotSkillPath)) {
-      const existing = listExistingGenerationNumbers(sessionDir);
+    // SEC-04 leaf: resolve the snapshot leaves under the session dir through the
+    // guard (leaf included) — a symlinked snapshot slot collapses to null, the
+    // same no-oracle answer as absent.
+    const snapshotDemoPath = guardedFile(input.projectRoot, [...genSegs, GENERATION_DEMO_FILENAME], 'read');
+    const snapshotSkillPath = guardedFile(input.projectRoot, [...genSegs, GENERATION_SKILL_FILENAME], 'read');
+    if (meta === null || snapshotDemoPath === null || snapshotSkillPath === null) {
+      const existing = listExistingGenerationNumbers(input.projectRoot, input.sessionId);
       throw new Error(
         `demo-builder runner: cannot lock — generation ${status.selectedGeneration} has no readable/parsable snapshot at ` +
         `${genDir}. Generations on disk: ${existing.length > 0 ? existing.join(', ') : '(none)'}.`,
@@ -500,7 +515,7 @@ function runLockStep(args: {
   writeFileSync(join(histDir, 'DEMO.html'), readFileSync(demoPath, 'utf8'));
   writeFileSync(join(histDir, 'meta.json'), `${JSON.stringify(lock, null, 2)}\n`);
 
-  writeSessionStatus(sessionDir, { ...status, phase: 'locked' });
+  writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'locked' });
 
   logger.emit({
     initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
@@ -522,15 +537,11 @@ function runLockStep(args: {
  *  the restore writes the skill back to — load-bearing). */
 type GenerationSnapshotMeta = { readonly skillRelPath: string };
 
-function readGenerationSnapshotMeta(sessionDir: string, n: number): GenerationSnapshotMeta | null {
-  const metaPath = join(sessionDir, GENERATIONS_DIRNAME, String(n), GENERATION_META_FILENAME);
-  if (!existsSync(metaPath)) return null;
-  let raw: string;
-  try {
-    raw = readFileSync(metaPath, 'utf8');
-  } catch {
-    return null;
-  }
+function readGenerationSnapshotMeta(projectRoot: string, sessionId: string, n: number): GenerationSnapshotMeta | null {
+  // SEC-04 leaf: route the meta.json read through the guard (leaf included) so a
+  // symlinked meta.json under generations/<n>/ collapses to null.
+  const raw = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME, String(n), GENERATION_META_FILENAME]);
+  if (raw === null) return null;
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
@@ -546,19 +557,43 @@ function readGenerationSnapshotMeta(sessionDir: string, n: number): GenerationSn
 /** The generation numbers that DO have a `generations/<n>/` dir on disk —
  *  used only to name what's available in the R4-16 fail-closed lock error.
  *  Best-effort: a missing/unreadable `generations/` dir yields []. */
-function listExistingGenerationNumbers(sessionDir: string): number[] {
-  const dir = join(sessionDir, GENERATIONS_DIRNAME);
-  if (!existsSync(dir)) return [];
-  let names: string[];
-  try {
-    names = readdirSync(dir);
-  } catch {
-    return [];
-  }
+function listExistingGenerationNumbers(projectRoot: string, sessionId: string): number[] {
+  // SEC-04 leaf: the generations/ dir readdir routed through the guard.
+  const names = guardedReadDir(projectRoot, [DEMO_KIND_DIR, sessionId, GENERATIONS_DIRNAME]);
+  if (names === null) return [];
   return names
     .map((n) => Number(n))
     .filter((n) => Number.isInteger(n))
     .sort((a, b) => a - b);
+}
+
+/**
+ * SEC-04 leaf: resolve a guarded WRITE path for a session-dir leaf (leaf
+ * included), mkdir its parent, and return it — throwing (fail closed, the
+ * runner contract) if the leaf escapes. Returns the path (not the write) so the
+ * caller keeps its Buffer/string write for byte-identical snapshots.
+ */
+function guardedGenerationWritePath(projectRoot: string, segs: readonly string[], what: string): string {
+  const p = guardedFile(projectRoot, segs, 'write');
+  if (p === null) {
+    throw new Error(`demo-builder runner: ${what} write failed containment (symlinked/escaping leaf) — refusing to write.`);
+  }
+  mkdirSync(dirname(p), { recursive: true });
+  return p;
+}
+
+/**
+ * SEC-04 leaf: guarded status.json write. Routes the WHOLE
+ * `<projectRoot>/<kind>/<sid>/status.json` path (leaf included) through the
+ * containment guard and THROWS (fail closed) if the leaf escapes.
+ */
+function writeDemoStatus(projectRoot: string, sessionId: string, status: DemoBuilderStatus): void {
+  const p = guardedWriteSessionStatus(projectRoot, [DEMO_KIND_DIR, sessionId], status);
+  if (p === null) {
+    throw new Error(
+      'demo-builder runner: status.json write failed containment (symlinked/escaping leaf) — refusing to write.',
+    );
+  }
 }
 
 function describeDemoProcess(projectRepoPath: string): string {
@@ -713,11 +748,12 @@ function readBaseCss(forgeRoot: string): string {
   }
 }
 
-function readFeedback(sessionDir: string): string | null {
-  const p = join(sessionDir, 'feedback.md');
-  if (!existsSync(p)) return null;
-  const fb = readFileSync(p, 'utf8').trim();
-  return fb || null;
+function readFeedback(projectRoot: string, sessionId: string): string | null {
+  // SEC-04 leaf: routed through the guard (leaf included).
+  const fb = guardedReadFile(projectRoot, [DEMO_KIND_DIR, sessionId, 'feedback.md']);
+  if (fb === null) return null;
+  const trimmed = fb.trim();
+  return trimmed || null;
 }
 
 const MAX_REASONING_TEXT = 400;
