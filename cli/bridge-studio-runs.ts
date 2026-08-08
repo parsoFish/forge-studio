@@ -42,7 +42,13 @@ import { loadProjectConfig } from '../orchestrator/project-config.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { runRequeue } from './forge-requeue.ts';
 import { isContainedWorktreePath, isContainedProjectRepoPath, isSafeCycleId } from './manifest-path-guard.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
+// SEC-04 serialized foundation: the guarded full-path (leaf-included) primitives
+// are imported here so Phase-1 route appliers switch session/status call sites
+// onto them WITHOUT editing this header (avoids header merge conflicts across
+// parallel appliers). The `void` below only satisfies `noUnusedLocals` until the
+// first applier wires a real call site; the first applier deletes this one line.
+void [guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir];
 import { isDryBridge, refuseDryBridge, emitDryBridgeSkip, dryBridgeAgentTurnMarker, type DryBridgeStubAction } from './dry-bridge.ts';
 import {
   sendJson,

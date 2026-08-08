@@ -135,7 +135,13 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { listRuns, buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
+// SEC-04 serialized foundation: the guarded full-path (leaf-included) primitives
+// are imported here so Phase-1 route appliers switch session/status call sites
+// onto them WITHOUT editing this header (avoids header merge conflicts across
+// parallel appliers). The `void` below only satisfies `noUnusedLocals` until the
+// first applier wires a real call site; the first applier deletes this one line.
+void [guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir];
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;

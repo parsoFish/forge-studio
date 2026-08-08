@@ -113,8 +113,8 @@
  * timing window between "verified safe" and "used".
  */
 
-import { join, relative, sep } from 'node:path';
-import { lstatSync, realpathSync } from 'node:fs';
+import { join, relative, sep, dirname } from 'node:path';
+import { lstatSync, realpathSync, readFileSync, writeFileSync, readdirSync, mkdirSync } from 'node:fs';
 
 export interface PathGuardOk {
   ok: true;
@@ -345,4 +345,145 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   }
 
   return { ok: true, realPath, exists: false };
+}
+
+// ---------------------------------------------------------------------------
+// SEC-04 — the FULL-PATH sink primitive (leaf included).
+//
+// The systemic SEC-04 defect: callers guard the DIRECTORY with
+// `resolveGuardedPath(root, [...dirSegments])`, then RAW-APPEND the leaf
+// filename with `join(guardedDir, 'status.json')` and read/write through THAT.
+// A symlinked leaf (`status.json` -> outside root) inside a genuinely real,
+// identity-verified directory sails straight through — the guard never saw the
+// leaf. `guardedFile` closes the class by routing the ENTIRE opened path,
+// LEAF INCLUDED, through one `resolveGuardedPath` call so the per-segment
+// identity walk + `nlink === 1` leaf check apply to the filename itself.
+//
+// This adds NO new containment/fs-resolution logic: every symlink / hardlink /
+// cross-object / nested-segment / root-escape decision stays inside
+// `resolveGuardedPath`. `guardedFile` only maps that ONE call's
+// `{ok, exists, realPath}` verdict onto a read/write/readdir intent, and the
+// ergonomic wrappers below only perform the I/O once the path is blessed.
+//
+// CONTRACT (inherited verbatim from `resolveGuardedPath`, restated because
+// SEC-04's root cause is a request-influenced value reaching the WRONG
+// parameter): `root` is TRUSTED and MUST be a fixed, config-derived constant —
+// `projectsRoot` / `logsRoot` / `forgeRoot`. A `project_repo_path` (or any
+// value persisted from a request body, e.g. an architect `/start` payload) is
+// REQUEST-INFLUENCED and MUST arrive as an element of `segments[]`, NEVER
+// folded into `root`. Folded into `root`, `realpathSync(root)` resolves it with
+// no identity check and containment becomes tautological — the root-folding
+// escape shape. `guardedFile` cannot detect a violated root contract (a
+// request-derived string is indistinguishable from a trusted one at this
+// layer); the caller owns it. The contract test in the suite pins exactly this
+// asymmetry: as a `segments[]` element a symlinked project id is REJECTED; as
+// `root` it silently escapes.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve `<root>/<segments...>` (LEAF INCLUDED) through `resolveGuardedPath`
+ * and return the blessed absolute path, or `null` if containment rejected it —
+ * for the given filesystem intent:
+ *
+ *   - `'read'`    → `(ok && exists) ? realPath : null`. A missing leaf collapses
+ *                   to `null` with NO distinct signal, so a caller cannot use
+ *                   this to probe existence outside the root (no oracle): a
+ *                   rejected path and an absent-but-contained path are
+ *                   indistinguishable to the caller — both `null`.
+ *   - `'write'`   → `ok ? realPath : null`. Create-mode is preserved: a
+ *                   not-yet-existing leaf is a legitimate scaffold-on-save
+ *                   target and returns its reassembled path.
+ *   - `'readdir'` → `(ok && exists && isDirectory) ? realPath : null`. The leaf
+ *                   must already exist AND be a real directory. Because
+ *                   `resolveGuardedPath` already identity-verified every
+ *                   segment including the leaf, an `lstatSync` here can never be
+ *                   traversing a symlink — it is a genuine type check on the
+ *                   real entry.
+ *
+ * Returns the PATH (not file contents) so a caller can do its own typed
+ * read/write; the wrappers below are the ergonomic contents-level shortcuts.
+ */
+export function guardedFile(
+  root: string,
+  segments: readonly string[],
+  mode: 'read' | 'write' | 'readdir',
+): string | null {
+  const guarded = resolveGuardedPath(root, segments);
+  if (!guarded.ok) return null;
+
+  switch (mode) {
+    case 'read':
+      // Missing leaf collapses to null — no existence oracle across the root.
+      return guarded.exists ? guarded.realPath : null;
+    case 'write':
+      // Create-mode leaf is fine: resolveGuardedPath already proved every
+      // EXISTING ancestor identity-clean and the not-yet-created tail literal.
+      return guarded.realPath;
+    case 'readdir': {
+      if (!guarded.exists) return null;
+      let st;
+      try {
+        // realPath is fully realpath-resolved + per-segment identity-checked by
+        // resolveGuardedPath, so this lstat cannot be following a symlink — it
+        // is a real directory-vs-not type check, no new containment logic.
+        st = lstatSync(guarded.realPath);
+      } catch {
+        return null;
+      }
+      return st.isDirectory() ? guarded.realPath : null;
+    }
+  }
+}
+
+/**
+ * Ergonomic read: guard `<root>/<segments...>` then return the file contents,
+ * or `null` if rejected / absent. Same no-oracle collapse as `guardedFile`'s
+ * read mode — a rejected path and an absent one both return `null`.
+ */
+export function guardedReadFile(
+  root: string,
+  segments: readonly string[],
+  encoding: BufferEncoding = 'utf8',
+): string | null {
+  const p = guardedFile(root, segments, 'read');
+  if (p === null) return null;
+  try {
+    return readFileSync(p, encoding);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Ergonomic write: guard `<root>/<segments...>` (leaf included, create-mode
+ * allowed), create the parent directory if needed, write `data`, and return the
+ * written path — or `null` if containment rejected the path (the write never
+ * happens). Mirrors the mkdir-then-write the raw session-status writers already
+ * do; the ONLY new thing is that the leaf itself is now guarded.
+ */
+export function guardedWriteFile(
+  root: string,
+  segments: readonly string[],
+  data: string,
+): string | null {
+  const p = guardedFile(root, segments, 'write');
+  if (p === null) return null;
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, data);
+  return p;
+}
+
+/**
+ * Ergonomic readdir: guard `<root>/<segments...>`, require it be an existing
+ * real directory, and return its entry names — or `null` if rejected / absent /
+ * not-a-directory.
+ */
+export function guardedReadDir(root: string, segments: readonly string[]): string[] | null {
+  const p = guardedFile(root, segments, 'readdir');
+  if (p === null) return null;
+  try {
+    return readdirSync(p);
+  } catch {
+    return null;
+  }
 }

@@ -25,8 +25,9 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
+import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import { extractLiveToolDetails } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
@@ -258,6 +259,56 @@ export function writeSessionStatus<S extends Record<string, unknown>>(
 ): string {
   if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
   const p = join(sessionDir, file);
+  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+// SEC-04 — guarded leaf siblings of readSessionStatus / writeSessionStatus.
+//
+// The raw pair above takes an ALREADY-BUILT `sessionDir` and raw-appends the
+// `status.json` leaf with `join(sessionDir, file)` — the exact "guard the dir,
+// raw-append the leaf" shape SEC-04 closes. These siblings take the TRUSTED
+// `projectsRoot` plus the request-derived directory segments and the leaf name,
+// and route the WHOLE path — leaf included — through `guardedFile` so a
+// symlinked/hardlinked `status.json` cannot escape. The raw pair is retained
+// deliberately; Phase-1 route appliers switch their call sites onto these.
+//
+// `dirSegments` carries the request-influenced ids (project / kindDir /
+// sessionId) as their OWN segments — NEVER folded into `projectsRoot` (see the
+// guard's root-trust contract). Returns `null` on a containment rejection so
+// the caller fails closed rather than reading/writing an escaped path.
+// ---------------------------------------------------------------------------
+
+/** Guarded read of `<projectsRoot>/<dirSegments...>/<leaf>` as JSON; `null` if
+ *  the guard rejects it, or it is absent/unparseable. */
+export function guardedReadSessionStatus<S>(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  leaf = 'status.json',
+): S | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'read');
+  if (p === null) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as S;
+  } catch {
+    return null;
+  }
+}
+
+/** Guarded write of `<projectsRoot>/<dirSegments...>/<leaf>` as pretty JSON,
+ *  stamping a fresh `updated_at` and creating the session dir if needed.
+ *  Returns the written path, or `null` if the guard rejected the path (the
+ *  write never happens — fail closed). */
+export function guardedWriteSessionStatus<S extends Record<string, unknown>>(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  status: S,
+  leaf = 'status.json',
+): string | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'write');
+  if (p === null) return null;
+  mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
   return p;
 }

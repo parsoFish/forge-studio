@@ -146,11 +146,29 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync, lstatSync, realpathSync } from 'node:fs';
+import {
+  mkdtempSync,
+  mkdirSync,
+  writeFileSync,
+  readFileSync,
+  existsSync,
+  rmSync,
+  chmodSync,
+  lstatSync,
+  realpathSync,
+  symlinkSync,
+  linkSync,
+} from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import {
+  resolveGuardedPath,
+  guardedFile,
+  guardedReadFile,
+  guardedWriteFile,
+  guardedReadDir,
+} from './studio-path-guard.ts';
 
 test('sanity: test process is non-root (uid 1000) — mode 000 genuinely denies access, not bypassed', () => {
   const uid = typeof process.getuid === 'function' ? process.getuid() : undefined;
@@ -525,5 +543,254 @@ test('H (GREEN, non-regression) [Finding 2]: ordinary create-mode for a brand-ne
     }
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+/**
+ * ===========================================================================
+ * SEC-04 — the FULL-PATH sink primitive (`guardedFile` + ergonomic wrappers).
+ * ===========================================================================
+ *
+ * SEC-04 class: contain the FULL opened file path (LEAF INCLUDED) at every
+ * project-derived fs sink. The shipped defect shape is "guard the DIRECTORY
+ * with resolveGuardedPath, then RAW-APPEND the leaf with join(dir, 'status.json')
+ * and read/write THAT" — a symlinked/hardlinked LEAF inside a genuinely real,
+ * identity-verified directory escapes because the guard never inspected the
+ * filename. `guardedFile` routes the entire path (leaf included) through ONE
+ * resolveGuardedPath call so the per-segment identity walk + nlink check reach
+ * the leaf.
+ *
+ * These are primitive tests, not RED-first pins (the primitive is new). To keep
+ * them from "passing by accident" (immutable-gates catalogue), each rejection
+ * test plants a distinguishable SECRET at the escape target and a COUNTER-PROOF
+ * that a naive raw-append read WOULD have leaked it — so a `null` is proven to
+ * be containment, not an incidental miss. Each fixture carries an arrange-step
+ * self-check asserting the symlink/hardlink is genuinely what the test claims,
+ * so the assertion is never vacuous.
+ *
+ * `realpathSync(tmpdir())` is used as the containment baseline throughout:
+ * on macOS/some Linux setups /tmp is itself a symlink, and the guard realpaths
+ * its root, so comparisons must be against the resolved root.
+ */
+
+test('SEC-04 P1 (read): a symlinked LEAF inside a real directory → guardedFile null (no leaf escape); a raw-append read WOULD have leaked', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-symleaf-'));
+  const outside = mkdtempSync(join(tmpdir(), 'sec04-symleaf-OUTSIDE-'));
+  try {
+    const secretPath = join(outside, 'secret.json');
+    writeFileSync(secretPath, JSON.stringify({ SECRET: 'victim-cross-project-read' }));
+
+    const agentDir = join(root, 'agent');
+    mkdirSync(agentDir); // a GENUINELY real, identity-clean directory
+    const leaf = join(agentDir, 'status.json');
+    symlinkSync(secretPath, leaf); // the LEAF is a symlink pointing OUTSIDE root
+
+    // Arrange self-check: the leaf is really a symlink resolving outside root.
+    assert.ok(lstatSync(leaf).isSymbolicLink(), 'arrange: leaf must be a symlink or the test is vacuous');
+    assert.equal(realpathSync(leaf), realpathSync(secretPath), 'arrange: leaf must resolve to the outside secret');
+
+    // Counter-proof: the exact "guard the dir, raw-append the leaf" shape SEC-04
+    // closes WOULD read the outside secret. Proves the fixture is a real escape
+    // vector, so the null below is protection, not an accidental miss.
+    const dirGuard = resolveGuardedPath(root, ['agent']);
+    assert.equal(dirGuard.ok, true, 'arrange: the DIRECTORY guard passes (it is a real dir) — that is exactly the trap');
+    if (dirGuard.ok) {
+      const leaked = readFileSync(join(dirGuard.realPath, 'status.json'), 'utf8');
+      assert.match(leaked, /victim-cross-project-read/, 'arrange: a raw-append read leaks the outside secret — the defect this closes');
+    }
+
+    // Act: guardedFile routes the LEAF through the guard → rejected.
+    assert.equal(guardedFile(root, ['agent', 'status.json'], 'read'), null, 'symlinked leaf must be rejected (null)');
+    assert.equal(guardedReadFile(root, ['agent', 'status.json']), null, 'the ergonomic read wrapper must not leak the secret either');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P2 (read): a real leaf in a real directory → guardedFile returns the realpath; guardedReadFile returns the contents', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-realleaf-'));
+  try {
+    const agentDir = join(root, 'agent');
+    mkdirSync(agentDir);
+    const leaf = join(agentDir, 'status.json');
+    writeFileSync(leaf, JSON.stringify({ phase: 'exploring' }));
+
+    const got = guardedFile(root, ['agent', 'status.json'], 'read');
+    assert.equal(got, realpathSync(leaf), 'a real, contained leaf must return its realpath-verified absolute path');
+
+    const contents = guardedReadFile(root, ['agent', 'status.json']);
+    assert.ok(contents !== null, 'guardedReadFile must return contents for a real contained leaf');
+    assert.match(contents!, /exploring/, 'guardedReadFile must return the actual file contents');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P3 (write): create-mode — a not-yet-existing leaf (and dir) returns its reassembled path; guardedWriteFile creates+writes it', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-createleaf-'));
+  try {
+    const realRoot = realpathSync(root);
+    // Neither the 'newagent' dir NOR the 'status.json' leaf exist yet — the
+    // legitimate scaffold-on-save shape. Write mode must return the path.
+    const got = guardedFile(root, ['newagent', 'status.json'], 'write');
+    assert.equal(got, join(realRoot, 'newagent', 'status.json'), 'create-mode write must return the reassembled path for a missing leaf');
+    assert.ok(!existsSync(join(realRoot, 'newagent', 'status.json')), 'guardedFile itself must NOT create anything — it only resolves');
+
+    // The ergonomic writer creates the parent dir + writes, returns the path.
+    const written = guardedWriteFile(root, ['newagent', 'status.json'], JSON.stringify({ phase: 'drafting' }));
+    assert.equal(written, join(realRoot, 'newagent', 'status.json'), 'guardedWriteFile returns the written path');
+    assert.ok(existsSync(written!), 'guardedWriteFile must have created the file');
+    assert.match(readFileSync(written!, 'utf8'), /drafting/, 'the written contents must be readable back');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P3b (write): a symlinked create-mode leaf is still rejected (null) — write never escapes', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-writesym-'));
+  const outside = mkdtempSync(join(tmpdir(), 'sec04-writesym-OUTSIDE-'));
+  try {
+    const victim = join(outside, 'victim.json');
+    writeFileSync(victim, 'original-untouched');
+    const agentDir = join(root, 'agent');
+    mkdirSync(agentDir);
+    const leaf = join(agentDir, 'status.json');
+    symlinkSync(victim, leaf); // leaf exists as a symlink to an outside file
+    assert.ok(lstatSync(leaf).isSymbolicLink(), 'arrange: leaf must be a symlink');
+
+    assert.equal(guardedFile(root, ['agent', 'status.json'], 'write'), null, 'a symlinked write leaf must be rejected');
+    assert.equal(guardedWriteFile(root, ['agent', 'status.json'], 'ATTACKER'), null, 'guardedWriteFile must refuse and write nothing');
+    assert.equal(readFileSync(victim, 'utf8'), 'original-untouched', 'the outside victim file must be byte-unchanged (artifact-level assertion)');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P4 (readdir): a real directory leaf → guardedFile returns its realpath; guardedReadDir lists it; a real FILE leaf → null', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-realdir-'));
+  try {
+    const dir = join(root, 'kind');
+    mkdirSync(dir);
+    mkdirSync(join(dir, 'sess-A'));
+    mkdirSync(join(dir, 'sess-B'));
+
+    const got = guardedFile(root, ['kind'], 'readdir');
+    assert.equal(got, realpathSync(dir), 'a real contained directory must return its realpath for readdir');
+
+    const entries = guardedReadDir(root, ['kind']);
+    assert.ok(entries !== null, 'guardedReadDir must return entries for a real directory');
+    assert.deepEqual(entries!.sort(), ['sess-A', 'sess-B'], 'guardedReadDir must list the real entries');
+
+    // A real FILE (not a directory) in readdir mode collapses to null.
+    writeFileSync(join(root, 'afile'), 'x');
+    assert.equal(guardedFile(root, ['afile'], 'readdir'), null, 'readdir mode on a real FILE leaf must return null (isDirectory gate)');
+    assert.equal(guardedReadDir(root, ['afile']), null, 'guardedReadDir on a file must return null');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P5 (readdir): a symlinked DIRECTORY leaf → null (no directory-symlink enumeration escape); raw readdir WOULD have listed the outside dir', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-symdir-'));
+  const outside = mkdtempSync(join(tmpdir(), 'sec04-symdir-OUTSIDE-'));
+  try {
+    mkdirSync(join(outside, 'sess-VICTIM')); // an outside session id an attacker wants to enumerate
+    const evil = join(root, 'evil');
+    symlinkSync(outside, evil); // the directory leaf itself is a symlink pointing outside
+    assert.ok(lstatSync(evil).isSymbolicLink(), 'arrange: the dir leaf must be a symlink');
+
+    // Counter-proof: realpath of the symlink IS the outside dir (a raw readdir
+    // would enumerate the victim ids — the R6-06 no-guessing chain).
+    assert.equal(realpathSync(evil), realpathSync(outside), 'arrange: the symlink resolves to the outside dir');
+
+    assert.equal(guardedFile(root, ['evil'], 'readdir'), null, 'a symlinked directory leaf must be rejected for readdir');
+    assert.equal(guardedReadDir(root, ['evil']), null, 'guardedReadDir must refuse the symlinked directory (no enumeration escape)');
+    // And a leaf UNDER the symlinked dir is rejected too (the R6-06 read leg).
+    assert.equal(guardedFile(root, ['evil', 'sess-VICTIM', 'status.json'], 'read'), null, 'reading through a symlinked dir leaf must be rejected');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P6 (read): a HARDLINKED file leaf (nlink != 1) → null; a raw read WOULD have leaked the shared inode', () => {
+  const root = mkdtempSync(join(tmpdir(), 'sec04-hardlink-'));
+  const outside = mkdtempSync(join(tmpdir(), 'sec04-hardlink-OUTSIDE-'));
+  try {
+    const secretPath = join(outside, 'secret.json');
+    writeFileSync(secretPath, JSON.stringify({ SECRET: 'hardlink-shared-inode' }));
+
+    const agentDir = join(root, 'agent');
+    mkdirSync(agentDir);
+    const leaf = join(agentDir, 'status.json');
+    // A HARDLINK: same inode as the outside secret, but a genuine (non-symlink)
+    // directory entry lexically AND really inside root — realpath is blind to it.
+    linkSync(secretPath, leaf);
+
+    // Arrange self-check: the leaf is NOT a symlink, shares the inode, nlink==2.
+    const st = lstatSync(leaf);
+    assert.ok(!st.isSymbolicLink(), 'arrange: a hardlink is not a symlink');
+    assert.equal(st.nlink, 2, 'arrange: the hardlinked leaf must have nlink 2 (shared inode)');
+    assert.equal(realpathSync(leaf), leaf, 'arrange: realpath leaves a hardlink path unchanged — nothing to resolve (why realpath-only checks miss it)');
+
+    // Counter-proof: a raw read through the in-tree path leaks the shared inode.
+    assert.match(readFileSync(leaf, 'utf8'), /hardlink-shared-inode/, 'arrange: raw read leaks the shared-inode secret — the defect nlink!=1 closes');
+
+    assert.equal(guardedFile(root, ['agent', 'status.json'], 'read'), null, 'a hardlinked leaf (nlink != 1) must be rejected');
+    assert.equal(guardedReadFile(root, ['agent', 'status.json']), null, 'guardedReadFile must not leak through the shared inode');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+    rmSync(outside, { recursive: true, force: true });
+  }
+});
+
+test('SEC-04 P7 (root-trust contract): a request-influenced project id as a SEGMENT is contained; folded into ROOT it escapes — the primitive cannot self-detect a bad root', () => {
+  // This pins the SEC-04 root cause asymmetry (the module docstring CONTRACT):
+  // project_repo_path is REQUEST-INFLUENCED (persisted from a /start body) and
+  // MUST NOT be passed as the guard `root`. The trusted root is
+  // projectsRoot/logsRoot/forgeRoot.
+  const projectsRoot = mkdtempSync(join(tmpdir(), 'sec04-contract-PROJECTS-'));
+  const outsideVictim = mkdtempSync(join(tmpdir(), 'sec04-contract-VICTIM-'));
+  try {
+    const victimStatus = join(outsideVictim, 'status.json');
+    writeFileSync(victimStatus, JSON.stringify({ SECRET: 'victim-project-status' }));
+
+    // The attacker project's on-disk dir is a symlink pointing at the victim —
+    // plantable by an ordinary git commit (git tracks symlinks). Its path is
+    // exactly what would be persisted as project_repo_path from a /start body.
+    const projectRepoPath = join(projectsRoot, 'attacker');
+    symlinkSync(outsideVictim, projectRepoPath);
+    assert.ok(lstatSync(projectRepoPath).isSymbolicLink(), 'arrange: the attacker project dir is a symlink to the victim');
+
+    // SAFE FORM — the request-influenced id arrives as its OWN segment under the
+    // TRUSTED projectsRoot: the per-segment identity walk catches the symlink.
+    assert.equal(
+      guardedFile(projectsRoot, ['attacker', 'status.json'], 'read'),
+      null,
+      'CONTAINED: a symlinked project id passed as a SEGMENT under the trusted root is rejected',
+    );
+
+    // WRONG FORM — project_repo_path folded into `root` (the SEC-04 root cause):
+    // resolveGuardedPath realpaths `root` with NO identity check, so containment
+    // is tautological and the outside victim is read. This is the DOCUMENTED
+    // hole the caller contract forbids — the primitive CANNOT detect a
+    // request-derived root (indistinguishable from a trusted string here).
+    const escaped = guardedFile(projectRepoPath, ['status.json'], 'read');
+    assert.notEqual(escaped, null, 'CONTRACT-FLAG: folding project_repo_path into root escapes — the guard cannot self-detect a bad root');
+    assert.equal(
+      realpathSync(escaped!),
+      realpathSync(victimStatus),
+      'CONTRACT-FLAG: the escaped read resolves to the OUTSIDE victim status — proving why the caller must pass projectsRoot/logsRoot/forgeRoot as root, never project_repo_path',
+    );
+    // And that escaped path is genuinely OUTSIDE the trusted projectsRoot.
+    assert.ok(
+      !realpathSync(escaped!).startsWith(realpathSync(projectsRoot)),
+      'CONTRACT-FLAG: the folded-root read landed outside the trusted projectsRoot entirely',
+    );
+  } finally {
+    rmSync(projectsRoot, { recursive: true, force: true });
+    rmSync(outsideVictim, { recursive: true, force: true });
   }
 });

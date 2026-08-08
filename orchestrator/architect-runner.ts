@@ -44,7 +44,7 @@ import {
   rmSync,
   writeFileSync,
 } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join, resolve, dirname } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
 
@@ -61,7 +61,7 @@ import {
   type InterviewRound,
 } from '../cli/architect-plan.ts';
 import { loadBrainIndex } from '../cli/brain-index.ts';
-import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile } from '../cli/studio-path-guard.ts';
 import {
   serializeManifest,
   parseManifest,
@@ -1397,6 +1397,48 @@ export function readStatus(sessionDir: string): ArchitectStatus | null {
 export function writeStatus(sessionDir: string, status: ArchitectStatus): string {
   if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
   const p = join(sessionDir, 'status.json');
+  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+  return p;
+}
+
+// ---------------------------------------------------------------------------
+// SEC-04 — guarded leaf siblings of readStatus / writeStatus.
+//
+// The raw pair above raw-appends the `status.json` leaf to an already-built
+// `sessionDir` (`join(sessionDir, 'status.json')`) — the "guard the dir,
+// raw-append the leaf" shape SEC-04 closes. These siblings take the TRUSTED
+// `projectsRoot` plus the request-derived directory segments (`project`,
+// `'_architect'`, `sessionId`) as their OWN `segments[]` elements — never
+// folded into the root — and route the WHOLE path, `status.json` leaf
+// included, through `guardedFile`, so a symlinked/hardlinked status leaf is
+// rejected. Raw pair retained; Phase-1 appliers switch the architect route
+// call sites onto these. Returns `null` on a containment rejection (fail
+// closed), matching `readStatus`'s existing "null when unavailable" contract.
+// ---------------------------------------------------------------------------
+
+export function guardedReadStatus(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  leaf = 'status.json',
+): ArchitectStatus | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'read');
+  if (p === null) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as ArchitectStatus;
+  } catch {
+    return null;
+  }
+}
+
+export function guardedWriteStatus(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  status: ArchitectStatus,
+  leaf = 'status.json',
+): string | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'write');
+  if (p === null) return null;
+  mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
   return p;
 }
