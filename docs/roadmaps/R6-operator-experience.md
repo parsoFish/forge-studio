@@ -178,6 +178,70 @@ one. Journey coverage: `scripts/journeys/flows-run.mjs`'s
 node expand/collapse) and the extended `flows-run-drawer-live-tail`, plus a
 `scripts/e2e-deadpaths.mjs` route for the flow run-detail 404 path.
 
+### R6-B8 Agent monitor linkage (R6-06-F1, 2026-08-08)
+
+`/agents/[id]` gains a per-agent run-history ledger, rendered by the SAME
+`forge-ui/components/studio/HistoryLedger.tsx` the flow monitor uses — the
+"build once, two surfaces" mandate of R6-B7 discharged. Rows come from a new
+read route `GET /api/agents/:slug/history` (`cli/ui-bridge.ts`) which joins
+**three execution paths**, each row's status and cost read from **that
+target's own record**: flow-node runs (attribution from the flow definitions'
+own `node.agent`, status `run.phases[nodeId]`, cost
+`phaseMeta[nodeId].costUsd`), standalone dispatches (`_logs/<runId>`, derived
+from that run's own `events.jsonl` through the SAME extracted deriver
+`GET /api/agents/runs/:runId` uses, so the two cannot drift), and sessions
+(that session's own `status.json` phase, cost from its own execution log or
+honestly absent). Per-row `data-*` contract in
+[`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md).
+
+**Why a new route at all, since R6-B7 needed none:** measured — `listRuns`
+walks `_queue/` only, so standalone dispatches are invisible to `/api/runs`
+entirely, and sessions have no list route and no served kind→agent mapping.
+Two of the three paths have no client-visible enumeration, so a client-side
+join is impossible. `LedgerRow.href` is still computed by the CALLER
+(`forge-ui/lib/agent-ledger.ts`), preserving R6-B7's reuse seam: the shared
+component renders whatever `href` it is handed and never constructs one.
+
+**Attribution is identity, never membership.** A standalone run is admitted
+only on exact equality against **its own events** (`metadata.agent_slug` or
+`skill`); the runId is never prefix-matched, because `_agent-a-` also matches
+every run of agent `a-b`. The caller-supplied slug is a **filter over
+enumerated entries, never a path segment**.
+
+**Segment vocabulary extended additively** (7 → 10: `standalone`, `in-flow`,
+`node-errors`) with both exhaustiveness pins updated in step. A node row's
+narrative derives from THAT NODE's own `phaseMeta`, never the run-level
+aggregate; `retries` remains a gate signal only on `dev`, and the separate
+`node-errors` kind names what it actually is elsewhere. Trigger provenance is
+now attached to **both** ledgers in one change (the deferral R6-B7 recorded).
+
+⚑ **A shipped cross-project read primitive was found and closed here.**
+`resolveSafeSessionDir` derived its containment baseline by realpath-ing a
+path already built from untrusted input, so when `projects/<p>/_<kind>` was
+itself a symlink the baseline WAS the escaped location and the check could
+never fail — wire-reachable on `GET /api/studio/sessions/:kind/:sessionId`,
+whose `project` comes from the request query, and plantable by an ordinary
+git commit because `projects/<name>/` is a managed project's own working
+tree. It now delegates to `resolveGuardedPath`'s per-segment identity walk.
+Six escape shapes (directory symlink, leaf file symlink, hardlinked leaf ×
+standalone and session paths) are pinned in
+`cli/ui-bridge-agent-history-containment.test.ts`; `nlink === 1` is what
+closes the hardlinks, since `realpath` is structurally blind to them. Audit
+rows added to `docs/security-request-path-audit.md` including a **retraction**
+of the row that had described the old guard as containment. The sinks
+baseline moved **422 → 421** — the fix removed `cli/ui-bridge.ts`'s last
+`statSync` sink outright. The sweep of other call sites is **SEC-04**
+(`forge-ebj`), deliberately out of scope here.
+
+**Honest gaps shipped as gaps:** the journey beat exercises the populated
+path on all three link kinds but not the `unresolved` state (page wiring is
+`tsc`-verified, per this repo's standing note for `'use client'` shells);
+`safeReadFileInSession`'s hardlink residual is untouched for the OTHER
+session files it reads, since this route uses a stricter purpose-built choke
+point; and `cli/ui-bridge.ts` (3998 lines) plus
+`forge-ui/app/agents/[id]/page.tsx` (877) both exceed the 800-line hard max,
+pre-existing and filed rather than split inside a pinned security fix.
+
 ### R6-B7 Flow monitor history ledger (R6-05-F1, 2026-08-08)
 
 The `/flows/[id]` monitor tab carries a per-flow **history ledger** in the
@@ -448,7 +512,7 @@ through the live `aggregateRun` rather than invented.
 
 ### R6-06 Agent monitor linkage
 
-- **Status:** planned  ·  **Wave:** 5 (module: agents-home/monitor)
+- **Status:** implemented (2026-08-08) — see baseline **R6-B8**  ·  **Wave:** 5 (module: agents-home/monitor)
 - **Depends on:** R6-05 (shared ledger components), R6-04-F3 (standalone run
   view to link to), R2-10 (session surface to link to).
 - **Context:** Wave-5 cut. Mockup round-7: agent monitor history rows link
@@ -637,3 +701,24 @@ R4-11-F4 attention strip during real multi-project operation.
   project typechecks `forge-ui/lib/*.test.ts`, so type-level pins cannot fail
   in any gate), `forge-0u4` (the artifact route's filename dimension), and
   `forge-cv9` (client `Run.origin` omits `'triggered'`).
+- 2026-08-08 — **R6-06 → implemented** (agent monitor linkage; WI-1 the
+  three-path `GET /api/agents/:slug/history` read route, WI-2 the shared
+  ledger extension + agent-side derivation, WI-3 the `/agents/[id]` surface,
+  WI-4 duties — as-built facts in new baseline **R6-B8**). The "build once,
+  two surfaces" mandate of R6-B7 is discharged: the agent ledger reuses
+  `HistoryLedger.tsx` unchanged, pointing rows at three destinations purely
+  through the caller-computed `LedgerRow.href`. A new route was needed —
+  measured, not chosen — because `listRuns` walks `_queue/` only, so
+  standalone dispatches are invisible to `/api/runs` and sessions have no
+  list route at all. ⚑ **A shipped, wire-reachable cross-project read
+  primitive was found and closed here**: `resolveSafeSessionDir`'s
+  containment baseline was root-folded and could never fail for a symlinked
+  `_<kind>` dir; six escape shapes are now pinned, `nlink === 1` closes the
+  hardlinks, and the sinks baseline moved **422 → 421** because the fix
+  removed a sink outright. Residue filed: `forge-ebj` (**SEC-04**, the
+  guard-family sweep — 41 guard refs, 27 `readSessionStatus` refs across six
+  files, 61 `realpathSync` sites), `forge-9vv` (the sweep's repro recipe),
+  `forge-uie` (the ratchet is blind to a new CALLER of an already-unguarded
+  shared function), `forge-2w4` (a third home of the parse-body-before-status
+  class), `forge-aug` (the standalone scan is unbounded and `_agent-*` dirs
+  are never pruned), and `forge-mqf` (`cli/ui-bridge.ts` at 3998 lines).

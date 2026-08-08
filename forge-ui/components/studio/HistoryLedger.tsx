@@ -42,6 +42,10 @@
  * `.toFixed(4)` precision on the page-level summary strip; reusing that
  * name here would make one attribute mean two different precisions across
  * two different elements. The `$`-prefixed form is display text only.
+ * R6-06: `row.costUsd` can be `null` (a cost that genuinely does not exist
+ * yet — e.g. a session with no log dir) — BOTH the attribute and the
+ * display text are then omitted entirely, never a fabricated `"0.00"`/
+ * `"$0.00"` standing in for an absent fact.
  *
  * The row is a REAL `<a href>` (amendment 29) — not a `<div>` with an
  * `onClick` bolted on, which is invisible to keyboard nav, screen readers,
@@ -53,6 +57,19 @@
  * human-readable relative text is rendered separately via
  * `formatWhen(row.when, nowMs)` from the REQUIRED `nowMs` prop — never
  * `Date.now()` read inside this component.
+ *
+ * R6-06 D8 — TWO new CONDITIONAL attributes, mirroring `data-ledger-narrative`/
+ * `data-narrative-kinds`'s own "only when present" discipline exactly, so
+ * every EXISTING (pre-R6-06) flow-ledger row renders BYTE-IDENTICALLY:
+ *   [data-ledger-link-kind]                 ONLY when row.linkKind !== undefined
+ *   [data-trigger-kind/source/scope]        ONLY when row.trigger !== undefined
+ *                                             (all three together — an
+ *                                             unscoped trigger still renders
+ *                                             `data-trigger-scope=""`, never
+ *                                             omitted, never "null")
+ * The trigger attribute NAMES mirror `FlowRunDetail.tsx`'s already-shipped
+ * `data-trigger-kind`/`data-trigger-source`/`data-trigger-scope` vocabulary
+ * verbatim — reused here on the ROW element instead of a page-level section.
  */
 
 import { formatWhen } from '@/lib/history-ledger';
@@ -97,9 +114,15 @@ export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
             data-run-id={row.id}
             data-run-status={row.status}
             data-run-when={row.when}
-            data-ledger-cost-usd={row.costUsd.toFixed(2)}
+            {...(row.costUsd !== null ? { 'data-ledger-cost-usd': row.costUsd.toFixed(2) } : {})}
             {...(row.narrative !== null ? { 'data-ledger-narrative': row.narrative } : {})}
             {...(row.narrativeKinds.length > 0 ? { 'data-narrative-kinds': row.narrativeKinds.join(',') } : {})}
+            {...(row.linkKind !== undefined ? { 'data-ledger-link-kind': row.linkKind } : {})}
+            {...(row.trigger !== undefined ? {
+              'data-trigger-kind': row.trigger.kind,
+              'data-trigger-source': row.trigger.source,
+              'data-trigger-scope': row.trigger.scope ?? '',
+            } : {})}
             href={row.href}
             title={`${row.what} — ${formatWhen(row.when, nowMs)}`}
             style={{
@@ -123,7 +146,9 @@ export function HistoryLedger({ rows, nowMs }: HistoryLedgerProps) {
                 {row.narrative}
               </span>
             )}
-            <span style={{ color: 'var(--ember)', flexShrink: 0, marginLeft: 'auto' }}>${row.costUsd.toFixed(2)}</span>
+            {row.costUsd !== null && (
+              <span style={{ color: 'var(--ember)', flexShrink: 0, marginLeft: 'auto' }}>${row.costUsd.toFixed(2)}</span>
+            )}
           </a>
         ))
       )}

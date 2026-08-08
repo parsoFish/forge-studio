@@ -30,6 +30,7 @@ import { ZoneWrap } from '@/components/studio/agent-builder/ZoneWrap';
 import { ReadOnlyFields } from '@/components/studio/agent-builder/ReadOnlyFields';
 import { InstructionsField } from '@/components/studio/agent-builder/InstructionsField';
 import { MaterialsPicker } from '@/components/studio/agent-builder/MaterialsPicker';
+import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import {
   fetchStudioAgentsWithMeta,
   fetchStudioCatalog,
@@ -49,6 +50,7 @@ import {
 import type { StandingTrigger } from '@/lib/standing-triggers';
 import { fetchConnections, type ConnectionWire } from '@/lib/connection-client';
 import { unreadyBoundConnections, blockedRunMessage, type BoundConnectionRef } from '@/lib/connection-library-view';
+import { fetchAgentHistory, type AgentHistoryResolution } from '@/lib/agent-ledger';
 import {
   toggleMaterial,
   applyInstructionsDraft,
@@ -288,6 +290,14 @@ export default function AgentBuilderPage() {
   // fails-open: never fabricate readiness from data that hasn't arrived).
   const [connections, setConnections] = useState<ConnectionWire[]>([]);
   const [connectionsStatus, setConnectionsStatus] = useState<'loading' | 'ready' | 'error'>('loading');
+  // R6-06 WI-3: this agent's own run-history ledger — an independent fetch,
+  // same idiom as the connections effect above (own useEffect, own cancelled
+  // flag), but keyed on the ROUTE's slug (see the effect below) rather than
+  // fired once, since the ledger is per-agent and must refetch on every
+  // agent switch. `null` means "not yet resolved" — kept DISTINCT from all
+  // three of fetchAgentHistory's own resolution kinds (found/not-found/
+  // unresolved) so a still-in-flight fetch never renders as any of them.
+  const [historyResolution, setHistoryResolution] = useState<AgentHistoryResolution | null>(null);
   // For a new agent: the user first picks a starter (or "blank"); only then is
   // the builder revealed. Existing agents skip the picker (chosen = true).
   const [starterChosen, setStarterChosen] = useState(false);
@@ -467,6 +477,27 @@ export default function AgentBuilderPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // R6-06 WI-3: independent per-agent history fetch, keyed on the route's own
+  // `slugParam` (the same dependency the primary load() effect above uses) so
+  // switching agents — via the selector or a direct route change — re-fetches
+  // THIS agent's own history, never leaves the previous agent's rows showing.
+  // A brand-new, not-yet-saved agent (`isNew`) has no persisted slug to have
+  // history for, so this effect deliberately does not fire for it —
+  // `historyResolution` stays `null` and the section is omitted entirely
+  // (never a fabricated "not-found" against a slug that isn't real yet).
+  useEffect(() => {
+    let cancelled = false;
+    setHistoryResolution(null);
+    if (isNew) return () => { cancelled = true; };
+    async function loadHistory() {
+      const res = await fetchAgentHistory(slugParam);
+      if (cancelled) return;
+      setHistoryResolution(res);
+    }
+    void loadHistory();
+    return () => { cancelled = true; };
+  }, [slugParam, isNew]);
+
   // ---- agent selector change (with dirty guard) ----
   function handleSelectAgent(newSlug: string) {
     if (dirty && !window.confirm('You have unsaved changes. Discard them?')) return;
@@ -563,6 +594,15 @@ export default function AgentBuilderPage() {
     capability:    state.capability,
     connectionsUnready,
   };
+
+  // R6-06 WI-3 — D2/D3: `found` and `not-found` both render through the
+  // shared `HistoryLedger` (rows=[] for not-found is the component's own
+  // honest `[data-component="history-ledger-empty"]`, never fabricated
+  // rows). `unresolved` (a failed/unreachable fetch) is a DIFFERENT operator
+  // fact — rendered separately below, never collapsed into this same empty
+  // ledger (that collapse is the filed defect class this WI must not
+  // reproduce).
+  const historyRows = historyResolution?.kind === 'found' ? historyResolution.rows : [];
 
   // ---- render ----
   return (
@@ -794,6 +834,34 @@ export default function AgentBuilderPage() {
             standingTriggers={standingTriggers}
           />
           <UsedInFlows agentSlug={state.slug} flows={flows} />
+
+          {/* R6-06 WI-3 — this agent's own run-history ledger, joined across
+              all three execution paths (flow-node / standalone / session) by
+              the server route (GET /api/agents/:slug/history). A new,
+              not-yet-saved agent has no persisted slug to have history for,
+              so the whole section is omitted rather than showing a
+              fabricated state for a slug that doesn't exist yet. */}
+          {!isNew && historyResolution === null && (
+            <div
+              data-component="history-ledger-loading"
+              className="muted"
+              style={{ padding: '10px 20px', fontSize: 12, borderTop: '1px solid var(--line)' }}
+            >
+              Loading run history…
+            </div>
+          )}
+          {!isNew && historyResolution?.kind === 'unresolved' && (
+            <div
+              data-component="history-ledger-unresolved"
+              className="muted"
+              style={{ padding: '10px 20px', fontSize: 12, borderTop: '1px solid var(--line)' }}
+            >
+              Could not load run history — try again shortly.
+            </div>
+          )}
+          {!isNew && (historyResolution?.kind === 'found' || historyResolution?.kind === 'not-found') && (
+            <HistoryLedger rows={historyRows} nowMs={Date.now()} />
+          )}
         </aside>
 
       </div>{/* /.workbench */}

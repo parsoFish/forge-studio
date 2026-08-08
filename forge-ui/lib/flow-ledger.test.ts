@@ -549,3 +549,54 @@ test("deriveFlowLedgerRows: THE CANONICAL ORDER, companion — narrative and nar
   expect(rowOut.narrative).toBe('dev 3/3 → gate failed ×2 → 3 findings (1 blocker, 1 major) → merged → reflection lost: crash');
   expect(rowOut.narrativeKinds).toEqual(['work-items', 'gate-fails', 'review-findings', 'merged', 'reflection-lost']);
 });
+
+// ---------------------------------------------------------------------------
+// R6-06 (D8) — trigger attachment on BOTH ledgers, and the byte-identical-
+// when-absent pin. `Run.trigger` already exists on the wire type
+// (studio-client.ts, R2-08-F4/R6-01 WI-2 — NOT new here); what's new is
+// `deriveFlowLedgerRows` actually copying it onto `LedgerRow.trigger`.
+// ---------------------------------------------------------------------------
+
+test("R6-06 D8: deriveFlowLedgerRows attaches run.trigger onto row.trigger verbatim when present — the SAME field flow-run-detail already renders (FlowRunDetail.tsx's data-trigger-kind/source/scope), now also reaching the ledger row", () => {
+  // KILLS: the CURRENT `deriveFlowLedgerRows` (flow-ledger.ts:112-127), whose
+  // returned object literal has no `trigger` key at all — `run.trigger` is
+  // read nowhere in this function today. A wrong "fix" that only reads
+  // `run.trigger` when truthy but drops a legitimately unscoped trigger
+  // (`scope: null`) is also killed by the SEPARATE unscoped-trigger test
+  // below (mirrors flow-run-detail-render.test.ts's own
+  // `data-trigger-scope=""` "not omitted, not null" precedent).
+  const run = baseRun({ trigger: { kind: 'schedule', source: 'cron:0 9 * * 1', scope: 'gitpulse' } });
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.trigger).toEqual({ kind: 'schedule', source: 'cron:0 9 * * 1', scope: 'gitpulse' });
+});
+
+test('R6-06 D8: an UNSCOPED trigger (scope: null) is carried through verbatim too — never dropped, never coerced to undefined', () => {
+  const run = baseRun({ trigger: { kind: 'webhook', source: 'gh-webhook', scope: null } });
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.trigger).toEqual({ kind: 'webhook', source: 'gh-webhook', scope: null });
+});
+
+test('R6-06 D8 BYTE-IDENTICAL-WHEN-ABSENT: a run with NO trigger produces a row with `trigger` left undefined — every EXISTING (pre-R6-06) flow-ledger row is unaffected by this addition', () => {
+  // KILLS: a naive implementation that always sets SOME trigger value
+  // (`trigger: null`, `trigger: {}`) instead of leaving the key genuinely
+  // absent when `run.trigger` itself is absent — the R6-05 flow monitor's
+  // shipped rows (none of which ever populate `trigger` today) must render
+  // byte-identically after this change lands, and `HistoryLedger.tsx`'s own
+  // conditional-attribute contract (history-ledger-render.test.ts) is keyed
+  // off `row.trigger !== undefined`, not off some other sentinel.
+  const run = baseRun({ trigger: undefined } as Partial<Run>);
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect(rowOut.trigger).toBeUndefined();
+  expect('trigger' in rowOut === false || rowOut.trigger === undefined).toBe(true);
+});
+
+test('R6-06 D8: linkKind is NEVER set by deriveFlowLedgerRows — that field belongs exclusively to R6-06\'s agent-ledger.ts caller (D8 scopes it to the new caller, not this existing one)', () => {
+  // KILLS: a copy-paste that also stamps `linkKind: 'flow-node'` onto every
+  // flow-ledger row — flow-ledger.ts's own rows are ALREADY scoped to
+  // "inside a flow run" by construction (that's the whole page they render
+  // on); a stray `linkKind` here would be dead weight this caller never
+  // needed and never asked for.
+  const run = baseRun();
+  const [rowOut] = deriveFlowLedgerRows([run]);
+  expect((rowOut as unknown as { linkKind?: unknown }).linkKind).toBeUndefined();
+});

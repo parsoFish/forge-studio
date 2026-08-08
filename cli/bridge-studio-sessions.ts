@@ -32,15 +32,23 @@
  *     with SLUG_RE. Exact precedent: cli/bridge-studio-runs.ts's plan-verdict
  *     route ("project uses SLUG_RE ... sessionId uses SAFE_ID_RE"). BOTH are
  *     validated (length cap + charset) BEFORE any fs call.
- *   - The session dir is resolved via `realpathSync`, never a lexical
- *     `startsWith(dir + sep)` check on the unresolved path — see
- *     `resolveSafeSessionDir` below. The escape probe this defends
- *     (AT-47) is a symlink whose OWN on-disk path is safely inside the
- *     requested `<project>/_<kind>/` dir but which resolves to a DIFFERENT
- *     project's session — a check that only verifies "somewhere under
- *     projectsRoot" would miss this (the target is still under projectsRoot,
- *     just under a different project); the check must be scoped to the
- *     specific `<project>/_<kind>/` parent, not the whole projectsRoot tree.
+ *   - The session dir is resolved via `resolveGuardedPath`
+ *     (cli/studio-path-guard.ts) — a per-segment IDENTITY walk, never a
+ *     lexical `startsWith(dir + sep)` check on the unresolved path, and
+ *     never (R6-06 round 6 fix) a realpath computed on an ALREADY-FOLDED
+ *     `<project>/_<kind>` baseline — see `resolveSafeSessionDir` below for
+ *     why that earlier shape was tautological when `_<kind>` itself was the
+ *     symlink. The escape probe AT-47 defends is a symlink whose OWN on-disk
+ *     path is safely inside the requested `<project>/_<kind>/` dir but which
+ *     resolves to a DIFFERENT project's session — a check that only verifies
+ *     "somewhere under projectsRoot" would miss this (the target is still
+ *     under projectsRoot, just under a different project); the check must be
+ *     scoped to the specific `<project>/_<kind>/` parent, not the whole
+ *     projectsRoot tree. `resolveGuardedPath`'s per-segment walk additionally
+ *     catches a symlinked `_<kind>` DIRECTORY itself (the R6-06 P0 shape,
+ *     git-plantable via `git update-index --cacheinfo 120000` inside any
+ *     onboarded project's own repo) — the one shape the old hand-rolled check
+ *     missed.
  *   - `phase` is read from the session's real `status.json` through the SAME
  *     realpath-guarded choke point (`safeReadFileInSession`,
  *     orchestrator/studio/session-transcript.ts) every other session file in
@@ -67,8 +75,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { realpathSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
@@ -77,6 +84,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrat
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import { deriveContractStages } from './contract-stages.ts';
+import { resolveGuardedPath } from './studio-path-guard.ts';
 
 /** `status.json`'s filename, relative to a session dir — read via
  *  `safeReadFileInSession` (the SAME realpath-guarded choke point
@@ -134,39 +142,39 @@ function invalidProjectReason(id: string): string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Session-dir resolution — realpathSync at the choke point, scoped to the
-// specific <project>/_<kind>/ parent (NOT the whole projectsRoot tree — see
-// header note on why that broader check would miss the AT-47 escape shape).
+// Session-dir resolution — delegates to `resolveGuardedPath`
+// (cli/studio-path-guard.ts), the repo's one shared per-segment IDENTITY
+// containment guard, scoped to the specific <project>/_<kind>/ parent (NOT
+// the whole projectsRoot tree — see header note on why that broader check
+// would miss the AT-47 escape shape).
 // ---------------------------------------------------------------------------
 
 /**
- * Resolves `<projectsRoot>/<project>/<kindDirName>/<sessionId>` and verifies,
- * via `realpathSync` (never a lexical prefix check on the unresolved path),
- * that the resolved directory still lives inside the resolved
- * `<projectsRoot>/<project>/<kindDirName>/` parent. A missing dir and an
- * escaping symlink both return `null` — collapsed into the same "not found"
- * outcome, so an attacker can never distinguish "wrong id" from "blocked
- * escape" from the response.
+ * Resolves `<projectsRoot>/<project>/<kindDirName>/<sessionId>` with genuine
+ * per-segment IDENTITY containment (R6-06 round 6 — replaces a HAND-ROLLED
+ * check that had its own root-folding defect: it called
+ * `realpathSync(join(projectsRoot, project, kindDirName))` FIRST and used
+ * THAT as its comparison baseline, so when `kindDirName` (the `_<kind>` dir)
+ * itself was a symlink, the baseline was already the escaped location and
+ * the "containment" check was tautological — proven by direct execution
+ * before this fix, see the R6-06 task report). `project`, `kindDirName`, and
+ * `sessionId` each arrive as their OWN element of `segments[]` — never
+ * folded into `root` — so `resolveGuardedPath`'s walk checks EVERY one of
+ * them against its own expected literal location, catching a symlinked
+ * `_<kind>` dir (this function's own prior defect) exactly as it catches a
+ * symlinked `sessionId` (AT-47, always caught, even by the old code).
+ *
+ * `projectsRoot` is a fixed, config-derived constant — the caller's own
+ * `root` in `resolveGuardedPath`'s trust contract — never request-derived.
+ *
+ * A missing dir and an escaping symlink both return `null` — collapsed into
+ * the same "not found" outcome, so an attacker can never distinguish "wrong
+ * id" from "blocked escape" from the response.
  */
 function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirName: string, sessionId: string): string | null {
-  const parentDir = join(projectsRoot, project, kindDirName);
-  let realParentDir: string;
-  try {
-    realParentDir = realpathSync(parentDir);
-  } catch {
-    return null; // no such project/kind dir at all
-  }
-  const candidate = join(parentDir, sessionId);
-  let realCandidate: string;
-  try {
-    realCandidate = realpathSync(candidate);
-  } catch {
-    return null; // missing session dir
-  }
-  if (realCandidate !== realParentDir && !realCandidate.startsWith(realParentDir + sep)) {
-    return null; // escapes the project/kind boundary via a symlink
-  }
-  return realCandidate;
+  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId]);
+  if (!guarded.ok || !guarded.exists) return null;
+  return guarded.realPath;
 }
 
 // ---------------------------------------------------------------------------

@@ -339,6 +339,120 @@ test('data-run-when carries the raw ISO verbatim regardless of nowMs', () => {
   expect(rowMarkup(html, 'a')).toContain('data-run-when="2026-01-01T00:00:00Z"');
 });
 
+// ---------------------------------------------------------------------------
+// R6-06 (D8) — NEW conditional attributes: data-ledger-link-kind,
+// data-trigger-kind/data-trigger-source/data-trigger-scope. Naming choice
+// for the trigger attributes is DELIBERATE, not invented fresh: mirrors
+// `FlowRunDetail.tsx`'s ALREADY-SHIPPED `data-trigger-kind`/
+// `data-trigger-source`/`data-trigger-scope` vocabulary verbatim (see that
+// component's header + `flow-run-detail-render.test.ts:304`'s own explicit
+// "KILLS: inventing a parallel vocabulary" precedent) — reused here on the
+// ROW element instead of a page-level `<section data-section="run-trigger">`.
+// `data-ledger-link-kind` (not the bare `data-link-kind`) follows this
+// component's OWN established `data-ledger-*` prefix for facts this ledger
+// layer adds that don't already exist as a `Run` field (`data-ledger-
+// cost-usd`, `data-ledger-narrative` — as opposed to `data-run-*`, reserved
+// for facts copied straight off `Run`).
+// ---------------------------------------------------------------------------
+
+test('R6-06 D8: a row with linkKind set renders data-ledger-link-kind with the exact value, verbatim', () => {
+  // KILLS: the CURRENT component (HistoryLedger.tsx), which has no
+  // `data-ledger-link-kind` attribute at all — legitimate RED against a
+  // not-yet-extended file. Also kills a renamed/synonym attribute
+  // (`data-link-kind`, `data-row-kind`) that would silently miss any
+  // automation/journey selector written against this exact name.
+  const html = render({ rows: [row({ id: 'a', linkKind: 'standalone' } as never)] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).toContain('data-ledger-link-kind="standalone"');
+});
+
+test('R6-06 D8: all three real linkKind values render their own exact literal, on the correct row, never scrambled across neighbours', () => {
+  const html = render({
+    rows: [
+      row({ id: 'a', linkKind: 'flow-node' } as never),
+      row({ id: 'b', linkKind: 'standalone' } as never),
+      row({ id: 'c', linkKind: 'session' } as never),
+    ],
+  });
+  expect(rowMarkup(html, 'a')).toContain('data-ledger-link-kind="flow-node"');
+  expect(rowMarkup(html, 'b')).toContain('data-ledger-link-kind="standalone"');
+  expect(rowMarkup(html, 'c')).toContain('data-ledger-link-kind="session"');
+});
+
+test('R6-06 D8 BYTE-IDENTICAL-WHEN-ABSENT: a row with linkKind left undefined (every EXISTING R6-05 flow-ledger row) renders NO data-ledger-link-kind attribute at all', () => {
+  // KILLS: a component that always renders SOME value for this attribute
+  // (`data-ledger-link-kind="undefined"`, `data-ledger-link-kind=""`) —
+  // every row R6-05's flow monitor already renders on production today has
+  // no `linkKind` (flow-ledger.ts never sets it, per flow-ledger.test.ts's
+  // own new pin) — this component must render those rows BYTE-IDENTICALLY
+  // to how it renders them today, not grow a stray empty attribute.
+  const html = render({ rows: [row({ id: 'a', linkKind: undefined } as never)] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).not.toContain('data-ledger-link-kind');
+});
+
+test('R6-06 D8: a row with trigger set renders data-trigger-kind/data-trigger-source/data-trigger-scope on the ROW element, mirroring FlowRunDetail.tsx\'s established vocabulary exactly', () => {
+  const html = render({
+    rows: [row({ id: 'a', trigger: { kind: 'schedule', source: 'cron:0 9 * * 1', scope: 'gitpulse' } } as never)],
+  });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).toContain('data-trigger-kind="schedule"');
+  expect(markup).toContain('data-trigger-source="cron:0 9 * * 1"');
+  expect(markup).toContain('data-trigger-scope="gitpulse"');
+});
+
+test('R6-06 D8: an UNSCOPED trigger renders data-trigger-scope="" — not omitted, not the string "null" — matching FlowRunDetail.tsx\'s own pinned convention for the identical fact', () => {
+  const html = render({
+    rows: [row({ id: 'a', trigger: { kind: 'webhook', source: 'gh-webhook', scope: null } } as never)],
+  });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).toContain('data-trigger-kind="webhook"');
+  expect(markup).toContain('data-trigger-scope=""');
+  expect(markup).not.toContain('data-trigger-scope="null"');
+  expect(markup).not.toContain('data-trigger-scope="undefined"');
+});
+
+test('R6-06 D8 BYTE-IDENTICAL-WHEN-ABSENT: a row with trigger left undefined renders NONE of the three data-trigger-* attributes — every EXISTING R6-05 flow-ledger row (none of which set trigger before this initiative) is unaffected', () => {
+  const html = render({ rows: [row({ id: 'a', trigger: undefined } as never)] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).not.toContain('data-trigger-kind');
+  expect(markup).not.toContain('data-trigger-source');
+  expect(markup).not.toContain('data-trigger-scope');
+});
+
+test('R6-06 D8 BYTE-IDENTICAL-WHEN-ABSENT (full regression lock): a row shaped EXACTLY like an R6-05-era row (no linkKind, no trigger) renders a markup fragment containing NONE of the four new attribute names anywhere', () => {
+  // The single strongest form of this pin: not just "the specific new
+  // attributes are absent from THIS row's own tag" but "nothing in the
+  // rendered fragment for this row even contains the new attribute NAME
+  // substrings" — catches an implementation that renders them elsewhere in
+  // the row's markup (e.g. on a child <span>) rather than omitting them
+  // outright.
+  const html = render({ rows: [row({ id: 'a' })] }); // the plain R6-05 fixture — unmodified
+  const markup = rowMarkup(html, 'a');
+  for (const attr of ['data-ledger-link-kind', 'data-trigger-kind', 'data-trigger-source', 'data-trigger-scope']) {
+    expect(markup).not.toContain(attr);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Honest-absent cost (server-facing rule restated at the render layer): a
+// row whose cost genuinely does not exist yet (a session/standalone entry
+// with no log dir) must never render as an authoritative "$0.00".
+// ---------------------------------------------------------------------------
+
+test('R6-06: a row with costUsd: null renders NO data-ledger-cost-usd attribute and no "$0.00"/"0.00" text — never a fabricated authoritative zero for a cost that genuinely does not exist yet', () => {
+  // KILLS: the CURRENT component's unconditional `row.costUsd.toFixed(2)`
+  // (HistoryLedger.tsx:100,126) — calling `.toFixed(2)` on `null` THROWS at
+  // runtime (a `TypeError`), which is itself proof this is unhandled today;
+  // a "fix" that instead defaults null to 0 before formatting would render
+  // the exact fabricated "$0.00" this test forbids.
+  const html = render({ rows: [row({ id: 'a', costUsd: null } as never)] });
+  const markup = rowMarkup(html, 'a');
+  expect(markup).not.toContain('data-ledger-cost-usd="0.00"');
+  expect(markup).not.toContain('data-ledger-cost-usd="null"');
+  expect(html).not.toContain('$0.00');
+});
+
 test('the SAME row renders DIFFERENT visible relative-time text for a DIFFERENT nowMs — proving nowMs is actually threaded through, not ignored', () => {
   // KILLS: a component that accepts the `nowMs` prop but never uses it
   // (e.g. calling `Date.now()` internally instead, D7's exact violation) —

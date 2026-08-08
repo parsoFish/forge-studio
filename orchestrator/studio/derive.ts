@@ -111,7 +111,23 @@ export function executionPathForSurface(surface: string | undefined): 'interacti
  * ever re-derived client-side.
  */
 export type AgentCapabilityDescriptor = {
-  /** true iff the agent runs through the interactive-session runner (not a flow node). */
+  /**
+   * true iff the agent runs through the interactive-session runner.
+   *
+   * ⚑ Corrected R6-06 (2026-08-08): this said "(not a flow node)", which is
+   * FALSE and was load-bearing for a decision. `interactive` is derived
+   * SOLELY from `def.surface` (`executionPathForSurface` below) and says
+   * nothing about flow membership — the two axes are independent.
+   * Counter-examples, both measured: `architect` declares no `surface:` key,
+   * so it is `interactive: false`, yet it is BOTH a flow node
+   * (`studio/flows/forge-architect/flow.yaml`) and a session kind
+   * (`studio/session-kinds.yaml`) — it is in fact the only agent on all
+   * three execution paths, which is what makes R6-06's per-agent history
+   * ledger demonstrable at all. And `project-brain-builder` is a session
+   * kind while declaring `surface: unattended`. Read this flag as "is
+   * worker-dispatchable or not"; to ask whether an agent is a flow node,
+   * read the flow definitions.
+   */
   interactive: boolean;
   /**
    * The runtime SDK(s) the agent declares — today a one-element set from

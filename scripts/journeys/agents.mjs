@@ -1,9 +1,20 @@
 import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync, writeFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync, rmSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
   cleanStarterAgents, STARTER_AGENT_SLUGS, FORGE_ROOT, waitForFile, caption, ACT, THINK, READ, SK_NEW_SLUG,
+  // R6-06 Task 3 — the agent-history-ledger beat's three fixtures:
+  //   - flow-node: real _queue/_logs manifest, hand-authored below (mirrors
+  //     archEvent's own JSONL-append style, no existing helper for this
+  //     shape).
+  //   - standalone: hand-authored below (see the dedicated header comment
+  //     at R6_06_STANDALONE_RUN_ID for corpus-provenance — no real
+  //     `_agent-*` run exists anywhere on this machine, measured this round).
+  //   - session: REUSES archDir/writeStatus/archEvent verbatim — the SAME
+  //     real, already-shipped architect-session fixture shape flows-run.mjs
+  //     already exercises for its own (different) session id.
+  archDir, writeStatus, archEvent, PROJECT,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -73,6 +84,128 @@ function stashDrSkill() {
 export function restoreDeveloperRalphSkill() {
   if (drSkillStash === null) return;
   try { writeFileSync(DR_SKILL_PATH, drSkillStash); } catch { /* best-effort */ }
+}
+
+// ── R6-06 Task 3 — agent-history-ledger fixtures (all three link kinds on
+// architect's own /agents/architect ledger) ─────────────────────────────────
+//
+// FLOW-NODE fixture — a real `_queue/done/` manifest + `_logs/<cycleId>/
+// events.jsonl`, `flow_id: forge-architect`, a real `phase: architect` start/
+// end pair. MEASURED, not invented: this exact event shape was run directly
+// through the REAL `orchestrator/run-model.ts` `listRuns()` this round (task
+// report has the full transcript) — `phaseMeta.architect.costUsd` resolved
+// to 2.5 (the architect node's OWN authoritative spend) while `run.costUsd`
+// (the aggregate, architect 2.5 + pm 9.75) resolved to 12.25 — the exact
+// D3/D9 "per-target fact, never the aggregate" gap this initiative's ledger
+// row must get right. `phases.architect` resolved to 'complete'.
+const R6_06_FLOW_INIT_ID = 'INIT-r6-06-agent-ledger-flow-node';
+const R6_06_FLOW_CYCLE_ID = `2026-01-01T00-00-00_${R6_06_FLOW_INIT_ID}`;
+const R6_06_FLOW_MANIFEST_PATH = join(FORGE_ROOT, '_queue', 'done', `${R6_06_FLOW_INIT_ID}.md`);
+const R6_06_FLOW_LOG_DIR = join(FORGE_ROOT, '_logs', R6_06_FLOW_CYCLE_ID);
+function cleanR6_06FlowNodeFixture() {
+  for (const q of ['pending', 'in-flight', 'ready-for-review', 'merged', 'done', 'failed']) {
+    try { rmSync(join(FORGE_ROOT, '_queue', q, `${R6_06_FLOW_INIT_ID}.md`), { force: true }); } catch { /* */ }
+  }
+  try { rmSync(R6_06_FLOW_LOG_DIR, { recursive: true, force: true }); } catch { /* */ }
+}
+function seedR6_06FlowNodeFixture() {
+  cleanR6_06FlowNodeFixture();
+  mkdirSync(join(FORGE_ROOT, '_queue', 'done'), { recursive: true });
+  writeFileSync(R6_06_FLOW_MANIFEST_PATH, [
+    '---',
+    `initiative_id: ${R6_06_FLOW_INIT_ID}`,
+    `project: ${PROJECT}`,
+    `project_repo_path: ${join(FORGE_ROOT, 'projects', PROJECT)}`,
+    'origin: architect',
+    'created_at: 2026-01-01T00:00:00.000Z',
+    'iteration_budget: 5',
+    'cost_budget_usd: 20.0',
+    `cycle_id: ${R6_06_FLOW_CYCLE_ID}`,
+    'flow_id: forge-architect',
+    '---',
+    '',
+    '# R6-06 agent-history-ledger flow-node fixture',
+    '',
+    'Seeded by the agents-edit-selector-navigate beat (R6-06 Task 3).',
+  ].join('\n'));
+  mkdirSync(R6_06_FLOW_LOG_DIR, { recursive: true });
+  const events = [
+    { event_id: 'EV_0', cycle_id: R6_06_FLOW_CYCLE_ID, initiative_id: R6_06_FLOW_INIT_ID, phase: 'architect', skill: 'architect', event_type: 'start', started_at: '2026-01-01T00:00:00.000Z', input_refs: [], output_refs: [] },
+    { event_id: 'EV_1', cycle_id: R6_06_FLOW_CYCLE_ID, initiative_id: R6_06_FLOW_INIT_ID, phase: 'architect', skill: 'architect', event_type: 'end', started_at: '2026-01-01T00:01:00.000Z', input_refs: [], output_refs: [], cost_usd: 2.5 },
+    { event_id: 'EV_2', cycle_id: R6_06_FLOW_CYCLE_ID, initiative_id: R6_06_FLOW_INIT_ID, phase: 'project-manager', skill: 'project-manager', event_type: 'start', started_at: '2026-01-01T00:02:00.000Z', input_refs: [], output_refs: [] },
+    { event_id: 'EV_3', cycle_id: R6_06_FLOW_CYCLE_ID, initiative_id: R6_06_FLOW_INIT_ID, phase: 'project-manager', skill: 'project-manager', event_type: 'end', started_at: '2026-01-01T00:03:00.000Z', input_refs: [], output_refs: [], cost_usd: 9.75 },
+  ];
+  writeFileSync(join(R6_06_FLOW_LOG_DIR, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+}
+
+/**
+ * STANDALONE fixture — CORPUS PROVENANCE (measured this round, reported
+ * honestly): `find / -type d -name '_agent-*'` returns NOTHING anywhere on
+ * this machine — no real standalone-dispatch run directory exists in this
+ * repo's `_logs/`, any worktree's `_logs/`, or anywhere else searched. No
+ * "earlier gate run" left a real one behind to capture. Rather than invent a
+ * shape from imagination, this fixture mirrors the shape straight off the
+ * PRODUCTION EMITTER (`orchestrator/run-agent.ts`'s `runAgent`, lines
+ * ~320-382: a `start` event with `metadata: {agent_phase, agent_slug}`, an
+ * `end` event with the SAME `metadata.agent_slug` plus a top-level
+ * `cost_usd`) — the SAME shape `cli/ui-bridge-agent-run.test.ts`'s own
+ * existing fixtures already encode for the sibling `GET /api/agents/runs/
+ * <runId>` route's tests (`{event_type:'start', skill:'test-runnable'}` /
+ * `{event_type:'end', skill:'test-runnable', cost_usd:0.42}`) — the closest
+ * thing to a real, already-relied-upon fixture shape this codebase has for
+ * this execution path.
+ */
+const R6_06_STANDALONE_RUN_ID = '_agent-architect-2026-01-01T00-10-00-000-r606';
+const R6_06_STANDALONE_LOG_DIR = join(FORGE_ROOT, '_logs', R6_06_STANDALONE_RUN_ID);
+function cleanR6_06StandaloneFixture() {
+  try { rmSync(R6_06_STANDALONE_LOG_DIR, { recursive: true, force: true }); } catch { /* */ }
+}
+function seedR6_06StandaloneFixture() {
+  cleanR6_06StandaloneFixture();
+  mkdirSync(R6_06_STANDALONE_LOG_DIR, { recursive: true });
+  const events = [
+    { event_id: 'EV_0', cycle_id: R6_06_STANDALONE_RUN_ID, initiative_id: R6_06_STANDALONE_RUN_ID, phase: 'orchestrator', skill: 'architect', event_type: 'start', started_at: '2026-01-01T00:10:00.000Z', input_refs: [], output_refs: [], metadata: { agent_phase: 'standalone', agent_slug: 'architect' } },
+    { event_id: 'EV_1', cycle_id: R6_06_STANDALONE_RUN_ID, initiative_id: R6_06_STANDALONE_RUN_ID, phase: 'orchestrator', skill: 'architect', event_type: 'end', started_at: '2026-01-01T00:11:00.000Z', input_refs: [], output_refs: [], cost_usd: 0.85, metadata: { agent_phase: 'standalone', agent_slug: 'architect' } },
+  ];
+  writeFileSync(join(R6_06_STANDALONE_LOG_DIR, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+}
+
+// SESSION fixture — REUSES the real, already-shipped archDir/writeStatus/
+// archEvent helpers verbatim (flows-run.mjs's own architect-interview beats
+// already exercise this SAME shape for a DIFFERENT session id — no
+// invention here).
+const R6_06_SESSION_ID = '2026-01-01T00-20-00-r6-06-ledger-sess';
+function cleanR6_06SessionFixture() {
+  try { rmSync(archDir(R6_06_SESSION_ID), { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(join(FORGE_ROOT, '_logs', `_architect-${R6_06_SESSION_ID}`), { recursive: true, force: true }); } catch { /* */ }
+}
+function seedR6_06SessionFixture() {
+  cleanR6_06SessionFixture();
+  writeStatus(R6_06_SESSION_ID, { phase: 'drafting', round: 1, idea: 'R6-06 agent-history-ledger session fixture' });
+  // `archEvent` (journey-fixtures.mjs) never writes a top-level `cost_usd` —
+  // it has no callers today that need one. Appending ONE extra line directly,
+  // in the SAME shape `archEvent` itself produces (same dir, same event
+  // envelope), demonstrates a REAL non-null session cost for this fixture
+  // rather than leaving cost permanently null here too — Task 1/2's tests
+  // already cover the null/no-log-dir case; this beat's own value is showing
+  // a POSITIVE session cost reaching the ledger, D3's headline claim, applied
+  // to the third path.
+  archEvent(R6_06_SESSION_ID, 'log', 'architect.session.paused-for-ledger-fixture', {});
+  const logDir = join(FORGE_ROOT, '_logs', `_architect-${R6_06_SESSION_ID}`);
+  writeFileSync(join(logDir, 'events.jsonl'),
+    readFileSync(join(logDir, 'events.jsonl'), 'utf8') +
+    JSON.stringify({
+      event_id: 'EV_arch_cost', cycle_id: `_architect-${R6_06_SESSION_ID}`,
+      initiative_id: `architect-session-${R6_06_SESSION_ID}`, started_at: new Date().toISOString(),
+      phase: 'architect', skill: 'architect-runner', event_type: 'end',
+      input_refs: [], output_refs: [], cost_usd: 0.42,
+    }) + '\n');
+}
+
+function cleanAllR6_06LedgerFixtures() {
+  cleanR6_06FlowNodeFixture();
+  cleanR6_06StandaloneFixture();
+  cleanR6_06SessionFixture();
 }
 
 /** Ensure the builder's collapsed Advanced section is open — checks state
@@ -692,10 +825,19 @@ export const journey = defineJourney({
       {
         id: 'agents-edit-selector-navigate',
         title: 'Edit-agent arc — switch agents through the selector',
-        narration: 'Switching agents through [data-agent-select] itself — not a direct URL edit — drives the same route + state change the operator sees clicking through the fleet, proving the selector (not just the route) is what moves the builder. Navigates forward to a second real agent and back to developer-ralph, so the arc continues on its own fixture.',
+        narration: 'Switching agents through [data-agent-select] itself — not a direct URL edit — drives the same route + state change the operator sees clicking through the fleet, proving the selector (not just the route) is what moves the builder. Navigates forward to a second real agent and back to developer-ralph, so the arc continues on its own fixture. R6-06 (agent-monitor linkage): while on architect\'s own page, this beat ALSO checks the new run-history ledger — architect is the one agent that runs on all three execution paths (a flow node inside forge-architect, a standalone dispatch, and an interactive session), so its ledger is the one place all three [data-ledger-link-kind] values can be demonstrated on a single page.',
         drive: async (ctx) => {
               const { page, frame, check } = ctx;
               console.log('\n[R2-09] Edit-agent arc — switch agents through the selector');
+
+              // R6-06 Task 3 — seed real fixtures for all three execution
+              // paths BEFORE navigating, so architect's ledger has something
+              // real to render once GET /api/agents/:slug/history exists.
+              console.log('[R6-06] seeding flow-node/standalone/session fixtures for architect\'s history ledger');
+              seedR6_06FlowNodeFixture();
+              seedR6_06StandaloneFixture();
+              seedR6_06SessionFixture();
+
               await page.locator('[data-agent-select]').selectOption('architect');
               await page.waitForFunction(
                 () => document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') === 'architect',
@@ -710,6 +852,120 @@ export const journey = defineJourney({
                 `agents-edit: [data-agent-id] flipped to the newly-selected agent (got "${agentIdAfterForward}")`);
               await frame(page, 'ae-1-selector-switched',
                 'Edit-agent — switching agents through the selector actually changes the route and the loaded agent');
+
+              // ── R6-06: the three-path history ledger ──────────────────────
+              // NOT YET IMPLEMENTED as of this beat's authoring — R6-06 is
+              // still in its acceptance-test phase (cli/ui-bridge-agent-
+              // history.test.ts, forge-ui/lib/agent-ledger.test.ts). This
+              // section is a legitimate RED against the current build,
+              // exactly like every other R6-06 test in this initiative — it
+              // will start passing once the feature ships. Expected VALUES
+              // below are MEASURED, not invented — ROUND 1 measured the
+              // flow-node fixture by running its exact events directly
+              // through the REAL `orchestrator/run-model.ts` `listRuns()`;
+              // ROUND 2 (this round) closes the gap round 1 itself flagged
+              // ("established the standalone and session expectations by
+              // direct correspondence to source" — reading, not executing)
+              // by ALSO replaying the standalone and session fixtures
+              // through their own real, already-shipped derivation code:
+              //   - flow-node: `phaseMeta.architect.costUsd` resolves to 2.5
+              //     (the node's OWN spend) while the run-level aggregate
+              //     resolves to 12.25 (2.5 + pm's 9.75) — a real, executed
+              //     measurement of the D3/D9 "per-target fact, never the
+              //     aggregate" gap, not a guess.
+              //   - standalone: this fixture's exact events, replayed
+              //     through the REAL, already-shipped `GET /api/agents/
+              //     runs/<runId>` (`cli/ui-bridge.ts` ~1163-1171 — the SAME
+              //     status/cost deriver Task 1's new route must reuse, per
+              //     the SHARED DERIVATION pin in `cli/ui-bridge-agent-
+              //     history.test.ts`), measured `state: 'done'`,
+              //     `costUsd: 0.85` — byte-identical to this fixture's own
+              //     literal `cost_usd: 0.85`, confirming the real deriver
+              //     round-trips this shape correctly (not merely assumed
+              //     because the fixture wrote that number).
+              //   - session: `phase: 'drafting'` replayed through the REAL,
+              //     already-shipped `listArchitectSessions()` (via `GET
+              //     /api/architect/sessions`) round-trips verbatim (D12: no
+              //     mapping exists to lose it). Session COST has no existing
+              //     wired-up route yet (a genuine Task-1 gap, not merely
+              //     untested) — measured instead by replaying the fixture's
+              //     own `_architect-<sessionId>/events.jsonl` through the
+              //     REAL, already-shipped `sumAuthoritativeCostUsd`
+              //     (`orchestrator/event-cost.ts`) directly: 0.42, matching
+              //     this fixture's own literal `cost_usd: 0.42` — confirming
+              //     no double-counting bug for this simple 2-event shape.
+              //   (See the task report for the full measurement transcript —
+              //   a standalone Node script executing all three fixtures
+              //   through this exact real code, not read-and-assumed.)
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="history-ledger"]') !== null,
+                null, { timeout: 8000 },
+              ).catch(() => {});
+              const ledgerPresent = await page.evaluate(() => document.querySelector('[data-section="history-ledger"]') !== null);
+              check(ledgerPresent, 'R6-06: architect\'s page renders [data-section="history-ledger"]');
+
+              if (ledgerPresent) {
+                const flowRow = page.locator(`[data-run-id="${R6_06_FLOW_CYCLE_ID}"]`);
+                const flowRowCount = await flowRow.count();
+                check(flowRowCount > 0, `R6-06: the flow-node fixture (${R6_06_FLOW_CYCLE_ID}) appears as a ledger row`);
+                if (flowRowCount > 0) {
+                  const linkKind = await flowRow.first().getAttribute('data-ledger-link-kind').catch(() => null);
+                  const href = await flowRow.first().getAttribute('href').catch(() => null);
+                  const cost = await flowRow.first().getAttribute('data-ledger-cost-usd').catch(() => null);
+                  check(linkKind === 'flow-node', `R6-06: the flow-node row carries data-ledger-link-kind="flow-node" (got "${linkKind}")`);
+                  check(href === `/flows/forge-architect/run/${R6_06_FLOW_CYCLE_ID}`,
+                    `R6-06: the flow-node row links to /flows/forge-architect/run/<runId> (got "${href}")`);
+                  check(cost === '2.50',
+                    `R6-06 (D3/D9, MEASURED): the flow-node row's cost is the architect NODE's own 2.50, not the run aggregate 12.25 (got "${cost}")`);
+                }
+
+                const standaloneRow = page.locator(`[data-run-id="${R6_06_STANDALONE_RUN_ID}"]`);
+                const standaloneRowCount = await standaloneRow.count();
+                check(standaloneRowCount > 0, `R6-06: the standalone fixture (${R6_06_STANDALONE_RUN_ID}) appears as a ledger row`);
+                if (standaloneRowCount > 0) {
+                  const linkKind = await standaloneRow.first().getAttribute('data-ledger-link-kind').catch(() => null);
+                  const href = await standaloneRow.first().getAttribute('href').catch(() => null);
+                  const narrativeKinds = await standaloneRow.first().getAttribute('data-narrative-kinds').catch(() => null);
+                  const status = await standaloneRow.first().getAttribute('data-run-status').catch(() => null);
+                  const cost = await standaloneRow.first().getAttribute('data-ledger-cost-usd').catch(() => null);
+                  check(linkKind === 'standalone', `R6-06: the standalone row carries data-ledger-link-kind="standalone" (got "${linkKind}")`);
+                  check(href === `/agents/architect/run/${R6_06_STANDALONE_RUN_ID}`,
+                    `R6-06: the standalone row links to /agents/architect/run/<runId> (got "${href}")`);
+                  check(narrativeKinds === 'standalone',
+                    `R6-06 (D7): the standalone row's narrative kind is the bare positive marker "standalone" (got "${narrativeKinds}")`);
+                  // MEASURED (round 2) via GET /api/agents/runs/<runId>, the
+                  // real shared status/cost deriver — see the header comment.
+                  check(status === 'done',
+                    `R6-06 (MEASURED, round 2): the standalone row's status is 'done' (the real endEvent-present, non-failed/non-suppressed derivation) (got "${status}")`);
+                  check(cost === '0.85',
+                    `R6-06 (MEASURED, round 2): the standalone row's cost round-trips this fixture's own 0.85 verbatim through the real shared deriver (got "${cost}")`);
+                }
+
+                const sessionRow = page.locator(`[data-run-id="${R6_06_SESSION_ID}"]`);
+                const sessionRowCount = await sessionRow.count();
+                check(sessionRowCount > 0, `R6-06: the session fixture (${R6_06_SESSION_ID}) appears as a ledger row`);
+                if (sessionRowCount > 0) {
+                  const linkKind = await sessionRow.first().getAttribute('data-ledger-link-kind').catch(() => null);
+                  const href = await sessionRow.first().getAttribute('href').catch(() => null);
+                  const status = await sessionRow.first().getAttribute('data-run-status').catch(() => null);
+                  const cost = await sessionRow.first().getAttribute('data-ledger-cost-usd').catch(() => null);
+                  check(linkKind === 'session', `R6-06: the session row carries data-ledger-link-kind="session" (got "${linkKind}")`);
+                  check(href === `/architect/${R6_06_SESSION_ID}`,
+                    `R6-06: the session row links to /architect/<sessionId> (the legacyRoutes[0] from studio/session-kinds.yaml's architect descriptor) (got "${href}")`);
+                  check(status === 'drafting',
+                    `R6-06 (D12): the session row's status is the session's OWN status.json phase string verbatim, never mapped to a RunStatus/RunPhaseStatus literal (got "${status}")`);
+                  // MEASURED (round 2) via the real sumAuthoritativeCostUsd
+                  // over this fixture's own events.jsonl — see the header
+                  // comment. No existing route wires this derivation up yet
+                  // (a genuine Task-1 gap this assertion pins).
+                  check(cost === '0.42',
+                    `R6-06 (MEASURED, round 2): the session row's cost round-trips this fixture's own 0.42 verbatim through the real sumAuthoritativeCostUsd (got "${cost}")`);
+                }
+
+                await frame(page, 'ae-1c-history-ledger',
+                  'Edit-agent — R6-06: architect\'s run-history ledger joins all three execution paths (flow-node, standalone, session) on one page',
+                  { key: true });
+              }
 
               // Switch back to developer-ralph — the arc's own fixture — through the
               // SAME selector, so beats 3-7 continue against it.
@@ -1285,6 +1541,51 @@ export const journey = defineJourney({
                 document.querySelector('[data-component="ceiling-provenance"]')?.getAttribute('data-ceiling-set') ?? null);
               check(ceilingSet === 'false',
                 `agents-kickoff-run-view: the ceiling provenance honestly reads "not recorded" under the no-spawn seam, not fabricated (got "${ceilingSet}")`);
+
+              // ── R6-06 ROUND 2 (amendment 4) — REACHABILITY ────────────────
+              // The strongest corpus ground available for this initiative:
+              // this beat already produced a REAL standalone run by driving
+              // a real browser click (agents-kickoff-dispatch), not a
+              // fixture. Assert it appears in ITS OWN agent's history
+              // ledger — one assertion, no fixture rewrite.
+              //
+              // ⚑ LOUD FINDING (measured this round, not assumed): this
+              // run's ONLY event is the dispatch route's own synchronous
+              // `agent-run.materials-staged` bookkeeping (cli/ui-bridge.ts
+              // ~1370-1389, confirmed by the log-line check above) — it sets
+              // `skill: slug` (here, KICKOFF_AGENT_SLUG) but carries NO
+              // `metadata.agent_slug` at all (its `metadata` is only
+              // `{materials: [...]}`). `spawnAgentDispatch` returns before
+              // ANY child process runs under FORGE_ARCHITECT_NO_SPAWN/
+              // FORGE_DRY_BRIDGE (both set on this harness — cli/ui-
+              // bridge.ts:1976), so `runAgent`'s own start/end events (the
+              // ones that DO carry `metadata.agent_slug`, per orchestrator/
+              // run-agent.ts:320-382) never get written for this run at all.
+              // If Task 1's route keys standalone identity STRICTLY off
+              // `metadata.agent_slug` (this initiative's own D4 language),
+              // this REAL run is structurally unreachable under its own
+              // agent's history — the one honest identity signal it DOES
+              // carry is the `skill` field, not `metadata.agent_slug`. This
+              // is reported as a genuine, EXECUTION-DISCOVERED requirement
+              // for Task 1 (accept `event.skill === slug` as an identity
+              // source too, not `metadata.agent_slug` exclusively) rather
+              // than silently worked around — see the task report for the
+              // full trail, including the apparent tension with THIS
+              // initiative's own "honest-absent cost" fixture (a
+              // ZERO-event standalone run that must ALSO be found by slug,
+              // which is possible only via SOME non-event signal, contrary
+              // to a metadata.agent_slug-only reading of D4).
+              let reachableInOwnHistory = false;
+              let historyRowIds = [];
+              try {
+                const histRes = await fetch(`${watch.bridgeUrl}/api/agents/${encodeURIComponent(KICKOFF_AGENT_SLUG)}/history`);
+                const histBody = await histRes.json().catch(() => ({}));
+                const rows = Array.isArray(histBody.rows) ? histBody.rows : [];
+                historyRowIds = rows.map((r) => r?.id);
+                reachableInOwnHistory = historyRowIds.includes(kickoffRunId);
+              } catch { /* leave false */ }
+              check(reachableInOwnHistory,
+                `R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (${kickoffRunId}) appears in its own agent's history ledger (GET /api/agents/${KICKOFF_AGENT_SLUG}/history) — got rows ${JSON.stringify(historyRowIds)}. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.`);
 
               await frame(page, 'ak-7-run-view', 'Kickoff — the standalone run view: log, cost, and the material as a reference only');
 
