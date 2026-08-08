@@ -172,6 +172,135 @@ function isCommentLine(line) {
   return t.startsWith('//') || t.startsWith('*') || t.startsWith('/*');
 }
 
+/**
+ * CALLER-COUNT DIMENSION (SEC-04, bd forge-ebj step 2).
+ *
+ * The raw-sink ratchet above keys on (file, RAW-SINK, count). That leaves a
+ * systemic hole: a NEW file that only *calls* an already-unguarded shared
+ * function defined in a DIFFERENT module — e.g.
+ * `readSessionStatus(join(root, reqProject, sid))` — introduces the exact
+ * request-derived-path defect while emitting ZERO raw-sink rows of its own, so
+ * the raw-sink ratchet stays green. This dimension closes that hole: it counts
+ * callers of a fixed, checked-in list of functions that resolve a session dir
+ * with NO containment of their own, and fails the moment a NEW reachable caller
+ * appears (or an existing file's caller count grows).
+ *
+ * Keys are the function names; each value records the def module + WHY the
+ * function is unguarded — kept a literal a reader can audit in one glance, the
+ * same discipline as SINK_NAMES. The def-module note is documentation only; the
+ * def file is DETECTED per-file at count time (see countDesignatedCallers), so
+ * this dimension works unchanged against a synthetic fixture tree whose def
+ * module lives at a different path than the real repo's.
+ *
+ * Contract for a designated function: it takes a caller-supplied session dir
+ * (or bare-joins request-derived segments into one) and performs NO per-segment
+ * identity / charset / symlink containment. Every caller must instead route the
+ * request-derived project + sessionId through
+ * resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId)
+ * (cli/bridge-studio-sessions.ts → resolveGuardedPath) and hand the GUARDED dir
+ * to the reader/writer — never a bare join.
+ */
+export const DESIGNATED_UNGUARDED_FUNCTIONS = {
+  readSessionStatus: {
+    defModule: 'orchestrator/interactive-session.ts',
+    why: 'Reads status.json from a caller-supplied sessionDir; no containment of its own — the dir it is handed must already be resolveSafeSessionDir-guarded.',
+  },
+  writeSessionStatus: {
+    defModule: 'orchestrator/interactive-session.ts',
+    why: 'Writes status.json into a caller-supplied sessionDir; same contract as readSessionStatus — the dir must already be guarded.',
+  },
+  architectSessionDir: {
+    defModule: 'cli/ui-bridge.ts',
+    why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId; folds untrusted segments into a path with no guard.',
+  },
+  instructionsSessionDir: {
+    defModule: 'orchestrator/instructions-runner.ts',
+    why: 'Bare join of projectRoot + "_instructions" + request-derived sessionId; no per-segment containment.',
+  },
+  projectBrainSessionDir: {
+    defModule: 'orchestrator/project-brain-builder-runner.ts',
+    why: 'Bare join of projectRoot + "_project-brain" + request-derived sessionId; no per-segment containment.',
+  },
+  demoSessionDir: {
+    defModule: 'orchestrator/demo-builder-runner.ts',
+    why: 'Bare join of projectRoot + "_demo" + request-derived sessionId; no per-segment containment.',
+  },
+  // SEC-04 completeness (bd forge-arch): the architect module was systematically
+  // missed by the first pass — three consumers reached architect session dirs
+  // through its OWN bespoke reader/builders with no containment. Designating
+  // them closes that blind spot: a future reachable caller of any of these now
+  // trips the ratchet unless it first routes the request-derived project +
+  // sessionId through resolveGuardedPath (per-segment identity + charset +
+  // symlink; refuse/skip on ANY escape) and hands the GUARDED dir to the reader.
+  readStatus: {
+    defModule: 'orchestrator/architect-runner.ts',
+    why: 'Reads status.json from a caller-supplied architect sessionDir; no containment of its own — the dir it is handed must already be resolveGuardedPath-guarded (GET /api/architect/sessions disclosed an out-of-root status.json through this + a symlinked _architect).',
+  },
+  sessionPaths: {
+    defModule: 'cli/architect-plan.ts',
+    why: 'Bare resolve(projectRoot, "_architect", sessionId) — folds a request-derived sessionId into a session-dir path with no per-segment containment; callers must guard "_architect" + sessionId as their own segments before reading through it (the architect runner leg read an out-of-root status.json through this).',
+  },
+  _architectSessionDir: {
+    defModule: 'cli/bridge-studio-runs.ts',
+    why: 'Bare join of projectsRoot + request-derived project + "_architect" + request-derived sessionId (the plan-verdict routes\' private copy); folds untrusted segments into a path with no guard — a valid-charset project+sessionId still resolves through a symlinked _architect (AT-47).',
+  },
+  _readStatus: {
+    defModule: 'cli/bridge-studio-runs.ts',
+    why: 'Reads (and its sibling _writeStatus mutates) status.json from a caller-supplied architect sessionDir (the plan-verdict routes\' private copy); no containment of its own — the dir must already be guarded.',
+  },
+};
+
+/** Sink-token suffix that namespaces a caller-count row so it flows through
+ *  compareBaseline / formatBaseline / parseBaseline unchanged (the token is a
+ *  single `\\S+` field, no spaces). */
+const CALLER_SINK_SUFFIX = '@caller';
+
+/** Per designated function: `callRe` matches an UNQUALIFIED call (same shape as
+ *  the sink matcher); `defRe` matches its DEFINITION (`function F(` / `function
+ *  F<` — covers `export function F`). A file that matches `defRe` is that fn's
+ *  own def file and is SKIPPED for that fn, because the definition line itself
+ *  matches `callRe` and would otherwise self-count. Detection is per-file so a
+ *  synthetic fixture whose def module differs from the real repo works too. */
+const DESIGNATED_MATCHERS = Object.keys(DESIGNATED_UNGUARDED_FUNCTIONS).map((name) => ({
+  name,
+  callRe: new RegExp(`(?<![.\\w$])${name}\\s*\\(`, 'g'),
+  defRe: new RegExp(`(?<![.\\w$])function\\s+${name}\\s*[<(]`),
+}));
+
+/** Caller-count enumeration. Returns a sorted array of { file, sink, count }
+ *  rows — one per (reachable file, designated fn) pair with count > 0 — where
+ *  sink is `${fnName}@caller`. Skips each fn's own def file. Comment lines are
+ *  filtered by the same crude line-based filter as the raw-sink pass; the
+ *  def-file detection runs over the whole file text (a `function F(` inside a
+ *  block comment would falsely mark a file as a def file and under-count its
+ *  callers — the same crude-comment-filter limitation the header documents).
+ *
+ *  These rows are DELIBERATELY NOT merged into countSinks/analyze output: the
+ *  raw-sink `rows` must stay caller-free so a new pure-caller file emits no
+ *  per-file raw-sink row. They are combined with the sink rows only inside
+ *  runCheck, for the baseline write and the compareBaseline comparison. */
+export function countDesignatedCallers(root, reachableFiles) {
+  const rows = [];
+  for (const relFile of reachableFiles) {
+    const absFile = join(root, relFile);
+    if (!existsSync(absFile)) continue;
+    const text = readFileSync(absFile, 'utf8');
+    const lines = text.split('\n');
+    for (const { name, callRe, defRe } of DESIGNATED_MATCHERS) {
+      if (defRe.test(text)) continue; // this fn's own def file — skip (self-match guard)
+      let n = 0;
+      for (const line of lines) {
+        if (isCommentLine(line)) continue;
+        callRe.lastIndex = 0;
+        while (callRe.exec(line)) n += 1;
+      }
+      if (n > 0) rows.push({ file: relFile, sink: `${name}${CALLER_SINK_SUFFIX}`, count: n });
+    }
+  }
+  rows.sort((a, b) => (a.file === b.file ? a.sink.localeCompare(b.sink) : a.file.localeCompare(b.file)));
+  return rows;
+}
+
 /** Relative-import specifiers this module cares about: static `from '...'`
  *  (covers `import x from`, `import {a} from`, `export {a} from`,
  *  `export * from`), bare side-effect `import '...'`, and string-literal
@@ -329,16 +458,33 @@ export function compareBaseline(currentRows, baselineRows) {
   return { failures, tighten };
 }
 
-function printFailureGuidance() {
-  console.error('');
-  console.error('A new or grown (file, sink) pair means request-derived-path surface may have grown. Before accepting this:');
-  console.error('  1. Route the path through a guard:');
-  console.error("       - resolveGuardedPath(root, segments) from cli/studio-path-guard.ts — FIXED root, every untrusted id its own segments[] element (never folded into root).");
-  console.error('       - or isContainedProjectRepoPath / isContainedWorktreePath / isSafeCycleId from cli/manifest-path-guard.ts.');
-  console.error('  2. Add a row to docs/security-request-path-audit.md classifying the new site guarded / unguarded / accidentally-safe, per that doc\'s own rules.');
-  console.error('  3. Re-run with --write to accept the new baseline:');
-  console.error('       node scripts/check-request-path-sinks.mjs --write');
-  console.error('');
+function printFailureGuidance(failures) {
+  const callerFailures = failures.filter((f) => f.sink.endsWith(CALLER_SINK_SUFFIX));
+  const sinkFailures = failures.filter((f) => !f.sink.endsWith(CALLER_SINK_SUFFIX));
+
+  if (sinkFailures.length) {
+    console.error('');
+    console.error('A new or grown (file, sink) pair means request-derived-path surface may have grown. Before accepting this:');
+    console.error('  1. Route the path through a guard:');
+    console.error("       - resolveGuardedPath(root, segments) from cli/studio-path-guard.ts — FIXED root, every untrusted id its own segments[] element (never folded into root).");
+    console.error('       - or isContainedProjectRepoPath / isContainedWorktreePath / isSafeCycleId from cli/manifest-path-guard.ts.');
+    console.error('  2. Add a row to docs/security-request-path-audit.md classifying the new site guarded / unguarded / accidentally-safe, per that doc\'s own rules.');
+    console.error('  3. Re-run with --write to accept the new baseline:');
+    console.error('       node scripts/check-request-path-sinks.mjs --write');
+    console.error('');
+  }
+
+  if (callerFailures.length) {
+    console.error('');
+    console.error('A new or grown `<fn>@caller` row means a reachable file gained a call to a DESIGNATED UNGUARDED function (one that resolves a session dir with no containment of its own — see DESIGNATED_UNGUARDED_FUNCTIONS). This is the SEC-04 cross-file hole: the caller carries no raw sink, so the per-file sink ratchet never sees it. Before accepting this:');
+    console.error('  1. Route the request-derived project + sessionId through the guard, do NOT bare-join them:');
+    console.error('       - resolveSafeSessionDir(projectsRoot, project, kindDirName, sessionId) from cli/bridge-studio-sessions.ts (delegates to resolveGuardedPath — per-segment identity + charset + symlink containment; returns null on ANY escape).');
+    console.error('       - Hand the GUARDED dir to readSessionStatus / writeSessionStatus; never a raw join(root, project, sessionId).');
+    console.error('  2. Add a row to docs/security-request-path-audit.md classifying the new caller guarded / unguarded / accidentally-safe.');
+    console.error('  3. Re-run with --write to accept the new baseline:');
+    console.error('       node scripts/check-request-path-sinks.mjs --write');
+    console.error('');
+  }
 }
 
 /**
@@ -347,7 +493,14 @@ function printFailureGuidance() {
  * real repo. Returns a process exit code; never calls process.exit itself.
  */
 export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PATH, write = false } = {}) {
-  const { reachable, rows } = analyze(root);
+  const { reachable, rows: sinkRows } = analyze(root);
+  // Combine the raw-sink rows with the caller-count dimension into ONE row
+  // stream. Both key on (file, sink, count) and flow through compareBaseline /
+  // formatBaseline unchanged — the `@caller` suffix is what distinguishes them.
+  const callerRows = countDesignatedCallers(root, reachable);
+  const rows = [...sinkRows, ...callerRows].sort((a, b) =>
+    a.file === b.file ? a.sink.localeCompare(b.sink) : a.file.localeCompare(b.file)
+  );
   const totalCalls = rows.reduce((sum, r) => sum + r.count, 0);
 
   if (write) {
@@ -382,7 +535,7 @@ export function runCheck({ root = FORGE_ROOT, baselinePath = DEFAULT_BASELINE_PA
     for (const f of failures) {
       console.error(`  ✗ ${f.file} ${f.sink}: baseline ${f.baselineCount} -> now ${f.count}`);
     }
-    printFailureGuidance();
+    printFailureGuidance(failures);
     return 1;
   }
 

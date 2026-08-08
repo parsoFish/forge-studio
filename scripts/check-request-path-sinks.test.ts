@@ -27,6 +27,10 @@ import {
   compareBaseline,
   runCheck,
 } from './check-request-path-sinks.mjs';
+// Namespace import (NOT a named import) so probing a not-yet-built export
+// yields `undefined` rather than an ESM link-time SyntaxError that would take
+// the whole file down — see the SEC-04 caller-count group at the bottom.
+import * as ratchet from './check-request-path-sinks.mjs';
 
 // =============================================================================
 // Group 1 — synthetic fixture tree
@@ -291,4 +295,146 @@ test('--write regenerates the baseline file and a subsequent check passes', () =
 test('the real repository baseline passes clean (no new or grown request-path sinks)', () => {
   const code = runCheck({});
   assert.equal(code, 0);
+});
+
+// =============================================================================
+// Group 3 — SEC-04 caller-count dimension (the systemic hole this ratchet has)
+//
+// The ratchet keys on (file, RAW-SINK, count). A NEW file that only *calls* an
+// already-unguarded shared function in a DIFFERENT module — e.g.
+// `readSessionStatus(join(root, reqProject, sid))` — introduces the exact SEC-04
+// defect while emitting ZERO raw-sink rows of its own, so the ratchet stays
+// green. bd forge-ebj step 2 asks for a caller-count dimension: count callers of
+// a designated set of unguarded functions (readSessionStatus / writeSessionStatus
+// and the bare-join builders architectSessionDir / instructionsSessionDir /
+// projectBrainSessionDir / demoSessionDir), and fail when a NEW reachable caller
+// appears.
+//
+// Both tests below are RED on the current (unfixed) script and go GREEN once the
+// caller-count dimension is built.
+// =============================================================================
+
+/** Fixture: cli/ui-bridge.ts (entry) imports a def module that DEFINES the
+ *  designated shared fns (with real raw sinks tracked in ITS file), and also
+ *  imports a `new-caller.ts` that does NOT exist yet (addNewCaller plants it).
+ *  Returns the fixture root. */
+function makeCallerFixture(): string {
+  const root = mkdtempSync(join(tmpdir(), 'sinks-caller-fixture-'));
+  mkdirSync(join(root, 'cli'), { recursive: true });
+  mkdirSync(join(root, 'orchestrator'), { recursive: true });
+
+  // Entry: import edges only (re-export lines carry no `(` → never counted as
+  // callers themselves). The '../orchestrator/new-caller.ts' target is absent at
+  // baseline time; the walker skips missing targets, so it is NOT baselined.
+  writeFileSync(
+    join(root, 'cli/ui-bridge.ts'),
+    [
+      "import { readSessionStatus, instructionsSessionDir } from '../orchestrator/session-def.ts';",
+      "import { handleNew } from '../orchestrator/new-caller.ts';",
+      'export { readSessionStatus, instructionsSessionDir, handleNew };',
+      '',
+    ].join('\n')
+  );
+
+  // The def module: DEFINES the designated fns; its raw fs sinks (existsSync,
+  // readFileSync) are the tracked rows that populate the baseline.
+  writeFileSync(
+    join(root, 'orchestrator/session-def.ts'),
+    [
+      "import { existsSync, readFileSync } from 'node:fs';",
+      "import { join } from 'node:path';",
+      'export function instructionsSessionDir(projectRoot, sessionId) {',
+      "  return join(projectRoot, '_instructions', sessionId);",
+      '}',
+      'export function readSessionStatus(sessionDir) {',
+      "  const p = join(sessionDir, 'status.json');",
+      '  if (!existsSync(p)) return null;',
+      "  return JSON.parse(readFileSync(p, 'utf8'));",
+      '}',
+      '',
+    ].join('\n')
+  );
+
+  return root;
+}
+
+/** Plant the NEW reachable caller: it CALLS the designated `readSessionStatus`
+ *  on a bare-joined request-derived path, but has NO raw fs sink of its own
+ *  (`readSessionStatus` and `join` are not in SINK_NAMES). */
+function addNewCaller(root: string): void {
+  writeFileSync(
+    join(root, 'orchestrator/new-caller.ts'),
+    [
+      "import { readSessionStatus } from './session-def.ts';",
+      "import { join } from 'node:path';",
+      'export function handleNew(root, reqProject, sid) {',
+      '  return readSessionStatus(join(root, reqProject, sid));',
+      '}',
+      '',
+    ].join('\n')
+  );
+}
+
+test('caller-count ratchet: a NEW file that only CALLS a designated unguarded fn (no raw sink of its own) FAILS', () => {
+  const root = makeCallerFixture();
+  const baselinePath = join(root, 'baseline.txt');
+  try {
+    // Baseline captured while only the entry + def module exist (new caller absent).
+    assert.equal(runCheck({ root, baselinePath, write: true }), 0);
+    assert.equal(runCheck({ root, baselinePath }), 0, 'sanity: clean immediately after --write');
+
+    addNewCaller(root);
+
+    // --- preconditions FIRST (false-negative discipline) ---
+    const reachable = findReachableModules(root);
+    assert.ok(
+      reachable.includes('orchestrator/new-caller.ts'),
+      'the new caller must be reachable from the bridge entry',
+    );
+    const { rows } = analyze(root);
+    assert.ok(
+      !rows.some((r) => r.file === 'orchestrator/new-caller.ts'),
+      'the new caller must emit NO per-file raw-sink row — so a FAIL cannot come from an accidental raw sink, only from the caller-count dimension',
+    );
+    assert.ok(
+      rows.some((r) => r.file === 'orchestrator/session-def.ts'),
+      'fixture sanity: the def module contributes tracked raw-sink rows to the baseline',
+    );
+
+    // The caller-count dimension must trip exit 1. RED today: the ratchet only
+    // keys on per-file raw sinks; the new caller has none, so runCheck returns 0.
+    assert.equal(
+      runCheck({ root, baselinePath }),
+      1,
+      'a new reachable caller of a designated unguarded fn must fail the ratchet (caller-count dimension not yet built)',
+    );
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test('caller-count ratchet: the designated-unguarded-fn registry is present and complete', () => {
+  // Probed via the namespace import: undefined today (the export does not exist)
+  // → RED. The registry must name readSessionStatus/writeSessionStatus AND the
+  // four bare-join session-dir builders (bd forge-ebj step 2 + fix-plan).
+  const designated = (ratchet as Record<string, unknown>).DESIGNATED_UNGUARDED_FUNCTIONS;
+  assert.ok(
+    designated,
+    'expected a DESIGNATED_UNGUARDED_FUNCTIONS export naming the shared fns whose callers the ratchet must count',
+  );
+  const names = new Set<string>(
+    Array.isArray(designated)
+      ? (designated as string[])
+      : Object.keys(designated as Record<string, unknown>),
+  );
+  for (const fn of [
+    'readSessionStatus',
+    'writeSessionStatus',
+    'architectSessionDir',
+    'instructionsSessionDir',
+    'projectBrainSessionDir',
+    'demoSessionDir',
+  ]) {
+    assert.ok(names.has(fn), `DESIGNATED_UNGUARDED_FUNCTIONS must designate ${fn}`);
+  }
 });

@@ -25,8 +25,9 @@
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname } from 'node:path';
 
+import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import { extractLiveToolDetails } from './tool-event-emit.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
@@ -262,6 +263,56 @@ export function writeSessionStatus<S extends Record<string, unknown>>(
   return p;
 }
 
+// ---------------------------------------------------------------------------
+// SEC-04 — guarded leaf siblings of readSessionStatus / writeSessionStatus.
+//
+// The raw pair above takes an ALREADY-BUILT `sessionDir` and raw-appends the
+// `status.json` leaf with `join(sessionDir, file)` — the exact "guard the dir,
+// raw-append the leaf" shape SEC-04 closes. These siblings take the TRUSTED
+// `projectsRoot` plus the request-derived directory segments and the leaf name,
+// and route the WHOLE path — leaf included — through `guardedFile` so a
+// symlinked/hardlinked `status.json` cannot escape. The raw pair is retained
+// deliberately; Phase-1 route appliers switch their call sites onto these.
+//
+// `dirSegments` carries the request-influenced ids (project / kindDir /
+// sessionId) as their OWN segments — NEVER folded into `projectsRoot` (see the
+// guard's root-trust contract). Returns `null` on a containment rejection so
+// the caller fails closed rather than reading/writing an escaped path.
+// ---------------------------------------------------------------------------
+
+/** Guarded read of `<projectsRoot>/<dirSegments...>/<leaf>` as JSON; `null` if
+ *  the guard rejects it, or it is absent/unparseable. */
+export function guardedReadSessionStatus<S>(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  leaf = 'status.json',
+): S | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'read');
+  if (p === null) return null;
+  try {
+    return JSON.parse(readFileSync(p, 'utf8')) as S;
+  } catch {
+    return null;
+  }
+}
+
+/** Guarded write of `<projectsRoot>/<dirSegments...>/<leaf>` as pretty JSON,
+ *  stamping a fresh `updated_at` and creating the session dir if needed.
+ *  Returns the written path, or `null` if the guard rejected the path (the
+ *  write never happens — fail closed). */
+export function guardedWriteSessionStatus<S extends Record<string, unknown>>(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  status: S,
+  leaf = 'status.json',
+): string | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, leaf], 'write');
+  if (p === null) return null;
+  mkdirSync(dirname(p), { recursive: true });
+  writeFileSync(p, JSON.stringify({ ...status, updated_at: new Date().toISOString() }, null, 2));
+  return p;
+}
+
 /**
  * Build a throttled heartbeat writer for `<heartbeatDir>/.heartbeat`. Each call
  * writes the current ISO timestamp at most once per HEARTBEAT_THROTTLE_MS;
@@ -302,10 +353,35 @@ export type InterviewAnswer = { question: string; answer: string };
 /** One round of answers POSTed by the operator (written by the bridge). */
 export type AnswerRound = { round: number; answers: InterviewAnswer[] };
 
-/** Write the pending questions for the operator to `<sessionDir>/questions.json`. */
-export function writeQuestions(sessionDir: string, questions: InterviewQuestion[]): string {
-  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-  const p = join(sessionDir, 'questions.json');
+// SEC-04 leaf-tail: `questions.json` / `answers.json` are the interview-handoff
+// SIBLINGS of `status.json` — and were the last raw-append leaves on the session
+// dir. A caller previously guarded the DIRECTORY (`resolveGuardedPath` →
+// `sessionDir` realPath) and then raw-appended the leaf with
+// `join(sessionDir, 'questions.json')`; a symlinked/hardlinked `questions.json`
+// or `answers.json` inside the genuinely-real, contained session dir therefore
+// escaped — proven live: `writeQuestions` wrote the pending questions THROUGH a
+// symlinked leaf to an out-of-root file, and `readAnswerRounds` READ an
+// out-of-root `answers.json` and surfaced its content into the replayed interview
+// prompt. These now route the WHOLE path (leaf included) through `guardedFile`
+// exactly like `guarded{Read,Write}SessionStatus` above: TRUSTED `projectsRoot`,
+// request-derived kind-dir + sessionId as their own `segments[]` elements (NEVER
+// folded into the root — the guard's root-trust contract), leaf last.
+
+/**
+ * Write the pending questions for the operator to
+ * `<projectsRoot>/<dirSegments...>/questions.json`, routing the leaf through the
+ * guard. Returns the written path, or `null` if containment rejected it (the
+ * write never happens — the caller fails closed rather than write an escaped
+ * leaf).
+ */
+export function writeQuestions(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  questions: InterviewQuestion[],
+): string | null {
+  const p = guardedFile(projectsRoot, [...dirSegments, 'questions.json'], 'write');
+  if (p === null) return null;
+  mkdirSync(dirname(p), { recursive: true });
   writeFileSync(p, JSON.stringify(questions, null, 2));
   return p;
 }
@@ -313,11 +389,14 @@ export function writeQuestions(sessionDir: string, questions: InterviewQuestion[
 /**
  * Read every `answers.json` round into a flat `InterviewAnswer[]`. The bridge
  * appends rounds as the operator answers; this flattens them into the prior-Q/A
- * list a turn prompt replays. Best-effort — never throws.
+ * list a turn prompt replays. The leaf rides through `guardedFile` (read mode) so
+ * a symlinked/escaping `answers.json` collapses to `null` == absent (no oracle)
+ * and yields `[]` rather than leaking out-of-root content into the prompt.
+ * Best-effort — never throws.
  */
-export function readAnswerRounds(sessionDir: string): InterviewAnswer[] {
-  const p = join(sessionDir, 'answers.json');
-  if (!existsSync(p)) return [];
+export function readAnswerRounds(projectsRoot: string, dirSegments: readonly string[]): InterviewAnswer[] {
+  const p = guardedFile(projectsRoot, [...dirSegments, 'answers.json'], 'read');
+  if (p === null) return [];
   try {
     const parsed = JSON.parse(readFileSync(p, 'utf8')) as AnswerRound[] | AnswerRound;
     const rounds = Array.isArray(parsed) ? parsed : [parsed];

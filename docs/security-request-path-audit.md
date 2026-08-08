@@ -172,6 +172,72 @@ Each fix keeps the charset check as an independent **first layer** and adds cont
 | `cli/bridge-studio-runs.ts:559,598,603` | `readFileSync`/`writeFileSync` | `POST /api/plan-verdict` body `project`, `sessionId` | unguarded `[read]` | `project` **is** `SLUG_RE`-gated and `sessionId` `SAFE_ID_RE`-gated here (materially stronger than the `ui-bridge.ts` equivalents), but `_architectSessionDir` is still a bare `join()` with no realpath. → bd `forge-28o` |
 | `cli/ui-bridge.ts:2284,2289,2313,2321` (`GET /api/demo-builder/sessions`, via `listDemoSessions`) | `existsSync`/`readdirSync` | `status.project_repo_path` read off each session's `status.json` | unguarded `[read]` | Found by SEC-03 WI-6's caller enumeration and deliberately NOT fixed there — stated rather than silently declared covered. The route takes no `project`/`sessionId` parameter, so it is not reachable by a routing escape, and it only probes existence and lists filenames (booleans and names, never file CONTENT). A forged value reaching it needs the same on-disk write precondition as the row above. Fixing it belongs with the session-status trust question as a whole, not inside a two-route content fix. → bd `forge-28o` |
 
+### Fixed in SEC-04 — full-path (leaf-inclusive) containment across every request-derived fs sink, + a mechanical lint
+
+**This is the row that closes the whole "Unguarded — filed, not fixed" table
+above** (except the two items whose fix is a *request-shape* change, not a guard
+call — see the residuals below). SEC-04 began as "guard the unguarded session
+route family" and, after two adversarial re-attacks reopened the class one layer
+down each time (an architect module a file away, then a symlinked *leaf* inside an
+already-guarded *dir*), was re-scoped to its true shape: **contain the full opened
+file path — the leaf included — at every request/project-derived filesystem sink,
+across all modules, enforced mechanically.**
+
+**The primitive.** `guardedFile(root, segments, 'read'|'write'|'readdir')` +
+`guardedReadFile`/`guardedWriteFile`/`guardedReadDir` (`cli/studio-path-guard.ts`)
+route the *entire* path — every directory segment **and the leaf filename** — through
+the existing `resolveGuardedPath` (per-segment realpath identity, `nlink===1` leaf
+check, fail-closed, no missing-vs-escape oracle). The caller passes a trusted,
+config-derived `root` (`projectsRoot`/`logsRoot`/`forgeRoot`) and every
+request-derived id (`project`, `sessionId`, `cycleId`, filename, and
+`project_repo_path`) as its own `segments[]` element — never folded into `root`.
+~100 sink sites across `cli/ui-bridge.ts`, the architect/instructions/project-brain/
+demo runners, `bridge-studio*`, `metrics`, `contract-stages`, and `project-config`
+were routed onto it. Guarded leaf siblings (`guardedReadSessionStatus`,
+`guardedReadStatus`, …) carry the shared readers.
+
+**The rows this closes** (all reproduced then re-confirmed contained by execution):
+the session-route family (`architectSessionDir`/`instructionsSessionDir`/
+`projectBrainSessionDir` bare joins; the `/start` unconditioned writes; the
+self-defeating `/file` `startsWith(base)` idiom; the AT-47 symlinked `_<kind>` list
+routes) → **`forge-28o`**; the `POST /api/plan-verdict` bare `_architectSessionDir`
+→ **`forge-28o`**; `listDemoSessions` and the `readSessionStatus`/`readStatus`
+symlink sweep (~17 callers, the generic-`<T>`-syntax callers a naïve grep missed)
+→ **`forge-9vv`**; the `cycleId` family (`events`/`graph`/`work-item`/`artifact`/
+`reflect` read **and** write) → **`forge-2zz`** (fs-sink rows); the `demo-builder/
+history` LIST+SERVE arbitrary read (a fourth module neither early commit touched);
+and `project-config.ts`'s `.forge/project.json` + `AGENTS.md` + `.forge/quality_gate_cmd`
+leaf reads (reached from the verdict send-back **and** the scheduler) → **`forge-2zz`**.
+
+**The mechanical guarantee** (`forge-uie`, and its generalisation). Two ratchets now
+guard the class rather than a one-time sweep: (1) `scripts/check-request-path-sinks.mjs`
+gained caller-counting over a designated-unguarded-function set (a *new caller* of an
+unguarded shared reader in *any* file now trips it — the blind spot that let R6-06
+ship a cross-project read); (2) **`scripts/check-raw-fs-guarded.mjs`** — a new
+taint-triggered def-use lint (wired into CI) that **fails any `readFileSync`/
+`writeFileSync`/`readdirSync`/`existsSync`/`statSync`/`mkdirSync` on a request-derived
+path not produced by the guard**, across 22 handling modules. Its taint model covers
+body/params/query/req heads, bare-name binding-wins ids, **url-derived ids**
+(`decodeURIComponent(url.match(re)[n])`, `url.split()`), and **interprocedural
+leaf-append** through a bare dir param (`sessionDir`/`projectRoot`/…). It currently
+reports **0 unguarded sinks**; every residual is on an explicit, reasoned,
+line-keyed allowlist. That 0-findings — not a hand re-attack — is the completeness
+proof going forward.
+
+**Residuals, disclosed not silent** (each an allowlist row, none a wire-reachable
+escape): the `_logs/<id>/…` event-read family (phase-log, preflight/brain-fix state,
+session stats, work-item snapshot) is symlink-blind behind charset/lexical gates —
+safe only because no route lets an attacker plant a symlink under forge-owned
+`_logs`; the `POST /api/studio/kbs/:id/maintenance` `file` arg and the
+`skills/install` `packageDir` are request-*shape* problems (a full client-supplied
+path, needing a `{kbId, relPath}`-style contract change, not a guard call) — they
+stay open under **`forge-2zz`** / **`forge-q80`** (the latter is SEC-05's lane); and
+the guard inherits a documented check-then-use TOCTOU window (needs an `O_NOFOLLOW`
+atomic open Node does not ergonomically expose). The `projects/<name>` *directory
+entry* being itself a symlink stays the guard's stated `root`-is-trusted contract
+residual — not wire-reachable, since an in-repo git commit controls a project's
+*contents*, never its enclosing directory entry.
+
 ### Fixed in R4-16 — the four `/start` routes' `projectRepoPath`
 
 Recorded here because leaving the row below in "unguarded" after R4-16 shipped

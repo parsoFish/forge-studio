@@ -29,8 +29,10 @@
  * PLAN.md annotations.
  */
 
-import { writeFileSync, mkdirSync, existsSync, renameSync } from 'node:fs';
+import { mkdirSync, existsSync, renameSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+
+import { guardedWriteFile } from './studio-path-guard.ts';
 
 
 // ---------------------------------------------------------------------------
@@ -624,14 +626,34 @@ ${rounds.map((r, i) => `      <tr><td>${i + 1}</td><td>${esc(r.question)}</td><t
  *  - `PLAN.html` — read-only rich viewer (cwc Amendment 2)
  */
 export function writePlanDoc(session: ArchitectSession, projectRoot: string): string {
-  const sessionDir = resolve(projectRoot, '_architect', session.session_id);
-  if (!existsSync(sessionDir)) mkdirSync(sessionDir, { recursive: true });
-  const planPath = join(sessionDir, 'PLAN.md');
-  writeFileSync(planPath, renderPlanDoc(session));
+  // SEC-04 leaf: `session.session_id` is request-derived — contain it (and the
+  // `_architect` kind-dir + each leaf) as their OWN guarded segments against the
+  // TRUSTED `projectRoot`, NEVER folded into the root (the root-folding bypass
+  // the guard cannot self-detect). guardedWriteFile mkdirs the parent and routes
+  // the WHOLE opened path (leaf included) through the guard, so a symlinked
+  // PLAN.md / PLAN.html leaf cannot escape the session dir.
+  const planPath = guardedWriteFile(
+    projectRoot,
+    ['_architect', session.session_id, 'PLAN.md'],
+    renderPlanDoc(session),
+  );
+  if (planPath === null) {
+    throw new Error(
+      `architect writePlanDoc: PLAN.md write failed containment for session "${session.session_id}" — refusing to write.`,
+    );
+  }
   // Sibling rich viewer (cwc Amendment 2). Operator opens in browser; never
   // read back as input — PLAN.md is the only parse target.
-  const htmlPath = join(sessionDir, 'PLAN.html');
-  writeFileSync(htmlPath, renderPlanHtml(session));
+  const htmlPath = guardedWriteFile(
+    projectRoot,
+    ['_architect', session.session_id, 'PLAN.html'],
+    renderPlanHtml(session),
+  );
+  if (htmlPath === null) {
+    throw new Error(
+      `architect writePlanDoc: PLAN.html write failed containment for session "${session.session_id}" — refusing to write.`,
+    );
+  }
   return planPath;
 }
 

@@ -808,11 +808,16 @@ test('awaiting-answers turn is a no-op (bridge owns the wait state)', async () =
   assert.equal(result.wrote.length, 0);
 });
 
-test('missing status.json throws a clear error', async () => {
+test('an unstarted session throws a clear error', async () => {
   const root = mkdtempSync(join(tmpdir(), 'arch-runner-'));
+  // SEC-04: runArchitectTurn now contains the session dir before reading, so a
+  // fully-missing session (its project root does not exist) surfaces as a
+  // containment failure; a present-but-empty session dir surfaces as the
+  // no-status message. Both are the "clear error for an unstarted session" this
+  // test guards — missing and escaped deliberately collapse (no oracle).
   await assert.rejects(
     runArchitectTurn({ sessionId: 'nope', projectRoot: join(root, 'p'), queryFn: makeQueryFn({}) }),
-    /no status\.json/,
+    /no status\.json|failed containment/,
   );
 });
 

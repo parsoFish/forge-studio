@@ -22,8 +22,9 @@
  * mirroring how `cmdStudioLauncher` threads `forgeRoot` into `runWatch`.
  */
 
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync, writeFileSync } from 'node:fs';
-import { join, resolve, sep } from 'node:path';
+import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
+import { join, relative, resolve, sep } from 'node:path';
+import { guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
 import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
 import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
@@ -209,15 +210,24 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
       return; // sessionDir escapes projectsRoot — refuse the write
     }
 
-    const statusPath = join(realSessionDir, 'status.json');
+    // SEC-04 (bd forge-ebj): route the WHOLE status.json path through the
+    // guarded primitives instead of the former bespoke realpath-only leaf check
+    // — that check resolved symlinks but was structurally blind to a HARDLINKED
+    // `status.json` (a genuine, non-symlink directory entry sharing an inode
+    // with an out-of-dir file; `realpathSync` returns it unchanged, so the
+    // startsWith check passed and the write mutated the shared inode). `guarded*`
+    // adds the `nlink === 1` leaf check that closes it. `realProjectsRoot` is the
+    // TRUSTED root; the already-contained, realpath-resolved session directory
+    // rides as its OWN `segments[]` elements (relative to that root), leaf
+    // included — never folded into the root.
+    const relFromRoot = relative(realProjectsRoot, realSessionDir);
+    const statusSegments = relFromRoot === '' ? ['status.json'] : [...relFromRoot.split(sep), 'status.json'];
+
     let existing: Record<string, unknown> = {};
-    if (existsSync(statusPath)) {
-      const realStatusPath = realpathSync(statusPath);
-      if (realStatusPath !== statusPath && !realStatusPath.startsWith(realSessionDir + sep)) {
-        return; // status.json escapes the session dir via a symlink — refuse the write
-      }
+    const rawExisting = guardedReadFile(realProjectsRoot, statusSegments);
+    if (rawExisting !== null) {
       try {
-        const parsed: unknown = JSON.parse(readFileSync(statusPath, 'utf8'));
+        const parsed: unknown = JSON.parse(rawExisting);
         if (parsed !== null && typeof parsed === 'object' && !Array.isArray(parsed)) {
           existing = parsed as Record<string, unknown>;
         }
@@ -226,7 +236,9 @@ function writeSessionTerminalPhase(forgeRoot: string, sessionDir: string, phase:
         // failing the dispatch outcome over a status-sidecar defect.
       }
     }
-    writeFileSync(statusPath, JSON.stringify({ ...existing, phase }, null, 2), 'utf8');
+    // A guarded refusal (symlinked/hardlinked leaf) returns null and writes
+    // NOTHING — best-effort, never masks the dispatch outcome/exit code.
+    guardedWriteFile(realProjectsRoot, statusSegments, JSON.stringify({ ...existing, phase }, null, 2));
   } catch {
     /* best-effort — never masks the dispatch outcome/exit code */
   }

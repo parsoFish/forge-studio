@@ -36,7 +36,7 @@ import {
 } from 'node:fs';
 import { randomBytes } from 'node:crypto';
 import { spawn } from 'node:child_process';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
@@ -92,18 +92,16 @@ import { createLogger, type EventLogEntry } from '../orchestrator/logging.ts';
 import { reconcileReflectFeedback, type RerunReflectorFn } from './reflect-reconcile.ts';
 import {
   listArchitectSessions,
-  readStatus,
-  writeStatus,
+  guardedReadStatus,
+  guardedWriteStatus,
   type ArchitectStatus,
   type ArchitectQuestion,
 } from '../orchestrator/architect-runner.ts';
 import {
-  instructionsSessionDir,
   DRAFT_FILENAME,
   type InstructionsStatus,
 } from '../orchestrator/instructions-runner.ts';
 import {
-  demoSessionDir,
   DEMO_HTML_REL_PATH,
   GENERATIONS_DIRNAME,
   type DemoBuilderStatus,
@@ -111,7 +109,6 @@ import {
 import { safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
 import { resolveContainedProjectDir } from './contract-stages.ts';
 import {
-  projectBrainSessionDir,
   type ProjectBrainStatus,
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
@@ -129,8 +126,8 @@ import type { AgentDefinition } from '../orchestrator/studio/types.ts';
 import { skillsDir, MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { unreadyConnectionsFor, formatUnreadyConnections } from '../orchestrator/studio/connection-run-gate.ts';
 import {
-  readSessionStatus,
-  writeSessionStatus,
+  guardedReadSessionStatus,
+  guardedWriteSessionStatus,
   type InterviewQuestion,
 } from '../orchestrator/interactive-session.ts';
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
@@ -138,7 +135,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { listRuns, buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
 const RECENT_CYCLES_MAX = 20;
@@ -1197,13 +1194,19 @@ async function handleHttp(
   }
   if (method === 'GET' && url.startsWith('/api/events/')) {
     const cycleId = decodeURIComponent(url.slice('/api/events/'.length));
-    const filePath = join(ctx.logsRoot, cycleId, 'events.jsonl');
-    if (!existsSync(filePath)) {
+    // SEC-04 (bd forge-ebj) — cycleId is request-derived and, until now,
+    // folded raw into `join(logsRoot, cycleId, 'events.jsonl')` with no
+    // per-segment guard: a `%2F`-smuggled `../..` cycleId escaped `_logs`
+    // entirely, and a symlinked `events.jsonl` leaf inside a real cycle dir
+    // was followed out of root. Route the WHOLE path (cycleId as its OWN
+    // segment under the trusted logsRoot, leaf included) through the guard;
+    // a rejected/absent path both collapse to 404 (no existence oracle).
+    const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
+    if (raw === null) {
       sendJson(res, 404, { error: 'no events.jsonl for cycle', cycleId }, origin);
       return;
     }
     try {
-      const raw = readFileSync(filePath, 'utf8');
       const events: EventLogEntry[] = [];
       for (const line of raw.split('\n')) {
         if (!line.trim()) continue;
@@ -1218,6 +1221,18 @@ async function handleHttp(
   if (method === 'GET' && url.startsWith('/api/cost/')) {
     // U1: cost summary per cycle (total + per-phase + per-skill).
     const cycleId = decodeURIComponent(url.slice('/api/cost/'.length));
+    // SEC-04 (bd forge-ebj) — `summariseCycle` folds `cycleId` into
+    // `join(logsRoot, cycleId, 'events.jsonl')` internally; gate the
+    // request-derived cycleId (as its OWN segment under the trusted logsRoot)
+    // through the per-segment identity guard BEFORE that read so a
+    // `%2F`-smuggled `../..` cycleId or a symlinked cycle dir is refused. A
+    // legitimately in-flight cycle whose dir does not yet exist stays valid
+    // (create-mode ⇒ ok), so an empty summary is unaffected.
+    const costCycleGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+    if (!costCycleGuard.ok) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return;
+    }
     try {
       const { summariseCycle } = await import('./metrics.ts');
       const m = summariseCycle(cycleId, ctx.logsRoot);
@@ -1239,16 +1254,21 @@ async function handleHttp(
     // end). Without this fallback a RESUMED cycle — whose PM phase is skipped, so
     // it has no snapshot until it finishes — serves no graph, and the WI hexes
     // vanish from the live hex view for the whole run. Mirrors /api/work-item.
-    const snapshotPath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', '_graph.md');
+    // SEC-04 (bd forge-ebj) — BOTH the snapshot path (cycleId under the
+    // trusted logsRoot) and the live-worktree fallback (initiativeId, derived
+    // from the request-supplied cycleId, under the trusted forgeRoot) are
+    // request-derived. Route each through the per-segment identity guard with
+    // the untrusted id as its OWN segment; a traversed cycleId or a symlinked
+    // leaf/dir at either location is refused rather than followed out of root.
     const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
-    const livePath = join(ctx.forgeRoot, '_worktrees', initiativeId, '.forge', 'work-items', '_graph.md');
-    const filePath = existsSync(snapshotPath) ? snapshotPath : existsSync(livePath) ? livePath : null;
-    if (!filePath) {
+    const raw =
+      guardedReadFile(ctx.logsRoot, [cycleId, 'work-items-snapshot', '_graph.md']) ??
+      guardedReadFile(ctx.forgeRoot, ['_worktrees', initiativeId, '.forge', 'work-items', '_graph.md']);
+    if (raw === null) {
       sendJson(res, 404, { error: 'no _graph.md for cycle', cycleId }, origin);
       return;
     }
     try {
-      const raw = readFileSync(filePath, 'utf8');
       sendJson(res, 200, { cycleId, mermaid: raw }, origin);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
@@ -1274,16 +1294,22 @@ async function handleHttp(
       sendJson(res, 400, { error: 'cycleId and a WI-<n> wiId are required' }, origin);
       return;
     }
-    const snapshotPath = join(ctx.logsRoot, cycleId, 'work-items-snapshot', `${wiId}.md`);
+    // SEC-04 (bd forge-ebj) — cycleId is request-derived and was folded raw
+    // into both `_logs/<cycleId>/...` and `_worktrees/<initiativeId>/...`; a
+    // symlinked cycleId DIRECTORY and a symlinked `WI-<n>.md` LEAF both escaped
+    // (wiId is already charset-gated above, but the cycleId hop was not).
+    // Route each candidate (untrusted id as its OWN segment under a trusted
+    // root, leaf included) through the per-segment identity guard.
     const initiativeId = (cycleId.match(/_(INIT-.+)$/) ?? [, cycleId])[1] as string;
-    const livePath = join(ctx.forgeRoot, '_worktrees', initiativeId, '.forge', 'work-items', `${wiId}.md`);
-    const found = existsSync(snapshotPath) ? snapshotPath : existsSync(livePath) ? livePath : null;
-    if (!found) {
+    const found =
+      guardedReadFile(ctx.logsRoot, [cycleId, 'work-items-snapshot', `${wiId}.md`]) ??
+      guardedReadFile(ctx.forgeRoot, ['_worktrees', initiativeId, '.forge', 'work-items', `${wiId}.md`]);
+    if (found === null) {
       sendJson(res, 404, { error: 'work item not found in snapshot or live worktree', cycleId, wiId }, origin);
       return;
     }
     try {
-      const w = parseWorkItem(readFileSync(found, 'utf8'));
+      const w = parseWorkItem(found);
       sendJson(res, 200, {
         work_item_id: w.work_item_id,
         acceptance_criteria: w.acceptance_criteria,
@@ -1323,18 +1349,18 @@ async function handleHttp(
       sendJson(res, 400, { error: 'invalid cycleId' }, origin);
       return;
     }
-    const requested = join(ctx.logsRoot, cycleId, 'artifacts', filename);
-    const safeBase = join(ctx.logsRoot, cycleId, 'artifacts') + sep;
-    if (!requested.startsWith(safeBase)) {
-      sendJson(res, 400, { error: 'path escape rejected' }, origin);
-      return;
-    }
-    if (!existsSync(requested)) {
+    // SEC-04 (bd forge-ebj) — the lexical `startsWith(safeBase)` above was
+    // blind to a SYMLINKED leaf: `artifacts/<filename>` real-located inside a
+    // genuine cycle dir but pointing out of root passed it and readFileSync
+    // followed it. Route the WHOLE path (cycleId + fixed `artifacts` + the
+    // filename segments, all under the trusted logsRoot) through the
+    // per-segment identity + nlink guard, which the lexical check cannot do.
+    const body = guardedReadFile(ctx.logsRoot, [cycleId, 'artifacts', ...filename.split('/')]);
+    if (body === null) {
       sendJson(res, 404, { error: 'artifact not found', cycleId, filename }, origin);
       return;
     }
     try {
-      const body = readFileSync(requested, 'utf8');
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
         'access-control-allow-origin': origin,
@@ -2253,41 +2279,24 @@ function resolveDemoSessionDir(projectsRoot: string, project: string, sessionId:
   const sessionIdReason = invalidGenerationSessionIdReason(sessionId);
   if (sessionIdReason) return { ok: false, reason: sessionIdReason };
 
-  const projectDir = join(projectsRoot, project);
-  let realProjectDir: string;
-  try {
-    realProjectDir = realpathSync(projectDir);
-  } catch {
-    return { ok: false, reason: `project "${project}" was not found under the projects root` };
-  }
-
-  // The candidate session dir may not exist yet (the CREATE case) — walk up
-  // to the closest EXISTING ancestor and prove THAT is contained, per the
-  // header note above.
-  const candidate = demoSessionDir(projectDir, sessionId);
-  let ancestor = candidate;
-  while (!existsSync(ancestor)) {
-    const parent = dirname(ancestor);
-    if (parent === ancestor) {
-      return { ok: false, reason: `session dir for project "${project}", sessionId "${sessionId}" could not be resolved` };
-    }
-    ancestor = parent;
-  }
-  let realAncestor: string;
-  try {
-    realAncestor = realpathSync(ancestor);
-  } catch {
-    return { ok: false, reason: `session dir for project "${project}", sessionId "${sessionId}" could not be resolved` };
-  }
-  if (realAncestor !== realProjectDir && !realAncestor.startsWith(realProjectDir + sep)) {
+  // SEC-04 (bd forge-ebj) — MIGRATED off the bespoke realpath baseline onto the
+  // shared per-segment IDENTITY guard. `project` now arrives as its OWN element
+  // of `segments[]`, NEVER folded into a realpath baseline: the previous check
+  // realpath'd `join(projectsRoot, project)` FIRST and compared against THAT,
+  // so when `project` itself was a SYMLINK the baseline WAS the escaped
+  // location and the `startsWith` was tautological (root-folding — verbatim
+  // from the adversarial-containment-review catalogue; the charset shape was
+  // already guarded by the two reason-checks above, but the symlinked-first-
+  // segment shape was not). `resolveGuardedPath` walks project → `_demo` →
+  // sessionId, identity-checking each; the session dir may not exist yet (the
+  // `/start` create case), which it handles by walking to the deepest existing
+  // ancestor and reassembling the literal tail. A missing dir and an escaping
+  // symlink both collapse to a single generic reason (no oracle).
+  const guarded = resolveGuardedPath(projectsRoot, [project, '_demo', sessionId]);
+  if (!guarded.ok) {
     return { ok: false, reason: `sessionId "${sessionId}" for project "${project}" resolves outside the project directory` };
   }
-
-  // Splice any not-yet-existing tail segments (plain literal names — see
-  // header note) back onto the resolved ancestor, so a fresh `/start` gets a
-  // real, fully-resolved dir it can `mkdirSync` under.
-  const tail = relative(ancestor, candidate);
-  return { ok: true, dir: tail === '' ? realAncestor : join(realAncestor, tail) };
+  return { ok: true, dir: guarded.realPath };
 }
 
 /** Timestamp stamp + short random suffix for a generated run id
@@ -2389,8 +2398,35 @@ function spawnAgentDispatch(
   } catch { /* best-effort */ }
 }
 
-function architectSessionDir(projectsRoot: string, project: string, sessionId: string): string {
-  return join(projectsRoot, project, '_architect', sessionId);
+/**
+ * SEC-04 (bd forge-ebj) — the ONE containment choke point for the bridge's
+ * request-derived session-dir families (architect / instructions /
+ * project-brain / demo). `project` and `sessionId` arrive from request input
+ * (a JSON body value OR a decoded URL segment); `kindDirName` is a fixed
+ * literal (`_architect` / `_instructions` / `_project-brain` / `_demo`). Each
+ * untrusted value is passed as its OWN element of `resolveGuardedPath`'s
+ * `segments[]` (cli/studio-path-guard.ts) — NEVER folded into `root` — so the
+ * per-segment IDENTITY walk catches every escape shape from the
+ * adversarial-containment-review catalogue: a `/`-, `.`- or `..`-laden segment,
+ * a symlinked `<project>` / `_<kind>` / `<sessionId>`, a cross-object same-root
+ * alias, and a hardlinked leaf.
+ *
+ * Returns the fully-resolved, contained dir, or `null` on ANY escape — a
+ * missing dir and an escaping symlink both collapse to `null`, so the caller's
+ * response is indistinguishable between "wrong id" and "blocked escape" (no
+ * oracle). The leaf may legitimately NOT exist yet (the `/start` create case),
+ * so existence is NOT required here; every read route separately returns 404
+ * when its `status.json` / file is subsequently found absent, and every write
+ * route mkdirs under a dir this function already proved contained.
+ */
+function guardedSessionDir(
+  projectsRoot: string,
+  project: string,
+  kindDirName: string,
+  sessionId: string,
+): string | null {
+  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId]);
+  return guarded.ok ? guarded.realPath : null;
 }
 
 /** R4-17, D8 — renders the operator's own onboarding-start `inputs` verbatim
@@ -2478,9 +2514,12 @@ function describeRejectedValue(candidate: unknown): string {
   return `${rendered.slice(0, MAX_REJECTED_VALUE_CHARS)}… (${rendered.length} chars, truncated)`;
 }
 
-function readJsonFile<T>(path: string): T | null {
-  if (!existsSync(path)) return null;
-  try { return JSON.parse(readFileSync(path, 'utf8')) as T; } catch { return null; }
+/** Parse an already-read JSON string; null on malformed content. Companion to
+ *  the guarded read primitives (which return raw contents, not parsed JSON) so
+ *  a SEC-04 guarded read can replace a `readJsonFile(join(dir, leaf))` call
+ *  without re-following the leaf: the guard read the bytes, this parses them. */
+function safeParseJson<T>(raw: string): T | null {
+  try { return JSON.parse(raw) as T; } catch { return null; }
 }
 
 function newArchitectSessionId(): string {
@@ -2524,12 +2563,19 @@ async function handleArchitect(
       if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureArchitectTail(s.session_id);
     }
     const sessions = statuses.map((s) => {
-      const dir = architectSessionDir(ctx.projectsRoot, s.project, s.session_id);
-      const questions =
+      // SEC-04 (bd forge-ebj) — this used a RAW `architectSessionDir` join and
+      // then raw-appended each leaf (worse than dir-guarded): a symlinked
+      // `_architect`/session dir OR a symlinked `questions.json`/`PLAN.html`
+      // leaf (git-plantable inside a project repo) was followed out of root.
+      // Route each leaf through the guard, request ids as their OWN segments
+      // under the trusted projectsRoot.
+      const dirSegs = [s.project, '_architect', s.session_id];
+      const questionsRaw =
         s.phase === 'awaiting-answers'
-          ? readJsonFile<ArchitectQuestion[]>(join(dir, 'questions.json'))
+          ? guardedReadFile(ctx.projectsRoot, [...dirSegs, 'questions.json'])
           : null;
-      const planUrl = existsSync(join(dir, 'PLAN.html'))
+      const questions = questionsRaw !== null ? safeParseJson<ArchitectQuestion[]>(questionsRaw) : null;
+      const planUrl = guardedFile(ctx.projectsRoot, [...dirSegs, 'PLAN.html'], 'read') !== null
         ? `/api/architect/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/PLAN.html`
         : null;
 
@@ -2571,16 +2617,26 @@ async function handleArchitect(
       sendJson(res, 400, { error: 'expected /api/architect/file/<project>/<sid>/<filename>' }, origin);
       return true;
     }
-    const base = architectSessionDir(ctx.projectsRoot, project, sessionId) + sep;
-    const requested = join(architectSessionDir(ctx.projectsRoot, project, sessionId), filename);
-    if (!requested.startsWith(base)) {
+    // SEC-04 (bd forge-ebj) — the old `startsWith(base)` check was
+    // self-defeating: `base` and `requested` were BOTH built from the same
+    // untrusted `project`/`sessionId`, so a traversal in either was invisible
+    // to the comparison (`join` only normalises `..` inside `filename`).
+    // Resolve the WHOLE path — project, `_architect`, sessionId AND the
+    // filename segments — through the per-segment identity guard; `!ok` (any
+    // escape) and `!exists` (contained but absent) both collapse to 404.
+    const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_architect', sessionId, ...filename.split('/')]);
+    if (!guarded.ok) {
+      // A containment escape (traversed project/sessionId, or a `..`/absolute
+      // filename) — rejected BEFORE any existence probe, so out-of-root
+      // existence is never leaked.
       sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return true;
     }
-    if (!existsSync(requested)) {
+    if (!guarded.exists) {
       sendJson(res, 404, { error: 'file not found', project, sessionId, filename }, origin);
       return true;
     }
+    const requested = guarded.realPath;
     try {
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
@@ -2611,9 +2667,15 @@ async function handleArchitect(
         return true;
       }
       const sessionId = newArchitectSessionId();
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, sessionId);
-      mkdirSync(dir, { recursive: true });
-      writeFileSync(join(dir, 'idea.md'), body.idea);
+      // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+write: a traversal
+      // `project` must create NOTHING out of root (the old code wrote
+      // idea.md=body.idea to `<outside>/_architect/<sid>/`).
+      const dirSegs = [body.project, '_architect', sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', sessionId);
+      if (!dir) {
+        sendJson(res, 400, { error: 'invalid project' }, origin);
+        return true;
+      }
       const status: ArchitectStatus = {
         session_id: sessionId,
         project: body.project,
@@ -2623,7 +2685,17 @@ async function handleArchitect(
         idea: body.idea,
         updated_at: new Date().toISOString(),
       };
-      writeStatus(dir, status);
+      // SEC-04 (bd forge-ebj) — route both leaf writes (`idea.md`, `status.json`)
+      // through the guard (leaf included) rather than raw-appending onto the
+      // contained dir; guardedWriteFile/guardedWriteStatus mkdir the parent and
+      // refuse a symlinked/hardlinked leaf (⇒ null ⇒ 400, nothing written).
+      if (
+        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'idea.md'], body.idea) === null ||
+        guardedWriteStatus(ctx.projectsRoot, dirSegs, status) === null
+      ) {
+        sendJson(res, 400, { error: 'invalid session path' }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'architect', body.project, sessionId);
       ctx.broadcastArchitectChanged();
       sendJson(res, 200, { ok: true, sessionId, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/architect/start', sessionId) }, origin);
@@ -2646,13 +2718,23 @@ async function handleArchitect(
         sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
         return true;
       }
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
+      // SEC-04 — guard BEFORE the lockfile.lock (which would otherwise create
+      // a `.lock` at an out-of-root traversed path) and before any read/write.
+      const dirSegs = [body.project, '_architect', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
       // R4-04 review finding: guard + serialize like applyPlanVerdict — the
       // interview→exploring→drafting turn is longer now, and an answer
       // landing mid-turn would yank a live session back to 'interviewing'
       // (a stray double-submit could previously do the same). The lock
       // serializes against the runner's own status writes; the phase guard
       // 409s anything that isn't actually waiting for answers.
+      // The lock path sits in the already-contained dir; the status/answers
+      // CONTENT reads+writes below go through the SEC-04 guarded leaf siblings
+      // (leaf included) so a symlinked `status.json`/`answers.json` is refused.
       const statusPath = join(dir, 'status.json');
       let round = 0;
       let release: (() => Promise<void>) | null = null;
@@ -2663,7 +2745,7 @@ async function handleArchitect(
         return true;
       }
       try {
-        const status = readStatus(dir);
+        const status = guardedReadStatus(ctx.projectsRoot, dirSegs);
         if (!status) {
           sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
           return true;
@@ -2672,11 +2754,16 @@ async function handleArchitect(
           sendJson(res, 409, { error: `session is not awaiting answers (phase: ${status.phase})` }, origin);
           return true;
         }
-        const answersPath = join(dir, 'answers.json');
-        const prior = readJsonFile<{ round: number; answers: unknown[] }[]>(answersPath) ?? [];
+        const priorRaw = guardedReadFile(ctx.projectsRoot, [...dirSegs, 'answers.json']);
+        const prior = (priorRaw !== null ? safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
         round = prior.length + 1;
-        writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
-        writeStatus(dir, { ...status, phase: 'interviewing', round: round + 1 });
+        if (
+          guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
+          guardedWriteStatus(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
+        ) {
+          sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+          return true;
+        }
       } finally {
         if (release) await release().catch(() => {});
       }
@@ -2702,8 +2789,17 @@ async function handleArchitect(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = architectSessionDir(ctx.projectsRoot, body.project, body.sessionId);
-      const status = readStatus(dir);
+      // SEC-04 — guard the request-derived session dir before resolving/reading
+      // it: a traversal `project` must not resolve to an out-of-root session,
+      // and the status.json READ goes through the guarded leaf sibling so a
+      // symlinked status leaf inside a real dir is refused, not followed.
+      const dirSegs = [body.project, '_architect', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_architect', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const status = guardedReadStatus(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
@@ -2774,7 +2870,15 @@ function listInstructionsSessions(projectsRoot: string): InstructionsStatus[] {
     } catch { continue; }
     for (const sid of sids) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      const status = readSessionStatus<InstructionsStatus>(instructionsSessionDir(join(projectsRoot, project), sid));
+      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
+      // symlinked `_instructions` (git-plantable inside any onboarded project's
+      // own repo) cannot fold this enumeration onto a victim dir outside root.
+      const dir = guardedSessionDir(projectsRoot, project, '_instructions', sid);
+      if (!dir) continue;
+      // SEC-04 (bd forge-ebj) — route the status.json READ through the guarded
+      // leaf sibling so a symlinked `status.json` inside a real session dir is
+      // refused, not followed (the dir guard alone did not cover the leaf).
+      const status = guardedReadSessionStatus<InstructionsStatus>(projectsRoot, [project, '_instructions', sid]);
       if (status) out.push(status);
     }
   }
@@ -2800,12 +2904,19 @@ async function handleInstructions(
       if (s.phase !== 'committed' && s.phase !== 'rejected') ctx.ensureInstructionsTail(s.session_id);
     }
     const sessions = statuses.map((s) => {
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, s.project), s.session_id);
-      const questions =
+      // SEC-04 — resolve through the shared guard (the enumeration is already
+      // guarded, so this is the same contained dir; keeps this file free of
+      // bare request-derived session-dir builders).
+      // SEC-04 (bd forge-ebj) — route each leaf through the guard (the dir was
+      // already contained, but the `questions.json`/draft leaves were then
+      // raw-appended and would follow a symlinked leaf).
+      const dirSegs = [s.project, '_instructions', s.session_id];
+      const questionsRaw =
         s.phase === 'awaiting-answers'
-          ? readJsonFile<InterviewQuestion[]>(join(dir, 'questions.json'))
+          ? guardedReadFile(ctx.projectsRoot, [...dirSegs, 'questions.json'])
           : null;
-      const draftUrl = existsSync(join(dir, DRAFT_FILENAME))
+      const questions = questionsRaw !== null ? safeParseJson<InterviewQuestion[]>(questionsRaw) : null;
+      const draftUrl = guardedFile(ctx.projectsRoot, [...dirSegs, DRAFT_FILENAME], 'read') !== null
         ? `/api/instructions/file/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}/${encodeURIComponent(DRAFT_FILENAME)}`
         : null;
 
@@ -2852,16 +2963,21 @@ async function handleInstructions(
       sendJson(res, 400, { error: 'expected /api/instructions/file/<project>/<sid>/<filename>' }, origin);
       return true;
     }
-    const base = instructionsSessionDir(join(ctx.projectsRoot, project), sessionId) + sep;
-    const requested = join(instructionsSessionDir(join(ctx.projectsRoot, project), sessionId), filename);
-    if (!requested.startsWith(base)) {
+    // SEC-04 — same self-defeating `startsWith(base)` defect as the architect
+    // /file route; resolve the whole path (project, `_instructions`, sessionId,
+    // filename) through the per-segment identity guard instead.
+    const guarded = resolveGuardedPath(ctx.projectsRoot, [project, '_instructions', sessionId, ...filename.split('/')]);
+    if (!guarded.ok) {
+      // A containment escape — rejected BEFORE any existence probe, so
+      // out-of-root existence is never leaked.
       sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return true;
     }
-    if (!existsSync(requested)) {
+    if (!guarded.exists) {
       sendJson(res, 404, { error: 'file not found', project, sessionId, filename }, origin);
       return true;
     }
+    const requested = guarded.realPath;
     try {
       res.writeHead(200, {
         'content-type': contentTypeFor(filename),
@@ -2900,9 +3016,16 @@ async function handleInstructions(
       const mode: 'init' | 'edit' =
         body.mode ?? (readAgentInstructionsFile(repoPath) ? 'edit' : 'init');
       const sessionId = newArchitectSessionId();
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), sessionId);
-      mkdirSync(dir, { recursive: true });
-      writeSessionStatus<InstructionsStatus>(dir, {
+      // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write: a traversal
+      // `project` must create no out-of-root `_instructions` session.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', sessionId);
+      if (!dir) {
+        sendJson(res, 400, { error: 'invalid project' }, origin);
+        return true;
+      }
+      // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf
+      // sibling (leaf included; mkdirs the parent, refuses a symlinked leaf).
+      if (guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, [body.project, '_instructions', sessionId], {
         session_id: sessionId,
         project: body.project,
         project_repo_path: repoPath,
@@ -2911,7 +3034,10 @@ async function handleInstructions(
         round: 1,
         prompt: '',
         updated_at: new Date().toISOString(),
-      });
+      }) === null) {
+        sendJson(res, 400, { error: 'invalid session path' }, origin);
+        return true;
+      }
       ctx.broadcastInstructionsChanged();
       sendJson(res, 200, { ok: true, sessionId, mode }, origin);
     } catch (err) {
@@ -2929,15 +3055,32 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
         return true;
       }
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
-      const status = readSessionStatus<InstructionsStatus>(dir);
+      // SEC-04 (bd forge-ebj) — the dir guard below contains the DIRECTORY,
+      // but each leaf (`status.json`, `prompt.md`) was then raw-appended and
+      // read/written through `join(dir, leaf)`, which FOLLOWS a symlinked leaf.
+      // Route every leaf — request ids as their OWN segments under the trusted
+      // projectsRoot, leaf included — through the guarded siblings so a
+      // symlinked/hardlinked `status.json`/`prompt.md` inside a real session
+      // dir is refused (read ⇒ null ⇒ 404; write ⇒ null ⇒ 400, nothing written).
+      const dirSegs = [body.project, '_instructions', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const status = guardedReadSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
       const brief = body.brief ?? '';
-      writeFileSync(join(dir, 'prompt.md'), brief);
-      writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: 1, prompt: brief });
+      if (
+        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+        guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: 1, prompt: brief }) === null
+      ) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/brief', body.sessionId) }, origin);
@@ -2960,17 +3103,30 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project, sessionId, answers[] are required' }, origin);
         return true;
       }
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
-      const status = readSessionStatus<InstructionsStatus>(dir);
+      // SEC-04 (bd forge-ebj) — guard the request-derived session dir, and
+      // route every leaf (status.json, answers.json) through the guarded leaf
+      // siblings so a symlinked leaf inside a real dir is refused, not followed.
+      const dirSegs = [body.project, '_instructions', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const status = guardedReadSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      const answersPath = join(dir, 'answers.json');
-      const prior = readJsonFile<{ round: number; answers: unknown[] }[]>(answersPath) ?? [];
+      const priorRaw = guardedReadFile(ctx.projectsRoot, [...dirSegs, 'answers.json']);
+      const prior = (priorRaw !== null ? safeParseJson<{ round: number; answers: unknown[] }[]>(priorRaw) : null) ?? [];
       const round = prior.length + 1;
-      writeFileSync(answersPath, JSON.stringify([...prior, { round, answers: body.answers }], null, 2));
-      writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'interviewing', round: round + 1 });
+      if (
+        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'answers.json'], JSON.stringify([...prior, { round, answers: body.answers }], null, 2)) === null ||
+        guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'interviewing', round: round + 1 }) === null
+      ) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
       sendJson(res, 200, { ok: true, round, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/instructions/answer', body.sessionId) }, origin);
@@ -2994,19 +3150,31 @@ async function handleInstructions(
         sendJson(res, 400, { error: 'project, sessionId, kind are required' }, origin);
         return true;
       }
-      const dir = instructionsSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
-      const status = readSessionStatus<InstructionsStatus>(dir);
+      // SEC-04 (bd forge-ebj) — guard the dir, and route each leaf (status.json,
+      // feedback.md) through the guarded leaf siblings (leaf-symlink close).
+      const dirSegs = [body.project, '_instructions', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_instructions', body.sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
+        return true;
+      }
+      const status = guardedReadSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
+      let wrote: string | null;
       if (body.kind === 'approve') {
-        writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'finalizing' });
+        wrote = guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'finalizing' });
       } else if (body.kind === 'revise') {
-        writeFileSync(join(dir, 'feedback.md'), body.feedback ?? '');
-        writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'drafting' });
+        const wroteFeedback = guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback ?? '');
+        wrote = wroteFeedback === null ? null : guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'drafting' });
       } else {
-        writeSessionStatus<InstructionsStatus>(dir, { ...status, phase: 'rejected' });
+        wrote = guardedWriteSessionStatus<InstructionsStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'rejected' });
+      }
+      if (wrote === null) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
       }
       spawnAgentTurn(ctx.forgeRoot, 'instructions', body.project, body.sessionId);
       ctx.broadcastInstructionsChanged();
@@ -3047,22 +3215,40 @@ function listProjectBrainSessions(projectsRoot: string): ProjectBrainStatus[] {
     let sids: string[];
     try { sids = readdirSync(base); } catch { continue; }
     for (const sid of sids) {
-      const status = readSessionStatus<ProjectBrainStatus>(projectBrainSessionDir(join(projectsRoot, project), sid));
+      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
+      // symlinked `_project-brain` cannot fold this enumeration onto a victim
+      // dir outside root.
+      const dir = guardedSessionDir(projectsRoot, project, '_project-brain', sid);
+      if (!dir) continue;
+      // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
+      // sibling (leaf-symlink close; the dir guard did not cover the leaf).
+      const status = guardedReadSessionStatus<ProjectBrainStatus>(projectsRoot, [project, '_project-brain', sid]);
       if (status) out.push(status);
     }
   }
   return out;
 }
 
-/** R1-3b — the staged theme files (name + content) for a session under review. */
-function readStagedThemes(projectsRoot: string, project: string, sessionId: string): Array<{ name: string; content: string }> {
-  const dir = join(projectBrainSessionDir(join(projectsRoot, project), sessionId), 'themes');
-  if (!existsSync(dir)) return [];
+/** R1-3b — the staged theme files (name + content) for a session under review.
+ *  SEC-04 (bd forge-ebj): the caller's `guardedSessionDir` contains the session
+ *  DIRECTORY, but the `themes/` subdir and each `<name>.md` LEAF were then
+ *  raw-appended and `readdir`/`readFileSync`'d — a symlinked `themes/` subdir
+ *  (git-plantable inside a project repo) OR a symlinked theme leaf was followed
+ *  out of root. Takes the TRUSTED `projectsRoot` plus the request-derived
+ *  `dirSegments` (project / `_project-brain` / sessionId) as their OWN
+ *  elements, and routes the `themes/` readdir + every leaf read through the
+ *  per-segment identity guard (leaf included). */
+function readStagedThemes(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+): Array<{ name: string; content: string }> {
+  const themeSegs = [...dirSegments, 'themes'];
+  const names = guardedReadDir(projectsRoot, themeSegs);
+  if (names === null) return [];
   const out: Array<{ name: string; content: string }> = [];
-  let files: string[];
-  try { files = readdirSync(dir).filter((f) => f.endsWith('.md')).sort(); } catch { return out; }
-  for (const name of files) {
-    try { out.push({ name, content: readFileSync(join(dir, name), 'utf8') }); } catch { /* skip */ }
+  for (const name of names.filter((f) => f.endsWith('.md')).sort()) {
+    const content = guardedReadFile(projectsRoot, [...themeSegs, name]);
+    if (content !== null) out.push({ name, content });
   }
   return out;
 }
@@ -3109,7 +3295,14 @@ function listDemoSessions(projectsRoot: string): DemoBuilderStatus[] {
     } catch { continue; }
     for (const sid of sids) {
       if (sid.startsWith('_')) continue; // skip _archived/
-      const status = readSessionStatus<DemoBuilderStatus>(demoSessionDir(join(projectsRoot, project), sid));
+      // SEC-04 (AT-47) — resolve through the per-segment identity guard so a
+      // symlinked `_demo` cannot fold this enumeration onto a victim dir
+      // outside root.
+      const dir = guardedSessionDir(projectsRoot, project, '_demo', sid);
+      if (!dir) continue;
+      // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
+      // sibling (leaf-symlink close; the dir guard did not cover the leaf).
+      const status = guardedReadSessionStatus<DemoBuilderStatus>(projectsRoot, [project, '_demo', sid]);
       if (status) out.push(status);
     }
   }
@@ -3198,21 +3391,28 @@ async function handleDemoBuilder(
       if (s.phase !== 'locked' && s.phase !== 'abandoned') ctx.ensureDemoTail(s.session_id);
     }
     const sessions = statuses.map((s) => {
-      // DEMO.html lives in the PROJECT REPO under .forge/demo/, not the session dir.
-      const demoUrl = existsSync(join(s.project_repo_path, DEMO_HTML_REL_PATH))
+      // SEC-04 (bd forge-ebj) — `s.project_repo_path` is UNTRUSTED at read time
+      // (it is status.json content, git-plantable, not a routing input). These
+      // probes existsSync/readdirSync THROUGH it: an out-of-root value was an
+      // existence oracle AND the fragments readdir ENUMERATED (disclosed) an
+      // out-of-root directory's filenames. Contain the value first
+      // (isContainedProjectRepoPath — the same guard the serve routes apply),
+      // THEN route each leaf through the per-segment identity guard (leaf
+      // included) with that now-contained value as the root. A forged
+      // out-of-root path yields no demoUrl/fragments (safe default), never a
+      // disclosure. DEMO.html lives in the PROJECT REPO under .forge/demo/.
+      const repoContained =
+        typeof s.project_repo_path === 'string' &&
+        isContainedProjectRepoPath(s.project_repo_path, { forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
+      const demoUrl = repoContained && guardedFile(s.project_repo_path, DEMO_HTML_REL_PATH.split('/'), 'read') !== null
         ? `/api/demo-builder/demo/${encodeURIComponent(s.project)}/${encodeURIComponent(s.session_id)}`
         : null;
       // Per-element rendered fragments present in the repo (element ids) — so the
       // operator can view each part's output independently.
-      const fragmentsDir = join(s.project_repo_path, '.forge', 'demo', 'fragments');
-      let fragments: string[] = [];
-      if (existsSync(fragmentsDir)) {
-        try {
-          fragments = readdirSync(fragmentsDir)
-            .filter((f) => f.endsWith('.html'))
-            .map((f) => f.slice(0, -'.html'.length));
-        } catch { fragments = []; }
-      }
+      const fragmentNames = repoContained ? guardedReadDir(s.project_repo_path, ['.forge', 'demo', 'fragments']) : null;
+      const fragments: string[] = (fragmentNames ?? [])
+        .filter((f) => f.endsWith('.html'))
+        .map((f) => f.slice(0, -'.html'.length));
 
       // staleMs: ms since the last sign of life — heartbeat mtime if present,
       // else the status.json updated_at timestamp.
@@ -3236,7 +3436,7 @@ async function handleDemoBuilder(
         prompt: s.prompt,
         demoUrl,
         fragments,
-        hasLockedDemo: existsSync(join(s.project_repo_path, '.forge', 'demo', 'demo.lock.json')),
+        hasLockedDemo: repoContained && guardedFile(s.project_repo_path, ['.forge', 'demo', 'demo.lock.json'], 'read') !== null,
         staleMs,
       };
     });
@@ -3268,7 +3468,10 @@ async function handleDemoBuilder(
       sendJson(res, 400, { error: dirOutcome.reason }, origin);
       return true;
     }
-    const status = readSessionStatus<DemoBuilderStatus>(dirOutcome.dir);
+    // SEC-04 (bd forge-ebj) — the status.json READ goes through the guarded
+    // leaf sibling (leaf included) so a symlinked status leaf inside the
+    // resolved-contained session dir is refused, not followed.
+    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [project, '_demo', sessionId]);
     if (!status) {
       sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
       return true;
@@ -3292,11 +3495,13 @@ async function handleDemoBuilder(
       sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
-    // DEMO_HTML_REL_PATH is a fixed constant ('.forge/demo/DEMO.html', no
-    // caller input), so once project_repo_path itself is proven contained,
-    // no further base/requested check is needed to reach it.
-    const requested = join(status.project_repo_path, DEMO_HTML_REL_PATH);
-    if (!existsSync(requested)) {
+    // SEC-04 (bd forge-ebj) — project_repo_path is proven contained above, but
+    // the DEMO.html LEAF beneath it could still be a symlink/hardlink out of
+    // root; route the whole leaf path (fixed DEMO_HTML_REL_PATH segments under
+    // the now-contained repo root) through the per-segment identity + nlink
+    // guard so a symlinked DEMO.html is refused, not followed.
+    const demoBody = guardedReadFile(status.project_repo_path, DEMO_HTML_REL_PATH.split('/'));
+    if (demoBody === null) {
       sendJson(res, 404, { error: 'DEMO.html not found', project, sessionId }, origin);
       return true;
     }
@@ -3306,7 +3511,7 @@ async function handleDemoBuilder(
         'access-control-allow-origin': origin,
         'vary': 'origin',
       });
-      res.end(readFileSync(requested, 'utf8'));
+      res.end(demoBody);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -3330,7 +3535,9 @@ async function handleDemoBuilder(
       sendJson(res, 400, { error: dirOutcome.reason }, origin);
       return true;
     }
-    const status = readSessionStatus<DemoBuilderStatus>(dirOutcome.dir);
+    // SEC-04 (bd forge-ebj) — status.json READ through the guarded leaf
+    // sibling (leaf-symlink close).
+    const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [project, '_demo', sessionId]);
     if (!status) {
       sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
       return true;
@@ -3347,22 +3554,28 @@ async function handleDemoBuilder(
       sendJson(res, 400, { error: 'session data invalid: project_repo_path is not a valid project directory' }, origin);
       return true;
     }
+    // The lexical `startsWith(base)` still guards the `element` component's own
+    // `..`/escape shape (AT-13 non-regression, 400). SEC-04 (bd forge-ebj)
+    // additionally routes the actual READ through the per-segment identity +
+    // nlink guard (project_repo_path is proven contained above ⇒ a trusted
+    // root here), so a symlinked/hardlinked fragment LEAF inside the real
+    // fragments dir is refused (⇒ null ⇒ 404), never followed out of root.
     const base = join(status.project_repo_path, '.forge', 'demo', 'fragments') + sep;
     const requested = join(status.project_repo_path, '.forge', 'demo', 'fragments', `${element}.html`);
     if (!requested.startsWith(base)) {
       sendJson(res, 400, { error: 'path escape rejected' }, origin);
       return true;
     }
-    if (!existsSync(requested)) {
+    // A fragment is just the element's `<section>` slice. Wrap it in the Forge
+    // demo base stylesheet so the component view is a styled slice of the full
+    // demo (the composer inlines the same CSS into DEMO.html). If the fragment
+    // is already a full HTML doc, serve it untouched.
+    const raw = guardedReadFile(status.project_repo_path, ['.forge', 'demo', 'fragments', ...`${element}.html`.split('/')]);
+    if (raw === null) {
       sendJson(res, 404, { error: 'fragment not found', project, sessionId, element }, origin);
       return true;
     }
     try {
-      // A fragment is just the element's `<section>` slice. Wrap it in the Forge
-      // demo base stylesheet so the component view is a styled slice of the full
-      // demo (the composer inlines the same CSS into DEMO.html). If the fragment
-      // is already a full HTML doc, serve it untouched.
-      const raw = readFileSync(requested, 'utf8');
       const isFullDoc = /^\s*<!doctype|^\s*<html[\s>]/i.test(raw);
       const out = isFullDoc ? raw : wrapDemoFragment(ctx.forgeRoot, element, raw);
       res.writeHead(200, { 'content-type': contentTypeFor('f.html'), 'access-control-allow-origin': origin, 'vary': 'origin' });
@@ -3438,24 +3651,35 @@ async function handleDemoBuilder(
   const histListMatch = url.match(/^\/api\/demo-builder\/history\/([^/]+)$/);
   if (method === 'GET' && histListMatch) {
     const project = decodeURIComponent(histListMatch[1]);
-    const histRoot = join(ctx.projectsRoot, project, '.forge', 'demo', 'history');
+    // SEC-04 (bd forge-ebj) — `project` was folded raw into
+    // `join(projectsRoot, project, '.forge','demo','history')` and enumerated
+    // with NO guard: a `%2F`-smuggled `../..` project enumerated an
+    // out-of-root history tree, and an in-root project whose `.forge/demo/
+    // history` is a git-plantable SYMLINK was followed out of root by
+    // readdirSync. Gate the request-derived `project` (its OWN segment under
+    // the trusted projectsRoot) first — a traversed/symlinked project is a 400
+    // — then route the history readdir + each per-id leaf through the guard so
+    // a symlinked history dir (or a symlinked id/leaf beneath it) is refused,
+    // never followed. A legit project with no history yet reads as empty.
+    const projGuard = resolveGuardedPath(ctx.projectsRoot, [project]);
+    if (!projGuard.ok) {
+      sendJson(res, 400, { error: 'invalid project' }, origin);
+      return true;
+    }
+    const histSegs = [project, '.forge', 'demo', 'history'];
     const entries: Array<Record<string, unknown>> = [];
-    if (existsSync(histRoot)) {
-      let ids: string[];
-      try {
-        ids = readdirSync(histRoot, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
-      } catch { ids = []; }
-      for (const id of ids) {
-        if (!existsSync(join(histRoot, id, 'DEMO.html'))) continue;
-        const meta = readJsonFile<Record<string, unknown>>(join(histRoot, id, 'meta.json')) ?? {};
-        entries.push({
-          id,
-          demoUrl: `/api/demo-builder/history/${encodeURIComponent(project)}/${encodeURIComponent(id)}`,
-          lockedAt: typeof meta.locked_at === 'string' ? meta.locked_at : null,
-          prompt: typeof meta.prompt === 'string' ? meta.prompt : '',
-          iterations: typeof meta.iterations === 'number' ? meta.iterations : null,
-        });
-      }
+    const ids = guardedReadDir(ctx.projectsRoot, histSegs) ?? [];
+    for (const id of ids) {
+      if (guardedFile(ctx.projectsRoot, [...histSegs, id, 'DEMO.html'], 'read') === null) continue;
+      const metaRaw = guardedReadFile(ctx.projectsRoot, [...histSegs, id, 'meta.json']);
+      const meta = (metaRaw !== null ? safeParseJson<Record<string, unknown>>(metaRaw) : null) ?? {};
+      entries.push({
+        id,
+        demoUrl: `/api/demo-builder/history/${encodeURIComponent(project)}/${encodeURIComponent(id)}`,
+        lockedAt: typeof meta.locked_at === 'string' ? meta.locked_at : null,
+        prompt: typeof meta.prompt === 'string' ? meta.prompt : '',
+        iterations: typeof meta.iterations === 'number' ? meta.iterations : null,
+      });
     }
     entries.sort((a, b) => String(b.lockedAt ?? '').localeCompare(String(a.lockedAt ?? '')));
     sendJson(res, 200, { history: entries }, origin);
@@ -3467,13 +3691,17 @@ async function handleDemoBuilder(
   if (method === 'GET' && histServeMatch) {
     const project = decodeURIComponent(histServeMatch[1]);
     const id = decodeURIComponent(histServeMatch[2]);
-    const base = join(ctx.projectsRoot, project, '.forge', 'demo', 'history') + sep;
-    const requested = join(ctx.projectsRoot, project, '.forge', 'demo', 'history', id, 'DEMO.html');
-    if (!requested.startsWith(base)) {
-      sendJson(res, 400, { error: 'path escape rejected' }, origin);
-      return true;
-    }
-    if (!existsSync(requested)) {
+    // SEC-04 (bd forge-ebj) — the old `requested.startsWith(base)` was
+    // self-defeating: `base` and `requested` were BOTH built from the same
+    // untrusted `project`, so a `../..` traversal sat in BOTH sides and the
+    // check was tautological; and a symlinked `.forge/demo/history` dir is
+    // lexically inside `base` yet readFileSync followed it out of root. Route
+    // the WHOLE path (project AND id each as their OWN segment under the
+    // trusted projectsRoot, DEMO.html leaf included) through the per-segment
+    // identity guard, which the lexical prefix check structurally cannot do. A
+    // rejected/absent path both collapse to 404 (no existence oracle).
+    const demoHtml = guardedReadFile(ctx.projectsRoot, [project, '.forge', 'demo', 'history', id, 'DEMO.html']);
+    if (demoHtml === null) {
       sendJson(res, 404, { error: 'demo not found', project, id }, origin);
       return true;
     }
@@ -3483,7 +3711,7 @@ async function handleDemoBuilder(
         'access-control-allow-origin': origin,
         'vary': 'origin',
       });
-      res.end(readFileSync(requested, 'utf8'));
+      res.end(demoHtml);
     } catch (err) {
       sendJson(res, 500, { error: String(err) }, origin);
     }
@@ -3506,9 +3734,19 @@ async function handleDemoBuilder(
   {
     const themesMatch = url.match(/^\/api\/project-brain\/themes\/([^/]+)\/([^/]+)$/);
     if (method === 'GET' && themesMatch) {
+      // SEC-04 — the route regex captures `[^/]+` per segment, so a
+      // `%2F`-smuggled `..` survives the real-slash boundary and only becomes a
+      // `/` at decodeURIComponent time. DECODE FIRST, then guard the decoded
+      // segments through the per-segment identity walk — an escaping
+      // project/sessionId resolves to null and discloses no out-of-root theme.
       const project = decodeURIComponent(themesMatch[1]);
       const sessionId = decodeURIComponent(themesMatch[2]);
-      sendJson(res, 200, { themes: readStagedThemes(ctx.projectsRoot, project, sessionId) }, origin);
+      const dir = guardedSessionDir(ctx.projectsRoot, project, '_project-brain', sessionId);
+      if (!dir) {
+        sendJson(res, 404, { error: 'session not found', project, sessionId }, origin);
+        return true;
+      }
+      sendJson(res, 200, { themes: readStagedThemes(ctx.projectsRoot, [project, '_project-brain', sessionId]) }, origin);
       return true;
     }
   }
@@ -3525,12 +3763,20 @@ async function handleDemoBuilder(
       }
       const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       const sessionId = newArchitectSessionId();
-      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), sessionId);
-      mkdirSync(dir, { recursive: true });
-      writeSessionStatus<ProjectBrainStatus>(dir, {
+      // SEC-04 — guard BEFORE the UNCONDITIONED mkdir+status write.
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', sessionId);
+      if (!dir) {
+        sendJson(res, 400, { error: 'invalid project' }, origin);
+        return true;
+      }
+      // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf sibling.
+      if (guardedWriteSessionStatus<ProjectBrainStatus>(ctx.projectsRoot, [body.project, '_project-brain', sessionId], {
         session_id: sessionId, project: body.project, project_repo_path: repoPath,
         phase: 'briefing', prompt: '', updated_at: new Date().toISOString(),
-      });
+      }) === null) {
+        sendJson(res, 400, { error: 'invalid session path' }, origin);
+        return true;
+      }
       ctx.broadcastProjectBrainChanged();
       sendJson(res, 200, { ok: true, sessionId }, origin);
     } catch (err) { sendJson(res, 500, { error: String(err) }, origin); }
@@ -3540,11 +3786,20 @@ async function handleDemoBuilder(
     try {
       const body = (await readJson(req)) as { project?: string; sessionId?: string; brief?: string };
       if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
-      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
-      const status = readSessionStatus<ProjectBrainStatus>(dir);
+      // SEC-04 (bd forge-ebj) — guard the dir, and route each leaf (prompt.md,
+      // status.json) through the guarded leaf siblings (leaf-symlink close).
+      const dirSegs = [body.project, '_project-brain', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', body.sessionId);
+      if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
+      const status = guardedReadSessionStatus<ProjectBrainStatus>(ctx.projectsRoot, dirSegs);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
-      writeFileSync(join(dir, 'prompt.md'), body.brief ?? '');
-      writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: 'analyzing', prompt: body.brief ?? '' });
+      if (
+        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], body.brief ?? '') === null ||
+        guardedWriteSessionStatus<ProjectBrainStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'analyzing', prompt: body.brief ?? '' }) === null
+      ) {
+        sendJson(res, 400, { error: 'invalid session path' }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/project-brain/brief', body.sessionId) }, origin);
@@ -3556,10 +3811,17 @@ async function handleDemoBuilder(
       const approve = url.endsWith('/approve');
       const body = (await readJson(req)) as { project?: string; sessionId?: string };
       if (!body.project || !body.sessionId) { sendJson(res, 400, { error: 'project and sessionId are required' }, origin); return true; }
-      const dir = projectBrainSessionDir(join(ctx.projectsRoot, body.project), body.sessionId);
-      const status = readSessionStatus<ProjectBrainStatus>(dir);
+      // SEC-04 (bd forge-ebj) — guard the dir, and route status.json read+write
+      // through the guarded leaf siblings (leaf-symlink close).
+      const dirSegs = [body.project, '_project-brain', body.sessionId];
+      const dir = guardedSessionDir(ctx.projectsRoot, body.project, '_project-brain', body.sessionId);
+      if (!dir) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
+      const status = guardedReadSessionStatus<ProjectBrainStatus>(ctx.projectsRoot, dirSegs);
       if (!status) { sendJson(res, 404, { error: 'session not found' }, origin); return true; }
-      writeSessionStatus<ProjectBrainStatus>(dir, { ...status, phase: approve ? 'committing' : 'abandoned' });
+      if (guardedWriteSessionStatus<ProjectBrainStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: approve ? 'committing' : 'abandoned' }) === null) {
+        sendJson(res, 400, { error: 'invalid session path' }, origin);
+        return true;
+      }
       if (approve) spawnAgentTurn(ctx.forgeRoot, 'project-brain', body.project, body.sessionId);
       ctx.broadcastProjectBrainChanged();
       // Only approve spawns — abandon is exempt-local and carries no marker.
@@ -3728,13 +3990,15 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
       }
-      const dir = dirOutcome.dir;
+      // dirOutcome.ok proved the DIR contained; the status.json WRITE below
+      // goes through the guarded leaf sibling (leaf included).
       const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
       // Default the mode by whether a locked demo already exists.
       const mode: 'create' | 'update' =
         body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
-      mkdirSync(dir, { recursive: true });
-      writeSessionStatus<DemoBuilderStatus>(dir, {
+      // SEC-04 (bd forge-ebj) — status.json WRITE through the guarded leaf
+      // sibling (leaf included; mkdirs the parent, refuses a symlinked leaf).
+      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, [body.project, '_demo', sessionId], {
         session_id: sessionId,
         project: body.project,
         project_repo_path: repoPath,
@@ -3745,7 +4009,10 @@ async function handleDemoBuilder(
         iteration: 1,
         prompt: '',
         updated_at: new Date().toISOString(),
-      });
+      }) === null) {
+        sendJson(res, 400, { error: 'invalid session path' }, origin);
+        return true;
+      }
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, sessionId, mode }, origin);
     } catch (err) {
@@ -3769,21 +4036,29 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
       }
-      const dir = dirOutcome.dir;
-      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      // SEC-04 (bd forge-ebj) — dirOutcome.ok above proved the DIR contained;
+      // route each leaf (prompt.md, status.json) through the guarded leaf
+      // siblings so the leaf itself is contained too (leaf-symlink close).
+      const dirSegs = [body.project, '_demo', body.sessionId];
+      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
       const brief = body.brief ?? '';
-      writeFileSync(join(dir, 'prompt.md'), brief);
       // `targetElement` narrows the turn to one demo element (per-element iteration);
       // omit/empty to compose the full demo.
       const targetElement = typeof body.targetElement === 'string' && body.targetElement ? body.targetElement : status.targetElement;
-      writeSessionStatus<DemoBuilderStatus>(dir, {
-        ...status, phase: 'generating', iteration: 1, prompt: brief,
-        ...(targetElement ? { targetElement } : {}),
-      });
+      if (
+        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'prompt.md'], brief) === null ||
+        guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
+          ...status, phase: 'generating', iteration: 1, prompt: brief,
+          ...(targetElement ? { targetElement } : {}),
+        }) === null
+      ) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/brief', body.sessionId) }, origin);
@@ -3807,14 +4082,21 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
       }
-      const dir = dirOutcome.dir;
-      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      // SEC-04 (bd forge-ebj) — route each leaf (feedback.md, status.json)
+      // through the guarded leaf siblings (leaf-symlink close).
+      const dirSegs = [body.project, '_demo', body.sessionId];
+      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      writeFileSync(join(dir, 'feedback.md'), body.feedback ?? '');
-      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'generating', iteration: status.iteration + 1 });
+      if (
+        guardedWriteFile(ctx.projectsRoot, [...dirSegs, 'feedback.md'], body.feedback ?? '') === null ||
+        guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'generating', iteration: status.iteration + 1 }) === null
+      ) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/feedback', body.sessionId) }, origin);
@@ -3840,22 +4122,27 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
       }
-      const dir = dirOutcome.dir;
       const hasGeneration = Object.prototype.hasOwnProperty.call(body, 'generation') && body.generation !== undefined;
       if (hasGeneration && !(typeof body.generation === 'number' && Number.isInteger(body.generation) && body.generation >= 1)) {
         sendJson(res, 400, { error: `generation must be an integer >= 1, got ${JSON.stringify(body.generation)}` }, origin);
         return true;
       }
-      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      // SEC-04 (bd forge-ebj) — status.json read+write through the guarded leaf
+      // siblings (leaf-symlink close).
+      const dirSegs = [body.project, '_demo', body.sessionId];
+      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      writeSessionStatus<DemoBuilderStatus>(dir, {
+      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, {
         ...status,
         phase: 'locking',
         ...(hasGeneration ? { selectedGeneration: body.generation as number } : {}),
-      });
+      }) === null) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/lock', body.sessionId) }, origin);
@@ -3878,13 +4165,18 @@ async function handleDemoBuilder(
         sendJson(res, 400, { error: dirOutcome.reason }, origin);
         return true;
       }
-      const dir = dirOutcome.dir;
-      const status = readSessionStatus<DemoBuilderStatus>(dir);
+      // SEC-04 (bd forge-ebj) — status.json read+write through the guarded leaf
+      // siblings (leaf-symlink close).
+      const dirSegs = [body.project, '_demo', body.sessionId];
+      const status = guardedReadSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs);
       if (!status) {
         sendJson(res, 404, { error: 'session not found', sessionId: body.sessionId }, origin);
         return true;
       }
-      writeSessionStatus<DemoBuilderStatus>(dir, { ...status, phase: 'abandoned' });
+      if (guardedWriteSessionStatus<DemoBuilderStatus>(ctx.projectsRoot, dirSegs, { ...status, phase: 'abandoned' }) === null) {
+        sendJson(res, 400, { error: 'invalid session path', sessionId: body.sessionId }, origin);
+        return true;
+      }
       spawnAgentTurn(ctx.forgeRoot, 'demo-builder', body.project, body.sessionId);
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/demo-builder/abandon', body.sessionId) }, origin);
@@ -3916,13 +4208,26 @@ async function handleReflect(
   if (method === 'GET' && url.startsWith('/api/reflect/') && !url.endsWith('/answer')) {
     const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length));
     if (!cycleId) { sendJson(res, 400, { error: 'expected /api/reflect/<cycleId>' }, origin); return true; }
-    const dir = join(ctx.logsRoot, cycleId);
-    const questions = readJsonFile<unknown[]>(join(dir, 'user-questions.json')) ?? [];
-    const answered = existsSync(join(dir, 'user-feedback.md'));
+    // SEC-04 (bd forge-ebj) — cycleId was folded raw into `join(logsRoot,
+    // cycleId)` and each leaf raw-appended: a `%2F`-smuggled `../..` cycleId
+    // disclosed an out-of-root user-questions.json, and a symlinked leaf inside
+    // a real cycle dir was followed. Gate the request-derived cycleId (its OWN
+    // segment under the trusted logsRoot) through the per-segment identity
+    // guard first — a traversed/symlinked cycle dir is a 400 with NO read —
+    // then route every leaf read through the guard too (leaf-symlink close).
+    const reflectCycleGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+    if (!reflectCycleGuard.ok) {
+      sendJson(res, 400, { error: 'invalid cycleId' }, origin);
+      return true;
+    }
+    const questionsRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'user-questions.json']);
+    const questions = questionsRaw !== null ? (safeParseJson<unknown[]>(questionsRaw) ?? []) : [];
+    const answered = guardedFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], 'read') !== null;
     // R4-09-F3: the durable reflect mode (REFLECT_MODE_FILE) — the authoritative
     // signal the UI uses to render the automated read-only view, independent of
     // per-question inferred-marker compliance.
-    const modeDoc = readJsonFile<{ mode?: string }>(join(dir, 'reflect-mode.json'));
+    const modeRaw = guardedReadFile(ctx.logsRoot, [cycleId, 'reflect-mode.json']);
+    const modeDoc = modeRaw !== null ? safeParseJson<{ mode?: string }>(modeRaw) : null;
     const mode = modeDoc?.mode === 'automated' ? 'automated' : modeDoc?.mode === 'interactive' ? 'interactive' : undefined;
     sendJson(res, 200, { cycleId, questions, answered, ...(mode ? { mode } : {}) }, origin);
     return true;
@@ -3937,14 +4242,29 @@ async function handleReflect(
     const cycleId = decodeURIComponent(url.slice('/api/reflect/'.length, url.length - '/answer'.length));
     try {
       const body = (await readJson(req)) as { answers?: { question: string; answer: string }[]; freeform?: string };
-      const dir = join(ctx.logsRoot, cycleId);
-      if (!existsSync(dir)) { sendJson(res, 404, { error: 'cycle not found', cycleId }, origin); return true; }
+      // SEC-04 (bd forge-ebj) — the WRITE twin of the reflect GET read. cycleId
+      // was folded raw into `join(logsRoot, cycleId)` and `user-feedback.md`
+      // raw-appended: a `%2F`-smuggled `../..` cycleId overwrote an out-of-root
+      // user-feedback.md, and a symlinked leaf was followed. Gate the cycleId
+      // (its OWN segment under the trusted logsRoot) first — reject a
+      // traversed/symlinked dir (400, no write) and keep the "cycle not found"
+      // 404 for a genuinely absent in-root cycle.
+      const dirGuard = resolveGuardedPath(ctx.logsRoot, [cycleId]);
+      if (!dirGuard.ok) { sendJson(res, 400, { error: 'invalid cycleId', cycleId }, origin); return true; }
+      if (!dirGuard.exists) { sendJson(res, 404, { error: 'cycle not found', cycleId }, origin); return true; }
+      const dir = dirGuard.realPath;
       const lines = [`# Reflection feedback — ${cycleId}`, '', '## Answers to numbered questions', ''];
       for (const a of body.answers ?? []) {
         lines.push(`### ${a.question}`, '', a.answer || '_(skipped)_', '');
       }
       lines.push('## Free-form feedback', '', (body.freeform ?? '').trim() || '_(none)_', '');
-      writeFileSync(join(dir, 'user-feedback.md'), lines.join('\n'));
+      // Route the leaf through the guard too: a symlinked user-feedback.md
+      // inside the (now identity-verified) real cycle dir is refused, never
+      // followed out of root. A rejected leaf writes NOTHING (fail closed).
+      if (guardedWriteFile(ctx.logsRoot, [cycleId, 'user-feedback.md'], lines.join('\n')) === null) {
+        sendJson(res, 400, { error: 'invalid cycle path', cycleId }, origin);
+        return true;
+      }
       const dryMarker = dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/reflect/:cycleId/answer', cycleId);
       sendJson(res, 200, { ok: true, ...dryMarker }, origin);
       if (!isDryBridge()) {

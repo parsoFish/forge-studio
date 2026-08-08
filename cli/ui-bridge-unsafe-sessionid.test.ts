@@ -91,9 +91,14 @@ test('spawnAgentTurn refuses an unsafe sessionId: no _logs dir created, no spawn
     body: JSON.stringify({ project: PROJECT, sessionId: unsafeSessionId, brief: 'x' }),
   });
   const json = await res.json();
-  // Best-effort: session bookkeeping still succeeds even though the spawn
-  // itself was refused (mirrors spawnAgentTurn's fire-and-forget contract).
-  assert.equal(res.status, 200, JSON.stringify(json));
+  // SEC-04 (bd forge-ebj): the `<real>/../<real>` sessionId is an
+  // escape-and-return shape — a `/`-bearing id that round-trips in-root. It is
+  // now REFUSED at the /api/instructions/brief route boundary by the
+  // per-segment identity guard (4xx), BEFORE spawnAgentTurn is reached, rather
+  // than accepted at 200 with only isSafeRunId blocking the spawn. The
+  // security outcome this test asserts — no spawn dir for an unsafe id — is
+  // preserved, now guaranteed by the earlier, stronger boundary rejection.
+  assert.ok(res.status >= 400 && res.status < 500, `expected a 4xx boundary rejection, got ${res.status}: ${JSON.stringify(json)}`);
 
   const logsEntries = existsSync(join(forgeRoot, '_logs')) ? readdirSync(join(forgeRoot, '_logs')) : [];
   assert.ok(
