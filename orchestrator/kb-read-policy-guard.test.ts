@@ -9,12 +9,14 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, mkdtempSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { dirname, resolve } from 'node:path';
 
 import { loadKbDescriptor, resolveKbProcesses } from './studio/registry.ts';
+import type { KbDescriptor, KbReaderRole } from './studio/types.ts';
+import { kbReadPolicyViolation } from '../cli/kb-read-policy.ts';
+import { runStudioLint } from '../cli/studio-lint.ts';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const src = (f: string): string => readFileSync(resolve(__dirname, f), 'utf8');
@@ -31,134 +33,135 @@ test('R1-01-F4: dev-loop and the reviewer do NOT read the forge brain (policy un
 });
 
 // ---------------------------------------------------------------------------
-// R1-06 WI-1 group B (4): the asymmetric brain-read policy extends past the
-// 4 phase-binding source files above to KB DESCRIPTORS. A flow-bound KB's
-// resolved usage.readers may grant 'reviewer' ONLY when the binding is
-// scoped to the review band (T1 ruling: the band-role map is ONLY
-// review-band -> reviewer), AND ADR-010 must carry the amendment recording
-// that scoped exception. The marker text T1 will add to
-// docs/decisions/010-brain-first.md when landing the amendment:
+// R1-06 WI-1 group B (4): the asymmetric brain-read policy (ADR-010 as
+// amended) extends past the 4 phase-binding source files above to KB
+// DESCRIPTORS. The rule is now encoded as ONE pure, exported predicate —
+// `kbReadPolicyViolation` (cli/kb-read-policy.ts) — that BOTH `forge studio
+// lint` (the production wiring, cli/studio-lint.ts) and this guard drive, so
+// there is a single source of the policy rather than a hand-rolled helper.
 //
-//   "R1-06 band-scoped reviewer grant"
+// The policy (T1 ruling + ADR-010 amendment "R1-06 band-scoped reviewer
+// grant"):
+//   - a `project` binding is ALWAYS exempt (Brain-3 legitimately grants the
+//     full reader set incl. dev-loop + reviewer, ADR-010 / ADR-035);
+//   - on a NON-project binding, granting `dev-loop` is NEVER ratified, and
+//     granting `reviewer` is ratified ONLY on { kind: flow, band: review-band }.
 //
-// Today NONE of this is enforced: `KbBinding` (orchestrator/studio/types.ts)
-// has no `band` field at all, `parseKbBinding`
-// (orchestrator/studio/kb-descriptor.ts) silently drops any `band` key
-// present in kb.yaml, and ADR-010 does not yet carry the marker — so a
-// banded, marker-backed grant is INDISTINGUISHABLE, once loaded through the
-// real production loader, from a bandless one. Unlike the 4-file source grep
-// above, this guard must walk every real `brain/*/kb.yaml` AND
-// `brain/projects/*/kb.yaml` (both directory shapes) — the two fixtures
-// below are planted at each shape to prove that.
+// F3 defect closed here: the previous ad-hoc `reviewerGrantIsBandScoped`
+// helper (a) FALSE-POSITIVED on every real project KB (it flagged the
+// legitimate 'reviewer' grant that deriveKbUsageDefaults gives project
+// bindings) and (b) UNDER-CHECKED — it inspected only 'reviewer', never
+// 'dev-loop', which the ADR forbids on ANY non-project binding.
 // ---------------------------------------------------------------------------
 
 const ADR_010_PATH = resolve(__dirname, '../docs/decisions/010-brain-first.md');
 const R1_06_AMENDMENT_MARKER = 'R1-06 band-scoped reviewer grant';
 
-/** Has ADR-010 landed the R1-06 amendment marker yet? (T1 lands the text — not this file.) */
-function adr010HasR106Marker(): boolean {
-  return readFileSync(ADR_010_PATH, 'utf8').includes(R1_06_AMENDMENT_MARKER);
+/** The ratified exception is documented in ADR-010 (T1 landed the text). This
+ *  guards that the amendment marker stays present — the predicate encodes the
+ *  same exception in code. */
+test('R1-06: ADR-010 carries the "R1-06 band-scoped reviewer grant" amendment marker', () => {
+  assert.match(
+    readFileSync(ADR_010_PATH, 'utf8'),
+    new RegExp(R1_06_AMENDMENT_MARKER),
+    'ADR-010 must document the one ratified band->reader exception the predicate encodes',
+  );
+});
+
+/** The 4 real central per-project brains (ADR 035). */
+const REAL_PROJECT_KB_PATHS = ['gitpulse', 'mdtoc', 'terraform-provider-betterado', 'trafficGame'].map((p) =>
+  resolve(__dirname, '..', 'brain', 'projects', p, 'kb.yaml'),
+);
+
+/** Build a KbDescriptor directly (bypasses disk) — `readers` present ⇒ an
+ *  explicit processes.usage grant; absent ⇒ resolveKbProcesses derives the
+ *  default reader set for the binding. */
+function descriptor(id: string, binding: KbDescriptor['binding'], readers?: KbReaderRole[]): KbDescriptor {
+  return {
+    id,
+    name: id,
+    binding,
+    desc: 'test descriptor',
+    processes: readers
+      ? {
+          lint: { builtin: 'forge-brain-lint' },
+          ingest: { builtin: 'reflector-ingest' },
+          consolidate: { builtin: 'brain-fix' },
+          usage: { readSurface: 'navigation-index', readers },
+        }
+      : undefined,
+    path: `/tmp/${id}/kb.yaml`,
+  };
 }
 
-/**
- * T1 ruling: the band-role map is ONLY review-band -> reviewer. A KB whose
- * resolved usage.readers grants 'reviewer' must be a flow binding scoped to
- * band:'review-band', AND ADR-010 must carry the amendment marker. Loads the
- * descriptor through the REAL production `loadKbDescriptor` +
- * `resolveKbProcesses` (orchestrator/studio/registry.ts) — not a hand-rolled
- * parse — so this genuinely exercises the loader's (missing) band support.
- */
-function reviewerGrantIsBandScoped(kbYamlPath: string): boolean {
-  const kb = loadKbDescriptor(kbYamlPath);
-  const usage = resolveKbProcesses(kb).usage;
-  if (!usage.readers.includes('reviewer')) return true; // no grant, nothing to scope
-  const band = kb.binding.kind === 'flow' ? (kb.binding as { band?: string }).band : undefined;
-  return band === 'review-band' && adr010HasR106Marker();
-}
-
-/** Writes a fixture kb.yaml granting the 'reviewer' reader role. */
-function writeReviewerGrantKb(dir: string, id: string, bindingYaml: string): string {
-  mkdirSync(dir, { recursive: true });
-  const kbYamlPath = join(dir, 'kb.yaml');
-  writeFileSync(
-    kbYamlPath,
-    `id: ${id}
-name: Test KB
-${bindingYaml}
-desc: A test knowledge base.
-processes:
-  lint: { builtin: forge-brain-lint }
-  ingest: { builtin: reflector-ingest }
-  consolidate: { builtin: brain-fix }
-  usage:
-    readSurface: navigation-index
-    readers: [reviewer]
-`,
-  );
-  return kbYamlPath;
-}
-
-test('RED (R1-06): a reviewer grant WITH band:review-band + the ADR-010 amendment marker passes the read-policy guard (both brain/*/kb.yaml and brain/projects/*/kb.yaml shapes)', () => {
-  const tmpBrainRoot = mkdtempSync(join(tmpdir(), 'kb-read-policy-guard-'));
-
-  // Shape 1: brain/<id>/kb.yaml (top-level, e.g. brain/cycles/kb.yaml)
-  const topLevelPath = writeReviewerGrantKb(
-    join(tmpBrainRoot, 'example-flow-kb'),
-    'example-flow-kb',
-    'binding: { kind: flow, ref: forge-develop, band: review-band }',
-  );
-  // Shape 2: brain/projects/<name>/kb.yaml (nested, e.g. brain/projects/gitpulse/kb.yaml)
-  const projectShapePath = writeReviewerGrantKb(
-    join(tmpBrainRoot, 'projects', 'example-flow-kb-2'),
-    'example-flow-kb-2',
-    'binding: { kind: flow, ref: forge-develop, band: review-band }',
-  );
-
-  for (const kbYamlPath of [topLevelPath, projectShapePath]) {
-    // Fixture precondition FIRST: the raw yaml text really declares the band
-    // and the reviewer grant, before we read any verdict off the loader.
-    const raw = readFileSync(kbYamlPath, 'utf8');
-    assert.match(raw, /band:\s*review-band/, `fixture precondition: ${kbYamlPath} must declare band: review-band`);
-    assert.match(raw, /readers:\s*\[reviewer\]/, `fixture precondition: ${kbYamlPath} must grant readers: [reviewer]`);
-
-    const kb = loadKbDescriptor(kbYamlPath);
+test('F3: all 4 real project KBs PASS the read-policy predicate (project bindings are exempt — the old helper flagged them)', () => {
+  for (const path of REAL_PROJECT_KB_PATHS) {
+    const kb = loadKbDescriptor(path);
+    // Fixture precondition FIRST: this IS a project binding whose resolved
+    // reader set really grants 'reviewer' — so the exemption is doing real
+    // work, not passing merely because there is no reviewer grant to catch.
+    assert.equal(kb.binding.kind, 'project', `precondition: ${path} must be a project binding`);
     assert.ok(
       resolveKbProcesses(kb).usage.readers.includes('reviewer'),
-      `fixture precondition: ${kbYamlPath} must resolve to a reviewer grant`,
+      `precondition: ${path} resolves to a reviewer grant (deriveKbUsageDefaults for a project)`,
     );
 
+    const verdict = kbReadPolicyViolation(kb);
     assert.equal(
-      reviewerGrantIsBandScoped(kbYamlPath),
+      verdict.ok,
       true,
-      `a reviewer grant scoped to band:review-band (with the ADR-010 marker) must pass the guard for ${kbYamlPath} — ` +
-        `today it fails because loadKbDescriptor drops binding.band entirely (kb.binding.band is undefined) AND ` +
-        `ADR-010 does not yet carry the "${R1_06_AMENDMENT_MARKER}" marker`,
+      `real project KB ${kb.id} must PASS the read-policy predicate (project bindings are exempt) — ` +
+        `got ${JSON.stringify(verdict)}`,
     );
   }
 });
 
-test('companion (RED (R1-06) above): the SAME reviewer grant WITHOUT a review-band binding fails the read-policy guard', () => {
-  const tmpBrainRoot = mkdtempSync(join(tmpdir(), 'kb-read-policy-guard-bandless-'));
-  const kbYamlPath = writeReviewerGrantKb(
-    join(tmpBrainRoot, 'bandless-flow-kb'),
-    'bandless-flow-kb',
-    'binding: { kind: flow, ref: forge-develop }',
-  );
-
-  const raw = readFileSync(kbYamlPath, 'utf8');
-  assert.doesNotMatch(raw, /band:/, 'fixture precondition: bandless fixture must declare no band key at all');
-  assert.match(raw, /readers:\s*\[reviewer\]/, 'fixture precondition: fixture must grant readers: [reviewer]');
-
-  const kb = loadKbDescriptor(kbYamlPath);
+test('F3: a review-band flow KB granting the reviewer PASSES (the one ratified exception)', () => {
+  // (a) default-derived: a { kind: flow, band: review-band } binding resolves
+  // to readers incl. reviewer via deriveKbUsageDefaults, with no processes block.
+  const derived = descriptor('review-band-derived', { kind: 'flow', ref: 'forge-develop', band: 'review-band' });
   assert.ok(
-    resolveKbProcesses(kb).usage.readers.includes('reviewer'),
-    'fixture precondition: fixture must resolve to a reviewer grant',
+    resolveKbProcesses(derived).usage.readers.includes('reviewer'),
+    'precondition: a review-band flow binding derives a reviewer grant by default',
   );
+  assert.equal(kbReadPolicyViolation(derived).ok, true, 'review-band flow KB (derived reviewer) must pass');
 
-  assert.equal(
-    reviewerGrantIsBandScoped(kbYamlPath),
-    false,
-    'a reviewer grant on a bandless flow binding must fail the read-policy guard',
+  // (b) explicit: the same binding with a hand-declared reviewer grant.
+  const explicit = descriptor('review-band-explicit', { kind: 'flow', ref: 'forge-develop', band: 'review-band' }, ['reviewer']);
+  assert.equal(kbReadPolicyViolation(explicit).ok, true, 'review-band flow KB (explicit reviewer) must pass');
+});
+
+test('F3: a bandless flow KB granting the reviewer FAILS', () => {
+  const kb = descriptor('bandless-reviewer', { kind: 'flow', ref: 'forge-develop' }, ['reviewer']);
+  // Precondition: bandless flow binding, resolved readers really include reviewer.
+  assert.equal(kb.binding.kind === 'flow' ? kb.binding.band : 'n/a', undefined, 'precondition: no band declared');
+  assert.ok(resolveKbProcesses(kb).usage.readers.includes('reviewer'), 'precondition: grants reviewer');
+
+  const verdict = kbReadPolicyViolation(kb);
+  assert.equal(verdict.ok, false, 'a bandless flow reviewer grant must FAIL');
+  if (!verdict.ok) assert.match(verdict.reason, /reviewer/, 'reason must name the reviewer grant');
+});
+
+test('F3: a flow KB granting dev-loop FAILS — even scoped to review-band (dev-loop is never ratified off a project binding)', () => {
+  // With review-band: reviewer would be ratified, but dev-loop never is.
+  const banded = descriptor('devloop-banded', { kind: 'flow', ref: 'forge-develop', band: 'review-band' }, ['reviewer', 'dev-loop']);
+  assert.ok(resolveKbProcesses(banded).usage.readers.includes('dev-loop'), 'precondition: grants dev-loop');
+  const v1 = kbReadPolicyViolation(banded);
+  assert.equal(v1.ok, false, 'a dev-loop grant on a flow binding must FAIL even with band:review-band');
+  if (!v1.ok) assert.match(v1.reason, /dev-loop/, 'reason must name the dev-loop grant');
+
+  // Plain flow binding granting dev-loop.
+  const plain = descriptor('devloop-plain', { kind: 'flow', ref: 'forge-develop' }, ['dev-loop']);
+  assert.equal(kbReadPolicyViolation(plain).ok, false, 'a dev-loop grant on a bandless flow binding must FAIL');
+});
+
+test('F1: runStudioLint over the REAL repo brain emits no read-policy error (the 4 project KBs + the real top-level KBs all pass through the production check)', () => {
+  const result = runStudioLint(process.cwd());
+  const readPolicyErrors = result.findings.filter((f) => f.check === 'read-policy');
+  assert.deepEqual(
+    readPolicyErrors,
+    [],
+    `the real brain must carry no read-policy violations — got: ${JSON.stringify(readPolicyErrors)}`,
   );
 });
 

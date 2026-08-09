@@ -59,6 +59,7 @@ import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill
 import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
+import { kbReadPolicyViolation } from './kb-read-policy.ts';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -430,6 +431,29 @@ export function runStudioLint(root: string): StudioLintResult {
     }
   }
 
+  // Read-policy scan (R1-06, §5b below) also covers the central per-project
+  // brains (brain/projects/<id>/kb.yaml, ADR 035) — the ADR-010 amendment
+  // ratifies the guard walking BOTH brain/*/kb.yaml AND brain/projects/*/kb.yaml.
+  // The R1-01 binding-ref / unique checks stay one-level-deep BY DESIGN (a
+  // sandbox checkout may lack the projects a project binding points at, so
+  // descending would fabricate dangling-ref errors); the read-policy predicate
+  // exempts project bindings, so this deeper walk adds no false errors while
+  // still catching a rogue flow/unique binding planted under brain/projects/.
+  const projectKbPaths: string[] = [];
+  const projectsBrainDir = join(brainDir, 'projects');
+  if (existsSync(projectsBrainDir)) {
+    try {
+      for (const entry of readdirSync(projectsBrainDir, { withFileTypes: true })) {
+        // Skip dot-prefixed dirs (a `.staging-*` orphan must never surface).
+        if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
+        const candidate = join(projectsBrainDir, entry.name, 'kb.yaml');
+        if (existsSync(candidate)) projectKbPaths.push(candidate);
+      }
+    } catch {
+      // brain/projects/ unreadable — tolerate silently (not part of the M0 gate)
+    }
+  }
+
   const seenKbIds = new Map<string, string>(); // id → first file path
   const loadedKbs: KbDescriptor[] = [];
 
@@ -513,6 +537,38 @@ export function runStudioLint(root: string): StudioLintResult {
           message: `Exactly one KB must declare binding: { kind: unique } — found ${uniqueKbs.length} (including "${kb.id}")`,
         });
       }
+    }
+  }
+
+  // ------------------------------------------------------------------
+  // 5b. KB read-policy guard (R1-06, ADR-010 amendment "R1-06 band-scoped
+  //     reviewer grant"). The asymmetric brain-read policy (ADR-010) forbids a
+  //     `dev-loop` OR `reviewer` reader grant on any NON-project KB binding,
+  //     except the ONE ratified exception: a flow binding scoped to
+  //     band:'review-band' may grant the reviewer an advisory read. This applies
+  //     the pure `kbReadPolicyViolation` predicate (cli/kb-read-policy.ts) to
+  //     every real, loaded descriptor — the production wiring of a guard that
+  //     previously ran only over tmpdir fixtures inside a test. Walks both brain
+  //     shapes (top-level + brain/projects/*), per the ADR-010 amendment.
+  // ------------------------------------------------------------------
+  const readPolicyKbs: KbDescriptor[] = [...loadedKbs];
+  for (const p of projectKbPaths) {
+    try {
+      readPolicyKbs.push(loadKbDescriptor(p));
+    } catch {
+      // A project kb.yaml that will not load is out of read-policy scope (a
+      // project binding is exempt anyway) — no double-report of a load error.
+    }
+  }
+  for (const kb of readPolicyKbs) {
+    const verdict = kbReadPolicyViolation(kb);
+    if (!verdict.ok) {
+      findings.push({
+        level: 'error',
+        object: `kb:${kb.id}`,
+        check: 'read-policy',
+        message: verdict.reason,
+      });
     }
   }
 

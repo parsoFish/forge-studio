@@ -41,6 +41,56 @@ import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nbinding: { kind: flow, ref: forge-develop }\ndesc: Cross-cycle patterns.\n`;
 const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nbinding: { kind: unique }\ndesc: Forge engineering decisions.\n`;
 
+/** Minimal valid SKILL.md whose composition.guards declares a single band —
+ *  just enough for isStudioAgent + loadAgentDefinition + resolveBandGuard. */
+function bandSkillMd(slug: string, band: string): string {
+  return `---
+name: ${slug}
+description: A test ${band} agent.
+library: true
+purpose: Does ${band} things.
+brainAccess: none
+interactivity: none
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: [${band}]
+runtime:
+  sdk: claude-agent-sdk
+  strategy: fixed
+  model: claude-sonnet-4-6
+budgets: {}
+allowed-tools: []
+disallowed-tools: []
+---
+## Process
+
+This agent does ${band} things.
+`;
+}
+
+/** Minimal forge-develop flow.yaml whose two agent-bearing nodes declare
+ *  demo-band + review-band — so listFlowBandIds derives a REAL, non-empty band
+ *  vocabulary { demo-band, review-band } (F2: the fail-CLOSED helper returns []
+ *  for a flow with no derivable vocabulary, so an EMPTY forge-develop dir would
+ *  now reject every band scope). */
+const FORGE_DEVELOP_FLOW_YAML = `id: forge-develop
+name: Forge Develop
+version: 1
+goal: Test develop flow.
+project: null
+kb: null
+costCeilingUsd: 10
+origin: seed
+disposable: true
+nodes:
+  - { id: demo, agent: demo-agent }
+  - { id: adversarial-review, agent: adversarial-review }
+edges: []
+triggers: []
+`;
+
 // ---------------------------------------------------------------------------
 // Bridge lifecycle
 // ---------------------------------------------------------------------------
@@ -68,8 +118,21 @@ before(async () => {
   writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'kb.yaml'), FORGE_DEV_KB_YAML);
 
   // A registered flow + a discovered project, so binding.ref existence checks
-  // (R1-01) have something real to resolve against.
-  mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-develop'), { recursive: true });
+  // (R1-01) have something real to resolve against. forge-develop is now a REAL
+  // flow (flow.yaml + demo-band/review-band skills) so listFlowBandIds derives a
+  // non-empty { demo-band, review-band } vocabulary — required after F2 made the
+  // helper fail CLOSED (an empty flow dir yields [] and rejects every band).
+  const developFlowDir = join(forgeRoot, 'studio', 'flows', 'forge-develop');
+  mkdirSync(developFlowDir, { recursive: true });
+  writeFileSync(join(developFlowDir, 'flow.yaml'), FORGE_DEVELOP_FLOW_YAML);
+  for (const [slug, band] of [['demo-agent', 'demo-band'], ['adversarial-review', 'review-band']] as const) {
+    const skillDir = join(forgeRoot, 'skills', slug);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), bandSkillMd(slug, band));
+  }
+  // A flow registered by DIRECTORY NAME ONLY (no flow.yaml) — the fail-CLOSED
+  // shape the F2 pin drives: any band scope on it must be rejected.
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'empty-flow'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects', 'demo-project'), { recursive: true });
 
   const result = await startBridge({ forgeRoot, port: 0 });
@@ -452,5 +515,34 @@ test('RED (R1-06): POST /api/studio/kbs rejects an unknown binding.band naming t
     existsSync(join(forgeRoot, 'brain', 'bad-band-brain')),
     false,
     'a rejected binding.band must not leave a half-written kb dir behind',
+  );
+});
+
+// F2 (fail-open-validator): a flow registered by directory name only (no
+// flow.yaml) has NO real band vocabulary, so listFlowBandIds fails CLOSED with
+// [] — attaching ANY band scope (even the otherwise-real review-band) to such a
+// flow must be rejected. Before F2, the fail-OPEN fallback returned the full
+// platform vocab, so review-band was accepted and a reviewer brain-read grant
+// got written onto a flow that has no review band at all.
+test('F2: POST /api/studio/kbs binding.band=review-band on a registered-but-empty flow → 400 (no phantom KB)', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'empty-flow-band-brain',
+    name: 'Empty Flow Band Brain',
+    binding: { kind: 'flow', ref: 'empty-flow', band: 'review-band' },
+    desc: 'Attaching review-band to a flow that has no derivable bands.',
+  });
+  assert.equal(
+    status,
+    400,
+    `expected 400 — an empty flow dir has no real band vocabulary, so review-band must be rejected (fail CLOSED). Got: ${JSON.stringify(json)}`,
+  );
+  assert.ok(typeof json['error'] === 'string');
+  assert.match(json['error'] as string, /band/i, 'error must mention band');
+
+  // Fail-closed must not leave a half-written KB behind.
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'empty-flow-band-brain')),
+    false,
+    'a rejected band scope must not create the KB dir',
   );
 });

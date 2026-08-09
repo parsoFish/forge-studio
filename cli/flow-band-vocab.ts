@@ -16,7 +16,7 @@
 import { join, resolve } from 'node:path';
 
 import { loadFlowDefinition, loadAgentDefinition } from '../orchestrator/studio/registry.ts';
-import { resolveBandGuard, BAND_GUARD_IDS } from '../orchestrator/agent-bands.ts';
+import { resolveBandGuard } from '../orchestrator/agent-bands.ts';
 import { skillPath } from '../orchestrator/skill-path.ts';
 
 /**
@@ -25,11 +25,16 @@ import { skillPath } from '../orchestrator/skill-path.ts';
  * A flow directory whose `flow.yaml` is missing or unparsable (e.g. a
  * freshly scaffolded, not-yet-authored flow — `flowId` is trusted to be a
  * real `studio/flows/` directory name, but that says nothing about the file
- * inside it) has no discoverable REAL vocabulary to report. Rather than
- * throw and block every caller that only wants to validate a candidate band
- * id against SOME closed vocabulary, this falls back to the full closed
- * platform band vocabulary (`BAND_GUARD_IDS`) — a caller still rejects an
- * invented band id, it just cannot narrow to this flow's true subset yet.
+ * inside it) has no discoverable REAL vocabulary to report, so this FAILS
+ * CLOSED with `[]`. An unauthored flow genuinely has no bands, so any band
+ * scope on it is correctly rejected by every caller. The former fail-OPEN
+ * fallback to the full platform vocabulary (`BAND_GUARD_IDS`) was a hole:
+ * `listFlowIds`/`studio-lint` register a flow by DIRECTORY NAME only, so a
+ * not-yet-authored/corrupt `flow.yaml` still passes the ref-existence check —
+ * yet widening the band vocab to everything let an operator attach
+ * `review-band` (→ a reviewer brain-read grant, ADR-010) to a flow that has
+ * no review band at all. `studio-lint` shares this helper, so a fail-open
+ * fallback was not independently backstopped anywhere.
  *
  * A node whose `agent` does not resolve to a loadable SKILL.md (a dangling
  * flow reference — flagged separately by `forge studio lint`) contributes no
@@ -44,7 +49,7 @@ export function listFlowBandIds(forgeRoot: string, flowId: string): string[] {
   try {
     nodes = loadFlowDefinition(flowYamlPath).nodes;
   } catch {
-    return [...BAND_GUARD_IDS];
+    return []; // fail CLOSED — no derivable band vocabulary means no bands
   }
 
   const bandIds = new Set<string>();
