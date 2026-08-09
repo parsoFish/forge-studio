@@ -241,10 +241,10 @@ orchestrator/kb-health.ts statSync 1
 orchestrator/logging.ts appendFileSync 1
 orchestrator/logging.ts existsSync 1
 orchestrator/logging.ts mkdirSync 1
-orchestrator/manifest.ts existsSync 4
+orchestrator/manifest.ts existsSync 5
 orchestrator/manifest.ts mkdirSync 1
-orchestrator/manifest.ts readFileSync 8
-orchestrator/manifest.ts writeFileSync 5
+orchestrator/manifest.ts readFileSync 9
+orchestrator/manifest.ts writeFileSync 6
 orchestrator/mint-triggered-initiative.ts existsSync 2
 orchestrator/mint-triggered-initiative.ts mkdirSync 1
 orchestrator/mint-triggered-initiative.ts writeFileSync 1
