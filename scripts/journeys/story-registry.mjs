@@ -106,7 +106,10 @@ export const STORY_REGISTRY = [
       'session shell is read-only. Beats 13-15 (contract-panel, roadmap tab, ' +
       'roadmap DAG on the project page) are R4-12-F1/R4-13, batch D — R4-17 ' +
       'ships their data contract (GET /api/studio/projects/<id>/contract-stages) ' +
-      'but not their rendering, deliberately. Beat 16 (showcase) is R4-14, ' +
+      'but not their rendering. R4-12-F1 (batch D) NOW ships the contract-panel ' +
+      'rendering — the permanent five-stage panel on the project page, asserted ' +
+      'green by stand-up-onboard/su-onboard-preflight AT-F1-8; the roadmap tab/DAG ' +
+      '(R4-13) remain. Beat 16 (showcase) is R4-14, ' +
       'unbuilt. Not recorded as {excluded}: an interactive onboarding interview ' +
       'is not a decision to never build, and pre-excluding it would freeze a ' +
       'call R4-18 or a later initiative may legitimately take.',
@@ -139,7 +142,9 @@ export const STORY_REGISTRY = [
       'skills/*/SKILL.md yields 16 agents, none of which authors a project. ' +
       'Beats 15-18 (contract panel, roadmap tab, DAG, showcase) are ' +
       'R4-12/R4-13/R4-14, batch D — R4-17 ships the data contract those ' +
-      'landing beats render, not the rendering.',
+      'landing beats render. R4-12 (batch D) NOW ships the contract-panel + ' +
+      'cycle-ledger rendering (asserted green by stand-up-create/su-create-project-builder ' +
+      'AT-F1-7 + AT-F2-4); the roadmap tab/DAG (R4-13) and showcase (R4-14) remain.',
   },
   {
     story: 'create-agent',
