@@ -1,0 +1,288 @@
+'use client';
+
+/**
+ * Project demo showcase — /projects/[id]/showcase (R4-14).
+ *
+ * A read-only "best evidence" gallery: the project's newest merged|done
+ * cycle's demo evidence, rendered through the SAME <DemoComparison> component
+ * /artifact's `type=demo` view already uses (T1 ruling — reuse wholesale, no
+ * fork). The gated "open showcase →" entry point lives on
+ * `/projects/[id]` (app/projects/[id]/page.tsx), visible only when
+ * `showShowcaseEntry` says this project has a terminal (merged|done) cycle.
+ * That gate does NOT verify the cycle's demo.json is present (it would cost an
+ * N-fetch), so the empty path IS reachable through the normal click-through
+ * when a terminal cycle exists but its demo evidence was never captured — the
+ * empty state distinguishes that case ("no captured demo evidence") from the
+ * genuinely-no-terminal-cycle case ("no merged/done cycle yet").
+ *
+ * Load pipeline (declared-data-fails-open guard — R4-14 WI-2 brief):
+ *   fetchCycles() (bridge-client) → loadShowcase({ cycles, projectId, fetchDemo })
+ *   (lib/showcase-load.ts) → deriveShowcaseCycleId + fetchDemoModel internally
+ *   → ShowcaseLoadResult { kind: 'empty' } | { kind: 'loaded'; cycleId; model }.
+ * `model` can itself be `null` on the loaded path (a terminal cycle exists but
+ * its demo.json never landed) — that is rendered as the SAME honest empty
+ * state as `kind: 'empty'`, never a fabricated gallery.
+ *
+ * data-* contract:
+ *   root: data-page="project-showcase" data-page-ready data-project-id
+ *   data-section="showcase-stats" | "showcase-evidence" | "showcase-empty"
+ * (mirrors the client-fetch + settled-`data-page-ready` idiom established by
+ * app/projects/[id]/page.tsx and app/artifact/page.tsx).
+ */
+
+import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
+
+import { StudioNav } from '@/components/StudioNav';
+import { DemoComparison } from '@/components/DemoComparison';
+import { fetchCycles, fetchDemoModel, type DemoModel } from '@/lib/bridge-client';
+import { loadShowcase, type ShowcaseLoadResult } from '@/lib/showcase-load';
+import { deriveShowcaseStats, type ShowcaseStats } from '@/lib/project-showcase';
+
+export default function ProjectShowcasePage({ params }: { params: { id: string } }) {
+  const { id } = params;
+
+  const [result, setResult] = useState<ShowcaseLoadResult | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const load = useCallback(async (signal: { cancelled: boolean }) => {
+    try {
+      const snapshot = await fetchCycles();
+      const cycles = [...(snapshot?.live ?? []), ...(snapshot?.recent ?? [])];
+      const loaded = await loadShowcase({ cycles, projectId: id, fetchDemo: fetchDemoModel });
+      if (!signal.cancelled) setResult(loaded);
+    } catch {
+      // Bridge offline / unreachable — degrade to the honest empty state
+      // rather than leaving the page stuck on "Loading…" forever.
+      if (!signal.cancelled) setResult({ kind: 'empty' });
+    } finally {
+      if (!signal.cancelled) setReady(true);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    const signal = { cancelled: false };
+    void load(signal);
+    return () => { signal.cancelled = true; };
+  }, [load]);
+
+  const model: DemoModel | null = result?.kind === 'loaded' ? result.model : null;
+  const cycleId: string | undefined = result?.kind === 'loaded' ? result.cycleId : undefined;
+  const stats: ShowcaseStats | null = model ? deriveShowcaseStats(model) : null;
+  // Honest empty: no eligible cycle at all (`kind: 'empty'`) OR a terminal
+  // cycle exists but its demo.json never landed (`kind: 'loaded', model: null`)
+  // — either way there is nothing real to render, never a fabricated gallery.
+  const isEmpty = !model;
+  // Distinguish a genuinely-absent terminal cycle from a terminal cycle whose
+  // demo.json was never captured (both render empty, but honestly differently).
+  const emptyReason: 'no-cycle' | 'no-demo' = result?.kind === 'loaded' ? 'no-demo' : 'no-cycle';
+
+  return (
+    <main
+      data-page="project-showcase"
+      data-page-ready={ready ? 'true' : 'false'}
+      data-project-id={id}
+      style={{ minHeight: '100vh', background: 'var(--bg)' }}
+    >
+      <StudioNav />
+
+      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '18px 28px 64px' }}>
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 12.5,
+          color: 'var(--faint)',
+          padding: '10px 0 0',
+          fontFamily: 'var(--font-mono)',
+        }}>
+          <Link href="/" style={{ color: 'var(--dim)', textDecoration: 'none' }}>Forge Studio</Link>
+          <span style={{ color: 'var(--line-2)' }}>/</span>
+          <Link href={`/projects/${encodeURIComponent(id)}`} style={{ color: 'var(--dim)', textDecoration: 'none' }}>
+            {id}
+          </Link>
+          <span style={{ color: 'var(--line-2)' }}>/</span>
+          <span style={{ color: 'var(--c-project)' }}>SHOWCASE</span>
+        </div>
+
+        <div style={{ padding: '18px 0 20px', borderBottom: '1px solid var(--line)', marginBottom: 24 }}>
+          <h1 style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 26,
+            fontWeight: 700,
+            lineHeight: 1.2,
+            color: 'var(--text)',
+            letterSpacing: '-0.01em',
+            margin: '0 0 6px',
+          }}>
+            Demo showcase
+          </h1>
+          <p style={{ fontSize: 13, color: 'var(--dim)', margin: 0 }}>
+            Best evidence from this project&apos;s most recent completed cycle.
+          </p>
+        </div>
+
+        {!ready ? (
+          <div style={{ fontSize: 13, color: 'var(--faint)', padding: '40px 0' }}>Loading…</div>
+        ) : isEmpty ? (
+          <ShowcaseEmptyState projectId={id} reason={emptyReason} />
+        ) : (
+          <>
+            {stats && <ShowcaseStatsStrip stats={stats} />}
+            <div data-section="showcase-evidence">
+              <DemoComparison model={model} cycleId={cycleId} />
+            </div>
+          </>
+        )}
+      </div>
+    </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Stats strip — a small summary derived from the SAME DemoModel already
+// fetched for the evidence gallery below (no second bridge round-trip).
+// ---------------------------------------------------------------------------
+
+function ShowcaseStatsStrip({ stats }: { stats: ShowcaseStats }) {
+  const tileStyle: React.CSSProperties = {
+    border: '1px solid var(--line)',
+    borderRadius: 'var(--radius-sm)',
+    padding: '10px 14px',
+    background: 'var(--panel)',
+    minWidth: 84,
+  };
+  const labelStyle: React.CSSProperties = {
+    fontSize: 10.5,
+    fontFamily: 'var(--font-display)',
+    fontWeight: 700,
+    textTransform: 'uppercase',
+    letterSpacing: '.08em',
+    color: 'var(--faint)',
+    marginBottom: 3,
+  };
+  const valueStyle: React.CSSProperties = {
+    fontSize: 16,
+    fontWeight: 700,
+    color: 'var(--text)',
+    fontFamily: 'var(--font-mono)',
+  };
+
+  return (
+    <div
+      data-section="showcase-stats"
+      style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 26 }}
+    >
+      <div style={tileStyle}>
+        <div style={labelStyle}>Tests</div>
+        <div style={valueStyle}>{stats.testEvidenceCount}</div>
+      </div>
+      <div style={tileStyle}>
+        <div style={labelStyle}>AC met</div>
+        <div style={{ ...valueStyle, color: 'var(--green)' }}>{stats.acVerdictCounts.met}</div>
+      </div>
+      <div style={tileStyle}>
+        <div style={labelStyle}>AC partial</div>
+        <div style={{ ...valueStyle, color: 'var(--amber)' }}>{stats.acVerdictCounts.partial}</div>
+      </div>
+      <div style={tileStyle}>
+        <div style={labelStyle}>AC missed</div>
+        <div style={{ ...valueStyle, color: 'var(--red)' }}>{stats.acVerdictCounts.missed}</div>
+      </div>
+      {stats.branch && (
+        <div style={tileStyle}>
+          <div style={labelStyle}>Branch</div>
+          <div style={{ ...valueStyle, fontSize: 12.5 }}>{stats.branch}</div>
+        </div>
+      )}
+      {stats.commitSha && (
+        <div style={tileStyle}>
+          <div style={labelStyle}>Commit</div>
+          <div style={{ ...valueStyle, fontSize: 12.5 }}>{stats.commitSha.slice(0, 10)}</div>
+        </div>
+      )}
+      {stats.prUrl && (
+        <a
+          href={stats.prUrl}
+          target="_blank"
+          rel="noreferrer"
+          style={{
+            ...tileStyle,
+            display: 'flex',
+            alignItems: 'center',
+            textDecoration: 'none',
+            color: 'var(--c-project)',
+            fontSize: 12.5,
+            fontWeight: 600,
+          }}
+        >
+          Pull request →
+        </a>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Empty state — mirrors app/artifact/page.tsx's EmptyState (same hex glyph +
+// layout convention); honest about WHY (no completed cycle yet), never a
+// silently-blank gallery.
+// ---------------------------------------------------------------------------
+
+function ShowcaseEmptyState({ projectId, reason }: { projectId: string; reason: 'no-cycle' | 'no-demo' }) {
+  return (
+    <div
+      data-section="showcase-empty"
+      style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: 320,
+        gap: 16,
+        textAlign: 'center',
+        padding: 40,
+      }}
+    >
+      <div style={{
+        width: 72,
+        height: 80,
+        clipPath: 'var(--hex-clip)',
+        background: 'var(--panel-2)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 28,
+      }}>
+        ◇
+      </div>
+      <h2 style={{ fontSize: 18, color: 'var(--text)' }}>No showcase yet</h2>
+      <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 440, lineHeight: 1.6, margin: 0 }}>
+        {reason === 'no-demo' ? (
+          <>This project's most recent <strong>merged</strong>/<strong>done</strong> cycle has no
+          captured demo evidence yet — the showcase fills in once a cycle records a demo.</>
+        ) : (
+          <>This project has no <strong>merged</strong> or <strong>done</strong> cycle yet — the
+          showcase fills in once a cycle completes.</>
+        )}
+      </p>
+      <Link
+        href={`/projects/${encodeURIComponent(projectId)}`}
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          padding: '8px 16px',
+          background: 'var(--panel)',
+          border: '1px solid var(--line)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: 13,
+          color: 'var(--dim)',
+          textDecoration: 'none',
+        }}
+      >
+        ← Back to project
+      </Link>
+    </div>
+  );
+}

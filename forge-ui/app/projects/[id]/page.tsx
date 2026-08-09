@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight, startOnboardingSession, getAgentRunStatus,
@@ -18,6 +19,7 @@ import {
   type ProjectRoadmap, type PlanInitiativeResult, type Cycle,
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
+import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
 import { RoadmapDag } from '@/components/studio/RoadmapDag';
@@ -270,6 +272,13 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 
   const skillItems = (catalog.skills ?? []) as Array<{ id: string; name: string; desc?: string }>;
 
+  // R4-14: gate the "open showcase →" affordance on this project actually
+  // having a merged|done cycle (honest gating — never offer a link the
+  // showcase page itself would then render empty for). `showShowcaseEntry`
+  // stays honest with the SAME deriver (`deriveShowcaseCycleId`) the
+  // showcase page's own load path calls.
+  const showcaseEntryVisible = showShowcaseEntry(projectCycles, id);
+
   // New-project surface: onboard an existing repo (R4-B8) OR create a greenfield
   // one from a framework template (R4-03).
   if (isNew) {
@@ -390,8 +399,35 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
                 Feeds this project's RAW cycles through <ProjectCycleLedger>'s
                 shared deriveProjectCycleLedgerRows → HistoryLedger. */}
             <section data-section="project-cycle-ledger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-                Cycle Ledger
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+                  Cycle Ledger
+                </div>
+                {/* R4-14: gated entry to the demo showcase — visible ONLY once
+                    this project has a merged|done cycle (showShowcaseEntry),
+                    so the link is never offered for a project the showcase
+                    page would itself render empty for. */}
+                {showcaseEntryVisible && (
+                  <Link
+                    href={`/projects/${encodeURIComponent(id)}/showcase`}
+                    data-action="open-showcase"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 11.5,
+                      fontWeight: 600,
+                      color: 'var(--c-project)',
+                      background: 'var(--panel)',
+                      border: '1px solid var(--line)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '4px 10px',
+                      textDecoration: 'none',
+                    }}
+                  >
+                    Open showcase →
+                  </Link>
+                )}
               </div>
               <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} />
             </section>

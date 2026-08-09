@@ -7,10 +7,10 @@
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
  * interleaving): skills → hooks → templates → connections → stand-up-onboard
  * → stand-up-create → knowledge → agents → flows-author → flows-run →
- * roadmap → demo-builder → community (R3-07 — deliberately LAST, see its own
- * RUN_ORDER comment below: it installs a real skill + a real hook, mutating
- * /skills, /hooks and the agent-builder palette counts every earlier
- * journey's own beats pin).
+ * roadmap → demo-showcase → demo-builder → community (R3-07 — deliberately
+ * LAST, see its own RUN_ORDER comment below: it installs a real skill + a
+ * real hook, mutating /skills, /hooks and the agent-builder palette counts
+ * every earlier journey's own beats pin).
  * (the standalone runtime-adapter journey was retired — its checks were
  * folded into agents' agents-scratch-build beat, which drives the SDK/model
  * picker as part of composing a brand-new agent from scratch.) Two
@@ -25,7 +25,7 @@
  *     monitor-deep-dive / detail-reachable / start-run-cta / gate-control,
  *     which stay inside the flows-run journey itself) has completed.
  * Every other journey (skills, hooks, templates, connections, agents,
- * knowledge, demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
+ * knowledge, demo-showcase, demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
  * skills-detail-package's own read-only precedent (R3-01-F3/F4)); knowledge
  * (R1-06 WI-4) drives THREE disjoint, create-and-destroy-itself scratch KBs
@@ -43,7 +43,14 @@
  * throwaway scratch agent, flows-author-scratch-build cleans its own
  * authored flow, roadmap-recovery cleans its own seeded failed/in-flight
  * initiatives (R4-11-T3 — moved off the retired standalone /recovery
- * journey), and demo-builder-lock cleans its own seeded state — each at
+ * journey), demo-showcase's own two mdtoc-scoped clip-only cycles
+ * (SHOWCASE_INIT_1/2, journey-fixtures.mjs) are seeded in demo-showcase-entry
+ * and demo-showcase-refresh respectively and both swept in
+ * demo-showcase-refresh's own finally (the last beat that needs either),
+ * leaving mdtoc's canonical cycle history byte-unchanged; its separate
+ * SHOWCASE_EMPTY_PROJECT in-flight fixture is fully self-contained to
+ * demo-showcase-empty (create + assert + clean in that one beat's own
+ * finally); and demo-builder-lock cleans its own seeded state — each at
  * the top/end of their own drive(). skills' created slugs never collide with
  * agents' starter slugs, and skills-create's api-contract-review skill is the
  * throughline artifact: it stays on disk until the runner's finally sweeps it.
@@ -151,6 +158,7 @@ import { journey as agents } from './agents.mjs';
 import { journey as flowsAuthor } from './flows-author.mjs';
 import { journey as flowsRun } from './flows-run.mjs';
 import { journey as roadmap } from './roadmap.mjs';
+import { journey as demoShowcase } from './demo-showcase.mjs';
 import { journey as demoBuilder } from './demo-builder.mjs';
 import { journey as community } from './community.mjs';
 
@@ -166,6 +174,7 @@ export const JOURNEYS = [
   flowsAuthor,
   flowsRun,
   roadmap,
+  demoShowcase,
   demoBuilder,
   community,
 ];
@@ -274,6 +283,11 @@ export const RUN_ORDER = [
   ['roadmap', 'roadmap-plan-trigger'],
   ['roadmap', 'roadmap-start-development'],
   ['roadmap', 'roadmap-recovery'],
+
+  ['demo-showcase', 'demo-showcase-entry'],
+  ['demo-showcase', 'demo-showcase-render'],
+  ['demo-showcase', 'demo-showcase-empty'],
+  ['demo-showcase', 'demo-showcase-refresh'],
 
   ['demo-builder', 'demo-builder-brief'],
   ['demo-builder', 'demo-builder-generate'],
