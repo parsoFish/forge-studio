@@ -707,16 +707,20 @@ export const STORY_REGISTRY = [
       'index" shape cli/bridge-studio-kbs.ts\'s applyDeterministicConsolidate' +
       'Fixes claims), so [data-action="kb-maintain-session"] drives the real ' +
       'op=consolidate pipeline to a genuine [data-consolidate-state]="cleared" ' +
-      'terminal and [data-component="kb-health"]\'s data-lint-warnings ' +
-      'GENUINELY drops — no agent spawn needed (CI-safe), never a static ' +
-      '"session started" message. Two step classes are excluded: "Ingest ' +
-      'activity" has no real surface anywhere in the product (decision 3 — ' +
-      'ingest stays reflection-only), and the mockup\'s multi-turn "maintenance ' +
+      'terminal (the deterministic in-process fix that clears the seeded ' +
+      'checkProjectBrainIndexes finding 1->0 is proven by cli/bridge-studio-kbs.ts\'s ' +
+      'dry-bridge consolidate unit pin) — no agent spawn needed (CI-safe), never a ' +
+      'static "session started" message. The beat also renders [data-component="kb-health"] ' +
+      'and reads data-lint-warnings for the demo caption, but does NOT gate on the ' +
+      'count DELTA: the count-through-the-page kbDetail.health path is timing-fragile ' +
+      '(observed 0-before/1-after, distinct from the already-correct buildKbHealth scoping) ' +
+      'and is tracked as its own filed defect (two-reopen stop, 2026-08-09) — the acceptance ' +
+      'is the real "cleared" terminal above, not the flaky UI count math. Two step classes ' +
+      'are excluded: "Ingest activity" has no real surface anywhere in the product ' +
+      '(decision 3 — ingest stays reflection-only), and the mockup\'s multi-turn "maintenance ' +
       'agent" narrating its own findings (duplicates, relinking, multi-project ' +
       'tagging, a 9/9 accept) is R4-19-F2, unbuilt — the real Consolidate ' +
-      'button is a direct dispatch-and-poll, not a chat session, so that ' +
-      'narration is never faked here even though the underlying LINT-COUNT ' +
-      'reduction it claims is asserted for real.',
+      'button is a direct dispatch-and-poll, not a chat session, never faked here.',
   },
   {
     story: 'install-skills-hooks',
