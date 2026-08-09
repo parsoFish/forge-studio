@@ -340,6 +340,7 @@ export function checkProjectBrainIndexes(forgeRoot: string): Finding[] {
   if (!existsSync(projectsRoot)) return findings;
 
   for (const name of readdirSync(projectsRoot)) {
+    if (name.startsWith('.')) continue; // skip `.staging-<id>-*` create leftovers (SEC-05 4on) + any dot-dir
     const projectDir = join(projectsRoot, name);
     const themesDir = join(projectDir, 'themes');
     if (!existsSync(themesDir)) continue;
