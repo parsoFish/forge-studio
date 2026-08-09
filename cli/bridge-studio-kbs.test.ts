@@ -660,6 +660,95 @@ test('R1-06 WI-3 MINOR 1 red-pin: a consolidate whose repair phase throws still 
   }
 });
 
+// ---------------------------------------------------------------------------
+// R1-06 WI-4 kb-maintain journey pin (dry-bridge consolidate refusal): the
+// journey harness runs `forge studio` under FORGE_DRY_BRIDGE=1 (scripts/
+// e2e-journey.mjs) — the seam that stops the bridge performing real
+// spawn/merge/daemon side-effects. The consolidate route USED to refuse the
+// WHOLE op under dry-bridge (`refuseDryBridge` → 409, action:'spawn-agent'),
+// which killed the DETERMINISTIC in-process repair too: the exact same
+// spawn-free category-index append op=fix-auto already performs under
+// dry-bridge with no guard. So the kb-maintain beat saw consolidate 409
+// (data-consolidate-state="error", never "cleared") and the seeded lint flag
+// never dropped — a KB whose health legitimately reports a fixable flag could
+// not be healed under the journey/CI env (declared-data-fails-open: health
+// surfaces a finding the only fix path refuses to act on).
+//
+// runBrainConsolidateNow already treats isDryBridge() as `noSpawn`, so the ONLY
+// thing dry-bridge must suppress — a real agent turn on the residual — is
+// skipped there regardless. The route must therefore dispatch (not refuse), and
+// the deterministic path clears the "not listed" finding in-process, terminal
+// 'cleared', health back to 0.
+//
+// RED before fix: POST consolidate under FORGE_DRY_BRIDGE=1 returns 409
+// (dry-bridge), so it never reaches a 'cleared' terminal and health stays 1.
+// ---------------------------------------------------------------------------
+test('R1-06 WI-4 kb-maintain pin: under FORGE_DRY_BRIDGE=1, consolidate still drives a real lint reduction (health 1 → cleared → 0) — RED before fix', async () => {
+  const iso = await makeIsolatedForge();
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1'; // mirror the journey harness's bridge env
+  try {
+    // The exact journey fixture shape: a project-bound KB with ONE `pattern`
+    // theme deliberately absent from its own patterns.md category index.
+    seedProjectBrain(iso.root, 'drybridge-consolidate', ['scratch-maintain-lesson']);
+
+    const health = async (): Promise<number> => {
+      const res = await fetch(`${iso.url}/api/studio/kbs/drybridge-consolidate`);
+      const json = (await res.json()) as { health?: { lintFlags?: number } };
+      return json.health?.lintFlags ?? -1;
+    };
+
+    // Fixture precondition, asserted BEFORE the verdict: health reflects exactly
+    // one fixable lint flag even under dry-bridge (a pure read, never gated).
+    assert.equal(
+      await health(),
+      1,
+      'precondition: health.lintFlags must be 1 for the seeded flagged KB (under dry-bridge)',
+    );
+    // And op=lint (already dry-bridge-allowed) agrees the finding is real.
+    const baseline = await postAt(iso.url, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'lint' });
+    const baselineFindings = (baseline.json['findings'] as Array<{ check?: string }>).filter(
+      (f) => f.check === 'checkProjectBrainIndexes',
+    );
+    assert.equal(baselineFindings.length, 1, `precondition: expected 1 seeded finding, got ${baselineFindings.length}`);
+
+    // Verdict 1: consolidate is DISPATCHED under dry-bridge (RED: 409), handing
+    // back the async run handle rather than refusing.
+    const dispatch = await postAt(iso.url, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'consolidate' });
+    assert.equal(
+      dispatch.status,
+      200,
+      `consolidate must dispatch (200) under dry-bridge, not 409-refuse — got ${dispatch.status}: ${JSON.stringify(dispatch.json)}`,
+    );
+    assert.equal(dispatch.json['ok'], true, JSON.stringify(dispatch.json));
+    const runId = dispatch.json['runId'];
+    assert.equal(typeof runId, 'string', `expected a string runId, got ${JSON.stringify(dispatch.json)}`);
+
+    // Verdict 2: the deterministic in-process path drains to a 'cleared'
+    // terminal — no spawn, no SDK turn (the CI-safe shipped shape).
+    const terminal = await pollTerminalAt(iso.url, 'drybridge-consolidate', runId as string);
+    assert.equal(
+      terminal.state,
+      'cleared',
+      `consolidate must reach a 'cleared' terminal under dry-bridge, got '${terminal.state}'`,
+    );
+
+    // Verdict 3: the seeded finding is actually gone — follow-up lint 0 AND
+    // health lintFlags back to 0 (the reduction the beat observes).
+    const after = await postAt(iso.url, `/api/studio/kbs/drybridge-consolidate/maintenance`, { op: 'lint' });
+    const afterFindings = (after.json['findings'] as Array<{ check?: string }>).filter(
+      (f) => f.check === 'checkProjectBrainIndexes',
+    );
+    assert.equal(afterFindings.length, 0, `consolidate must clear the seeded finding, ${afterFindings.length} remain`);
+    assert.equal(await health(), 0, 'health.lintFlags must drop to 0 after consolidate cleared the finding');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
 // ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
 // must surface them alongside the top-level brains so they appear in Studio's KB
 // list/graph (previously only direct subdirs of brain/ were scanned).

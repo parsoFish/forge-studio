@@ -1287,12 +1287,21 @@ export async function handleStudioKbRoutes(
         return true;
       }
       if (op === 'consolidate') {
-        if (isDryBridge()) {
-          refuseDryBridge(res, origin, {
-            route: '/api/studio/kbs/:id/maintenance (op=consolidate)', method, action: 'spawn-agent', logsRoot: ctx.logsRoot,
-          });
-          return true;
-        }
+        // NO route-level dry-bridge refusal here (unlike op=fix-agent above).
+        // Consolidate's shipped shape clears the deterministic
+        // `checkProjectBrainIndexes` "not listed" findings IN-PROCESS via
+        // `applyDeterministicConsolidateFixes` — an idempotent category-index
+        // append, the SAME spawn-free write op=fix-auto already performs under
+        // dry-bridge without a guard. `runBrainConsolidateNow` treats
+        // `isDryBridge()` as `noSpawn` internally, so the ONLY thing dry-bridge
+        // must suppress — a real `forge brain fix` agent turn on the residual —
+        // is already skipped there. Refusing the whole op at the route (the old
+        // behaviour) killed the deterministic path too: under the journey/CI
+        // harness's `FORGE_DRY_BRIDGE=1`, consolidate 409'd, so a KB whose
+        // health legitimately reports a fixable flag could never be healed
+        // (declared-data-fails-open — health surfaces a finding the only fix
+        // path refuses to act on). Dispatch and let the internal noSpawn guard
+        // keep it CI-safe.
         // Resolve the KB's declared consolidate obligation (R1-06 WI-3):
         // defaults to the 'brain-fix' builtin (DEFAULT_KB_CONSOLIDATE) unless
         // the kb.yaml explicitly overrides it. Only 'brain-fix' is

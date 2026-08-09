@@ -60,7 +60,7 @@ function cleanScratchKbSession() {
 // resolved through orchestrator/agent-bands.ts — never a hardcoded guess).
 // Disjoint id from SCRATCH_KB_ID above; same create-and-destroy-itself
 // discipline.
-const SCRATCH_KB_BAND_ID = 'journey-scratch-kb-band';
+const SCRATCH_KB_BAND_ID = 'journey-scratch-kb-review-band';
 const SCRATCH_KB_BAND_NAME = 'Journey scratch KB (review band)';
 const SCRATCH_KB_BAND_DESC = 'Ephemeral, flow-bound + band-scoped KB created by the e2e journey itself, to demo the kb-binding-band field threading a real flow band into the create request.';
 const SCRATCH_KB_BAND_BIND_KIND = 'flow';
