@@ -30,6 +30,7 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
+import { cyclesRawDir } from './brain-paths.ts';
 import type { KbBinding } from './studio/types.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec(skillPathRelative('project-brain-builder'));
@@ -184,20 +185,51 @@ export async function runProjectBrainTurn(
 
 // --- analyze step: the agent reads the project + authors staged themes --------
 
-async function runAnalyzeStep(args: {
-  input: RunProjectBrainTurnInput;
-  sessionDir: string;
-  status: ProjectBrainStatus;
-  forgeRoot: string;
-  queryFn: QueryFn;
-  onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
-  onHeartbeat: () => void;
-}): Promise<RunProjectBrainTurnResult> {
-  const { input, sessionDir, status, forgeRoot, queryFn, onToolUse, onHeartbeat } = args;
-  const staging = stagingThemesDir(sessionDir);
-  mkdirSync(staging, { recursive: true });
+/**
+ * R4-19 WI-1: pure `{cwd, prompt}` plan for the analyze-step agent turn.
+ * Extracted from `runAnalyzeStep` (ADR-042 pure-function allowance) so the
+ * read-source branch is directly testable without spinning up an agent turn.
+ *
+ * Branches on `status.kb_binding`:
+ *   - a `flow` binding WITH a `band` (the create-kb-cycle case, e.g.
+ *     `review-insights` bound to `{kind:'flow', ref:'forge-develop',
+ *     band:'review-band'}`) has NO project repo to read — its evidence is
+ *     the forge-owned cycle archives (Brain 2, `cyclesRawDir`) plus the
+ *     review-band / adversarial-review findings logged inside them.
+ *   - every other binding shape (`project`, `unique`, a `flow` binding
+ *     WITHOUT a band, or no `kb_binding` at all — the historical default)
+ *     stays on the ordinary project-repo read, BYTE-IDENTICAL to the
+ *     pre-WI-1 project-brain prompt.
+ */
+export function buildAnalyzePlan(
+  status: ProjectBrainStatus,
+  forgeRoot: string,
+  staging: string,
+  skill: string,
+): { cwd: string; prompt: string } {
+  const binding = status.kb_binding;
+  if (binding?.kind === 'flow' && binding.band) {
+    const cwd = cyclesRawDir(forgeRoot);
+    const prompt = [
+      skill,
+      '',
+      '## Your task this turn: read the CYCLE ARCHIVES and author the review-insights brain.',
+      '',
+      `Project: ${status.project}`,
+      `Cycle archives (your working directory — READ from here): ${cwd}`,
+      `Staging directory (WRITE every theme + profile.md here, as absolute paths): ${staging}`,
+      '',
+      'Operator focus / guidance:',
+      status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
+      '',
+      `Evidence source: this KB has no project repo — read the \`${binding.ref}\` flow's archived cycles under the cycle archives dir above, and synthesize the durable patterns from each cycle's logged \`${binding.band}\` band / adversarial-review findings.`,
+      '',
+      'Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.',
+    ].join('\n');
+    return { cwd, prompt };
+  }
 
-  const skill = loadSkillPrompt(input.skillPromptPath, forgeRoot);
+  const cwd = status.project_repo_path;
   const prompt = [
     skill,
     '',
@@ -212,11 +244,29 @@ async function runAnalyzeStep(args: {
     '',
     'Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.',
   ].join('\n');
+  return { cwd, prompt };
+}
+
+async function runAnalyzeStep(args: {
+  input: RunProjectBrainTurnInput;
+  sessionDir: string;
+  status: ProjectBrainStatus;
+  forgeRoot: string;
+  queryFn: QueryFn;
+  onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
+  onHeartbeat: () => void;
+}): Promise<RunProjectBrainTurnResult> {
+  const { input, sessionDir, status, forgeRoot, queryFn, onToolUse, onHeartbeat } = args;
+  const staging = stagingThemesDir(sessionDir);
+  mkdirSync(staging, { recursive: true });
+
+  const skill = loadSkillPrompt(input.skillPromptPath, forgeRoot);
+  const { cwd, prompt } = buildAnalyzePlan(status, forgeRoot, staging, skill);
 
   await runAgentTurn({
     queryFn,
     prompt,
-    cwd: status.project_repo_path,
+    cwd,
     model: PROJECT_BRAIN_MODEL,
     allowedTools: projectBrainAgentSpec.allowedTools,
     disallowedTools: projectBrainAgentSpec.disallowedTools,

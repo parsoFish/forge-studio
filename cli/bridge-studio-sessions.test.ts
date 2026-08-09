@@ -89,6 +89,8 @@ import { startBridge } from './ui-bridge.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import type { StudioContext } from './bridge-studio.ts';
 import { serializeManifest, type InitiativeManifest } from '../orchestrator/manifest.ts';
+import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -263,6 +265,55 @@ function writeProjectBrainSession(projectsRoot: string, project: string, session
   writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'analyzing' }), 'utf8');
 }
 
+// ---------------------------------------------------------------------------
+// R4-19 WI-2 — the ".kb-" seeding-anchor carve-out fixture. CONTEXT: R1-06's
+// KB-create hand-off (cli/bridge-studio-kbs.ts:1005-1044) anchors a
+// non-project-bound KB's seeding session at
+// `projects/.kb-<id>/_project-brain/<sid>/` (KB_SEEDING_ANCHOR_PREFIX =
+// '.kb-', cli/bridge-studio-kbs.ts:690, unexported — mirrored here as a
+// literal, same idiom this file already uses for `newProjectBrainSessionId`)
+// so `discoverProjects` (which filters ALL dot-dirs) never surfaces it as a
+// phantom project. This route's `invalidProjectReason` currently rejects
+// EVERY project starting with "." via a bare SLUG_RE test, making that same
+// anchor unreachable through the session shell.
+// ---------------------------------------------------------------------------
+
+const KB_SEEDING_ID = 'seedkb';
+const KB_SEEDING_PROJECT = `.kb-${KB_SEEDING_ID}`;
+const KB_SEEDING_SESSION = '2026-08-10T09-10-00';
+const GITPULSE_SESSION = '2026-08-10T09-11-00';
+
+/**
+ * Mirrors the REAL create hand-off (cli/bridge-studio-kbs.ts:1026-1044)
+ * byte-for-byte — same `guardedWriteSessionStatus` call, same dir segments
+ * (`[sessionProject, '_project-brain', sessionId]`), same initial `phase:
+ * 'briefing'` — rather than a hand-rolled `writeFileSync`, so this fixture's
+ * on-disk shape is genuinely what a real KB create produces, never invented.
+ * A `flow` binding with a `band` (R1-06 amendment, the reviewer's
+ * band-scoped grant) is the realistic non-project case that forces the
+ * dot-anchor branch (`binding.kind !== 'project'` in the real handler).
+ */
+function writeKbSeedingHandoffSession(projectsRoot: string, kbId: string, sessionId: string): void {
+  const sessionProject = `.kb-${kbId}`;
+  const written = guardedWriteSessionStatus<ProjectBrainStatus>(
+    projectsRoot,
+    [sessionProject, '_project-brain', sessionId],
+    {
+      session_id: sessionId,
+      project: sessionProject,
+      project_repo_path: join(projectsRoot, sessionProject),
+      phase: 'briefing',
+      prompt: '',
+      updated_at: new Date().toISOString(),
+      kb_id: kbId,
+      kb_binding: { kind: 'flow', ref: 'review-flow', band: 'review-band' },
+    },
+  );
+  if (written === null) {
+    throw new Error(`test fixture: kb-seeding hand-off session write failed containment for "${kbId}"`);
+  }
+}
+
 // R4-17 — the onboarding session dir (honestly one turn, D8: no fabricated
 // interview) + a REAL project fixture with a well-formed `.forge/project.json`
 // so `deriveContractStages` (cli/contract-stages.ts) has something real to
@@ -312,6 +363,11 @@ before(async () => {
   writeInstructionsSession(projectsRoot, 'demoproj', REAL_INSTRUCTIONS_SESSION);
   writeProjectBrainSession(projectsRoot, 'demoproj', REAL_PROJECT_BRAIN_SESSION);
   writeArchitectSessionWithDeps(projectsRoot, 'depsproj', DEPS_SESSION);
+
+  // R4-19 WI-2 — the ".kb-" seeding-anchor reachability fixture, plus a
+  // normal (non-dot) project-brain session as the companion baseline.
+  writeKbSeedingHandoffSession(projectsRoot, KB_SEEDING_ID, KB_SEEDING_SESSION);
+  writeProjectBrainSession(projectsRoot, 'gitpulse', GITPULSE_SESSION);
 
   // R4-17 — onboarding session fixtures: a well-formed project (contract
   // stages derive cleanly) and a malformed one (deriveContractStages
@@ -841,4 +897,102 @@ test('R4-17 AT-2: a malformed .forge/project.json → deriveContractStages\'s {o
     `the error response must name the cause, got: ${JSON.stringify(body)}`,
   );
   assert.notEqual(body.ok, true, 'the response must not claim ok:true alongside an error');
+});
+
+// ---------------------------------------------------------------------------
+// R4-19 WI-2 — the ".kb-" seeding-anchor carve-out. AT-1 is the RED pin that
+// flips green on the fix (invalidProjectReason currently rejects ANY
+// dot-leading project, full stop, so the real KB-seeding anchor is
+// unreachable). AT-2..AT-7 are the containment RATCHET the fix must not
+// break — every one of them is a bare SLUG_RE rejection today (nothing in
+// the current code special-cases ".kb-" at all, so a leading "." is ALWAYS
+// a 400 pre-fix), and MUST remain a 400 once the bounded exact-".kb-"+
+// valid-slug carve-out exists, proving the carve-out never widens into a
+// general "." allow. AT-8 is the companion pin: the ordinary non-dot path
+// is untouched by the carve-out, both before and after.
+// ---------------------------------------------------------------------------
+
+test('R4-19 WI-2 AT-1 (RED — reachability, flips green on the fix): GET /api/studio/sessions/project-brain/<sid>?project=.kb-<id> returns the REAL session status (200), not 400', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=${KB_SEEDING_PROJECT}`);
+  const text = await res.text();
+  assert.equal(
+    res.status,
+    200,
+    `a ".kb-" seeding-anchor session must be reachable via a BOUNDED exact-prefix carve-out (R4-19 WI-2) — expected 200, got ${res.status}: ${text}`,
+  );
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'project-brain');
+  assert.equal(body.sessionId, KB_SEEDING_SESSION);
+  assert.equal(body.project, KB_SEEDING_PROJECT, 'the dot-anchored project id must be echoed back verbatim, not stripped/normalized');
+  assert.equal(body.phase, 'briefing', 'phase must be the REAL value written by the create hand-off (guardedWriteSessionStatus), never fabricated');
+});
+
+test('R4-19 WI-2 AT-2 (containment guard — must stay 400 after the fix): a traversal-shaped ".kb-x/../../etc" project param is rejected, never resolving through the exact-prefix carve-out', async () => {
+  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const { res, status, body } = captureResponse();
+  const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.kb-x/../../etc`;
+  const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
+  assert.equal(handled, true, 'must be handled (not passthrough)');
+  assert.equal(status(), 400, `expected 400, got ${status()}: ${JSON.stringify(body())}`);
+});
+
+test('R4-19 WI-2 AT-3 (containment guard — must stay 400 after the fix): ".kb-" with an EMPTY slug after the prefix is rejected', async () => {
+  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const { res, status, body } = captureResponse();
+  const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.kb-`;
+  const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
+  assert.equal(handled, true, 'must be handled (not passthrough)');
+  assert.equal(status(), 400, `expected 400, got ${status()}: ${JSON.stringify(body())}`);
+});
+
+test('R4-19 WI-2 AT-4 (containment guard — must stay 400 after the fix): "../secret" (no ".kb-" prefix at all) is rejected', async () => {
+  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const { res, status, body } = captureResponse();
+  const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=../secret`;
+  const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
+  assert.equal(handled, true, 'must be handled (not passthrough)');
+  assert.equal(status(), 400, `expected 400, got ${status()}: ${JSON.stringify(body())}`);
+});
+
+test('R4-19 WI-2 AT-5 (containment guard — must stay 400 after the fix): ".foo" is dot-prefixed but NOT the ".kb-" prefix — rejected, proving the carve-out is never a general "." allow', async () => {
+  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const { res, status, body } = captureResponse();
+  const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.foo`;
+  const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
+  assert.equal(handled, true, 'must be handled (not passthrough)');
+  assert.equal(status(), 400, `expected 400, got ${status()}: ${JSON.stringify(body())}`);
+});
+
+test('R4-19 WI-2 AT-6 (containment guard — must stay 400 after the fix): ".kb-<id>" whose id contains a "/" is rejected — proves the carve-out validates the POST-prefix slug, not just the literal prefix', async () => {
+  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const { res, status, body } = captureResponse();
+  // %2F decodes (via URLSearchParams, same as AT-46's 'a%2Fb' variant) to a
+  // literal "/" embedded inside the post-prefix slug.
+  const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.kb-abc%2Fdef`;
+  const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
+  assert.equal(handled, true, 'must be handled (not passthrough)');
+  assert.equal(status(), 400, `expected 400, got ${status()}: ${JSON.stringify(body())}`);
+});
+
+test('R4-19 WI-2 AT-7 (containment guard — must stay 400 after the fix): ".kb-<id>" whose id contains an embedded NUL byte is rejected', async () => {
+  const ctx: StudioContext = { forgeRoot, logsRoot: join(forgeRoot, '_logs') };
+  const { res, status, body } = captureResponse();
+  // %00 decodes (via URLSearchParams, same as AT-46's '%00' variant) to a
+  // literal NUL byte embedded inside the post-prefix slug.
+  const rawUrl = `/api/studio/sessions/project-brain/${KB_SEEDING_SESSION}?project=.kb-abc%00def`;
+  const handled = await handleStudioSessionsRoutes({} as import('node:http').IncomingMessage, res, ctx, rawUrl, 'GET');
+  assert.equal(handled, true, 'must be handled (not passthrough)');
+  assert.equal(status(), 400, `expected 400, got ${status()}: ${JSON.stringify(body())}`);
+});
+
+test('R4-19 WI-2 AT-8 (companion — unaffected by the carve-out, both before and after): GET /api/studio/sessions/project-brain/<sid>?project=gitpulse still resolves its session unchanged', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/project-brain/${GITPULSE_SESSION}?project=gitpulse`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'project-brain');
+  assert.equal(body.project, 'gitpulse');
+  assert.equal(body.phase, 'analyzing', 'phase must be the real value read from the session\'s status.json — the non-dot path\'s behavior must be identical to AT-40');
 });

@@ -941,9 +941,10 @@ inventory rather than one shared page-level contract:
   it as a no-op (stage-UNAWARE by nature).
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser and the
   band-scoped, agent-seeded create + maintain surface (R1-01's binding
-  contract, extended by R1-06 WI-2/WI-3; journeys: `knowledge-graph`,
-  `knowledge-pin-guidance`, `knowledge-create-kb`, `knowledge-ingest`,
-  `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
+  contract, extended by R1-06 WI-2/WI-3 and R4-19 WI-1/WI-2; journeys:
+  `knowledge-graph`, `knowledge-pin-guidance`, `knowledge-create-kb`,
+  `knowledge-ingest`, `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
+  `knowledge-create-kb-band-scope-seed`, `knowledge-create-kb-band-scope-commit`,
   `knowledge-kb-maintain-session`).
   - **Graph browser:** `[data-page="knowledge"][data-page-ready]`, force-graph
     root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
@@ -998,20 +999,44 @@ inventory rather than one shared page-level contract:
       `discoverProjects` and the KB descriptor walk (`subDirs`) already skip
       dot-prefixed dirs — a real project/KB id is slug-validated with no
       leading dot — so this keeps the session on disk and runner-reachable
-      while never surfacing as a phantom project on the library. It is
-      correspondingly **unreachable through the session-shell route**: a
-      leading `.` fails the `project` query param's own `SLUG_RE` check
-      (`cli/bridge-studio-sessions.ts`), a 400, not a 404 — the session
-      genuinely exists on disk but has no real page to view it from today.
-    - **What is real vs. not (R1-06 vs. R4-19):** the HAND-OFF itself
-      (sessionId, correct anchor, `kb_id`/`kb_binding` on the status file) is
-      R1-06's own shipped surface. The session ADVANCING through turns — an
-      agent drafting real themes from project history or review-band
-      evidence, an accept step — has no agent behind it yet; that is
-      R4-19 (`docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
-      `docs/roadmaps/R4-ootb-suite.md` R4-19). A project-scope session
-      genuinely sits at `phase: 'briefing'` with an empty transcript when
-      viewed — never a fabricated multi-turn conversation.
+      while never surfacing as a phantom project on the library. **Since
+      R4-19 WI-2** it is also **reachable through the session-shell route**:
+      `invalidProjectReason` (`cli/bridge-studio-sessions.ts`) carries a
+      bounded carve-out — `project=.kb-<id>` passes when the post-prefix
+      remainder matches the SAME `SLUG_RE` every other project id is checked
+      against, so `/`, `..`, NUL, and an empty slug still reject (general
+      leading-dot traversal defense is unchanged; this is never a broad
+      leading-`.` allow). Before WI-2 a leading `.` failed that check
+      outright — a 400, not a 404 — genuinely on disk but with no page to
+      view it from; that gap is closed.
+    - **What is real vs. not (R1-06 + R4-19 WI-1/WI-2 vs. R4-19-F2):** the
+      HAND-OFF itself (sessionId, correct anchor, `kb_id`/`kb_binding` on the
+      status file) is R1-06's own shipped surface. **Now also real:** the
+      session is reachable and drivable end to end — briefing (a real
+      `POST /api/project-brain/brief` flips `phase → analyzing` on disk),
+      and the commit step (`runCommitStep`,
+      `orchestrator/project-brain-builder-runner.ts`) is fully deterministic
+      — no SDK call — so it can be invoked directly once `phase ===
+      'committing'`, landing a genuine write into `brain/<kbId>/`. WI-1
+      additionally branches the analyze step's own plan
+      (`buildAnalyzePlan`) on `kb_binding.kind`: a `flow` binding *with* a
+      `band` (the create-kb-cycle shape) has no project repo to read, so its
+      `cwd` is the forge-owned cycle archives (`cyclesRawDir`) and its
+      prompt asks the agent to synthesize durable patterns from each
+      archived cycle's logged review-band / adversarial-review findings —
+      every other binding shape stays on the byte-identical, pre-WI-1
+      project-repo read. **What still has no agent behind it:** the
+      SDK theme-authoring turn itself never runs under
+      `FORGE_ARCHITECT_NO_SPAWN=1` (this harness's env, same as every other
+      agentic surface) — the journey harness (`knowledge-create-kb-band-
+      scope-seed`) honestly narrates a scripted stand-in there, grounded in
+      forge's own real, already-committed review findings, never presented
+      as a real agent run. Docs/roadmap pointer:
+      `docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
+      `docs/roadmaps/R4-ootb-suite.md` R4-19. `kb-maintain`'s SEPARATE
+      multi-turn "maintenance agent" narration gap (R4-19-F2) is untouched by
+      this — Consolidate's real shipped shape stays a direct dispatch-and-
+      poll, not a chat session.
   - **KB maintenance panel:**
     `[data-component="kb-maintenance"]`, with `[data-consolidate-state]` on
     that same root once a consolidate run reaches a terminal (`'cleared'` |

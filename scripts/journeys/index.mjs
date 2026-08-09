@@ -222,6 +222,8 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-ingest'],
   ['knowledge', 'knowledge-lint-index'],
   ['knowledge', 'knowledge-create-kb-band-scope'],
+  ['knowledge', 'knowledge-create-kb-band-scope-seed'],
+  ['knowledge', 'knowledge-create-kb-band-scope-commit'],
   ['knowledge', 'knowledge-kb-maintain-session'],
 
   ['agents', 'agents-starters'],

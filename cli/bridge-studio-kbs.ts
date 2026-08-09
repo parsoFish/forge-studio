@@ -687,7 +687,7 @@ function newProjectBrainSessionId(): string {
  * seeding runner reads the KB's identity from the session status.json's `kb_id`
  * field, never from the anchor name.
  */
-const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
+export const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
 
 // ---------------------------------------------------------------------------
 // Unified KB route handler (GET + POST)

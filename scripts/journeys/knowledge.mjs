@@ -3,9 +3,31 @@ import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import { caption, ACT, THINK, WORK, READ, FORGE_ROOT, waitForFile } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
+// R4-19 WI-1/WI-2 (journey-sync F1) — direct in-process imports of the real
+// orchestrator/CLI functions, mirroring the established precedent
+// (scripts/lib/journey-daemon-guard.mjs importing orchestrator/daemon.ts
+// directly: "Node ≥22.18 strips types natively ... so the daemon helpers can
+// be imported directly from the orchestrator TypeScript source"). Used ONLY
+// by knowledge-create-kb-band-scope-commit below: `runProjectBrainTurn`'s
+// `phase === 'committing'` branch (`runCommitStep`) is fully deterministic —
+// no SDK call — so calling it here exercises the SAME real code path a live
+// daemon would run, bypassing only the detached-process `spawnAgentTurn`
+// wrapper this harness's FORGE_ARCHITECT_NO_SPAWN=1 suppresses. `runBrainLint`
+// is the same `forge brain lint` the CLI runs, called in-process to assert
+// the real write leaves the whole brain 9/9 clean.
+import { runProjectBrainTurn } from '../../orchestrator/project-brain-builder-runner.ts';
+import { runBrainLint } from '../../cli/brain-lint.ts';
 
 // module-scope cross-beat state for this journey (was hoisted in main())
 let GUIDANCE_TEXT, kbPageReady;             // knowledge-graph → knowledge-pin-guidance
+// knowledge-create-kb-band-scope → -seed → -commit (R4-19 WI-1/WI-2 arc)
+let bandSessionId = null;
+// Byte-stash of brain/INDEX.md, taken immediately before the real commit beat
+// calls regenerateBrainIndex (inside runCommitStep) — restored in that same
+// beat's own tail so the canonical repo file is never left dirty (state-
+// ownership rule; this journey creates+destroys the scratch KB itself, but
+// brain/INDEX.md is shared, git-tracked state it must put back byte-for-byte).
+let brainIndexStash = null;
 
 // ── scratch KB (knowledge-create-kb → knowledge-ingest) ──────────────────────
 // A KB this journey creates AND deletes itself — never a REAL brain (brain/cycles,
@@ -68,17 +90,108 @@ const SCRATCH_KB_BAND_BIND_REF = 'forge-develop';
 const SCRATCH_KB_BAND_VALUE = 'review-band';
 const SCRATCH_KB_BAND_DIR = join(FORGE_ROOT, 'brain', SCRATCH_KB_BAND_ID);
 // A non-project binding's seeding session is dot-anchored (bridge-studio-kbs.ts
-// KB_SEEDING_ANCHOR_PREFIX = '.kb-') — genuinely unreachable through the
-// session-shell route (its `project` query param is SLUG_RE-validated, which a
-// leading '.' fails), which is exactly why create-kb-cycle's session-turn steps
-// are excluded (R4-19), not merely undemonstrated. Same gitignored `projects/`
-// tree as the mdtoc session above; cleaned as a whole dot-dir.
+// KB_SEEDING_ANCHOR_PREFIX = '.kb-'). Before R4-19 WI-2 this was genuinely
+// unreachable through the session-shell route (its `project` query param was
+// SLUG_RE-validated, which a leading '.' failed) — WI-2
+// (cli/bridge-studio-sessions.ts's `invalidProjectReason`) added a BOUNDED
+// carve-out: EXACTLY `.kb-<valid-slug>` now passes (the post-prefix remainder
+// still runs through the same SLUG_RE, so `/`, `..`, NUL, empty-slug all still
+// reject — general leading-dot traversal defense is unchanged). So the session
+// is now genuinely reachable/drivable — proven by
+// knowledge-create-kb-band-scope-seed below, not merely asserted. Same
+// gitignored `projects/` tree as the mdtoc session above; cleaned as a whole
+// dot-dir (by the LAST beat in the arc, knowledge-create-kb-band-scope-commit
+// — the KB + its session must stay live across all three beats).
 function scratchKbBandSessionAnchorDir() {
   return join(FORGE_ROOT, 'projects', `.kb-${SCRATCH_KB_BAND_ID}`);
 }
+/** The seeding session's own dir: projects/.kb-<id>/_project-brain/<sid>/ —
+ *  same shape journey-fixtures.mjs's pbDir() uses for the mdtoc case,
+ *  reimplemented module-local (this module owns the whole scratch-KB
+ *  cleanup contract per the header note above SCRATCH_KB_DIR). */
+function bandPbSessionDir(sid) {
+  return join(scratchKbBandSessionAnchorDir(), '_project-brain', sid);
+}
+function readBandPbStatus(sid) {
+  try { return JSON.parse(readFileSync(join(bandPbSessionDir(sid), 'status.json'), 'utf8')); } catch { return null; }
+}
+/** Merge-patch status.json (preserves kb_id/kb_binding/project/
+ *  project_repo_path/session_id written by the real create hand-off —
+ *  runCommitStep reads kb_id/kb_binding to resolve WHERE to commit, so those
+ *  fields must survive every patch here untouched). */
+function writeBandPbStatus(sid, patch) {
+  const current = readBandPbStatus(sid) ?? {};
+  writeFileSync(join(bandPbSessionDir(sid), 'status.json'), JSON.stringify({
+    ...current, ...patch, updated_at: new Date().toISOString(),
+  }, null, 2));
+}
+
+/**
+ * R4-19 WI-1/WI-2 — EMULATED analyze-step theme authoring for the band-scoped
+ * scratch KB, staged into the seeding session's own themes/ dir (exactly
+ * where a real analyze turn would stage them — runCommitStep reads from
+ * here, unchanged by anything below).
+ *
+ * The real R4-19 agent (`buildAnalyzePlan`'s flow+band branch,
+ * orchestrator/project-brain-builder-runner.ts) reads live archived cycles
+ * under `cyclesRawDir` plus each cycle's logged review-band / adversarial-
+ * review findings. That SDK turn is suppressed under this harness's
+ * FORGE_ARCHITECT_NO_SPAWN=1 — the SAME seam every other agentic beat honors
+ * (su-create-project-brain's own seedStagedBrain is the precedent this
+ * mirrors) — so this is a SCRIPTED STAND-IN, narrated as such everywhere it
+ * is invoked, never presented as a real agent run.
+ *
+ * Grounded, not invented (corpus-grounded-demo-seeds): both themes mirror
+ * forge's own real, already-committed review findings —
+ * brain/cycles/themes/declared-data-fails-open.md and
+ * .../suppression-env-fakes-the-pass.md — cited as provenance in each
+ * theme's own Sources section, the shape a real pass over forge's own
+ * archived cycles would actually surface.
+ */
+function seedBandStagedThemes(sid) {
+  const themesDir = join(bandPbSessionDir(sid), 'themes');
+  mkdirSync(themesDir, { recursive: true });
+  const now = new Date().toISOString();
+  const fm = (title, description, related) => [
+    '---', `title: ${title}`, `description: ${description}`, 'category: antipattern',
+    'keywords:', '  - review-band', '  - adversarial-review', '  - emulated-seeding',
+    `created_at: ${now}`, `updated_at: ${now}`,
+    'related_themes:', `  - ${related}`, '---', '',
+  ].join('\n');
+  writeFileSync(join(themesDir, 'review-band-declared-data-fails-open.md'),
+    fm('review-band recurring finding — declared data fails open',
+      'Emulated seeding pass over forge-develop\'s review-band findings — the recurring shape where a field is parsed, typed and surfaced but no production path reads it.',
+      'review-band-suppression-env-fakes-the-pass') +
+    '# review-band recurring finding — declared data fails open\n\n' +
+    '**Harness stand-in (R4-19).** The real seeding agent (`buildAnalyzePlan`\'s flow+band branch) reads live archived cycles under `brain/cycles/_raw/` and each cycle\'s logged adversarial-review findings; that SDK turn is suppressed under `FORGE_ARCHITECT_NO_SPAWN=1` in this harness, so this theme is a SCRIPTED stand-in, not a real agent output.\n\n' +
+    'It is grounded, not invented: forge\'s own review-band already surfaced this exact recurring pattern for real — a field declared, parsed, and rendered with no production path reading it to decide anything — logged as the wave-4/5 campaign\'s #1 recurring finding.\n\n' +
+    '## Sources\n\n' +
+    '- [`brain/cycles/themes/declared-data-fails-open.md`](../../cycles/themes/declared-data-fails-open.md) — the real, already-committed forge-brain theme this emulation mirrors.\n\n' +
+    '## See also\n\n' +
+    '- [[review-band-suppression-env-fakes-the-pass]]\n');
+  writeFileSync(join(themesDir, 'review-band-suppression-env-fakes-the-pass.md'),
+    fm('review-band recurring finding — the suppression env fakes the pass',
+      'Emulated seeding pass over forge-develop\'s review-band findings — the recurring shape where the environment, not the code, decides whether a check passes.',
+      'review-band-declared-data-fails-open') +
+    '# review-band recurring finding — the suppression env fakes the pass\n\n' +
+    '**Harness stand-in (R4-19).** Same emulation boundary as the sibling theme in this seeding pass — a scripted stand-in for the real, suppressed agent turn, grounded in forge\'s own already-logged recurring review finding rather than invented content.\n\n' +
+    '## Sources\n\n' +
+    '- [`brain/cycles/themes/suppression-env-fakes-the-pass.md`](../../cycles/themes/suppression-env-fakes-the-pass.md) — the real, already-committed forge-brain theme this emulation mirrors.\n\n' +
+    '## See also\n\n' +
+    '- [[review-band-declared-data-fails-open]]\n');
+  writeFileSync(join(themesDir, 'profile.md'), [
+    '---', 'title: profile', 'description: One-page overview of this review-band-scoped brain.',
+    'category: reference', `created_at: ${now}`, `updated_at: ${now}`, '---', '',
+    'Seeded (emulated, R4-19) from forge-develop\'s review-band findings — cross-project adversarial-review patterns, not a single project\'s own history.\n',
+  ].join('\n'));
+}
+
 function cleanScratchKbBand() {
   try { rmSync(SCRATCH_KB_BAND_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   try { rmSync(scratchKbBandSessionAnchorDir(), { recursive: true, force: true }); } catch { /* best-effort */ }
+  if (bandSessionId) {
+    try { rmSync(join(FORGE_ROOT, '_logs', `_project-brain-${bandSessionId}`), { recursive: true, force: true }); } catch { /* best-effort */ }
+  }
 }
 
 // ── scratch project-brain (knowledge-kb-maintain-session) — kb-maintain port ─
@@ -669,7 +782,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-create-kb-band-scope',
         title: 'Author a KB from scratch — flow binding + band scope (/knowledge/new)',
-        narration: 'A second scratch KB, bound to forge-develop but scoped to its real review-band — [data-field="kb-binding-band"] only renders for a flow binding, is populated from that flow\'s own REAL derived bands (never a static list), and the chosen band threads straight into the create request and the written kb.yaml. This is the create-kb-cycle mockup\'s scope+create arc, real end to end. Its session-content steps stay R4-19-deferred: a non-project binding\'s hand-off session is dot-anchored (real, but genuinely unreachable through the session-shell route — proven on disk here, not merely asserted), so the 41-runs / declared-data-fails-open seeding content the mockup shows has no real agent behind it yet.',
+        narration: 'A second scratch KB, bound to forge-develop but scoped to its real review-band — [data-field="kb-binding-band"] only renders for a flow binding, is populated from that flow\'s own REAL derived bands (never a static list), and the chosen band threads straight into the create request and the written kb.yaml. This is the create-kb-cycle mockup\'s scope+create arc, real end to end. Its session-content steps continue in the next two beats (knowledge-create-kb-band-scope-seed / -commit): R4-19 WI-2 made this non-project binding\'s dot-anchored hand-off session genuinely reachable (it used to 404 on the session-shell route), and WI-1 branches the analyze plan to read cycle/review-band evidence instead of a project repo — only the SDK theme-authoring turn itself stays emulated under this harness.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── S3.3: flow binding + band scope (/knowledge/new) — create-kb-cycle ────
@@ -720,7 +833,7 @@ export const journey = defineJourney({
               const created = await waitForFile(join(SCRATCH_KB_BAND_DIR, 'kb.yaml'), 12000);
               check(created, `kb-band: creating writes brain/${SCRATCH_KB_BAND_ID}/kb.yaml`);
               const createResp = await createRespPromise;
-              let bandSessionId = '';
+              bandSessionId = ''; // module-scope — read by knowledge-create-kb-band-scope-seed/-commit
               if (createResp) {
                 try {
                   const json = await createResp.json();
@@ -747,16 +860,179 @@ export const journey = defineJourney({
               check(bandKbReady, 'kb-band: the new band-scoped KB\'s graph page reaches data-page-ready="true"');
               await frame(page, 'kb-band-2-graph', 'Knowledge — the band-scoped scratch KB\'s graph renders', { key: true });
 
-              // R4-19 grounding (Q5): a non-project binding's hand-off session is
-              // dot-anchored — genuinely unreachable through the session-shell route (its
-              // ?project= is SLUG_RE-validated, which a leading "." fails) — proven on disk,
-              // not merely asserted from the ruling text.
+              // R4-19 WI-2: the hand-off session is still dot-anchored on disk (the
+              // anchor SHAPE is unchanged) — but it is no longer unreachable. Proven
+              // on disk here; genuine session-shell reachability is proven next, by
+              // knowledge-create-kb-band-scope-seed (not merely asserted from a
+              // ruling — the WI-2 carve-out changed a real 400 into a real 200).
               if (bandSessionId) {
                 const anchored = existsSync(join(scratchKbBandSessionAnchorDir(), '_project-brain', bandSessionId, 'status.json'));
-                check(anchored, 'kb-band: the hand-off session is dot-anchored on disk (projects/.kb-<id>/_project-brain/<sid>/status.json) — real, but not a discovered project, hence unreachable/excluded (R4-19)');
+                check(anchored, 'kb-band: the hand-off session is dot-anchored on disk (projects/.kb-<id>/_project-brain/<sid>/status.json) — the anchor shape R4-19 WI-2 made reachable, not merely a phantom-project dodge');
               }
 
+              // NOTE: no cleanup here — the scratch KB + its seeding session stay live
+              // across the next two beats (knowledge-create-kb-band-scope-seed / -commit),
+              // which continue this SAME session. knowledge-create-kb-band-scope-commit
+              // (the last beat in the arc) owns the sweep.
+
+        },
+      },
+      {
+        id: 'knowledge-create-kb-band-scope-seed',
+        title: 'Band-scoped KB seeding session — reachable + real briefing (R4-19 WI-1/WI-2)',
+        narration: 'R4-19 WI-2 makes a non-project KB\'s dot-anchored hand-off session genuinely reachable — this exact session used to 404 through the session-shell route; now it loads for real. The operator briefs it and starts analysis for real (a real POST flips phase to analyzing on disk); the theme-authoring pass itself is EMULATED — the real seeding agent is suppressed under this harness (FORGE_ARCHITECT_NO_SPAWN=1) — but the staged themes mirror forge\'s own real, already-logged review-band findings (declared-data-fails-open, suppression-env-fakes-the-pass), narrated honestly as a scripted stand-in and never presented as a real agent run.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame, countAtLeast } = ctx;
+              console.log('\n[R4-19] Band-scoped KB seeding session — reachable + real briefing');
+              if (!bandSessionId) {
+                check(false, 'kb-band-seed: bandSessionId available from knowledge-create-kb-band-scope (precondition)');
+                return;
+              }
+              const anchor = `.kb-${SCRATCH_KB_BAND_ID}`;
+              await page.goto(`${watch.uiUrl}/sessions/project-brain/${encodeURIComponent(bandSessionId)}?project=${encodeURIComponent(anchor)}`, { waitUntil: 'domcontentloaded' });
+              const sessionReady = await page.waitForFunction(
+                () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).then(() => true).catch(() => false);
+              check(sessionReady, `kb-band-seed: R4-19 WI-2 — the dot-anchored seeding session is now genuinely reachable at /sessions/project-brain/<sid>?project=${anchor} (used to 404)`);
+              if (!sessionReady) return;
+              const sessionKind = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-kind') ?? '');
+              check(sessionKind === 'project-brain', `kb-band-seed: data-session-kind="project-brain" (got "${sessionKind}")`);
+              const sessionIdAttr = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-id') ?? '');
+              check(sessionIdAttr === bandSessionId, `kb-band-seed: data-session-id="${bandSessionId}" (got "${sessionIdAttr}")`);
+              await caption(page, 'R4-19 WI-2 — this dot-anchored, non-project seeding session used to 404 here; now it genuinely loads.');
+              await sleep(READ);
+              await frame(page, 'kb-band-seed-0-reachable', 'R4-19 — the band-scoped KB\'s seeding session, genuinely reachable (WI-2)');
+
+              // Real briefing: fill + click start-brain-analysis — a REAL POST flips
+              // phase -> analyzing on disk (prompt.md written for real too; only the
+              // spawn that would follow is suppressed under FORGE_ARCHITECT_NO_SPAWN=1).
+              await page.waitForSelector('[data-section="brain-briefing"]', { timeout: 10000 }).catch(() => {});
+              await page.locator('[data-component="brain-brief-input"]').fill('Focus on the review band\'s most frequent recurring findings.').catch(() => {});
+              await page.locator('[data-action="start-brain-analysis"]').click().catch(() => {});
+              const analyzing = await page.waitForFunction(
+                () => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') === 'analyzing',
+                null, { timeout: 10000 },
+              ).then(() => true).catch(() => false);
+              check(analyzing, 'kb-band-seed: clicking "Start analysis" flips phase to analyzing for real (POST /api/project-brain/brief)');
+              check(await page.locator('[data-section="brain-analyzing"]').count() > 0, 'kb-band-seed: brain-analyzing section renders');
+
+              // EMULATED: the real R4-19 agent never runs under this harness — write the
+              // staged themes directly (grounded in forge's own real review-band
+              // findings), then flip phase -> awaiting-review the same way a real
+              // successful analyze turn would (writeProjectBrainStatus in
+              // orchestrator/project-brain-builder-runner.ts's runAnalyzeStep).
+              await caption(page, 'Emulated — R4-19\'s real agent is suppressed here; scripted stand-in themes grounded in forge\'s own real review-band findings.');
+              seedBandStagedThemes(bandSessionId);
+              writeBandPbStatus(bandSessionId, { phase: 'awaiting-review' });
+              const reviewReady = await page.waitForSelector('[data-section="brain-review"]', { timeout: 12000 }).then(() => true).catch(() => false);
+              check(reviewReady, 'kb-band-seed: awaiting-review renders after the emulated seeding pass (client poll picked up the disk write)');
+              await countAtLeast(page, '[data-theme-name]', 2, 'kb-band-seed: >=2 staged themes rendered for review');
+              await frame(page, 'kb-band-seed-1-review', 'R4-19 — staged themes (emulated authoring, grounded in real review-band findings) awaiting review', { key: true });
+
+        },
+      },
+      {
+        id: 'knowledge-create-kb-band-scope-commit',
+        title: 'Band-scoped KB — real commit + brain write (R4-19 WI-1/WI-2)',
+        narration: 'Approving is real (a real POST flips phase to committing); the commit itself is the deterministic runCommitStep (R1-06, generalized to any kb_binding) — invoked directly here since the harness suppresses the detached spawn that would normally trigger it — so a genuine brain write lands: themes physically committed into brain/<kbId>, the KB\'s own graph gets a real index hub with real links off them, and forge brain lint stays clean with the new KB present. The accept affordance (bind-and-return) is offered, byte-identical to the project-scoped panel.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              console.log('\n[R4-19] Band-scoped KB — real commit + brain write');
+              if (!bandSessionId) {
+                check(false, 'kb-band-commit: bandSessionId available (precondition)');
+                return;
+              }
+              const anchor = `.kb-${SCRATCH_KB_BAND_ID}`;
+              await page.goto(`${watch.uiUrl}/sessions/project-brain/${encodeURIComponent(bandSessionId)}?project=${encodeURIComponent(anchor)}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              check(await page.locator('[data-section="brain-review"]').count() > 0, 'kb-band-commit: the staged themes from the seed beat persisted on disk (cross-beat, same session)');
+
+              // Real approve — POST /api/project-brain/approve flips phase -> committing
+              // for real (only the spawn that would follow is suppressed).
+              await page.locator('[data-action="approve-brain"]').click().catch(() => {});
+              const committing = await page.waitForFunction(
+                () => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') === 'committing',
+                null, { timeout: 10000 },
+              ).then(() => true).catch(() => false);
+              check(committing, 'kb-band-commit: clicking "Approve + commit" flips phase to committing for real (POST /api/project-brain/approve)');
+
+              // REAL, deterministic commit. The detached spawn that would normally run
+              // this is suppressed (FORGE_ARCHITECT_NO_SPAWN=1); runCommitStep itself
+              // makes no SDK call, so calling runProjectBrainTurn in-process here
+              // exercises the SAME deterministic code path a live daemon would run —
+              // a genuine brain write, never flip-only.
+              brainIndexStash = readFileSync(join(FORGE_ROOT, 'brain', 'INDEX.md'), 'utf8');
+              let commitOk = false;
+              try {
+                const result = await runProjectBrainTurn({
+                  sessionId: bandSessionId,
+                  projectRoot: scratchKbBandSessionAnchorDir(),
+                  forgeRoot: FORGE_ROOT,
+                });
+                commitOk = result.phase === 'committed' && (result.themes?.length ?? 0) > 0;
+              } catch (err) {
+                console.error(`[kb-band-commit] runProjectBrainTurn threw: ${err?.message ?? err}`);
+              }
+              check(commitOk, 'kb-band-commit: runCommitStep (R1-06, deterministic, generalized to any kb_binding) committed the staged themes for real');
+
+              const committed = await page.waitForSelector('[data-section="brain-committed"]', { timeout: 12000 }).then(() => true).catch(() => false);
+              check(committed, 'kb-band-commit: brain-committed section renders after the real commit (client poll picked up the disk write)');
+              check(await page.locator('[data-action="bind-and-return"]').count() > 0, 'kb-band-commit: bind-and-return offered — same accept affordance as the project-scoped panel (SessionProjectBrainPanel is shared, byte-identical)');
+              await frame(page, 'kb-band-commit-0-committed', 'R4-19 — the band-scoped KB, real commit landed; bind-and-return offered');
+
+              // Real brain write, on disk.
+              const themesDir = join(SCRATCH_KB_BAND_DIR, 'themes');
+              let writtenThemes = [];
+              try { writtenThemes = readdirSync(themesDir).filter((f) => f.endsWith('.md')); } catch { /* checked below */ }
+              check(writtenThemes.length >= 2, `kb-band-commit: brain/${SCRATCH_KB_BAND_ID}/themes/ carries the real committed theme files (got ${writtenThemes.length})`);
+              let themeContent = '';
+              try { themeContent = readFileSync(join(themesDir, writtenThemes.find((f) => f !== 'profile.md') ?? ''), 'utf8'); } catch { /* checked below */ }
+              check(themeContent.includes('review-band'), 'kb-band-commit: the committed theme content is grounded in real review-band evidence, not empty/placeholder');
+
+              // The KB's own graph — a real index hub + real links, off the
+              // just-committed themes (orchestrator/kb-graph.ts buildKbGraph runs for
+              // ANY kbId on disk, regardless of binding kind).
+              await page.goto(`${watch.uiUrl}/knowledge?id=${SCRATCH_KB_BAND_ID}`, { waitUntil: 'domcontentloaded' });
+              const graphReady = await page.waitForFunction(
+                () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).then(() => true).catch(() => false);
+              check(graphReady, 'kb-band-commit: the committed KB\'s graph page reaches data-page-ready="true"');
+              if (graphReady) {
+                const nodeCount = await page.evaluate(() => parseInt(document.querySelector('#kb-svg')?.getAttribute('data-node-count') ?? '0', 10));
+                check(nodeCount >= 3, `kb-band-commit: the graph carries a real INDEX hub + the committed theme nodes (got ${nodeCount} nodes)`);
+                const edgeCount = await page.evaluate(() => parseInt(document.querySelector('#kb-svg')?.getAttribute('data-edge-count') ?? '0', 10));
+                check(edgeCount >= 2, `kb-band-commit: real links from the INDEX hub to the committed themes (got ${edgeCount} edges)`);
+                const indexNodes = await page.locator('[data-layer="index"]').count();
+                check(indexNodes >= 1, `kb-band-commit: at least one real [data-layer="index"] hub node (got ${indexNodes})`);
+              }
+              await frame(page, 'kb-band-commit-1-graph', 'R4-19 — the committed band-scoped KB\'s real graph: index hub + linked themes', { key: true });
+
+              // forge brain lint stays clean with the new KB present. Scoping honesty:
+              // brain-lint's 9 checks are scoped to brain/cycles, brain/forge-dev, and
+              // brain/projects/* (cli/brain-lint.ts THEME_SUBDIRS / checkProjectBrainIndexes)
+              // — a flow-bound top-level KB like this one is not itself swept by them —
+              // so this proves the real write doesn't disrupt brain integrity in the
+              // SAME run its checks actually cover, not that lint validated this KB's
+              // own content.
+              const lintResult = runBrainLint({ cwd: FORGE_ROOT, scope: 'full' });
+              check(lintResult.exitCode === 0, `kb-band-commit: forge brain lint stays clean (9/9) with the new KB present (exitCode=${lintResult.exitCode}) — its checks are scoped to cycles/forge-dev/projects, so this proves no disruption, not that lint swept this KB's own content`);
+
+              // Cleanup — the ENTIRE 3-beat arc's scratch state, swept here (the last
+              // beat in the arc): the scratch KB + its dot-anchored session dir + its
+              // log dir, and the brain/INDEX.md byte-stash restored so the real
+              // regenerateBrainIndex call above (inside runCommitStep) never leaves the
+              // canonical repo file dirty (state-ownership rule).
               cleanScratchKbBand();
+              if (brainIndexStash !== null) {
+                try { writeFileSync(join(FORGE_ROOT, 'brain', 'INDEX.md'), brainIndexStash); } catch { /* best-effort */ }
+                brainIndexStash = null;
+              }
+              bandSessionId = null;
 
         },
       },
