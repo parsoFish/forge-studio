@@ -887,24 +887,6 @@ function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
     : { status: 'error', error: result.detail ?? result.status };
 }
 
-/**
- * Combine server truth (`planned` — has `workItems`) with the transient
- * client action state into the one rendered `data-plan-state`. Server truth
- * always wins once it lands: a refetch that surfaces `workItems` flips the
- * card to `planned` even if the client never itself observed the enqueue.
- */
-function planStateAttr(unplanned: boolean, plan: PlanCardState): 'planned' | 'planning' | 'error' | 'unplanned' {
-  // Only a WI-less *pending* card is "unplanned" (the sole state that renders
-  // the Plan trigger + lock). Any non-pending card — even one whose WI
-  // snapshot can't be found right now — went through decomposition, so it is
-  // reported "planned", never mislabelled "unplanned" (DOM-as-metrics must
-  // mirror the actual UI state per the CLAUDE.md convention).
-  if (!unplanned) return 'planned';
-  if (plan.status === 'error') return 'error';
-  if (plan.status === 'planning' || plan.status === 'started') return 'planning';
-  return 'unplanned';
-}
-
 function RoadmapView({
   projectId,
   roadmap,
