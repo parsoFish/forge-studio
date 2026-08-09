@@ -40,8 +40,12 @@
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, agents-scratch-build/agents-builder each clean up their own
  * skill-dir/stashed-SKILL.md, agents-materials-declare cleans its own
- * throwaway scratch agent, flows-author-scratch-build cleans its own
- * authored flow, roadmap-recovery cleans its own seeded failed/in-flight
+ * throwaway scratch agent, flows-author-scratch-build's SCRATCH_FLOW is swept
+ * only by the top-level pre-run sweep / finally block in scripts/e2e-
+ * journey.mjs (never at the end of the beat's own drive) — flows-author-
+ * shelf-return, its next-run sibling beat, deliberately relies on that gap to
+ * read the just-authored flow's card back on the library home page,
+ * roadmap-recovery cleans its own seeded failed/in-flight
  * initiatives (R4-11-T3 — moved off the retired standalone /recovery
  * journey), demo-showcase's own two mdtoc-scoped clip-only cycles
  * (SHOWCASE_INIT_1/2, journey-fixtures.mjs) are seeded in demo-showcase-entry
@@ -246,10 +250,12 @@ export const RUN_ORDER = [
   ['agents', 'agents-kickoff-dispatch'],
   ['agents', 'agents-kickoff-run-view'],
   ['agents', 'agents-kickoff-standing-triggers'],
+  ['agents', 'agents-run-reflector-detail'],
 
   ['flows-author', 'flows-author-new-flow'],
   ['flows-author', 'flows-author-scratch-build'],
   ['flows-author', 'flows-author-seeded-run'],
+  ['flows-author', 'flows-author-shelf-return'],
 
   ['flows-run', 'flows-run-idea'],
   ['flows-run', 'flows-run-grounding'],

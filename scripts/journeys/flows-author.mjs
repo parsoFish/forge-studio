@@ -311,7 +311,7 @@ export const journey = defineJourney({
       {
         id: 'flows-author-scratch-build',
         title: 'Build the forge-develop flow from scratch (flow-as-data)',
-        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag four agents onto a blank canvas by HTML5 drag-and-drop, wire three edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → Reflect, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
+        narration: 'The operator genuinely rebuilds forge-develop in the live builder. First, the BUILD tab\'s capability gate (R2-02-F3): an interactive agent\'s palette chip is greyed out and non-placeable, and even a raw drop naming it is rejected — both driven by the F1 capability descriptor, proven here against a one-shot fixture since no shipped library agent is presently declared interactive. Then: clear the seeded starter, drag four agents onto a blank canvas by HTML5 drag-and-drop, wire three edges by real ReactFlow handle-drag (labelling each via the ArtifactPicker), gate the terminal node, ENABLE fan-out on developer-ralph with a real click (verified both in the DOM and, after save, round-tripped through the persisted YAML — not just the capability-state read the fanout-gate check already covers), bind a KB, author a "merged" trigger via the kind selector (R2-04-F4 — on merged → Reflect, closing the trigger picker\'s formerly-unauthorable "merged" gap) and client-side-validate a cron pattern, name it, and save. `studio lint` validates the result and a topological compare (agent-ref multiset + edge artifact labels + gate placement — not literal node ids, which the canvas always auto-generates) proves it matches the production seed\'s shape. Two honest UI limits remain: the seed\'s bare, agent-less gate node cannot be reproduced exactly (every UI-saved node carries a concrete agent), and kickoff/cost-ceiling have no UI surface at all.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ── A2: BUILD THE FORGE DEVELOP FLOW FROM SCRATCH, LIVE IN THE UI ─────────
@@ -497,6 +497,21 @@ export const journey = defineJourney({
                 `author-from-scratch: R2-03-F3 — demo-agent (not fanout-capable) has a DISABLED fanout toggle (data-fanout-capable="${demoGate.cap}", disabled=${demoGate.disabled})`);
               await frame(page, 'a2-3b-fanout-gate', 'A2 — the fanout toggle is enabled only on fanout-capable agents (R2-03-F3): developer-ralph on, demo-agent off');
 
+              // create-flow mockup step 5 ("Enable fan-out: parallel worktrees,
+              // one per work item") — an actual ENABLE click, not just the
+              // capability read above. Reopen developer-ralph's mini-panel and
+              // check the toggle; its persisted round-trip through save is
+              // verified below, alongside the topological parity compare.
+              await page.locator(`[data-testid="rf__node-${devId}"]`).click({ force: true }).catch(() => {});
+              await page.waitForSelector(`[data-component="node-mini-panel"][data-panel-node-id="${devId}"]`, { timeout: 6000 }).catch(() => {});
+              const fanoutToggle = page.locator('[data-modifier="fanout"] input[data-action="toggle-fanout"]');
+              await fanoutToggle.check().catch(() => {});
+              await sleep(THINK);
+              const fanoutEnabled = await fanoutToggle.isChecked().catch(() => false);
+              check(fanoutEnabled, 'author-from-scratch: clicking the fanout toggle actually ENABLES it on developer-ralph (a real state change, not just the capability read above)');
+              await page.keyboard.press('Escape').catch(() => {});
+              await frame(page, 'a2-3b2-fanout-enabled', 'A2 — fan-out enabled on developer-ralph: a real click, verified on the DOM and, below, through the saved YAML');
+
               // KB bind — Advanced → kb-select (this one WORKS; not a UI limit).
               await page.locator('summary[data-action="toggle-flow-advanced"]').click().catch(() => {});
               await page.waitForFunction(
@@ -585,6 +600,13 @@ export const journey = defineJourney({
                 for (const { ok, label } of compareFlowTopology(seedDoc, scratchDoc)) {
                   check(ok, `author-from-scratch: ${label}`);
                 }
+                // create-flow mockup step 5's enable-click, round-tripped: the
+                // saved YAML carries developer-ralph's declared driving
+                // artifact (fanout.drivingArtifact: work-items, skills/
+                // developer-ralph/SKILL.md), not a hardcoded value.
+                const devNodeSaved = scratchDoc?.nodes?.find((n) => n.id === devId);
+                check(devNodeSaved?.fanOut === 'work-items',
+                  `author-from-scratch: the enabled fan-out toggle persists on save (fanOut="${devNodeSaved?.fanOut}")`);
               } else {
                 check(false, 'author-from-scratch: topological parity vs the seed (skipped — save did not land)');
               }
@@ -771,6 +793,37 @@ export const journey = defineJourney({
               // Clean the seeded run now so it does not bleed into the mdtoc RUN act.
               cleanFirstFlowRun();
 
+        },
+      },
+      {
+        id: 'flows-author-shelf-return',
+        title: 'The from-scratch flow joins the shelf beside forge-develop',
+        narration: 'Back on the library home page, the flow just rebuilt from scratch (A2, above) renders as an ordinary flow card in the SAME "flows" section as the OOTB forge-develop flow — same card type, same builder/monitor route reached the same way — proving a user-authored flow is a first-class shelf citizen, not a demo-only shell.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              // create-flow mockup step 11 ("It joins the shelf beside forge-
+              // develop — same builder, same monitor") — SCRATCH_FLOW (saved by
+              // flows-author-scratch-build, above) is still on disk: cleanScratchFlow()
+              // only runs in the top-level pre-run sweep and finally block
+              // (scripts/e2e-journey.mjs), never at the end of that beat's own
+              // drive — see index.mjs's RUN_ORDER header comment.
+              console.log('\n[A2] The from-scratch flow joins the shelf (return to library)');
+              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const authoredCard = page.locator(`[data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"]`);
+              await authoredCard.waitFor({ timeout: 8000 }).catch(() => {});
+              const authoredCount = await authoredCard.count();
+              check(authoredCount === 1,
+                `flows-author-shelf-return: the from-scratch flow ("${SCRATCH_FLOW}") renders as a real card in the library's flows section ([data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"])`);
+              const seedCount = await page.locator('[data-card-type="flow"][data-card-id="forge-develop"]').count();
+              check(seedCount === 1, 'flows-author-shelf-return: the OOTB forge-develop flow renders in the SAME flows section, beside the authored one');
+              const href = await authoredCard.getAttribute('href').catch(() => null);
+              check(href === `/flows/${SCRATCH_FLOW}`,
+                `flows-author-shelf-return: the card links to the SAME builder/monitor route every flow uses (href="${href}")`);
+              await frame(page, 'flows-shelf-return', 'flows-author — the from-scratch flow on the shelf, beside forge-develop, in the SAME library flows section');
         },
       },
     ],

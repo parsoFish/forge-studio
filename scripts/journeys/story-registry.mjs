@@ -210,6 +210,43 @@ const DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN =
   'agent, done) ... trigger machinery (R2-08)" — R4-14 ports the SHOWCASE ' +
   'surface only, not the demo-runner agent-builder/agent-run surface';
 
+// Batch-D journey-sync (T3) — cited by create-flow's excluded step 1 below.
+// R2-04-F4's own text draws the real library shape: flows are a SECTION of
+// the single library home page (`/`), never a standalone route — the
+// create-flow mockup's own step 1 ("goto '#/flows'") depicts a route that
+// was never built. The real entry point (that section's own "+ New Flow"
+// CTA, [data-action="new-flow"]) is what the story's ported beat actually
+// drives.
+const DECISION_FLOWS_LIBRARY_SECTION =
+  'docs/roadmaps/R2-runnable-componentry.md R2-04-F4 "Trigger authoring ' +
+  'surface" ("Flow builder exposes trigger declaration ... the library `/` ' +
+  'flows section surfaces each flow\'s triggers") — flows are a section of ' +
+  'the single library home page, not a standalone route';
+
+// Batch-D journey-sync (T3) — cited by run-agent-reflector's excluded steps
+// below. R4-B13's own reflector line draws the real boundary: the agent is
+// "as-built (R4-09)" for its outside-the-cycle brain-write behavior, but no
+// journey in this harness ever executes a real reflector SDK turn
+// (FORGE_ARCHITECT_NO_SPAWN=1 suppresses every real agent spawn) — a live
+// run's own narrative content (which cycle it read, how many lessons it
+// distilled, whether they were "evidence-backed") is therefore genuinely
+// unavailable to any beat, honestly excluded rather than fabricated. What IS
+// real and ported: reflector's own DECLARED composition
+// (skills/reflector/SKILL.md — `brainAccess: mandatory`,
+// `composition.skills: [brain-query, brain-ingest]`) rendered on its real
+// /agents/reflector page, plus a genuine `forge brain lint` run (the real
+// 9-check suite CLAUDE.md documents) proving brain/ is actually lint-clean
+// right now.
+const DECISION_REFLECTOR_NO_LIVE_RUN =
+  'docs/roadmaps/R4-ootb-suite.md R4-B13 "reflector (run-agent-reflector) — ' +
+  'outside-the-cycle reflection into the brains, merged-trigger: as-built ' +
+  '(R4-09)" + skills/reflector/SKILL.md (`brainAccess: mandatory`, ' +
+  '`composition.skills: [brain-query, brain-ingest]`) — no journey in this ' +
+  'harness spawns a real reflector SDK turn (FORGE_ARCHITECT_NO_SPAWN=1), so ' +
+  'a specific run\'s own narrative (which cycle it read, lesson count, ' +
+  '"evidence-backed" judgment) is honestly unavailable; the agent\'s real ' +
+  'declared composition + a genuine `forge brain lint` run are ported instead';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -396,7 +433,22 @@ export const STORY_REGISTRY = [
   {
     story: 'create-flow',
     batch: 'C',
-    port: null,
+    port: {
+      journey: 'flows-author',
+      beats: [
+        { excluded: 'goto \'#/flows\' — no dedicated /flows route exists; flows are a section of the single library `/` home page, never a standalone route', decision: DECISION_FLOWS_LIBRARY_SECTION },
+        'flows-author-scratch-build',
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 (flows-author-scratch-build) — its own drive fills the real [data-field="flow-name"] input (a real, non-literal name, "Forge Develop Scratch", not the mockup\'s "deps-refresh")', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it drops developer-ralph onto the canvas via real HTML5 drag-and-drop; the mockup\'s "click — or drag" framing is only half real — AgentPalette\'s DraggableChip (forge-ui/components/studio/flow-builder/AgentPalette.tsx) has no onClick handler at all, drag is the ONLY real placement path', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it ENABLES fan-out on developer-ralph with a real click (not just a capability-state read), verified both in the DOM and, after save, round-tripped through the persisted YAML', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it drops demo-agent onto the canvas via the same real HTML5 drag-and-drop path', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it wires the developer→demo-agent edge by real ReactFlow handle-drag and labels it via the real ArtifactPicker; the mockup\'s literal "demo HTML summary" label has no backing real template (forge-ui/lib/flow-artifact-catalog.ts\'s own header comment: a `demo` artifact id existed and was deleted, R2-05-F1, "no on-disk template") — the real, closest hand-off genuinely picked is "wi-branches"', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it toggles the real human-verdict gate on the terminal node; there is no separate "verdict" node kind to drop from the palette (a gate is a MODIFIER on an agent node, not its own agent kind) — an honest, already-narrated UI limit', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — its own frame captures show the SAME composite state the mockup depicts as one hover: hex agents, fan-out, hand-off artifacts, and a gate all on the SAME lane', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it saves via the real [data-action="save-flow"] click (a real, non-literal name, not the mockup\'s "deps-refresh")', decision: DECISION_ONE_REF_PER_STORY },
+        'flows-author-shelf-return',
+      ],
+    },
     excluded: null,
     note:
       "Only mockup story absent from every batch's functional-closure " +
@@ -405,10 +457,43 @@ export const STORY_REGISTRY = [
       'is a pure journey-sync duty with no product work; assigned to C ' +
       'as the only batch owning flows-pillar modules. MEASURED at ' +
       'batch-C exit (2026-08-08): NOT ported — 0 of 11 beats, and the ' +
-      'only zero whose producer is already complete on main. It was ' +
-      'never a pack exit criterion, so it is recorded as batch C\u2019s ' +
-      'unpaid journey-sync debt rather than reassigned; flows-author ' +
-      'has 3 beats against 11 mockup steps. Filed as bd forge-9ir.',
+      'only zero whose producer is already complete on main. Batch-D ' +
+      'journey-sync (T3, forge-9ir) pays off that debt: step 1 (goto ' +
+      "'#/flows') is excluded (DECISION_FLOWS_LIBRARY_SECTION — no " +
+      "dedicated route, flows live in the library `/` page's own " +
+      '"flows" section); step 2 (an "empty canvas") is flows-author-' +
+      "scratch-build — the closer real match of the journey's two " +
+      'entry beats, since it genuinely clears the canvas to data-node-' +
+      "count=\"0\" (new-flow's own starter-seeded arrival keeps 3 pre-" +
+      "wired nodes, further from the mockup's literal claim). Steps " +
+      '3-10 (name, drop-the-Developer, enable-fanout, drop-Demo-Runner, ' +
+      'wire-the-hand-off, gate, the composite hover, and save) are ALL ' +
+      "genuinely driven by that SAME single beat's own drive — the " +
+      "registry's one-real-ref-per-story rule forbids citing the same " +
+      'beat id twice, so each is an excluded BeatRef pointing back at ' +
+      "step 2's citation, naming the specific real action. Two " +
+      'genuinely NEW UI actions were added this pass, not just re-' +
+      "narrated: an actual ENABLE click on developer-ralph's fan-out " +
+      'toggle, round-tripped through the persisted YAML (previously the ' +
+      'beat only read the capability STATE, never clicked it); and ' +
+      'step 11 ("it joins the shelf") is the new flows-author-shelf-' +
+      'return beat — a real return to the library home page asserting ' +
+      'the just-authored flow renders as an ordinary [data-card-' +
+      'type="flow"] card in the SAME flows section as forge-develop, ' +
+      'linking to the same real /flows/<slug> route. Two honest content ' +
+      "gaps, both narrated rather than faked: the mockup's specific " +
+      'artifact label "demo HTML summary" has no backing real template ' +
+      "(flow-artifact-catalog.ts's own header comment records a " +
+      '`demo` id existed and was deleted, R2-05-F1, for having none) — ' +
+      'the real pick exercised is "wi-branches" instead; and there is ' +
+      'no separate "verdict" node kind to drop from the palette (gate ' +
+      'is a modifier on the terminal agent node, not its own kind) — ' +
+      'both pre-existing, already-documented UI limits, not new debt. ' +
+      'Net: 2 of 11 mockup steps carry the literal string BeatRef ' +
+      '(flows-author-scratch-build, flows-author-shelf-return); the ' +
+      'other 9 are explicit ONE_REF_PER_STORY exclusions pointing at ' +
+      'real, executed actions within those same two beats — never ' +
+      'silently skipped. Filed as bd forge-9ir.',
   },
   {
     story: 'edit-flow',
@@ -908,15 +993,53 @@ export const STORY_REGISTRY = [
   {
     story: 'run-agent-reflector',
     batch: 'C',
-    port: null,
+    port: {
+      journey: 'agents',
+      beats: [
+        'agents-kickoff-standing-triggers',
+        { excluded: '"the reflector reads the whole run" is live-run behavior a specific executed turn performs — no static UI surface represents it, and no journey here spawns a real reflector SDK turn to read it back from', decision: DECISION_REFLECTOR_NO_LIVE_RUN },
+        'agents-run-reflector-detail',
+        { excluded: '"two durable lessons — evidence-backed" is a specific run\'s OWN output content (a count + a qualitative judgment) — genuinely unavailable without a real reflector SDK turn, honestly excluded rather than fabricated', decision: DECISION_REFLECTOR_NO_LIVE_RUN },
+        { excluded: 'already demonstrated by the SAME beat cited at step 3 (agents-run-reflector-detail) — that beat asserts the real brain-ingest skill chip (the declared capability to write themes) AND runs the real `forge brain lint` (the genuine 9-check suite), proving "themes linked, index updated, lint 9/9" with an actual tool run, not narrated content', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'closing narrative line summarising the auto-triggered, self-improving loop — not a distinct UI action beyond the real standing trigger already cited at step 1', decision: DECISION_REFLECTOR_NO_LIVE_RUN },
+      ],
+    },
     excluded: null,
     note:
       'Agent itself verified aligned by R4-B13 (outside-the-cycle ' +
       'reflection into the brains on the merged trigger; the brain-tune ' +
       "flow packaging delta is R4-20). MEASURED at batch-C exit (2026-08-08): " +
-      'batch C did NOT port this story — 0 of 6 beats. Cheapest of the four ' +
-      'agent ports; covers the on-complete-chain framing (merged half). ' +
-      'Filed as a batch-D WI (bd forge-1ge).',
+      'batch C did NOT port this story — 0 of 6 beats. Batch-D journey-sync ' +
+      '(T3, forge-1ge) pays off that debt: step 1 ("auto-triggered when a ' +
+      'forge-develop run completes") is the pre-existing agents-kickoff-' +
+      'standing-triggers (R6-01 WI-4) — the mockup\'s own route ' +
+      '(`#/agents/run/reflector`) does not exist (a standalone run view ' +
+      'needs a concrete run id, `/agents/<id>/run/<runId>`), so the real ' +
+      'substitute is the SAME /agents/reflector page, which already reads ' +
+      'the real `{on: merged, target: {kind: agent, ref: reflector}}` ' +
+      'standing trigger. Step 3 ("queries all three brain scopes before ' +
+      'writing anything") is the new agents-run-reflector-detail beat — no ' +
+      'UI surface renders a live per-scope query trace (that is runtime SDK ' +
+      'behavior), so the real, honest substitute is the SAME page\'s ' +
+      'DECLARED composition: the Knowledge Access card reads "Mandatory" ' +
+      '(skills/reflector/SKILL.md `brainAccess: mandatory`) and the Skills ' +
+      'zone carries the real brain-query/brain-ingest chips. Step 5 ' +
+      '("themes linked, index updated, lint 9/9") is ONE_REF_PER_STORY back ' +
+      'onto that SAME beat, which also runs a genuine `forge brain lint` — ' +
+      'brain/ actually passes its real 9-check suite right now, proven live ' +
+      'rather than claimed. Steps 2, 4, and 6 (reading the merged run, the ' +
+      'specific "two durable lessons" judgment, and the closing narrative) ' +
+      'are excluded under DECISION_REFLECTOR_NO_LIVE_RUN: a real, ' +
+      'individual reflector SDK turn\'s own narrative content is not ' +
+      'something any UI surface renders, and this harness spawns no real ' +
+      'agent turns (FORGE_ARCHITECT_NO_SPAWN=1) — honestly excluded rather ' +
+      'than emulated as if real. Net: 2 of 6 mockup steps carry the ' +
+      'literal string BeatRef (agents-kickoff-standing-triggers, the ' +
+      'pre-existing R6-01 WI-4 beat; agents-run-reflector-detail, new this ' +
+      'pass); the other 4 are explicit, decision-cited exclusions. Cheapest ' +
+      'of the four agent ports; covers the on-complete-chain framing ' +
+      '(merged half) plus the agent\'s real declared brain-access ' +
+      'composition. Filed as a batch-D WI (bd forge-1ge).',
   },
   {
     story: 'run-agent-demo-design',

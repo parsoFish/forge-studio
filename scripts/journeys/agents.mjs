@@ -1636,5 +1636,52 @@ export const journey = defineJourney({
               await frame(page, 'ak-8-standing-triggers', 'Kickoff — reflector\'s page lists the standing trigger that already targets it (forge-develop, on: merged)');
         },
       },
+      {
+        id: 'agents-run-reflector-detail',
+        title: 'The reflector\'s real composition: mandatory brain access + a genuine lint run',
+        narration: 'run-agent-reflector\'s mockup route (`#/agents/run/reflector`) does not exist — a standalone agent-run view needs a concrete run id (`/agents/<id>/run/<runId>`), and no journey here spawns a real reflector SDK turn (FORGE_ARCHITECT_NO_SPAWN=1 suppresses every real agent spawn), so the SAME real /agents/reflector page (agents-kickoff-standing-triggers, above) is the honest substitute. What IS real and genuinely driven here: the agent\'s DECLARED composition — Knowledge Access reads "Mandatory" (skills/reflector/SKILL.md\'s `brainAccess: mandatory`) and its Skills zone carries the real brain-query/brain-ingest chips (composition.skills) — plus an actual `forge brain lint` run proving brain/ passes its real 9-check suite right now, not a fabricated "lint 9/9" claim.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              console.log('\n[R4-B13] The reflector\'s real composition + a genuine brain-lint run');
+              await page.goto(watch.uiUrl + '/agents/reflector', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              const agentId = await page.evaluate(() =>
+                document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') ?? '');
+              check(agentId === 'reflector', `agents-run-reflector-detail: landed on the real reflector agent page (data-agent-id="${agentId}")`);
+
+              // "It queries all three brain scopes before writing anything" —
+              // the UI has no per-scope query trace (that is runtime SDK
+              // behavior, not a static composition fact); the real, honest
+              // substitute is the agent's own DECLARED Knowledge Access card
+              // (brainAccess: mandatory) plus its brain-query/brain-ingest
+              // skill chips — genuinely rendered, not narrated-only.
+              const mandatoryCard = page.locator('.brain-option[data-access="mandatory"]');
+              await mandatoryCard.waitFor({ timeout: 8000 }).catch(() => {});
+              const mandatorySelected = await mandatoryCard.evaluate((el) => el.classList.contains('selected')).catch(() => false);
+              check(mandatorySelected, 'agents-run-reflector-detail: reflector\'s real Knowledge Access card reads "Mandatory" (skills/reflector/SKILL.md brainAccess: mandatory)');
+              const brainQueryChip = page.locator('[data-accepts="skill"] [data-id="brain-query"]');
+              const brainIngestChip = page.locator('[data-accepts="skill"] [data-id="brain-ingest"]');
+              check((await brainQueryChip.count()) === 1, 'agents-run-reflector-detail: reflector\'s real Skills zone carries the brain-query chip (queries the brain before writing)');
+              check((await brainIngestChip.count()) === 1, 'agents-run-reflector-detail: reflector\'s real Skills zone carries the brain-ingest chip (writes durable findings into the brain)');
+              await frame(page, 'ak-9-reflector-composition', 'The reflector\'s real, declared composition — mandatory brain access, brain-query + brain-ingest — not a live execution trace');
+
+              // "Themes linked, index updated, lint 9/9" — the real `forge
+              // brain lint` 9-check suite (CLAUDE.md), run for real: brain/ is
+              // genuinely lint-clean right now, not a fabricated claim.
+              let brainLintOk = false;
+              try {
+                execFileSync(process.execPath,
+                  ['--experimental-strip-types', 'orchestrator/cli.ts', 'brain', 'lint'],
+                  { cwd: FORGE_ROOT, stdio: 'pipe' });
+                brainLintOk = true;
+              } catch (e) {
+                console.error(`  [brain lint] non-zero: ${(e.stdout?.toString() ?? '') + (e.stderr?.toString() ?? '')}`.slice(0, 600));
+              }
+              check(brainLintOk, 'agents-run-reflector-detail: `forge brain lint` genuinely passes its real 9-check suite (exit 0) — the reflector\'s own closing claim, proven live rather than narrated');
+        },
+      },
     ],
   });
