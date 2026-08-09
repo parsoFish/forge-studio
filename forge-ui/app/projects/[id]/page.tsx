@@ -5,10 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight, startOnboardingSession, getAgentRunStatus,
-  fetchProjectStarters, createGreenfieldProject,
+  fetchProjectStarters, createGreenfieldProject, fetchStudioAgentsWithMeta,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause, type AgentRunStatus,
 } from '@/lib/studio-client';
+import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
   fetchCycles,
@@ -905,6 +906,28 @@ function RoadmapView({
   const [planByInitiative, setPlanByInitiative] = useState<Record<string, PlanCardState>>({});
   const [batchStarting, setBatchStarting] = useState(false);
 
+  // forge-shc WI-1: the operator per-run cost-ceiling lever for a
+  // single-initiative "Start development". `defaultCeilingUsd` arrives
+  // ASYNCHRONOUSLY (fetched below) — `manualCeilingUsd` stays `undefined`
+  // until the operator types something, so the resolved field value tracks
+  // the fetched default until then (same race the agent-run kickoff field
+  // already fixed — see `resolveCeilingFieldValue`'s doc comment). T1
+  // ruling: this lever is single-id ONLY — the batch "Start eligible"
+  // button never sends it (a scalar ceiling can't map onto N manifests).
+  const [defaultCeilingUsd, setDefaultCeilingUsd] = useState(0);
+  const [manualCeilingUsd, setManualCeilingUsd] = useState<number | undefined>(undefined);
+  const ceilingFieldValue = resolveCeilingFieldValue(defaultCeilingUsd, manualCeilingUsd);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStudioAgentsWithMeta()
+      .then(({ defaultCostCeilingUsd }) => {
+        if (!cancelled) setDefaultCeilingUsd(defaultCostCeilingUsd);
+      })
+      .catch(() => { /* best-effort — the field just stays at its 0 fallback */ });
+    return () => { cancelled = true; };
+  }, []);
+
   const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
 
   // plan-everything-before-kickoff: the whole roadmap can be decomposed up
@@ -926,12 +949,17 @@ function RoadmapView({
 
   const startOne = useCallback(async (initiativeId: string): Promise<void> => {
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'starting', error: null } }));
-    const r = await startDevelopment([initiativeId]);
+    // A single-id start may carry the operator's ceiling override; an empty/
+    // non-finite/non-positive field degrades to "no override" — the SAME
+    // "nothing sent rather than a round-tripped 400" convention the agent-run
+    // kickoff field uses, never a fabricated fallback value.
+    const ceilingToSend = Number.isFinite(ceilingFieldValue) && ceilingFieldValue > 0 ? ceilingFieldValue : undefined;
+    const r = await startDevelopment([initiativeId], ceilingToSend);
     const item = r.results?.find((x) => x.initiativeId === initiativeId);
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
     // Refetch so status/ready/blockedBy reflect the queue's new reality.
     await onRefresh();
-  }, [onRefresh]);
+  }, [onRefresh, ceilingFieldValue]);
 
   // R4-11-F2: the per-card "Plan" trigger — dispatches the standalone
   // forge-architect (decompose) flow for a WI-less initiative. Refetches
@@ -1019,6 +1047,32 @@ function RoadmapView({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ProjectArchitectEntry projectId={projectId} />
+            {/* forge-shc WI-1: per-initiative cost-ceiling override — applies
+                ONLY to a single card's "Start development" click (startOne).
+                "Start eligible" is a batch trigger and deliberately never
+                reads this field (T1 ruling: a scalar ceiling can't map onto
+                N manifests unambiguously). */}
+            <label
+              title="Cost ceiling (USD) for the next single-initiative 'Start development' click. Does not apply to 'Start eligible' (batch)."
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--faint)' }}
+            >
+              ceiling ($)
+              <input
+                type="number"
+                data-field="develop-cost-ceiling-usd"
+                min={0}
+                step="0.01"
+                value={ceilingFieldValue}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setManualCeilingUsd(raw === '' ? undefined : Number(raw));
+                }}
+                style={{
+                  width: 62, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                  border: '1px solid var(--line)', background: 'var(--panel)', color: 'inherit',
+                }}
+              />
+            </label>
             <button
               data-action="kickoff-eligible"
               data-eligible-count={eligible.length}

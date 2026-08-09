@@ -40,7 +40,7 @@ import { join, resolve, sep } from 'node:path';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { getPaths, listInFlight } from '../orchestrator/queue.ts';
-import { parseManifest } from '../orchestrator/manifest.ts';
+import { parseManifest, persistManifestCostCeiling } from '../orchestrator/manifest.ts';
 import { enqueueDevelopRun } from '../orchestrator/enqueue-develop-run.ts';
 import { enqueuePlanRun } from '../orchestrator/enqueue-plan-run.ts';
 import {
@@ -1500,11 +1500,49 @@ async function handleHttp(
       }
       // Dedupe, preserving first-occurrence order — one enqueue + one result per id.
       const initiativeIds = [...new Set(rawIds as string[])];
+
+      // forge-shc WI-1 (T1 ruling): an operator per-run cost-ceiling override
+      // is accepted ONLY on a single-id batch — a single scalar can't map
+      // onto N manifests unambiguously. Validated fully BEFORE any enqueue
+      // side effect (mirrors the 3-stage discipline at
+      // `POST /api/agents/:slug/run` — batch-shape, then value bounds — a
+      // refused request never repoints or stamps any manifest).
+      let costCeilingUsd: number | undefined;
+      if (body.costCeilingUsd !== undefined) {
+        if (initiativeIds.length > 1) {
+          sendJson(
+            res,
+            400,
+            { error: `costCeilingUsd may only be supplied with a single initiativeId (got ${initiativeIds.length})` },
+            origin,
+          );
+          return;
+        }
+        const v = body.costCeilingUsd;
+        if (typeof v !== 'number' || !Number.isFinite(v) || v <= 0 || v > MAX_KICKOFF_COST_CEILING_USD) {
+          sendJson(
+            res,
+            400,
+            { error: `invalid costCeilingUsd: ${JSON.stringify(v)} (must be a finite number > 0 and <= ${MAX_KICKOFF_COST_CEILING_USD})` },
+            origin,
+          );
+          return;
+        }
+        costCeilingUsd = v;
+      }
+
       const results = initiativeIds.map((initiativeId) => {
         // Per-item isolation: a throw on one item must not 500 away the
         // results of items whose side effects already applied.
         try {
           const result = enqueueDevelopRun(initiativeId, { queueRoot: ctx.queueRoot });
+          if (result.status === 'enqueued' && costCeilingUsd !== undefined) {
+            // Single-id-only invariant (checked above) means this fires at
+            // most once per request — stamp only when the operator supplied
+            // an explicit, already-validated ceiling; never fabricate one.
+            const pendingPath = join(getPaths(ctx.queueRoot).pending, `${initiativeId}.md`);
+            persistManifestCostCeiling(pendingPath, costCeilingUsd);
+          }
           return { ...result, ok: result.status === 'enqueued' };
         } catch (err) {
           return { status: 'error' as const, initiativeId, ok: false, detail: sanitizeError(err) };
