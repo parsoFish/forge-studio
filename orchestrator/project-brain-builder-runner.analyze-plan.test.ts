@@ -35,7 +35,6 @@
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { join } from 'node:path';
 
 import { buildAnalyzePlan, type ProjectBrainStatus } from './project-brain-builder-runner.ts';
 import { cyclesRawDir } from './brain-paths.ts';
@@ -96,15 +95,20 @@ test('RED (R4-19 WI-1): a flow/band kb_binding reads CYCLE evidence, not the (no
     'cwd must be the cycle-archives dir (brain/cycles/_raw via cyclesRawDir) for a flow/band-bound KB',
   );
 
-  // The prompt must not carry the project-repo framing at all...
+  // The prompt must not carry the project-repo READ framing — the flow/band
+  // agent reads cycle evidence, not a project working directory.
   assert.ok(
     !plan.prompt.includes('Project repo (your working directory — READ from here)'),
     'prompt must not tell the agent to read a project repo that does not exist for this binding',
   );
-  assert.ok(
-    !plan.prompt.includes(status.project_repo_path),
-    'prompt must not reference project_repo_path at all on the flow/band branch',
-  );
+  // NOTE (T1, R4-19 WI-1): the original pin also asserted the prompt never
+  // contains `status.project_repo_path` at all. That is logically impossible
+  // for the REAL flow/band shape: the create hand-off sets
+  // project_repo_path = join(projectsRoot, '.kb-<id>') (cli/bridge-studio-kbs.ts),
+  // i.e. the PARENT of the .kb-anchored STAGING dir — and the verbatim
+  // staging-dir WRITE line (companion test below) necessarily contains STAGING,
+  // hence its parent. The real intent (no project-repo READ) is fully captured
+  // by the assertion above; the removed check contradicted the WRITE contract.
   // ...and it must instead point the agent at the cycle archives + the
   // review-band / adversarial-review findings logged inside them.
   assert.ok(
