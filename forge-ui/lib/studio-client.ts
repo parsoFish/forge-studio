@@ -956,10 +956,14 @@ export async function createSkill(
   return { ok: r.ok, id: typeof r.data?.id === 'string' ? r.data.id : undefined, error: r.error };
 }
 
-/** Run a manual brain-maintenance op on a KB (K3): 'lint' or 'index'. */
+/** Run a manual brain-maintenance op on a KB (K3): 'lint', 'index', or
+ *  'consolidate' (R1-06 WI-3 — drains the FULL agent-tier finding set as one
+ *  async session; dispatched the same way as 'index'/'lint', but its `data`
+ *  carries a `runId` pollable via the existing `getAgentFixStatus` helper
+ *  below, which already targets the shared GET .../fix-agent/:runId route). */
 export async function runKbMaintenance(
   id: string,
-  op: 'lint' | 'index',
+  op: 'lint' | 'index' | 'consolidate',
 ): Promise<{ ok: boolean; error?: string; data?: Record<string, unknown> }> {
   const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/maintenance`, { op });
   return { ok: r.ok, error: r.error, data: r.data };

@@ -85,13 +85,22 @@ function linkedSlugs(body: string): string[] {
   return slugs;
 }
 
-/** Insert the theme's link line into its category index exactly once (idempotent). */
-function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; detail: string } {
+/**
+ * Idempotently append a theme's link line to a category index file, given the
+ * EXACT index file path (rather than deriving it from `category` via
+ * `categoryIndexPath`/`CATEGORY_TO_BRAIN_SUBDIR`, which only covers the
+ * top-level cycles/forge-dev brains). Exported so a caller that already knows
+ * its target index file by another means — e.g. `cli/bridge-studio-kbs.ts`'s
+ * `op:'consolidate'` obligation, which reads the exact path straight out of a
+ * `checkProjectBrainIndexes` finding's own message for a project brain under
+ * `brain/projects/<id>/` — can apply the SAME deterministic, no-LLM repair
+ * this file's own `ensureLinked` uses for the top-level brains, without
+ * hand-rolling a second copy of the append/dedupe convention.
+ */
+export function ensureLinkedAt(indexPath: string, themeFile: string): { ok: boolean; detail: string } {
   const parsed = parseTheme(themeFile);
   if (!parsed) return { ok: false, detail: 'theme unparseable' };
-  const category = String(parsed.data.category ?? '');
-  const indexPath = categoryIndexPath(forgeRoot, category);
-  if (!indexPath || !existsSync(indexPath)) return { ok: false, detail: `no category index for "${category}"` };
+  if (!existsSync(indexPath)) return { ok: false, detail: `category index not found: ${indexPath}` };
   const slug = basename(themeFile, '.md');
   const body = readFileSync(indexPath, 'utf8');
   if (linkedSlugs(body).includes(slug)) return { ok: true, detail: 'already linked' };
@@ -103,6 +112,18 @@ function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; deta
     next = `${body.replace(/\n+$/, '')}\n\n${AUTO_LINK_HEADING}\n\n${line}\n`;
   }
   writeFileSync(indexPath, next);
+  return { ok: true, detail: `linked into ${indexPath}` };
+}
+
+/** Insert the theme's link line into its category index exactly once (idempotent). */
+function ensureLinked(forgeRoot: string, themeFile: string): { ok: boolean; detail: string } {
+  const parsed = parseTheme(themeFile);
+  if (!parsed) return { ok: false, detail: 'theme unparseable' };
+  const category = String(parsed.data.category ?? '');
+  const indexPath = categoryIndexPath(forgeRoot, category);
+  if (!indexPath || !existsSync(indexPath)) return { ok: false, detail: `no category index for "${category}"` };
+  const r = ensureLinkedAt(indexPath, themeFile);
+  if (!r.ok || r.detail === 'already linked') return r;
   return { ok: true, detail: `linked into ${relative(forgeRoot, indexPath)}` };
 }
 
