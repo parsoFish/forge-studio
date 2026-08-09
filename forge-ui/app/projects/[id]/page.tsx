@@ -888,6 +888,33 @@ function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
     : { status: 'error', error: result.detail ?? result.status };
 }
 
+/**
+ * shc review finding 1 (BLOCKER, silent-default-as-operator-intent) fix: the
+ * develop-start ceiling field's SEND decision. `fieldValue`
+ * (`resolveCeilingFieldValue`) is what the input DISPLAYS — it seeds from
+ * the run-level `defaultCeilingUsd` (`resolveDefaultKickoffCeilingUsd`,
+ * orchestrator/config.ts) the instant the tab mounts, long before any
+ * operator interaction. Displaying a default is fine; SENDING it on every
+ * "Start development" click is not — a manifest with its own
+ * `cost_budget_usd`-derived ceiling (`readManifestCostCeiling`'s
+ * budget+`DERIVED_CEILING_MARGIN_USD` fallback) would get silently
+ * overwritten by the generic per-run default just because the operator
+ * opened the tab and clicked Start, never having looked at the field.
+ *
+ * Gated on `ceilingTouched` FIRST — a real operator opt-in boolean, checked
+ * before the value is even inspected — then the usual finite/positive shape
+ * check, exactly mirroring RunPanel's `costCeilingEnforceable`-gated
+ * `resolveCostCeilingForDispatch` (./run-panel-view.ts). When untouched,
+ * returns `undefined` so `POST /api/develop/start` omits `costCeilingUsd`
+ * entirely and the manifest's own derived fallback
+ * (`resolveCostCeilingOverride`, orchestrator/cycle.ts) stands. Exported so
+ * `lib/roadmap-develop-start-ceiling.test.ts` pins the real, shipped gate.
+ */
+export function resolveDevelopStartCeilingToSend(fieldValue: number, ceilingTouched: boolean): number | undefined {
+  if (!ceilingTouched) return undefined;
+  return Number.isFinite(fieldValue) && fieldValue > 0 ? fieldValue : undefined;
+}
+
 function RoadmapView({
   projectId,
   roadmap,
@@ -916,6 +943,15 @@ function RoadmapView({
   // button never sends it (a scalar ceiling can't map onto N manifests).
   const [defaultCeilingUsd, setDefaultCeilingUsd] = useState(0);
   const [manualCeilingUsd, setManualCeilingUsd] = useState<number | undefined>(undefined);
+  // shc review finding 1: an EXPLICIT operator opt-in, set true the instant
+  // the operator edits the field — and NEVER reset, including on blank —
+  // mirrors RunPanel's `costCeilingEnforceable` gate
+  // (resolveCostCeilingForDispatch, lib/run-panel-view.ts). Deliberately NOT
+  // derived from `manualCeilingUsd !== undefined`: blanking the input sets
+  // `manualCeilingUsd` back to `undefined`, which would silently re-arm
+  // "untouched" and defeat the opt-in the moment the operator clears the
+  // field.
+  const [ceilingTouched, setCeilingTouched] = useState(false);
   const ceilingFieldValue = resolveCeilingFieldValue(defaultCeilingUsd, manualCeilingUsd);
 
   useEffect(() => {
@@ -949,17 +985,21 @@ function RoadmapView({
 
   const startOne = useCallback(async (initiativeId: string): Promise<void> => {
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'starting', error: null } }));
-    // A single-id start may carry the operator's ceiling override; an empty/
-    // non-finite/non-positive field degrades to "no override" — the SAME
-    // "nothing sent rather than a round-tripped 400" convention the agent-run
-    // kickoff field uses, never a fabricated fallback value.
-    const ceilingToSend = Number.isFinite(ceilingFieldValue) && ceilingFieldValue > 0 ? ceilingFieldValue : undefined;
+    // shc review finding 1: a single-id start carries the operator's ceiling
+    // override ONLY when the operator has explicitly touched the field
+    // (`ceilingTouched`) — an untouched field must send NOTHING, so the
+    // manifest's own derived `cost_budget_usd`+margin fallback
+    // (resolveCostCeilingOverride, orchestrator/cycle.ts) stands. Never a
+    // fabricated fallback value; an empty/non-finite/non-positive TOUCHED
+    // field also degrades to "no override" — the same "nothing sent rather
+    // than a round-tripped 400" convention the agent-run kickoff field uses.
+    const ceilingToSend = resolveDevelopStartCeilingToSend(ceilingFieldValue, ceilingTouched);
     const r = await startDevelopment([initiativeId], ceilingToSend);
     const item = r.results?.find((x) => x.initiativeId === initiativeId);
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
     // Refetch so status/ready/blockedBy reflect the queue's new reality.
     await onRefresh();
-  }, [onRefresh, ceilingFieldValue]);
+  }, [onRefresh, ceilingFieldValue, ceilingTouched]);
 
   // R4-11-F2: the per-card "Plan" trigger — dispatches the standalone
   // forge-architect (decompose) flow for a WI-less initiative. Refetches
@@ -1065,6 +1105,11 @@ function RoadmapView({
                 value={ceilingFieldValue}
                 onChange={(e) => {
                   const raw = e.target.value;
+                  // shc review finding 1: ANY edit — including blanking the
+                  // field back to `''` — is the operator's opt-in; touched
+                  // is never reset, so a since-cleared field can't silently
+                  // re-arm "send the seeded default".
+                  setCeilingTouched(true);
                   setManualCeilingUsd(raw === '' ? undefined : Number(raw));
                 }}
                 style={{

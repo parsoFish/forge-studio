@@ -1540,8 +1540,14 @@ async function handleHttp(
             // Single-id-only invariant (checked above) means this fires at
             // most once per request — stamp only when the operator supplied
             // an explicit, already-validated ceiling; never fabricate one.
+            // shc review finding 2: fold the REAL outcome into the per-item
+            // result as `ceilingStamped` — a silently-failed stamp (the
+            // manifest went missing/unwritable between enqueue and stamp)
+            // must stay distinguishable from a landed one, never reported as
+            // an unconditional success.
             const pendingPath = join(getPaths(ctx.queueRoot).pending, `${initiativeId}.md`);
-            persistManifestCostCeiling(pendingPath, costCeilingUsd);
+            const ceilingStamped = persistManifestCostCeiling(pendingPath, costCeilingUsd);
+            return { ...result, ok: result.status === 'enqueued', ceilingStamped };
           }
           return { ...result, ok: result.status === 'enqueued' };
         } catch (err) {

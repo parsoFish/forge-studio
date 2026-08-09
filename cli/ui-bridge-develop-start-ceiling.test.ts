@@ -42,14 +42,14 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { resolveCostCeilingOverride } from '../orchestrator/cycle.ts';
 import { MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
-import { DERIVED_CEILING_MARGIN_USD } from '../orchestrator/manifest.ts';
+import { DERIVED_CEILING_MARGIN_USD, persistManifestCostCeiling } from '../orchestrator/manifest.ts';
 
 const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
 
@@ -248,4 +248,102 @@ test('POST /api/develop/start: costCeilingUsd supplied with initiativeIds.length
   assert.match(onDiskB, /flow_id: forge-architect/, `id B must remain unenqueued. On-disk:\n${onDiskB}`);
   assert.doesNotMatch(onDiskA, /cost_ceiling_usd:/, 'id A must not be stamped from a refused batch request');
   assert.doesNotMatch(onDiskB, /cost_ceiling_usd:/, 'id B must not be stamped from a refused batch request');
+});
+
+// ---------------------------------------------------------------------------
+// shc review FINDING 2 (MINOR, mutation-not-applied): `persistManifestCostCeiling`
+// had a bare `catch {}` and its outcome was never folded into the per-item
+// `/api/develop/start` result — a silently-failed stamp still reported
+// `{status:'enqueued', ok:true}`, indistinguishable from a real success.
+//
+// (5) RED pin (unit boundary) — `persistManifestCostCeiling` itself must
+// return a boolean signal, not `void`. Pinned directly against the function
+// (not through HTTP): both writes a real `/api/develop/start` request would
+// perform — `enqueueFlowRun`'s own repoint-write and this stamp write — hit
+// the EXACT SAME manifest path with the EXACT SAME permissions, so there is
+// no way to make the bridge's enqueue succeed while ONLY the stamp fails
+// without mocking fs (not available to this file's `node:test` harness —
+// see this repo's other cli/*.test.ts files, none of which mock fs). A
+// missing/unwritable manifest is therefore pinned directly at the function
+// boundary, the one place a false return is actually reachable.
+// ---------------------------------------------------------------------------
+
+test('persistManifestCostCeiling returns true on a real, successful stamp — a boolean signal, not void', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'persist-ceiling-ok-'));
+  const manifestPath = join(dir, 'INIT-2026-08-09-persist-ok.md');
+  writeFileSync(manifestPath, pendingManifest('INIT-2026-08-09-persist-ok', 2.0));
+
+  const outcome = persistManifestCostCeiling(manifestPath, 42);
+  assert.equal(outcome, true, `expected persistManifestCostCeiling to return true on success — the pre-fix function returns void (undefined), which is what this assertion catches. Got: ${outcome}`);
+
+  // Assert the mutation actually applied before trusting the boolean.
+  const onDisk = readFileSync(manifestPath, 'utf8');
+  assert.match(onDisk, /cost_ceiling_usd:\s*42(\.0+)?\s*$/m, `expected the stamp to have actually landed. On-disk:\n${onDisk}`);
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+test('persistManifestCostCeiling returns false (not void/undefined) when the target manifest does not exist — the failure signal a silently-swallowed catch used to hide', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'persist-ceiling-missing-'));
+  const manifestPath = join(dir, 'INIT-2026-08-09-persist-missing.md');
+  // Deliberately never written — this is the fixture precondition.
+  assert.equal(existsSync(manifestPath), false, 'fixture precondition: the manifest must not exist');
+
+  const outcome = persistManifestCostCeiling(manifestPath, 42);
+  assert.equal(outcome, false, `expected persistManifestCostCeiling to return false for a manifest that does not exist — the pre-fix function returns void (undefined !== false) regardless of outcome. Got: ${outcome}`);
+
+  rmSync(dir, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// (6) RED pin (integration boundary) — the SUCCESS path's outcome must fold
+// into the per-item `/api/develop/start` result as a distinguishable field
+// (`ceilingStamped`), not be silently dropped after `persistManifestCostCeiling`
+// returns. Pre-fix: `results[0]` carries no such field at all regardless of
+// stamp outcome — this is the "reports enqueued/ok:true regardless" the
+// finding calls out, now made assertable.
+// ---------------------------------------------------------------------------
+
+test('POST /api/develop/start: a successful single-id stamp folds ceilingStamped:true into the per-item result', async () => {
+  const id = 'INIT-2026-08-09-ceiling-stamp-folded';
+  const manifestPath = manifestPathFor(id);
+  writeFileSync(manifestPath, pendingManifest(id, 2.0));
+  assertFixturePrecondition(manifestPath);
+
+  const res = await fetch(`${url}/api/develop/start`, {
+    method: 'POST',
+    headers: CSRF,
+    body: JSON.stringify({ initiativeIds: [id], costCeilingUsd: 23 }),
+  });
+  assert.equal(res.status, 200, `expected the accepted-batch 200, got ${res.status}`);
+  const body = (await res.json()) as { ok: boolean; results: Array<{ initiativeId: string; ok: boolean; status: string; ceilingStamped?: boolean }> };
+  assert.equal(body.ok, true);
+  assert.equal(body.results[0]?.status, 'enqueued');
+
+  // Assert the mutation actually applied BEFORE trusting the response-shape
+  // field that claims it did.
+  const onDisk = readFileSync(manifestPath, 'utf8');
+  assert.match(onDisk, /cost_ceiling_usd:\s*23(\.0+)?\s*$/m, `expected the manifest to actually carry the stamp before trusting ceilingStamped. On-disk:\n${onDisk}`);
+
+  assert.equal(
+    body.results[0]?.ceilingStamped,
+    true,
+    `expected results[0].ceilingStamped === true — the pre-fix route response carries no such field at all (undefined), leaving a failed stamp indistinguishable from a successful one. Got: ${JSON.stringify(body.results[0])}`,
+  );
+});
+
+test('COMPANION of (6): no costCeilingUsd supplied ⇒ no stamp attempted ⇒ ceilingStamped is absent (never fabricated true/false for a stamp that never ran)', async () => {
+  const id = 'INIT-2026-08-09-ceiling-stamp-folded-companion';
+  const manifestPath = manifestPathFor(id);
+  writeFileSync(manifestPath, pendingManifest(id, 2.0));
+
+  const res = await fetch(`${url}/api/develop/start`, {
+    method: 'POST',
+    headers: CSRF,
+    body: JSON.stringify({ initiativeIds: [id] }),
+  });
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; results: Array<{ initiativeId: string; ceilingStamped?: boolean }> };
+  assert.equal(body.ok, true);
+  assert.equal(body.results[0]?.ceilingStamped, undefined, `expected no ceilingStamped field when no stamp was ever attempted. Got: ${JSON.stringify(body.results[0])}`);
 });
