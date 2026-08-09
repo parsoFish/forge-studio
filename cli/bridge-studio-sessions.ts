@@ -79,6 +79,7 @@ import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
@@ -134,6 +135,20 @@ function invalidProjectReason(id: string): string | null {
   }
   if (id.length > MAX_PROJECT_ID_LENGTH) {
     return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_PROJECT_ID_LENGTH}-character length limit`;
+  }
+  // R4-19 WI-2 — bounded carve-out: a non-project KB seeding session anchors
+  // under `projects/.kb-<id>/` (KB_SEEDING_ANCHOR_PREFIX, so it never surfaces
+  // as a phantom project — discoverProjects still filters ALL dot-dirs). To
+  // make that session viewable/drivable, allow EXACTLY `.kb-<valid-slug>` here,
+  // validating the post-prefix remainder with the SAME SLUG_RE (so a `/`, `..`,
+  // NUL, or empty slug still rejects — traversal defense is unchanged; this is
+  // never a general leading-"." allow).
+  if (id.startsWith(KB_SEEDING_ANCHOR_PREFIX)) {
+    const anchorSlug = id.slice(KB_SEEDING_ANCHOR_PREFIX.length);
+    if (SLUG_RE.test(anchorSlug)) {
+      return null;
+    }
+    return `invalid KB seeding anchor "${id}" — the id after "${KB_SEEDING_ANCHOR_PREFIX}" must match ${SLUG_RE}`;
   }
   if (!SLUG_RE.test(id)) {
     return `invalid project "${id}" — must match ${SLUG_RE} (a single lowercase-kebab slug; no "/", "\\", ".", or "..")`;
