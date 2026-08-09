@@ -561,11 +561,30 @@ inventory rather than one shared page-level contract:
   (`[data-page="projects-index"]` while empty/loading). The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
-  Roadmap renders `SerpentineTimeline.tsx`:
-  `[data-roadmap-timeline][data-node-count]` with per-initiative
-  `[data-roadmap-node][data-initiative-id][data-initiative-status]` and a
-  pop-off detail card `[data-roadmap-popover][data-popover-initiative-id]`.
-  Each pending initiative card also carries `[data-plan-state="unplanned"
+  Roadmap renders `RoadmapDag.tsx` (R4-13, replacing the retired
+  `SerpentineTimeline` time-ordered spine): a real dependency **DAG** —
+  `[data-roadmap-dag][data-initiative-count][data-roadmap-edge-count]` — with
+  initiatives bucketed left→right into dependency-depth columns
+  (`[data-dag-column]`; layout `lib/roadmap-dag-layout.ts`'s `byDepth`, node
+  tone `lib/roadmap-status-color.ts`). An `[data-dag-edges]` SVG overlay draws
+  **one edge per (prerequisite → dependent) pair whose both ends are in the
+  roadmap**:
+  `[data-dep-edge][data-dep-from="<prerequisite>"][data-dep-to="<dependent>"]`
+  — the edge-correctness the serpentine arcs carried ZERO `data-*` for. (Note:
+  NO attribute begins with `data-dep-edge-`; the edge count lives on
+  `[data-roadmap-edge-count]` — a `\bdata-dep-edge\b` matcher must remember a
+  hyphen is a word boundary.) Per initiative,
+  `[data-roadmap-node][data-initiative-id][data-initiative-status]` (+
+  `[data-develop-state][data-plan-state][data-initiative-ready][data-blocked-by]`),
+  whose header `[data-action="toggle-node-detail"]` toggles a
+  **default-EXPANDED** `[data-node-detail]` — so every affordance below is
+  present on first paint (no click-to-pop; a blind node-center click is
+  unnecessary AND must be avoided, since it can land on a trigger). The card
+  lists the initiative's real work items (`[data-work-item-id]`) and a per-node
+  run dig-in `[data-section="initiative-runs"]` with one
+  `[data-run-link][data-run-cycle-id][data-run-active="true"|"false"]`
+  (href `/flows/forge-develop/run/<cycleId>`) for the active cycle plus every
+  prior attempt. Each pending initiative also carries `[data-plan-state="unplanned"
   |"planning"|"planned"|"error"]` (`unplanned` = the R4-05
   `enqueuePlanRun`-derived `workItems === undefined` proxy — no decomposition
   has run yet): unplanned renders the `[data-action="plan-initiative"]`
@@ -573,7 +592,7 @@ inventory rather than one shared page-level contract:
   (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
   dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
-  the `forge-architect` flow monitor. Every popped initiative card carries
+  the `forge-architect` flow monitor. Every node's card carries
   `[data-link="demo-builder"]` (R4-07-F3) — switches to the editor tab's Demo
   Timeline (+ inline builder panel), tying demo upkeep to initiative state.
   A brand-new project renders
@@ -607,14 +626,16 @@ inventory rather than one shared page-level contract:
   `onboarding`, for both onboarding AND creation).
   A recoverable initiative (`in-flight | ready-for-review | failed` —
   deliberately excluding `merged`, a transient pass-through, and terminal
-  `pending`/`done`) gets recovery affordances right on its `InitiativeCard`
-  inside the popover (R4-11-T3, folded off the retired standalone
+  `pending`/`done`) gets recovery affordances right on its RoadmapDag node's
+  (default-expanded) detail card (R4-11-T3, folded off the retired standalone
   `/recovery` page — see below): `[data-recovery-item][data-recovery-initiative]
   [data-recovery-status][data-recovery-attempt-count]` (+
   `[data-recovery-prior-attempts]` when a prior attempt exists) with
   `[data-action="recovery-inspect"|"recovery-requeue"|"recovery-abandon"]`
-  buttons; inspecting expands
-  `[data-section="recovery-detail"][data-recovery-detail-initiative]`
+  buttons. The `[data-section="recovery-detail"][data-recovery-detail-initiative]`
+  region renders **structurally** (R4-13: it is in the DOM on first paint,
+  empty until Inspect populates it with branch / worktree / PR-draft detail, so
+  the re-home can't drop a click-gated affordance)
   (+ `[data-recovery-commits]` when the worktree has commits, and a
   `[data-recovery-note]` result line after requeue/abandon). The recovery
   API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
@@ -1059,7 +1080,7 @@ The shared status vocabularies:
   independently.
 - **Run lifecycle** (`RunStatus`, [`forge-ui/lib/studio-client.ts`](./forge-ui/lib/studio-client.ts)) —
   `planned | active | gated | complete | failed`.
-- **Roadmap initiative status** (`SerpentineTimeline.tsx`) — `pending |
+- **Roadmap initiative status** (`RoadmapDag.tsx`) — `pending |
   in-flight | ready-for-review | merged | done | failed` (R4-11-F1: `merged`
   = PR confirmed merged, reflect pending — a transient `_queue/merged/`
   pass-through promoted to `done` in the same finalize sweep).
