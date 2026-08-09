@@ -254,19 +254,27 @@ function runCommitStep(args: {
   // F2) — never silently re-derive `{ kind: 'project', ref: status.project }`.
   // Absent a descriptor (the ordinary, non-KB-scoped project-brain flow), the
   // fallback IS that historical default, unchanged.
+  //
+  // `kb_id` present ⇔ this session is a POST /api/studio/kbs create hand-off.
+  const isCreateHandoff = status.kb_id !== undefined;
   const kbId = status.kb_id ?? status.project;
   const binding: KbBinding = status.kb_binding ?? { kind: 'project', ref: status.project };
 
+  // Brain-dir resolution MUST agree with what POST /api/studio/kbs already
+  // scaffolded, or the descriptor splits in two (one empty kb.yaml at the
+  // create location, one seeded kb.yaml here) and every operator-authored theme
+  // is silently orphaned. Create scaffolds brain/<id> UNCONDITIONALLY for EVERY
+  // binding kind (cli/bridge-studio-kbs.ts create route), so a create hand-off
+  // commits into brain/<kbId> REGARDLESS of binding.kind — resolveKbBrainDir
+  // (orchestrator/brain-paths.ts) resolves it there. Only the ORDINARY
+  // project-brain flow (no hand-off, kbId === status.project, a real project)
+  // targets the central per-project brain brain/projects/<project> (ADR 035).
+  //
   // SEC-04: `kbId` is request-derived (either `status.project` or a
-  // descriptor's own id) — contain it (and every leaf) as its OWN segment
-  // against the TRUSTED forgeRoot, NEVER folded into a
-  // projectThemesDir/projectBrainDir root (that would be the root-folding
-  // bypass the guard cannot self-detect). Central brain layout (ADR 035) for
-  // a project binding: brain/projects/<id>/{themes/<file>,profile.md,kb.yaml}.
-  // Every other binding kind mirrors `resolveKbBrainDir`'s other containment
-  // root (orchestrator/brain-paths.ts) — brain/<id>/{...} — the same location
-  // POST /api/studio/kbs already scaffolded for a flow/unique-bound KB.
-  const brainSegs = binding.kind === 'project' ? ['brain', 'projects', kbId] : ['brain', kbId];
+  // descriptor's own id) — it rides as its OWN guarded segment against the
+  // TRUSTED forgeRoot below, NEVER folded into a root (the root-folding bypass
+  // the guard cannot self-detect).
+  const brainSegs = isCreateHandoff ? ['brain', kbId] : ['brain', 'projects', kbId];
 
   const wrote: string[] = [];
   for (const file of staged) {

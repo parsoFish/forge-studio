@@ -312,6 +312,21 @@ function newProjectBrainSessionId(): string {
   return `${stamp}-${entropy}`;
 }
 
+/**
+ * R1-06 WI-2 review (MAJOR 2): dot-prefixed anchor for a NON-project KB
+ * seeding session's `projects/<anchor>/_project-brain/<sid>/` directory. A
+ * flow/unique-bound KB has no natural project home, so anchoring it under the
+ * bare KB id created a top-level `projects/<kbId>/` dir that `discoverProjects`
+ * (orchestrator/studio/registry.ts) surfaced as a PHANTOM project. Both
+ * `discoverProjects` and `subDirs` (this file) already skip dot-prefixed dirs —
+ * a real project/kb id is slug-validated (no leading dot) — so a dot-prefixed
+ * anchor keeps the seeding session on disk + runner-reachable while filtering it
+ * out of project discovery. The anchor is a pure filesystem-nesting device: the
+ * seeding runner reads the KB's identity from the session status.json's `kb_id`
+ * field, never from the anchor name.
+ */
+const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
+
 // ---------------------------------------------------------------------------
 // Unified KB route handler (GET + POST)
 // ---------------------------------------------------------------------------
@@ -637,13 +652,16 @@ export async function handleStudioKbRoutes(
       // `{kind:'project'}` guess (T1 ruling Q4).
       //
       // Session-dir anchor: a project binding nests the session under its
-      // own project dir (the established architect/instructions/demo-builder
-      // shape); every other binding kind has no natural project home, so it
-      // nests under the new KB's own id instead — a legitimate, not-yet
-      // existing `projects/<id>/` dir (create-mode, same as any other
-      // freshly-started session).
+      // own (real, discovered) project dir — the established architect/
+      // instructions/demo-builder shape, and a real project so it is a
+      // legitimate discovered project, not a phantom. Every other binding kind
+      // has no natural project home; anchoring it under the bare KB id created a
+      // top-level `projects/<kbId>/` dir that `discoverProjects` surfaced as a
+      // PHANTOM project (MAJOR 2). It nests under a dot-prefixed anchor instead,
+      // which `discoverProjects` filters out while the runner still finds its
+      // status there (via the anchored `projectRoot`).
       const projectsRoot = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      const sessionProject = binding.kind === 'project' ? binding.ref : id;
+      const sessionProject = binding.kind === 'project' ? binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${id}`;
       const sessionId = newProjectBrainSessionId();
       const sessionWritten = guardedWriteSessionStatus<ProjectBrainStatus>(
         projectsRoot,
