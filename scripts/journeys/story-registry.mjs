@@ -102,6 +102,39 @@ const DECISION_R4_19 =
   'agents" ("As-built: ... no cycle/band-scope creation, no maintenance ' +
   'agent")';
 
+// R4-19 F1 (journey-sync T3, 2026-08-10) — WI-2 (cli/bridge-studio-sessions.ts
+// `invalidProjectReason`'s bounded `.kb-<slug>` carve-out) made a non-project
+// KB's dot-anchored seeding session genuinely REACHABLE through the
+// session-shell route (it used to 404 there), and WI-1
+// (orchestrator/project-brain-builder-runner.ts `buildAnalyzePlan`) branches
+// the analyze step's plan on `kb_binding.kind` so a flow+band binding reads
+// real cycle-archive/review-band evidence instead of a project repo. This
+// closes exactly the gap DECISION_R4_19 names for create-kb-cycle's SESSION
+// TURNS (not create-kb-project's or kb-maintain's — those stay on
+// DECISION_R4_19 unchanged: create-kb-project's gap is a project-scoped
+// theme-authoring agent, and kb-maintain's F2 maintenance-agent narration
+// gap is untouched by this initiative, a separate PR). What is now REAL:
+// the session is reachable/drivable end to end (briefing → a real POST that
+// flips phase → the deterministic commit step, `runCommitStep`, invoked
+// directly since only the detached SDK-turn *spawn* stays suppressed under
+// this harness's FORGE_ARCHITECT_NO_SPAWN=1) — a genuine brain write lands.
+// What stays EMULATED, honestly narrated as such: the theme-AUTHORING
+// judgment itself (the actual SDK turn), since no real agent runs under this
+// harness — grounded in forge's own real, already-committed review findings
+// (declared-data-fails-open, suppression-env-fakes-the-pass), never invented.
+const DECISION_R4_19_WI1_WI2 =
+  'orchestrator/project-brain-builder-runner.ts `buildAnalyzePlan` (R4-19 ' +
+  'WI-1, "flow binding WITH a band ... has NO project repo to read — its ' +
+  'evidence is the forge-owned cycle archives ... plus the review-band / ' +
+  'adversarial-review findings logged inside them") + ' +
+  'cli/bridge-studio-sessions.ts `invalidProjectReason` (R4-19 WI-2, ' +
+  '"bounded carve-out: allow EXACTLY `.kb-<valid-slug>` ... traversal ' +
+  'defense is unchanged") — together make create-kb-cycle\'s seeding ' +
+  'session reachable and deterministically committable for real; only the ' +
+  'SDK theme-authoring turn stays emulated (create-kb-project and ' +
+  'kb-maintain\'s F2 gap are untouched by this initiative and stay on ' +
+  'DECISION_R4_19)';
+
 // The mockup's create-kb-project/create-kb-cycle stories script a multi-
 // click WIZARD (create-brain-btn -> scope-X -> select target -> continue) as
 // four separate user actions. The real, as-built /knowledge/new form (R1-06-
@@ -663,35 +696,44 @@ export const STORY_REGISTRY = [
         { excluded: 'create-brain-btn — same single-kickoff gap as create-kb-project: the real CTA is the library\'s [data-action="new-kb"], ported at knowledge-create-kb-band-scope\'s own entry', decision: DECISION_R1_06_SINGLE_FORM },
         { excluded: 'scope-cycle — the real form has one [data-field="kb-binding-kind"] select (flow, not a fourth "cycle" kind — R1-06-F1 chose a band QUALIFIER on the existing flow binding); filled as part of the single submission', decision: DECISION_R1_06_SINGLE_FORM },
         'knowledge-create-kb-band-scope',
-        { excluded: 'sessionTurns:1 ("continue into the creation session") — for a NON-project binding the hand-off session is dot-anchored (projects/.kb-<id>/), proven unreachable on disk by knowledge-create-kb-band-scope itself, not merely a missing "continue" click', decision: DECISION_R4_19 },
-        { excluded: 'sessionTurns:2 ("seeded from 41 runs of review findings — clusters become themes") — no cycle/band-scope creation agent exists yet (R4-ootb-suite.md R4-19: "no cycle/band-scope creation")', decision: DECISION_R4_19 },
-        { excluded: 'sessionTurns:3 ("declared-data-fails-open leads with 9 occurrences") — same gap, fabricated finding-cluster content, never scripted-as-real here', decision: DECISION_R4_19 },
-        { excluded: 'accept-btn — no session content to accept; the dot-anchored session has no reachable session-shell page at all', decision: DECISION_R4_19 },
+        'knowledge-create-kb-band-scope-seed',
+        { excluded: 'sessionTurns:2 ("seeded from 41 runs of review findings — clusters become themes") — already demonstrated: knowledge-create-kb-band-scope-seed\'s own emulated theme authoring is grounded in forge\'s real review-band findings (declared-data-fails-open, suppression-env-fakes-the-pass) — the real evidence shape is archived cycles/review-band findings (R4-19 WI-1), never "41 runs" or PR threads, which the mockup\'s specific number was never scripted as real here', decision: DECISION_ONE_REF_PER_STORY },
+        'knowledge-create-kb-band-scope-commit',
+        { excluded: 'accept-btn — already demonstrated: knowledge-create-kb-band-scope-commit\'s own approve-brain click + bind-and-return assertion, cited at the prior step', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'nav-knowledge ("a Brain-2-scoped base, bound to the review band") — already demonstrated: knowledge-create-kb-band-scope confirms kb.yaml\'s binding carries "band: review-band" the moment create is submitted', decision: DECISION_ONE_REF_PER_STORY },
-        { excluded: 'brain-review-insights ("same graph, same reader — different scope") — already demonstrated: knowledge-create-kb-band-scope\'s own closing frame is the new band-scoped KB\'s graph rendering', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'brain-review-insights ("same graph, same reader — different scope") — already demonstrated: knowledge-create-kb-band-scope-commit\'s own closing frame is the committed band-scoped KB\'s real graph (index hub + linked themes)', decision: DECISION_ONE_REF_PER_STORY },
       ],
     },
     excluded: null,
     note:
-      'R1-06 WI-4 (journey-sync) ports 2 of 10 mockup steps and excludes 8, ' +
-      'per T1 ruling 2026-08-09 (Q5). Step 1 reuses knowledge-graph (same ' +
-      'substitution as create-kb-project — one real /knowledge page, ' +
-      'independent of which story cites it). Step 4 ("the review band of ' +
-      'forge-develop") maps onto the NEW knowledge-create-kb-band-scope beat, ' +
-      'built for this initiative: it drives the real [data-field="kb-binding-' +
-      'band"] select — populated from forge-develop\'s REAL derived bands ' +
-      '(orchestrator/agent-bands.ts\'s resolveBandGuard reading adversarial-' +
-      'review\'s own SKILL.md guard, never a hardcoded list) — selects ' +
-      '"review-band", and verifies the written kb.yaml carries it. T1\'s own ' +
-      'distinguishing ruling for this story ("its seeding session is dot-' +
-      'anchored + R4-19-deferred") is asserted POSITIVELY, not just cited: the ' +
-      'beat confirms on disk that a non-project binding\'s hand-off session ' +
-      'lands under the dot-prefixed projects/.kb-<id>/ anchor bridge-studio-' +
-      'kbs.ts writes — real, but genuinely unreachable through the session-' +
-      'shell route (its ?project= is SLUG_RE-validated, which a leading "." ' +
-      'fails), which is why every session-turn step here is excluded rather ' +
-      'than substituted with the ingest-fold trick create-kb-project could ' +
-      'have reached for.',
+      'R4-19 F1 (journey-sync T3, 2026-08-10) flips this story from 2/10 real ' +
+      'to 4/10 real (6 excluded, all decision-cited) — WI-1/WI-2 close the ' +
+      'exact gap the prior R1-06 WI-4 pass (2026-08-09) left open. Step 1 ' +
+      'reuses knowledge-graph. Step 4 ("the review band of forge-develop") ' +
+      'is unchanged from the prior pass: knowledge-create-kb-band-scope\'s ' +
+      'real [data-field="kb-binding-band"] select. Steps 5 ("continue into ' +
+      'the creation session") and 6 ("seeded from 41 runs...") now map onto ' +
+      'the NEW knowledge-create-kb-band-scope-seed beat: R4-19 WI-2 made the ' +
+      'dot-anchored session genuinely reachable (proven by loading it, not ' +
+      'merely asserted) and drives a REAL briefing POST that flips phase to ' +
+      'analyzing; the analyze step\'s own theme-authoring judgment stays an ' +
+      'honestly-narrated emulation (the real R4-19 agent never runs under ' +
+      'this harness\'s FORGE_ARCHITECT_NO_SPAWN=1), grounded in forge\'s own ' +
+      'already-committed review-band findings rather than invented content. ' +
+      'Step 7 ("declared-data-fails-open leads with 9 occurrences") maps onto ' +
+      'the NEW knowledge-create-kb-band-scope-commit beat: approving is a ' +
+      'real POST (phase -> committing), and the commit itself — R1-06\'s ' +
+      'deterministic runCommitStep, which makes no SDK call — is invoked ' +
+      'directly in-process (bypassing only the detached spawn this harness ' +
+      'suppresses), landing a genuine brain write: themes physically commit ' +
+      'into brain/journey-scratch-kb-review-band/, the KB\'s own graph shows ' +
+      'a real INDEX hub with real links to them, and forge brain lint stays ' +
+      '9/9 clean with the new KB present. Step 8 (accept) and steps 9-10 ' +
+      '(nav-knowledge/brain-review-insights) are the registry\'s one-ref-per-' +
+      'story rule at work, not gaps — each is already demonstrated by a beat ' +
+      'cited above. See DECISION_R4_19_WI1_WI2 for the full as-built/emulated ' +
+      'boundary; kb-maintain\'s F2 maintenance-agent narration gap is a ' +
+      'SEPARATE PR and stays on DECISION_R4_19 unchanged.',
   },
   {
     story: 'kb-maintain',
@@ -1004,8 +1046,33 @@ export const STORY_REGISTRY = [
   {
     story: 'run-agent-brain-creation',
     batch: 'D',
-    port: null,
+    port: {
+      journey: 'knowledge',
+      beats: [
+        { excluded: 'goto #/agents/builder/brain-creation — the real seeding agent has no agent-builder library entry (it is not `library: true` studio-agent-shaped); its kickoff is the /knowledge/new create hand-off, ported at knowledge-create-kb-band-scope\'s own entry', decision: DECISION_R1_06_SINGLE_FORM },
+        'knowledge-create-kb-band-scope-seed',
+        { excluded: 'sessionTurns:2 ("3 cycles of history + 14 PR-thread decisions become the seed") — already demonstrated: knowledge-create-kb-band-scope-seed\'s own emulated theme authoring, cited at the prior step; the real evidence shape (R4-19 WI-1) is archived cycles + logged review-band/adversarial-review findings, never "PR-thread decisions" — the mockup\'s specific framing was never scripted as real here', decision: DECISION_ONE_REF_PER_STORY },
+        'knowledge-create-kb-band-scope-commit',
+        { excluded: 'accept-btn ("the reflector grows it from the next cycle") — already demonstrated: knowledge-create-kb-band-scope-commit\'s own approve-brain click + real commit + bind-and-return assertion, cited at the prior step', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
+    note:
+      'R4-19 F1 (journey-sync T3, 2026-08-10) flips this story from pending ' +
+      '(port: null) to ported — 2 of 5 mockup steps map onto REAL beats, 3 ' +
+      'excluded (all decision-cited, none an unbuilt gap). This story is the ' +
+      'generic "run a brain-creation session" arc; forge has no separate ' +
+      'agent-builder-launched run for it (step 1\'s #/agents/builder/brain-' +
+      'creation has no real analog — the kickoff IS the /knowledge/new create ' +
+      'hand-off, already the entry point knowledge-create-kb-band-scope ' +
+      'drives), so the ported beats are the SAME two this batch built for ' +
+      'create-kb-cycle: knowledge-create-kb-band-scope-seed (R4-19 WI-2\'s ' +
+      'real session reachability + a real briefing POST + honestly-emulated ' +
+      'theme authoring grounded in forge\'s own review-band findings) and ' +
+      'knowledge-create-kb-band-scope-commit (a real approve POST + R1-06\'s ' +
+      'deterministic runCommitStep invoked directly, landing a genuine ' +
+      'brain write). See DECISION_R4_19_WI1_WI2 for the as-built/emulated ' +
+      'boundary.',
   },
   {
     story: 'run-flow-onboard',
