@@ -45,8 +45,15 @@ export const journey = defineJourney({
         ).then(() => true).catch(() => false);
         check(projectReady, 'demo-showcase-entry: the project page renders ([data-page="projects"][data-page-ready="true"])');
 
+        // The gated link is driven by `projectCycles`, populated by the project
+        // page's loadCycleGroups effect which settles AFTER data-page-ready flips
+        // (a separate async fetch). Wait for that settle before asserting — the
+        // seeded mdtoc done-cycle is genuinely in the raw project-scoped set, so
+        // the link WILL appear; this waits for the async load, never masks a real
+        // absence (the empty beat below proves the not-gated case for real).
         const entryLink = page.locator('[data-action="open-showcase"]');
-        check(await entryLink.count() > 0, 'demo-showcase-entry: the gated "Open showcase →" link renders once the project has a merged|done cycle');
+        const entryAppeared = await entryLink.waitFor({ state: 'attached', timeout: 8000 }).then(() => true).catch(() => false);
+        check(entryAppeared, 'demo-showcase-entry: the gated "Open showcase →" link renders once the project has a merged|done cycle');
 
         await entryLink.scrollIntoViewIfNeeded().catch(() => {});
         await caption(page, 'A project with a merged cycle offers "Open showcase →" on its cycle ledger — a standing "show someone the project" page, distinct from a per-run artifact view.');
