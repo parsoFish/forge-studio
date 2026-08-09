@@ -8,9 +8,12 @@
  * /artifact's `type=demo` view already uses (T1 ruling — reuse wholesale, no
  * fork). The gated "open showcase →" entry point lives on
  * `/projects/[id]` (app/projects/[id]/page.tsx), visible only when
- * `showShowcaseEntry` says this project actually has a showcase-worthy cycle
- * — so this page's own "no data" path is reachable only via a direct/stale
- * URL, never the normal click-through.
+ * `showShowcaseEntry` says this project has a terminal (merged|done) cycle.
+ * That gate does NOT verify the cycle's demo.json is present (it would cost an
+ * N-fetch), so the empty path IS reachable through the normal click-through
+ * when a terminal cycle exists but its demo evidence was never captured — the
+ * empty state distinguishes that case ("no captured demo evidence") from the
+ * genuinely-no-terminal-cycle case ("no merged/done cycle yet").
  *
  * Load pipeline (declared-data-fails-open guard — R4-14 WI-2 brief):
  *   fetchCycles() (bridge-client) → loadShowcase({ cycles, projectId, fetchDemo })
@@ -70,6 +73,9 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
   // cycle exists but its demo.json never landed (`kind: 'loaded', model: null`)
   // — either way there is nothing real to render, never a fabricated gallery.
   const isEmpty = !model;
+  // Distinguish a genuinely-absent terminal cycle from a terminal cycle whose
+  // demo.json was never captured (both render empty, but honestly differently).
+  const emptyReason: 'no-cycle' | 'no-demo' = result?.kind === 'loaded' ? 'no-demo' : 'no-cycle';
 
   return (
     <main
@@ -119,7 +125,7 @@ export default function ProjectShowcasePage({ params }: { params: { id: string }
         {!ready ? (
           <div style={{ fontSize: 13, color: 'var(--faint)', padding: '40px 0' }}>Loading…</div>
         ) : isEmpty ? (
-          <ShowcaseEmptyState projectId={id} />
+          <ShowcaseEmptyState projectId={id} reason={emptyReason} />
         ) : (
           <>
             {stats && <ShowcaseStatsStrip stats={stats} />}
@@ -223,7 +229,7 @@ function ShowcaseStatsStrip({ stats }: { stats: ShowcaseStats }) {
 // silently-blank gallery.
 // ---------------------------------------------------------------------------
 
-function ShowcaseEmptyState({ projectId }: { projectId: string }) {
+function ShowcaseEmptyState({ projectId, reason }: { projectId: string; reason: 'no-cycle' | 'no-demo' }) {
   return (
     <div
       data-section="showcase-empty"
@@ -252,8 +258,13 @@ function ShowcaseEmptyState({ projectId }: { projectId: string }) {
       </div>
       <h2 style={{ fontSize: 18, color: 'var(--text)' }}>No showcase yet</h2>
       <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 440, lineHeight: 1.6, margin: 0 }}>
-        This project has no <strong>merged</strong> or <strong>done</strong> cycle with demo
-        evidence yet — the showcase fills in once a cycle completes.
+        {reason === 'no-demo' ? (
+          <>This project's most recent <strong>merged</strong>/<strong>done</strong> cycle has no
+          captured demo evidence yet — the showcase fills in once a cycle records a demo.</>
+        ) : (
+          <>This project has no <strong>merged</strong> or <strong>done</strong> cycle yet — the
+          showcase fills in once a cycle completes.</>
+        )}
       </p>
       <Link
         href={`/projects/${encodeURIComponent(projectId)}`}

@@ -85,7 +85,10 @@ export function deriveShowcaseCycleId(cycles: Cycle[], projectId: string): strin
   let newestMs = resolveShowcaseCycleTimeMs(newest) ?? -Infinity;
   for (const cycle of eligible.slice(1)) {
     const ms = resolveShowcaseCycleTimeMs(cycle) ?? -Infinity;
-    if (ms > newestMs) {
+    // Deterministic tie-break: on an exact timestamp tie, prefer the
+    // lexicographically greater cycleId (it embeds the ISO stamp), so the pick
+    // never depends on the bridge's live/recent concatenation order.
+    if (ms > newestMs || (ms === newestMs && cycle.cycleId > newest.cycleId)) {
       newest = cycle;
       newestMs = ms;
     }

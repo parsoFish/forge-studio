@@ -254,3 +254,14 @@ test('AT-4: deriveShowcaseCycleId picks the genuinely-newest cycle via the ended
   expect(result).toBe(NEWEST_CYCLE_MISSING_ENDED_AT.cycleId);
   expect(result).not.toBe(OLDER_CYCLE_WITH_ENDED_AT.cycleId);
 });
+
+// AT-5 (review finding, R4-14): deterministic tie-break — two eligible cycles
+// with the IDENTICAL resolved timestamp pick the lexicographically greater
+// cycleId regardless of input-array order (never input-order-dependent).
+test('AT-5: deriveShowcaseCycleId breaks an exact-timestamp tie by greater cycleId, order-independently', () => {
+  const same = '2026-07-01T00:00:00.000Z';
+  const a: Cycle = { cycleId: '2026-07-01T00-00-00_INIT-aaa', project: 'gitpulse', status: 'merged', startedAt: same, endedAt: same };
+  const b: Cycle = { cycleId: '2026-07-01T00-00-00_INIT-zzz', project: 'gitpulse', status: 'done', startedAt: same, endedAt: same };
+  expect(deriveShowcaseCycleId([a, b], 'gitpulse')).toBe(b.cycleId);
+  expect(deriveShowcaseCycleId([b, a], 'gitpulse')).toBe(b.cycleId);
+});
