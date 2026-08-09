@@ -24,8 +24,8 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { dirname } from 'node:path';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import matter from 'gray-matter';
 
 import {
@@ -38,6 +38,7 @@ import {
 } from './bridge-studio.ts';
 import { skillPath, skillsDir } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
+import { stageSkillPackage } from './skill-staging.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { isStudioAgent } from '../orchestrator/studio/registry.ts';
 import {
@@ -49,6 +50,22 @@ import {
   approveSkillDraft,
   type SkillLibraryEntry,
 } from '../orchestrator/studio/skill-library.ts';
+
+// SEC-05 q80 (d1): total decoded-bytes cap on an inline-upload install. Kept
+// at or below the transport's MAX_BODY_BYTES (~1 MiB, cli/bridge-studio.ts) so
+// a staged package can never exceed what the body reader already admits; a
+// request over this cap is refused before any staging write.
+const MAX_STAGED_PACKAGE_BYTES = 1 * 1024 * 1024; // 1 MiB
+
+/** Server-minted, unpredictable staging id — mirrors `newRunStamp` in
+ *  cli/ui-bridge.ts (ISO-8601 stamp to ms precision + 4 base36 chars, so two
+ *  installs in the same millisecond never collide onto one staging dir). NEVER
+ *  derived from client input: the guarded stage's containment proof rests on
+ *  this being fully server-controlled. */
+function newSourceId(): string {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
+  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
+}
 
 // ---------------------------------------------------------------------------
 // Response shaping — never forward an internal absolute host path to the
@@ -153,14 +170,22 @@ export async function handleStudioSkillsRoutes(
   }
 
   // ---- POST /api/studio/skills/install -------------------------------------
-  // D2: transport-agnostic — consumes an already-materialised package (a local
-  // directory path). No network call, no fabricated "vendored upstream"
-  // content. Every field is validated at this boundary before it reaches
-  // installSkillPackage; every error installSkillPackage itself throws is, by
-  // its own contract, a caller-input problem (bad id/packageDir/upstream,
-  // traversal, oversize, binary, missing SKILL.md) — reported as 400, never
-  // 500, never a bare stack trace.
+  // SEC-05 q80 (d1): inline-upload contract. The route NO LONGER accepts a
+  // client-supplied `packageDir` — a caller-controlled absolute host path
+  // handed straight into installSkillPackage's filesystem walk was the P1 this
+  // fix closes. Instead it consumes inline-uploaded bytes:
+  //   { id, entries: [{ path, contentBase64 }], upstream: { source, ref? } }
+  // Every field is validated at this boundary; a SERVER-derived sourceId (never
+  // from the client) names a private staging dir under
+  // <forgeRoot>/_skill-staging; stageSkillPackage (cli/skill-staging.ts) writes
+  // each entry through the shared realpath containment guard, and the returned
+  // server-trusted staged realpath is what installSkillPackage copies from. The
+  // staging dir is rm'd in a `finally` on BOTH success and failure. Every
+  // stage/install throw is, by contract, a caller-input problem — reported 400,
+  // never 500, never a bare stack trace.
   if (method === 'POST' && url === '/api/studio/skills/install') {
+    const sourceId = newSourceId();
+    const stagingRoot = resolve(ctx.forgeRoot, '_skill-staging');
     try {
       let body: unknown;
       try { body = await readJson(req); } catch { sendJson(res, 400, { error: 'invalid JSON body' }, origin); return true; }
@@ -172,10 +197,34 @@ export async function handleStudioSkillsRoutes(
       const id = typeof b['id'] === 'string' ? b['id'].trim() : '';
       if (!id) { sendJson(res, 400, { error: 'id is required' }, origin); return true; }
 
-      const packageDir = typeof b['packageDir'] === 'string' ? b['packageDir'].trim() : '';
-      if (!packageDir) { sendJson(res, 400, { error: 'packageDir is required' }, origin); return true; }
-      if (!existsSync(packageDir)) {
-        sendJson(res, 400, { error: `packageDir "${packageDir}" does not exist` }, origin); return true;
+      // entries — a non-empty array of { path, contentBase64 }. Each path is an
+      // untrusted, possibly-nested package-relative path: it must be a non-empty
+      // string, must NOT be absolute, and must contain no ".." segment. This is
+      // the fail-fast boundary layer in front of the guarded stage, not a
+      // substitute for it — stageSkillPackage re-checks containment on the
+      // resolved realpath of every entry.
+      const rawEntries = b['entries'];
+      if (!Array.isArray(rawEntries) || rawEntries.length === 0) {
+        sendJson(res, 400, { error: 'entries is required (a non-empty array of { path, contentBase64 })' }, origin); return true;
+      }
+      const entries: Array<{ path: string; contentBase64: string }> = [];
+      let totalDecodedBytes = 0;
+      for (const raw of rawEntries) {
+        if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+          sendJson(res, 400, { error: 'each entry must be an object { path, contentBase64 }' }, origin); return true;
+        }
+        const e = raw as Record<string, unknown>;
+        const entryPath = typeof e['path'] === 'string' ? e['path'] : '';
+        if (!entryPath) { sendJson(res, 400, { error: 'each entry.path must be a non-empty string' }, origin); return true; }
+        if (entryPath.startsWith('/')) { sendJson(res, 400, { error: `entry.path "${entryPath}" must not be absolute` }, origin); return true; }
+        if (entryPath.split('/').includes('..')) { sendJson(res, 400, { error: `entry.path "${entryPath}" must not contain a ".." segment` }, origin); return true; }
+        if (typeof e['contentBase64'] !== 'string') { sendJson(res, 400, { error: `entry "${entryPath}" contentBase64 must be a string` }, origin); return true; }
+        const contentBase64 = e['contentBase64'];
+        totalDecodedBytes += Buffer.from(contentBase64, 'base64').length;
+        if (totalDecodedBytes > MAX_STAGED_PACKAGE_BYTES) {
+          sendJson(res, 413, { error: `staged package exceeds the ${MAX_STAGED_PACKAGE_BYTES}-byte cap` }, origin); return true;
+        }
+        entries.push({ path: entryPath, contentBase64 });
       }
 
       const rawUpstream = b['upstream'];
@@ -188,21 +237,34 @@ export async function handleStudioSkillsRoutes(
       const ref = typeof upstreamObj['ref'] === 'string' && upstreamObj['ref'].trim() ? upstreamObj['ref'].trim() : undefined;
 
       try {
+        // stagingRoot must exist before the guard resolves against it
+        // (resolveGuardedPath realpath's its root and refuses a missing one).
+        // Mirrors the stageMaterials caller in cli/ui-bridge.ts, which mkdir's
+        // the run dir before staging.
+        mkdirSync(stagingRoot, { recursive: true });
+        const stagedDir = stageSkillPackage(stagingRoot, sourceId, entries);
         const result = installSkillPackage({
           forgeRoot: ctx.forgeRoot,
           id,
-          packageDir,
+          packageDir: stagedDir,
           upstream: ref ? { source, ref } : { source },
         });
         sendJson(res, 200, { ok: true, id, ...result }, origin);
       } catch (err) {
-        // Every installSkillPackage throw (bad slug, traversal, cap exceeded,
-        // binary file, no SKILL.md at the package root, ...) is a caller-input
-        // problem by the module's own contract — never a 500 here.
+        // Every stageSkillPackage / installSkillPackage throw (traversal entry,
+        // duplicate target, bad slug, cap exceeded, binary file, no SKILL.md at
+        // the package root, ...) is a caller-input problem by contract — 400,
+        // never a 500 here.
         sendJson(res, 400, { error: sanitizeError(err) }, origin);
       }
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    } finally {
+      // Clean the private staging dir on BOTH success and throw. `sourceId` is
+      // server-minted, so this join targets exactly this request's dir; the
+      // force flag makes it a no-op when staging never wrote (e.g. a
+      // body-validation 400 that returned before the mkdir above).
+      rmSync(join(stagingRoot, sourceId), { recursive: true, force: true });
     }
     return true;
   }

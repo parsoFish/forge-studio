@@ -226,17 +226,6 @@ async function skillClientPost(
   }
 }
 
-/** Install an already-materialised skill package (D2: transport-agnostic —
- *  this initiative never fetches from a hub itself). */
-export async function installSkill(input: {
-  id: string;
-  packageDir: string;
-  upstream: { source: string; ref?: string };
-}): Promise<{ ok: boolean; alreadyInstalled?: boolean; error?: string }> {
-  const r = await skillClientPost('/api/studio/skills/install', input);
-  return { ok: r.ok, error: r.error, alreadyInstalled: r.data?.alreadyInstalled === true };
-}
-
 /** Approve a draft skill install (D4: never restores `runtime`/`allowed-tools`). */
 export async function approveSkill(id: string): Promise<{ ok: boolean; error?: string }> {
   const r = await skillClientPost(`/api/studio/skills/${encodeURIComponent(id)}/approve`, {});

@@ -1,6 +1,5 @@
-import { readFileSync, readdirSync, mkdirSync, mkdtempSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, readdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
@@ -392,12 +391,11 @@ export const journey = defineJourney({
               // artifact a later agents-journey beat still needs (ui:journey-found
               // defect, R3-01-F4: this beat ran AFTER skills-create and wiped it).
               cleanSkillInstallArtifacts(); // stale-state sweep first (crash-safe, own artifacts only)
-              let pkgDir = null;
               try {
-                // D2: this pipeline consumes an ALREADY-MATERIALISED package (a local
-                // directory) — no hub fetch, no fabricated "vendored upstream" content.
-                // The package lives entirely outside the repo tree.
-                pkgDir = mkdtempSync(join(tmpdir(), 'forge-journey-skill-'));
+                // D2: this pipeline consumes an inline package upload — the entries are
+                // built in memory and streamed as base64; the server stages them under a
+                // trusted root (<forgeRoot>/_skill-staging) before any filesystem walk,
+                // so no caller-supplied host path ever reaches installSkillPackage.
                 const skillMd = [
                   '---',
                   'name: Journey Installed Skill',
@@ -417,18 +415,23 @@ export const journey = defineJourney({
                   'of every run.',
                   '',
                 ].join('\n');
-                writeFileSync(join(pkgDir, 'SKILL.md'), skillMd);
-                mkdirSync(join(pkgDir, 'scripts'), { recursive: true });
-                writeFileSync(join(pkgDir, 'scripts', 'collect.sh'), '#!/usr/bin/env bash\necho "journey fixture -- never executed"\n');
+                const collectSh = '#!/usr/bin/env bash\necho "journey fixture -- never executed"\n';
+                const entries = [
+                  { path: 'SKILL.md', contentBase64: Buffer.from(skillMd).toString('base64') },
+                  { path: 'scripts/collect.sh', contentBase64: Buffer.from(collectSh).toString('base64') },
+                ];
 
-                // Install via the bridge — the exact route the UI's own install button
-                // calls (forge-ui/lib/skill-client.ts's installSkill()).
+                // Install via the bridge — the inline { id, entries, upstream } upload
+                // contract. No install button ever called this route (installSkill was a
+                // dead export, now deleted); the harness posts the entries directly. The
+                // server stages them under a trusted root (<forgeRoot>/_skill-staging),
+                // re-checking per-entry containment, before installSkillPackage walks them.
                 const installRes = await fetch(watch.bridgeUrl + '/api/studio/skills/install', {
                   method: 'POST',
                   headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
                   body: JSON.stringify({
                     id: SK_INSTALL_ID,
-                    packageDir: pkgDir,
+                    entries,
                     upstream: { source: 'local-fixture://journey-install-approve' },
                   }),
                 });
@@ -511,11 +514,11 @@ export const journey = defineJourney({
                 const driftedInPalette = await page.locator(`[data-component="catalog-palette"] [data-kind="skill"][data-id="${SK_INSTALL_ID}"]`).count();
                 check(driftedInPalette === 0, `SK-5: needs-review drops back OUT of the palette (found ${driftedInPalette})`);
               } finally {
-                // Every beat cleans up its own artifacts — the source package dir plus
-                // the installed result + ledger, restored to their exact prior state
-                // (cleanSkillInstallArtifacts — the NARROW sweep; see the start-of-beat
-                // comment for why this must not be the broad cleanSkillArtifacts()).
-                if (pkgDir) { try { rmSync(pkgDir, { recursive: true, force: true }); } catch { /* */ } }
+                // Every beat cleans up its own artifacts — the installed result + ledger,
+                // restored to their exact prior state (cleanSkillInstallArtifacts — the
+                // NARROW sweep; see the start-of-beat comment for why this must not be the
+                // broad cleanSkillArtifacts()). No temp package dir to remove any more —
+                // the entries are streamed in memory and staged server-side.
                 cleanSkillInstallArtifacts();
               }
               check(!existsSync(SK_INSTALL_DIR), `SK-5: skills/${SK_INSTALL_ID}/ removed after the beat (self-cleaning)`);

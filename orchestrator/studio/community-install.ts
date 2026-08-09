@@ -28,10 +28,11 @@
  */
 
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve, sep } from 'node:path';
+import { dirname, join } from 'node:path';
 
 import { assertSkillSlug, skillPath } from '../skill-path.ts';
-import { hookDir, hookYamlPath } from './hook-library.ts';
+import { hooksDir } from './hook-library.ts';
+import { guardedFile } from '../../cli/studio-path-guard.ts';
 import { listConnections } from './connection-library.ts';
 import { loadCatalog } from './registry.ts';
 import { vendoredPackageDir, readVendoredPackage, communityInstallState } from './community-index.ts';
@@ -139,8 +140,14 @@ export function installCommunityHookPackage(input: InstallCommunityHookInput): I
   }
 
   // Reinstall is idempotent — leave the existing installed copy untouched
-  // (mirrors the skill pipeline's own reinstall behaviour).
-  if (existsSync(hookYamlPath(id, forgeRoot))) {
+  // (mirrors the skill pipeline's own reinstall behaviour). Probe the dedup
+  // through the realpath containment guard, NOT a bare existsSync on a lexical
+  // path: a `studio/hooks/<id>` that is a SYMLINK out of the tree must never be
+  // read as an already-installed copy. `guardedFile` 'read' resolves every
+  // ancestor segment's realpath (leaf included), so a symlinked `<id>` segment
+  // yields null — the symlink-following dedup can no longer launder a false
+  // `alreadyInstalled: true` for an install dir that really points outside root.
+  if (guardedFile(hooksDir(forgeRoot), [id, 'hook.yaml'], 'read') !== null) {
     return { alreadyInstalled: true };
   }
 
@@ -157,22 +164,38 @@ export function installCommunityHookPackage(input: InstallCommunityHookInput): I
     throw new Error(`installCommunityHookPackage: package "${id}" exceeds the ${MAX_PACKAGE_BYTES}-byte cap`);
   }
 
-  // Pre-validate every destination path BEFORE any write (mirrors
-  // installSkillPackage's own AT-21 discipline) — a failure above or below
-  // must never leave a partial install on disk.
-  const destDir = hookDir(id, forgeRoot);
-  const boundary = resolve(destDir) + sep;
-  const destinations = files.map((file) => {
-    const destPath = join(destDir, ...file.path.split('/'));
-    if (!resolve(destPath).startsWith(boundary)) {
-      throw new Error(`installCommunityHookPackage: destination for "${file.path}" escapes "${destDir}" — refusing to write`);
+  // Ensure the TRUSTED containment root exists before guarding — `studio/hooks`
+  // is a fixed, config-derived directory (never request-derived), and
+  // `resolveGuardedPath` realpaths its `root` up front, so a fresh forge root
+  // (where `studio/hooks/` does not exist yet) would otherwise reject every
+  // write. Creating it does NOT weaken containment: only the untrusted `<id>`
+  // segment (and the package's own leaf paths) go through the per-segment
+  // identity walk below; the root itself is trusted by contract.
+  mkdirSync(hooksDir(forgeRoot), { recursive: true });
+
+  // PHASE 1 — bless every destination path through the SAME realpath guard,
+  // LEAF INCLUDED, before any write (mirrors installSkillPackage's own AT-21
+  // "validate the whole package, then write" discipline). A lexical
+  // `resolve().startsWith(boundary)` check is worthless here: it normalises
+  // `..` away and is blind to a symlinked `studio/hooks/<id>` install
+  // destination, through which `writeFileSync` would follow the symlink and
+  // land the vendored bytes OUTSIDE the boundary (zip-slip into the install
+  // destination). `guardedFile` 'write' resolves every ancestor segment's
+  // realpath — a symlinked `<id>` segment yields null → refusal, so no vendored
+  // byte is ever written through the symlink. A failure here must never leave a
+  // partial install on disk, so nothing is written until every path is blessed.
+  const blessed = files.map((file) => {
+    const realPath = guardedFile(hooksDir(forgeRoot), [id, ...file.path.split('/')], 'write');
+    if (realPath === null) {
+      throw new Error(`installCommunityHookPackage: destination for "${file.path}" is not contained under studio/hooks/${id}/ (traversal or symlink) — refusing to write`);
     }
-    return { destPath, file };
+    return { realPath, file };
   });
 
-  for (const { destPath, file } of destinations) {
-    mkdirSync(dirname(destPath), { recursive: true });
-    writeFileSync(destPath, file.body, 'utf8');
+  // PHASE 2 — every path is blessed; materialise the bytes.
+  for (const { realPath, file } of blessed) {
+    mkdirSync(dirname(realPath), { recursive: true });
+    writeFileSync(realPath, file.body, 'utf8');
   }
 
   return { alreadyInstalled: false };

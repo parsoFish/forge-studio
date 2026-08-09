@@ -51,6 +51,7 @@ import { probeConnection } from './connection-probe.ts';
 import type { ProbeState, ProbeResult } from './connection-probe.ts';
 import { loadCatalog } from './registry.ts';
 import { reqString, loadYaml } from './yaml-fields.ts';
+import { guardedFile, guardedReadFile } from '../../cli/studio-path-guard.ts';
 import type { CommunitySkill } from './types.ts';
 import type { Finding } from './validate.ts';
 
@@ -307,9 +308,24 @@ function communitySkillSignals(cs: CommunitySkill): CommunitySignals | null {
   return { stars: cs.stars, attributedTo };
 }
 
+/** The fixed-filename leaf (`SKILL.md`/`hook.yaml`) inside a vendored package
+ *  is read through the shared realpath containment guard, LEAF INCLUDED —
+ *  `vendoredPackageDir` only realpath-checks the package DIRECTORY, never the
+ *  leaf inside it, so a `SKILL.md`/`hook.yaml` that is a SYMLINK to an external
+ *  secret would otherwise be read through and its bytes surface in the served
+ *  `CommunityItem` (name/description). `guardedReadFile`/`guardedFile` walk
+ *  `<vendored base>/<id>/<leaf>` per segment: a symlinked leaf (or `<id>` dir)
+ *  yields null → these throw → the caller's `try/catch` surfaces the module's
+ *  existing `error:` entry, never the target bytes. `assertSkillSlug` stays as
+ *  the caller-side slug check the guard's own CONTRACT requires (the guard
+ *  verifies path containment, never slug shape — see cli/studio-path-guard.ts). */
 function readVendoredSkillMeta(forgeRoot: string, id: string): { name: string; description?: string } {
-  const mdPath = join(vendoredPackageDir(forgeRoot, 'skill', id), 'SKILL.md');
-  const { data } = matter(readFileSync(mdPath, 'utf8'), {});
+  assertSkillSlug(id);
+  const raw = guardedReadFile(vendoredBaseDir(forgeRoot, 'skill'), [id, 'SKILL.md']);
+  if (raw === null) {
+    throw new Error(`readVendoredSkillMeta: SKILL.md for vendored skill "${id}" is missing or fails realpath containment (a symlinked leaf never surfaces its bytes) — refusing to read`);
+  }
+  const { data } = matter(raw, {});
   const d = (data ?? {}) as Record<string, unknown>;
   const name = typeof d['name'] === 'string' && d['name'] ? (d['name'] as string) : id;
   const description = typeof d['description'] === 'string' ? (d['description'] as string) : undefined;
@@ -317,7 +333,14 @@ function readVendoredSkillMeta(forgeRoot: string, id: string): { name: string; d
 }
 
 function readVendoredHookMeta(forgeRoot: string, id: string): { name: string; description?: string } {
-  const yamlPath = join(vendoredPackageDir(forgeRoot, 'hook', id), 'hook.yaml');
+  assertSkillSlug(id);
+  // Guard the leaf, then feed the BLESSED realpath to `loadYaml` unchanged (its
+  // path-based parse + mapping/read-error semantics are reused, not re-invented
+  // as a string parse). A symlinked/absent leaf → null → throw → error entry.
+  const yamlPath = guardedFile(vendoredBaseDir(forgeRoot, 'hook'), [id, 'hook.yaml'], 'read');
+  if (yamlPath === null) {
+    throw new Error(`readVendoredHookMeta: hook.yaml for vendored hook "${id}" is missing or fails realpath containment (a symlinked leaf never surfaces its bytes) — refusing to read`);
+  }
   const d = loadYaml(yamlPath);
   return { name: reqString(d, 'name', yamlPath), description: reqString(d, 'description', yamlPath) };
 }

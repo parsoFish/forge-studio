@@ -84,13 +84,17 @@ async function postJson(url: string, body: unknown, headers: Record<string, stri
   });
 }
 
-/** Materialise a real, already-mateiralised skill package directory on disk (D2). */
-function makePackageDir(
+/**
+ * Inline-upload {entries} for POST /api/studio/skills/install (SEC-05 q80 new
+ * contract). Mirrors the old makePackageDir's SKILL.md byte-for-byte so the
+ * installed skill is byte-equivalent — only the transport changed (a client
+ * packageDir became a server-staged inline upload). `b64` is a hoisted function
+ * declaration further down the file, so referencing it here is safe.
+ */
+function makeEntries(
   frontmatter: Record<string, unknown> = { name: 'Route Installable', description: 'installed via the bridge route' },
-): string {
-  const dir = mkdtempSync(join(tmpdir(), 'bridge-skill-pkg-'));
-  writeFileSync(join(dir, 'SKILL.md'), matter.stringify('\n# Route Installable\n\nBody.\n', frontmatter));
-  return dir;
+): Array<{ path: string; contentBase64: string }> {
+  return [{ path: 'SKILL.md', contentBase64: b64(matter.stringify('\n# Route Installable\n\nBody.\n', frontmatter)) }];
 }
 
 // ---------------------------------------------------------------------------
@@ -177,10 +181,9 @@ test('AT-50: GET /api/studio/skills/<traversal> (URL-encoded variants) returns 4
 // ---------------------------------------------------------------------------
 
 test('AT-51: POST /api/studio/skills/install writes a draft on disk with a valid body', async () => {
-  const packageDir = makePackageDir();
   const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
     id: 'route-installed-skill',
-    packageDir,
+    entries: makeEntries(),
     upstream: { source: 'https://github.com/example/route-installed-skill' },
   });
   assert.equal(res.status, 200);
@@ -191,41 +194,45 @@ test('AT-51: POST /api/studio/skills/install writes a draft on disk with a valid
 });
 
 test('AT-51: POST /api/studio/skills/install missing upstream.source → 400', async () => {
-  const packageDir = makePackageDir();
   const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
     id: 'missing-source-skill',
-    packageDir,
+    entries: makeEntries(),
     upstream: {},
   });
   assert.equal(res.status, 400);
 });
 
-test('AT-51: POST /api/studio/skills/install missing packageDir → 400', async () => {
+test('AT-51: POST /api/studio/skills/install missing entries → 400', async () => {
   const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
-    id: 'missing-package-dir-skill',
+    id: 'missing-entries-skill',
     upstream: { source: 'https://x' },
   });
   assert.equal(res.status, 400);
 });
 
-test('AT-51: POST /api/studio/skills/install with a non-existent packageDir → 400 with an actionable message (not 500)', async () => {
+test('AT-51: POST /api/studio/skills/install with a malformed entry (traversal path) → 400 with an actionable message (not 500)', async () => {
+  // New-contract analogue of the retired "non-existent packageDir" case: bad
+  // caller input must be a 400 with an actionable message, never a 500 / raw
+  // stack trace. A traversal entry.path is deterministically rejected (the
+  // route boundary refuses a ".." segment; the guarded stage refuses it too),
+  // whereas a bad base64 string is decoded leniently by Node and would NOT
+  // reliably 400 — so the traversal path is the robust bad-input probe here.
   const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
-    id: 'nonexistent-package-dir-skill',
-    packageDir: join(tmpdir(), 'this-package-dir-does-not-exist-at-all'),
+    id: 'malformed-entry-skill',
+    entries: [{ path: '../escape', contentBase64: b64('malformed caller input') }],
     upstream: { source: 'https://x' },
   });
-  assert.equal(res.status, 400, 'a missing packageDir must be a 400, never a 500');
+  assert.equal(res.status, 400, 'malformed caller input must be a 400, never a 500');
   const body = (await res.json()) as { error: string };
   assert.ok(typeof body.error === 'string' && body.error.length > 0);
 });
 
 test('AT-52: POST /api/studio/skills/install for an already-installed id → 200 with alreadyInstalled: true', async () => {
   const id = 'reinstall-route-skill';
-  const packageDir = makePackageDir();
-  const first = await postJson(`${bridgeUrl}/api/studio/skills/install`, { id, packageDir, upstream: { source: 'https://x' } });
+  const first = await postJson(`${bridgeUrl}/api/studio/skills/install`, { id, entries: makeEntries(), upstream: { source: 'https://x' } });
   assert.equal(first.status, 200);
 
-  const second = await postJson(`${bridgeUrl}/api/studio/skills/install`, { id, packageDir: makePackageDir(), upstream: { source: 'https://x' } });
+  const second = await postJson(`${bridgeUrl}/api/studio/skills/install`, { id, entries: makeEntries(), upstream: { source: 'https://x' } });
   assert.equal(second.status, 200, 'reinstall is idempotent, not a 409');
   const body = (await second.json()) as { alreadyInstalled: boolean };
   assert.equal(body.alreadyInstalled, true);
@@ -237,8 +244,7 @@ test('AT-52: POST /api/studio/skills/install for an already-installed id → 200
 
 test('AT-53: POST /api/studio/skills/<id>/approve succeeds for a draft, 409 for a non-draft', async () => {
   const id = 'approve-route-skill';
-  const packageDir = makePackageDir();
-  await postJson(`${bridgeUrl}/api/studio/skills/install`, { id, packageDir, upstream: { source: 'https://x' } });
+  await postJson(`${bridgeUrl}/api/studio/skills/install`, { id, entries: makeEntries(), upstream: { source: 'https://x' } });
 
   const res = await postJson(`${bridgeUrl}/api/studio/skills/${id}/approve`, {});
   assert.equal(res.status, 200);

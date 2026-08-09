@@ -55,6 +55,12 @@ projects/*
 # Worktrees the scheduler creates
 _worktrees/
 
+# SEC-05 q80: skill-package install staging root (<forgeRoot>/_skill-staging).
+# The install route stages uploaded entries here (per-entry containment
+# re-checked) before installSkillPackage copies them into skills/<id>/.
+# Runtime, never source.
+_skill-staging/
+
 # Unifier scratchpad + DEMO bundle directories — these belong to a
 # worktree, but occasionally leak to the forge root when a worktree's
 # fast-forward into main carries gitignored-elsewhere paths. Pin them
