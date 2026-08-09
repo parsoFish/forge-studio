@@ -360,7 +360,18 @@ export type KbBackendId = (typeof KB_BACKENDS)[number];
 export type KbBindingKind = 'flow' | 'project' | 'unique';
 export const KB_BINDING_KINDS: readonly KbBindingKind[] = ['flow', 'project', 'unique'];
 export type KbBinding =
-  | { kind: 'flow'; ref: string }
+  | {
+      kind: 'flow';
+      ref: string;
+      /**
+       * Optional band scope (R1-06, ADR-010 amendment "R1-06 band-scoped
+       * reviewer grant"). Meaningless off a `flow` binding — a `project`/
+       * `unique` binding declaring `band` is rejected at load time
+       * (`parseKbBinding`, orchestrator/studio/kb-descriptor.ts). Absent ⇒
+       * unscoped (the pre-existing flow-binding behaviour).
+       */
+      band?: string;
+    }
   | { kind: 'project'; ref: string }
   | { kind: 'unique' };
 

@@ -58,6 +58,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrat
 import { listSkillMdDirs, skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { lintSkillTrust, lintSkillRefs } from '../orchestrator/studio/skill-library.ts';
 import type { AgentDefinition, KbDescriptor } from '../orchestrator/studio/types.ts';
+import { listFlowBandIds } from './flow-band-vocab.ts';
 
 // ---------------------------------------------------------------------------
 // Public API
@@ -458,6 +459,21 @@ export function runStudioLint(root: string): StudioLintResult {
           check: 'binding-ref',
           message: `KB "${kb.id}" binding.ref "${kb.binding.ref}" is not a registered flow id (studio/flows/${kb.binding.ref}/flow.yaml not found)`,
         });
+      } else if (kb.binding.kind === 'flow' && kb.binding.band !== undefined) {
+        // R1-06 — a declared band must be one the bound flow's own nodes
+        // actually run under (flow -> node -> agent -> declared band, one
+        // level deeper than the ref-existence check above). Only checked
+        // once the ref itself resolves — a dangling ref already errors above
+        // and has no real flow to derive a band vocabulary from.
+        const realBands = listFlowBandIds(root, kb.binding.ref);
+        if (!realBands.includes(kb.binding.band)) {
+          findings.push({
+            level: 'error',
+            object: `kb:${kb.id}`,
+            check: 'binding-band',
+            message: `KB "${kb.id}" binding.band "${kb.binding.band}" is not one of flow "${kb.binding.ref}"'s real bands: ${realBands.join(', ')}`,
+          });
+        }
       }
       if (kb.binding.kind === 'project' && !projectIds.has(kb.binding.ref)) {
         findings.push({

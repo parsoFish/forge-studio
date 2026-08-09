@@ -29,6 +29,7 @@ import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '../orchestrator/studio/types.ts';
+import { listFlowBandIds } from './flow-band-vocab.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -539,6 +540,30 @@ export async function handleStudioKbRoutes(
             sendJson(res, 400, { error: `binding.ref "${ref}" is not a registered flow id` }, origin);
             return true;
           }
+
+          // R1-06: an optional band scope, meaningful only on a flow binding.
+          // Reject an unknown band up front, naming the flow's real band
+          // vocabulary — mirrors the ref-existence check just above.
+          const bandRaw = bindingObj['band'];
+          if (bandRaw !== undefined && bandRaw !== null) {
+            if (typeof bandRaw !== 'string' || bandRaw.length === 0) {
+              sendJson(res, 400, { error: 'binding.band must be a non-empty string when present' }, origin);
+              return true;
+            }
+            const realBands = listFlowBandIds(ctx.forgeRoot, ref);
+            if (!realBands.includes(bandRaw)) {
+              sendJson(
+                res,
+                400,
+                { error: `binding.band "${bandRaw}" is not one of flow "${ref}"'s real bands: ${realBands.join(', ')}` },
+                origin,
+              );
+              return true;
+            }
+            binding = { kind: 'flow', ref, band: bandRaw };
+          } else {
+            binding = { kind: 'flow', ref };
+          }
         } else {
           const projectsDir = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
           const projectIds = discoverProjects(projectsDir, ctx.forgeRoot).map((p) => p.id);
@@ -546,8 +571,8 @@ export async function handleStudioKbRoutes(
             sendJson(res, 400, { error: `binding.ref "${ref}" is not a discovered project id` }, origin);
             return true;
           }
+          binding = { kind: 'project', ref };
         }
-        binding = { kind: kind as 'flow' | 'project', ref };
       }
 
       // 5. Containment: `brain/` is the fixed, forgeRoot-derived root and `id`

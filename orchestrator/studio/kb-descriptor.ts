@@ -19,17 +19,64 @@ import type {
 import { reqString, optString, oneOf, reqObject, loadYaml } from './yaml-fields.ts';
 
 /**
- * Strict `binding` parse (R1-01) — mirrors the strict-at-load-time treatment
- * the old `scope` enum received. `kind` must be one of KB_BINDING_KINDS;
- * `flow`/`project` bindings require a non-empty string `ref`; `unique`
- * carries no `ref`.
+ * Thrown when a `binding.band` key is declared where it carries no meaning
+ * (R1-06) — a named/typed error so a caller can discriminate this failure
+ * from a generic malformed-yaml `Error`, mirroring `RegistryError` in
+ * `./yaml-fields.ts`.
+ */
+export class KbBindingBandError extends Error {}
+
+/**
+ * Strict optional `binding.band` parse (R1-06). A `band` value present but
+ * not a non-empty string fails fast rather than being silently dropped the
+ * way `optString`'s bare `typeof v === 'string' ? v : undefined` would —
+ * distinguishing "band omitted" (undefined) from "band malformed" (throw)
+ * matters here because the caller uses presence to decide whether a
+ * project/unique binding must reject it.
+ */
+function parseKbBindingBand(raw: Record<string, unknown>, file: string): string | undefined {
+  const v = raw['band'];
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== 'string' || v.length === 0) {
+    throw new Error(`${file}: binding.band must be a non-empty string when present`);
+  }
+  return v;
+}
+
+/**
+ * Strict `binding` parse (R1-01, amended R1-06) — mirrors the strict-at-
+ * load-time treatment the old `scope` enum received. `kind` must be one of
+ * KB_BINDING_KINDS; `flow`/`project` bindings require a non-empty string
+ * `ref`; `unique` carries no `ref`. `band` (R1-06) is meaningful ONLY on a
+ * `flow` binding — declaring it on `project`/`unique` throws
+ * `KbBindingBandError` rather than silently dropping it.
  */
 function parseKbBinding(raw: Record<string, unknown>, file: string): KbBinding {
   const kindRaw = reqString(raw, 'kind', file);
   const kind = oneOf(kindRaw, KB_BINDING_KINDS, file, 'binding.kind');
-  if (kind === 'unique') return { kind: 'unique' };
+  const band = parseKbBindingBand(raw, file);
+
+  if (kind === 'unique') {
+    if (band !== undefined) {
+      throw new KbBindingBandError(
+        `${file}: binding.band is not meaningful on a "unique" binding — band only scopes a "flow" binding`,
+      );
+    }
+    return { kind: 'unique' };
+  }
+
   const ref = reqString(raw, 'ref', file);
-  return { kind, ref };
+
+  if (kind === 'project') {
+    if (band !== undefined) {
+      throw new KbBindingBandError(
+        `${file}: binding.band is not meaningful on a "project" binding — band only scopes a "flow" binding`,
+      );
+    }
+    return { kind: 'project', ref };
+  }
+
+  return band !== undefined ? { kind: 'flow', ref, band } : { kind: 'flow', ref };
 }
 
 const KB_PROCESS_KEYS = ['lint', 'ingest', 'consolidate', 'usage'] as const;
@@ -94,6 +141,14 @@ export function deriveKbUsageDefaults(binding: KbBinding): KbUsagePolicy {
   if (binding.kind === 'project') {
     return { readSurface: 'navigation-index', readers: ['planner', 'reflector', 'dev-loop', 'reviewer'] };
   }
+  // R1-06, T1 ruling Q2: review-band is the ONLY band the band-role map
+  // grants an extra reader to (ADR-010 amendment "R1-06 band-scoped reviewer
+  // grant") — a KB scoped to the review band is advisory reading material for
+  // the reviewer, on top of the planner+reflector default every other
+  // binding (including every other band) gets.
+  if (binding.kind === 'flow' && binding.band === 'review-band') {
+    return { readSurface: 'navigation-index', readers: ['planner', 'reflector', 'reviewer'] };
+  }
   return { readSurface: 'navigation-index', readers: ['planner', 'reflector'] };
 }
 
@@ -119,7 +174,9 @@ export function serializeKbDescriptor(kb: KbDescriptor): string {
   out['name'] = kb.name;
   out['binding'] = kb.binding.kind === 'unique'
     ? { kind: 'unique' }
-    : { kind: kb.binding.kind, ref: kb.binding.ref };
+    : kb.binding.kind === 'flow' && kb.binding.band !== undefined
+      ? { kind: kb.binding.kind, ref: kb.binding.ref, band: kb.binding.band }
+      : { kind: kb.binding.kind, ref: kb.binding.ref };
   out['desc'] = kb.desc;
   if (kb.processes !== undefined) out['processes'] = kb.processes;
   if (kb.backend !== undefined) out['backend'] = kb.backend;
