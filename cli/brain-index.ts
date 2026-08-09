@@ -191,6 +191,7 @@ function inventoryProjects(
   const out: Array<{ name: string; description: string; brainDir: string }> = [];
   for (const entry of readdirSync(projectsRoot).sort()) {
     if (entry === 'README.md') continue;
+    if (entry.startsWith('.')) continue; // skip `.staging-<id>-*` create leftovers (SEC-05 4on) + any dot-dir
     const dir = join(projectsRoot, entry);
     let st;
     try {

@@ -578,13 +578,13 @@ export const ALLOWLIST = [
     reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path.' },
 
   // ---- cli/bridge-studio-kbs.ts ----
-  { file: 'cli/bridge-studio-kbs.ts', line: 173, sink: 'existsSync',
+  { file: 'cli/bridge-studio-kbs.ts', line: 176, sink: 'existsSync',
     reason: 'LOG-READ: readBrainFixState — runId is SAFE_ID_RE-gated at the GET route (line 814) before this helper; `_brainfix-<runId>/events.jsonl` is a single validated segment under trusted forgeRoot/_logs; boolean existence probe.' },
-  { file: 'cli/bridge-studio-kbs.ts', line: 175, sink: 'readFileSync',
+  { file: 'cli/bridge-studio-kbs.ts', line: 178, sink: 'readFileSync',
     reason: 'LOG-READ: same as line 173 — reads only the internal brain-fix event log; SAFE_ID_RE (route 814) blocks / and .. (symlink-blind residual disclosed in openConcerns).' },
-  { file: 'cli/bridge-studio-kbs.ts', line: 571, sink: 'mkdirSync',
+  { file: 'cli/bridge-studio-kbs.ts', line: 574, sink: 'mkdirSync',
     reason: 'CREATE-LITERAL-SUBDIR: kbDir = kbGuard.realPath (resolveGuardedPath) and the route 409s if kbGuard.exists (line 564), so this runs only create-mode on a FRESH dir; the appended leaf `themes` is a literal — a just-created dir cannot host a pre-planted symlink.' },
-  { file: 'cli/bridge-studio-kbs.ts', line: 572, sink: 'mkdirSync',
+  { file: 'cli/bridge-studio-kbs.ts', line: 575, sink: 'mkdirSync',
     reason: 'CREATE-LITERAL-SUBDIR: as line 571, literal `_raw` subdir under the freshly-created guarded kbDir.' },
 
   // ---- cli/bridge-studio-runs.ts ----
@@ -701,7 +701,7 @@ export const ALLOWLIST = [
   { file: 'cli/bridge-studio.ts', line: 1236, sink: 'readFileSync',
     reason: 'GUARD-NEXT (SEC-04, caught by broadened dir-param): tryReadWorkItemDir(dir) reads readFileSync(join(dir, file)); its callers pass snapshotDir=join(logsRoot, cycleId, "work-items-snapshot") and liveDir=join(forgeRoot, "_worktrees", initId, ".forge","work-items") — the DIR is built from request-derived cycleId/initId by lexical join with NO realpath containment (the WI-*.md leaf is readdir-enumerated). Symlink-blind coverage gap (full route-reachability not traced this stage). NEXT: route the dir+leaf through guardedReadDir/guardedReadFile; delete when guarded.' },
   // ---- RETAIN: contained by a mechanism the scanner can\'t see (confirm next stage) ----
-  { file: 'cli/bridge-studio-kbs.ts', line: 605, sink: 'existsSync',
+  { file: 'cli/bridge-studio-kbs.ts', line: 608, sink: 'existsSync',
     reason: 'RETAIN (contained + boolean): DELETE /api/studio/kbs/:id — id is URL-derived (newly tainted) but SLUG_RE-gated at line 595 (blocks / and ..), and dir = resolveKbBrainDir(forgeRoot, id) runs the per-segment realpath identity walk (choke-point containment, line 609-611 note) returning null on any escape; existsSync(dir) is a boolean 404 probe, no bytes flow. Same manifest-path-guard category as the isContainedWorktreePath rows above.' },
   { file: 'cli/ui-bridge.ts', line: 1788, sink: 'mkdirSync',
     reason: 'RETAIN (isSafeRunId-gated logdir-create): runId = `_agent-${slug}-${newRunStamp()}` with slug URL-derived (newly tainted), but isSafeRunId(runId) (SAFE_RUN_ID_RE + explicit .. check) THROWS at line 1781 BEFORE this recursive mkdir of the run\'s own log dir under trusted ctx.logsRoot — the SAME deliberate guard-symmetry check its already-allowlisted siblings at 1992/2393 carry.' },

@@ -820,7 +820,10 @@ export function discoverProjects(projectsDir: string, forgeRoot: string): Discov
   let entries: string[];
   try {
     entries = readdirSync(projectsDir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
+      // Skip dot-prefixed dirs — a `.staging-<id>-*` in-flight/orphaned create
+      // (SEC-05 4on reopen-1) must NEVER surface as a project. A real project id
+      // is slug-validated (no leading dot), so this drops only non-projects.
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
       .map((e) => e.name);
   } catch {
     return [];

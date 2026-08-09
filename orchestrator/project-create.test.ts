@@ -23,6 +23,10 @@ import {
   type CreationManifest,
 } from './project-create.ts';
 import { discoverProjects } from './studio/registry.ts';
+// SEC-05 / forge-4on additions (below) also need to write corrupt template
+// fixtures — added as a second node:fs import so the existing import line (and
+// every existing test) stays byte-for-byte untouched.
+import { writeFileSync } from 'node:fs';
 
 const REAL_ROOT = process.cwd();
 
@@ -543,4 +547,409 @@ test('AT-hwo-3: [SEC-05] boundary — validateCreationManifest rejects a comment
     () => validateCreationManifest({ name: 'bad /* title', appType: 'typescript-cli', language: 'typescript', northStar: 'ship the thing' }),
     'title (manifest.name) containing the comment opener "/*" must be rejected at the boundary',
   );
+});
+
+// ===========================================================================
+// SEC-05 / forge-4on (P1) — scaffoldGreenfieldProject is NON-TRANSACTIONAL.
+//
+// Phase 1 validates (manifest, slug, appType whitelist, existsSync(projectDir)
+// duplicate refusal, checkProjectBrainSeedContainment — a read-only lstat walk
+// that never writes a request-derived path). Phase 2 WRITES, with NO unwind on
+// a throw between the first write and the last:
+//   copyTemplate   (project-create.ts:227) — mkdirSync(projectDir) then per-file
+//                    writes; throws on invalid scaffolded JSON (:157-158) or any
+//                    OS read/write error (:152/:160).
+//   seedProjectBrain (:233) — writes brain/projects/<id>/{kb.yaml,profile.md,
+//                    themes/README.md}; can throw EACCES on a brain write.
+//   runPreflight   (:235) — a PURE, non-throwing reporter (every readFileSync in
+//                    cli/preflight.ts is existsSync-guarded or try/caught, and
+//                    loadProjectConfig is wrapped), so it can NEVER itself orphan;
+//                    the tail-most REPRODUCIBLE Phase-2 throw is seedProjectBrain's
+//                    final write, which AT-4on-5 pins.
+// A throw in that band leaves an ORPHAN — a half-created <projectsRoot>/<id>
+// and/or a phantom <forgeRoot>/brain/projects/<id> — and a RETRY then trips
+// existsSync(projectDir) → "project already exists". Neither caller (the
+// bridge greenfield route, cli.ts:538 cmdCreate) does any rmSync cleanup.
+//
+// THE RULED FIX these RED tests pin: stage-then-atomic-move — build the whole
+// project into projectsRoot/.staging-<rand>/ (same fs, NOT os.tmpdir → EXDEV) +
+// brain into brain/projects/.staging-<rand>/, run copyTemplate + seedProjectBrain
+// + runPreflight entirely in staging, then renameSync each staged tree into
+// place on FULL success, writing .forge/.create-complete LAST; a pre-create/boot
+// reconcile sweeps any projects/<id> lacking that marker (and any brain/projects/
+// <id> with no matching project). On any staged failure: rmSync the staging dirs
+// and rethrow → no orphan, retry succeeds. NOT a reordering (three SEC-03
+// reorders already failed — see the SEC-03 round 3/4 tests above).
+//
+// cmdCreate (cli.ts) is NOT driven here — same reason the SEC-03 round-3 block
+// above states: it is a private, process.exit()-calling function keyed off a
+// module-level FORGE_ROOT constant with no override, so it can only be covered
+// at the function level; reading its source confirms it adds no cleanup of its
+// own beyond the bare `try { scaffoldGreenfieldProject } catch { print+exit }`.
+// The bridge greenfield route IS driven end-to-end in
+// cli/bridge-studio-writes.test.ts (AT-4on-4 + AT-4on-6).
+// ===========================================================================
+
+/** True iff creating a child under `dir` is ACTUALLY blocked by permissions in
+ *  this process's uid (a 0o500 chmod bites). Returns false when the probe write
+ *  SUCCEEDS — i.e. we are root and the mode bit is bypassed — so a caller skips
+ *  rather than false-fail. Cleans up its own probe. */
+function writeIsBlocked(dir: string): boolean {
+  const probe = join(dir, `.__wprobe_${Math.random().toString(36).slice(2)}`);
+  try {
+    mkdirSync(probe);
+    rmSync(probe, { recursive: true, force: true });
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+/** True iff reading `file` is actually blocked in this process's uid (a 0o000
+ *  chmod bites). False when the read SUCCEEDS (root bypass) → caller skips. */
+function readIsBlocked(file: string): boolean {
+  try {
+    readFileSync(file, 'utf8');
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+test('AT-4on-1 (RED) [SEC-05 4on] a copyTemplate invalid-JSON throw mid-Phase-2 leaves NEITHER projects/<id> NOR brain/projects/<id>, and an identical retry succeeds', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const pkgPath = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli', 'package.json');
+  try {
+    // Corrupt the SHARED template input so copyTemplate's JSON.parse
+    // (project-create.ts:157-158) throws AFTER mkdirSync(projectDir) already ran
+    // — still invalid JSON after token substitution. Both today's code and the
+    // staged fix read this same template, so both fail Phase 2 here.
+    writeFileSync(pkgPath, '{ "name": "{{NAME}}", NOT_VALID_JSON }', 'utf8');
+
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /invalid JSON/i,
+      'injection precondition: copyTemplate must throw on the corrupt scaffolded JSON',
+    );
+
+    // No-orphan invariant — RED at base: mkdirSync(projects/<id>) ran before the
+    // throw and nothing unwinds it.
+    assert.ok(!existsSync(join(forgeRoot, 'projects', id)), `mid-copyTemplate failure left an orphan project dir at projects/${id}`);
+    assert.ok(!existsSync(join(forgeRoot, 'brain', 'projects', id)), `no brain orphan may be left at brain/projects/${id}`);
+
+    // Clear the transient (restore the good template) and retry — RED at base:
+    // the orphan trips existsSync(projectDir) → "already exists".
+    cpSync(join(projectStartersDir(REAL_ROOT), 'typescript-cli', 'package.json'), pkgPath);
+    let ok = false;
+    let err = '';
+    try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
+    catch (e) { err = e instanceof Error ? e.message : String(e); }
+    assert.ok(ok, `the identical retry after a mid-Phase-2 failure must succeed with no "already exists" — got: ${err}`);
+    assert.ok(existsSync(join(forgeRoot, 'projects', id, '.forge', 'project.json')), 'the retry must produce a complete scaffold');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-2 (RED) [SEC-05 4on] an OS filesystem error mid-copyTemplate leaves no orphan; retry succeeds', (t) => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const srcFile = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli', 'AGENTS.md');
+  try {
+    // Unreadable template source → readFileSync (project-create.ts:152) throws
+    // EACCES mid-copy, AFTER mkdirSync(projectDir). A genuine OS filesystem
+    // error in the copy step (the "OS write fail" class), reproducible + shared
+    // by the staged fix (it reads the same source).
+    chmodSync(srcFile, 0o000);
+    if (!readIsBlocked(srcFile)) { chmodSync(srcFile, 0o644); t.skip('chmod 0o000 does not block reads in this environment (running as root?)'); return; }
+
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /EACCES|permission denied/i,
+      'injection precondition: copyTemplate must throw an OS read error mid-copy',
+    );
+    assert.ok(!existsSync(join(forgeRoot, 'projects', id)), `mid-copyTemplate OS failure left an orphan at projects/${id}`);
+    assert.ok(!existsSync(join(forgeRoot, 'brain', 'projects', id)), `no brain orphan at brain/projects/${id}`);
+
+    chmodSync(srcFile, 0o644);
+    let ok = false;
+    let err = '';
+    try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
+    catch (e) { err = e instanceof Error ? e.message : String(e); }
+    assert.ok(ok, `the retry after the OS-error failure must succeed — got: ${err}`);
+    assert.ok(existsSync(join(forgeRoot, 'projects', id, 'AGENTS.md')), 'the retry must produce a complete scaffold (AGENTS.md restored)');
+  } finally {
+    try { chmodSync(srcFile, 0o644); } catch { /* best effort */ }
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-3 (RED, headline) [SEC-05 4on] a seedProjectBrain EACCES AFTER a full copyTemplate — the fully-scaffolded project dir must NOT survive; retry succeeds', (t) => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const brainProjects = join(forgeRoot, 'brain', 'projects');
+  try {
+    // Injection: brain/projects read-only. Phase 1's checkProjectBrainSeedContainment
+    // only lstat-walks (r-x is enough) and mkdirs an ALREADY-existing brain/projects
+    // (a no-op that does not need write) → it PASSES. copyTemplate then writes the
+    // WHOLE projects/<id> tree. Only seedProjectBrain's mkdirSync(brain/projects/<id>)
+    // then hits EACCES — Leg B, the headline: the failure lands AFTER the project
+    // directory is fully, validly scaffolded.
+    chmodSync(brainProjects, 0o500);
+    if (!writeIsBlocked(brainProjects)) { chmodSync(brainProjects, 0o755); t.skip('chmod 0o500 does not block writes (running as root?)'); return; }
+
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /EACCES|permission denied/i,
+      'injection precondition: seedProjectBrain must throw EACCES after copyTemplate completed',
+    );
+
+    // HEADLINE — RED at base: copyTemplate wrote the whole project dir
+    // (.forge/project.json included) before seedProjectBrain threw; today nothing
+    // unwinds it, so a FULLY-scaffolded orphan survives.
+    assert.ok(!existsSync(join(forgeRoot, 'projects', id)), `a FULLY-scaffolded orphan project survived at projects/${id} after seedProjectBrain threw`);
+    assert.ok(!existsSync(join(brainProjects, id)), `no brain orphan at brain/projects/${id}`);
+
+    // Retry once the transient clears — RED at base ("already exists").
+    chmodSync(brainProjects, 0o755);
+    let ok = false;
+    let err = '';
+    try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
+    catch (e) { err = e instanceof Error ? e.message : String(e); }
+    assert.ok(ok, `the retry after the seedProjectBrain failure must succeed, never "already exists" — got: ${err}`);
+    assert.ok(existsSync(join(brainProjects, id, 'kb.yaml')), 'the retry must seed the central brain');
+  } finally {
+    try { chmodSync(brainProjects, 0o755); } catch { /* best effort */ }
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-5 (RED) [SEC-05 4on] a tail failure AFTER kb.yaml was written is atomic — no half-created project, no phantom brain, always retryable', (t) => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const brainDir = join(forgeRoot, 'brain', 'projects', id);
+  const themesDir = join(brainDir, 'themes');
+  try {
+    // Injection: a read-only themes/ dir under a WRITABLE brain/projects/<id>.
+    // seedProjectBrain writes kb.yaml then profile.md into <id> (writable), then
+    // throws writing themes/README.md into the 0o500 themes dir — the tail-most
+    // reproducible Phase-2 throw (runPreflight, the nominal tail, cannot throw —
+    // see the header). So today the failed create leaves BOTH a copyTemplate
+    // orphan AND a phantom kb.yaml+profile.md.
+    mkdirSync(themesDir, { recursive: true });
+    chmodSync(themesDir, 0o500);
+    if (!writeIsBlocked(themesDir)) { chmodSync(themesDir, 0o755); t.skip('chmod 0o500 does not block writes (running as root?)'); return; }
+    assert.ok(!existsSync(join(brainDir, 'kb.yaml')), 'precondition: no kb.yaml before the create');
+
+    let firstThrew = false;
+    try { scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }); }
+    catch { firstThrew = true; }
+
+    if (firstThrew) {
+      // A FAILED create must be atomic — RED at base (both orphans present).
+      assert.ok(!existsSync(join(forgeRoot, 'projects', id)), `orphan project dir survived at projects/${id}`);
+      assert.ok(!existsSync(join(brainDir, 'kb.yaml')), `phantom kb.yaml survived at brain/projects/${id}/kb.yaml`);
+
+      // ...and retryable. Clear the transient + the injection scaffold, then
+      // retry — RED at base (the projects/<id> orphan → "already exists").
+      chmodSync(themesDir, 0o755);
+      rmSync(brainDir, { recursive: true, force: true });
+      let ok = false;
+      let err = '';
+      try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
+      catch (e) { err = e instanceof Error ? e.message : String(e); }
+      assert.ok(ok, `retry after a tail failure must succeed — got: ${err}`);
+    } else {
+      // The transactional fix stages everything and sidesteps the partial-write
+      // window (its pre-create reconcile sweeps the pre-planted marker-less
+      // brain/projects/<id>), so the create SUCCEEDS on the first attempt and
+      // the project is real + complete.
+      assert.ok(existsSync(join(forgeRoot, 'projects', id, '.forge', 'project.json')), 'a first-attempt success must be a complete scaffold');
+      assert.ok(existsSync(join(brainDir, 'kb.yaml')), 'a first-attempt success must seed the brain');
+    }
+  } finally {
+    try { chmodSync(themesDir, 0o755); } catch { /* best effort */ }
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-7 (RED) [SEC-05 4on] retryability regression lock — a mid-Phase-2 failure then an IDENTICAL create must succeed, never "already exists"', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const pkgPath = join(forgeRoot, 'studio', 'starters', 'projects', 'typescript-cli', 'package.json');
+  try {
+    writeFileSync(pkgPath, '{ "name": "{{NAME}}", NOPE }', 'utf8');
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /invalid JSON/i,
+      'injection precondition: copyTemplate throws mid-Phase-2',
+    );
+    // Restore the shared template input; the identical create must now succeed.
+    cpSync(join(projectStartersDir(REAL_ROOT), 'typescript-cli', 'package.json'), pkgPath);
+    let ok = false;
+    let err = '';
+    try { ok = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }).id === id; }
+    catch (e) { err = e instanceof Error ? e.message : String(e); }
+    assert.ok(ok, `the identical retry must succeed with no "already exists" — got: ${err}`);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-8 (RED-today) [SEC-05 4on] a stale marker-less orphan is reconciled away and a fresh create over the slot succeeds', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const projectDir = join(forgeRoot, 'projects', id);
+  try {
+    // A previous crashed create left a half-built projects/<id> carrying NO
+    // .forge/.create-complete marker (the marker the ruled fix writes LAST).
+    mkdirSync(join(projectDir, '.forge'), { recursive: true });
+    writeFileSync(join(projectDir, '.forge', 'project.json'), '{"partial":true}', 'utf8');
+    writeFileSync(join(projectDir, 'ORPHAN_SENTINEL.txt'), 'left by a crashed create\n', 'utf8');
+    assert.ok(!existsSync(join(projectDir, '.forge', '.create-complete')), 'precondition: the orphan carries no completion marker');
+
+    // Today: existsSync(projectDir) → throws "already exists" (no reconcile).
+    // After the fix: the pre-create reconcile sweeps the marker-less orphan and
+    // a FRESH scaffold lands — proven by ORPHAN_SENTINEL.txt being GONE (a real
+    // scaffold, not adoption of the crashed dir).
+    let ok = false;
+    let err = '';
+    try {
+      const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
+      ok = out.id === id
+        && !existsSync(join(projectDir, 'ORPHAN_SENTINEL.txt'))
+        && existsSync(join(projectDir, 'package.json'));
+    } catch (e) { err = e instanceof Error ? e.message : String(e); }
+    assert.ok(ok, `a marker-less orphan must be reconciled + replaced by a fresh scaffold — got: ${err}`);
+    // EXPIRY: GREEN once the fix adds (a) the .forge/.create-complete marker
+    // written LAST and (b) a pre-create reconcile that removes any projects/<id>
+    // lacking it. If a future change makes an existsSync collision non-fatal by
+    // ADOPTING the dir instead of sweeping it, the ORPHAN_SENTINEL assertion
+    // above catches it — re-audit rather than relax.
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ===========================================================================
+// SEC-05 / forge-4on REOPEN #1 — the transactional create fix LEAKS
+// `.staging-<id>-<rand>` orphans. Two ways they arise: a rename-loser under
+// concurrency (two creates for the same id both stage, one wins the rename and
+// the other's staged tree is stranded) and a hard-kill DURING staging (the
+// process dies after `copyTemplate`/`seedProjectBrain` wrote into
+// `.staging-*` but before the rename). Both leave a real, fully-formed staging
+// tree in `projectsRoot`/`brain/projects/` — which then SURFACES as a
+// phantom project (AT-4on-9, discoverProjects — a sibling test file) or a
+// phantom KB (AT-4on-9, loadKbDescriptors — a sibling test file), because
+// neither listing filters dot-prefixed dirs, and the pre-create reconcile
+// (project-create.ts:240-251) never sweeps `.staging-*` at all.
+//
+// AT-4on-10 pins the SWEEP (RED today: the reconcile ignores `.staging-*`).
+// AT-4on-11a/-11b pin the completion-marker SEMANTICS the sweep hinges on
+// (green-lock today; named killed impls so the widened reconcile can't regress
+// them into deleting a genuinely-complete project or dropping the marker).
+// ===========================================================================
+
+test('AT-4on-10 (RED) [SEC-05 4on] a stale `.staging-<id>-<rand>` orphan is swept (not adopted) and the fresh create succeeds clean', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const stagingProj = join(forgeRoot, 'projects', `.staging-${id}-deadbeef`);
+  const stagingBrain = join(forgeRoot, 'brain', 'projects', `.staging-${id}-deadbeef`);
+  try {
+    // Plant BOTH halves of a crashed-during-staging leftover, each carrying a
+    // SENTINEL that a real fresh scaffold (its staging name is a fresh random
+    // hex, never "deadbeef") would never itself write.
+    mkdirSync(stagingProj, { recursive: true });
+    writeFileSync(join(stagingProj, 'STAGING_SENTINEL.txt'), 'rename-loser / hard-kill leftover\n', 'utf8');
+    mkdirSync(stagingBrain, { recursive: true });
+    writeFileSync(join(stagingBrain, 'STAGING_SENTINEL.txt'), 'rename-loser / hard-kill leftover\n', 'utf8');
+    // Fixture precondition (before any verdict): both leftovers really exist.
+    assert.ok(existsSync(join(stagingProj, 'STAGING_SENTINEL.txt')), 'precondition: projects/.staging-* leftover planted');
+    assert.ok(existsSync(join(stagingBrain, 'STAGING_SENTINEL.txt')), 'precondition: brain/projects/.staging-* leftover planted');
+
+    const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
+
+    // The create must SUCCEED with a clean, complete project (+ completion marker).
+    // (These PASS at base too — the RED here is the SWEEP assertions below, so the
+    // test fails for the right reason: `.staging-*` was never reconciled away.)
+    assert.equal(out.id, id, 'the fresh create must succeed over a `.staging-*`-littered root');
+    assert.ok(existsSync(join(forgeRoot, 'projects', id, '.forge', 'project.json')), 'the create must produce a complete scaffold');
+    assert.ok(existsSync(join(forgeRoot, 'projects', id, '.forge', '.create-complete')), 'the completed project must carry the completion marker');
+
+    // The verdict — RED at base: the leftover `.staging-*` trees must be GONE
+    // (swept), with their SENTINELs absent — proving a SWEEP, not adoption.
+    // Kills: a reconcile that GCs only projects/<id> + brain/projects/<id> and
+    // ignores the sibling `.staging-*` orphans it must also sweep.
+    assert.ok(!existsSync(stagingProj), `a stale projects/.staging-${id}-deadbeef orphan survived the create — the reconcile must sweep it`);
+    assert.ok(!existsSync(stagingBrain), `a stale brain/projects/.staging-${id}-deadbeef orphan survived the create — the reconcile must sweep it`);
+    assert.ok(!existsSync(join(stagingProj, 'STAGING_SENTINEL.txt')), 'the projects staging SENTINEL must be gone (swept, not adopted)');
+    assert.ok(!existsSync(join(stagingBrain, 'STAGING_SENTINEL.txt')), 'the brain staging SENTINEL must be gone (swept, not adopted)');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// AT-4on-11 (green-lock) — the completion-marker semantics the reconcile (and
+// AT-4on-8/-10's sweep) hinge on. TWO invariants, BOTH green at base today;
+// pinned so the transactional-reconcile fix cannot regress them.
+//   (a) marker-exists-after-success — a SUCCESSFUL create writes
+//       <projectsRoot>/<id>/.forge/.create-complete (project-create.ts:311-312,
+//       LAST, after both renames). Kills: a fix that drops the marker write, or
+//       writes it at the wrong path — without it the reconcile cannot tell a
+//       COMPLETE project from a crash orphan and would sweep real projects.
+//   (b) marker-present-refused-and-untouched — a projects/<id> that DOES carry
+//       the marker is the genuinely-complete case: it must be REFUSED
+//       ("already exists", project-create.ts:240-243) and NEVER swept. Kills: a
+//       reconcile widened to rmSync projects/<id> unconditionally (marker-blind)
+//       — the over-reach twin of the AT-4on-10 sweep; the untouched SENTINEL is
+//       the tell.
+// EXPIRY: both stay green after the fix. If a future change makes a
+// marker-present collision non-fatal (ADOPTING or SWEEPING a complete project),
+// (b)'s throw + SENTINEL assertions catch it — re-audit rather than relax.
+test('AT-4on-11a (green-lock) [SEC-05 4on] a successful create writes the .forge/.create-complete marker LAST', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
+    // Fixture precondition: the create really produced a project.
+    assert.ok(existsSync(join(out.projectDir, '.forge', 'project.json')), 'precondition: the create produced a scaffold');
+    // Verdict: the completion marker is present at the contracted path.
+    assert.ok(
+      existsSync(join(out.projectDir, '.forge', '.create-complete')),
+      'a completed create must write .forge/.create-complete — the reconcile relies on it to tell a complete project from a crash orphan',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-11b (green-lock) [SEC-05 4on] a marker-PRESENT projects/<id> is refused ("already exists"), never swept', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const projectDir = join(forgeRoot, 'projects', id);
+  try {
+    // Plant a genuinely-COMPLETE project: a valid .forge/project.json + the
+    // completion marker + a SENTINEL a sweep-then-rescaffold would destroy.
+    mkdirSync(join(projectDir, '.forge'), { recursive: true });
+    writeFileSync(join(projectDir, '.forge', 'project.json'), '{"name":"my-tool"}', 'utf8');
+    writeFileSync(join(projectDir, '.forge', '.create-complete'), `${new Date().toISOString()}\n`, 'utf8');
+    writeFileSync(join(projectDir, 'COMPLETE_SENTINEL.txt'), 'a real, complete project — must not be swept\n', 'utf8');
+    // Fixture precondition (before any verdict): the marker + sentinel are on disk.
+    assert.ok(existsSync(join(projectDir, '.forge', '.create-complete')), 'precondition: the marker is planted');
+    assert.ok(existsSync(join(projectDir, 'COMPLETE_SENTINEL.txt')), 'precondition: the sentinel is planted');
+
+    // Verdict 1: a marker-present slot is REFUSED, not reconciled away.
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /already exists/,
+      'a marker-present (genuinely complete) projects/<id> must be refused, never swept',
+    );
+    // Verdict 2 (assert the ARTIFACT, not just the throw): the pre-existing
+    // complete project is byte-untouched — a marker-blind sweep would have
+    // rmSync'd the SENTINEL before throwing/rescaffolding.
+    assert.ok(existsSync(join(projectDir, 'COMPLETE_SENTINEL.txt')), 'the complete project must be left UNTOUCHED — a marker-blind sweep would have deleted the SENTINEL');
+    assert.equal(readFileSync(join(projectDir, '.forge', 'project.json'), 'utf8'), '{"name":"my-tool"}', 'the pre-existing project.json must be byte-untouched');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
 });

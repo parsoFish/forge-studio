@@ -1456,6 +1456,43 @@ describe('discoverProjects', () => {
     // missing projects root → empty list (not a throw)
     assert.deepEqual(discoverProjects(join(tmpDir, 'does-not-exist'), tmpDir), []);
   });
+
+  // -------------------------------------------------------------------------
+  // AT-4on-9 (discoverProjects) [SEC-05 4on REOPEN #1] — a `.staging-<id>-<rand>`
+  // orphan (a rename-loser under concurrency, or a hard-kill DURING staging, of
+  // the transactional create fix) must NEVER be adopted into the operator's
+  // project library. discoverProjects walks projectsDir filtering ONLY on
+  // isDirectory() (registry.ts:822-824) with no dot-prefix filter, and
+  // normalizeProjectId('.staging-decoy-abc123') strips the leading dot to a
+  // valid, non-empty id ('staging-decoy-abc123') — so the staging leftover
+  // surfaces as a phantom project today.
+  //
+  // RED at base: the decoy surfaces with id 'staging-decoy-abc123'. Kills: a
+  // listing that walks projects/ with no `.`-prefix filter. The `realproj`
+  // control proves the scan actually reached disk (not an accidental-empty pass
+  // where the guard is really firing because nothing was scanned at all).
+  // -------------------------------------------------------------------------
+  it('AT-4on-9: a `.staging-*` leftover dir is never adopted as a project (control `realproj` still discovered)', () => {
+    const forgeRoot = join(tmpDir, 'disc-staging-dotdir');
+    // Control: a real, complete project — proves the scan reaches disk.
+    const real = join(forgeRoot, 'projects', 'realproj', '.forge');
+    mkdirSync(real, { recursive: true });
+    writeFileSync(join(real, 'project.json'), '{"name":"realproj"}', 'utf8');
+    // Decoy: a `.staging-<id>-<rand>` leftover carrying a VALID .forge/project.json.
+    const decoy = join(forgeRoot, 'projects', '.staging-decoy-abc123', '.forge');
+    mkdirSync(decoy, { recursive: true });
+    writeFileSync(join(decoy, 'project.json'), '{"name":"decoy"}', 'utf8');
+    // Fixture precondition (before any verdict): the decoy really is on disk.
+    assert.equal(readFileSync(join(decoy, 'project.json'), 'utf8'), '{"name":"decoy"}', 'precondition: the decoy project.json must be planted');
+
+    const found = discoverProjects(join(forgeRoot, 'projects'), forgeRoot);
+    const ids = found.map((p) => p.id);
+    // The scan works: the control project is discovered.
+    assert.ok(ids.includes('realproj'), `control project must be discovered — got ${JSON.stringify(ids)}`);
+    // The verdict: the staging leftover is NOT surfaced under EITHER shape.
+    assert.ok(!ids.includes('staging-decoy-abc123'), `a .staging-* leftover was adopted as project id "staging-decoy-abc123" — got ${JSON.stringify(ids)}`);
+    assert.ok(!ids.includes('.staging-decoy-abc123'), `a .staging-* leftover was adopted verbatim — got ${JSON.stringify(ids)}`);
+  });
 });
 
 // ---------------------------------------------------------------------------
