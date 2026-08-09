@@ -572,9 +572,9 @@ not:
      already-on-disk manifest through `serializeManifest` + `writeFileSync` without
      revalidating anything. As of forge-shc (2026-08-09) this family gains
      `persistManifestCostCeiling`, called from `POST /api/develop/start` on the
-     enqueue-produced `pendingPath = join(getPaths(queueRoot).pending, `
-     `` `${initiativeId}.md`) `` — the identical path `enqueueDevelopRun` just wrote,
-     so it introduces no path surface beyond enqueue's own; it `existsSync`-guards,
+     enqueue-produced pending-queue path (`getPaths(queueRoot).pending` joined with
+     the initiative id) — the identical path `enqueueDevelopRun` just wrote, so it
+     introduces no path surface beyond enqueue's own; it `existsSync`-guards,
      re-parses, re-serialises with a validated numeric `cost_ceiling_usd`, and never
      touches a path-shaped field.
    - `orchestrator/scheduler-dispatch.ts`'s `annotateManifestForRetry` — re-parses
