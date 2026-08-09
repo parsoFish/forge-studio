@@ -625,3 +625,27 @@ with the re-entry condition being an actual per-project `merged` story.
 
 **Scope of this addendum:** `projects:` remains kind-independent for every shipped
 kind except `merged`. Nothing else in the amendment changes.
+
+## Amendment (R1-06, 2026-08-09): `band?:` qualifier on a `{kind: flow}` binding
+
+R1-01 (above) made the KB binding `{ kind: 'flow', ref } | { kind: 'project', ref
+} | { kind: 'unique' }`. R1-06 adds an **optional `band?: string` qualifier to the
+`{kind: 'flow'}` arm only** — a band-scoped KB is still flow-owned; the band names
+which of that flow's bands (`review-band`, `demo-band`, …, derived from the flow's
+nodes' agent `composition.guards` via `resolveBandGuard`) the KB is scoped to.
+
+- **Shape:** `{ kind: 'flow', ref: <flow-id>, band?: <band-id> }`. `band` is
+  meaningless (and lint-rejected) on `{kind: 'project'}` and `{kind: 'unique'}`.
+  An unknown `band` — one not in the bound flow's real band vocabulary
+  (`listFlowBandIds`) — is a create-route 400 and a `studio-lint` error, never a
+  silent accept.
+- **Why a qualifier, not a fourth binding kind.** A band KB is still owned by its
+  flow; a fourth kind would fork every `binding.kind` switch in
+  `kb-descriptor.ts` / `bridge-studio-kbs.ts` / `studio-lint.ts` / the UI for no
+  added meaning. Rejected.
+- **Read-policy coupling (ADR-010, 2026-08-09 amendment):** `deriveKbUsageDefaults`
+  becomes band-aware — `band: review-band` grants `usage.readers` the reviewer;
+  every other band keeps the `planner + reflector` default. This is the first
+  deliberate crossing of the R1-01 "scoping, not who-reads-what" boundary and is
+  ratified in ADR-010, enforced by `orchestrator/kb-read-policy-guard.test.ts`'s
+  descriptor walk. Contract + guard only until R4-19 wires a real read.

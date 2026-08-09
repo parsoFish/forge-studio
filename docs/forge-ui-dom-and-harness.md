@@ -900,10 +900,124 @@ inventory rather than one shared page-level contract:
   `selectedStage` straight to the dispatcher as `activeStage`
   (`SessionArtifactPane`'s new optional prop) — every OTHER live kind treats
   it as a no-op (stage-UNAWARE by nature).
-- **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser
-  (`[data-page="knowledge"][data-page-ready]`) and the new-KB form
-  (`[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`; the create form's
-  binding picker carries `data-field="kb-binding-kind"` + `data-field="kb-binding-ref"` — R1-01).
+- **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser and the
+  band-scoped, agent-seeded create + maintain surface (R1-01's binding
+  contract, extended by R1-06 WI-2/WI-3; journeys: `knowledge-graph`,
+  `knowledge-pin-guidance`, `knowledge-create-kb`, `knowledge-ingest`,
+  `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
+  `knowledge-kb-maintain-session`).
+  - **Graph browser:** `[data-page="knowledge"][data-page-ready]`, force-graph
+    root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
+    per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
+    `[data-hit]` inner hit-circle (click target — the outer `<g>`'s bbox
+    centre is pushed off-centre by the label). Node click opens the article
+    pane (`[data-node-article-body]`); the KB selector is `#kb-select`, one
+    `<option value="<kbId>">` per KB `loadKbDescriptors` finds walking
+    `brain/*` AND `brain/projects/*` (ADR 035 central per-project brains, e.g.
+    `mdtoc`, `gitpulse`, alongside the OOTB `cycles`/`forge-dev`).
+  - **New-KB form (`/knowledge/new`):**
+    `[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`.
+    Fields: `[data-field="kb-name"]`, `[data-field="kb-binding-kind"]`
+    (`flow` | `project`), `[data-field="kb-binding-ref"]` (options populated
+    from `GET /api/studio/flows` or `GET /api/studio/projects` depending on
+    kind), `[data-field="kb-desc"]`. **`[data-field="kb-binding-band"]`
+    (R1-06 WI-2 group A)** renders ONLY when `kind === 'flow'` — `null`
+    (field absent) for `project`/`unique`, since a band scope is meaningless
+    there. Its options are the bound flow's REAL derived bands
+    (`deriveKbBandOptions`, `forge-ui/lib/studio-client.ts`, pure/DOM-free —
+    the flow roster's `bands: string[]` the `GET /api/studio/flows` payload
+    now carries, itself `listFlowBandIds` reading each node agent's own
+    `guards:` through `orchestrator/agent-bands.ts`'s `resolveBandGuard` —
+    never a hardcoded list, and `[]` for an unbound ref or a bandless flow,
+    not a fabricated default). Submit is `[data-action="create-kb"]`
+    (disabled until name + binding are filled); on success the server
+    validates `binding.band` against that SAME real vocabulary
+    (`POST /api/studio/kbs`, `cli/bridge-studio-kbs.ts`) and writes it into
+    `kb.yaml`'s `binding.band` — never silently dropped between the picker
+    and the descriptor.
+  - **Create hand-off → a real seeding session (R1-06-F2).** A successful
+    `POST /api/studio/kbs` response is `{ ok: true, id, sessionId }` — the
+    SAME `{ok, sessionId}` shape `POST /api/project-brain/start` already
+    established — and the route ALSO writes a `project-brain` session
+    `status.json` (`phase: 'briefing'`, carrying the created KB's own
+    `kb_id`/`kb_binding` so a band-scoped KB seeds against its real scope,
+    not a re-derived guess). The form itself does not surface the
+    `sessionId` or navigate to it (`router.push('/knowledge')` on success) —
+    an operator/automation that wants to view the hand-off reads the POST
+    response directly. Where the session lands depends on the binding kind:
+    - `binding.kind === 'project'` — the session nests under that REAL,
+      discovered project's own dir:
+      `projects/<ref>/_project-brain/<sessionId>/status.json`. It is
+      genuinely viewable at
+      `/sessions/project-brain/<sessionId>?project=<ref>` (the shared
+      session-shell route above, `kind: 'project-brain'`) — `?project=` is
+      required and `SLUG_RE`-validated, and a real project id passes.
+    - any other binding kind (`flow`, `unique`) has no natural project home,
+      so the session is nested under a **dot-prefixed anchor**:
+      `projects/.kb-<kbId>/_project-brain/<sessionId>/status.json`
+      (`KB_SEEDING_ANCHOR_PREFIX = '.kb-'`, `cli/bridge-studio-kbs.ts`). Both
+      `discoverProjects` and the KB descriptor walk (`subDirs`) already skip
+      dot-prefixed dirs — a real project/KB id is slug-validated with no
+      leading dot — so this keeps the session on disk and runner-reachable
+      while never surfacing as a phantom project on the library. It is
+      correspondingly **unreachable through the session-shell route**: a
+      leading `.` fails the `project` query param's own `SLUG_RE` check
+      (`cli/bridge-studio-sessions.ts`), a 400, not a 404 — the session
+      genuinely exists on disk but has no real page to view it from today.
+    - **What is real vs. not (R1-06 vs. R4-19):** the HAND-OFF itself
+      (sessionId, correct anchor, `kb_id`/`kb_binding` on the status file) is
+      R1-06's own shipped surface. The session ADVANCING through turns — an
+      agent drafting real themes from project history or review-band
+      evidence, an accept step — has no agent behind it yet; that is
+      R4-19 (`docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
+      `docs/roadmaps/R4-ootb-suite.md` R4-19). A project-scope session
+      genuinely sits at `phase: 'briefing'` with an empty transcript when
+      viewed — never a fabricated multi-turn conversation.
+  - **KB maintenance panel:**
+    `[data-component="kb-maintenance"]`, with `[data-consolidate-state]` on
+    that same root once a consolidate run reaches a terminal (`'cleared'` |
+    `'not-cleared'` | `'failed'` | `'running'` — absent before the first
+    run, reset to `''` the moment a new one starts). Actions:
+    `[data-action="kb-lint"]` (deterministic `forge brain lint`, scoped to
+    the KB's own dir), `[data-action="kb-index"]` (index refresh),
+    **`[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
+    `op=consolidate`)**, `[data-action="kb-delete"]` (guarded: `cycles` and
+    `forge-dev` are server-refused, 403). Consolidate is genuinely
+    asynchronous — `forge-ui/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
+    dispatches, reads the returned `runId`, and polls
+    `getAgentFixStatus` (bounded, 40 × 250ms) to a real terminal before the
+    button's own `[data-component="kb-maintenance-result"]` label and
+    `[data-consolidate-state]` update — never a static "session started"
+    message. The terminal state is computed CI-safely: findings scoped to
+    the KB (`resolveKbBrainDir`-identity-matched, both `brain/<id>` and the
+    central `brain/projects/<id>`) whose `resolution === 'agent'` are first
+    run through `applyDeterministicConsolidateFixes` — the ONE fully
+    deterministic shape, `checkProjectBrainIndexes`'s "not listed in project
+    category index" finding (only ever raised for a `brain/projects/<id>`
+    brain), resolved in-process via the same `ensureLinkedAt` idempotent
+    append `op=fix-auto` already uses, zero spawn — before any real agent
+    turn is attempted, and a real agent turn is only attempted at all when
+    NEITHER `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active
+    (mirrors `spawnAgentTurn`'s own guard). A KB re-lint after the run
+    computes the real `cleared`/`total` count the terminal event carries.
+  - **KB health panel:** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
+    (numeric strings — `lintErrors`/`lintFlags`, findings scoped to this
+    KB's own dir by the same identity-matched `resolveKbBrainDir` walk
+    consolidate uses, so a sibling KB's findings never leak in and a
+    `brain/projects/<id>` KB's findings are no longer invisible the way the
+    pre-WI-3 hardcoded `brain/<id>` prefix made them, MAJOR 1). Layer
+    balance / connectivity / staleness render unconditionally; the "Lint"
+    sub-section renders only when `lintFlags > 0 || lintErrors > 0`. The
+    "Suggested action" copy (staleness-driven) reads "Run a consolidate
+    pass, check lint, or leave a guidance note" — **it no longer says
+    "manual ingest"** (R1-06 WI-3, operator decision 3): ingest stays
+    reflection-only, and no route or action anywhere on this page (or
+    `/knowledge/new`) triggers one.
+  - **No ingest affordance (decision 3, cross-referenced R1-06-F3 +
+    R6-08-F2):** neither creation nor maintenance renders an "ingest" button,
+    tab, or action. The mockup's "Ingest activity" tab has no real analog —
+    ingest is a reflection-only pass (the reflector phase), never a
+    KB-page-triggerable operation.
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The

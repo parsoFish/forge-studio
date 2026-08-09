@@ -41,6 +41,56 @@ import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
 const CYCLES_KB_YAML = `id: cycles\nname: Cycles Brain\nbinding: { kind: flow, ref: forge-develop }\ndesc: Cross-cycle patterns.\n`;
 const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nbinding: { kind: unique }\ndesc: Forge engineering decisions.\n`;
 
+/** Minimal valid SKILL.md whose composition.guards declares a single band —
+ *  just enough for isStudioAgent + loadAgentDefinition + resolveBandGuard. */
+function bandSkillMd(slug: string, band: string): string {
+  return `---
+name: ${slug}
+description: A test ${band} agent.
+library: true
+purpose: Does ${band} things.
+brainAccess: none
+interactivity: none
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: [${band}]
+runtime:
+  sdk: claude-agent-sdk
+  strategy: fixed
+  model: claude-sonnet-4-6
+budgets: {}
+allowed-tools: []
+disallowed-tools: []
+---
+## Process
+
+This agent does ${band} things.
+`;
+}
+
+/** Minimal forge-develop flow.yaml whose two agent-bearing nodes declare
+ *  demo-band + review-band — so listFlowBandIds derives a REAL, non-empty band
+ *  vocabulary { demo-band, review-band } (F2: the fail-CLOSED helper returns []
+ *  for a flow with no derivable vocabulary, so an EMPTY forge-develop dir would
+ *  now reject every band scope). */
+const FORGE_DEVELOP_FLOW_YAML = `id: forge-develop
+name: Forge Develop
+version: 1
+goal: Test develop flow.
+project: null
+kb: null
+costCeilingUsd: 10
+origin: seed
+disposable: true
+nodes:
+  - { id: demo, agent: demo-agent }
+  - { id: adversarial-review, agent: adversarial-review }
+edges: []
+triggers: []
+`;
+
 // ---------------------------------------------------------------------------
 // Bridge lifecycle
 // ---------------------------------------------------------------------------
@@ -68,8 +118,21 @@ before(async () => {
   writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'kb.yaml'), FORGE_DEV_KB_YAML);
 
   // A registered flow + a discovered project, so binding.ref existence checks
-  // (R1-01) have something real to resolve against.
-  mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-develop'), { recursive: true });
+  // (R1-01) have something real to resolve against. forge-develop is now a REAL
+  // flow (flow.yaml + demo-band/review-band skills) so listFlowBandIds derives a
+  // non-empty { demo-band, review-band } vocabulary — required after F2 made the
+  // helper fail CLOSED (an empty flow dir yields [] and rejects every band).
+  const developFlowDir = join(forgeRoot, 'studio', 'flows', 'forge-develop');
+  mkdirSync(developFlowDir, { recursive: true });
+  writeFileSync(join(developFlowDir, 'flow.yaml'), FORGE_DEVELOP_FLOW_YAML);
+  for (const [slug, band] of [['demo-agent', 'demo-band'], ['adversarial-review', 'review-band']] as const) {
+    const skillDir = join(forgeRoot, 'skills', slug);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), bandSkillMd(slug, band));
+  }
+  // A flow registered by DIRECTORY NAME ONLY (no flow.yaml) — the fail-CLOSED
+  // shape the F2 pin drives: any band scope on it must be rejected.
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'empty-flow'), { recursive: true });
   mkdirSync(join(forgeRoot, 'projects', 'demo-project'), { recursive: true });
 
   const result = await startBridge({ forgeRoot, port: 0 });
@@ -386,4 +449,192 @@ test('DELETE without CSRF header → 403', async () => {
   const { status } = await del('/api/studio/kbs/csrf-brain', true);
   assert.equal(status, 403);
   assert.equal(existsSync(join(forgeRoot, 'brain', 'csrf-brain')), true, 'not deleted without CSRF');
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-1 group B (1)/(2): binding.band — a KB bound to a flow may scope
+// its grant to one of that flow's bands (T1 ruling: the band-role map is
+// ONLY review-band -> reviewer). Today `KbBinding` has no `band` field at
+// all — the create route only reads `binding.kind`/`binding.ref` (see
+// cli/bridge-studio-kbs.ts ~516-551) and `serializeKbDescriptor` only ever
+// writes `{ kind, ref }` (orchestrator/studio/kb-descriptor.ts ~116-127) — so
+// any `binding.band` sent in the POST body is silently dropped before the
+// kb.yaml is ever written.
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06): POST /api/studio/kbs preserves binding.band in the written kb.yaml', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'band-scoped-brain',
+    name: 'Band Scoped Brain',
+    binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
+    desc: 'Testing a band-scoped flow binding.',
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+
+  const kbYamlPath = join(forgeRoot, 'brain', 'band-scoped-brain', 'kb.yaml');
+  assert.ok(existsSync(kbYamlPath), 'kb.yaml must exist — create must have succeeded');
+  const content = readFileSync(kbYamlPath, 'utf8');
+  assert.match(
+    content,
+    /band:\s*review-band/,
+    `binding.band must round-trip into the written kb.yaml — it is dropped before serialization today. Got:\n${content}`,
+  );
+
+  // Confirm via the real loader too, not just raw yaml text — the descriptor
+  // object itself must expose .band once loaded back off disk.
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  assert.equal(
+    (descriptor.binding as { band?: string }).band,
+    'review-band',
+    'loadKbDescriptor must parse binding.band back off the written kb.yaml',
+  );
+});
+
+test('RED (R1-06): POST /api/studio/kbs rejects an unknown binding.band naming the real band vocabulary', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'bad-band-brain',
+    name: 'Bad Band Brain',
+    binding: { kind: 'flow', ref: 'forge-develop', band: 'no-such-band' },
+    desc: 'Testing an unknown band id.',
+  });
+  assert.equal(
+    status,
+    400,
+    `expected 400 for an unknown binding.band, got ${status} — today the route ignores binding.band entirely and creates the KB anyway: ${JSON.stringify(json)}`,
+  );
+  assert.ok(typeof json['error'] === 'string', `expected a 400 with an error string, got: ${JSON.stringify(json)}`);
+  const errMsg = json['error'] as string;
+  assert.match(errMsg, /band/i, 'error must mention band');
+  // Must name a real band id (the flow's real band vocabulary), not just
+  // reject silently — "review-band" is a real BAND_GUARD_IDS member and one
+  // forge-develop's own nodes (adversarial-review) actually declares.
+  assert.match(errMsg, /review-band/, `error must name the real band vocabulary — got: ${errMsg}`);
+
+  // And the KB must NOT have been created with the bogus band silently ignored.
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'bad-band-brain')),
+    false,
+    'a rejected binding.band must not leave a half-written kb dir behind',
+  );
+});
+
+// F2 (fail-open-validator): a flow registered by directory name only (no
+// flow.yaml) has NO real band vocabulary, so listFlowBandIds fails CLOSED with
+// [] — attaching ANY band scope (even the otherwise-real review-band) to such a
+// flow must be rejected. Before F2, the fail-OPEN fallback returned the full
+// platform vocab, so review-band was accepted and a reviewer brain-read grant
+// got written onto a flow that has no review band at all.
+test('F2: POST /api/studio/kbs binding.band=review-band on a registered-but-empty flow → 400 (no phantom KB)', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'empty-flow-band-brain',
+    name: 'Empty Flow Band Brain',
+    binding: { kind: 'flow', ref: 'empty-flow', band: 'review-band' },
+    desc: 'Attaching review-band to a flow that has no derivable bands.',
+  });
+  assert.equal(
+    status,
+    400,
+    `expected 400 — an empty flow dir has no real band vocabulary, so review-band must be rejected (fail CLOSED). Got: ${JSON.stringify(json)}`,
+  );
+  assert.ok(typeof json['error'] === 'string');
+  assert.match(json['error'] as string, /band/i, 'error must mention band');
+
+  // Fail-closed must not leave a half-written KB behind.
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'empty-flow-band-brain')),
+    false,
+    'a rejected band scope must not create the KB dir',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-2 group B (1): agent-seeded creation hand-off (R1-06-F2).
+// On a successful create, the route must hand off to the project-brain
+// ("brain-creation") session shell for seeding, mirroring the ESTABLISHED
+// `POST /api/project-brain/start` contract (cli/ui-bridge.ts:3797-3826):
+// `{ ok: true, sessionId }`, plus a REAL session dir + status.json (phase
+// 'briefing') at <projectsRoot>/<project>/_project-brain/<sessionId> — the
+// exact anchor the generic session-shell route
+// (GET /api/studio/sessions/project-brain/:sessionId?project=<p>,
+// cli/bridge-studio-sessions.ts) resolves against. Today the create route
+// (cli/bridge-studio-kbs.ts ~476-611) only ever returns { ok: true, id } —
+// no session is started at all, so this is RED on both the wire contract and
+// the on-disk side effect.
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06 WI-2 group B, F2): POST /api/studio/kbs create hands off a project-brain session for seeding', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'handoff-brain',
+    name: 'Handoff Brain',
+    binding: { kind: 'project', ref: 'demo-project' },
+    desc: 'Testing the agent-seeded creation hand-off.',
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+  assert.equal(json['id'], 'handoff-brain');
+
+  // The wire contract: a real hand-off sessionId, same field name as the
+  // sibling POST /api/project-brain/start route.
+  assert.equal(
+    typeof json['sessionId'],
+    'string',
+    `create response must carry a hand-off "sessionId" (mirroring POST /api/project-brain/start's { ok, sessionId } contract) — today it only returns { ok, id }. Got: ${JSON.stringify(json)}`,
+  );
+  const sessionId = json['sessionId'] as string;
+  assert.ok(sessionId.length > 0, 'sessionId must be non-empty');
+
+  // The hand-off must be REAL, not a fabricated id on the wire: a project-brain
+  // session dir + status.json must actually exist on disk, in the 'briefing'
+  // phase, exactly like a session started via POST /api/project-brain/start —
+  // the shell the UI's /sessions/project-brain/:sessionId page reads through
+  // cli/bridge-studio-sessions.ts.
+  const statusPath = join(forgeRoot, 'projects', 'demo-project', '_project-brain', sessionId, 'status.json');
+  assert.ok(existsSync(statusPath), `hand-off session status.json must exist at ${statusPath} — no project-brain session is started by create today`);
+  const statusJson = JSON.parse(readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+  assert.equal(statusJson['phase'], 'briefing', 'hand-off session must start in the briefing phase, like /api/project-brain/start');
+  assert.equal(statusJson['project'], 'demo-project', 'hand-off session is anchored under the bound project');
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-2 group B (3): bootstrapKb / POST /api/studio/kbs/:id/bootstrap
+// REMOVAL (T1 ruling Q3) — dead code + a competing seed path now that create
+// hands off to the real project-brain agent flow (F2, pin above). RED today
+// means the route STILL responds (has not been removed yet).
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06 WI-2 group B, T1 Q3): POST /api/studio/kbs/:id/bootstrap is REMOVED — no route responds', async () => {
+  // Precondition: the target kb genuinely exists on disk BEFORE probing the
+  // removed route, so a 404 below can only mean "route gone", never "unknown
+  // kb id" (the route's own pre-existing 404 branch for that case).
+  await post('/api/studio/kbs', {
+    id: 'bootstrap-removal-brain',
+    name: 'Bootstrap Removal Brain',
+    binding: { kind: 'unique' },
+    desc: 'kb exists; the bootstrap route should not.',
+  });
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'bootstrap-removal-brain', 'kb.yaml')),
+    true,
+    'precondition: the kb must exist on disk before probing the removed bootstrap route',
+  );
+
+  const res = await fetch(`${bridgeUrl}/api/studio/kbs/bootstrap-removal-brain/bootstrap`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ name: 'x', summary: 'y' }),
+  });
+  assert.equal(
+    res.status,
+    404,
+    `expected 404 (route removed — falls through to the bridge's bare 404 fallback) — the bootstrap route still responds today with status ${res.status}`,
+  );
+
+  // The removed route must leave no seed side-effect behind either — a stale
+  // handler that somehow still 404s but still wrote profile.md would be a
+  // false "removed" green.
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'bootstrap-removal-brain', 'profile.md')),
+    false,
+    'no profile.md must be seeded by a removed bootstrap route',
+  );
 });

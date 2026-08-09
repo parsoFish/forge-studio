@@ -17,7 +17,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { runStudioLint } from './studio-lint.ts';
-import { loadKbDescriptor } from '../orchestrator/studio/registry.ts';
+import { loadKbDescriptor, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
 import { validateKb } from '../orchestrator/studio/validate.ts';
 import type { KbBinding } from '../orchestrator/studio/types.ts';
 
@@ -432,6 +432,82 @@ desc: Bound to a project that does not exist.
     `Expected a binding-ref error for kb:project-kb, got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
   );
   assert.ok(refFinding.message.includes('no-such-project'));
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
+// Test 6c-bis (R1-06 WI-1 group B (3)): kb.yaml binding.band not present in
+// the bound flow's real band vocabulary → error.
+//
+// A KB's `binding.band` (when set) must name a band the flow's own nodes
+// actually run under (derived from each node's agent -> composition.guards
+// -> resolveBandGuard, orchestrator/agent-bands.ts) — analogous to the
+// existing dangling binding.ref cross-check above, but one level deeper
+// (flow -> node -> agent -> declared band). Today studio-lint (cli/studio-lint.ts
+// ~409+) has ZERO notion of `band` at all — the KB section only cross-checks
+// binding.ref against registered flows/projects — so a mismatched band is
+// silently accepted.
+// ---------------------------------------------------------------------------
+
+/** SKILL.md for the canonical review-band agent (composition/band-guard
+ * lint requires the exact canonical slug 'adversarial-review' plus
+ * loopStrategy: one-shot and a budget cap — mirrors skills/adversarial-review/SKILL.md). */
+function reviewBandSkillMd(): string {
+  return `---
+name: adversarial-review
+description: A test review-band agent.
+library: true
+purpose: Does review-band things.
+brainAccess: none
+interactivity: none
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: [review-band]
+runtime:
+  sdk: claude-agent-sdk
+  strategy: fixed
+  model: claude-sonnet-4-6
+  loopStrategy: one-shot
+budgets: {maxTurns: 10, maxBudgetUsd: 1}
+allowed-tools: []
+disallowed-tools: []
+---
+## Process
+
+This agent does review-band things.
+`;
+}
+
+test('RED (R1-06): kb.yaml binding.band not present in the bound flow\'s real bands → error finding', () => {
+  // test-flow's ONE node runs the canonical review-band agent — so the
+  // flow's real band vocabulary is exactly { review-band }.
+  const root = buildValidRoot({ agentSlug: 'adversarial-review', flowId: 'test-flow', includeKb: false });
+  writeFileSync(join(root, 'skills', 'adversarial-review', 'SKILL.md'), reviewBandSkillMd());
+
+  const kbDir = join(root, 'brain', 'mismatched-band-kb');
+  mkdirSync(kbDir, { recursive: true });
+  // demo-band IS a real BAND_GUARD_IDS member, but it is NOT one of
+  // test-flow's own bands (only review-band is) — so this must be flagged,
+  // the same way a dangling binding.ref is flagged above.
+  writeFileSync(
+    join(kbDir, 'kb.yaml'),
+    validKbYaml('mismatched-band-kb', 'binding: { kind: flow, ref: test-flow, band: demo-band }'),
+  );
+
+  const result = runStudioLint(root);
+
+  const bandFinding = result.findings.find(
+    (f) => f.level === 'error' && f.object === 'kb:mismatched-band-kb' && /band/i.test(f.message),
+  );
+  assert.ok(
+    bandFinding !== undefined,
+    'Expected an error finding naming the band mismatch for kb:mismatched-band-kb (binding.band '
+      + '"demo-band" is not among test-flow\'s real bands { review-band }) — studio-lint has no band '
+      + `check at all today. Got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, message: f.message })))}`,
+  );
 
   cleanup(root);
 });
@@ -856,4 +932,90 @@ test('AT-40: runStudioLint(process.cwd()) surfaces the 3 real unverifiable-endpo
   for (const id of ['verdict', 'work-items', 'demo-fix-spec']) {
     assert.ok(flags.some((f) => f.message.includes(id)), `expected a flag naming "${id}"`);
   }
+});
+
+// ---------------------------------------------------------------------------
+// F1 (decorative-guard): the ADR-010 read-policy guard must be WIRED into the
+// production `forge studio lint` KB section over REAL kb.yaml content — not
+// only exercised over tmpdir fixtures inside a test. A hand-authored, bandless
+// flow-bound kb.yaml that grants the reviewer reader role must surface as a
+// `read-policy` ERROR finding. (RED before the wiring: no such check exists,
+// so no read-policy finding is emitted.)
+// ---------------------------------------------------------------------------
+
+test('F1: a hand-authored bandless-flow reviewer-granting kb.yaml is flagged by forge studio lint read-policy', () => {
+  // buildValidRoot registers flow 'test-flow' (agent 'test-agent'), so the
+  // rogue's binding.ref resolves — the ONLY thing wrong with it is the policy
+  // violation (a bandless flow binding that grants the reviewer).
+  const root = buildValidRoot({ includeKb: false });
+
+  const kbDir = join(root, 'brain', 'rogue-reviewer-kb');
+  mkdirSync(kbDir, { recursive: true });
+  const roguePath = join(kbDir, 'kb.yaml');
+  writeFileSync(
+    roguePath,
+    `id: rogue-reviewer-kb
+name: Rogue Reviewer KB
+binding: { kind: flow, ref: test-flow }
+desc: A bandless flow binding that illegitimately grants the reviewer.
+processes:
+  lint: { builtin: forge-brain-lint }
+  ingest: { builtin: reflector-ingest }
+  consolidate: { builtin: brain-fix }
+  usage:
+    readSurface: navigation-index
+    readers: [reviewer]
+`,
+  );
+
+  // Fixture precondition FIRST (before reading the lint verdict): the rogue
+  // really is a bandless flow binding that resolves to a reviewer grant.
+  const rogue = loadKbDescriptor(roguePath);
+  assert.equal(rogue.binding.kind, 'flow', 'precondition: rogue is a flow binding');
+  assert.equal(rogue.binding.kind === 'flow' ? rogue.binding.band : 'n/a', undefined, 'precondition: no band declared');
+  assert.ok(
+    resolveKbProcesses(rogue).usage.readers.includes('reviewer'),
+    'precondition: rogue resolves to a reviewer grant',
+  );
+
+  const result = runStudioLint(root);
+  const readPolicyFinding = result.findings.find(
+    (f) => f.level === 'error' && f.check === 'read-policy' && f.object === 'kb:rogue-reviewer-kb',
+  );
+  assert.ok(
+    readPolicyFinding !== undefined,
+    `Expected a read-policy error for kb:rogue-reviewer-kb — the ADR-010 guard must be wired into the ` +
+      `production KB section. Got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check })))}`,
+  );
+
+  cleanup(root);
+});
+
+// A project-bound KB granting the full reader set (incl. reviewer + dev-loop,
+// the deriveKbUsageDefaults default) must NOT be flagged — the F3 false-positive
+// the old helper produced. Uses a brain/<id>/kb.yaml the top-level scan reaches.
+test('F1/F3: a project-bound KB is NOT flagged by read-policy (project bindings are exempt)', () => {
+  const root = buildValidRoot({ includeKb: false });
+  const kbDir = join(root, 'brain', 'project-brain');
+  mkdirSync(kbDir, { recursive: true });
+  writeFileSync(
+    join(kbDir, 'kb.yaml'),
+    `id: project-brain
+name: Project Brain
+binding: { kind: project, ref: my-project }
+desc: A per-project brain (Brain-3) that legitimately grants the reviewer.
+`,
+  );
+
+  const result = runStudioLint(root);
+  const readPolicyErrors = result.findings.filter(
+    (f) => f.check === 'read-policy' && f.object === 'kb:project-brain',
+  );
+  assert.deepEqual(
+    readPolicyErrors,
+    [],
+    `a project binding must be exempt from read-policy, got: ${JSON.stringify(readPolicyErrors)}`,
+  );
+
+  cleanup(root);
 });

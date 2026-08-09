@@ -312,62 +312,6 @@ test('(d-file) FIXED (amendment round): GET /api/studio/kbs/leafkb/nodes/planted
   );
 });
 
-// ---------------------------------------------------------------------------
-// Shape (d-hardlink): brain/hlkb/profile.md hardlinked to an outside file —
-// POST bootstrap only writes profile.md when ABSENT.
-// ---------------------------------------------------------------------------
-
-test('(d-hardlink) FIXED (amendment round): POST bootstrap on a hardlinked profile.md is now rejected by containment itself, not by the create-only accident', async (t) => {
-  const hlkbOutside = outsideDirs.find((d) => d.includes('kb-hlkb-outside-'))!;
-  const outsideFile = join(hlkbOutside, 'outside-profile.md');
-  if (!existsSync(join(forgeRoot, 'brain', 'hlkb', 'profile.md'))) {
-    t.skip('hardlink creation (linkSync) unavailable in this environment (EXDEV or unsupported)');
-    return;
-  }
-  const originalBytes = readFileSync(outsideFile, 'utf8');
-
-  // STALE COMMENT SUPERSEDED (amendment round): the previous comment here
-  // named an ACCIDENT — bootstrap's create-only `!existsSync(profilePath)`
-  // semantics happened to skip the write regardless of what already occupied
-  // the slot. That is no longer the operative mechanism. The bootstrap route
-  // now resolves profile.md through a guarded tail-path helper
-  // (cli/bridge-studio-kbs.ts's `guardKbTail`, wrapping
-  // cli/studio-path-guard.ts's `resolveGuardedPath`), whose leaf check
-  // rejects a hardlinked file outright (`nlink !== 1`) BEFORE the
-  // exists/create branch is even reached — the request 400s. This is now a
-  // genuine containment pin, not a coincidence of route semantics.
-  const { status, text } = await post('/api/studio/kbs/hlkb/bootstrap', { name: 'HL KB', summary: 'x' });
-  assert.equal(status, 400, `expected the hardlinked profile.md to be rejected outright (400), got ${status}: ${text}`);
-
-  const afterBytes = readFileSync(outsideFile, 'utf8');
-  assert.equal(afterBytes, originalBytes, 'the outside file (shared inode via hardlink) must be byte-unchanged');
-});
-
-// ---------------------------------------------------------------------------
-// Shape (d-dangling): brain/dangkb/profile.md -> a NON-existent outside path.
-// POST bootstrap's `writeFileSync` follows the dangling symlink through
-// O_CREAT and creates a brand-new file at the attacker-chosen outside path.
-// ---------------------------------------------------------------------------
-
-test('(d-dangling) FIXED (amendment round): POST /api/studio/kbs/dangkb/bootstrap no longer creates a file at the dangling symlink\'s outside target', async (t) => {
-  if (skipIfNoSymlinks(t)) return;
-  const dangkbOutsideParent = outsideDirs.find((d) => d.includes('kb-dangkb-outside-parent-'))!;
-  const targetPath = join(dangkbOutsideParent, 'does-not-exist-yet.md');
-  assert.ok(!existsSync(targetPath), 'sanity: the dangling symlink target must not exist before the request');
-
-  // The bootstrap route now resolves profile.md through guardKbTail() ->
-  // resolveGuardedPath, whose existence probe is lstat-based: a dangling
-  // symlink counts as "there" and is routed into the realpath check (which
-  // throws, since the target is absent) rather than mistaken for a free
-  // creation slot — the guard rejects with 400 before writeFileSync ever runs.
-  const { status, text } = await post('/api/studio/kbs/dangkb/bootstrap', { name: 'Dang KB', summary: 'x' });
-  assert.equal(status, 400, `expected the dangling symlink to be rejected outright (400), got ${status}: ${text}`);
-
-  assert.ok(
-    !existsSync(targetPath),
-    `no file may be created at the dangling symlink's outside target — but it now exists: ${existsSync(targetPath) ? readFileSync(targetPath, 'utf8') : ''}`,
-  );
-});
 
 // ---------------------------------------------------------------------------
 // Shape (d-cross-object): brain/evilalias -> brain/realkb (SAME root, real kb)
@@ -418,8 +362,6 @@ test('".."-normalization: raw and percent-encoded ".." ids are rejected (400) on
     const guidance = await post(`/api/studio/kbs/${id}/guidance`, { text: 'x' });
     assert.equal(guidance.status, 400, `POST /kbs/${id}/guidance: expected 400, got ${guidance.status}`);
 
-    const bootstrap = await post(`/api/studio/kbs/${id}/bootstrap`, {});
-    assert.ok(bootstrap.status === 400 || bootstrap.status === 404, `POST /kbs/${id}/bootstrap: expected 400/404, got ${bootstrap.status}`);
 
     const maintenance = await post(`/api/studio/kbs/${id}/maintenance`, { op: 'lint' });
     assert.equal(maintenance.status, 400, `POST /kbs/${id}/maintenance: expected 400, got ${maintenance.status}`);

@@ -108,6 +108,72 @@ function makeAgentSkillMd(): string {
   ].join('\n');
 }
 
+/**
+ * Minimal valid SKILL.md whose `composition.guards` declares a single band —
+ * just enough for `loadAgentDefinition` + `resolveBandGuard`
+ * (orchestrator/agent-bands.ts) to resolve a real band id off a real,
+ * loadable agent def. Same shape as bridge-studio-kb-create.test.ts's
+ * `bandSkillMd` fixture helper (R1-01's `listFlowBandIds` ground truth),
+ * duplicated here per this repo's convention of self-contained test fixtures
+ * (no shared cli/test fixture module exists).
+ */
+function bandSkillMd(slug: string, band: string): string {
+  return [
+    '---',
+    `name: ${slug}`,
+    `description: A test ${band} agent.`,
+    'library: true',
+    `purpose: Does ${band} things.`,
+    'brainAccess: none',
+    'interactivity: none',
+    'composition:',
+    '  skills: []',
+    '  tools: []',
+    '  mcps: []',
+    `  guards: [${band}]`,
+    'runtime:',
+    '  sdk: claude-agent-sdk',
+    '  strategy: fixed',
+    '  model: claude-sonnet-4-6',
+    'budgets: {}',
+    'allowed-tools: []',
+    'disallowed-tools: []',
+    '---',
+    '',
+    `This agent does ${band} things.`,
+  ].join('\n');
+}
+
+/**
+ * A `forge-develop`-shaped flow.yaml whose two agent-bearing nodes declare
+ * `demo-band` + `review-band` — mirrors the REAL shipped `studio/flows/
+ * forge-develop/flow.yaml`'s derived band vocabulary (confirmed live via
+ * `listFlowBandIds(repoRoot, 'forge-develop')` -> `['demo-band',
+ * 'review-band']`, cli/flow-band-vocab.ts), so the `bands` field this test
+ * pins on `GET /api/studio/flows` is checked against a REAL, non-fabricated
+ * band vocabulary shape, not an arbitrary made-up one.
+ */
+function makeForgeDevelopFlowYaml(): string {
+  return [
+    'id: forge-develop',
+    'name: Forge Develop',
+    'version: 1',
+    'goal: Test develop flow.',
+    'project: null',
+    'kb: null',
+    'costCeilingUsd: 10',
+    'origin: seed',
+    'disposable: true',
+    'nodes:',
+    '  - id: demo',
+    '    agent: demo-agent',
+    '  - id: adversarial-review',
+    '    agent: adversarial-review',
+    'edges: []',
+    'triggers: []',
+  ].join('\n');
+}
+
 /** Minimal manifest for an in-flight cycle (produces an active run) */
 function makeInFlightManifest(initId: string, cycleId: string): string {
   return [
@@ -181,6 +247,20 @@ before(async () => {
     join(forgeRoot, 'studio', 'flows', 'locked-flow', 'flow.yaml'),
     makeFlowYaml({ id: 'locked-flow', version: 1, origin: 'studio' }),
   );
+
+  // ---- studio/flows/forge-develop/flow.yaml + its band-guard skills -------
+  // (R1-06 WI-2 group A) — a REAL, non-empty derivable band vocabulary
+  // {demo-band, review-band} for the GET /api/studio/flows `bands:` field pin.
+  mkdirSync(join(forgeRoot, 'studio', 'flows', 'forge-develop'), { recursive: true });
+  writeFileSync(
+    join(forgeRoot, 'studio', 'flows', 'forge-develop', 'flow.yaml'),
+    makeForgeDevelopFlowYaml(),
+  );
+  for (const [slug, band] of [['demo-agent', 'demo-band'], ['adversarial-review', 'review-band']] as const) {
+    const skillDir = join(forgeRoot, 'skills', slug);
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, 'SKILL.md'), bandSkillMd(slug, band));
+  }
 
   // ---- _queue/in-flight/<init>.md (produces status=active for locked-flow run) ----
   mkdirSync(join(forgeRoot, '_queue', 'in-flight'), { recursive: true });
@@ -728,6 +808,49 @@ test('GET /api/studio/flows list still works alongside the single-flow route', a
   assert.ok(Array.isArray(body.flows), 'flows must be array');
   const testFlow = body.flows.find((f) => f.id === 'test-flow');
   assert.ok(testFlow, 'test-flow must appear in the list');
+});
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TEST (T3, R1-06 WI-2 group A) — GET /api/studio/flows rows must
+// carry a `bands: string[]` field derived from EACH flow's real band
+// vocabulary (cli/flow-band-vocab.ts's `listFlowBandIds`, landed R1-06 WI-1),
+// so `/knowledge/new`'s per-flow band picker (forge-ui/app/knowledge/new/
+// page.tsx) has something real to source its options from over the wire.
+//
+// RED today: `loadAllFlows` (cli/bridge-studio.ts ~:361) builds each row from
+// `loadFlowDefinition` alone and the `GET /api/studio/flows` handler
+// (~:679) passes those rows straight through with no per-flow band
+// derivation at all — no `bands` key is ever attached, so every row's
+// `.bands` is `undefined`, not `[]` for a bandless flow and not
+// `['demo-band','review-band']` for the forge-develop fixture below.
+// ---------------------------------------------------------------------------
+
+test('(RED) GET /api/studio/flows: forge-develop row carries bands: ["demo-band","review-band"] — its REAL derived band vocabulary', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/flows`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { flows: Array<{ id: string; bands?: string[] }> };
+  const develop = body.flows.find((f) => f.id === 'forge-develop');
+  assert.ok(develop, 'forge-develop must appear in the flows list');
+  assert.deepEqual(
+    [...(develop!.bands ?? [])].sort(),
+    ['demo-band', 'review-band'],
+    `expected forge-develop's bands to be derived from its real demo-band/review-band ` +
+      `guard nodes (listFlowBandIds) — got ${JSON.stringify(develop!.bands)}`,
+  );
+});
+
+test('(RED) GET /api/studio/flows: a flow with NO band-guard nodes carries bands: [] (present, not absent/undefined)', async () => {
+  resetTestFlow(); // test-flow's only agent node (test-agent) has no band guard
+  const res = await fetch(`${bridgeUrl}/api/studio/flows`);
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { flows: Array<{ id: string; bands?: string[] }> };
+  const plain = body.flows.find((f) => f.id === 'test-flow');
+  assert.ok(plain, 'test-flow must appear in the flows list');
+  assert.deepEqual(
+    plain!.bands,
+    [],
+    `expected test-flow (no band-guard nodes) to carry an EMPTY bands array, not undefined/absent — got ${JSON.stringify(plain!.bands)}`,
+  );
 });
 
 // ---------------------------------------------------------------------------

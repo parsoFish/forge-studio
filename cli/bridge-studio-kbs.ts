@@ -18,17 +18,27 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync, realpathSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { resolveGuardedPath, type PathGuardResult } from './studio-path-guard.ts';
+// gray-matter has no usable types; treated as `any` like cli/brain-lint.ts and
+// cli/brain-fix-auto.ts, which import it the same way.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+import matter from 'gray-matter';
 
-import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects } from '../orchestrator/studio/registry.ts';
+import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
-import { KB_BINDING_KINDS, type KbBinding } from '../orchestrator/studio/types.ts';
+import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '../orchestrator/studio/types.ts';
+import { listFlowBandIds } from './flow-band-vocab.ts';
+import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
+import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
+import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -142,12 +152,49 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
 // Lint-resolution helpers (the guided-resolution UI)
 // ---------------------------------------------------------------------------
 
-/** Keep only findings whose file belongs to this kb's brain dir (matches the
- *  lint route's historical filter; the kbId substring also covers the central
- *  per-project path brain/projects/<kbId>/). */
-function scopeFindingsToKb(findings: Finding[], kbId: string): Finding[] {
-  const brainDir = `brain/${kbId}`;
-  return findings.filter((f) => !f.file || f.file.includes(brainDir) || f.file.includes(kbId));
+/**
+ * R1-06 WI-3 review MAJOR 1 + MAJOR 2 — the ONE exact-dir scoping root both a
+ * KB's health lint COUNT (read) and its consolidate/fix-auto obligation (WRITE)
+ * share. A finding belongs to `kbId` iff its file resolves to a path AT or
+ * nested UNDER the KB's OWN resolved brain dir — `resolveKbBrainDir`, the SAME
+ * resolution consolidate/lint/health use, covering BOTH `brain/<id>` and the
+ * central per-project `brain/projects/<id>` (ADR 035).
+ *
+ * The two shapes this replaces were both live defects:
+ *   - substring `f.file.includes(kbId)` (the old `scopeFindingsToKb`) folded a
+ *     SIBLING like `alpha-two` into `alpha` — and because consolidate turns the
+ *     scope into WRITES, consolidating `alpha` mutated `brain/projects/alpha-two/`
+ *     (cross-KB write, MAJOR 2);
+ *   - the hardcoded `brain/<id>` prefix (buildKbHealth's old filter) matched
+ *     NOTHING for a project brain at `brain/projects/<id>`, so health reported
+ *     lintFlags=0 and hid the Lint section for exactly the project KBs WI-3
+ *     targets (declared-data-fails-open, MAJOR 1).
+ *
+ * Comparison is by identity-after-realpath (not a lexical prefix): the finding's
+ * file is realpath'd where it exists, matching `resolveKbBrainDir`'s own
+ * realpath'd return — so a symlinked forge-root component (e.g. macOS `/tmp`)
+ * can't defeat the prefix check, and a theme reached through a symlink that
+ * escapes the dir is correctly EXCLUDED from a write scope rather than folded in.
+ */
+function findingUnderDir(forgeRoot: string, brainDir: string, f: Finding): boolean {
+  if (!f.file) return false;
+  const abs = resolve(forgeRoot, f.file);
+  // Never let a realpath fs-throw (e.g. a TOCTOU unlink between existsSync and
+  // realpathSync) escape the scoping path and 500 an otherwise-fine lint —
+  // fall back to the lexical absolute path.
+  let real = abs;
+  try {
+    if (existsSync(abs)) real = realpathSync(abs);
+  } catch {
+    real = abs;
+  }
+  return real === brainDir || real.startsWith(brainDir + sep);
+}
+
+function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
+  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!brainDir) return [];
+  return findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
 }
 
 /** Spawn ONE detached `forge brain fix` agent turn; events stream to
@@ -189,6 +236,322 @@ function readBrainFixState(forgeRoot: string, runId: string): { state: 'running'
     }
   }
   return { state: 'running', cleared: false };
+}
+
+/**
+ * R1-06 WI-3: write the SINGLE terminal event for a `consolidate` run's own
+ * exposed `runId`. Deliberately NOT one event per finding — each per-finding
+ * `runBrainFixTurn` call inside `runBrainConsolidate` is given its OWN
+ * discardable sub-runId (never the exposed one), so its 'end' event lands in
+ * a different log dir and can never leak into this run's log. Without that
+ * separation, `readBrainFixState` (which returns on the FIRST terminal event
+ * found scanning backward) would report the whole consolidate batch "done"
+ * the moment the FIRST scoped finding cleared, while the rest were still
+ * mid-flight — silently truncating the drain this op exists to guarantee.
+ */
+function writeConsolidateTerminalEvent(
+  forgeRoot: string,
+  runId: string,
+  outcome: { total: number; clearedCount: number },
+): void {
+  const logDir = join(forgeRoot, '_logs', `_brainfix-${runId}`);
+  mkdirSync(logDir, { recursive: true });
+  const cleared = outcome.total === 0 || outcome.clearedCount === outcome.total;
+  const line = JSON.stringify({
+    event_type: 'end',
+    message: `brain-fix-consolidate.end (cleared=${outcome.clearedCount}/${outcome.total})`,
+    metadata: { runId, cleared, total: outcome.total, clearedCount: outcome.clearedCount },
+  });
+  try {
+    appendFileSync(join(logDir, 'events.jsonl'), line + '\n', 'utf8');
+  } catch {
+    // Best-effort: a run whose terminal event never lands stays 'running'
+    // forever, which the caller's own poll-budget timeout surfaces loudly
+    // rather than this failing silently in a way that hides the cause.
+  }
+}
+
+/**
+ * R1-06 WI-3 review MINOR 1 (poll-hang on throw): the terminal event for a
+ * consolidate run whose repair phase (the initial `runBrainLint`, or
+ * `applyDeterministicConsolidateFixes`' `ensureLinkedAt` read/write) threw
+ * before the normal `writeConsolidateTerminalEvent` could fire. Without this,
+ * `readBrainFixState` reports 'running' forever and every poller exhausts its
+ * whole budget. Writes an `event_type:'error'` terminal — which
+ * `readBrainFixState` maps to state 'failed' — NOT a vacuous cleared:true
+ * 'end', so the failure is honest rather than a silent success.
+ */
+function writeConsolidateErrorTerminalEvent(forgeRoot: string, runId: string, err: unknown): void {
+  const logDir = join(forgeRoot, '_logs', `_brainfix-${runId}`);
+  try { mkdirSync(logDir, { recursive: true }); } catch { /* dir may already exist; the append below is the real signal */ }
+  const line = JSON.stringify({
+    event_type: 'error',
+    message: 'brain-fix-consolidate.crashed',
+    metadata: { runId, error: err instanceof Error ? err.message : String(err) },
+  });
+  try {
+    appendFileSync(join(logDir, 'events.jsonl'), line + '\n', 'utf8');
+  } catch {
+    // Best-effort — the caller's poll budget still surfaces a stuck run loudly.
+  }
+}
+
+type AgentFinding = Finding & { check: string; kind: string };
+
+/**
+ * Best-effort extraction of the target index-file path a
+ * `checkProjectBrainIndexes` finding's message embeds (e.g. "not listed in
+ * project category index: brain/projects/<id>/patterns.md") — the file the
+ * FIX actually writes, which is NOT `f.file` (that's the unrelated theme
+ * file the finding is keyed by). Falls back to the finding's own `file` when
+ * no index path is embedded (a different check's message shape), which just
+ * keeps that finding in its own single-finding group rather than breaking.
+ */
+function consolidateTargetFile(forgeRoot: string, f: AgentFinding): string {
+  const m = /category index:\s*(\S+)\s*$/.exec(f.message);
+  return m ? resolve(forgeRoot, m[1]) : f.file;
+}
+
+/**
+ * Group agent-tier findings by the file their fix actually writes to.
+ * Findings sharing a write target get ONE real agent session covering ALL of
+ * them ("ONE session over the FULL scoped finding set") instead of one
+ * session per finding — both far fewer real SDK round trips and no risk of
+ * two turns racing edits on the same file.
+ */
+function groupConsolidateFindings(forgeRoot: string, findings: readonly AgentFinding[]): Map<string, AgentFinding[]> {
+  const groups = new Map<string, AgentFinding[]>();
+  for (const f of findings) {
+    const target = consolidateTargetFile(forgeRoot, f);
+    const list = groups.get(target);
+    if (list) list.push(f);
+    else groups.set(target, [f]);
+  }
+  return groups;
+}
+
+/** Best-effort theme frontmatter `description` (empty string on any
+ *  read/parse failure — the agent still gets a valid, if bare, link line). */
+function themeDescription(themeFile: string): string {
+  try {
+    const { data } = matter(readFileSync(themeFile, 'utf8'));
+    return String((data as Record<string, unknown>).description ?? '').replace(/\s+/g, ' ').trim();
+  } catch {
+    return '';
+  }
+}
+
+/** The exact link-line shape `readIndexEntries` (cli/brain-lint.ts) scans
+ *  for, mirroring the deterministic auto-fixer's own `linkLine` convention
+ *  (cli/brain-fix-auto.ts) — so a pre-computed line is indistinguishable from
+ *  one a human or the auto-fixer would have written. */
+function themeLinkLine(themeFile: string): string {
+  const slug = basename(themeFile, '.md');
+  const desc = themeDescription(themeFile);
+  return desc ? `- [\`${slug}\`](./themes/${slug}.md) — ${desc}` : `- [\`${slug}\`](./themes/${slug}.md)`;
+}
+
+/**
+ * Combine a group's findings into ONE message + fixHint the agent turn can
+ * act on in a single pass, rather than the single-finding phrasing
+ * `runBrainFixTurn` uses for a lone finding. Real SDK round trips are the
+ * dominant cost of every session, so for the common "not listed in project
+ * category index" shape this pre-computes the EXACT append-ready line per
+ * finding — a directive single-edit instruction instead of asking the agent
+ * to open every theme file and compose its own lines, collapsing what would
+ * otherwise be several exploratory tool-use turns into one.
+ */
+function describeConsolidateGroup(group: readonly AgentFinding[]): { message: string; fixHint?: string } {
+  if (group.length === 1) return { message: group[0].message, fixHint: group[0].fixHint };
+  if (group.every((f) => f.message.startsWith('not listed'))) {
+    const lines = group.map((f) => themeLinkLine(f.file));
+    return {
+      message: `${group.length} theme(s) missing from this category index: ${group.map((f) => basename(f.file, '.md')).join(', ')}`,
+      fixHint:
+        `Append EXACTLY these ${lines.length} line(s) to the end of the file, verbatim, one per line, then stop — ` +
+        `do not open or read any other file:\n${lines.join('\n')}`,
+    };
+  }
+  const message = `${group.length} findings to resolve in this one file:\n` +
+    group.map((f, i) => `${i + 1}. [${f.kind}] ${f.message}`).join('\n');
+  const hint = group[0].fixHint;
+  const fixHint = `Resolve EVERY finding listed above in this single file before stopping.` +
+    (hint ? ` ${hint}` : '');
+  return { message, fixHint };
+}
+
+/**
+ * Per-KB consolidate serialization. A second `op:'consolidate'` dispatch
+ * against a KB that already has a run in flight must NOT start its own real
+ * agent turns concurrently with the first — both could target the same
+ * on-disk category-index file (e.g. the operator double-clicking
+ * "Consolidate", or a manual dispatch overlapping the reflector's own
+ * post-cycle kb-health pass) and race-edit it, which is both a correctness
+ * hazard (lost writes) and inflates latency (an agent turn that reads
+ * half-written state needs extra tool-use rounds to make sense of it). One
+ * `Promise` chain per kbId is the queue; each queued unit re-computes its OWN
+ * scoped finding set at ACTUAL run time (`runBrainConsolidateNow`, not at
+ * enqueue time), so a run queued behind an already-in-flight one correctly
+ * sees whatever the prior run already cleared instead of redoing it.
+ */
+const consolidateQueues = new Map<string, Promise<unknown>>();
+
+/** Fire-and-forget dispatch defer: long enough that a queued run never lands
+ *  inline with (and complete before) the dispatching request's own HTTP
+ *  response finishes round-tripping — a same-turn completion (a bare
+ *  `.then()` is only a MICROtask, which drains before the response is even
+ *  flushed) would let a run's on-disk mutations race ahead of both the
+ *  response that reports its `runId` and any other in-flight request against
+ *  the same KB. Still 200x under the 10s poll budget the deterministic
+ *  in-process repair path (no SDK turn) needs to actually run in. */
+const CONSOLIDATE_DISPATCH_DEFER_MS = 50;
+
+function deferToNextTick(): Promise<void> {
+  return new Promise((resolveTick) => setTimeout(resolveTick, CONSOLIDATE_DISPATCH_DEFER_MS));
+}
+
+function enqueueConsolidate(kbId: string, run: () => Promise<void>): void {
+  const prior = consolidateQueues.get(kbId) ?? Promise.resolve();
+  const next = prior.then(() => deferToNextTick().then(run), () => deferToNextTick().then(run));
+  consolidateQueues.set(kbId, next.catch(() => { /* queue continuation only; each run's own errors are already handled inside it */ }));
+}
+
+/**
+ * True for the ONE `checkProjectBrainIndexes` message shape with a fully
+ * deterministic repair — "not listed in project category index" — where
+ * `consolidateTargetFile` resolves the finding's own message to the EXACT
+ * index file to append into, and the theme's link line is a pure function of
+ * its own frontmatter (no judgment call). The sibling "category index
+ * missing" (would need a whole new file authored) and "listed N times"
+ * (needs a keep/drop decision) message shapes stay agent-tier — this
+ * deterministic path only ever claims the shape it can prove is safe.
+ */
+function isDeterministicNotListedFinding(f: AgentFinding): boolean {
+  return f.check === 'checkProjectBrainIndexes' && /not listed in project category index:/.test(f.message);
+}
+
+/**
+ * R1-06 WI-3 CI-safety fix: resolve every deterministically-repairable
+ * finding IN-PROCESS — zero child spawns, zero SDK turns — by reusing
+ * `ensureLinkedAt` (cli/brain-fix-auto.ts), the SAME idempotent
+ * append-link-line convention `op=fix-auto` already uses for the top-level
+ * brains' `index.not-listed` kind. For the pin fixture (all
+ * `checkProjectBrainIndexes` "not listed" findings) this clears every
+ * finding with zero agent turns. Returns the findings this pass could NOT
+ * resolve — genuinely agent-tier work for a real (non-NO_SPAWN) run.
+ */
+function applyDeterministicConsolidateFixes(
+  forgeRoot: string,
+  findings: readonly AgentFinding[],
+): AgentFinding[] {
+  const residual: AgentFinding[] = [];
+  for (const f of findings) {
+    if (!isDeterministicNotListedFinding(f)) { residual.push(f); continue; }
+    const indexPath = consolidateTargetFile(forgeRoot, f);
+    const result = ensureLinkedAt(indexPath, f.file);
+    // A failed deterministic attempt (unparseable theme, missing index file,
+    // …) falls back to the agent tier rather than silently dropping the
+    // finding — the re-lint at the end of the run still surfaces it as
+    // uncleared either way.
+    if (!result.ok) residual.push(f);
+  }
+  return residual;
+}
+
+/**
+ * R1-06 WI-3: drain the FULL agent-tier finding set scoped to `kbId` — the
+ * KB's RESOLVED `consolidate` obligation (`DEFAULT_KB_CONSOLIDATE`,
+ * `orchestrator/studio/kb-descriptor.ts`) is the SAME 'brain-fix' agent
+ * op=fix-agent dispatches one finding at a time; this runs it over every
+ * scoped agent-tier finding grouped by shared write-target (one real session
+ * per target file, covering every finding that lands there — "ONE session
+ * over the FULL scoped finding set"), instead of requiring one "Fix with
+ * agent" click per finding. Sequential across groups (not parallel) — agent
+ * turns share the same brain corpus on disk, so concurrent turns could race
+ * on the same file. Always invoked via `enqueueConsolidate` (never directly),
+ * which is what keeps this run from overlapping another dispatch against the
+ * same kbId.
+ *
+ * CI-safety (this WI's fix): deterministically-repairable findings are
+ * cleared in-process FIRST via `applyDeterministicConsolidateFixes` — no
+ * spawn, no SDK turn, so they never depend on the no-spawn guard below. Only
+ * the genuinely-ambiguous residual gets a real agent turn, and ONLY when
+ * neither `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active —
+ * mirroring `spawnAgentTurn`'s own `FORGE_ARCHITECT_NO_SPAWN` guard
+ * (cli/ui-bridge.ts) so this route can never spawn a real `forge brain fix` /
+ * SDK turn under the harness env CI runs `npm test` with. The single
+ * terminal event is always written (even when the loop below is skipped
+ * entirely), so a CI run with residual findings still reaches a terminal
+ * state deterministically — just with an honest `cleared: false`.
+ */
+async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: string): Promise<void> {
+  // MINOR 1: the whole body is wrapped so the SINGLE terminal event is
+  // guaranteed even on an unexpected throw in the pre-terminal repair phase
+  // (the initial runBrainLint, or applyDeterministicConsolidateFixes'
+  // ensureLinkedAt read/write). The happy path writes its own terminal at the
+  // end and returns without throwing, so the catch never double-fires.
+  try {
+    const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+    const scoped = scopeFindingsToKb(forgeRoot, kbId, findings);
+    const agentTier = scoped.filter(
+      (f): f is AgentFinding => f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
+    );
+
+    const residual = applyDeterministicConsolidateFixes(forgeRoot, agentTier);
+    const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
+
+    if (!noSpawn) {
+      const groups = groupConsolidateFindings(forgeRoot, residual);
+      let i = 0;
+      for (const [targetFile, group] of groups) {
+        const { message, fixHint } = describeConsolidateGroup(group);
+        try {
+          await runBrainFixTurn({
+            runId: `${runId}__${i}`,
+            kbId,
+            file: targetFile,
+            check: group[0].check,
+            kind: group[0].kind,
+            fixHint,
+            message,
+            forgeRoot,
+          });
+        } catch {
+          // One group's agent turn failing must not abort the rest of the
+          // batch — every other scoped group still gets its own attempt.
+        }
+        i++;
+      }
+    }
+    // else: CI-safe seam — any residual (non-deterministic) findings are left
+    // for a real production run; the terminal event below still fires so the
+    // poller never blocks on a turn that will never happen.
+
+    // Re-lint for an ACCURATE cleared count: `runBrainFixTurn`'s own per-run
+    // `cleared` signal is scoped to its `file` argument, which for a grouped,
+    // multi-finding session is the shared INDEX file — not the theme files
+    // the original findings are keyed by — so it would report a vacuous
+    // "cleared" that never actually re-checked anything.
+    let clearedCount = 0;
+    try {
+      const { findings: after } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+      const stillPresent = new Set(
+        scopeFindingsToKb(forgeRoot, kbId, after)
+          .filter((f) => f.resolution === 'agent')
+          .map((f) => `${f.kind}::${f.file}`),
+      );
+      clearedCount = agentTier.filter((f) => !stillPresent.has(`${f.kind}::${f.file}`)).length;
+    } catch {
+      clearedCount = 0;
+    }
+
+    writeConsolidateTerminalEvent(forgeRoot, runId, { total: agentTier.length, clearedCount });
+  } catch (err) {
+    // The repair phase threw before the normal terminal could fire. Emit an
+    // honest error terminal so the poll resolves to 'failed' within its budget
+    // instead of hanging on 'running' forever.
+    writeConsolidateErrorTerminalEvent(forgeRoot, runId, err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -251,13 +614,16 @@ function buildKbHealth(
     }
   }
 
-  // Run brain-lint and filter findings to this kb's directory
+  // Run brain-lint and filter findings to this kb's directory. MAJOR 1: scope
+  // through the SAME exact-dir helper consolidate/lint use (resolveKbBrainDir),
+  // so a project brain at brain/projects/<id> is counted — the old hardcoded
+  // `resolve(forgeRoot,'brain',kbId)` prefix matched nothing for a project KB
+  // and reported a false 0, hiding the Lint section for exactly those KBs.
   let lintFlags = 0;
   let lintErrors = 0;
   try {
-    const kbDir = resolve(forgeRoot, 'brain', kbId);
     const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
-    const kbFindings = findings.filter((f) => f.file.startsWith(kbDir));
+    const kbFindings = scopeFindingsToKb(forgeRoot, kbId, findings);
     lintFlags = kbFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
     lintErrors = kbFindings.filter((f) => f.category === 'error').length;
   } catch {
@@ -293,6 +659,35 @@ const GUIDANCE_MAX_BYTES = 8 * 1024; // 8 KiB
 function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult {
   return resolveGuardedPath(dirname(kbDir), [basename(kbDir), ...tail]);
 }
+
+/**
+ * R1-06-F2: session id for the project-brain hand-off a successful KB create
+ * starts. Same shape as the architect/instructions/demo-builder family's
+ * `newArchitectSessionId` (cli/ui-bridge.ts) — a chronologically-sortable
+ * ISO-ish timestamp plus a hex entropy suffix (SAFE_ID_RE-compatible), so a
+ * same-second double-create can never collide. Kept local rather than
+ * imported: that helper is a private, unexported function of ui-bridge.ts.
+ */
+function newProjectBrainSessionId(): string {
+  const stamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+$/, '');
+  const entropy = randomBytes(4).toString('hex');
+  return `${stamp}-${entropy}`;
+}
+
+/**
+ * R1-06 WI-2 review (MAJOR 2): dot-prefixed anchor for a NON-project KB
+ * seeding session's `projects/<anchor>/_project-brain/<sid>/` directory. A
+ * flow/unique-bound KB has no natural project home, so anchoring it under the
+ * bare KB id created a top-level `projects/<kbId>/` dir that `discoverProjects`
+ * (orchestrator/studio/registry.ts) surfaced as a PHANTOM project. Both
+ * `discoverProjects` and `subDirs` (this file) already skip dot-prefixed dirs —
+ * a real project/kb id is slug-validated (no leading dot) — so a dot-prefixed
+ * anchor keeps the seeding session on disk + runner-reachable while filtering it
+ * out of project discovery. The anchor is a pure filesystem-nesting device: the
+ * seeding runner reads the KB's identity from the session status.json's `kb_id`
+ * field, never from the anchor name.
+ */
+const KB_SEEDING_ANCHOR_PREFIX = '.kb-';
 
 // ---------------------------------------------------------------------------
 // Unified KB route handler (GET + POST)
@@ -539,6 +934,30 @@ export async function handleStudioKbRoutes(
             sendJson(res, 400, { error: `binding.ref "${ref}" is not a registered flow id` }, origin);
             return true;
           }
+
+          // R1-06: an optional band scope, meaningful only on a flow binding.
+          // Reject an unknown band up front, naming the flow's real band
+          // vocabulary — mirrors the ref-existence check just above.
+          const bandRaw = bindingObj['band'];
+          if (bandRaw !== undefined && bandRaw !== null) {
+            if (typeof bandRaw !== 'string' || bandRaw.length === 0) {
+              sendJson(res, 400, { error: 'binding.band must be a non-empty string when present' }, origin);
+              return true;
+            }
+            const realBands = listFlowBandIds(ctx.forgeRoot, ref);
+            if (!realBands.includes(bandRaw)) {
+              sendJson(
+                res,
+                400,
+                { error: `binding.band "${bandRaw}" is not one of flow "${ref}"'s real bands: ${realBands.join(', ')}` },
+                origin,
+              );
+              return true;
+            }
+            binding = { kind: 'flow', ref, band: bandRaw };
+          } else {
+            binding = { kind: 'flow', ref };
+          }
         } else {
           const projectsDir = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
           const projectIds = discoverProjects(projectsDir, ctx.forgeRoot).map((p) => p.id);
@@ -546,8 +965,8 @@ export async function handleStudioKbRoutes(
             sendJson(res, 400, { error: `binding.ref "${ref}" is not a discovered project id` }, origin);
             return true;
           }
+          binding = { kind: 'project', ref };
         }
-        binding = { kind: kind as 'flow' | 'project', ref };
       }
 
       // 5. Containment: `brain/` is the fixed, forgeRoot-derived root and `id`
@@ -583,7 +1002,48 @@ export async function handleStudioKbRoutes(
       // 9. Verify loadKbDescriptor can round-trip it
       loadKbDescriptor(kbYamlPath);
 
-      sendJson(res, 200, { ok: true, id }, origin);
+      // 10. R1-06-F2: hand off to a project-brain seeding session — mirrors
+      // POST /api/project-brain/start's `{ ok: true, sessionId }` contract
+      // (cli/ui-bridge.ts:3797-3826) plus its status.json write, so the new,
+      // still-empty KB gets a REAL agentic seeding pass through the SAME
+      // shell (GET /api/studio/sessions/project-brain/:sessionId) rather
+      // than a separate, competing seed path (T1 ruling Q3 removed the old
+      // POST .../bootstrap route for exactly this reason). The session
+      // carries the created KB's OWN descriptor (kb_id/kb_binding) so a
+      // flow/band-scoped KB seeds against its real scope, not a re-derived
+      // `{kind:'project'}` guess (T1 ruling Q4).
+      //
+      // Session-dir anchor: a project binding nests the session under its
+      // own (real, discovered) project dir — the established architect/
+      // instructions/demo-builder shape, and a real project so it is a
+      // legitimate discovered project, not a phantom. Every other binding kind
+      // has no natural project home; anchoring it under the bare KB id created a
+      // top-level `projects/<kbId>/` dir that `discoverProjects` surfaced as a
+      // PHANTOM project (MAJOR 2). It nests under a dot-prefixed anchor instead,
+      // which `discoverProjects` filters out while the runner still finds its
+      // status there (via the anchored `projectRoot`).
+      const projectsRoot = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const sessionProject = binding.kind === 'project' ? binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${id}`;
+      const sessionId = newProjectBrainSessionId();
+      const sessionWritten = guardedWriteSessionStatus<ProjectBrainStatus>(
+        projectsRoot,
+        [sessionProject, '_project-brain', sessionId],
+        {
+          session_id: sessionId,
+          project: sessionProject,
+          project_repo_path: join(projectsRoot, sessionProject),
+          phase: 'briefing',
+          prompt: '',
+          updated_at: new Date().toISOString(),
+          kb_id: id,
+          kb_binding: binding,
+        },
+      );
+      if (sessionWritten === null) {
+        throw new Error(`kb create: hand-off session status.json for "${id}" failed containment`);
+      }
+
+      sendJson(res, 200, { ok: true, id, sessionId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -752,64 +1212,6 @@ export async function handleStudioKbRoutes(
     return true;
   }
 
-  // ---- POST /api/studio/kbs/:id/bootstrap (P3) — give a new brain real content --
-  const bootstrapMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/bootstrap$/);
-  if (bootstrapMatch && method === 'POST') {
-    try {
-      const kbId = decodeURIComponent(bootstrapMatch[1]);
-      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
-      // Containment via the guarded choke point (bd `forge-wze`) — replaces a
-      // vacuous lexical check, and also reaches per-project brains
-      // (`brain/projects/<id>`) the old `brain/<id>`-only build could not.
-      const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-      if (!kbDir) {
-        sendJson(res, 404, { error: 'unknown kb (create it first)' }, origin); return true;
-      }
-      let body: unknown;
-      try { body = await readJson(req); } catch { body = {}; }
-      const b = (body ?? {}) as Record<string, unknown>;
-      const name = typeof b['name'] === 'string' && b['name'].trim() ? b['name'].trim() : kbId;
-      const summary = typeof b['summary'] === 'string' ? b['summary'].trim() : '';
-
-      // Seed a real profile node (Brain-3 convention) so the brain isn't an empty
-      // single node — a readable starting point cycles then build on.
-      // The guard's existence probe is `lstat`-based, so a DANGLING symlink at
-      // `profile.md` counts as "there" and is routed into the realpath check
-      // (which rejects) rather than mistaken for a free creation slot. That is
-      // the fix for the confirmed arbitrary-file-CREATE here: `existsSync` is
-      // `stat`-based and reported a dangling symlink as absent, after which
-      // `writeFileSync`'s default `O_CREAT` (no `O_NOFOLLOW`) created the file
-      // at whatever outside path the link named. A hardlinked `profile.md` is
-      // caught by the same call's `nlink` check.
-      const profileGuard = guardKbTail(kbDir, 'profile.md');
-      if (!profileGuard.ok) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin); return true;
-      }
-      const profilePath = profileGuard.realPath;
-      if (!profileGuard.exists) {
-        writeFileSync(profilePath, [
-          `# ${name}`,
-          '',
-          summary || '_Project knowledge base. Populated as cycles run and the reflector ingests learnings._',
-          '',
-          '## Themes',
-          '',
-          '_(none yet — the reflector adds a theme per durable learning)_',
-          '',
-          '## Known failure modes',
-          '',
-          '_(none recorded yet)_',
-          '',
-        ].join('\n'), 'utf8');
-      }
-      const result = regenerateBrainIndex({ cwd: ctx.forgeRoot });
-      sendJson(res, 200, { ok: true, seeded: ['profile.md'], result }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
   // ---- GET /api/studio/kbs/:id/fix-agent/:runId — agent-fix run state ----
   const fixStatusMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/fix-agent\/([^/]+)$/);
   if (fixStatusMatch && method === 'GET') {
@@ -831,7 +1233,7 @@ export async function handleStudioKbRoutes(
 
       if (op === 'lint') {
         const { findings } = runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' });
-        const scoped = scopeFindingsToKb(findings, kbId);
+        const scoped = scopeFindingsToKb(ctx.forgeRoot, kbId, findings);
         // `ok: true` so the UI's studioPost (which gates success on data.ok, like
         // the sibling `index` op) treats a successful lint as success, not failure.
         sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length, counts: resolutionCounts(scoped) }, origin);
@@ -840,9 +1242,11 @@ export async function handleStudioKbRoutes(
       if (op === 'fix-auto') {
         // Apply every deterministic AUTO-tier fix for this kb to a FIXED POINT —
         // one click drains the whole auto tier (re-lints between rounds), no
-        // repeat clicks. Scoped to this kb's findings.
-        const brainDir = `brain/${kbId}`;
-        const inKb = (f: Finding): boolean => !f.file || f.file.includes(brainDir) || f.file.includes(kbId);
+        // repeat clicks. MAJOR 2: fix-auto also WRITES, so it must share the
+        // exact-dir scope — the old substring `includes(kbId)` folded a sibling
+        // (e.g. `alpha-two` into `alpha`) into this KB's auto-fix write set.
+        const kbBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        const inKb = (f: Finding): boolean => kbBrainDir !== null && findingUnderDir(ctx.forgeRoot, kbBrainDir, f);
         const result = applyAutoFixesUntilStable(ctx.forgeRoot, { filter: inKb });
         sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, rounds: result.rounds, remaining: result.remaining, counts: resolutionCounts(result.remaining) }, origin);
         return true;
@@ -882,7 +1286,52 @@ export async function handleStudioKbRoutes(
         sendJson(res, 200, { op: 'index', ok: true, result }, origin);
         return true;
       }
-      sendJson(res, 400, { error: 'op must be one of: lint | fix-auto | fix-agent | index' }, origin);
+      if (op === 'consolidate') {
+        // NO route-level dry-bridge refusal here (unlike op=fix-agent above).
+        // Consolidate's shipped shape clears the deterministic
+        // `checkProjectBrainIndexes` "not listed" findings IN-PROCESS via
+        // `applyDeterministicConsolidateFixes` — an idempotent category-index
+        // append, the SAME spawn-free write op=fix-auto already performs under
+        // dry-bridge without a guard. `runBrainConsolidateNow` treats
+        // `isDryBridge()` as `noSpawn` internally, so the ONLY thing dry-bridge
+        // must suppress — a real `forge brain fix` agent turn on the residual —
+        // is already skipped there. Refusing the whole op at the route (the old
+        // behaviour) killed the deterministic path too: under the journey/CI
+        // harness's `FORGE_DRY_BRIDGE=1`, consolidate 409'd, so a KB whose
+        // health legitimately reports a fixable flag could never be healed
+        // (declared-data-fails-open — health surfaces a finding the only fix
+        // path refuses to act on). Dispatch and let the internal noSpawn guard
+        // keep it CI-safe.
+        // Resolve the KB's declared consolidate obligation (R1-06 WI-3):
+        // defaults to the 'brain-fix' builtin (DEFAULT_KB_CONSOLIDATE) unless
+        // the kb.yaml explicitly overrides it. Only 'brain-fix' is
+        // implemented today — an explicit, typed rejection beats silently
+        // running the wrong obligation for a `{cmd}` or unrecognized builtin.
+        const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        if (!kbDir) { sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin); return true; }
+        let kb: KbDescriptor;
+        try {
+          kb = loadKbDescriptor(join(kbDir, 'kb.yaml'));
+        } catch (err) {
+          sendJson(res, 500, { error: `failed to load kb descriptor: ${sanitizeError(err)}` }, origin);
+          return true;
+        }
+        const consolidateImpl = resolveKbProcesses(kb).consolidate;
+        if (!('builtin' in consolidateImpl) || consolidateImpl.builtin !== 'brain-fix') {
+          sendJson(res, 400, { error: `unsupported consolidate obligation for kb "${kbId}": ${JSON.stringify(consolidateImpl)}` }, origin);
+          return true;
+        }
+
+        const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
+        // Fire-and-forget: dispatched async like fix-agent, pollable via the
+        // existing GET .../fix-agent/:runId route. Queued per-kbId (not run
+        // directly) so an overlapping dispatch against the same KB never
+        // races its real agent turns against this one on the same files.
+        enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId));
+        sendJson(res, 200, { op: 'consolidate', ok: true, runId }, origin);
+        return true;
+      }
+      sendJson(res, 400, { error: 'op must be one of: lint | fix-auto | fix-agent | index | consolidate' }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

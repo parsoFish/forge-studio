@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance, deleteKb } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle } from '@/lib/studio-client';
+import { runConsolidateToTerminal, consolidateResultLabel } from '@/lib/kb-consolidate';
 import { StudioNav } from '@/components/StudioNav';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
 import { NodeArticle } from '@/components/studio/knowledge/NodeArticle';
@@ -221,6 +222,7 @@ function KnowledgePageInner() {
         {currentId && (
           <KbMaintenance
             kbId={currentId}
+            onMaintained={handlePinned}
             onDeleted={() => {
               setCurrentId('');
               setKbDetail(null);
@@ -295,13 +297,30 @@ function KnowledgePageInner() {
 // (Ingest + agentic review run during cycle reflection; these are the
 // deterministic, operator-triggerable ops.)
 // ---------------------------------------------------------------------------
-function KbMaintenance({ kbId, onDeleted }: { kbId: string; onDeleted?: () => void }) {
-  const [busy, setBusy] = useState<'lint' | 'index' | 'delete' | null>(null);
+function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMaintained?: () => void; onDeleted?: () => void }) {
+  const [busy, setBusy] = useState<'lint' | 'index' | 'consolidate' | 'delete' | null>(null);
   const [result, setResult] = useState<string | null>(null);
+  // R1-06 WI-3 MINOR 2: the observed terminal state of the LAST consolidate run
+  // ('' until one completes) — the kb-maintain journey drives off this rather
+  // than scraping the result text. Reset when a fresh consolidate starts.
+  const [consolidateState, setConsolidateState] = useState<string>('');
 
-  async function run(op: 'lint' | 'index') {
+  async function run(op: 'lint' | 'index' | 'consolidate') {
     setBusy(op);
     setResult(null);
+    if (op === 'consolidate') {
+      // Consolidate is async: dispatch, poll its runId to terminal, then refresh
+      // the KB health so the operator sees a real completion + updated warnings
+      // (not a static "session started"). onMaintained refetches KB detail.
+      setConsolidateState('');
+      const outcome = await runConsolidateToTerminal(kbId);
+      setBusy(null);
+      setResult(consolidateResultLabel(outcome));
+      setConsolidateState(outcome.ok ? outcome.state : 'error');
+      if (outcome.ok) onMaintained?.();
+      setTimeout(() => setResult(null), 6000);
+      return;
+    }
     const r = await runKbMaintenance(kbId, op);
     setBusy(null);
     if (!r.ok) { setResult(r.error ?? 'failed'); return; }
@@ -329,12 +348,25 @@ function KbMaintenance({ kbId, onDeleted }: { kbId: string; onDeleted?: () => vo
     border: '1px solid var(--line-2)', borderRadius: 5, cursor: 'pointer',
   };
   return (
-    <div data-component="kb-maintenance" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+    <div
+      data-component="kb-maintenance"
+      {...(consolidateState ? { 'data-consolidate-state': consolidateState } : {})}
+      style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+    >
       <button data-action="kb-lint" style={btn} disabled={busy !== null} onClick={() => void run('lint')}>
         {busy === 'lint' ? 'Linting…' : 'Lint'}
       </button>
       <button data-action="kb-index" style={btn} disabled={busy !== null} onClick={() => void run('index')}>
         {busy === 'index' ? 'Refreshing…' : 'Refresh index'}
+      </button>
+      <button
+        data-action="kb-maintain-session"
+        style={btn}
+        disabled={busy !== null}
+        onClick={() => void run('consolidate')}
+        title="Start a consolidate maintenance session"
+      >
+        {busy === 'consolidate' ? 'Consolidating…' : 'Consolidate'}
       </button>
       <button
         data-action="kb-delete"

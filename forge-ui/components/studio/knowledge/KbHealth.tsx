@@ -37,7 +37,7 @@ export function KbHealth({ health }: Props) {
   const staleTheme = staleness?.staleThemeCount  ?? 0;
 
   return (
-    <div>
+    <div data-component="kb-health" data-lint-errors={lintErrors} data-lint-warnings={lintFlags}>
       <div className="panel-head">
         <svg width="12" height="12" viewBox="0 0 12 12">
           <path d="M1,6 L3,3 L5,8 L7,2 L9,6 L11,4" fill="none" stroke="var(--c-kb)" strokeWidth="1.5"
@@ -127,7 +127,7 @@ export function KbHealth({ health }: Props) {
           }}>
             <strong style={{ color: 'var(--amber)' }}>Suggested action:</strong>{' '}
             {staleRaw} raw incident{staleRaw !== 1 ? 's' : ''} ready to distil into the theme layer.
-            Queue a manual ingest pass or leave a guidance note.
+            Run a consolidate pass, check lint, or leave a guidance note.
           </div>
         )}
       </div>

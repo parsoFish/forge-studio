@@ -238,6 +238,79 @@ entry* being itself a symlink stays the guard's stated `root`-is-trusted contrac
 residual — not wire-reachable, since an in-repo git commit controls a project's
 *contents*, never its enclosing directory entry.
 
+### Extended in R1-06 — KB `op=consolidate` / KB-create sinks (`[read]`)
+
+R1-06 added `POST /api/studio/kbs/:id/maintenance` `op=consolidate` (deterministic
++ agent-tier drain of a KB's `checkProjectBrainIndexes` findings) and a hand-off
+session write on KB create. Every new fs sink these introduced was swept against
+`scripts/check-raw-fs-guarded.mjs` (all in `cli/bridge-studio-kbs.ts` unless noted)
+and `scripts/check-request-path-sinks.mjs`; none is request-body-steerable:
+
+- **Consolidate index-append (`ensureLinkedAt`, `cli/brain-fix-auto.ts`), called
+  from `applyDeterministicConsolidateFixes`** — writes into the category-index
+  path returned by `consolidateTargetFile(forgeRoot, f)`, which parses
+  `resolve(forgeRoot, m[1])` out of a `checkProjectBrainIndexes` **Finding's own
+  `message`** (`cli/brain-lint.ts:337-407`) — never the request body. Tracing that
+  finding's construction: `projectDir = join(projectsRoot, name)` where `name` is
+  `readdirSync`-enumerated (a real directory forge itself created, most recently
+  via the KB-create route's own `resolveGuardedPath`-contained scaffold below —
+  never an attacker string), and `indexFile` is one of four LITERAL filenames
+  (`CATEGORY_TO_INDEX_FILE[cat]`, `cat` itself constrained by
+  `ALLOWED_CATEGORIES.has(cat)`). LINTER-DERIVED, server-enumerated path;
+  `scopeFindingsToKb`/`findingUnderDir` additionally confine every finding this
+  loop touches to the dispatching KB's own `resolveKbBrainDir`-resolved dir
+  (realpath-identity comparison, not a lexical prefix) before it ever reaches
+  `ensureLinkedAt`. `cli/brain-fix-auto.ts` is not itself in
+  `check-raw-fs-guarded.mjs`'s scanned-module list (a shared helper, not a
+  request handler); its `existsSync`/`readFileSync`/`writeFileSync` growth (+1
+  each of the first two, tracked by the sink-count ratchet) is this same
+  call, `--write`-accepted below.
+- **KB-create scaffold `mkdirSync(join(kbDir,'themes'|'_raw'))`**
+  (`cli/bridge-studio-kbs.ts:993-994`) — `kbDir = kbGuard.realPath` from
+  `resolveGuardedPath(brainBase, [id])`, and the route 409s on `kbGuard.exists`
+  before this runs, so it only ever mkdirs a FRESH, just-created dir; the
+  appended leaves are literals. Allowlisted (`check-raw-fs-guarded.mjs`,
+  CREATE-LITERAL-SUBDIR) — unchanged from the pre-R1-06 site, just line-drifted
+  by earlier insertions in the same file.
+- **KB-create hand-off session write** (`guardedWriteSessionStatus(projectsRoot,
+  [sessionProject, '_project-brain', sessionId], …)`,
+  `cli/bridge-studio-kbs.ts:1028-1041`) — routes through
+  `guardedFile(projectsRoot, [...segments, 'status.json'], 'write')`
+  (`orchestrator/interactive-session.ts:303-314`), a GUARD_PRODUCERS-listed
+  guard-terminal call; the checker sees no raw sink at this call site at all.
+  `sessionId = newProjectBrainSessionId()` is server-generated;
+  `sessionProject` is either a real `discoverProjects`-verified project id or a
+  dot-prefixed `KB_SEEDING_ANCHOR_PREFIX + id` where `id` is the already-
+  `resolveGuardedPath`-proven-contained KB id from the same create route.
+- **Consolidate-run log dir/writes** — `writeConsolidateTerminalEvent` /
+  `writeConsolidateErrorTerminalEvent` (`cli/bridge-studio-kbs.ts:252-296`,
+  `mkdirSync`/`appendFileSync` on `join(forgeRoot,'_logs','_brainfix-'+runId)`)
+  and `runBrainFixTurn`'s own heartbeat dir (`orchestrator/brain-fix-runner.ts:90-92`,
+  newly reachable from the bridge because `bridge-studio-kbs.ts` now imports
+  `runBrainFixTurn` directly instead of only spawning it as a subprocess via
+  `orchestrator/cli.ts`). Both take a bare `runId` parameter — a name on the
+  raw-fs-guarded lint's curated taint list — but at every call site the actual
+  value is TRUSTED AT CONSTRUCTION: the outer `runId` is
+  `` `${kbId}-consolidate-${Date.now().toString(36)}` ``
+  (`cli/bridge-studio-kbs.ts:1316`), built from a `kbId` already `SLUG_RE`-gated
+  at the `op=consolidate` route (line 1229, blocks `/` and `..`) plus a
+  server timestamp; `runBrainFixTurn` receives `` `${runId}__${i}` `` — the same
+  trusted value with a literal group-index suffix. Same construction class as
+  the pre-existing, already-allowlisted `fix-agent` runId
+  (`` `${kbId}-${Date.now().toString(36)}` ``, `spawnBrainFix`'s own logDir
+  create) — the raw-fs-guarded lint does not also flag that sibling only
+  because it reaches its sink through `p.runId`, a member expression outside
+  the scan's curated bare-name list, not because the value differs. Allowlisted
+  in `check-raw-fs-guarded.mjs`; `orchestrator/brain-fix-runner.ts`'s own three
+  sinks are outside that lint's scanned-module list (same shared-helper
+  reasoning as `brain-fix-auto.ts` above) but are covered by the same
+  trust argument and the sink-count ratchet, `--write`-accepted below.
+
+None of the four is a new *unguarded* sink: the index-append and the log-dir
+writes are TRUSTED-AT-CONSTRUCTION (server/linter-derived, not request-body
+derived), the scaffold mkdir is an unchanged already-allowlisted
+CREATE-LITERAL-SUBDIR, and the session write is fully guard-terminal.
+
 ### Fixed in R4-16 — the four `/start` routes' `projectRepoPath`
 
 Recorded here because leaving the row below in "unguarded" after R4-16 shipped

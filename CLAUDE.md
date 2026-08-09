@@ -35,7 +35,7 @@ There is **one operating model**: the daemon (`forge serve`). Operator-directed 
 Who reads what (see [ADR 010](./docs/decisions/010-brain-first.md) as amended + [`brain/forge-dev/themes/brain-read-policy.md`](./brain/forge-dev/themes/brain-read-policy.md)):
 
 - **Planners (architect / project-manager) + reflector** — query Brain 2 + the cycle's Brain 3 (reflector: all three). Mandatory for planners.
-- **Dev-loop + reviewer** — do **NOT** read the forge brain (Brains 1+2); the planner already encoded every relevant convention/antipattern into the work items, their single source of *intent*. They **may** consult the cycle's Brain 3 at `brain/projects/<name>/themes/` in the forge repo (per [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)) for supplemental project context — advisory, not mandatory (amended 2026-05-26, ADR 010).
+- **Dev-loop + reviewer** — do **NOT** read the forge brain (Brains 1+2); the planner already encoded every relevant convention/antipattern into the work items, their single source of *intent*. They **may** consult the cycle's Brain 3 at `brain/projects/<name>/themes/` in the forge repo (per [ADR 035](./docs/decisions/035-forge-owned-central-artifacts.md)) for supplemental project context — advisory, not mandatory (amended 2026-05-26, ADR 010). The reviewer additionally gains a per-KB advisory read of any `{kind: flow, band: review-band}` KB it is granted (amended 2026-08-09, ADR 010 / ADR 027 R1-06); the OOTB Brains 1+2 stay off-limits.
 
 ## Architecture, principles, decisions
 

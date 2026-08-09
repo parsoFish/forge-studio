@@ -30,6 +30,7 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
 import { skillPath, skillPathRelative } from './skill-path.ts';
+import type { KbBinding } from './studio/types.ts';
 
 export const projectBrainAgentSpec = deriveAgentSpec(skillPathRelative('project-brain-builder'));
 export const PROJECT_BRAIN_MODEL = modelForSpec(projectBrainAgentSpec);
@@ -52,6 +53,16 @@ export type ProjectBrainStatus = {
   /** The operator's focus/guidance for the brain (persisted to prompt.md). */
   prompt: string;
   updated_at: string;
+  /**
+   * R1-06 WI-2 (F2 hand-off, T1 ruling Q4 option (a)): when this session was
+   * started as the POST /api/studio/kbs create hand-off, these two fields
+   * carry the target KB's OWN id + binding (which may differ from `project`
+   * — an arbitrary directory the session dir merely nests under). Absent
+   * (the ordinary, non-KB-scoped project-brain flow), the commit step falls
+   * back to the historical default: `{ kind: 'project', ref: project }`.
+   */
+  kb_id?: string;
+  kb_binding?: KbBinding;
 };
 
 export type RunProjectBrainTurnInput = {
@@ -238,18 +249,38 @@ function runCommitStep(args: {
   const { input, status, forgeRoot } = args;
   const staged = listStagedThemes(input.projectRoot, input.sessionId);
 
-  // SEC-04: `status.project` is request-derived — contain it (and every leaf)
-  // as its OWN segment against the TRUSTED forgeRoot, NEVER folded into a
-  // projectThemesDir/projectBrainDir root (that would be the root-folding
-  // bypass the guard cannot self-detect). Central brain layout (ADR 035):
-  // brain/projects/<project>/{themes/<file>,profile.md,kb.yaml}.
-  const brainSegs = ['brain', 'projects', status.project];
+  // R1-06 WI-2 (T1 ruling Q4 option (a)): honor a descriptor-derived binding
+  // when this session carries one (the POST /api/studio/kbs create hand-off,
+  // F2) — never silently re-derive `{ kind: 'project', ref: status.project }`.
+  // Absent a descriptor (the ordinary, non-KB-scoped project-brain flow), the
+  // fallback IS that historical default, unchanged.
+  //
+  // `kb_id` present ⇔ this session is a POST /api/studio/kbs create hand-off.
+  const isCreateHandoff = status.kb_id !== undefined;
+  const kbId = status.kb_id ?? status.project;
+  const binding: KbBinding = status.kb_binding ?? { kind: 'project', ref: status.project };
+
+  // Brain-dir resolution MUST agree with what POST /api/studio/kbs already
+  // scaffolded, or the descriptor splits in two (one empty kb.yaml at the
+  // create location, one seeded kb.yaml here) and every operator-authored theme
+  // is silently orphaned. Create scaffolds brain/<id> UNCONDITIONALLY for EVERY
+  // binding kind (cli/bridge-studio-kbs.ts create route), so a create hand-off
+  // commits into brain/<kbId> REGARDLESS of binding.kind — resolveKbBrainDir
+  // (orchestrator/brain-paths.ts) resolves it there. Only the ORDINARY
+  // project-brain flow (no hand-off, kbId === status.project, a real project)
+  // targets the central per-project brain brain/projects/<project> (ADR 035).
+  //
+  // SEC-04: `kbId` is request-derived (either `status.project` or a
+  // descriptor's own id) — it rides as its OWN guarded segment against the
+  // TRUSTED forgeRoot below, NEVER folded into a root (the root-folding bypass
+  // the guard cannot self-detect).
+  const brainSegs = isCreateHandoff ? ['brain', kbId] : ['brain', 'projects', kbId];
 
   const wrote: string[] = [];
   for (const file of staged) {
     // Source: a staged theme leaf the agent authored under the session dir.
     // Route the READ through the guard (a symlinked staged file → null → skip),
-    // and route the central-brain WRITE through the guard too (project +
+    // and route the central-brain WRITE through the guard too (kb id +
     // filename as guarded segments). `file` is a readdir entry name, so it is a
     // single safe path component by construction.
     const contents = guardedReadFile(input.projectRoot, [PROJECT_BRAIN_KIND_DIR, input.sessionId, 'themes', file]);
@@ -258,32 +289,31 @@ function runCommitStep(args: {
     const dest = guardedWriteFile(forgeRoot, destSegs, contents);
     if (dest === null) {
       throw new Error(
-        `project-brain runner: refusing to commit — destination for "${file}" failed containment (project="${status.project}").`,
+        `project-brain runner: refusing to commit — destination for "${file}" failed containment (kb="${kbId}").`,
       );
     }
     wrote.push(dest);
   }
 
-  // Ensure a kb.yaml descriptor exists so the brain is discoverable. R1-01:
-  // binding.kind=project ref=<project> — the owning-project identity,
-  // replacing the old loose `scope: project` enum. Existence + write both
-  // routed through the guard (project folded as a segment, not the root).
+  // Ensure a kb.yaml descriptor exists so the brain is discoverable.
+  // Existence + write both routed through the guard (kb id folded as a
+  // segment, not the root).
   const existingKb = guardedReadFile(forgeRoot, [...brainSegs, 'kb.yaml']);
   if (existingKb === null) {
     const kbDest = guardedWriteFile(
       forgeRoot,
       [...brainSegs, 'kb.yaml'],
       serializeKbDescriptor({
-        id: status.project,
-        name: `${status.project} Brain`,
-        binding: { kind: 'project', ref: status.project },
-        desc: `Per-project brain for ${status.project}.`,
+        id: kbId,
+        name: `${kbId} Brain`,
+        binding,
+        desc: binding.kind === 'project' ? `Per-project brain for ${kbId}.` : `Brain for ${kbId}.`,
         path: '',
       }),
     );
     if (kbDest === null) {
       throw new Error(
-        `project-brain runner: refusing to commit — kb.yaml for project "${status.project}" failed containment.`,
+        `project-brain runner: refusing to commit — kb.yaml for "${kbId}" failed containment.`,
       );
     }
     // Loud self-check (parity with project-brain-seed): a malformed kb.yaml
