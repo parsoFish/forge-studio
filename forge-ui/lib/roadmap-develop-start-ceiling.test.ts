@@ -39,7 +39,7 @@
 
 import { test, expect } from 'vitest';
 
-import { resolveDevelopStartCeilingToSend } from '../app/projects/[id]/page.tsx';
+import { resolveDevelopStartCeilingToSend } from './roadmap-develop-start-ceiling.ts';
 
 // ---------------------------------------------------------------------------
 // (1) RED pin — the headline defect: opening the tab (default seeded, never

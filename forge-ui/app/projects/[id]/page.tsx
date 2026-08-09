@@ -10,6 +10,7 @@ import {
   type FailingClause, type AgentRunStatus,
 } from '@/lib/studio-client';
 import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
+import { resolveDevelopStartCeilingToSend } from '@/lib/roadmap-develop-start-ceiling';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
   fetchCycles,
@@ -910,11 +911,6 @@ function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
  * (`resolveCostCeilingOverride`, orchestrator/cycle.ts) stands. Exported so
  * `lib/roadmap-develop-start-ceiling.test.ts` pins the real, shipped gate.
  */
-export function resolveDevelopStartCeilingToSend(fieldValue: number, ceilingTouched: boolean): number | undefined {
-  if (!ceilingTouched) return undefined;
-  return Number.isFinite(fieldValue) && fieldValue > 0 ? fieldValue : undefined;
-}
-
 function RoadmapView({
   projectId,
   roadmap,
