@@ -34,7 +34,6 @@
 import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join, relative, resolve, sep } from 'node:path';
 
-import { projectBrainDir, projectThemesDir } from './brain-paths.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { resolveGuardedPath, PathGuardContainmentError } from '../cli/studio-path-guard.ts';
 
@@ -175,6 +174,16 @@ type BrainSeedTarget = {
 function brainSeedTargets(
   forgeRoot: string,
   projectId: string,
+  // The on-disk directory NAME under `brain/projects/` this seed writes into.
+  // Defaults to `projectId` (the normal final location). The transactional
+  // greenfield create (project-create.ts, SEC-05 / forge-4on) passes a
+  // `.staging-<id>-<rand>` name so the whole brain stub is built in a staging
+  // directory and renamed into `<projectId>` atomically on full success — the
+  // CONTENT stays keyed to `projectId` (kb id, binding ref, profile headings),
+  // ONLY the write LOCATION differs. Every path component (dir name + fixed
+  // leaves) is still its OWN `segments[]` element for `resolveGuardedPath`,
+  // never folded into `root` (studio-path-guard.ts's CONTRACT section).
+  dirName: string = projectId,
 ): {
   brainDir: string;
   themesDir: string;
@@ -183,18 +192,18 @@ function brainSeedTargets(
   profile: BrainSeedTarget;
   themesReadme: BrainSeedTarget;
 } {
-  const brainDir = projectBrainDir(forgeRoot, projectId);
-  const themesDir = projectThemesDir(forgeRoot, projectId);
   // Fixed, config-derived containment root — never built by folding
-  // `projectId` into it (studio-path-guard.ts's CONTRACT section).
+  // `projectId`/`dirName` into it (studio-path-guard.ts's CONTRACT section).
   const brainProjectsRoot = resolve(forgeRoot, 'brain', 'projects');
+  const brainDir = resolve(brainProjectsRoot, dirName);
+  const themesDir = join(brainDir, 'themes');
   return {
     brainDir,
     themesDir,
     brainProjectsRoot,
-    kb: { segments: [projectId, 'kb.yaml'], absPath: join(brainDir, 'kb.yaml') },
-    profile: { segments: [projectId, 'profile.md'], absPath: join(brainDir, 'profile.md') },
-    themesReadme: { segments: [projectId, 'themes', 'README.md'], absPath: join(themesDir, 'README.md') },
+    kb: { segments: [dirName, 'kb.yaml'], absPath: join(brainDir, 'kb.yaml') },
+    profile: { segments: [dirName, 'profile.md'], absPath: join(brainDir, 'profile.md') },
+    themesReadme: { segments: [dirName, 'themes', 'README.md'], absPath: join(themesDir, 'README.md') },
   };
 }
 
@@ -220,8 +229,8 @@ function brainSeedTargets(
  * mirroring `seedProjectBrain`'s own per-file idempotency contract — see
  * its docstring) or passes `resolveGuardedPath`'s per-segment identity walk.
  */
-export function checkProjectBrainSeedContainment(forgeRoot: string, projectId: string): void {
-  const { brainProjectsRoot, kb, profile, themesReadme } = brainSeedTargets(forgeRoot, projectId);
+export function checkProjectBrainSeedContainment(forgeRoot: string, projectId: string, dirName: string = projectId): void {
+  const { brainProjectsRoot, kb, profile, themesReadme } = brainSeedTargets(forgeRoot, projectId, dirName);
   // `resolveGuardedPath` deliberately performs NO identity check on `root`
   // itself and has no create-mode for it (it must already exist) — see that
   // module's CONTRACT section. Materializing this TRUSTED, forgeRoot-derived
@@ -292,10 +301,16 @@ export function seedProjectBrain(
   forgeRoot: string,
   projectId: string,
   name: string,
+  // `dirName` (SEC-05 / forge-4on): write the stub into this directory under
+  // `brain/projects/` instead of `<projectId>`, so a transactional create can
+  // build it in a `.staging-<id>-<rand>` dir and rename it into place on full
+  // success. The file CONTENT is unchanged (still keyed to `projectId`).
+  opts: { dirName?: string } = {},
 ): ProjectBrainSeedResult {
-  checkProjectBrainSeedContainment(forgeRoot, projectId);
+  const dirName = opts.dirName ?? projectId;
+  checkProjectBrainSeedContainment(forgeRoot, projectId, dirName);
 
-  const { brainDir, brainProjectsRoot, kb, profile, themesReadme } = brainSeedTargets(forgeRoot, projectId);
+  const { brainDir, brainProjectsRoot, kb, profile, themesReadme } = brainSeedTargets(forgeRoot, projectId, dirName);
 
   const files: ProjectBrainSeedFile[] = [];
   const pending: Array<{ realPath: string; build: () => string; verify?: (path: string) => void }> = [];

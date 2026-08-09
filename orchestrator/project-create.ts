@@ -14,8 +14,9 @@
  * with no manual repo surgery.
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
+import { randomBytes } from 'node:crypto';
+import { dirname, join, resolve } from 'node:path';
 
 import { seedProjectBrain, checkProjectBrainSeedContainment } from './project-brain-seed.ts';
 import { runPreflight, type ClauseResult } from '../cli/preflight.ts';
@@ -162,11 +163,47 @@ function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title
   }
 }
 
+/** The marker `scaffoldGreenfieldProject` writes LAST — inside the final
+ *  `<projectDir>/.forge/`, only AFTER both atomic renames have landed. Its
+ *  presence is the SOLE signal that a project directory is COMPLETE (not a
+ *  crashed-create orphan): the pre-create reconcile treats any `projects/<id>`
+ *  lacking it as a stale orphan to sweep, and only a project carrying it earns
+ *  the "already exists" refusal. */
+const CREATE_COMPLETE_MARKER = join('.forge', '.create-complete');
+
+/** Sweep a stale brain-seed directory left by a crashed create — but ONLY when
+ *  it is a REAL directory. A SYMLINK at `brain/projects/<id>` is a containment
+ *  attack surface (SEC-03), never a crash artifact: leave it untouched so the
+ *  `checkProjectBrainSeedContainment` guard downstream still REJECTS it (removing
+ *  it here would silently launder the attack into a success — the exact
+ *  "reorder reopens it one layer down" trap this campaign keeps closing). Absent
+ *  / unreadable → no-op. */
+function sweepBrainOrphan(brainDir: string): void {
+  let st;
+  try {
+    st = lstatSync(brainDir);
+  } catch {
+    return; // ENOENT (absent) or unreadable — nothing to sweep
+  }
+  if (st.isSymbolicLink()) return; // leave for the containment guard to reject
+  rmSync(brainDir, { recursive: true, force: true });
+}
+
 /**
  * Scaffold a greenfield project from its template + seed the central brain, then
  * preflight. `hardGreen` is the authoritative "ready for the first architect run"
  * signal (all HARD contract clauses pass) — computed by `runPreflight`, never
  * asserted. Throws on an unknown appType or a name that doesn't slugify.
+ *
+ * TRANSACTIONAL (SEC-05 / forge-4on): every filesystem write is staged into
+ * `.staging-<id>-<rand>` dirs on the same fs as their destinations and moved
+ * into place with `renameSync` only on FULL success; any staged failure unwinds
+ * both staging dirs and rethrows. A failed create therefore leaves NO orphan
+ * project dir and NO phantom brain, and an identical retry always succeeds. A
+ * pre-create reconcile sweeps a marker-less `projects/<id>` (and any real orphan
+ * `brain/projects/<id>`) left by an earlier crash. This is NOT a reordering of
+ * the two writes — three prior SEC-03 reorders each reopened the orphan one
+ * layer down; transactionalization is the different axis that actually closes it.
  */
 export function scaffoldGreenfieldProject(input: {
   manifest: CreationManifest;
@@ -188,51 +225,92 @@ export function scaffoldGreenfieldProject(input: {
 
   const projectsRoot = input.projectsRoot ?? join(input.forgeRoot, 'projects');
   const projectDir = resolve(projectsRoot, id);
-  if (existsSync(projectDir)) throw new Error(`project "${id}" already exists at ${projectDir}`);
+  // Fixed, config-derived brain root (forgeRoot-relative, NOT projectsRoot —
+  // the central Brain-3 always lives under the forge repo, ADR 035).
+  const brainProjectsRoot = resolve(input.forgeRoot, 'brain', 'projects');
+  const finalBrainDir = resolve(brainProjectsRoot, id);
 
-  // SEC-03 round 4 (T1 ruling) — Phase 1: a PURE containment check, zero
-  // side effects on anything request-derived (see
-  // `checkProjectBrainSeedContainment`'s docstring), for every path
-  // `seedProjectBrain` will write under `brain/projects/<id>/`. Runs BEFORE
-  // `copyTemplate` — the FIRST write this function makes — so a containment
-  // rejection here leaves NOTHING on disk anywhere, not even a project
-  // directory (closes round 3's half-created-project class without ever
-  // giving `seedProjectBrain` a chance to WRITE before that write is known
-  // to be safe).
-  //
-  // Round 3's fix ran the real `seedProjectBrain` WRITE first instead — that
-  // closed the containment-rejection scenario but, for an UNRELATED failure
-  // AFTER it succeeded (e.g. EACCES on `copyTemplate`'s own `mkdirSync`),
-  // left a fully-formed, orphaned `brain/projects/<id>/kb.yaml` behind: a
-  // phantom KB bound to a project that was never created, invisible to
-  // `discoverProjects` (which only scans `projectsRoot`) but VISIBLE to
-  // `loadKbDescriptors` (`cli/bridge-studio-kbs.ts`), which walks
-  // `brain/projects/` as its own second containment root — strictly worse
-  // than the half-created directory it replaced. Separating the check from
-  // the write removes the ordering question entirely: nothing this function
-  // writes can even be ATTEMPTED before every path it and `seedProjectBrain`
-  // will touch is proven safe.
+  // RECONCILE (pre-create). A `projects/<id>` carrying the completion marker is
+  // a genuinely COMPLETE project → refuse (the unchanged "already exists"
+  // contract). A marker-less `projects/<id>` is a STALE ORPHAN from a crashed
+  // create (a throw between the two renames below, or any pre-fix half-write) →
+  // sweep it plus any real brain orphan, then proceed. This replaces the old
+  // bare `existsSync(projectDir)` throw, which made every retry-after-crash fail
+  // with "already exists".
+  if (existsSync(projectDir)) {
+    if (existsSync(join(projectDir, CREATE_COMPLETE_MARKER))) {
+      throw new Error(`project "${id}" already exists at ${projectDir}`);
+    }
+    rmSync(projectDir, { recursive: true, force: true });
+    sweepBrainOrphan(finalBrainDir);
+  } else {
+    // No project dir, but a brain stub for this id can still be orphaned (a
+    // crash BETWEEN the project rename and the brain rename, or before either)
+    // — sweep a REAL one. A SYMLINK is left for the containment guard below.
+    sweepBrainOrphan(finalBrainDir);
+  }
+
+  // Phase 1 (SEC-03 round 4, T1 ruling) — a PURE containment check for every
+  // path `seedProjectBrain` will write under the FINAL `brain/projects/<id>/`.
+  // Kept BEFORE any staging write so a containment rejection (a pre-planted
+  // symlink/hardlink at the final brain target — the SEC-03 vector) throws with
+  // NOTHING on disk anywhere. The staged seed below re-verifies its own (fresh,
+  // random) staging path independently; this guards the rename DESTINATION.
   checkProjectBrainSeedContainment(input.forgeRoot, id);
 
-  // Phase 2 — writes, in the ORIGINAL order (restored, SEC-03 round 4):
-  // `copyTemplate` first, `seedProjectBrain` after. `seedProjectBrain`'s
-  // target is entirely independent of `projectDir`, so this ordering was
-  // never about correctness — only about which artifact gets orphaned by an
-  // unrelated later failure. With Phase 1 above having already validated
-  // every brain-seed target, `seedProjectBrain` here can only fail for a
-  // reason genuinely unrelated to containment (or not fail at all), and the
-  // Phase 1 check ran before `copyTemplate` regardless of where
-  // `seedProjectBrain` itself sits in Phase 2.
+  // Phase 2 — STAGE-then-atomic-move. Build the ENTIRE project + brain stub into
+  // sibling `.staging-<id>-<rand>` dirs on the SAME filesystem as their
+  // destinations (`projectsRoot` and `brain/projects/` respectively — NOT
+  // os.tmpdir, whose separate fs would make `renameSync` throw EXDEV), run every
+  // write + the read-only preflight there, then `renameSync` each staged tree
+  // into place only on FULL success. Both staging dirs share ONE name so
+  // preflight's C4 brain-profile lookup (keyed on the project-dir basename)
+  // resolves against the staged brain.
+  const stagingName = `.staging-${id}-${randomBytes(6).toString('hex')}`;
+  const stagingProjectDir = resolve(projectsRoot, stagingName);
+  const stagingBrainDir = resolve(brainProjectsRoot, stagingName);
+
   const filesWritten: string[] = [];
-  copyTemplate(templateDir, projectDir, { id, title: manifest.name, northStar: manifest.northStar }, filesWritten);
+  let report;
+  try {
+    copyTemplate(templateDir, stagingProjectDir, { id, title: manifest.name, northStar: manifest.northStar }, filesWritten);
+    // The CENTRAL Brain-3 stub (kb.yaml + profile.md + themes/README.md) is the
+    // only forge-owned artifact not in the template. Seeded into the STAGING
+    // dir; its CONTENT is still keyed to `id` (kb id, binding ref) so a rename
+    // into `<id>` is byte-identical to seeding there directly.
+    seedProjectBrain(input.forgeRoot, id, manifest.name, { dirName: stagingName });
+    // Pure, non-throwing reporter — reads the staged tree only, so it can never
+    // itself orphan. `hardGreen` computed here is valid for the final dir: the
+    // staged trees are byte-identical to their post-rename form.
+    report = runPreflight(stagingProjectDir, { forgeRoot: input.forgeRoot });
+  } catch (err) {
+    // UNWIND: any staged failure leaves NOTHING behind. `rmSync` is
+    // recursive+force, so a not-yet-created staging dir is a silent no-op.
+    rmSync(stagingProjectDir, { recursive: true, force: true });
+    rmSync(stagingBrainDir, { recursive: true, force: true });
+    throw err;
+  }
 
-  // Hand off to the onboarding side: the CENTRAL Brain-3 stub (kb.yaml +
-  // profile.md) is the only forge-owned artifact not in the template — seed
-  // it so C4's central profile + the KB binding resolve. Idempotent per
-  // file; its own containment was already proven by Phase 1 above.
-  seedProjectBrain(input.forgeRoot, id, manifest.name);
+  // ATOMIC MOVE (per root). On FULL success move each staged tree into its final
+  // slot — the reconcile above guaranteed both slots are clear.
+  renameSync(stagingProjectDir, projectDir);
+  renameSync(stagingBrainDir, finalBrainDir);
 
-  const report = runPreflight(projectDir, { forgeRoot: input.forgeRoot });
+  // Completion marker LAST — AFTER both renames — so a crash BETWEEN the two
+  // renames leaves a marker-less `projects/<id>` the next reconcile sweeps.
+  //
+  // DISCLOSED RESIDUAL (accepted, not silently swallowed): `projectsRoot` and
+  // `brain/projects/` are SEPARATE filesystem roots, so the two `renameSync`
+  // calls are NOT one transaction. A crash between them leaves a
+  // project-without-brain (or, if the marker write itself is interrupted, a
+  // marker-less project alongside its brain). Both are RECONCILABLE: the marker
+  // is written strictly AFTER both renames, so a marker-less `projects/<id>` is
+  // swept on the next create for that id, and a `brain/projects/<id>` with no
+  // matching project is swept too. This narrow between-renames window is the
+  // residual this design accepts in exchange for closing the orphan class.
+  mkdirSync(join(projectDir, dirname(CREATE_COMPLETE_MARKER)), { recursive: true });
+  writeFileSync(join(projectDir, CREATE_COMPLETE_MARKER), `${new Date().toISOString()}\n`, 'utf8');
+
   return {
     id,
     projectDir,
