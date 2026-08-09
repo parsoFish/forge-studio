@@ -11,16 +11,14 @@ import {
 } from '@/lib/studio-client';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
-  fetchCycles, fetchRecovery, recoveryRequeue, recoveryAbandon,
+  fetchCycles,
   listDemoSessions,
-  type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem, type PlanInitiativeResult,
-  type RecoveryInspect, type Cycle,
+  type ProjectRoadmap, type PlanInitiativeResult, type Cycle,
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
-import { isRecoverableStatus, attemptInfoFor } from '@/lib/recovery-attrs';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
-import { SerpentineTimeline, STATUS_COLOURS } from '@/components/studio/SerpentineTimeline';
+import { RoadmapDag } from '@/components/studio/RoadmapDag';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 import { NorthStar } from '@/components/studio/project-builder/NorthStar';
@@ -865,7 +863,6 @@ function ProjectOnboardForm() {
 // so the batch "start eligible" button and individual card buttons share one
 // source of truth (both funnel through the same startDevelopment() call).
 type DevelopCardState = { status: 'idle' | 'starting' | 'started' | 'error'; error: string | null };
-const IDLE_DEVELOP: DevelopCardState = { status: 'idle', error: null };
 
 /** Map a batch item result onto the per-card develop state. */
 function developStateFromResult(
@@ -882,7 +879,6 @@ function developStateFromResult(
 // truth from the roadmap fetch, not tracked here — this only tracks the
 // transient client-side request lifecycle of clicking "Plan".
 type PlanCardState = { status: 'idle' | 'planning' | 'started' | 'error'; error: string | null };
-const IDLE_PLAN: PlanCardState = { status: 'idle', error: null };
 
 /** Map a single plan-dispatch result onto the per-card plan state. */
 function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
@@ -923,20 +919,11 @@ function RoadmapView({
   /** R4-07-F3: roadmap → demo-builder tie-in (switches to the editor tab's Demo Timeline). */
   onOpenDemo?: () => void;
 }) {
-  // Node selected in the serpentine timeline → highlight + scroll to its card.
-  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [developByInitiative, setDevelopByInitiative] = useState<Record<string, DevelopCardState>>({});
   const [planByInitiative, setPlanByInitiative] = useState<Record<string, PlanCardState>>({});
   const [batchStarting, setBatchStarting] = useState(false);
 
   const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
-
-  // Toggle the selected dot; clicking the open one again (or × / Escape) closes.
-  const handleSelect = useCallback(
-    (initiativeId: string): void =>
-      setSelectedId((prev) => (prev === initiativeId ? null : initiativeId)),
-    [],
-  );
 
   // plan-everything-before-kickoff: the whole roadmap can be decomposed up
   // front (the flow_id-aware gate), so any number of initiatives may already
@@ -1023,9 +1010,8 @@ function RoadmapView({
     );
   }
 
-  // Dependency depth is still surfaced (data-dep-count) for tooling, but the
-  // roadmap is now laid out over TIME by the serpentine timeline (which orders
-  // its own nodes chronologically). The detail card pops off the selected dot.
+  // Dependency depth is surfaced on the section (data-dep-count) for tooling;
+  // <RoadmapDag> below lays the initiatives out left → right by that same depth.
   const initLevels = topoLevels(
     initiatives,
     (i) => i.initiativeId,
@@ -1039,14 +1025,14 @@ function RoadmapView({
       data-dep-count={String(initLevels.maxLevel)}
       style={{ flex: 1, overflowY: 'auto', padding: '24px 28px 96px', display: 'flex', flexDirection: 'column', gap: 28 }}
     >
-      {/* The roadmap-over-time: a serpentine arrow, oldest → newest. Clicking a
-          dot pops that initiative's detail card up off the dot. */}
+      {/* R4-13: the roadmap is a dependency DAG — initiatives laid out left → right
+          by dependency depth, one edge per prerequisite → dependent pair. */}
       <div style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)', padding: '12px 16px 16px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
           <div style={{ fontSize: 11, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-            Progression over time
+            Dependency graph
             <span style={{ marginLeft: 10, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}>
-              click a dot for detail
+              left → right by dependency depth
             </span>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -1068,25 +1054,15 @@ function RoadmapView({
             </button>
           </div>
         </div>
-        <SerpentineTimeline
-          initiatives={initiatives}
-          selectedId={selectedId}
-          onSelect={handleSelect}
-          onClose={() => setSelectedId(null)}
-          renderCard={(init) => (
-            <InitiativeCard
-              key={init.initiativeId}
-              initiative={init}
-              selected
-              develop={developByInitiative[init.initiativeId] ?? IDLE_DEVELOP}
-              onStart={startOne}
-              plan={planByInitiative[init.initiativeId] ?? IDLE_PLAN}
-              onPlan={planOne}
-              attempt={attemptInfoFor(init.initiativeId, cycleGroups)}
-              onRecoveryDone={onRefresh}
-              onOpenDemo={onOpenDemo}
-            />
-          )}
+        <RoadmapDag
+          roadmap={roadmap}
+          cycleGroups={cycleGroups}
+          developByInitiative={developByInitiative}
+          planByInitiative={planByInitiative}
+          onStart={startOne}
+          onPlan={planOne}
+          onRecoveryDone={onRefresh}
+          onOpenDemo={onOpenDemo}
         />
       </div>
 
@@ -1094,309 +1070,3 @@ function RoadmapView({
   );
 }
 
-function InitiativeCard({
-  initiative,
-  selected = false,
-  develop,
-  onStart,
-  plan,
-  onPlan,
-  attempt,
-  onRecoveryDone,
-  onOpenDemo,
-}: {
-  initiative: RoadmapInitiative;
-  selected?: boolean;
-  develop: DevelopCardState;
-  onStart: (initiativeId: string) => void | Promise<void>;
-  plan: PlanCardState;
-  onPlan: (initiativeId: string) => void | Promise<void>;
-  /** R4-11-T3: attemptCount/priorCycleIds for the recovery affordances. */
-  attempt: { attemptCount: number; priorCycleIds: string[] };
-  /** R4-11-T3: called after a successful requeue/abandon to refetch the roadmap + cycle groups. */
-  onRecoveryDone: () => Promise<void>;
-  /** R4-07-F3: opens the project's demo surface (editor tab, Demo Timeline + builder panel). */
-  onOpenDemo?: () => void;
-}) {
-  const { initiativeId, title, status, dependsOnInitiatives, workItems, ready, blockedBy } = initiative;
-  const colour = STATUS_COLOURS[status] ?? 'var(--faint)';
-  const router = useRouter();
-
-  // R4-11-T3: recovery affordances (inspect/requeue/abandon) fold the retired
-  // standalone /recovery page's per-item state onto this card. `InitiativeCard`
-  // only ever renders inside the roadmap's pop-off popover ([data-roadmap-popover]
-  // — see RoadmapView/SerpentineTimeline's renderCard), so there is no separate
-  // compact card to choose between: the recovery attrs live in this one render
-  // tree, which the popover already hosts.
-  const [recoveryDetail, setRecoveryDetail] = useState<RecoveryInspect | null>(null);
-  const [recoveryBusy, setRecoveryBusy] = useState(false);
-  const [recoveryNote, setRecoveryNote] = useState('');
-
-  const inspectRecovery = useCallback(async (): Promise<void> => {
-    setRecoveryDetail(await fetchRecovery(initiativeId));
-  }, [initiativeId]);
-
-  const doRecoveryAction = useCallback(async (kind: 'requeue' | 'abandon'): Promise<void> => {
-    setRecoveryBusy(true);
-    setRecoveryNote('');
-    const res = kind === 'requeue'
-      ? await recoveryRequeue(initiativeId, { resetRetries: true })
-      : await recoveryAbandon(initiativeId);
-    setRecoveryBusy(false);
-    setRecoveryNote(res.ok ? `${kind} ok` : `${kind} failed: ${res.error ?? 'unknown'}`);
-    if (res.ok) {
-      setRecoveryDetail(null);
-      await onRecoveryDone();
-    }
-  }, [initiativeId, onRecoveryDone]);
-
-  // R4-11-F2: "planned" is the same fact the roadmap-builder computes
-  // server-side (`workItems !== undefined` — a WI snapshot exists,
-  // independent of queue status). A pending, WI-less initiative is
-  // "unplanned" and shows the Plan trigger + the blocked-until-planned lock.
-  const planned = workItems !== undefined;
-  const unplanned = status === 'pending' && !planned;
-
-  // S7 / DEC-3: "start development" runs the forge-develop flow on a decomposed,
-  // not-yet-developing initiative (pending = architect hand-off). It repoints the
-  // manifest at forge-develop + threads the cycle_id, then the scheduler claims it.
-  // plan-everything-before-kickoff: gated on `ready` too — a pending initiative
-  // can still be blocked by an unmet build-flow dependency (item 1's gate).
-  // R4-11-F2: also gated on `planned` — a WI-less initiative can't be
-  // developed until the standalone Plan trigger (or the architect) decomposes it.
-  const canStartDevelopment = status === 'pending' && ready && planned;
-  const blocked = status === 'pending' && !ready;
-
-  // WI topo levels (for sub-graph ordering).
-  const wiLevels = workItems && workItems.length > 0
-    ? topoLevels(workItems, (w) => w.id, (w) => w.dependsOn)
-    : null;
-
-  return (
-    <div
-      data-initiative-id={initiativeId}
-      data-initiative-status={status}
-      data-develop-state={develop.status}
-      data-plan-state={planStateAttr(unplanned, plan)}
-      data-initiative-ready={String(ready)}
-      data-blocked-by={blockedBy.join(',')}
-      style={{
-        background: 'var(--panel)',
-        border: `1px solid ${selected ? colour : 'var(--line)'}`,
-        borderTop: `3px solid ${colour}`,
-        borderRadius: 'var(--radius)',
-        padding: '14px 16px',
-        minWidth: 260, maxWidth: 380,
-        display: 'flex', flexDirection: 'column', gap: 10,
-        position: 'relative',
-        boxShadow: selected ? `0 0 0 2px ${colour}55` : 'none',
-        transition: 'box-shadow 0.15s, border-color 0.15s',
-      }}
-    >
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35 }}>{title}</div>
-          <div style={{ fontSize: 11, color: 'var(--faint)', marginTop: 3 }}>{initiativeId}</div>
-        </div>
-        <span style={{
-          fontSize: 10, fontWeight: 700, letterSpacing: '.07em', textTransform: 'uppercase',
-          color: colour, background: `${colour}18`, borderRadius: 4, padding: '2px 6px', flexShrink: 0,
-        }}>{status}</span>
-      </div>
-
-      {dependsOnInitiatives.length > 0 && (
-        <div style={{ fontSize: 11, color: 'var(--dim)' }}>
-          Depends on: {dependsOnInitiatives.join(', ')}
-        </div>
-      )}
-
-      {/* plan-everything-before-kickoff: pending-but-blocked — the whole
-          roadmap can decompose up front, but this initiative's build-flow
-          dep(s) haven't merged yet, so kickoff is withheld. */}
-      {blocked && (
-        <div data-section="initiative-blocked" style={{ fontSize: 11, color: 'var(--amber, #d29922)' }}>
-          Blocked by: {blockedBy.join(', ')}
-        </div>
-      )}
-
-      {/* R4-11-F2: blocked-until-planned lock — a WI-less initiative can't
-          start development until it's decomposed (the standalone Plan
-          trigger below, or an architect run). */}
-      {unplanned && (
-        <div data-section="initiative-blocked-until-planned" style={{ fontSize: 11, color: 'var(--amber, #d29922)' }}>
-          Not yet planned — decompose it before starting development.
-        </div>
-      )}
-
-      {wiLevels && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}>
-          <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>Work Items</div>
-          {Array.from({ length: wiLevels.maxLevel + 1 }, (_, lvl) => {
-            const levelWis = wiLevels.byLevel.get(lvl) ?? [];
-            return levelWis.map((wi) => (
-              <WorkItemBadge key={wi.id} wi={wi} />
-            ));
-          })}
-        </div>
-      )}
-
-      {/* R4-07-F3: demo tie-in — the roadmap card links straight to the
-          project's demo surface (the editor tab's Demo Timeline + inline
-          builder panel), so demo upkeep is reachable from where the operator
-          reviews initiative state. */}
-      {onOpenDemo && (
-        <button
-          data-link="demo-builder"
-          onClick={onOpenDemo}
-          style={{
-            alignSelf: 'flex-start', fontSize: 11, color: 'var(--c-project, #1f6feb)',
-            background: 'none', border: 'none', padding: 0, cursor: 'pointer',
-            textDecoration: 'underline',
-          }}
-        >
-          demo builder →
-        </button>
-      )}
-
-      {/* R4-11-F2: Plan trigger — only on a WI-less pending initiative. Runs
-          the forge-architect (decompose) flow so a real PM pass produces
-          work items, which then flips this card to "planned". */}
-      {unplanned && plan.status !== 'started' && (
-        <button
-          data-action="plan-initiative"
-          data-initiative-id={initiativeId}
-          disabled={plan.status === 'planning'}
-          onClick={() => void onPlan(initiativeId)}
-          style={{
-            marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: plan.status === 'error' ? '#9e6a03' : '#1f6feb',
-            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: plan.status === 'planning' ? 'default' : 'pointer',
-            opacity: plan.status === 'planning' ? 0.6 : 1,
-          }}
-        >
-          {plan.status === 'planning' ? 'planning…' : plan.status === 'error' ? 'retry — plan' : 'Plan →'}
-        </button>
-      )}
-      {unplanned && plan.status === 'error' && plan.error && (
-        <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{plan.error}</div>
-      )}
-      {unplanned && plan.status === 'started' && (
-        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Planning started — the initiative will be decomposed into work items.</span>
-          <button
-            data-action="open-plan-run"
-            onClick={() => router.push('/flows/forge-architect')}
-            style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >
-            view run →
-          </button>
-        </div>
-      )}
-
-      {/* S7: start-development trigger — only on a decomposed, not-yet-developing
-          initiative. Runs the forge-develop flow (dev → unifier → review). */}
-      {canStartDevelopment && develop.status !== 'started' && (
-        <button
-          data-action="start-development"
-          data-initiative-id={initiativeId}
-          disabled={develop.status === 'starting'}
-          onClick={() => void onStart(initiativeId)}
-          style={{
-            marginTop: 4, alignSelf: 'flex-start',
-            color: '#fff', background: develop.status === 'error' ? '#9e6a03' : '#238636',
-            border: '1px solid var(--line)', borderRadius: 6, padding: '6px 14px',
-            fontSize: 12, fontWeight: 600, cursor: develop.status === 'starting' ? 'default' : 'pointer',
-            opacity: develop.status === 'starting' ? 0.6 : 1,
-          }}
-        >
-          {develop.status === 'starting' ? 'starting…' : develop.status === 'error' ? 'retry — start development' : 'Start development →'}
-        </button>
-      )}
-      {develop.status === 'error' && develop.error && (
-        <div style={{ fontSize: 11, color: 'var(--red, #f85149)' }}>{develop.error}</div>
-      )}
-      {develop.status === 'started' && (
-        <div style={{ marginTop: 4, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 12, color: 'var(--green, #3fb950)', fontWeight: 600 }}>Development started — the unifier will open a PR for review.</span>
-          <button
-            data-action="open-develop-run"
-            onClick={() => router.push('/flows/forge-develop')}
-            style={{ fontSize: 11, color: '#fff', background: '#1f6feb', border: '1px solid var(--line)', borderRadius: 6, padding: '4px 10px', cursor: 'pointer' }}
-          >
-            view run →
-          </button>
-        </div>
-      )}
-
-      {/* R4-11-T3: recovery affordances — folded off the retired standalone
-          /recovery page. Gated on the same "recoverable" set that page used
-          (in-flight / ready-for-review / failed — NOT merged, a deliberately
-          transient pass-through). Attrs mirror that page's exact contract so
-          the (moved) journey beat is drop-in recognisable. */}
-      {isRecoverableStatus(status) && (
-        <div
-          data-recovery-item
-          data-recovery-initiative={initiativeId}
-          data-recovery-status={status}
-          data-recovery-attempt-count={attempt.attemptCount}
-          style={{ display: 'flex', flexDirection: 'column', gap: 6, borderTop: '1px solid var(--line)', paddingTop: 8 }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--faint)' }}>
-              Recovery
-              {attempt.attemptCount > 1 && (
-                <span
-                  data-recovery-prior-attempts={attempt.attemptCount - 1}
-                  title={`${attempt.attemptCount - 1} prior attempt(s): ${attempt.priorCycleIds.join(', ')}`}
-                  style={{ marginLeft: 8, fontWeight: 500, textTransform: 'none', letterSpacing: 0, color: 'var(--faint)', fontSize: 10.5 }}
-                >
-                  ×{attempt.attemptCount}
-                </span>
-              )}
-            </div>
-            <span style={{ display: 'flex', gap: 6 }}>
-              <button data-action="recovery-inspect" onClick={() => void inspectRecovery()} style={recoveryBtn('var(--line)')}>Inspect</button>
-              <button data-action="recovery-requeue" disabled={recoveryBusy} onClick={() => void doRecoveryAction('requeue')} style={recoveryBtn('#1f6feb')}>Requeue</button>
-              <button data-action="recovery-abandon" disabled={recoveryBusy} onClick={() => void doRecoveryAction('abandon')} style={recoveryBtn('#a33')}>Abandon</button>
-            </span>
-          </div>
-
-          {recoveryDetail && (
-            <div data-section="recovery-detail" data-recovery-detail-initiative={initiativeId} style={{ fontSize: 11, color: 'var(--dim)' }}>
-              <div>branch: <code>{recoveryDetail.branch}</code> · worktree: {recoveryDetail.worktreeExists ? 'preserved' : 'gone'} · PR draft: {recoveryDetail.prDraftChars ?? 0} chars</div>
-              {recoveryDetail.commits && recoveryDetail.commits.length > 0 && (
-                <pre data-recovery-commits style={{ background: 'var(--bg)', padding: 6, borderRadius: 4, marginTop: 4, overflowX: 'auto' }}>
-                  {recoveryDetail.commits.join('\n')}
-                </pre>
-              )}
-            </div>
-          )}
-          {recoveryNote && <p data-recovery-note style={{ fontSize: 11, color: 'var(--faint)', margin: 0 }}>{recoveryNote}</p>}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function recoveryBtn(bg: string): React.CSSProperties {
-  return { fontSize: 10, padding: '2px 8px', background: bg, color: '#fff', border: 'none', borderRadius: 4, cursor: 'pointer' };
-}
-
-function WorkItemBadge({ wi }: { wi: RoadmapWorkItem }) {
-  return (
-    <div
-      data-work-item-id={wi.id}
-      style={{
-        display: 'flex', alignItems: 'center', gap: 8,
-        fontSize: 12, color: 'var(--text)',
-        background: 'var(--bg)', borderRadius: 'var(--radius-sm)',
-        padding: '5px 9px',
-        border: '1px solid var(--line)',
-      }}
-    >
-      <span style={{ fontFamily: 'var(--font-mono, monospace)', fontSize: 10, color: 'var(--c-dev, #4ca3f5)', fontWeight: 700 }}>{wi.id}</span>
-      <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{wi.title}</span>
-    </div>
-  );
-}
