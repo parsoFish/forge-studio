@@ -69,7 +69,10 @@ function subDirs(dir: string): string[] {
   if (!existsSync(dir)) return [];
   try {
     return readdirSync(dir, { withFileTypes: true })
-      .filter((e) => e.isDirectory())
+      // Skip dot-prefixed dirs — a `.staging-<id>-*` brain leftover (SEC-05 4on
+      // reopen-1) must never surface as a phantom KB. Real kb/project ids are
+      // slug-safe (no leading dot).
+      .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
       .map((e) => e.name);
   } catch {
     return [];

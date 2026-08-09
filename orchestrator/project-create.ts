@@ -189,6 +189,24 @@ function sweepBrainOrphan(brainDir: string): void {
   rmSync(brainDir, { recursive: true, force: true });
 }
 
+/** Sweep this id's stale STAGING leftovers — `.staging-<id>-*` dirs a hard kill
+ *  left behind when a create's own unwind catch never ran (reopen-1). Prefix-
+ *  scoped to THIS id so a concurrent create for another id is never touched. */
+function sweepStagingLeftovers(root: string, id: string): void {
+  let entries;
+  try {
+    entries = readdirSync(root, { withFileTypes: true });
+  } catch {
+    return; // root absent — nothing to sweep
+  }
+  const prefix = `.staging-${id}-`;
+  for (const e of entries) {
+    if (e.isDirectory() && e.name.startsWith(prefix)) {
+      rmSync(resolve(root, e.name), { recursive: true, force: true });
+    }
+  }
+}
+
 /**
  * Scaffold a greenfield project from its template + seed the central brain, then
  * preflight. `hardGreen` is the authoritative "ready for the first architect run"
@@ -237,6 +255,11 @@ export function scaffoldGreenfieldProject(input: {
   // sweep it plus any real brain orphan, then proceed. This replaces the old
   // bare `existsSync(projectDir)` throw, which made every retry-after-crash fail
   // with "already exists".
+  //
+  // Also sweep this id's stale STAGING leftovers first — `.staging-<id>-*` dirs a
+  // hard kill left when a prior create's unwind catch never ran (reopen-1).
+  sweepStagingLeftovers(projectsRoot, id);
+  sweepStagingLeftovers(brainProjectsRoot, id);
   if (existsSync(projectDir)) {
     if (existsSync(join(projectDir, CREATE_COMPLETE_MARKER))) {
       throw new Error(`project "${id}" already exists at ${projectDir}`);
@@ -283,33 +306,40 @@ export function scaffoldGreenfieldProject(input: {
     // itself orphan. `hardGreen` computed here is valid for the final dir: the
     // staged trees are byte-identical to their post-rename form.
     report = runPreflight(stagingProjectDir, { forgeRoot: input.forgeRoot });
+
+    // Completion marker written INTO the project STAGING dir, BEFORE the rename,
+    // so the renamed `projects/<id>` is ATOMICALLY complete-marked — there is NO
+    // marker-less window on the final path for a concurrent same-id reconcile to
+    // mis-sweep (the reopen-1 wedge).
+    mkdirSync(join(stagingProjectDir, dirname(CREATE_COMPLETE_MARKER)), { recursive: true });
+    writeFileSync(join(stagingProjectDir, CREATE_COMPLETE_MARKER), `${new Date().toISOString()}\n`, 'utf8');
+
+    // ATOMIC MOVE — INSIDE the try so a concurrent same-id winner's `renameSync`
+    // ENOTEMPTY (or any throw) unwinds THIS create's staging in the catch below.
+    // Brain FIRST, then the marker-carrying project LAST: the project rename is
+    // the single commit point and lands `projects/<id>` already marked complete.
+    renameSync(stagingBrainDir, finalBrainDir);
+    renameSync(stagingProjectDir, projectDir);
   } catch (err) {
-    // UNWIND: any staged failure leaves NOTHING behind. `rmSync` is
-    // recursive+force, so a not-yet-created staging dir is a silent no-op.
+    // UNWIND: any staged failure — INCLUDING a rename ENOTEMPTY from a losing
+    // concurrent same-id create — leaves NOTHING of THIS create's staging behind.
+    // `rmSync` recursive+force no-ops on an absent dir. (A brain already renamed
+    // before a project-rename throw becomes a brain-without-project, swept by the
+    // next create's reconcile — the disclosed two-root residual below.)
     rmSync(stagingProjectDir, { recursive: true, force: true });
     rmSync(stagingBrainDir, { recursive: true, force: true });
     throw err;
   }
 
-  // ATOMIC MOVE (per root). On FULL success move each staged tree into its final
-  // slot — the reconcile above guaranteed both slots are clear.
-  renameSync(stagingProjectDir, projectDir);
-  renameSync(stagingBrainDir, finalBrainDir);
-
-  // Completion marker LAST — AFTER both renames — so a crash BETWEEN the two
-  // renames leaves a marker-less `projects/<id>` the next reconcile sweeps.
-  //
   // DISCLOSED RESIDUAL (accepted, not silently swallowed): `projectsRoot` and
   // `brain/projects/` are SEPARATE filesystem roots, so the two `renameSync`
-  // calls are NOT one transaction. A crash between them leaves a
-  // project-without-brain (or, if the marker write itself is interrupted, a
-  // marker-less project alongside its brain). Both are RECONCILABLE: the marker
-  // is written strictly AFTER both renames, so a marker-less `projects/<id>` is
-  // swept on the next create for that id, and a `brain/projects/<id>` with no
-  // matching project is swept too. This narrow between-renames window is the
-  // residual this design accepts in exchange for closing the orphan class.
-  mkdirSync(join(projectDir, dirname(CREATE_COMPLETE_MARKER)), { recursive: true });
-  writeFileSync(join(projectDir, CREATE_COMPLETE_MARKER), `${new Date().toISOString()}\n`, 'utf8');
+  // calls are NOT one transaction. A crash AFTER the brain rename but BEFORE the
+  // project rename leaves a `brain/projects/<id>` with no matching project —
+  // RECONCILABLE (the next create for that id sweeps a brain-without-project).
+  // Because the marker now rides in the project staging dir, `projects/<id>` is
+  // NEVER marker-less on the final path, so a concurrent reconcile can never
+  // mis-sweep a live create. This narrow between-renames brain-orphan window is
+  // the residual this design accepts in exchange for closing the orphan class.
 
   return {
     id,
