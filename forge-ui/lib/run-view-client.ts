@@ -55,6 +55,19 @@ export type RunDetail = {
   materials: RunMaterialRef[];
   ceilingUsd?: number;
   outputs: RunOutput[];
+  /**
+   * R6-01 WI-2-style provenance (debt-T trigger plumbing): what started this
+   * run, mirrored from `GET /api/agents/runs/:runId`'s `trigger` field.
+   * Absent when the run carries no derivable trigger — NEVER a fabricated
+   * default. Client-side plumbing only (T1 ruling): no corresponding server
+   * field is wired by this change, so this key is honestly absent on every
+   * real response today until a server-side field lands.
+   */
+  trigger?: {
+    kind: string;
+    source: string;
+    scope: string | null;
+  };
 };
 
 const NOT_FOUND_DETAIL: RunDetail = {
@@ -112,6 +125,18 @@ export function ceilingFromEvents(events: EventLogEntry[]): number | undefined {
   return typeof val === 'number' ? val : undefined;
 }
 
+/** Validate a raw `trigger` field off the wire body into `RunDetail`'s
+ *  `trigger` shape — an object with string `kind`/`source` and a
+ *  `scope` that is either a string or `null`. Returns `undefined` (never a
+ *  fabricated default) when the raw value is missing or malformed. */
+function triggerFromBody(raw: unknown): RunDetail['trigger'] {
+  if (!raw || typeof raw !== 'object') return undefined;
+  const t = raw as { kind?: unknown; source?: unknown; scope?: unknown };
+  if (typeof t.kind !== 'string' || typeof t.source !== 'string') return undefined;
+  if (typeof t.scope !== 'string' && t.scope !== null) return undefined;
+  return { kind: t.kind, source: t.source, scope: t.scope };
+}
+
 /**
  * Pure: turn one resolved fetch response (`status` + parsed JSON `body`)
  * into a `RunDetail`. Extracted out of `fetchRunDetail` (R6-04 D22
@@ -126,10 +151,11 @@ export function ceilingFromEvents(events: EventLogEntry[]): number | undefined {
 export function resolveRunDetailFromResponse(status: number, body: unknown): RunDetail {
   if (status < 200 || status >= 300) return NOT_FOUND_DETAIL;
   const data = body && typeof body === 'object'
-    ? (body as { state?: unknown; costUsd?: unknown; lines?: unknown })
+    ? (body as { state?: unknown; costUsd?: unknown; lines?: unknown; trigger?: unknown })
     : {};
   const rawLines = Array.isArray(data.lines) ? (data.lines as Record<string, unknown>[]) : [];
   const events = rawLines.map(toEventLogEntry);
+  const trigger = triggerFromBody(data.trigger);
   return {
     found: true,
     state: typeof data.state === 'string' ? data.state : 'unknown',
@@ -138,6 +164,10 @@ export function resolveRunDetailFromResponse(status: number, body: unknown): Run
     materials: materialsFromEvents(events),
     ceilingUsd: ceilingFromEvents(events),
     outputs: [],
+    // Carried through only when present + valid — mirrors
+    // studio-client.ts:588's declared-data-fails-open convention: an absent
+    // `trigger` key must stay absent, never defaulted.
+    ...(trigger !== undefined ? { trigger } : {}),
   };
 }
 

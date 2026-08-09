@@ -5,10 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
   saveProject, createProject, fetchPreflight, startOnboardingSession, getAgentRunStatus,
-  fetchProjectStarters, createGreenfieldProject,
+  fetchProjectStarters, createGreenfieldProject, fetchStudioAgentsWithMeta,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
   type FailingClause, type AgentRunStatus,
 } from '@/lib/studio-client';
+import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
+import { resolveDevelopStartCeilingToSend } from '@/lib/roadmap-develop-start-ceiling';
 import {
   fetchRoadmap, startDevelopment, planInitiative,
   fetchCycles,
@@ -887,6 +889,28 @@ function planStateFromResult(result: PlanInitiativeResult): PlanCardState {
     : { status: 'error', error: result.detail ?? result.status };
 }
 
+/**
+ * shc review finding 1 (BLOCKER, silent-default-as-operator-intent) fix: the
+ * develop-start ceiling field's SEND decision. `fieldValue`
+ * (`resolveCeilingFieldValue`) is what the input DISPLAYS — it seeds from
+ * the run-level `defaultCeilingUsd` (`resolveDefaultKickoffCeilingUsd`,
+ * orchestrator/config.ts) the instant the tab mounts, long before any
+ * operator interaction. Displaying a default is fine; SENDING it on every
+ * "Start development" click is not — a manifest with its own
+ * `cost_budget_usd`-derived ceiling (`readManifestCostCeiling`'s
+ * budget+`DERIVED_CEILING_MARGIN_USD` fallback) would get silently
+ * overwritten by the generic per-run default just because the operator
+ * opened the tab and clicked Start, never having looked at the field.
+ *
+ * Gated on `ceilingTouched` FIRST — a real operator opt-in boolean, checked
+ * before the value is even inspected — then the usual finite/positive shape
+ * check, exactly mirroring RunPanel's `costCeilingEnforceable`-gated
+ * `resolveCostCeilingForDispatch` (./run-panel-view.ts). When untouched,
+ * returns `undefined` so `POST /api/develop/start` omits `costCeilingUsd`
+ * entirely and the manifest's own derived fallback
+ * (`resolveCostCeilingOverride`, orchestrator/cycle.ts) stands. Exported so
+ * `lib/roadmap-develop-start-ceiling.test.ts` pins the real, shipped gate.
+ */
 function RoadmapView({
   projectId,
   roadmap,
@@ -904,6 +928,37 @@ function RoadmapView({
   const [developByInitiative, setDevelopByInitiative] = useState<Record<string, DevelopCardState>>({});
   const [planByInitiative, setPlanByInitiative] = useState<Record<string, PlanCardState>>({});
   const [batchStarting, setBatchStarting] = useState(false);
+
+  // forge-shc WI-1: the operator per-run cost-ceiling lever for a
+  // single-initiative "Start development". `defaultCeilingUsd` arrives
+  // ASYNCHRONOUSLY (fetched below) — `manualCeilingUsd` stays `undefined`
+  // until the operator types something, so the resolved field value tracks
+  // the fetched default until then (same race the agent-run kickoff field
+  // already fixed — see `resolveCeilingFieldValue`'s doc comment). T1
+  // ruling: this lever is single-id ONLY — the batch "Start eligible"
+  // button never sends it (a scalar ceiling can't map onto N manifests).
+  const [defaultCeilingUsd, setDefaultCeilingUsd] = useState(0);
+  const [manualCeilingUsd, setManualCeilingUsd] = useState<number | undefined>(undefined);
+  // shc review finding 1: an EXPLICIT operator opt-in, set true the instant
+  // the operator edits the field — and NEVER reset, including on blank —
+  // mirrors RunPanel's `costCeilingEnforceable` gate
+  // (resolveCostCeilingForDispatch, lib/run-panel-view.ts). Deliberately NOT
+  // derived from `manualCeilingUsd !== undefined`: blanking the input sets
+  // `manualCeilingUsd` back to `undefined`, which would silently re-arm
+  // "untouched" and defeat the opt-in the moment the operator clears the
+  // field.
+  const [ceilingTouched, setCeilingTouched] = useState(false);
+  const ceilingFieldValue = resolveCeilingFieldValue(defaultCeilingUsd, manualCeilingUsd);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStudioAgentsWithMeta()
+      .then(({ defaultCostCeilingUsd }) => {
+        if (!cancelled) setDefaultCeilingUsd(defaultCostCeilingUsd);
+      })
+      .catch(() => { /* best-effort — the field just stays at its 0 fallback */ });
+    return () => { cancelled = true; };
+  }, []);
 
   const initiatives = useMemo(() => roadmap?.initiatives ?? [], [roadmap]);
 
@@ -926,12 +981,21 @@ function RoadmapView({
 
   const startOne = useCallback(async (initiativeId: string): Promise<void> => {
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: { status: 'starting', error: null } }));
-    const r = await startDevelopment([initiativeId]);
+    // shc review finding 1: a single-id start carries the operator's ceiling
+    // override ONLY when the operator has explicitly touched the field
+    // (`ceilingTouched`) — an untouched field must send NOTHING, so the
+    // manifest's own derived `cost_budget_usd`+margin fallback
+    // (resolveCostCeilingOverride, orchestrator/cycle.ts) stands. Never a
+    // fabricated fallback value; an empty/non-finite/non-positive TOUCHED
+    // field also degrades to "no override" — the same "nothing sent rather
+    // than a round-tripped 400" convention the agent-run kickoff field uses.
+    const ceilingToSend = resolveDevelopStartCeilingToSend(ceilingFieldValue, ceilingTouched);
+    const r = await startDevelopment([initiativeId], ceilingToSend);
     const item = r.results?.find((x) => x.initiativeId === initiativeId);
     setDevelopByInitiative((prev) => ({ ...prev, [initiativeId]: developStateFromResult(item, r.error) }));
     // Refetch so status/ready/blockedBy reflect the queue's new reality.
     await onRefresh();
-  }, [onRefresh]);
+  }, [onRefresh, ceilingFieldValue, ceilingTouched]);
 
   // R4-11-F2: the per-card "Plan" trigger — dispatches the standalone
   // forge-architect (decompose) flow for a WI-less initiative. Refetches
@@ -1019,6 +1083,37 @@ function RoadmapView({
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <ProjectArchitectEntry projectId={projectId} />
+            {/* forge-shc WI-1: per-initiative cost-ceiling override — applies
+                ONLY to a single card's "Start development" click (startOne).
+                "Start eligible" is a batch trigger and deliberately never
+                reads this field (T1 ruling: a scalar ceiling can't map onto
+                N manifests unambiguously). */}
+            <label
+              title="Cost ceiling (USD) for the next single-initiative 'Start development' click. Does not apply to 'Start eligible' (batch)."
+              style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 10.5, color: 'var(--faint)' }}
+            >
+              ceiling ($)
+              <input
+                type="number"
+                data-field="develop-cost-ceiling-usd"
+                min={0}
+                step="0.01"
+                value={ceilingFieldValue}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  // shc review finding 1: ANY edit — including blanking the
+                  // field back to `''` — is the operator's opt-in; touched
+                  // is never reset, so a since-cleared field can't silently
+                  // re-arm "send the seeded default".
+                  setCeilingTouched(true);
+                  setManualCeilingUsd(raw === '' ? undefined : Number(raw));
+                }}
+                style={{
+                  width: 62, fontSize: 11, padding: '3px 6px', borderRadius: 6,
+                  border: '1px solid var(--line)', background: 'var(--panel)', color: 'inherit',
+                }}
+              />
+            </label>
             <button
               data-action="kickoff-eligible"
               data-eligible-count={eligible.length}

@@ -28,14 +28,27 @@ import {
   // the AT-F1-1 test goes red, on its explicit `typeof … === 'function'`
   // guard.
   fetchContractStages,
+  // zyc review finding 1/2: same "not yet exported" RED convention as
+  // AT-F1-1 above — pre-fix, both resolve to `undefined`, so calling either
+  // throws a genuine "is not a function" RED rather than silently no-op-ing.
+  WEBHOOK_FAMILY_TRIGGER_KINDS,
+  isSameTriggerIdentity,
 } from './studio-client';
-import type { Run } from './studio-client';
+import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
 // into is session-client.ts's EXPORTED `ContractStageRow` (:248-258) — the
 // same type the session-shell's contract-buildout artifact already uses. The
 // test types its expectation as `ContractStageRow[]` so a third client-side
 // mirror (a new type, or a hand-rolled row parser) diverges and fails.
 import type { ContractStageRow } from './session-client';
+// zyc review finding 1 pin — reads the REAL orchestrator SSOT lint directly
+// (same "read the real thing, not a hand-copied mirror" mechanism
+// flow-header-render.test.ts's pin 2 already established for
+// SHIPPED_TRIGGER_KIND_IDS): proves a pr-merged/issue-raised trigger built
+// via the real client path is one `orchestrator/studio/validate-triggers.ts`
+// actually accepts, not just a shape this test file asserts by eye.
+import { checkFlowTriggers } from '../../orchestrator/studio/validate-triggers.ts';
+import type { AgentDefinition, FlowDefinition } from '../../orchestrator/studio/types.ts';
 
 // AT-F1-1 fetch harness — matches lib/agent-ledger.test.ts verbatim.
 // `fetchContractStages` calls `resolveBridgeUrl()` (./bridge-client) then
@@ -152,6 +165,202 @@ test('buildTriggerDeclaration: webhook sources is a trimmed, comma-split list', 
     webhookSources: ' parsoFish/a , parsoFish/b ,,',
   });
   expect(result?.webhook?.sources).toEqual(['parsoFish/a', 'parsoFish/b']);
+});
+
+// ---------------------------------------------------------------------------
+// forge-zyc pin 3 — agent-complete completability (RED today).
+//
+// orchestrator/studio/validate-triggers.ts:279-287's `trigger-agent-complete`
+// check requires a non-empty `agent:` on every `on: 'agent-complete'` row —
+// a row without one can never fire (orchestrator/flow-trigger.ts:132-165's
+// `fireAgentCompleteTriggers` strict-matches `trigger.agent ===
+// completedAgentSlug`, so an absent `agent` never matches any real slug).
+// `buildTriggerDeclaration` is the ONLY place FlowHeader builds a trigger row
+// from user input — if it can never emit an `agent:` key for kind
+// 'agent-complete', a row saved through the UI is UNCOMPLETABLE: it would
+// fail studio-lint's trigger-agent-complete check on save (once pin 2's
+// mirror gap is separately closed and the kind becomes selectable at all).
+//
+// `TriggerBuilderFields` today (:264-277) carries no `agentSlug` field, and
+// `buildTriggerDeclaration` (:290-319) falls through to the generic
+// `return { on: kind, target }` for any kind that isn't 'cron'/'webhook' — no
+// `agent:` key is ever emitted, for any kind. `ShippedTriggerKind` also
+// doesn't include 'agent-complete' yet (pin 2's mirror gap) — cast past that
+// here since this pin is about the BUILDER's per-kind behaviour, independent
+// of whether the kind is offered in the UI selector.
+// ---------------------------------------------------------------------------
+
+test('RED (forge-zyc pin 3): buildTriggerDeclaration("agent-complete", {targetId, agentSlug}) must produce a declaration carrying agent: <slug> — today it emits no "agent" key at all', () => {
+  const fields = { targetId: 'forge-develop', agentSlug: 'developer' } as unknown as TriggerBuilderFields;
+  const trigger = buildTriggerDeclaration('agent-complete' as unknown as ShippedTriggerKind, fields);
+  expect(trigger).not.toBeNull();
+  // The defect: today's builder returns { on: 'agent-complete', target } —
+  // no `agent` key at all — so this is the RED assertion.
+  expect((trigger as unknown as { agent?: string } | null)?.agent).toBe('developer');
+});
+
+// companion (not independently RED) — paired with the RED pin above: proves
+// the four already-shipped kinds' declarations stay untouched by whatever
+// implementation adds agentSlug/agent-complete handling — none of them
+// should ever grow a stray "agent" key just because `fields.agentSlug` now
+// exists on the input. Passes today (the current builder ignores
+// `agentSlug` entirely, for every kind) — its purpose is to fail LOUDLY if a
+// future fix threads `agentSlug` into the generic fallback branch instead of
+// an `agent-complete`-specific one.
+test('companion: buildTriggerDeclaration for flow-complete/merged/cron carries no stray "agent" key even when fields.agentSlug is set', () => {
+  const withStrayAgentSlug = { targetId: 'forge-develop', agentSlug: 'developer' } as unknown as TriggerBuilderFields;
+  expect(buildTriggerDeclaration('flow-complete', withStrayAgentSlug))
+    .toEqual({ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-develop' } });
+  expect(buildTriggerDeclaration('merged', withStrayAgentSlug))
+    .toEqual({ on: 'merged', target: { kind: 'flow', ref: 'forge-develop' } });
+  expect(buildTriggerDeclaration('cron', { ...withStrayAgentSlug, schedule: '0 3 * * *' }))
+    .toEqual({ on: 'cron', target: { kind: 'flow', ref: 'forge-develop' }, schedule: '0 3 * * *', concurrency: 'forbid' });
+});
+
+// ---------------------------------------------------------------------------
+// zyc review finding 1 (MAJOR, route-works≠feature-works) — pr-merged /
+// issue-raised must build a REAL "webhook" block, not the bare {on,target}
+// fallback.
+//
+// cli/bridge-hooks.ts's `findWebhookTrigger` (~:94-115) resolves an incoming
+// delivery ONLY by scanning every flow for a trigger whose
+// `webhook.id === hookId` (WEBHOOK_FAMILY_KIND_IDS covers webhook/pr-merged/
+// issue-raised alike). Before this fix, `buildTriggerDeclaration` only built
+// a `webhook:` block for `kind === 'webhook'` — pr-merged/issue-raised fell
+// through to the generic `return { on: kind, target }` with no webhook key
+// at all, so a trigger authored through the real UI/client path was
+// authorable-but-permanently-dead: no hook URL could ever address it.
+// ---------------------------------------------------------------------------
+
+function prMergedWebhookFields(): TriggerBuilderFields {
+  return {
+    targetId: 'forge-develop',
+    webhookId: 'myproj-pr-merged',
+    webhookProvider: 'github',
+    webhookEvents: ['pull_request'],
+    webhookSecretEnv: 'MYPROJ_WEBHOOK_SECRET',
+    webhookSources: 'parsoFish/myproj',
+  };
+}
+
+test('RED (zyc finding 1): buildTriggerDeclaration("pr-merged", {...webhook fields}) must emit a real "webhook" block, not the bare {on,target} fallback', () => {
+  const trigger = buildTriggerDeclaration('pr-merged', prMergedWebhookFields());
+  // Precondition: the fields were complete enough to build SOMETHING at all
+  // (a null here would mean the test fixture itself is broken, not the
+  // production defect this test targets).
+  expect(trigger).not.toBeNull();
+  expect(trigger?.on).toBe('pr-merged');
+  // The defect: today's builder returns { on: 'pr-merged', target } — no
+  // "webhook" key — so this is the RED assertion.
+  expect(trigger?.webhook).toEqual({
+    id: 'myproj-pr-merged',
+    provider: 'github',
+    events: ['pull_request'],
+    secretEnv: 'MYPROJ_WEBHOOK_SECRET',
+    sources: ['parsoFish/myproj'],
+  });
+});
+
+test('RED (zyc finding 1): a pr-merged trigger built via the real client path is one validate-triggers.ts actually accepts (webhook.id present, zero lint findings)', () => {
+  const trigger = buildTriggerDeclaration('pr-merged', prMergedWebhookFields());
+  expect(trigger).not.toBeNull();
+  // findWebhookTrigger's ONLY match key — must be present for the delivery
+  // to ever be routable at all.
+  expect(trigger?.webhook?.id).toBe('myproj-pr-merged');
+
+  const flow: FlowDefinition = {
+    id: 'flow-a', name: 'Flow A', version: 1, goal: '', project: 'demo-project', kb: null,
+    costCeilingUsd: 0, origin: 'studio', nodes: [], edges: [],
+    triggers: trigger ? [trigger] : [],
+    path: '/dev/null/flow.yaml',
+  };
+  const findings = checkFlowTriggers(flow, new Map<string, AgentDefinition>(), {
+    flowIds: new Set(['flow-a', 'forge-develop']),
+    flowProjectOf: () => 'demo-project',
+  });
+  expect(findings).toEqual([]);
+});
+
+test('companion (zyc finding 1): issue-raised builds the SAME real webhook shape (the sibling kind, not just pr-merged)', () => {
+  const trigger = buildTriggerDeclaration('issue-raised', {
+    targetId: 'forge-develop',
+    webhookId: 'myproj-issue-raised',
+    webhookProvider: 'github',
+    webhookEvents: ['issues'],
+    webhookSecretEnv: 'MYPROJ_WEBHOOK_SECRET',
+    webhookSources: 'parsoFish/myproj',
+  });
+  expect(trigger?.webhook?.id).toBe('myproj-issue-raised');
+  const flow: FlowDefinition = {
+    id: 'flow-a', name: 'Flow A', version: 1, goal: '', project: 'demo-project', kb: null,
+    costCeilingUsd: 0, origin: 'studio', nodes: [], edges: [],
+    triggers: trigger ? [trigger] : [],
+    path: '/dev/null/flow.yaml',
+  };
+  expect(checkFlowTriggers(flow, new Map<string, AgentDefinition>(), {
+    flowIds: new Set(['flow-a', 'forge-develop']),
+    flowProjectOf: () => 'demo-project',
+  })).toEqual([]);
+});
+
+// companion — the un-widened kinds (flow-complete/merged/cron/agent-complete)
+// must never grow a stray "webhook" key just because WEBHOOK_FAMILY_TRIGGER_
+// KINDS now drives the branch condition instead of a literal `=== 'webhook'`.
+test('companion (zyc finding 1): non-webhook-family kinds still build no "webhook" key at all', () => {
+  expect(buildTriggerDeclaration('flow-complete', { targetId: 'forge-develop' })?.webhook).toBeUndefined();
+  expect(buildTriggerDeclaration('merged', { targetId: 'forge-develop' })?.webhook).toBeUndefined();
+  expect(
+    buildTriggerDeclaration('agent-complete', { targetId: 'forge-develop', agentSlug: 'developer' })?.webhook,
+  ).toBeUndefined();
+});
+
+test('WEBHOOK_FAMILY_TRIGGER_KINDS: webhook, pr-merged and issue-raised are members — the render gate + builder branch condition FlowHeader.tsx and buildTriggerDeclaration share', () => {
+  expect([...WEBHOOK_FAMILY_TRIGGER_KINDS].sort()).toEqual(['issue-raised', 'pr-merged', 'webhook']);
+});
+
+// ---------------------------------------------------------------------------
+// zyc review finding 2 (MINOR, guard-asymmetry) — `isSameTriggerIdentity`
+// must treat `agent` as part of an `agent-complete` row's identity so a
+// SECOND row at the same target with a DIFFERENT source agent is not
+// mistaken for a duplicate of the first.
+//
+// FlowHeader.tsx's add-dedup (~:116) and its target-flow dropdown filter
+// (~:396) each independently compared only `(on, target)` — excluding a
+// valid 2nd agent-complete row for the same target with a different agent,
+// even though the server fires each row independently
+// (orchestrator/flow-trigger.ts's `fireAgentCompleteTriggers` matches
+// per-row by `trigger.agent === completedAgentSlug`).
+// ---------------------------------------------------------------------------
+
+test('RED (zyc finding 2): isSameTriggerIdentity must NOT treat two agent-complete rows with the SAME target but a DIFFERENT agent as duplicates', () => {
+  const existing: FlowTrigger = { on: 'agent-complete', target: { kind: 'flow', ref: 'forge-develop' }, agent: 'developer' };
+  // Precondition: the fixture really is an agent-complete row aimed at the
+  // target this test probes against.
+  expect(existing.on).toBe('agent-complete');
+  expect(existing.target.ref).toBe('forge-develop');
+
+  // Same kind + same target, DIFFERENT agent — a real second trigger, must
+  // NOT be reported as a duplicate. This is the RED assertion.
+  expect(isSameTriggerIdentity(existing, 'agent-complete', 'forge-develop', 'reviewer')).toBe(false);
+});
+
+test('companion (zyc finding 2): two agent-complete rows with the SAME target AND the SAME agent ARE a real duplicate', () => {
+  const existing: FlowTrigger = { on: 'agent-complete', target: { kind: 'flow', ref: 'forge-develop' }, agent: 'developer' };
+  expect(isSameTriggerIdentity(existing, 'agent-complete', 'forge-develop', 'developer')).toBe(true);
+});
+
+test('companion (zyc finding 2): a different target flow is never a duplicate, regardless of agent', () => {
+  const existing: FlowTrigger = { on: 'agent-complete', target: { kind: 'flow', ref: 'forge-develop' }, agent: 'developer' };
+  expect(isSameTriggerIdentity(existing, 'agent-complete', 'forge-reflect', 'developer')).toBe(false);
+});
+
+test('companion (zyc finding 2): every OTHER kind stays (on,target)-only — a differing "agent" argument is never consulted (a second cron/webhook/flow-complete/merged row at the same target IS a real duplicate)', () => {
+  const cron: FlowTrigger = { on: 'cron', target: { kind: 'flow', ref: 'nightly' }, schedule: '0 3 * * *' };
+  expect(isSameTriggerIdentity(cron, 'cron', 'nightly', '')).toBe(true);
+  expect(isSameTriggerIdentity(cron, 'cron', 'nightly', 'anything')).toBe(true);
+
+  const flowComplete: FlowTrigger = { on: 'flow-complete', target: { kind: 'flow', ref: 'forge-develop' } };
+  expect(isSameTriggerIdentity(flowComplete, 'flow-complete', 'forge-develop', '')).toBe(true);
 });
 
 test('isValidCronSchedule: valid croner patterns pass, empty/invalid do not throw and return false', () => {

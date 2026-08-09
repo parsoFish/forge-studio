@@ -381,9 +381,17 @@ export type StartDevelopmentResult = {
  * manifest at forge-develop + threads its cycle_id, then the scheduler
  * claims it. plan-everything-before-kickoff: batch — one request, one
  * result per id (no single HTTP status can represent N outcomes).
+ *
+ * forge-shc WI-1: `costCeilingUsd` is an optional per-run cost-ceiling
+ * override, valid ONLY when `initiativeIds` is a single id (the bridge route
+ * refuses a scalar ceiling against a multi-id batch with a 400 — a single
+ * number can't map onto N manifests unambiguously). Omit it to leave the
+ * initiative's manifest-derived ceiling untouched, exactly as before this
+ * field existed.
  */
-export async function startDevelopment(initiativeIds: string[]): Promise<StartDevelopmentResult> {
-  const r = await bridgePost('/api/develop/start', { initiativeIds });
+export async function startDevelopment(initiativeIds: string[], costCeilingUsd?: number): Promise<StartDevelopmentResult> {
+  const body = costCeilingUsd === undefined ? { initiativeIds } : { initiativeIds, costCeilingUsd };
+  const r = await bridgePost('/api/develop/start', body);
   return {
     ok: r.ok,
     error: r.error,

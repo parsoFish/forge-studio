@@ -40,6 +40,7 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { mintTriggeredInitiative } from '../orchestrator/mint-triggered-initiative.ts';
+import { buildCronFlowRunRequest } from '../orchestrator/test-fixtures/flow-run-request.ts';
 import type { FlowRunRequest } from '../orchestrator/flow-run-requests.ts';
 
 // ---------------------------------------------------------------------------
@@ -153,13 +154,17 @@ before(async () => {
   planFlow(forgeRoot, 'worker-triggered', { project: 'test-project' });
 
   // -- a REAL triggered (minted) run via the real mintTriggeredInitiative --
-  const req: FlowRunRequest = {
+  // forge-76y: built through the fixture builder (mirrors the real
+  // cron-triggers.ts staging shape) rather than a hand-built literal, with an
+  // explicit sourceFlowId override so `run.trigger.source` below stays
+  // 'watcher-triggered' (deriveTriggerFields's cron arm now reads ONLY
+  // sourceFlowId — the fallback that parsed it out of `triggeredBy` is gone).
+  const req: FlowRunRequest = buildCronFlowRunRequest({
     target: { kind: 'flow', ref: 'worker-triggered' },
-    origin: 'cron',
     triggeredBy: 'cron:watcher-triggered',
+    sourceFlowId: 'watcher-triggered',
     payload: { kind: 'cron', schedule: '0 3 * * *', firedAt: new Date().toISOString() },
-    createdAt: new Date().toISOString(),
-  };
+  });
   const mintResult = mintTriggeredInitiative(req, {
     forgeRoot,
     queueRoot: join(forgeRoot, '_queue'),

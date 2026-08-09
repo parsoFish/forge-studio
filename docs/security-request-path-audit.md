@@ -570,7 +570,13 @@ not:
      from config plus an already-pattern-gated id, never client-derived.
    - The `persistManifest*` family in `orchestrator/manifest.ts` — round-trips an
      already-on-disk manifest through `serializeManifest` + `writeFileSync` without
-     revalidating anything.
+     revalidating anything. As of forge-shc (2026-08-09) this family gains
+     `persistManifestCostCeiling`, called from `POST /api/develop/start` on the
+     enqueue-produced pending-queue path (`getPaths(queueRoot).pending` joined with
+     the initiative id) — the identical path `enqueueDevelopRun` just wrote, so it
+     introduces no path surface beyond enqueue's own; it `existsSync`-guards,
+     re-parses, re-serialises with a validated numeric `cost_ceiling_usd`, and never
+     touches a path-shaped field.
    - `orchestrator/scheduler-dispatch.ts`'s `annotateManifestForRetry` — re-parses
      and re-serialises an already-on-disk manifest, mutating only `retry_count` and
      `previous_failure_modes`; no path-shaped field is touched.

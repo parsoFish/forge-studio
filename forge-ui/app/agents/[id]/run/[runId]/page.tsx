@@ -80,6 +80,7 @@ export default function AgentRunPage() {
           materials={detail.materials}
           ceilingUsd={detail.ceilingUsd}
           outputs={detail.outputs}
+          trigger={detail.trigger}
         />
       )}
     </div>

@@ -47,9 +47,19 @@ export type RunViewProps = {
   /** undefined = no ceiling was ever set for this run. */
   ceilingUsd?: number;
   outputs: RunOutput[];
+  /**
+   * Debt-T trigger plumbing: what started this run, mirroring
+   * `FlowRunDetail.tsx`'s own `Run.trigger` provenance. Absent when the run
+   * carries no derivable trigger — NEVER a fabricated default.
+   */
+  trigger?: {
+    kind: string;
+    source: string;
+    scope: string | null;
+  };
 };
 
-export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputs }: RunViewProps) {
+export function RunView({ runId, found, state, costUsd, lines, materials, ceilingUsd, outputs, trigger }: RunViewProps) {
   return (
     <div
       data-page="agent-run"
@@ -63,6 +73,8 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
         <RunNotFound runId={runId} />
       ) : (
         <>
+          <RunTrigger trigger={trigger} />
+
           <section data-section="run-log">
             <h3 style={{ margin: '0 0 8px', fontSize: 13 }}>Log</h3>
             <RunLog lines={lines} />
@@ -74,6 +86,25 @@ export function RunView({ runId, found, state, costUsd, lines, materials, ceilin
         </>
       )}
     </div>
+  );
+}
+
+/** D9/`docs/forge-ui-dom-and-harness.md`: the reserved trigger-provenance
+ *  vocabulary, verbatim — mirrors `FlowRunDetail.tsx`'s own `RunTrigger`.
+ *  Returns null when the run carries no derivable trigger — never a
+ *  placeholder block. */
+function RunTrigger({ trigger }: { trigger?: { kind: string; source: string; scope: string | null } }) {
+  if (!trigger) return null;
+  return (
+    <section
+      data-section="run-trigger"
+      data-trigger-kind={trigger.kind}
+      data-trigger-source={trigger.source}
+      data-trigger-scope={trigger.scope ?? ''}
+      style={{ fontSize: 12, color: 'var(--dim)' }}
+    >
+      Triggered by <strong>{trigger.kind}</strong> ({trigger.source}){trigger.scope ? ` · scope ${trigger.scope}` : ''}
+    </section>
   );
 }
 

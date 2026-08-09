@@ -560,6 +560,36 @@ export function persistManifestCycleId(manifestPath: string, cycleId: string): v
 }
 
 /**
+ * forge-shc WI-1: persist an operator-supplied per-run cost ceiling onto the
+ * manifest's frontmatter (`cost_ceiling_usd`) at develop-start time, read
+ * back by `resolveCostCeilingOverride` (orchestrator/cycle.ts) ahead of the
+ * `cost_budget_usd` + `DERIVED_CEILING_MARGIN_USD` derived fallback. Unlike
+ * `persistManifestCycleId` this is NOT one-shot: a later develop/start with a
+ * different ceiling overwrites the prior one (the operator's latest explicit
+ * choice wins). The caller is responsible for validating `costCeilingUsd`
+ * (finite, > 0, <= the route's bound) BEFORE calling — this function never
+ * fabricates or clamps a value, it only writes what it is given.
+ *
+ * shc review finding 2 (MINOR, mutation-not-applied) fix: NEVER THROWS (still
+ * best-effort — a manifest write failure must not fail the enqueue), but now
+ * returns `true`/`false` rather than `void` so the caller can fold the real
+ * outcome into its own result instead of reporting success unconditionally.
+ * A bare `catch {}` that swallows the outcome entirely is exactly the defect
+ * this return value closes.
+ */
+export function persistManifestCostCeiling(manifestPath: string, costCeilingUsd: number): boolean {
+  try {
+    if (!existsSync(manifestPath)) return false;
+    const m = parseManifest(readFileSync(manifestPath, 'utf8'));
+    writeFileSync(manifestPath, serializeManifest({ ...m, cost_ceiling_usd: costCeilingUsd }));
+    return true;
+  } catch {
+    /* best-effort — a manifest write failure must not fail the enqueue */
+    return false;
+  }
+}
+
+/**
  * R4-05-F2: persist the initiative→specs back-reference onto the manifest's
  * frontmatter once the plan agent's decomposition completes — the
  * work_item_ids it produced. Unlike `persistManifestCycleId` this is NOT

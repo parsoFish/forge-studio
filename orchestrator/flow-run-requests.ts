@@ -84,10 +84,11 @@ export type FlowRunRequest = {
    * change to `triggeredBy`'s format can never silently corrupt `source`.
    * webhook has NO fallback when this is absent (`findWebhookTrigger`
    * already resolves it at every real call site; a hook id is never a
-   * substitute definition id — round-2 ruling). cron falls back to
-   * recovering it from `triggeredBy`'s `cron:<flowId>` shape when absent
-   * (a genuinely correct value, unlike webhook's hook-id shape). Absent for
-   * `agent-complete` — its declaring definition is `sourceAgent`.
+   * substitute definition id — round-2 ruling). cron has NO fallback either
+   * (forge-76y, T1 ruling): `cron-triggers.ts`'s `makeFireFn` always threads
+   * this field, so the `triggeredBy`-parsing fallback arm that used to exist
+   * was deleted — symmetric with webhook. Absent for `agent-complete` — its
+   * declaring definition is `sourceAgent`.
    */
   sourceFlowId?: string;
   /**

@@ -88,13 +88,22 @@ inventory rather than one shared page-level contract:
   `validateFlow`'s `fanout-capability` check lints), disabled + greyed
   otherwise, and binds the node `fanOut` to the agent's declared
   `fanout.drivingArtifact` rather than a hardcoded artifact.
-  Triggers (R2-04-F4, `FlowHeader.tsx`, under Advanced): a kind selector
-  `[data-field="trigger-kind"]` offers exactly the four SHIPPED kinds
-  (`flow-complete | merged | cron | webhook` — a hand-kept client mirror of
-  orchestrator/flow-trigger.ts's `SHIPPED_TRIGGER_KIND_IDS`, the SSOT;
-  registry-reserved kinds are never offered) and a target-flow select
-  `[data-field="trigger-target"]` shared by all four (every kind fires a
-  flow; agent targets are schema-ready but not authorable, R4-09). `cron`
+  Triggers (R2-04-F4, extended forge-zyc 2026-08-09, `FlowHeader.tsx`, under
+  Advanced): a kind selector `[data-field="trigger-kind"]` offers all seven
+  SHIPPED kinds (`flow-complete | agent-complete | merged | pr-merged |
+  issue-raised | cron | webhook` — a client mirror of orchestrator/flow-trigger.ts's
+  `SHIPPED_TRIGGER_KIND_IDS`, the SSOT, now guarded by a both-directions parity
+  test so the mirror cannot silently drift; registry-reserved kinds `manual`/`feed`
+  are never offered) and a target-flow select `[data-field="trigger-target"]`
+  shared by all (every kind fires a flow; agent targets are schema-ready but not
+  authorable, R4-09). `agent-complete` additionally renders an agent-slug input
+  threaded into the declaration's `agent:` field (the server's `trigger-agent-complete`
+  check requires it); the **webhook family** (`webhook | pr-merged | issue-raised`)
+  renders the same webhook-config inputs (`[data-field="webhook-id"|"webhook-provider"|
+  "webhook-events"|"webhook-secret-env"|"webhook-sources"]`) with per-kind-constrained
+  provider/event option sets, so an authored pr-merged/issue-raised trigger carries a
+  real `webhook.id` the hook receiver can route to (previously these were selectable
+  but produced a bare, permanently-dead declaration). `cron`
   additionally renders `[data-field="trigger-schedule"][data-schedule-invalid]`
   (client-side croner syntax check — UX only, `orchestrator/studio/validate.ts`'s
   `trigger-cron` check is authoritative on save) and
@@ -460,7 +469,16 @@ inventory rather than one shared page-level contract:
   a `data-page-ready` flip). `found:false` (no `_logs/<runId>` directory
   exists — never dispatched, the R6-04 D22 404 case) renders ONLY
   `[data-component="run-not-found"]`, suppressing every other section even if
-  the caller supplied non-empty data. `found:true` renders four sections:
+  the caller supplied non-empty data. `found:true` renders (forge-pet, 2026-08-09)
+  a reserved `[data-section="run-trigger"]` provenance section
+  (`data-trigger-kind`/`data-trigger-source`/`data-trigger-scope`, `scope ?? ''`)
+  when the run carries a `trigger`, mirroring the flow run-detail vocabulary —
+  **omitted entirely otherwise, and honestly absent on every real run today**:
+  the client resolver passes a `trigger` through only when the server body carries
+  one (never fabricated), and no standalone-dispatch path writes trigger origin into
+  a run yet (the R4-09 agent-target dispatch still throws in production), so this
+  attaches the vocabulary ahead of a producer exactly like `data-outputs-count`'s
+  honest `0`. Then the four data sections:
   `[data-section="run-log"]` wrapping the shared `RunLog` component
   (`components/studio/RunLog.tsx`, also reusable for a future per-node flow
   log) — `[data-component="run-log"]` with one
@@ -592,7 +610,14 @@ inventory rather than one shared page-level contract:
   (`[data-section="initiative-blocked-until-planned"]`) that hides
   `[data-action="start-development"]` until the card flips to `planned`;
   dispatching a plan run surfaces `[data-action="open-plan-run"]` linking to
-  the `forge-architect` flow monitor. Every node's card carries
+  the `forge-architect` flow monitor. The roadmap header carries an optional
+  per-kickoff cost-ceiling input (forge-shc, 2026-08-09) — `POST /api/develop/start`
+  accepts `costCeilingUsd` **only** for a single-initiative Start and stamps it onto
+  that initiative's manifest `cost_ceiling_usd`; the field is **opt-in gated**
+  (untouched → no `costCeilingUsd` is sent → the manifest's own budget-derived
+  ceiling stands, never silently overwritten by the run-level default), and a stamp
+  that fails to land is surfaced in the per-item result rather than reported as a
+  clean enqueue. Every node's card carries
   `[data-link="demo-builder"]` (R4-07-F3) — switches to the editor tab's Demo
   Timeline (+ inline builder panel), tying demo upkeep to initiative state.
   A brand-new project renders
