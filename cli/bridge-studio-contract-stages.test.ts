@@ -25,6 +25,7 @@ import { tmpdir } from 'node:os';
 import { startBridge } from './ui-bridge.ts';
 import { handleStudioRoutes } from './bridge-studio.ts';
 import type { StudioContext } from './bridge-studio.ts';
+import { deriveContractStages, type ContractStageRow, type DeriveContractStagesResult } from './contract-stages.ts';
 
 let forgeRoot: string;
 let url: string;
@@ -131,4 +132,92 @@ test('R4-17 AT-6: a project with a malformed .forge/project.json → deriveContr
   const body = (await res.json()) as { error?: string; ok?: boolean };
   assert.ok(typeof body.error === 'string' && body.error.length > 0, `the error response must name the cause, got: ${JSON.stringify(body)}`);
   assert.notEqual(body.ok, true);
+});
+
+// ---------------------------------------------------------------------------
+// AT-F1-4 (server half) — derived-not-duplicated / cannot-drift (R4-12-F1)
+// ---------------------------------------------------------------------------
+
+/**
+ * GREEN-ON-ARRIVAL REGRESSION LOCK (immutable-gates: this proves a killed
+ * impl, it does not merely restate existing coverage). `deriveContractStages`
+ * ALREADY EXISTS and already re-reads its artifacts on every call — this test
+ * is red-before-green only in the trivial "doesn't exist as a file" sense;
+ * against the real implementation it is green on arrival, and stays the
+ * tripwire for two DISTINCT wrong shapes the project-detail page
+ * (R4-12-F1) must never regress to:
+ *
+ *   (a) a SERVER-side cached/memoized `deriveContractStages` result (e.g. the
+ *       route handler in cli/bridge-studio.ts memoizing by projectId and
+ *       serving the first computed rows on every subsequent request) — this
+ *       test's second call, after mutating the on-disk fixture, would still
+ *       observe the FIRST call's stale `requiresEnv`/`bytes` and fail;
+ *   (b) a CLIENT-side hand-parsed second copy of contract facts (forge-ui
+ *       re-deriving secrets/instructions status itself from a raw project
+ *       payload instead of trusting this server-derived `ContractStageRow[]`
+ *       verbatim) — a second parser is exactly the shape that can silently
+ *       drift from this one; this test pins that the ONE real parser
+ *       (`deriveContractStages`) is safe to point the client at, by proving
+ *       it has no hidden cache and genuinely re-derives from the artifacts
+ *       every time, so there is no correctness reason to ever justify (b).
+ *
+ * Fixture/tmp-dir pattern reused from this file's own `before()` above
+ * (mkdirSync + writeFileSync directly under the shared `forgeRoot` temp
+ * dir, no separate mkdtempSync per test).
+ */
+test('R4-12 AT-F1-4 (server half, GREEN-ON-ARRIVAL REGRESSION LOCK): deriveContractStages re-derives the secrets/instructions rows from the on-disk artifacts on every call — mutating .forge/project.json requiresEnv and AGENTS.md bytes between two calls changes the SECOND result, proving there is no server-side cache/duplicate that could drift from the artifacts (kills: a memoized/cached deriveContractStages result, or a client-side hand-parsed second copy of these facts)', () => {
+  const projectId = 'driftlockproj';
+  const projectsRoot = join(forgeRoot, 'projects');
+  const dir = join(projectsRoot, projectId);
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(
+    join(dir, '.forge', 'project.json'),
+    JSON.stringify({
+      testProcess: {
+        local: { cmd: ['npm', 'test'] },
+        acceptance: { match: 'acceptance', required: true, requiresEnv: ['FOO'] },
+      },
+    }),
+    'utf8',
+  );
+  const agentsMdPath = join(dir, 'AGENTS.md');
+  const initialBody = '# Instructions\n\nInitial fixture content, sentinel-3301.\n';
+  writeFileSync(agentsMdPath, initialBody, 'utf8');
+
+  const firstResult: DeriveContractStagesResult = deriveContractStages({ forgeRoot, projectsRoot, projectId });
+  assert.equal(firstResult.ok, true, `expected ok:true before mutation, got: ${JSON.stringify(firstResult)}`);
+  const firstRows = (firstResult as { ok: true; rows: ContractStageRow[] }).rows;
+  const secretsBefore = firstRows.find((r) => r.stage === 'secrets')!;
+  const instructionsBefore = firstRows.find((r) => r.stage === 'instructions')!;
+  assert.deepEqual(secretsBefore.detail, ['FOO'], 'secrets row detail must be exactly the declared requiresEnv NAMES, before mutation');
+  assert.equal(instructionsBefore.bytes, Buffer.byteLength(initialBody, 'utf8'), 'instructions row bytes must be the real AGENTS.md byte length, before mutation');
+
+  // MUTATE the fixture: add a new required secret NAME and grow AGENTS.md.
+  writeFileSync(
+    join(dir, '.forge', 'project.json'),
+    JSON.stringify({
+      testProcess: {
+        local: { cmd: ['npm', 'test'] },
+        acceptance: { match: 'acceptance', required: true, requiresEnv: ['FOO', 'NEW_SECRET'] },
+      },
+    }),
+    'utf8',
+  );
+  const grownBody = initialBody + 'Appended content to grow the byte length, sentinel-8842.\n';
+  writeFileSync(agentsMdPath, grownBody, 'utf8');
+
+  const secondResult: DeriveContractStagesResult = deriveContractStages({ forgeRoot, projectsRoot, projectId });
+  assert.equal(secondResult.ok, true, `expected ok:true after mutation, got: ${JSON.stringify(secondResult)}`);
+  const secondRows = (secondResult as { ok: true; rows: ContractStageRow[] }).rows;
+  const secretsAfter = secondRows.find((r) => r.stage === 'secrets')!;
+  const instructionsAfter = secondRows.find((r) => r.stage === 'instructions')!;
+
+  assert.ok(
+    secretsAfter.detail.includes('NEW_SECRET'),
+    `secrets row detail must CONTAIN the newly-declared "NEW_SECRET" after re-deriving, got: ${JSON.stringify(secretsAfter.detail)} — a cached/stale result would still show only ["FOO"]`,
+  );
+  assert.ok(
+    (instructionsAfter.bytes ?? 0) > (instructionsBefore.bytes ?? 0),
+    `instructions row bytes must have INCREASED after AGENTS.md grew, got before=${instructionsBefore.bytes} after=${instructionsAfter.bytes} — a cached/stale result would still show the original byte count`,
+  );
 });

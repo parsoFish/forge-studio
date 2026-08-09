@@ -10,7 +10,7 @@
  * delegates to, extracted so it's unit-testable without mounting the
  * component.
  */
-import { test, expect } from 'vitest';
+import { test, expect, vi, afterEach } from 'vitest';
 
 import {
   parseCapability,
@@ -20,8 +20,38 @@ import {
   parseMaterials,
   parseInstructionsDraftResponse,
   parseRun,
+  // AT-F1-1 (R4-12-F1): does NOT exist yet — the RED trigger for the new
+  // wire-contract test at the bottom of this file. A missing named export of
+  // an existing module resolves to `undefined` under this repo's vitest
+  // module runner (not a collection-time throw, unlike a whole missing
+  // module), so the existing pure-function tests above stay green and only
+  // the AT-F1-1 test goes red, on its explicit `typeof … === 'function'`
+  // guard.
+  fetchContractStages,
 } from './studio-client';
 import type { Run } from './studio-client';
+// AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
+// into is session-client.ts's EXPORTED `ContractStageRow` (:248-258) — the
+// same type the session-shell's contract-buildout artifact already uses. The
+// test types its expectation as `ContractStageRow[]` so a third client-side
+// mirror (a new type, or a hand-rolled row parser) diverges and fails.
+import type { ContractStageRow } from './session-client';
+
+// AT-F1-1 fetch harness — matches lib/agent-ledger.test.ts verbatim.
+// `fetchContractStages` calls `resolveBridgeUrl()` (./bridge-client) then
+// `fetch()`; under this repo's `environment: 'node'` vitest config the REAL
+// `resolveBridgeUrl` returns '' (its `typeof window` SSR guard trips with no
+// `window` global), short-circuiting before `fetch` is ever reached — so the
+// fetch call is only exercisable with `resolveBridgeUrl` replaced by a fixed
+// base. `vi.mock` is hoisted above every import by vitest, and matches by
+// RESOLVED file path, so `'./bridge-client.ts'` here intercepts
+// studio-client.ts's extensionless `from './bridge-client'` import. The
+// factory returns ONLY `resolveBridgeUrl` (all studio-client.ts uses of
+// bridge-client), and `standing-triggers.ts` imports nothing from
+// bridge-client, so the module graph still loads for the pure tests above.
+vi.mock('./bridge-client.ts', () => ({
+  resolveBridgeUrl: vi.fn(async () => 'http://bridge.test'),
+}));
 
 test('parseRunInputs: one key:value per line → inputs map; blanks ignored', () => {
   expect(parseRunInputs('repo: ./projects/foo\nnorthStar: ship X\n\n')).toEqual({
@@ -415,4 +445,137 @@ test('parseRun: FIELD-PARITY PIN — every field declared on the client Run type
     expect(parsed[key], `field "${key}" was dropped (undefined) by parseRun`).not.toBeUndefined();
     expect(parsed[key], `field "${key}" was mutated, not carried through verbatim`).toEqual(raw[key]);
   }
+});
+
+// ---------------------------------------------------------------------------
+// AT-F1-1 (R4-12-F1, rule 38 — wire-contract + caller-count) —
+// `fetchContractStages(id)`: the FIRST client function to fetch
+// `GET /api/studio/projects/:id/contract-stages`.
+//
+// KILLS THE ZERO-CALLER GAP: no client function fetches this route today.
+// studio-client.ts already fetches a project's projects list / preflight /
+// repo-status, but NOTHING hits `contract-stages` — so R4-12-F1's project-page
+// "contract buildout" checklist ([data-component="contract-buildout"], the
+// [data-checklist-row][data-checklist-status]/[data-detail-line] vocabulary in
+// docs/forge-ui-dom-and-harness.md:794-821) has no data source until this
+// lands. The route + its 200 body already exist and are server-tested
+// (cli/bridge-studio.ts's `contractStagesMatch` branch, built from
+// cli/contract-stages.ts's `deriveContractStages`); the missing seam is the
+// CLIENT fetch. This test pins that seam BEFORE it is written.
+//
+// REUSE, not a third mirror: the rows parse into session-client.ts's exported
+// `ContractStageRow` (imported above) via its own `parseContractStageRow`
+// (session-client.ts:401-414) — the SAME parser the session-shell's
+// contract-buildout artifact already runs. The return is typed
+// `ContractStageRow[]`, and the parsed rows must equal the captured server
+// rows verbatim, so a new client-side row type, or a hand-rolled row parser
+// inside studio-client.ts, diverges here and fails.
+//
+// CAPTURED_CONTRACT_STAGES is the REAL 200-body SHAPE of the route
+// (`{ ok, project, stages, sourcesScanned }`, cli/bridge-studio.ts's
+// `sendJson(res, 200, { ok:true, project:id, stages:result.rows,
+// sourcesScanned:result.sourcesScanned })`), with rows in the canonical
+// `deriveContractStages` order (contract, instructions, secrets, demo,
+// roadmap — cli/contract-stages.ts:305-311) and each row's real per-field
+// shape:
+//   - secrets.detail is a `string[]` of env-var NAMES ONLY (D3, load-bearing:
+//     cli/contract-stages.ts:165-169 — `[...requiresEnv]`, never a value).
+//     `GITHUB_TOKEN` here is a fake IDENTIFIER used as a name; this is a
+//     public repo, so it is never a real secret value.
+//   - instructions.bytes is a real `number` (the byte length read off disk,
+//     cli/contract-stages.ts:146-156), while the config/lock-JSON-backed
+//     stages (contract, secrets, demo) carry `bytes: null`.
+//
+// Fetch harness matches lib/agent-ledger.test.ts: `resolveBridgeUrl` is
+// vi.mock'd to a fixed base (above the imports), `fetch` is stubbed for this
+// one call, and the SPY is asserted for EXACTLY ONE GET at the exact URL
+// (rule 38: caller-count is load-bearing — a project-page render must not
+// N+1 this route, and a wrong/hand-rolled path must not silently 404 the
+// checklist into emptiness).
+// ---------------------------------------------------------------------------
+
+const BRIDGE_BASE = 'http://bridge.test';
+
+const CAPTURED_CONTRACT_STAGES: {
+  ok: true;
+  project: string;
+  stages: ContractStageRow[];
+  sourcesScanned: string[];
+} = {
+  ok: true,
+  project: 'mdtoc',
+  stages: [
+    { stage: 'contract', status: 'present', source: '.forge/project.json', detail: ['gate command: npm test'], bytes: null },
+    { stage: 'instructions', status: 'present', source: 'AGENTS.md', detail: ['source file: AGENTS.md'], bytes: 1487 },
+    // D3 (security): secrets.detail is env-var NAMES ONLY — never a value.
+    // GITHUB_TOKEN is a fake identifier standing in for a declared name.
+    { stage: 'secrets', status: 'present', source: '.forge/project.json', detail: ['GITHUB_TOKEN'], bytes: null },
+    { stage: 'demo', status: 'present', source: '.forge/project.json + .forge/demo/demo.lock.json', detail: ['step: capture', 'step: verify', 'step: present'], bytes: null },
+    { stage: 'roadmap', status: 'present', source: 'roadmap.md', detail: ['brain profile: present (brain/projects/mdtoc/profile.md)'], bytes: 20416 },
+  ],
+  sourcesScanned: [
+    '.forge/project.json (contract: testProcess.local.cmd) + .forge/contract-compliance-report.json',
+    'AGENTS.md | CLAUDE.md (instructions)',
+    '.forge/project.json (secrets: testProcess.acceptance.requiresEnv — NAMES ONLY, never a value)',
+    '.forge/project.json (demoProcess) + .forge/demo/demo.lock.json (built)',
+    'roadmap.md + brain/projects/mdtoc/profile.md (C4 divergence visibility, not a verdict)',
+  ],
+};
+
+const CONTRACT_STAGE_ORDER = ['contract', 'instructions', 'secrets', 'demo', 'roadmap'];
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/projects/:id/contract-stages and parses the real 5-row payload into ContractStageRow[] in canonical order (reuses the session-client row type + parser — no third mirror)', async () => {
+  // KILL 1 (zero-caller gap): no client function fetches this route today.
+  // Until `fetchContractStages` is exported this binding is `undefined` -> RED
+  // here, naming exactly the gap this AT closes.
+  expect(
+    typeof fetchContractStages,
+    'fetchContractStages is not exported from ./studio-client yet — the zero-caller gap this AT closes',
+  ).toBe('function');
+
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => CAPTURED_CONTRACT_STAGES,
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const rows = await fetchContractStages('mdtoc');
+
+  // --- caller-count + wire-contract (rule 38) ---
+  // EXACTLY ONE GET — kills an N+1 render and any double-fetch.
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  // The exact URL — kills a hand-rolled / wrong path (e.g. dropping the
+  // /studio/ segment, or a `?project=` query shape) that would 404 silently.
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/projects/mdtoc/contract-stages`);
+  // A read — a bare GET (no init, or an explicit method:'GET'); never POST/PUT.
+  const init = fetchSpy.mock.calls[0][1] as { method?: string } | undefined;
+  expect(init?.method ?? 'GET').toBe('GET');
+
+  // --- parses into ContractStageRow[] of length 5, canonical order ---
+  expect(Array.isArray(rows)).toBe(true);
+  expect(rows).toHaveLength(5);
+  expect(rows.map((r) => r.stage)).toEqual(CONTRACT_STAGE_ORDER);
+
+  // secrets row: detail is a string[] of env NAMES only (D3) — never a value.
+  const secrets = rows[2];
+  expect(secrets.stage).toBe('secrets');
+  expect(Array.isArray(secrets.detail)).toBe(true);
+  expect(secrets.detail.every((d) => typeof d === 'string')).toBe(true);
+  expect(secrets.detail).toEqual(['GITHUB_TOKEN']);
+
+  // instructions row: bytes is a real number (byte length read off disk).
+  const instructions = rows[1];
+  expect(instructions.stage).toBe('instructions');
+  expect(typeof instructions.bytes).toBe('number');
+  expect(instructions.bytes).toBe(1487);
+
+  // REUSE proof: the parsed rows carry the real ContractStageRow shape
+  // verbatim (parseContractStageRow round-trips stage/status/source/detail/
+  // bytes). A re-derived or renamed client mirror would diverge here.
+  expect(rows).toEqual(CAPTURED_CONTRACT_STAGES.stages);
 });
