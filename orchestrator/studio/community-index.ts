@@ -188,17 +188,44 @@ export function vendoredPackageDir(forgeRoot: string, kind: 'skill' | 'hook', id
 
 /** Every file under a vendored package, sorted by relative POSIX path.
  *  Absent package ⇒ [], never a throw (a non-vendored id is an ordinary,
- *  expected shape — vendored-ness is exactly what this distinguishes). */
+ *  expected shape — vendored-ness is exactly what this distinguishes).
+ *
+ *  LEAF GUARD (SEC-05 q80 GAP 1) — every leaf is read through the shared
+ *  realpath containment guard, LEAF INCLUDED, the SAME twin treatment the META
+ *  readers (readVendoredSkillMeta/readVendoredHookMeta) already get.
+ *  `vendoredPackageDir` realpath-checks only the package DIRECTORY, never the
+ *  leaves inside it, so a HARDLINKED leaf (SEC-04 escape-shape 5: a real,
+ *  non-symlink dirent — `isFile()` true, `nlink > 1` — sharing an inode with an
+ *  outside file, which `realpathSync` is structurally blind to) would otherwise
+ *  read the shared inode's bytes straight into this served `files` payload
+ *  (surfaced by GET /api/studio/community/:kind/:id). `guardedReadFile` walks
+ *  `<vendored base>/<id>/<...relPath>` per segment (identity walk + `nlink === 1`
+ *  leaf check): a hardlinked/symlinked leaf yields null → throw → the caller's
+ *  try/catch surfaces a refusal, never the target bytes. (A symlinked leaf is
+ *  additionally skipped by the `withFileTypes` walk itself — `isFile()` is false
+ *  for a symlink dirent — so it never even reaches this read.) `assertSkillSlug`
+ *  is already enforced upstream by `vendoredPackageDir`, satisfying the guard's
+ *  slug CONTRACT (the guard verifies path containment, never slug shape). */
 export function readVendoredPackage(forgeRoot: string, kind: 'skill' | 'hook', id: string): PackageFile[] {
   const dir = vendoredPackageDir(forgeRoot, kind, id);
   if (!existsSync(dir)) return [];
+  const base = vendoredBaseDir(forgeRoot, kind);
   const out: PackageFile[] = [];
   const walk = (absDir: string, relDir: string): void => {
     for (const entry of readdirSync(absDir, { withFileTypes: true })) {
       const absPath = join(absDir, entry.name);
       const relPath = relDir ? `${relDir}/${entry.name}` : entry.name;
-      if (entry.isDirectory()) walk(absPath, relPath);
-      else if (entry.isFile()) out.push({ path: relPath, body: readFileSync(absPath, 'utf8') });
+      if (entry.isDirectory()) {
+        walk(absPath, relPath);
+      } else if (entry.isFile()) {
+        const body = guardedReadFile(base, [id, ...relPath.split('/')]);
+        if (body === null) {
+          throw new Error(
+            `readVendoredPackage: leaf "${relPath}" of vendored ${kind} "${id}" is missing or fails realpath containment (a symlinked/hardlinked leaf never surfaces its bytes) — refusing to read`,
+          );
+        }
+        out.push({ path: relPath, body });
+      }
     }
   };
   walk(dir, '');

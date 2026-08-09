@@ -249,3 +249,60 @@ test('DUPLICATE TARGET: two entries with the SAME path in one stage → refused 
     rmSync(stagingRoot, { recursive: true, force: true });
   }
 });
+
+// =============================================================================
+// CONTROL-CHAR / NUL entry paths (SEC-05 q80 extension — GAP 2 hardening). An
+// entry.path segment carrying ANY C0 control char (0x00-0x1f) must be REFUSED by
+// the module's OWN typed error (SkillStagingError), with ZERO side effects.
+//
+// Before the isSafeSegment hardening, `isSafeSegment` rejected only '/', '\\',
+// sep, '.', '..', and the empty string — a control char slipped straight
+// through. Because the route mints a FRESH sourceId, resolveGuardedPath's walk
+// breaks into create-mode at that not-yet-existing sourceId and reassembles the
+// (unchecked) leaf tail literally, returning {ok:true} for a control-char path
+// (proven directly in studio-path-guard.test.ts's control-char unit). The two
+// downstream failure modes this closes:
+//   - NUL (0x00): stageSkillPackage's Phase-2 `writeFileSync` throws a RAW,
+//     UNTYPED OS TypeError ("path must be ... without null bytes") — NOT the
+//     module's SkillStagingError — and that OS message even LEAKS an absolute
+//     filesystem path (violating this module's "names no absolute path" rule).
+//   - other C0 controls (0x01/0x09/0x0a/0x1f): no throw at all — a
+//     control-char-NAMED file is SILENTLY materialised on disk.
+// Rejecting the segment in isSafeSegment is strictly MORE restrictive (no legit
+// slug or fixed literal carries a control char), so the whole call fails closed
+// in Phase 1 before any mkdir/write. RED today (TypeError for NUL, silent write
+// for the rest); GREEN once isSafeSegment rejects the 0x00-0x1f range.
+// =============================================================================
+
+test('CONTROL-CHAR / NUL: an entry.path segment carrying any C0 control char (0x00 NUL / 0x01 / 0x09 / 0x0a / 0x1f) is REFUSED with the module\'s OWN SkillStagingError and NOTHING is written — not a raw OS TypeError (NUL) and not a silent control-char-named file (others)', async () => {
+  const { stageSkillPackage, SkillStagingError } = await loadStaging();
+
+  // Constructed via char codes so the test SOURCE carries no raw control bytes.
+  const cases: ReadonlyArray<[string, number]> = [
+    ['NUL(0x00)', 0], ['SOH(0x01)', 1], ['TAB(0x09)', 9], ['LF(0x0a)', 10], ['US(0x1f)', 31],
+  ];
+
+  for (const [label, code] of cases) {
+    const evilPath = `a${String.fromCharCode(code)}b`;
+    const stagingRoot = freshStagingRoot('ctrlchar');
+    try {
+      assert.throws(
+        () => stageSkillPackage(stagingRoot, SOURCE_ID, [{ path: evilPath, contentBase64: b64('ATTACK') }]),
+        // Predicate (not the class shorthand) so the discriminator is the ERROR
+        // TYPE: today NUL throws a TypeError (fails this predicate → RED) and the
+        // other controls throw nothing at all (assert.throws → RED). Only the
+        // module's own typed error satisfies this.
+        (err: unknown) => err instanceof SkillStagingError,
+        `a control-char (${label}) entry.path must be refused with the module's OWN SkillStagingError — never a raw OS TypeError, never a silent write`,
+      );
+      // ARTIFACT: zero side effects — no <sourceId>/ dir, no control-char file.
+      assert.equal(
+        existsSync(join(stagingRoot, SOURCE_ID)),
+        false,
+        `no <sourceId>/ dir may be created for a refused control-char (${label}) stage`,
+      );
+    } finally {
+      rmSync(stagingRoot, { recursive: true, force: true });
+    }
+  }
+});

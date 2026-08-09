@@ -50,7 +50,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, symlinkSync, linkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -488,7 +488,7 @@ describe('installCommunityHookPackage', () => {
 // be satisfied by any implementation that still lets a byte cross the boundary.
 // ===========================================================================
 
-import { communityItem, listCommunityIndex } from './community-index.ts';
+import { communityItem, listCommunityIndex, readVendoredPackage } from './community-index.ts';
 
 /** Recursively true iff any file anywhere under `dir` contains `needle`. */
 function anyFileContains(dir: string, needle: string): boolean {
@@ -683,5 +683,107 @@ describe('AT-q80-7 (SEC-05 q80 leaf): community-index vendored leaf reads follow
 
     const listed = JSON.stringify(listCommunityIndex(root));
     assert.ok(!listed.includes(secretMarker), 'the symlinked SKILL.md target bytes must never surface in the community list route either');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AT-q80-8 (SEC-05 q80 extension — GAP 1): readVendoredPackage's `files` payload
+// leaves follow no hardlink/symlink.
+//
+// The consistency gap: the q80 fix routed the META leaf reads
+// (readVendoredSkillMeta/readVendoredHookMeta — name/description) through the
+// shared realpath guard, but readVendoredPackage — which reads the LARGER
+// `files` payload surfaced via GET /api/studio/community/:kind/:id (see
+// cli/bridge-studio-community.ts: `files: readVendoredPackage(...)`) — still
+// read every leaf by name with a raw `readFileSync(absPath)` and NO leaf
+// identity/hardlink check. `vendoredPackageDir` realpath-checks only the package
+// DIRECTORY, never the leaves inside it.
+//
+// The genuine deterministic vector here is a HARDLINKED leaf (SEC-04
+// escape-shape 5): `readdirSync(dir, {withFileTypes:true})` reports a hardlink
+// as `isFile() === true` (it is a real, non-symlink directory entry sharing an
+// inode with the outside file), so the raw walk reads the shared inode's bytes
+// straight into the `files` payload. `realpathSync` is structurally blind to it
+// (nothing to resolve); only `guardedReadFile`'s `nlink === 1` leaf check
+// catches it. A SYMLINKED leaf is, by contrast, already skipped by the same
+// walk (a symlink dirent reports `isFile() === false`), so it never surfaces
+// today either — the symlink sub-case below is a defense-in-depth regression pin
+// that must STAY contained after the fix, not the RED gate.
+//
+// KILLS: a fixed-directory-only guard that raw-reads each leaf by name. The fix
+// routes each leaf through guardedReadFile(vendoredBaseDir(root,kind),
+// [id, ...relPath.split('/')]) — a hardlinked/symlinked leaf yields null → throw
+// → the caller (bridge route try/catch, or installCommunityHookPackage) surfaces
+// a refusal, never the target bytes. Assertion is content-based + fix-agnostic
+// (a refusal-throw is acceptable; the ONLY invariant is the secret marker must
+// never appear in any returned payload), so it is acceptance, not
+// characterization: RED now (hardlink bytes surface) and GREEN only when the
+// leaf read refuses.
+// ---------------------------------------------------------------------------
+
+describe('AT-q80-8 (SEC-05 q80 GAP 1): readVendoredPackage `files` leaves follow no hardlink/symlink', () => {
+  /** Serialize the files payload, treating a refusal-throw as an acceptable
+   *  "no bytes surfaced" outcome — the invariant is byte-containment, not a
+   *  particular return-vs-throw shape (fix-agnostic). */
+  function payloadSerialized(root: string, kind: 'skill' | 'hook', id: string): string {
+    try {
+      return JSON.stringify(readVendoredPackage(root, kind, id));
+    } catch {
+      return ''; // a refusal never surfaces the target bytes — acceptable
+    }
+  }
+
+  it('HARDLINK leaf (RED gate) — a vendored hook script HARDLINKED to an external secret NEVER surfaces its bytes in readVendoredPackage\'s files payload', () => {
+    const root = makeForgeRoot('community-index-q80-8-hardlink-');
+    const externalDir = makeForgeRoot('community-index-OUTSIDE-q80-8-hardlink-');
+    const secretMarker = 'HARDLINKED_LEAF_SECRET_q80_8_never_surface';
+    const secretFile = join(externalDir, 'secret');
+    writeFileSync(secretFile, `outside body ${secretMarker}\n`, 'utf8');
+
+    // A genuinely real, on-disk vendored package DIR (passes vendoredPackageDir's
+    // dir realpath check) with a real hook.yaml — only the scripts/run.sh LEAF is
+    // a HARDLINK to the external secret (a real, non-symlink dirent: isFile()
+    // true, nlink 2). Planted directly on disk, not through the code under test.
+    vendorHookPackage(root, 'hardlink-leaf-hook', '#!/usr/bin/env bash\nexit 0\n');
+    const runSh = join(root, 'studio', 'community', 'hooks', 'hardlink-leaf-hook', 'scripts', 'run.sh');
+    rmSync(runSh, { force: true });
+    linkSync(secretFile, runSh); // hardlink the leaf onto the outside inode
+
+    // Arrange-step self-check: the leaf must genuinely be a shared-inode hardlink
+    // (else the containment assertion below passes vacuously).
+    assert.equal(readFileSync(runSh, 'utf8').includes(secretMarker), true, 'arrange-step failed: the hardlinked leaf must genuinely read back the external secret');
+
+    const serialized = payloadSerialized(root, 'hook', 'hardlink-leaf-hook');
+    assert.ok(!serialized.includes(secretMarker), `a hardlinked leaf's shared-inode bytes must never surface in readVendoredPackage's files payload; got: ${serialized}`);
+
+    // Same invariant across the whole served surface the payload flows through.
+    assert.ok(!JSON.stringify(communityItem(root, 'hook', 'hardlink-leaf-hook')).includes(secretMarker), 'no secret byte may surface via the community detail item either');
+    assert.ok(!JSON.stringify(listCommunityIndex(root)).includes(secretMarker), 'no secret byte may surface via the community list route either');
+  });
+
+  it('SYMLINK leaf (defense-in-depth pin) — a vendored hook script SYMLINKED to an external secret NEVER surfaces its bytes (already skipped by the withFileTypes walk; must STAY contained)', () => {
+    const root = makeForgeRoot('community-index-q80-8-symlink-');
+    const externalDir = makeForgeRoot('community-index-OUTSIDE-q80-8-symlink-');
+    const secretMarker = 'SYMLINKED_LEAF_SECRET_q80_8_never_surface';
+    const secretFile = join(externalDir, 'secret');
+    writeFileSync(secretFile, `outside body ${secretMarker}\n`, 'utf8');
+
+    vendorHookPackage(root, 'symlink-leaf-hook', '#!/usr/bin/env bash\nexit 0\n');
+    const runSh = join(root, 'studio', 'community', 'hooks', 'symlink-leaf-hook', 'scripts', 'run.sh');
+    rmSync(runSh, { force: true });
+    symlinkSync(secretFile, runSh, 'file');
+
+    const serialized = payloadSerialized(root, 'hook', 'symlink-leaf-hook');
+    assert.ok(!serialized.includes(secretMarker), `a symlinked leaf's target bytes must never surface in readVendoredPackage's files payload; got: ${serialized}`);
+  });
+
+  it('the negative direction still holds: an ORDINARY vendored package still reads every real leaf into the files payload (the fix must not refuse everything)', () => {
+    const root = makeForgeRoot('community-index-q80-8-neg-');
+    vendorHookPackage(root, 'ordinary-leaf-hook', '#!/usr/bin/env bash\necho ORDINARY_LEAF_BODY_q80_8\nexit 0\n');
+    const files = readVendoredPackage(root, 'hook', 'ordinary-leaf-hook');
+    const paths = files.map((f) => f.path).sort();
+    assert.deepEqual(paths, ['hook.yaml', 'scripts/run.sh'], 'an ordinary vendored package must still surface all its real leaves — the leaf guard must be scoped, not a blanket refusal');
+    const script = files.find((f) => f.path === 'scripts/run.sh');
+    assert.ok(script !== undefined && script.body.includes('ORDINARY_LEAF_BODY_q80_8'), 'a real (nlink=1, non-symlink) leaf must still read through byte-exact');
   });
 });
