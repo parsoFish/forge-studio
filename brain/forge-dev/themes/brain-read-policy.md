@@ -76,9 +76,12 @@ gap: `brain-index.ts` is module-cached, so a long `forge serve` process
 sees stale indexes until restart — invalidate per cycle or document.
 
 Net: **one source of intent per phase.** Planner ← brain. Executor ←
-work item. Reviewer ← manifest + work-item set. Reflector ↔ brain.
+work item. Reviewer ← manifest + work-item set (+ per-KB `review-band` grants,
+advisory). Reflector ↔ brain.
 
 > **R1-01 (2026-07-19):** the KB `binding` contract changed KB *scoping*, not this asymmetric who-reads-what policy (ADR-010, Q5-B) — guarded by `orchestrator/kb-read-policy-guard.test.ts`.
+
+> **R1-06 (2026-08-09):** band-scoped KB bindings DO change who-reads-what — deliberately. `review-band` KBs grant the reviewer a per-KB advisory read; Studio creation/maintenance sessions are a second, structure-only write class (no ingest — decision 3). Guarded by the descriptor-driven extension of `orchestrator/kb-read-policy-guard.test.ts`. See ADR-010 (2026-08-09 amendment) + ADR-027 (R1-06 amendment).
 
 ## Sources
 
