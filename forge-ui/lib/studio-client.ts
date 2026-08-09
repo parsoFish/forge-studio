@@ -18,6 +18,12 @@ import { resolveBridgeUrl } from './bridge-client';
 // module only adds the fetch. The import is one-way — standing-triggers.ts
 // never imports back from here.
 import { parseStandingTriggers, type StandingTrigger } from './standing-triggers';
+// R4-12-F1: the project-page "contract buildout" checklist reads the same rows
+// the session-shell's contract-buildout artifact does — REUSE that row type +
+// its parser (session-client.ts's exported `parseContractStageRow`), never a
+// third client-side mirror. The import is one-way (session-client never imports
+// back from here).
+import { parseContractStageRow, type ContractStageRow } from './session-client';
 
 // ---------------------------------------------------------------------------
 // Types mirroring server shapes
@@ -1108,6 +1114,26 @@ export async function fetchPreflight(projectId: string): Promise<PreflightResult
     null,
   );
   return body;
+}
+
+/**
+ * R4-12-F1 — fetch a project's five-stage contract-buildout presence report
+ * (`GET /api/studio/projects/:id/contract-stages`, a pure read served by
+ * cli/bridge-studio.ts from cli/contract-stages.ts's `deriveContractStages`).
+ * The 200 body is `{ok, project, stages, sourcesScanned}`; the rows are
+ * validated at THIS boundary via session-client's `parseContractStageRow` —
+ * the SAME parser + row type the session-shell's contract-buildout artifact
+ * uses, never a re-derived client mirror. Shares this module's `studioGet`
+ * error convention (no bridge / non-2xx / thrown fetch all degrade to the
+ * empty fallback), so exactly ONE GET is issued and a missing checklist never
+ * rejects a caller's render.
+ */
+export async function fetchContractStages(id: string): Promise<ContractStageRow[]> {
+  const body = await studioGet<{ stages?: unknown[] }>(
+    `/api/studio/projects/${encodeURIComponent(id)}/contract-stages`,
+    { stages: [] },
+  );
+  return (body.stages ?? []).map((row, i) => parseContractStageRow(row, i));
 }
 
 // --- R1-2 — project-repo write transaction (forge-studio branch) ------------

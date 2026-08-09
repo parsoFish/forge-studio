@@ -398,7 +398,7 @@ function parseContractStageStatus(raw: unknown): ContractStageStatus {
   throw new Error(`unrecognised contract-buildout stage status ${JSON.stringify(raw)} — must be one of: ${CONTRACT_STAGE_STATUSES.join(', ')}`);
 }
 
-function parseContractStageRow(raw: unknown, index: number): ContractStageRow {
+export function parseContractStageRow(raw: unknown, index: number): ContractStageRow {
   if (!isPlainObject(raw)) {
     throw new Error(`malformed contract-buildout stage row[${index}]: expected an object, got ${JSON.stringify(raw)}`);
   }

@@ -14,7 +14,7 @@ import {
   fetchCycles, fetchRecovery, recoveryRequeue, recoveryAbandon,
   listDemoSessions,
   type ProjectRoadmap, type RoadmapInitiative, type RoadmapWorkItem, type PlanInitiativeResult,
-  type RecoveryInspect,
+  type RecoveryInspect, type Cycle,
 } from '@/lib/bridge-client';
 import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-grouping';
 import { isRecoverableStatus, attemptInfoFor } from '@/lib/recovery-attrs';
@@ -30,6 +30,8 @@ import { DemoBuilderPanel } from '@/components/studio/project-builder/DemoBuilde
 import { SkillsBind } from '@/components/studio/project-builder/SkillsBind';
 import { ContractReadiness } from '@/components/studio/project-builder/ContractReadiness';
 import { ContractResolutionPanel } from '@/components/studio/project-builder/ContractResolutionPanel';
+import { ProjectContractPanel } from '@/components/studio/project-builder/ProjectContractPanel';
+import { ProjectCycleLedger } from '@/components/studio/project-builder/ProjectCycleLedger';
 import { KbBind } from '@/components/studio/project-builder/KbBind';
 import { UsedByFlows } from '@/components/studio/project-builder/UsedByFlows';
 import { ProjectArchitectEntry } from '@/components/studio/ProjectArchitectEntry';
@@ -77,6 +79,11 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
   // back the roadmap's recovery affordances — a different data source than
   // `roadmap` itself (fetchRoadmap()'s RoadmapInitiative[] has no attemptCount).
   const [cycleGroups, setCycleGroups] = useState<InitiativeGroup[]>([]);
+  // R4-12-F2: raw, project-scoped cycles (NOT grouped) — the permanent cycle
+  // ledger's completed-cycle dig-in feeds these RAW `Cycle[]` through
+  // `deriveProjectCycleLedgerRows` inside <ProjectCycleLedger>. Populated from
+  // the same `fetchCycles()` call that backs `cycleGroups`.
+  const [projectCycles, setProjectCycles] = useState<Cycle[]>([]);
 
   const [northStar, setNorthStar] = useState('');
   const [instructions, setInstructions] = useState('');
@@ -132,12 +139,23 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
   const loadCycleGroups = useCallback(async (signal: { cancelled: boolean }) => {
     try {
       const snap = await fetchCycles();
-      const groups = groupCyclesByInitiative([...(snap?.live ?? []), ...(snap?.recent ?? [])]);
-      if (!signal.cancelled) setCycleGroups(groups);
+      const all = [...(snap?.live ?? []), ...(snap?.recent ?? [])];
+      const groups = groupCyclesByInitiative(all);
+      // R4-12-F2: same fetch also feeds the cycle ledger — scoped to THIS
+      // project (drop cycles with no/other `project`), left RAW so the ledger's
+      // shared `deriveProjectCycleLedgerRows` transform runs on the render path.
+      const mine = all.filter((c) => c.project === id);
+      if (!signal.cancelled) {
+        setCycleGroups(groups);
+        setProjectCycles(mine);
+      }
     } catch {
-      if (!signal.cancelled) setCycleGroups([]);
+      if (!signal.cancelled) {
+        setCycleGroups([]);
+        setProjectCycles([]);
+      }
     }
-  }, []);
+  }, [id]);
 
   // plan-everything-before-kickoff: RoadmapView refetches after kickoff so
   // status/ready/blockedBy (and the eligible count) reflect queue reality.
@@ -367,6 +385,16 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               onSessionStarted={handleDemoSessionStarted} />
             )}
             <SkillsBind skills={skills} onChange={(s) => { setSkills(s); markDirty(); }} catalog={skillItems} />
+
+            {/* R4-12-F2: permanent cycle ledger — the completed-cycle dig-in.
+                Feeds this project's RAW cycles through <ProjectCycleLedger>'s
+                shared deriveProjectCycleLedgerRows → HistoryLedger. */}
+            <section data-section="project-cycle-ledger" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 700, letterSpacing: '.1em', textTransform: 'uppercase', color: 'var(--faint)' }}>
+                Cycle Ledger
+              </div>
+              <ProjectCycleLedger cycles={projectCycles} nowMs={Date.now()} />
+            </section>
           </div>
 
           <aside style={{
@@ -422,6 +450,17 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               />
             )}
 
+            {/* R4-12-F1: permanent contract-buildout panel (async server
+                component; ContractPanelMount resolves it client-side since this
+                page is 'use client'). Distinct concern from the preflight
+                VERDICT above (ContractReadiness / ContractResolutionPanel). */}
+            <ContractPanelMount
+              projectId={id}
+              northStar={northStar}
+              instructions={instructions}
+              instructionsSource={instructionsSource}
+            />
+
             <OnboardWithAgent projectId={id} />
 
             <UsedByFlows flows={flows} projectId={id} />
@@ -458,6 +497,34 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
 // `data-action="run-onboarding-agent"` are UNCHANGED (an existing journey
 // beat asserts them) — `data-onboard-session-id` is additive.
 // ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// ContractPanelMount (R4-12-F1) — the client-side seam that mounts the ASYNC
+// server component <ProjectContractPanel> inside this 'use client' page. React
+// 18 can't render an async component directly in a client tree (and has no
+// `use()` for its returned promise), so this resolves the panel's element in an
+// effect and renders it. The panel still owns its OWN fetch
+// (fetchContractStages) exactly as its render-test contract pins — this seam
+// only threads the props + awaits the returned markup.
+// ---------------------------------------------------------------------------
+
+function ContractPanelMount(props: {
+  projectId: string;
+  northStar?: string | null;
+  instructions?: string | null;
+  instructionsSource?: string | null;
+}) {
+  const { projectId, northStar, instructions, instructionsSource } = props;
+  const [el, setEl] = useState<JSX.Element | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    void ProjectContractPanel({ projectId, northStar, instructions, instructionsSource })
+      .then((resolved) => { if (!cancelled) setEl(resolved); })
+      .catch(() => { if (!cancelled) setEl(null); });
+    return () => { cancelled = true; };
+  }, [projectId, northStar, instructions, instructionsSource]);
+  return el;
+}
 
 function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
