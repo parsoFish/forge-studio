@@ -755,7 +755,7 @@ export function writeDemoJson(revision) {
 // newCycleId, never appends one — these constants mirror THAT real shape,
 // mirroring agents.mjs's own R6_06_FLOW_CYCLE_ID fixed-timestamp precedent).
 export const SHOWCASE_INIT_1 = 'INIT-r4-14-showcase-evidence-a';
-export const SHOWCASE_CYCLE_ID_1 = `2026-01-01T00-00-00_${SHOWCASE_INIT_1}`;
+export const SHOWCASE_CYCLE_ID_1 = `2026-09-01T00-00-00_${SHOWCASE_INIT_1}`;
 export const SHOWCASE_CYCLE_LOG_1 = join(FORGE_ROOT, '_logs', SHOWCASE_CYCLE_ID_1);
 
 // A later leading timestamp than CYCLE_ID_1 — scanCycles() never sets
@@ -763,7 +763,7 @@ export const SHOWCASE_CYCLE_LOG_1 = join(FORGE_ROOT, '_logs', SHOWCASE_CYCLE_ID_
 // fallback chain (endedAt ?? startedAt ?? cycleId stamp) always lands on the
 // cycleId stamp here; that is the ONLY thing that needs to be newer.
 export const SHOWCASE_INIT_2 = 'INIT-r4-14-showcase-evidence-b';
-export const SHOWCASE_CYCLE_ID_2 = `2026-01-02T00-00-00_${SHOWCASE_INIT_2}`;
+export const SHOWCASE_CYCLE_ID_2 = `2026-09-02T00-00-00_${SHOWCASE_INIT_2}`;
 export const SHOWCASE_CYCLE_LOG_2 = join(FORGE_ROOT, '_logs', SHOWCASE_CYCLE_ID_2);
 
 // A second, distinct project id — NEVER `mdtoc` itself — for the honest-empty
