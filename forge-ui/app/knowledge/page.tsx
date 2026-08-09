@@ -296,10 +296,10 @@ function KnowledgePageInner() {
 // deterministic, operator-triggerable ops.)
 // ---------------------------------------------------------------------------
 function KbMaintenance({ kbId, onDeleted }: { kbId: string; onDeleted?: () => void }) {
-  const [busy, setBusy] = useState<'lint' | 'index' | 'delete' | null>(null);
+  const [busy, setBusy] = useState<'lint' | 'index' | 'consolidate' | 'delete' | null>(null);
   const [result, setResult] = useState<string | null>(null);
 
-  async function run(op: 'lint' | 'index') {
+  async function run(op: 'lint' | 'index' | 'consolidate') {
     setBusy(op);
     setResult(null);
     const r = await runKbMaintenance(kbId, op);
@@ -308,8 +308,10 @@ function KbMaintenance({ kbId, onDeleted }: { kbId: string; onDeleted?: () => vo
     if (op === 'lint') {
       const findings = (r.data?.findings as unknown[] | undefined) ?? [];
       setResult(findings.length === 0 ? 'lint: clean ✓' : `lint: ${findings.length} finding(s)`);
-    } else {
+    } else if (op === 'index') {
       setResult('index refreshed ✓');
+    } else {
+      setResult('consolidate session started ✓');
     }
     setTimeout(() => setResult(null), 6000);
   }
@@ -335,6 +337,15 @@ function KbMaintenance({ kbId, onDeleted }: { kbId: string; onDeleted?: () => vo
       </button>
       <button data-action="kb-index" style={btn} disabled={busy !== null} onClick={() => void run('index')}>
         {busy === 'index' ? 'Refreshing…' : 'Refresh index'}
+      </button>
+      <button
+        data-action="kb-maintain-session"
+        style={btn}
+        disabled={busy !== null}
+        onClick={() => void run('consolidate')}
+        title="Start a consolidate maintenance session"
+      >
+        {busy === 'consolidate' ? 'Consolidating…' : 'Consolidate'}
       </button>
       <button
         data-action="kb-delete"
