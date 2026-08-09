@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { chmodSync, cpSync, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import {
   scaffoldGreenfieldProject,
@@ -322,4 +323,224 @@ test('(RED) [SEC-03 round 4] an UNRELATED EACCES failure after seedProjectBrain 
     chmodSync(projectsDir, 0o755);
     rmSync(forgeRoot, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// SEC-05 (P1 forge-hwo) — RCE via raw north-star / title interpolation into a
+// scaffolded CODE FILE's JSDoc header.
+//
+// copyTemplate (orchestrator/project-create.ts:126-127) interpolates the
+// human-authored `title` (= manifest.name, line 126) and `northStar`
+// (line 127) RAW into every code file on the NON-JSON branch. Each starter's
+// entry module opens with:
+//
+//     /**
+//      * {{TITLE}} — {{NORTH_STAR}}
+//      *  ...
+//      */
+//
+// A value carrying the comment-terminator `*/` closes that JSDoc block early;
+// the text that follows becomes TOP-LEVEL module code (the starters are ESM —
+// `"type":"module"` — so top-level `await` is legal); a trailing `/*` reopens
+// a comment to swallow the rest of the original header. The injected statement
+// then executes at MODULE LOAD — i.e. the moment the shipped gate
+// (`node --experimental-strip-types --test`) loads the entry module via its
+// test's `import` — and the scaffold's OWN gate stays GREEN (preflight does
+// only static command-shape checks; it never runs the scaffolded suite, so the
+// break-out is never compiled or executed at create time — it lands live in
+// the operator's new repo). Sinks: src/server.ts (typescript-api / -web),
+// src/index.ts (typescript-cli).
+//
+// The FIX these ATs pin (implemented in a later stage — RED now):
+//   • commentSafe(s) = s.replace(/\*\//g,'* /').replace(/\/\*/g,'/ *'),
+//     applied at :126-127 to BOTH title and northStar on the code-file branch,
+//     so neither bigram can terminate/open a comment.
+//   • validateCreationManifest ALSO rejects northStar/title carrying `*/`/`/*`
+//     (defense-in-depth at the boundary).
+//
+// The payload string below is a TEST ASSET — an inertness assertion. It stays
+// on this lane branch until the fix lands in the same PR. It is written only
+// into throwaway /tmp scaffolds, never into any repo-tracked file.
+// ---------------------------------------------------------------------------
+
+/** Build the break-out payload targeting a unique /tmp marker. `*/` closes the
+ *  JSDoc header, the middle runs at module load, `/*` reopens a comment. */
+function hwoPayload(marker: string): string {
+  return `*/;(await import("node:fs")).writeFileSync(${JSON.stringify(marker)},"[exec]");/*`;
+}
+
+/** (appType → its entry code file, the JSDoc-header sink). */
+const HWO_STARTERS = [
+  { appType: 'typescript-api', codeFile: 'src/server.ts' },
+  { appType: 'typescript-web', codeFile: 'src/server.ts' },
+  { appType: 'typescript-cli', codeFile: 'src/index.ts' },
+];
+
+/** Run the scaffolded project's REAL shipped gate, exactly as its package.json
+ *  declares it (`node --experimental-strip-types --test`), from the project dir
+ *  — NOT through a shell, so we read the child's numeric exit status directly.
+ *
+ *  `NODE_TEST_CONTEXT` is stripped from the child's env on purpose: THIS suite
+ *  runs under `node --test`, which exports `NODE_TEST_CONTEXT=child-v8`; a
+ *  nested `node --test` that inherits it detects a "recursive" run and SKIPS
+ *  running any files (0 tests, entry module never loaded) — a false green that
+ *  would hide the very RCE these ATs assert. An operator running the shipped
+ *  `npm test` is never nested under a test runner, so the clean-env child is
+ *  the faithful reproduction of what actually ships. `gateRanTests` below
+ *  backstops this: it fails loudly if the gate ever runs zero tests again. */
+function runScaffoldedGate(projectDir: string) {
+  const env = { ...process.env };
+  delete env.NODE_TEST_CONTEXT;
+  return spawnSync('node', ['--experimental-strip-types', '--test'], { cwd: projectDir, encoding: 'utf8', env });
+}
+
+/** True iff the gate actually executed ≥1 test (entry module was loaded). A
+ *  recursion-skipped run emits no `# tests N` summary — this guards against a
+ *  gate that "passes" only because it ran nothing. */
+function gateRanTests(stdout: string): boolean {
+  const m = stdout.match(/^# tests (\d+)/m);
+  return m !== null && Number(m[1]) >= 1;
+}
+
+// Defense-in-depth invariant. The intended fix has TWO layers that BOTH aim at
+// the same break-out payload: the boundary validator (AT-hwo-3) refuses it, AND
+// commentSafe neutralizes it at the code-file sink. So creating with a break-out
+// value must land in exactly one of two inert outcomes — and NEVER execute:
+//   • REFUSED — validateCreationManifest throws; no project, no gate; OR
+//   • NEUTRALIZED — a scaffold IS produced, but the payload sits inert in the
+//     entry module's JSDoc header, so the shipped gate loads it and stays green.
+// The marker-absent assertion holds on BOTH paths and is the load-bearing one.
+// It is RED at base (neither layer exists → the scaffold's gate loads the entry
+// module and the break-out executes, writing the marker). Whenever a scaffold IS
+// produced (base today, or a sink-only fix tomorrow), the gate branch runs and
+// pins the sink directly; the moment the boundary is the last line of defense,
+// the refusal branch covers it. Either way a regression that re-opens the RCE
+// (raw interpolation reachable) trips the marker assertion.
+
+test('AT-hwo-1: [SEC-05] a break-out northStar never executes — the create is either refused, or scaffolds inert with a green gate (all three starters)', () => {
+  for (const { appType, codeFile } of HWO_STARTERS) {
+    const forgeRoot = isolatedForgeRoot();
+    const marker = `/tmp/HWO_MARK_ns_${appType.replace('typescript-', '')}`;
+    rmSync(marker, { force: true });
+    try {
+      let out: ReturnType<typeof scaffoldGreenfieldProject> | undefined;
+      try {
+        out = scaffoldGreenfieldProject({
+          manifest: manifest({ name: 'HWO NorthStar Probe', appType, northStar: hwoPayload(marker) }),
+          forgeRoot,
+        });
+      } catch {
+        // Layer 1 — the boundary validator refused the break-out payload
+        // outright. A fully inert outcome: no project, no gate (marker-absent
+        // asserted below).
+        out = undefined;
+      }
+
+      if (out) {
+        // A scaffold WAS produced → layer 2 (commentSafe) must have neutralized
+        // the payload. Fixture precondition (before any verdict): the entry code
+        // file exists and the payload's MARKER PATH reached its JSDoc header —
+        // fix-agnostic, since commentSafe breaks only the `*/`/`/*` bigrams,
+        // never the marker path text.
+        const codePath = join(out.projectDir, codeFile);
+        assert.ok(existsSync(codePath), `${appType}: expected the scaffold to produce ${codeFile}`);
+        assert.ok(
+          readFileSync(codePath, 'utf8').includes(marker),
+          `${appType}: the northStar payload did not reach ${codeFile}'s header — the repro precondition is not met`,
+        );
+
+        const gate = runScaffoldedGate(out.projectDir);
+        // The REAL shipped gate must PASS and must actually load the entry
+        // module — a comment-safe fix keeps the scaffold green, it does not
+        // fail-closed by breaking compilation.
+        assert.equal(gate.error, undefined, `${appType}: could not launch the scaffolded gate — ${gate.error}`);
+        assert.ok(
+          gateRanTests(gate.stdout ?? ''),
+          `${appType}: the gate ran ZERO tests (the entry module was never loaded) — the inertness check below would false-green. stdout:\n${gate.stdout}`,
+        );
+        assert.equal(
+          gate.status,
+          0,
+          `${appType}: the scaffolded project's own gate must stay green. exit=${gate.status}\n${(gate.stdout ?? '') + (gate.stderr ?? '')}`,
+        );
+      }
+
+      // The invariant on EVERY path: the injected statement NEVER executed.
+      assert.ok(
+        !existsSync(marker),
+        `${appType}: RCE — a break-out northStar reached ${codeFile}'s JSDoc header and executed at module load, writing ${marker} (the create was neither refused at the boundary nor neutralized at the sink)`,
+      );
+    } finally {
+      rmSync(marker, { force: true });
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test('AT-hwo-2: [SEC-05] the TITLE twin — a break-out in the title field (manifest.name → copyTemplate subs.title, line 126) never executes either', () => {
+  for (const { appType, codeFile } of HWO_STARTERS) {
+    const forgeRoot = isolatedForgeRoot();
+    const marker = `/tmp/HWO_MARK_tt_${appType.replace('typescript-', '')}`;
+    rmSync(marker, { force: true });
+    try {
+      // Payload in the TITLE field (manifest.name → copyTemplate's subs.title,
+      // line 126). The slug id still derives to a valid slug (the leading
+      // punctuation is stripped); the human title lands in {{TITLE}} in the
+      // code-file header — the injection point a northStar-only sink fix would
+      // miss. Same defense-in-depth disjunction as AT-hwo-1.
+      let out: ReturnType<typeof scaffoldGreenfieldProject> | undefined;
+      try {
+        out = scaffoldGreenfieldProject({
+          manifest: manifest({ name: hwoPayload(marker), appType, northStar: 'ship the thing' }),
+          forgeRoot,
+        });
+      } catch {
+        out = undefined; // Layer 1: boundary refused the break-out title.
+      }
+
+      if (out) {
+        const codePath = join(out.projectDir, codeFile);
+        assert.ok(existsSync(codePath), `${appType}: expected the scaffold to produce ${codeFile}`);
+        assert.ok(
+          readFileSync(codePath, 'utf8').includes(marker),
+          `${appType}: the title(name) payload did not reach ${codeFile}'s header — the repro precondition is not met`,
+        );
+
+        const gate = runScaffoldedGate(out.projectDir);
+        assert.equal(gate.error, undefined, `${appType}: could not launch the scaffolded gate — ${gate.error}`);
+        assert.ok(
+          gateRanTests(gate.stdout ?? ''),
+          `${appType}: the gate ran ZERO tests (the entry module was never loaded) — the inertness check below would false-green. stdout:\n${gate.stdout}`,
+        );
+        assert.equal(
+          gate.status,
+          0,
+          `${appType}: the scaffolded project's own gate must stay green. exit=${gate.status}\n${(gate.stdout ?? '') + (gate.stderr ?? '')}`,
+        );
+      }
+
+      assert.ok(
+        !existsSync(marker),
+        `${appType}: RCE via the TITLE injection point — a break-out {{TITLE}} reached ${codeFile}'s JSDoc header and executed at module load, writing ${marker} (neither refused at the boundary nor neutralized at the sink)`,
+      );
+    } finally {
+      rmSync(marker, { force: true });
+      rmSync(forgeRoot, { recursive: true, force: true });
+    }
+  }
+});
+
+test('AT-hwo-3: [SEC-05] boundary — validateCreationManifest rejects a comment terminator in northStar (`*/`) and in title (`/*`)', () => {
+  // RED at base: validateCreationManifest screens only control chars + the
+  // ≤140 length; neither bigram is caught, so both manifests validate today.
+  // A sink-only commentSafe fix that leaves the boundary permissive is caught
+  // here — the defense-in-depth clause is what these two throws pin.
+  assert.throws(
+    () => validateCreationManifest({ name: 'Ok Name', appType: 'typescript-cli', language: 'typescript', northStar: 'break out */ of the header' }),
+    'northStar containing the comment terminator "*/" must be rejected at the boundary',
+  );
+  assert.throws(
+    () => validateCreationManifest({ name: 'bad /* title', appType: 'typescript-cli', language: 'typescript', northStar: 'ship the thing' }),
+    'title (manifest.name) containing the comment opener "/*" must be rejected at the boundary',
+  );
 });

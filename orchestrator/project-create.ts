@@ -80,6 +80,12 @@ export function validateCreationManifest(raw: unknown): CreationManifest {
     // Single-line fields — a newline/control char would break scaffolded markdown
     // structure (quotes/backslashes are fine; they're JSON-escaped when written).
     if (/[\u0000-\u001f]/.test(v)) throw new Error(`creation manifest: "${k}" must be a single line (no control characters)`);
+    // Defense-in-depth boundary refusal (SEC-05 / forge-hwo): a comment
+    // terminator bigram (`*/` or `/*`) in a human-authored value can break out
+    // of a scaffolded code file's JSDoc header. `commentSafe` neutralizes it at
+    // the copyTemplate sink; here the boundary refuses it outright so no path
+    // that validates a manifest can carry the break-out payload downstream.
+    if (v.includes('*/') || v.includes('/*')) throw new Error(`creation manifest: "${k}" must not contain a comment terminator`);
     return v.trim();
   };
   const manifest: CreationManifest = {
@@ -104,13 +110,30 @@ function jsonInner(s: string): string {
   return JSON.stringify(s).slice(1, -1);
 }
 
+/** Neutralize the two comment-terminator bigrams so a human-authored value
+ *  can't break out of a scaffolded CODE file's comment (SEC-05 / forge-hwo).
+ *  A space is inserted between the star and slash of each bigram (the close
+ *  bigram becomes "star space slash", the open bigram "slash space star") — an
+ *  auditable, no-op-to-humans transform that leaves every other character
+ *  untouched: the marker text a break-out payload targets still lands, but the
+ *  bigram that would close/open the JSDoc header no longer does. */
+function commentSafe(s: string): string {
+  return s.replace(/\*\//g, '* /').replace(/\/\*/g, '/ *');
+}
+
 /** Recursively copy a template dir into dest, substituting the tokens in every
  *  file. Two hardening rules the raw approach missed: (1) FUNCTION replacers so
  *  a `$&`/`$$` in a value is inserted literally, not as a regex replacement
  *  pattern; (2) for `.json` files, JSON-escape the human-authored values so a
  *  quote/backslash/newline can't produce invalid JSON — a corrupt scaffold that
  *  would fail preflight (C1) and break `npm test`/`build`. Each written `.json`
- *  is JSON.parse-validated so a scaffold can only ship well-formed config. */
+ *  is JSON.parse-validated so a scaffold can only ship well-formed config.
+ *  (3) for NON-`.json` (code/markdown) files, `commentSafe` breaks the two
+ *  comment-terminator bigrams (the close and open comment markers) so a value
+ *  can't escape a code file's JSDoc header and execute at module load
+ *  (SEC-05 / forge-hwo). The boundary validator refuses those bigrams too; this
+ *  sink escaping is the defense-in-depth backstop for any path that builds a
+ *  manifest without it. */
 function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title: string; northStar: string }, written: string[], relBase = ''): void {
   mkdirSync(destDir, { recursive: true });
   for (const entry of readdirSync(srcDir, { withFileTypes: true })) {
@@ -123,8 +146,9 @@ function copyTemplate(srcDir: string, destDir: string, subs: { id: string; title
     }
     const isJson = entry.name.endsWith('.json');
     // id is slug-safe (SLUG_RE) either way; title/northStar are human text.
-    const title = isJson ? jsonInner(subs.title) : subs.title;
-    const northStar = isJson ? jsonInner(subs.northStar) : subs.northStar;
+    // .json → JSON-escape; code/markdown → commentSafe (SEC-05 / forge-hwo).
+    const title = isJson ? jsonInner(subs.title) : commentSafe(subs.title);
+    const northStar = isJson ? jsonInner(subs.northStar) : commentSafe(subs.northStar);
     const text = readFileSync(src, 'utf8')
       .replace(NAME_TOKEN, () => subs.id)
       .replace(TITLE_TOKEN, () => title)
