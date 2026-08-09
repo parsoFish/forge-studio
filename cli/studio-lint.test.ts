@@ -437,6 +437,82 @@ desc: Bound to a project that does not exist.
 });
 
 // ---------------------------------------------------------------------------
+// Test 6c-bis (R1-06 WI-1 group B (3)): kb.yaml binding.band not present in
+// the bound flow's real band vocabulary → error.
+//
+// A KB's `binding.band` (when set) must name a band the flow's own nodes
+// actually run under (derived from each node's agent -> composition.guards
+// -> resolveBandGuard, orchestrator/agent-bands.ts) — analogous to the
+// existing dangling binding.ref cross-check above, but one level deeper
+// (flow -> node -> agent -> declared band). Today studio-lint (cli/studio-lint.ts
+// ~409+) has ZERO notion of `band` at all — the KB section only cross-checks
+// binding.ref against registered flows/projects — so a mismatched band is
+// silently accepted.
+// ---------------------------------------------------------------------------
+
+/** SKILL.md for the canonical review-band agent (composition/band-guard
+ * lint requires the exact canonical slug 'adversarial-review' plus
+ * loopStrategy: one-shot and a budget cap — mirrors skills/adversarial-review/SKILL.md). */
+function reviewBandSkillMd(): string {
+  return `---
+name: adversarial-review
+description: A test review-band agent.
+library: true
+purpose: Does review-band things.
+brainAccess: none
+interactivity: none
+composition:
+  skills: []
+  tools: []
+  mcps: []
+  guards: [review-band]
+runtime:
+  sdk: claude-agent-sdk
+  strategy: fixed
+  model: claude-sonnet-4-6
+  loopStrategy: one-shot
+budgets: {maxTurns: 10, maxBudgetUsd: 1}
+allowed-tools: []
+disallowed-tools: []
+---
+## Process
+
+This agent does review-band things.
+`;
+}
+
+test('RED (R1-06): kb.yaml binding.band not present in the bound flow\'s real bands → error finding', () => {
+  // test-flow's ONE node runs the canonical review-band agent — so the
+  // flow's real band vocabulary is exactly { review-band }.
+  const root = buildValidRoot({ agentSlug: 'adversarial-review', flowId: 'test-flow', includeKb: false });
+  writeFileSync(join(root, 'skills', 'adversarial-review', 'SKILL.md'), reviewBandSkillMd());
+
+  const kbDir = join(root, 'brain', 'mismatched-band-kb');
+  mkdirSync(kbDir, { recursive: true });
+  // demo-band IS a real BAND_GUARD_IDS member, but it is NOT one of
+  // test-flow's own bands (only review-band is) — so this must be flagged,
+  // the same way a dangling binding.ref is flagged above.
+  writeFileSync(
+    join(kbDir, 'kb.yaml'),
+    validKbYaml('mismatched-band-kb', 'binding: { kind: flow, ref: test-flow, band: demo-band }'),
+  );
+
+  const result = runStudioLint(root);
+
+  const bandFinding = result.findings.find(
+    (f) => f.level === 'error' && f.object === 'kb:mismatched-band-kb' && /band/i.test(f.message),
+  );
+  assert.ok(
+    bandFinding !== undefined,
+    'Expected an error finding naming the band mismatch for kb:mismatched-band-kb (binding.band '
+      + '"demo-band" is not among test-flow\'s real bands { review-band }) — studio-lint has no band '
+      + `check at all today. Got: ${JSON.stringify(result.findings.map((f) => ({ object: f.object, check: f.check, message: f.message })))}`,
+  );
+
+  cleanup(root);
+});
+
+// ---------------------------------------------------------------------------
 // Test 6d: two KBs both binding: { kind: unique } → unique-binding error (R1-01)
 // ---------------------------------------------------------------------------
 

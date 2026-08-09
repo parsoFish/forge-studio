@@ -387,3 +387,70 @@ test('DELETE without CSRF header → 403', async () => {
   assert.equal(status, 403);
   assert.equal(existsSync(join(forgeRoot, 'brain', 'csrf-brain')), true, 'not deleted without CSRF');
 });
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-1 group B (1)/(2): binding.band — a KB bound to a flow may scope
+// its grant to one of that flow's bands (T1 ruling: the band-role map is
+// ONLY review-band -> reviewer). Today `KbBinding` has no `band` field at
+// all — the create route only reads `binding.kind`/`binding.ref` (see
+// cli/bridge-studio-kbs.ts ~516-551) and `serializeKbDescriptor` only ever
+// writes `{ kind, ref }` (orchestrator/studio/kb-descriptor.ts ~116-127) — so
+// any `binding.band` sent in the POST body is silently dropped before the
+// kb.yaml is ever written.
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06): POST /api/studio/kbs preserves binding.band in the written kb.yaml', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'band-scoped-brain',
+    name: 'Band Scoped Brain',
+    binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
+    desc: 'Testing a band-scoped flow binding.',
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+
+  const kbYamlPath = join(forgeRoot, 'brain', 'band-scoped-brain', 'kb.yaml');
+  assert.ok(existsSync(kbYamlPath), 'kb.yaml must exist — create must have succeeded');
+  const content = readFileSync(kbYamlPath, 'utf8');
+  assert.match(
+    content,
+    /band:\s*review-band/,
+    `binding.band must round-trip into the written kb.yaml — it is dropped before serialization today. Got:\n${content}`,
+  );
+
+  // Confirm via the real loader too, not just raw yaml text — the descriptor
+  // object itself must expose .band once loaded back off disk.
+  const descriptor = loadKbDescriptor(kbYamlPath);
+  assert.equal(
+    (descriptor.binding as { band?: string }).band,
+    'review-band',
+    'loadKbDescriptor must parse binding.band back off the written kb.yaml',
+  );
+});
+
+test('RED (R1-06): POST /api/studio/kbs rejects an unknown binding.band naming the real band vocabulary', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'bad-band-brain',
+    name: 'Bad Band Brain',
+    binding: { kind: 'flow', ref: 'forge-develop', band: 'no-such-band' },
+    desc: 'Testing an unknown band id.',
+  });
+  assert.equal(
+    status,
+    400,
+    `expected 400 for an unknown binding.band, got ${status} — today the route ignores binding.band entirely and creates the KB anyway: ${JSON.stringify(json)}`,
+  );
+  assert.ok(typeof json['error'] === 'string', `expected a 400 with an error string, got: ${JSON.stringify(json)}`);
+  const errMsg = json['error'] as string;
+  assert.match(errMsg, /band/i, 'error must mention band');
+  // Must name a real band id (the flow's real band vocabulary), not just
+  // reject silently — "review-band" is a real BAND_GUARD_IDS member and one
+  // forge-develop's own nodes (adversarial-review) actually declares.
+  assert.match(errMsg, /review-band/, `error must name the real band vocabulary — got: ${errMsg}`);
+
+  // And the KB must NOT have been created with the bogus band silently ignored.
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'bad-band-brain')),
+    false,
+    'a rejected binding.band must not leave a half-written kb dir behind',
+  );
+});
