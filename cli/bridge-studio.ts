@@ -49,6 +49,7 @@ import {
   listPlainSkills,
 } from '../orchestrator/studio/registry.ts';
 import { listHookLibrary } from '../orchestrator/studio/hook-library.ts';
+import { listFlowBandIds } from './flow-band-vocab.ts';
 import { listProjectStarters } from '../orchestrator/project-create.ts';
 import { skillsDir as toSkillsDir } from '../orchestrator/skill-path.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile } from './studio-path-guard.ts';
@@ -358,7 +359,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 // Flows loader
 // ---------------------------------------------------------------------------
 
-function loadAllFlows(forgeRoot: string): FlowDefinition[] {
+function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string[] }> {
   const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
   if (!existsSync(flowsDir)) return [];
 
@@ -371,12 +372,18 @@ function loadAllFlows(forgeRoot: string): FlowDefinition[] {
     return [];
   }
 
-  const flows: FlowDefinition[] = [];
+  const flows: Array<FlowDefinition & { bands: string[] }> = [];
   for (const entry of entries) {
     const flowYamlPath = join(flowsDir, entry, 'flow.yaml');
     if (!existsSync(flowYamlPath)) continue;
     try {
-      flows.push(loadFlowDefinition(flowYamlPath));
+      const flow = loadFlowDefinition(flowYamlPath);
+      // R1-06 WI-2 (group A): attach each flow's REAL derived band vocabulary
+      // (cli/flow-band-vocab.ts's listFlowBandIds, WI-1) so the KB-create
+      // page's per-flow band picker has something real to source options
+      // from over the wire. Fails closed to [] for an underivable flow —
+      // handled inside the helper, never re-guessed here.
+      flows.push({ ...flow, bands: listFlowBandIds(forgeRoot, flow.id) });
     } catch {
       // Skip unreadable flow
     }

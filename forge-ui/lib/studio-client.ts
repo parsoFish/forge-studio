@@ -458,6 +458,17 @@ export type Flow = {
    * shipped flows (don't suppress the onramp) from user-authored content.
    */
   origin?: string;
+  /**
+   * The flow's REAL derived band vocabulary (cli/flow-band-vocab.ts's
+   * listFlowBandIds, R1-06 WI-1) — the distinct band ids its own
+   * agent-bearing nodes declare via `composition.guards`. `[]` for a
+   * bandless (or underivable) flow, never absent — GET /api/studio/flows
+   * (cli/bridge-studio.ts) always attaches this per row (R1-06 WI-2).
+   * Optional on the client TYPE (not the wire payload) so existing Flow
+   * fixtures elsewhere in forge-ui that predate this field keep compiling;
+   * `deriveKbBandOptions` below treats an absent value as `[]`.
+   */
+  bands?: string[];
 };
 
 export type DemoStep = {
@@ -483,7 +494,16 @@ export type Project = {
 };
 
 export type KbBinding =
-  | { kind: 'flow'; ref: string }
+  | {
+      kind: 'flow';
+      ref: string;
+      /**
+       * Optional band scope (R1-06, ADR-010 amendment "R1-06 band-scoped
+       * reviewer grant") — mirrors orchestrator/studio/types.ts's KbBinding.
+       * Meaningless off a `flow` binding. Absent ⇒ unscoped.
+       */
+      band?: string;
+    }
   | { kind: 'project'; ref: string }
   | { kind: 'unique' };
 
@@ -827,6 +847,28 @@ export async function fetchStudioFlows(): Promise<Flow[]> {
 }
 
 /**
+ * Derive the `[data-field="kb-binding-band"]` select's options (R1-06 WI-2
+ * group A) — pure, DOM-free so it's unit-testable without mounting
+ * `/knowledge/new` (see studio-client.test.ts's block comment for why a
+ * render test can't observe this page's state transitions).
+ *
+ * - `kind !== 'flow'` -> `null`: the field must not render at all for a
+ *   project (or unique) binding — band scope is meaningless there.
+ * - `kind === 'flow'` -> the bound flow's REAL derived `bands` (never the
+ *   whole flow roster's union), `[]` when unbound (`ref` doesn't match any
+ *   flow) or the matched flow is bandless. Never throws.
+ */
+export function deriveKbBandOptions(
+  kind: 'flow' | 'project',
+  flows: Pick<Flow, 'id' | 'name' | 'bands'>[],
+  ref: string,
+): string[] | null {
+  if (kind !== 'flow') return null;
+  const bound = flows.find((f) => f.id === ref);
+  return bound?.bands ?? [];
+}
+
+/**
  * R6-01 WI-4 — fetch every standing trigger declared across the whole flow
  * roster (`GET /api/triggers`, a pure read).
  *
@@ -912,15 +954,6 @@ export async function createSkill(
 ): Promise<{ ok: boolean; id?: string; error?: string }> {
   const r = await studioPost('/api/studio/skills', body);
   return { ok: r.ok, id: typeof r.data?.id === 'string' ? r.data.id : undefined, error: r.error };
-}
-
-/** Bootstrap a freshly-created KB with real content (P3): seed profile + index. */
-export async function bootstrapKb(
-  id: string,
-  body: { name?: string; summary?: string },
-): Promise<{ ok: boolean; error?: string }> {
-  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/bootstrap`, body);
-  return { ok: r.ok, error: r.error };
 }
 
 /** Run a manual brain-maintenance op on a KB (K3): 'lint' or 'index'. */
