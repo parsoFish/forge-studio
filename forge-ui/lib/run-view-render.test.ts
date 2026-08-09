@@ -295,3 +295,54 @@ test('found=false wins even if the caller ALSO supplied non-empty lines/material
   expect(html).not.toContain('materials/x.md');
   expect(html).not.toContain('9.99');
 });
+
+// ---------------------------------------------------------------------------
+// TRIGGER PROVENANCE (debt-T trigger plumbing) — the RESERVED vocabulary,
+// verbatim, per `docs/forge-ui-dom-and-harness.md`'s `data-trigger-kind`/
+// `data-trigger-source`/`data-trigger-scope` contract and mirroring
+// `flow-run-detail-render.test.ts`'s own trigger-provenance pins
+// (lines 303-320 and 322-342) exactly, adapted to this component's props
+// shape. `RunViewProps` does NOT declare a `trigger` field today (see the
+// header's ASSUMED EXPORTS block above) — every overrides object below is
+// therefore widened via a type cast (`as Partial<RunViewProps> & { trigger?:
+// unknown }`) so TypeScript's excess-property check does not itself block
+// compilation; the RED-ness of the first two tests below comes from
+// `RunView.tsx` (currently four sections, no trigger handling at all —
+// components/studio/agent-builder/RunView.tsx:52-78), not from a type error.
+// ---------------------------------------------------------------------------
+
+test('a run with a trigger renders the reserved trigger-provenance section — kills "trigger data silently dropped, standalone run view never shows how/why a run fired"', () => {
+  const overrides = {
+    trigger: { kind: 'schedule', source: 'cron:0 9 * * 1', scope: 'gitpulse' },
+  } as Partial<RunViewProps> & { trigger?: unknown };
+  const html = render(overrides);
+
+  expect(html).toContain('data-section="run-trigger"');
+  expect(html).toContain('data-trigger-kind="schedule"');
+  expect(html).toContain('data-trigger-source="cron:0 9 * * 1"');
+  expect(html).toContain('data-trigger-scope="gitpulse"');
+});
+
+test('an UNSCOPED trigger renders data-trigger-scope="" — not omitted, not "null" — kills the three wrong renderings of a null scope (dropped attribute, stringified "null"/"undefined", or a substituted word like "all"/"global")', () => {
+  const overrides = {
+    trigger: { kind: 'webhook', source: 'github:push', scope: null },
+  } as Partial<RunViewProps> & { trigger?: unknown };
+  const html = render(overrides);
+
+  expect(html).toContain('data-trigger-kind="webhook"');
+  expect(html).toContain('data-trigger-scope=""');
+  expect(html).not.toContain('data-trigger-scope="null"');
+  expect(html).not.toContain('data-trigger-scope="undefined"');
+});
+
+// COMPANION (not independently RED — RunView renders no run-trigger section
+// under ANY input today, so this assertion already holds before the fix).
+// Paired with the two RED pins directly above: once trigger handling is
+// implemented, a run with no trigger prop supplied must still render no
+// run-trigger section at all (the same "absence is meaningful, don't
+// manufacture a row for it" rule `flow-run-detail-render.test.ts` pins at
+// its own "a run with NO trigger renders no trigger section at all" test).
+test('companion: a run with no trigger prop renders no run-trigger section', () => {
+  const html = render();
+  expect(html).not.toContain('data-section="run-trigger"');
+});

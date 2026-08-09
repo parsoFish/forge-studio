@@ -37,7 +37,7 @@
  */
 
 import { test, expect } from 'vitest';
-import { resolveRunDetailFromResponse } from './run-view-client.ts';
+import { resolveRunDetailFromResponse, type RunDetail } from './run-view-client.ts';
 
 test('404 -> found:false, and the rest of the shape is the same honest "not found" default RunView already treats as suppress-everything — kills "reads body.state before checking status, so a 404 with a stray body leaks through as found"', () => {
   const detail = resolveRunDetailFromResponse(404, {});
@@ -91,4 +91,44 @@ test('200 with a malformed/missing body does not crash, degrades to honest defau
   expect(detail.state).toBe('unknown');
   expect(detail.costUsd).toBe(0);
   expect(detail.lines).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// TRIGGER PROVENANCE (debt-T trigger plumbing) — `RunDetail` does NOT declare
+// a `trigger` field today (see this file's header: `materialsFromEvents` /
+// `ceilingFromEvents` / `fetchRunDetail` / `RunDetail` are the only exports
+// this file's own header documents), so the returned value is read through a
+// widened cast (`as RunDetail & { trigger?: unknown }`) below — matching the
+// SAME widened-cast convention used in `./run-view-render.test.ts`'s new
+// trigger tests for `RunViewProps`. The RED-ness of the first test below
+// comes from `resolveRunDetailFromResponse` (run-view-client.ts:126) itself:
+// it destructures only `state`/`costUsd`/`lines` off the body and drops every
+// other key, `trigger` included — not from the type cast.
+// ---------------------------------------------------------------------------
+
+test('200 with a real trigger on the body -> carried through verbatim onto detail.trigger — kills "resolver silently drops unknown keys, so a run\'s trigger provenance never reaches RunView"', () => {
+  const detail = resolveRunDetailFromResponse(200, {
+    state: 'done',
+    costUsd: 0.5,
+    lines: [],
+    trigger: { kind: 'merged', source: 'flow:forge-develop', scope: null },
+  }) as RunDetail & { trigger?: unknown };
+
+  expect(detail.trigger).toEqual({ kind: 'merged', source: 'flow:forge-develop', scope: null });
+});
+
+// COMPANION (not independently RED — today's resolver never sets `trigger`
+// at all, so `detail.trigger` is already `undefined` for a body with no
+// `trigger` key, before any fix lands). Paired with the RED pin directly
+// above: once the resolver carries `trigger` through, a body that never had
+// one must still resolve to `undefined` rather than a fabricated default
+// (e.g. `{kind: 'manual', ...}` guessed in when the wire data says nothing).
+test('companion: 200 with no trigger on the body -> detail.trigger is undefined, never a fabricated default', () => {
+  const detail = resolveRunDetailFromResponse(200, {
+    state: 'done',
+    costUsd: 0.5,
+    lines: [],
+  }) as RunDetail & { trigger?: unknown };
+
+  expect(detail.trigger).toBeUndefined();
 });

@@ -29,7 +29,7 @@ import {
   // guard.
   fetchContractStages,
 } from './studio-client';
-import type { Run } from './studio-client';
+import type { Run, TriggerBuilderFields, ShippedTriggerKind } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
 // into is session-client.ts's EXPORTED `ContractStageRow` (:248-258) — the
 // same type the session-shell's contract-buildout artifact already uses. The
@@ -152,6 +152,56 @@ test('buildTriggerDeclaration: webhook sources is a trimmed, comma-split list', 
     webhookSources: ' parsoFish/a , parsoFish/b ,,',
   });
   expect(result?.webhook?.sources).toEqual(['parsoFish/a', 'parsoFish/b']);
+});
+
+// ---------------------------------------------------------------------------
+// forge-zyc pin 3 — agent-complete completability (RED today).
+//
+// orchestrator/studio/validate-triggers.ts:279-287's `trigger-agent-complete`
+// check requires a non-empty `agent:` on every `on: 'agent-complete'` row —
+// a row without one can never fire (orchestrator/flow-trigger.ts:132-165's
+// `fireAgentCompleteTriggers` strict-matches `trigger.agent ===
+// completedAgentSlug`, so an absent `agent` never matches any real slug).
+// `buildTriggerDeclaration` is the ONLY place FlowHeader builds a trigger row
+// from user input — if it can never emit an `agent:` key for kind
+// 'agent-complete', a row saved through the UI is UNCOMPLETABLE: it would
+// fail studio-lint's trigger-agent-complete check on save (once pin 2's
+// mirror gap is separately closed and the kind becomes selectable at all).
+//
+// `TriggerBuilderFields` today (:264-277) carries no `agentSlug` field, and
+// `buildTriggerDeclaration` (:290-319) falls through to the generic
+// `return { on: kind, target }` for any kind that isn't 'cron'/'webhook' — no
+// `agent:` key is ever emitted, for any kind. `ShippedTriggerKind` also
+// doesn't include 'agent-complete' yet (pin 2's mirror gap) — cast past that
+// here since this pin is about the BUILDER's per-kind behaviour, independent
+// of whether the kind is offered in the UI selector.
+// ---------------------------------------------------------------------------
+
+test('RED (forge-zyc pin 3): buildTriggerDeclaration("agent-complete", {targetId, agentSlug}) must produce a declaration carrying agent: <slug> — today it emits no "agent" key at all', () => {
+  const fields = { targetId: 'forge-develop', agentSlug: 'developer' } as unknown as TriggerBuilderFields;
+  const trigger = buildTriggerDeclaration('agent-complete' as unknown as ShippedTriggerKind, fields);
+  expect(trigger).not.toBeNull();
+  // The defect: today's builder returns { on: 'agent-complete', target } —
+  // no `agent` key at all — so this is the RED assertion.
+  expect((trigger as unknown as { agent?: string } | null)?.agent).toBe('developer');
+});
+
+// companion (not independently RED) — paired with the RED pin above: proves
+// the four already-shipped kinds' declarations stay untouched by whatever
+// implementation adds agentSlug/agent-complete handling — none of them
+// should ever grow a stray "agent" key just because `fields.agentSlug` now
+// exists on the input. Passes today (the current builder ignores
+// `agentSlug` entirely, for every kind) — its purpose is to fail LOUDLY if a
+// future fix threads `agentSlug` into the generic fallback branch instead of
+// an `agent-complete`-specific one.
+test('companion: buildTriggerDeclaration for flow-complete/merged/cron carries no stray "agent" key even when fields.agentSlug is set', () => {
+  const withStrayAgentSlug = { targetId: 'forge-develop', agentSlug: 'developer' } as unknown as TriggerBuilderFields;
+  expect(buildTriggerDeclaration('flow-complete', withStrayAgentSlug))
+    .toEqual({ on: 'flow-complete', target: { kind: 'flow', ref: 'forge-develop' } });
+  expect(buildTriggerDeclaration('merged', withStrayAgentSlug))
+    .toEqual({ on: 'merged', target: { kind: 'flow', ref: 'forge-develop' } });
+  expect(buildTriggerDeclaration('cron', { ...withStrayAgentSlug, schedule: '0 3 * * *' }))
+    .toEqual({ on: 'cron', target: { kind: 'flow', ref: 'forge-develop' }, schedule: '0 3 * * *', concurrency: 'forbid' });
 });
 
 test('isValidCronSchedule: valid croner patterns pass, empty/invalid do not throw and return false', () => {
