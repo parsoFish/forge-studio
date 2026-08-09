@@ -143,13 +143,16 @@ function chipPhrase(html: string, kind: string): string {
 // Passes today; a regex/markup-shape mistake in this file (reading the wrong
 // element, matching zero options) would fail THIS test rather than silently
 // producing a false "RED" on the real assertion below.
-test('companion (forge-zyc pin 2): today\'s select renders exactly the 4-option mirror shape — precondition for the RED pin below', () => {
+test('companion (forge-zyc pin 2): the trigger-kind select offers ONLY shipped kinds — never the reserved manual/feed (guards over-rendering all 9)', () => {
   const html = render();
   const rendered = selectOptionValues(html, 'trigger-kind');
-  expect(rendered).toEqual(['flow-complete', 'merged', 'cron', 'webhook']);
-  expect(rendered).not.toContain('agent-complete');
-  expect(rendered).not.toContain('pr-merged');
-  expect(rendered).not.toContain('issue-raised');
+  // Companion to the RED pin below: the pin asserts all 7 SHIPPED ids ARE
+  // present; this guards the other boundary — the 2 reserved kinds (manual,
+  // feed) must NOT leak into the authoring select. Together they pin the
+  // select to exactly the shipped set, mirroring the both-directions parity
+  // test on SHIPPED_TRIGGER_KINDS.
+  expect(rendered).not.toContain('manual');
+  expect(rendered).not.toContain('feed');
 });
 
 test('RED (forge-zyc pin 2): the trigger-kind select must offer an <option> for every SHIPPED SSOT id (all 7, incl. agent-complete/pr-merged/issue-raised) — an operator must be able to author every shipped kind', () => {

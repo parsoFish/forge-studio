@@ -7,8 +7,9 @@
  *   - Editable flow name input
  *   - Goal textarea + data-goal-set warning when empty
  *   - Project + KB selects
- *   - Trigger chips + kind selector (flow-complete/merged/cron/webhook,
- *     R2-04-F4) with per-kind fields, target-flow picker shared by all four
+ *   - Trigger chips + kind selector (all 7 shipped kinds — flow-complete,
+ *     agent-complete, merged, pr-merged, issue-raised, cron, webhook —
+ *     R2-04-F4/forge-zyc) with per-kind fields, target-flow picker shared by all
  *   - Save button → calls onSave() (parent PUT); handles 423 edit-lock
  *
  * Props receive the current header state; parent owns the state (FlowBuilder).
@@ -74,12 +75,13 @@ export function FlowHeader({
   // Unified save feedback (X1) — the hook maps a 423/in-flight error to `locked`.
   const { saving, save: handleSave, ...saveFb } = useSaveState(onSave);
 
-  // R2-04-F4: the operator chooses a trigger kind (data-field="trigger-kind",
-  // the four SHIPPED_TRIGGER_KINDS — flow-complete/merged/cron/webhook; the
-  // registry-reserved kinds agent-complete/manual/feed are never offered) and
-  // a target flow (data-field="trigger-target", now shared by ALL four kinds
-  // — this closes the "merged trigger unauthorable" gap). Per-kind extra
-  // fields (schedule/concurrency, webhook block) layer on top of the target.
+  // R2-04-F4/forge-zyc: the operator chooses a trigger kind (data-field=
+  // "trigger-kind", all 7 SHIPPED_TRIGGER_KINDS — flow-complete,
+  // agent-complete, merged, pr-merged, issue-raised, cron, webhook; the
+  // registry-reserved kinds manual/feed are never offered) and a target flow
+  // (data-field="trigger-target", shared by every kind — this closes the
+  // "merged trigger unauthorable" gap). Per-kind extra fields (schedule/
+  // concurrency, webhook block, agent-complete's agent slug) layer on top.
   const [triggerKind, setTriggerKind] = useState<ShippedTriggerKind>(SHIPPED_TRIGGER_KINDS[0]);
   const [triggerTarget, setTriggerTarget] = useState('');
   const [cronSchedule, setCronSchedule] = useState('');
@@ -89,6 +91,7 @@ export function FlowHeader({
   const [webhookEvents, setWebhookEvents] = useState<Array<'push' | 'release'>>([]);
   const [webhookSecretEnv, setWebhookSecretEnv] = useState('');
   const [webhookSources, setWebhookSources] = useState('');
+  const [agentSlug, setAgentSlug] = useState('');
 
   // Client-side only (UX) — orchestrator/studio/validate.ts's trigger-cron
   // check (same croner engine) is authoritative on save.
@@ -104,6 +107,7 @@ export function FlowHeader({
     webhookEvents,
     webhookSecretEnv,
     webhookSources,
+    agentSlug,
   });
   const canAddTrigger = pendingTrigger !== null && !cronScheduleInvalid;
 
@@ -116,6 +120,7 @@ export function FlowHeader({
     if (triggerKind === 'webhook') {
       setWebhookId(''); setWebhookProvider('github'); setWebhookEvents([]); setWebhookSecretEnv(''); setWebhookSources('');
     }
+    if (triggerKind === 'agent-complete') { setAgentSlug(''); }
   }, [pendingTrigger, canAddTrigger, state, onChange, triggerKind]);
 
   const toggleWebhookEvent = useCallback((ev: 'push' | 'release') => {
@@ -133,11 +138,17 @@ export function FlowHeader({
 
   // Chip label's kind phrase, e.g. "on merged →", "cron 0 3 * * * →",
   // "webhook myproj-push →" — the target-flow name is rendered separately.
+  // `pr-merged`/`issue-raised`/`agent-complete` each get their own honest
+  // phrase (TRIGGER_KINDS carries no display-text field, so the fallback is
+  // the row's own `id`: "on pr-merged →" etc — never the generic "on
+  // complete →", which would mislabel a GitHub-receipt kind as a completion
+  // event, or make an agent-complete chip indistinguishable from a flow one).
   const triggerKindPhrase = (tr: FlowTrigger): string => {
     if (tr.on === 'cron') return `cron ${tr.schedule ?? ''} →`;
     if (tr.on === 'webhook') return `webhook ${tr.webhook?.id ?? ''} →`;
     if (tr.on === 'merged') return 'on merged →';
-    return 'on complete →';
+    if (tr.on === 'flow-complete') return 'on complete →';
+    return `on ${tr.on} →`;
   };
 
   return (
@@ -323,8 +334,8 @@ export function FlowHeader({
           ))}
         </select>
 
-        {/* Triggers (R2-04-F4: kind selector + per-kind fields; the
-            target-flow select is shared by all four shipped kinds). */}
+        {/* Triggers (R2-04-F4/forge-zyc: kind selector + per-kind fields; the
+            target-flow select is shared by every shipped kind). */}
         <span style={{ fontFamily: 'var(--font-display)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase' as const, color: 'var(--faint)', marginLeft: 8 }}>Triggers</span>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
           {state.triggers.map((tr, i) => (
@@ -358,9 +369,9 @@ export function FlowHeader({
             </span>
           ))}
 
-          {/* Kind selector — the four SHIPPED kinds only (mirrors
-              orchestrator/flow-trigger.ts's SHIPPED_TRIGGER_KIND_IDS, the
-              SSOT; forge-ui cannot import orchestrator TS directly). */}
+          {/* Kind selector — every SHIPPED kind, one <option> per entry
+              (mirrors orchestrator/flow-trigger.ts's SHIPPED_TRIGGER_KIND_IDS,
+              the SSOT; forge-ui cannot import orchestrator TS directly). */}
           <select
             value={triggerKind}
             onChange={(e) => { setTriggerKind(e.target.value as ShippedTriggerKind); setTriggerTarget(''); }}
@@ -372,9 +383,9 @@ export function FlowHeader({
             ))}
           </select>
 
-          {/* Target flow — shared by all four kinds (a cron/webhook trigger
-              fires a flow just like flow-complete/merged do; B3: the operator
-              chooses WHICH flow, no longer hardcoded to the first). */}
+          {/* Target flow — shared by every kind (a cron/webhook/agent-complete
+              trigger fires a flow just like flow-complete/merged do; B3: the
+              operator chooses WHICH flow, no longer hardcoded to the first). */}
           <select
             value={triggerTarget}
             onChange={(e) => setTriggerTarget(e.target.value)}
@@ -386,6 +397,20 @@ export function FlowHeader({
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
+
+          {/* agent-complete — the source agent slug whose completion fires
+              this trigger (orchestrator/studio/validate-triggers.ts's
+              trigger-agent-complete check requires this be non-empty). */}
+          {triggerKind === 'agent-complete' && (
+            <input
+              type="text"
+              value={agentSlug}
+              onChange={(e) => setAgentSlug(e.target.value)}
+              placeholder="agent slug"
+              data-field="trigger-agent-slug"
+              style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-mono)', fontSize: 12, padding: '3px 8px', outline: 'none', width: 110 }}
+            />
+          )}
 
           {/* cron — schedule + overrun concurrency policy. */}
           {triggerKind === 'cron' && (

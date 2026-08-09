@@ -230,6 +230,10 @@ export type FlowTrigger = {
   concurrency?: 'allow' | 'forbid' | 'replace';
   /** webhook only. */
   webhook?: WebhookTriggerConfig;
+  /** agent-complete only: the source agent slug whose completion fires this row
+   *  (orchestrator/studio/validate-triggers.ts's trigger-agent-complete check
+   *  requires this be non-empty — an absent agent never means "fires for all"). */
+  agent?: string;
   note?: string;
 };
 
@@ -239,10 +243,20 @@ export type FlowTrigger = {
  * server-side SSOT (registry rows-as-data). forge-ui cannot import
  * orchestrator TS directly, so this is a hand-kept mirror; keep it in
  * lockstep with the registry when a new kind ships (or one is retired).
- * `agent-complete` | `manual` | `feed` are registry-reserved (no runtime yet)
- * and intentionally absent — FlowHeader's kind selector must never offer them.
+ * All 7 shipped ids today: flow-complete, agent-complete, merged, pr-merged,
+ * issue-raised, cron, webhook. `manual` | `feed` are registry-reserved (no
+ * runtime yet) and intentionally absent — FlowHeader's kind selector must
+ * never offer them.
  */
-export const SHIPPED_TRIGGER_KINDS = ['flow-complete', 'merged', 'cron', 'webhook'] as const;
+export const SHIPPED_TRIGGER_KINDS = [
+  'flow-complete',
+  'agent-complete',
+  'merged',
+  'pr-merged',
+  'issue-raised',
+  'cron',
+  'webhook',
+] as const;
 export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
 
 /** Client-side cron syntax check (UX only) — same croner engine as the
@@ -274,6 +288,8 @@ export type TriggerBuilderFields = {
   webhookSecretEnv?: string;
   /** webhook only — comma-separated `owner/repo` list, split here. */
   webhookSources?: string;
+  /** agent-complete only: the source agent slug whose completion fires this trigger. */
+  agentSlug?: string;
 };
 
 /**
@@ -314,6 +330,11 @@ export function buildTriggerDeclaration(
         sources,
       },
     };
+  }
+  if (kind === 'agent-complete') {
+    const agent = fields.agentSlug?.trim();
+    if (!agent) return null;
+    return { on: kind, target, agent };
   }
   return { on: kind, target };
 }
