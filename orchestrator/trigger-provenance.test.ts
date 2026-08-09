@@ -90,6 +90,7 @@ import { aggregateRun, listRuns } from './run-model.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { getPaths } from './queue.ts';
 import { normalizeProjectId } from './studio/registry.ts';
+import { buildCronFlowRunRequest } from './test-fixtures/flow-run-request.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 
 // ---------------------------------------------------------------------------
@@ -241,13 +242,16 @@ test('trigger.kind === "cron" for a run derived from a staged cron request', () 
   const root = makeTmp();
   try {
     planFlow(root, 'worker-cron', 'test-project');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder (mirrors the real
+    // cron-triggers.ts staging shape) with an explicit sourceFlowId override
+    // — deriveTriggerFields's cron arm reads ONLY sourceFlowId now.
+    const run = mintAndDeriveRun(root, buildCronFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-cron' },
-      origin: 'cron',
       triggeredBy: 'cron:watcher-cron',
+      sourceFlowId: 'watcher-cron',
       concurrency: 'allow',
       payload: { kind: 'cron', schedule: '0 3 * * *', firedAt: new Date().toISOString() },
-    });
+    }));
     assert.equal(run.trigger?.kind, 'cron', `expected trigger.kind 'cron', got ${JSON.stringify(run.trigger)}`);
   } finally {
     cleanup(root);
@@ -363,12 +367,16 @@ test('trigger.source is the declaring flow id (cron) — distinct from the targe
     // Declaring flow ('watcher-cron') != target flow ('worker-cron-2') — if
     // source were wrongly derived from target.ref this assertion fails.
     planFlow(root, 'worker-cron-2', 'test-project');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder, with an explicit
+    // sourceFlowId override ('watcher-cron') so trigger.source below stays
+    // the DECLARING flow id — deriveTriggerFields's cron arm reads ONLY
+    // sourceFlowId now (the triggeredBy-parsing fallback arm is deleted).
+    const run = mintAndDeriveRun(root, buildCronFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-cron-2' },
-      origin: 'cron',
       triggeredBy: 'cron:watcher-cron',
+      sourceFlowId: 'watcher-cron',
       payload: { kind: 'cron', schedule: '0 3 * * *', firedAt: new Date().toISOString() },
-    });
+    }));
     assert.equal(run.flowId, 'worker-cron-2', 'sanity: the run itself runs the TARGET flow');
     assert.equal(run.trigger?.source, 'watcher-cron', `expected trigger.source to be the DECLARING flow id 'watcher-cron' (never the target 'worker-cron-2'), got ${JSON.stringify(run.trigger)}`);
   } finally {
@@ -464,13 +472,16 @@ test('trigger.scope is normalizeProjectId-agreeing for a resolved project (fixtu
     planFlow(root, 'worker-scoped', 'My_Project');
     const normalized = normalizeProjectId('My_Project');
     assert.equal(normalized, 'my-project', 'sanity on the normalizer itself');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder, with an explicit
+    // sourceFlowId override — deriveTriggerFields's cron arm reads ONLY
+    // sourceFlowId now, so a trigger with none derives no trigger at all.
+    const run = mintAndDeriveRun(root, buildCronFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-scoped' },
-      origin: 'cron',
       triggeredBy: 'cron:worker-scoped',
+      sourceFlowId: 'worker-scoped',
       payload: { kind: 'cron', schedule: '0 3 * * *', firedAt: new Date().toISOString() },
       eventProject: normalized,
-    });
+    }));
     assert.equal(
       run.trigger?.scope,
       normalized,
@@ -677,12 +688,15 @@ test('reading a triggered run\'s trigger provenance (aggregateRun + listRuns) wr
   const root = makeTmp();
   try {
     planFlow(root, 'worker-purity', 'test-project');
-    mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder, with an explicit
+    // sourceFlowId override — deriveTriggerFields's cron arm reads ONLY
+    // sourceFlowId now, so a trigger with none derives no trigger at all.
+    mintAndDeriveRun(root, buildCronFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-purity' },
-      origin: 'cron',
       triggeredBy: 'cron:worker-purity',
+      sourceFlowId: 'worker-purity',
       payload: { kind: 'cron', schedule: '0 3 * * *', firedAt: new Date().toISOString() },
-    });
+    }));
 
     const before = listAllFilesRec(root);
 

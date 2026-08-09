@@ -55,15 +55,14 @@ function idToken(s: string): string {
  *     `source` is a hook-id slug (round-2 ruling; the earlier fallback that
  *     stripped `webhook:` off `triggeredBy` produced exactly that forbidden
  *     shape and is deleted).
- *   - `cron`           → prefers `sourceFlowId` (every real
- *     `cron-triggers.ts` fire sets it, for the same one-mechanism-per-field
- *     reason as webhook); falls back to recovering the declaring flow id
- *     from `triggeredBy`'s own `cron:<declaringFlowId>` shape when absent.
- *     This fallback is NOT the webhook one reinstated: a cron `triggeredBy`
- *     prefix genuinely IS the declaring flow id (cron-triggers.ts's
- *     `makeFireFn` writes `cron:${d.flowId}` — documented intent, correct by
- *     construction), where a webhook `triggeredBy` prefix is a hook id,
- *     never a flow id.
+ *   - `cron`           → ONLY `sourceFlowId` (every real `cron-triggers.ts`
+ *     fire sets it, for the same one-mechanism-per-field reason as webhook).
+ *     NO fallback (forge-76y, T1 ruling — arm 1 deletion): an earlier version
+ *     of this arm recovered the declaring flow id by parsing `triggeredBy`'s
+ *     `cron:<flowId>` prefix when `sourceFlowId` was absent, but no real
+ *     caller ever omits it — only pre-fix hand-built test fixtures did, and
+ *     the fixture builder (`orchestrator/test-fixtures/flow-run-request.ts`)
+ *     now threads it by default. Same no-fallback posture as webhook above.
  * Only these three origins ever reach this function (drainFlowRunRequests
  * routes chaining's `origin: 'trigger'` through `enqueueFlowRun` instead,
  * never through mint). Returns `null` when no honest source is derivable at
@@ -91,8 +90,13 @@ function deriveTriggerFields(req: FlowRunRequest): { kind: string; source: strin
   } else if (req.origin === 'webhook') {
     source = req.sourceFlowId;
   } else if (req.origin === 'cron') {
-    const prefix = 'cron:';
-    source = req.sourceFlowId ?? (req.triggeredBy.startsWith(prefix) ? req.triggeredBy.slice(prefix.length) : undefined);
+    // forge-76y (T1 ruling, arm 1 deletion): every real cron fire
+    // (cron-triggers.ts's `makeFireFn`) always threads `sourceFlowId` — the
+    // `?? parse(triggeredBy)` fallback this arm used to have was only ever
+    // reached by hand-built test fixtures that omitted it, never by a real
+    // caller. Deleted; a cron request with no `sourceFlowId` now has no
+    // honest provenance, same as webhook's existing no-fallback rule.
+    source = req.sourceFlowId;
   }
   if (!source) return null;
   return {

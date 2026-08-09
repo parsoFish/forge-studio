@@ -37,6 +37,7 @@ import type { Cron } from 'croner';
 import { syncCronTriggers, stopAllCronTriggers } from './cron-triggers.ts';
 import { flowRunsDir } from './flow-run-requests.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
+import { buildCronFlowRunRequest } from './test-fixtures/flow-run-request.ts';
 
 function setup(): string {
   return mkdtempSync(join(tmpdir(), 'flow-run-fixture-parity-'));
@@ -132,7 +133,7 @@ async function fireRealCronAndCaptureStaged(
   return JSON.parse(readFileSync(join(dir, files[0]), 'utf8')) as FlowRunRequest;
 }
 
-test('RED pin — real cron-fired FlowRunRequest field set diverges from the hand-built fixture literal', async () => {
+test('RED pin — buildCronFlowRunRequest reproduces the field set a real cron fire stages (fixture no longer drifts from production shape)', async () => {
   const forgeRoot = setup();
   const queueRoot = setup();
   const armed = new Map<string, Cron>();
@@ -143,26 +144,24 @@ test('RED pin — real cron-fired FlowRunRequest field set diverges from the han
     assert.equal(staged.origin, 'cron');
     assert.equal(staged.triggeredBy, 'cron:flow-fixture-parity');
 
-    // --- the hand-built literal, replicated VERBATIM from
-    // cli/bridge-studio-triggers.test.ts:155-165 ("current hand-built
-    // shape"). That file is NOT modified — this is a read-only parity copy.
-    const handBuiltFixtureLiteral: FlowRunRequest = {
-      target: { kind: 'flow', ref: 'worker-triggered' },
-      origin: 'cron',
-      triggeredBy: 'cron:watcher-triggered',
-      payload: { kind: 'cron', schedule: '0 3 * * *', firedAt: new Date().toISOString() },
-      createdAt: new Date().toISOString(),
-    };
+    // The fixture BUILDER must reproduce the real staging shape. A project-
+    // scoped cron fire stages the conditional projects/eventProject fields, so
+    // the builder is called with those overrides — parity is over the field SET
+    // (which keys are present), not their values. RED before the builder exists
+    // (import error); GREEN only when buildCronFlowRunRequest mirrors every
+    // field a real fire stages; RED again if the builder ever drops one.
+    const built = buildCronFlowRunRequest({ projects: ['demo-project'], eventProject: 'demo-project' });
 
     const realFields = fieldPaths(staged, TIMING_FIELDS);
-    const fixtureFields = fieldPaths(handBuiltFixtureLiteral, TIMING_FIELDS);
+    const builtFields = fieldPaths(built, TIMING_FIELDS);
 
     assert.deepEqual(
+      builtFields,
       realFields,
-      fixtureFields,
-      `field-set parity gap: a REAL cron fire stages ${JSON.stringify(realFields)} but the hand-built ` +
-        `fixture literal (cli/bridge-studio-triggers.test.ts:155-165) only carries ${JSON.stringify(fixtureFields)} — ` +
-        `missing from the fixture: ${JSON.stringify(realFields.filter((f) => !fixtureFields.includes(f)))}`,
+      `field-set parity gap: buildCronFlowRunRequest stages ${JSON.stringify(builtFields)} but a REAL cron fire ` +
+        `stages ${JSON.stringify(realFields)} — ` +
+        `builder missing: ${JSON.stringify(realFields.filter((f) => !builtFields.includes(f)))}; ` +
+        `builder extra: ${JSON.stringify(builtFields.filter((f) => !realFields.includes(f)))}`,
     );
   } finally {
     stopAllCronTriggers(armed);
