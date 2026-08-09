@@ -95,3 +95,68 @@ test('committing copies staged themes into the central project brain + kb.yaml',
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-2 group B (2): the runner's commit step must honor a
+// DESCRIPTOR-DERIVED binding (T1 ruling Q4 option (a)) instead of always
+// hardcoding `binding: { kind: 'project', ref: status.project }`
+// (project-brain-builder-runner.ts ~279) and always writing under
+// `brain/projects/<status.project>/` (~246). When the session was started as
+// the R1-06-F2 hand-off for a KB created via POST /api/studio/kbs (arbitrary
+// id, arbitrary binding — e.g. a flow/band-scoped KB), the commit must write
+// to that KB's OWN brain dir (`brain/<kbId>/`, matching the scaffold POST
+// /api/studio/kbs already created) with THAT binding — never silently
+// re-derive `{ kind: 'project', ref: status.project }`.
+//
+// The `_project-brain/<sid>` session-dir derivation itself is left
+// untouched (T1 ruling) — only status.json carries the extra
+// descriptor-derived fields (`kb_id` / `kb_binding`) a KB-scoped hand-off
+// session needs. Written directly (not via the typed `writeSessionStatus`
+// helper) because `ProjectBrainStatus` does not declare these fields yet —
+// that absence is exactly what this pin is red on.
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06 WI-2 group B): committing a KB-scoped hand-off session honors its descriptor-derived binding, not a hardcoded {kind:"project"}', async () => {
+  const { forgeRoot, sessionDir, sessionId, projectRoot } = setup('committing');
+  try {
+    const staging = join(sessionDir, 'themes');
+    mkdirSync(staging, { recursive: true });
+    writeFileSync(join(staging, 'profile.md'), '# review-insights profile\n');
+
+    // Overwrite status.json with the descriptor-derived fields a KB-scoped
+    // hand-off session carries: the KB's own id (distinct from the
+    // "demoproj" project this session dir happens to be nested under) and
+    // its real binding — a flow/band scope, the shape the ⚑ read-policy
+    // gate (WI-1) already exists to cover.
+    writeFileSync(
+      join(sessionDir, 'status.json'),
+      JSON.stringify({
+        session_id: sessionId,
+        project: 'demoproj',
+        project_repo_path: projectRoot,
+        phase: 'committing',
+        prompt: '',
+        updated_at: new Date().toISOString(),
+        kb_id: 'review-insights',
+        kb_binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
+      }),
+    );
+
+    const r = await runProjectBrainTurn({ sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs') });
+    assert.equal(r.phase, 'committed');
+
+    const kbYamlPath = join(forgeRoot, 'brain', 'review-insights', 'kb.yaml');
+    assert.ok(
+      existsSync(kbYamlPath),
+      `kb.yaml must be written at the descriptor-derived location brain/review-insights/kb.yaml — today the runner ignores kb_id/kb_binding and always writes brain/projects/demoproj/kb.yaml instead (exists: ${existsSync(join(forgeRoot, 'brain', 'projects', 'demoproj', 'kb.yaml'))})`,
+    );
+    const committedKb = loadKbDescriptor(kbYamlPath);
+    assert.deepEqual(
+      committedKb.binding,
+      { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
+      'kb.yaml must carry the descriptor-derived flow/band binding, not a hardcoded {kind:"project", ref: status.project}',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

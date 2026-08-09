@@ -33,8 +33,29 @@ import {
   // throws a genuine "is not a function" RED rather than silently no-op-ing.
   WEBHOOK_FAMILY_TRIGGER_KINDS,
   isSameTriggerIdentity,
+  // R1-06 WI-2 group B (3) / T1 Q3 — REMOVAL pin: bootstrapKb is a dead,
+  // competing seed path (POST /api/studio/kbs/:id/bootstrap) now that KB
+  // create hands off to the real project-brain agent flow (F2). Still
+  // exported today, so this static import resolves to a real function and
+  // the typeof check below goes red for the right reason — same "missing
+  // named export resolves to undefined, not a collection-time throw"
+  // convention already documented above for AT-F1-1 / zyc findings, used
+  // here in reverse (red-while-present, not red-while-absent).
+  bootstrapKb,
+  // R1-06 WI-2 group A: same "not yet exported" RED convention as
+  // AT-F1-1 above — does NOT exist on ./studio-client yet.
+  // `/knowledge/new`'s `[data-field="kb-binding-band"]` select (forge-ui/
+  // app/knowledge/new/page.tsx) needs a pure, DOM-free function to decide
+  // (a) whether the band field renders at all (gated on binding `kind`) and
+  // (b) what options it populates (the bound flow's real `bands`, sourced
+  // from the new GET /api/studio/flows `bands:` field this same WI adds —
+  // see cli/bridge-studio-flows.test.ts's companion route pin). Colocated
+  // here, not as a new lib file, matching this module's existing convention
+  // of exporting small pure derivation helpers alongside the `Flow` type
+  // they read (parseCapability/parseFanout/buildTriggerDeclaration/etc.).
+  deriveKbBandOptions,
 } from './studio-client';
-import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger } from './studio-client';
+import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger, Flow } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
 // into is session-client.ts's EXPORTED `ContractStageRow` (:248-258) — the
 // same type the session-shell's contract-buildout artifact already uses. The
@@ -787,4 +808,84 @@ test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/pro
   // verbatim (parseContractStageRow round-trips stage/status/source/detail/
   // bytes). A re-derived or renamed client mirror would diverge here.
   expect(rows).toEqual(CAPTURED_CONTRACT_STAGES.stages);
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-2 group B (3): bootstrapKb REMOVAL (T1 ruling Q3) — dead code + a
+// competing seed path now that KB create hands off to the real project-brain
+// agent flow (R1-06-F2). RED today means the export still exists.
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06 WI-2 group B, T1 Q3): bootstrapKb must be REMOVED from studio-client — it is a dead, competing seed path', () => {
+  expect(typeof bootstrapKb).toBe('undefined');
+});
+
+// ---------------------------------------------------------------------------
+// ACCEPTANCE TESTS (T3, R1-06 WI-2 group A) — `deriveKbBandOptions`, the
+// pure option-derivation function `/knowledge/new`'s new
+// `[data-field="kb-binding-band"]` select must call to decide (a) whether it
+// renders at all and (b) what it's populated with.
+//
+// Why a pure function rather than a `*-render.test.ts` DOM assertion: unlike
+// RunPanel/FlowRunDetail/RoadmapDag (the components this repo's
+// `*-render.test.ts` files render via `renderToStaticMarkup`), NewKbPage
+// (forge-ui/app/knowledge/new/page.tsx) is the `app/` ROUTE component
+// itself, not a props-driven presentational component — it calls
+// `useRouter()` (next/navigation) and owns ALL of `kind`/`ref`/`flows` as
+// internal `useState`, populated by a `useEffect` fetch. `useEffect` never
+// runs under `renderToStaticMarkup` (SSR-only, no jsdom in this repo — see
+// run-panel-render.test.ts's header), so every such render only ever
+// observes the SAME fixed initial state (kind='flow', flows=[]) regardless
+// of what any mock returns — there is no way to observe an "ABSENT for
+// kind=project" render or a "populated from a bound flow's real bands"
+// render without simulating a state transition, which requires jsdom/
+// interaction plumbing this repo does not have. No other /knowledge or /new
+// page has a render test to follow (confirmed: zero matches in this repo for
+// "knowledge/new" across forge-ui/lib/*.test.ts before this WI). The
+// contract below is exactly what the page's render logic must reduce to:
+//   - kind !== 'flow'  -> null   (the page must render NO
+//     `[data-field="kb-binding-band"]` element at all)
+//   - kind === 'flow'  -> string[] (the bound flow's `bands`, or `[]` when
+//     unbound/bandless — the page renders the field with these as its
+//     `<option>`s, even when empty, since it's still "present" per kind)
+//
+// RED today: `deriveKbBandOptions` does not exist on ./studio-client.ts —
+// the import above resolves to `undefined`, so the `typeof` guard fails.
+// ---------------------------------------------------------------------------
+
+const BANDED_FLOWS: Pick<Flow, 'id' | 'name' | 'bands'>[] = [
+  // Mirrors the REAL shipped forge-develop flow's derived band vocabulary
+  // (confirmed live via listFlowBandIds(repoRoot, 'forge-develop') ->
+  // ['demo-band', 'review-band'], cli/flow-band-vocab.ts) — same ground
+  // truth cli/bridge-studio-flows.test.ts's companion route pin uses.
+  { id: 'forge-develop', name: 'Forge Develop', bands: ['demo-band', 'review-band'] },
+  { id: 'forge-architect', name: 'Forge Architect', bands: [] },
+];
+
+test('RED (R1-06 WI-2 group A): deriveKbBandOptions is not exported from ./studio-client yet — the missing-feature gap this pin closes', () => {
+  expect(
+    typeof deriveKbBandOptions,
+    'deriveKbBandOptions is not exported from ./studio-client yet — /knowledge/new has no way to derive the ' +
+      'kb-binding-band options a flow-scoped KB binding needs',
+  ).toBe('function');
+});
+
+test('deriveKbBandOptions("flow", flows, "forge-develop") returns exactly that flow\'s REAL bands: ["demo-band","review-band"]', () => {
+  expect(deriveKbBandOptions('flow', BANDED_FLOWS, 'forge-develop')).toEqual(['demo-band', 'review-band']);
+});
+
+test('deriveKbBandOptions("flow", flows, ref) for a bound flow with NO bands returns [] — present-but-empty, not undefined/null', () => {
+  expect(deriveKbBandOptions('flow', BANDED_FLOWS, 'forge-architect')).toEqual([]);
+});
+
+test('deriveKbBandOptions("flow", flows, "") for an UNBOUND ref (no flow selected yet) returns [] — never throws, never the whole flows list', () => {
+  expect(deriveKbBandOptions('flow', BANDED_FLOWS, '')).toEqual([]);
+});
+
+test('deriveKbBandOptions("project", flows, ref) is ALWAYS null regardless of ref/flows — the field must not render for a project binding', () => {
+  // Even a ref that WOULD resolve real bands under kind="flow" must not leak
+  // through when kind="project" — proves the kind-gate is checked first/
+  // independently, not just "no matching flow found".
+  expect(deriveKbBandOptions('project', BANDED_FLOWS, 'forge-develop')).toBeNull();
+  expect(deriveKbBandOptions('project', BANDED_FLOWS, '')).toBeNull();
 });

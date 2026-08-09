@@ -546,3 +546,95 @@ test('F2: POST /api/studio/kbs binding.band=review-band on a registered-but-empt
     'a rejected band scope must not create the KB dir',
   );
 });
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-2 group B (1): agent-seeded creation hand-off (R1-06-F2).
+// On a successful create, the route must hand off to the project-brain
+// ("brain-creation") session shell for seeding, mirroring the ESTABLISHED
+// `POST /api/project-brain/start` contract (cli/ui-bridge.ts:3797-3826):
+// `{ ok: true, sessionId }`, plus a REAL session dir + status.json (phase
+// 'briefing') at <projectsRoot>/<project>/_project-brain/<sessionId> — the
+// exact anchor the generic session-shell route
+// (GET /api/studio/sessions/project-brain/:sessionId?project=<p>,
+// cli/bridge-studio-sessions.ts) resolves against. Today the create route
+// (cli/bridge-studio-kbs.ts ~476-611) only ever returns { ok: true, id } —
+// no session is started at all, so this is RED on both the wire contract and
+// the on-disk side effect.
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06 WI-2 group B, F2): POST /api/studio/kbs create hands off a project-brain session for seeding', async () => {
+  const { status, json } = await post('/api/studio/kbs', {
+    id: 'handoff-brain',
+    name: 'Handoff Brain',
+    binding: { kind: 'project', ref: 'demo-project' },
+    desc: 'Testing the agent-seeded creation hand-off.',
+  });
+  assert.equal(status, 200, JSON.stringify(json));
+  assert.equal(json['ok'], true);
+  assert.equal(json['id'], 'handoff-brain');
+
+  // The wire contract: a real hand-off sessionId, same field name as the
+  // sibling POST /api/project-brain/start route.
+  assert.equal(
+    typeof json['sessionId'],
+    'string',
+    `create response must carry a hand-off "sessionId" (mirroring POST /api/project-brain/start's { ok, sessionId } contract) — today it only returns { ok, id }. Got: ${JSON.stringify(json)}`,
+  );
+  const sessionId = json['sessionId'] as string;
+  assert.ok(sessionId.length > 0, 'sessionId must be non-empty');
+
+  // The hand-off must be REAL, not a fabricated id on the wire: a project-brain
+  // session dir + status.json must actually exist on disk, in the 'briefing'
+  // phase, exactly like a session started via POST /api/project-brain/start —
+  // the shell the UI's /sessions/project-brain/:sessionId page reads through
+  // cli/bridge-studio-sessions.ts.
+  const statusPath = join(forgeRoot, 'projects', 'demo-project', '_project-brain', sessionId, 'status.json');
+  assert.ok(existsSync(statusPath), `hand-off session status.json must exist at ${statusPath} — no project-brain session is started by create today`);
+  const statusJson = JSON.parse(readFileSync(statusPath, 'utf8')) as Record<string, unknown>;
+  assert.equal(statusJson['phase'], 'briefing', 'hand-off session must start in the briefing phase, like /api/project-brain/start');
+  assert.equal(statusJson['project'], 'demo-project', 'hand-off session is anchored under the bound project');
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-2 group B (3): bootstrapKb / POST /api/studio/kbs/:id/bootstrap
+// REMOVAL (T1 ruling Q3) — dead code + a competing seed path now that create
+// hands off to the real project-brain agent flow (F2, pin above). RED today
+// means the route STILL responds (has not been removed yet).
+// ---------------------------------------------------------------------------
+
+test('RED (R1-06 WI-2 group B, T1 Q3): POST /api/studio/kbs/:id/bootstrap is REMOVED — no route responds', async () => {
+  // Precondition: the target kb genuinely exists on disk BEFORE probing the
+  // removed route, so a 404 below can only mean "route gone", never "unknown
+  // kb id" (the route's own pre-existing 404 branch for that case).
+  await post('/api/studio/kbs', {
+    id: 'bootstrap-removal-brain',
+    name: 'Bootstrap Removal Brain',
+    binding: { kind: 'unique' },
+    desc: 'kb exists; the bootstrap route should not.',
+  });
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'bootstrap-removal-brain', 'kb.yaml')),
+    true,
+    'precondition: the kb must exist on disk before probing the removed bootstrap route',
+  );
+
+  const res = await fetch(`${bridgeUrl}/api/studio/kbs/bootstrap-removal-brain/bootstrap`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: JSON.stringify({ name: 'x', summary: 'y' }),
+  });
+  assert.equal(
+    res.status,
+    404,
+    `expected 404 (route removed — falls through to the bridge's bare 404 fallback) — the bootstrap route still responds today with status ${res.status}`,
+  );
+
+  // The removed route must leave no seed side-effect behind either — a stale
+  // handler that somehow still 404s but still wrote profile.md would be a
+  // false "removed" green.
+  assert.equal(
+    existsSync(join(forgeRoot, 'brain', 'bootstrap-removal-brain', 'profile.md')),
+    false,
+    'no profile.md must be seeded by a removed bootstrap route',
+  );
+});
