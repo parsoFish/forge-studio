@@ -27,7 +27,15 @@
  * Every other journey (skills, hooks, templates, connections, agents,
  * knowledge, demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
- * skills-detail-package's own read-only precedent (R3-01-F3/F4)); skills-edit
+ * skills-detail-package's own read-only precedent (R3-01-F3/F4)); knowledge
+ * (R1-06 WI-4) drives THREE disjoint, create-and-destroy-itself scratch KBs
+ * (journey-scratch-kb, journey-scratch-kb-band, journey-scratch-kb-maintain —
+ * the last nested one level deeper, under brain/projects/, since that's the
+ * ONE containment root checkProjectBrainIndexes scans; none is ever a real
+ * project brain like brain/projects/mdtoc), each swept inside its own beat's
+ * drive(), never brain/cycles, brain/forge-dev, or a real project's central
+ * brain — see knowledge.mjs's own header comment for the full discipline;
+ * skills-edit
  * restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, agents-scratch-build/agents-builder each clean up their own
@@ -204,6 +212,8 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-create-kb'],
   ['knowledge', 'knowledge-ingest'],
   ['knowledge', 'knowledge-lint-index'],
+  ['knowledge', 'knowledge-create-kb-band-scope'],
+  ['knowledge', 'knowledge-kb-maintain-session'],
 
   ['agents', 'agents-starters'],
   ['agents', 'agents-scratch-build'],

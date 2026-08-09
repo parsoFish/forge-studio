@@ -80,6 +80,79 @@ const DECISION_R604_KICKOFF_BASELINE =
   'docs/roadmaps/R6-operator-experience.md R6-B5 "Agent kickoff panel + ' +
   'standalone run view" (R6-04, 2026-08-07)';
 
+// T1 ruling 2026-08-09 (batch D, R1-06 WI-4) — cited by create-kb-project/
+// create-kb-cycle/kb-maintain below. R1-06-F2's own text draws the exact
+// line this journey-sync pass ports to: "/knowledge/new ... on create, hands
+// off to the brain-creation session (R4-19) to seed structure" — the HAND-OFF
+// (sessionId, real project/dot anchor, kb.yaml + band) is R1-06's own real,
+// shipped surface; the SEEDING CONTENT (turns that draft themes, findings
+// clusters, an accept step) is the brain-creation/maintenance AGENT R4-19
+// builds. R4-ootb-suite.md's own R4-19 section confirms the as-built gap
+// ("no cycle/band-scope creation, no maintenance agent — guided
+// lint-resolution exists as a UI, not an agent session"). Every mockup step
+// that depicts multi-turn session CONTENT (seeded findings, an accept
+// affordance, a maintenance agent narrating its own fix) is excluded under
+// this citation — never faked/scripted-as-real (T1 ruling Q5).
+const DECISION_R4_19 =
+  'docs/roadmaps/R1-contract-componentry.md R1-06-F2 "Agent-seeded creation ' +
+  'hand-off" (" ... hands off to the brain-creation session (R4-19) to seed ' +
+  'structure ... Descriptor-only creation remains valid") + R1-06-F3 ' +
+  '("running the R4-19-F2 agent against real lint findings") + ' +
+  'docs/roadmaps/R4-ootb-suite.md R4-19 "Brain creation & maintenance ' +
+  'agents" ("As-built: ... no cycle/band-scope creation, no maintenance ' +
+  'agent")';
+
+// The mockup's create-kb-project/create-kb-cycle stories script a multi-
+// click WIZARD (create-brain-btn -> scope-X -> select target -> continue) as
+// four separate user actions. The real, as-built /knowledge/new form (R1-06-
+// F2: "the binding picker, as-built") is ONE page filled top-to-bottom and
+// submitted with a SINGLE click — there is no separate "scope" click or
+// "continue" click to independently drive. The single real submit (name +
+// binding-kind + binding-ref [+ band] + desc, one create-kb click) is what
+// knowledge-create-kb/knowledge-create-kb-band-scope actually exercise.
+const DECISION_R1_06_SINGLE_FORM =
+  'docs/roadmaps/R1-contract-componentry.md R1-06-F2 "Agent-seeded creation ' +
+  'hand-off" ("/knowledge/new (binding picker, as-built) gains the band ' +
+  'option and, on create, hands off ...") — the real form is one page, one ' +
+  'submit, not the mockup\'s multi-step wizard';
+
+// R6-08 (KB explore, wave 5, status: planned) owns BOTH gaps this decision
+// covers: "draggable nodes with reactive neighbours, tension presets"
+// (R6-08-F1, mockup round-5 — "As-built: KbGraph ... exist as separate
+// panels ... largely not new machinery", i.e. drag is not yet real) and the
+// tabbed "Ingest activity" panel (R6-08-F2 — "Ingest activity lists
+// reflection-driven ingest events from the event log, read-only, with NO
+// ingest affordance (explicit negative AC — decision 3)"). R1-06-F3 states
+// the SAME operator decision 3 from the maintenance side ("no ingest
+// affordance anywhere in creation or maintenance").
+const DECISION_R6_08_GRAPH_INTERACTIONS =
+  'docs/roadmaps/R6-operator-experience.md R6-08-F1 "Combined explore ' +
+  'surface" (mockup round-5 draggable-node/tension-preset interactions; ' +
+  '"As-built: ... largely not new machinery" — not yet built)';
+const DECISION_NO_INGEST_AFFORDANCE =
+  'docs/roadmaps/R6-operator-experience.md R6-08-F2 "Health + Ingest-' +
+  'activity tabs" ("Ingest activity ... with NO ingest affordance ' +
+  '(explicit negative AC — decision 3)") + ' +
+  'docs/roadmaps/R1-contract-componentry.md R1-06-F3 "Explicit negative AC ' +
+  '(decision 3): no ingest affordance anywhere in creation or maintenance" ' +
+  '+ docs/roadmaps/README.md §4 wave-5 cut summary ("manual KB ingest -> ' +
+  'rejected, reflection-only policy stands (decision 3, negative ACs on ' +
+  'R6-08/R1-06)")';
+
+// A mockup step whose real UI moment genuinely IS demonstrated, but by the
+// SAME beat already cited elsewhere in this story's own port.beats — the
+// registry's one-real-ref-per-story rule (scripts/lib/story-parity.mjs,
+// validateEntry Rule 13: "reject a repeated real beat ref ... a repeated ref
+// is a copy-paste typo that would otherwise silently manufacture a fake
+// `ported` beat") forbids citing the same string beat id twice within one
+// story. This is a schema-honesty technicality, never a claim the capability
+// is unbuilt — the note field on each row below says exactly which cited
+// beat/step already covers it.
+const DECISION_ONE_REF_PER_STORY =
+  'scripts/lib/story-parity.mjs validateEntry Rule 13 ("reject a repeated ' +
+  'real beat ref") — the registry allows exactly one string BeatRef per ' +
+  'real beat within a single story\'s port.beats';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -520,20 +593,130 @@ export const STORY_REGISTRY = [
   {
     story: 'create-kb-project',
     batch: 'D',
-    port: null,
+    port: {
+      journey: 'knowledge',
+      beats: [
+        'knowledge-graph',
+        { excluded: 'create-brain-btn — the real /knowledge/new form has no separate "create a brain" click reachable from /knowledge itself; the real kickoff is the library\'s own [data-action="new-kb"] CTA, ported at knowledge-create-kb\'s own entry', decision: DECISION_R1_06_SINGLE_FORM },
+        { excluded: 'scope-project — the real form has one [data-field="kb-binding-kind"] select, not a separate "scope" click; filled as part of the single submission knowledge-create-kb drives', decision: DECISION_R1_06_SINGLE_FORM },
+        { excluded: 'select kb-target=trafficgame — the real form\'s [data-field="kb-binding-ref"] select is filled with mdtoc (forge\'s own creds-free reference project — trafficgame is not discovered in this checkout), as part of the same single submission', decision: DECISION_R1_06_SINGLE_FORM },
+        'knowledge-create-kb',
+        { excluded: 'sessionTurns:2 ("seeded from the project\'s own history: cycles, PR threads, operator notes") — no creation agent drafts real content yet; only the hand-off (real sessionId, real project anchor) is built', decision: DECISION_R4_19 },
+        { excluded: 'sessionTurns:3 ("8 themes, an index hub, links into develop-cycle — lint-clean from day one") — same gap, R4-19-F1 owns the seeding turns', decision: DECISION_R4_19 },
+        { excluded: 'accept-btn — the real session-shell has no accept affordance for a project-brain session sitting at phase:"briefing"; there is nothing yet to accept', decision: DECISION_R4_19 },
+        { excluded: 'nav-knowledge ("projects/trafficgame joins the shelf") — already demonstrated: knowledge-create-kb (cited above) confirms the new KB appears in #kb-select immediately on create, no accept needed', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'brain-trafficgame ("a living graph from the first minute") — already demonstrated: knowledge-create-kb\'s own closing frame is the new scratch KB\'s (near-empty) graph rendering', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
+    note:
+      'R1-06 WI-4 (journey-sync) ports 2 of 10 mockup steps to real beats and ' +
+      'excludes 8, all with a decision citation, per T1 ruling 2026-08-09. ' +
+      'Step 1 maps onto the existing knowledge-graph beat (the real /knowledge ' +
+      'page — the mockup\'s "three-scope brain model" framing substituted ' +
+      'honestly by the real KB-backend seam + #kb-select, which genuinely ' +
+      'lists KBs across binding kinds). Step 5 ("continue into the creation ' +
+      'session") maps onto knowledge-create-kb, which R1-06 WI-2 extended with ' +
+      'a REAL assertion the mockup does not have an analog for: capturing the ' +
+      'POST /api/studio/kbs response\'s sessionId and navigating to ' +
+      '/sessions/project-brain/<sid>?project=mdtoc to confirm it genuinely ' +
+      'reaches data-page-ready="true" — the T1-ruled distinguishing fact for ' +
+      'this story ("its seeding session IS viewable, real project anchor"). ' +
+      'Steps 2-4 and 9-10 are excluded only because the real product collapses ' +
+      'the mockup\'s multi-click wizard into ONE form + ONE beat citation (the ' +
+      'underlying capability IS real, just not independently citable per the ' +
+      'registry\'s one-ref-per-story rule — see each row\'s own reason). Steps ' +
+      '6-8 are the genuine gap: the multi-turn seeding CONTENT (drafted themes, ' +
+      'an accept step) has no agent behind it yet — R4-19, never faked here.',
   },
   {
     story: 'create-kb-cycle',
     batch: 'D',
-    port: null,
+    port: {
+      journey: 'knowledge',
+      beats: [
+        'knowledge-graph',
+        { excluded: 'create-brain-btn — same single-kickoff gap as create-kb-project: the real CTA is the library\'s [data-action="new-kb"], ported at knowledge-create-kb-band-scope\'s own entry', decision: DECISION_R1_06_SINGLE_FORM },
+        { excluded: 'scope-cycle — the real form has one [data-field="kb-binding-kind"] select (flow, not a fourth "cycle" kind — R1-06-F1 chose a band QUALIFIER on the existing flow binding); filled as part of the single submission', decision: DECISION_R1_06_SINGLE_FORM },
+        'knowledge-create-kb-band-scope',
+        { excluded: 'sessionTurns:1 ("continue into the creation session") — for a NON-project binding the hand-off session is dot-anchored (projects/.kb-<id>/), proven unreachable on disk by knowledge-create-kb-band-scope itself, not merely a missing "continue" click', decision: DECISION_R4_19 },
+        { excluded: 'sessionTurns:2 ("seeded from 41 runs of review findings — clusters become themes") — no cycle/band-scope creation agent exists yet (R4-ootb-suite.md R4-19: "no cycle/band-scope creation")', decision: DECISION_R4_19 },
+        { excluded: 'sessionTurns:3 ("declared-data-fails-open leads with 9 occurrences") — same gap, fabricated finding-cluster content, never scripted-as-real here', decision: DECISION_R4_19 },
+        { excluded: 'accept-btn — no session content to accept; the dot-anchored session has no reachable session-shell page at all', decision: DECISION_R4_19 },
+        { excluded: 'nav-knowledge ("a Brain-2-scoped base, bound to the review band") — already demonstrated: knowledge-create-kb-band-scope confirms kb.yaml\'s binding carries "band: review-band" the moment create is submitted', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'brain-review-insights ("same graph, same reader — different scope") — already demonstrated: knowledge-create-kb-band-scope\'s own closing frame is the new band-scoped KB\'s graph rendering', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
+    note:
+      'R1-06 WI-4 (journey-sync) ports 2 of 10 mockup steps and excludes 8, ' +
+      'per T1 ruling 2026-08-09 (Q5). Step 1 reuses knowledge-graph (same ' +
+      'substitution as create-kb-project — one real /knowledge page, ' +
+      'independent of which story cites it). Step 4 ("the review band of ' +
+      'forge-develop") maps onto the NEW knowledge-create-kb-band-scope beat, ' +
+      'built for this initiative: it drives the real [data-field="kb-binding-' +
+      'band"] select — populated from forge-develop\'s REAL derived bands ' +
+      '(orchestrator/agent-bands.ts\'s resolveBandGuard reading adversarial-' +
+      'review\'s own SKILL.md guard, never a hardcoded list) — selects ' +
+      '"review-band", and verifies the written kb.yaml carries it. T1\'s own ' +
+      'distinguishing ruling for this story ("its seeding session is dot-' +
+      'anchored + R4-19-deferred") is asserted POSITIVELY, not just cited: the ' +
+      'beat confirms on disk that a non-project binding\'s hand-off session ' +
+      'lands under the dot-prefixed projects/.kb-<id>/ anchor bridge-studio-' +
+      'kbs.ts writes — real, but genuinely unreachable through the session-' +
+      'shell route (its ?project= is SLUG_RE-validated, which a leading "." ' +
+      'fails), which is why every session-turn step here is excluded rather ' +
+      'than substituted with the ingest-fold trick create-kb-project could ' +
+      'have reached for.',
   },
   {
     story: 'kb-maintain',
     batch: 'D',
-    port: null,
+    port: {
+      journey: 'knowledge',
+      beats: [
+        'knowledge-graph',
+        { excluded: 'brain-develop-cycle ("develop-cycle carries a skew warning") — already demonstrated: knowledge-kb-maintain-session (cited below) opens its own seeded, flagged scratch KB from its library card', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '"the graph is ALIVE: clusters form..." — the real animated, force-directed graph is already asserted by knowledge-graph (data-node-count/data-edge-count/layered nodes), cited at step 1', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'drag gnode-3 ("its neighbours follow, and the graph re-settles") — draggable nodes + tension presets are R6-08-F1\'s own mockup-round-5 scope, not yet built ("largely not new machinery" pending R6-08)', decision: DECISION_R6_08_GRAPH_INTERACTIONS },
+        { excluded: 'click gnode-4 to read it — node-click-opens-article is already demonstrated by knowledge-graph\'s own theme-node-click assertion, cited at step 1', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'kbtab-activity ("Ingest activity: every reflector pass on record") — forge has no Ingest-activity panel; ingest is reflection-only by explicit operator decision, no UI route or action triggers it', decision: DECISION_NO_INGEST_AFFORDANCE },
+        { excluded: 'kbtab-health ("Health: 8/9 — the distribution check is failing") — there is no tabbed Health view to click into; KB HEALTH (real data-lint-warnings/data-lint-errors) renders inline on the KB page, read by knowledge-kb-maintain-session before it clicks Consolidate', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'op-lint ("run lint confirms it") — already demonstrated by the SAME real lint math knowledge-lint-index exercises (kb-lint result badge) and by knowledge-kb-maintain-session\'s own pre-Consolidate KB HEALTH read', decision: DECISION_ONE_REF_PER_STORY },
+        'knowledge-kb-maintain-session',
+        { excluded: 'sessionTurns:1/2 ("it found the duplicates and dangling edges itself — you choose the primaries") — Consolidate\'s real shipped shape (R1-06-F3) is a direct dispatch-and-poll against real lint findings, not a chat session narrating its own discoveries; that narration has no agent behind it (R4-19-F2, unbuilt)', decision: DECISION_R4_19 },
+        { excluded: 'sessionTurns:3 ("merged, relinked, tagged for multi-project evidence") — same gap: multi-project tagging/relinking judgment calls are the maintenance AGENT\'s job (R4-19-F2), not the deterministic in-process fix path this beat actually drives', decision: DECISION_R4_19 },
+        { excluded: 'sessionTurns:4 + kbFixed ("lint re-run: 9/9 green") — the real beat proves a genuine reduction (data-lint-warnings drops), never a fabricated 9/9; going all the way to 0 depends on the agent-tier residual R4-19-F2 would clear', decision: DECISION_R4_19 },
+        { excluded: 'accept-btn — the real Consolidate op is applied directly (no staged proposal to accept); nothing sits pending review the way a session\'s output would', decision: DECISION_R4_19 },
+        { excluded: 'nav-knowledge ("back on the shelf") — already demonstrated: knowledge-kb-maintain-session enters from the library\'s own KB card in the first place', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'brain-develop-cycle again ("develop-cycle is healthy again, with the cleanup on record") — already demonstrated: knowledge-kb-maintain-session re-reads KB HEALTH on the SAME open page and confirms data-lint-warnings genuinely dropped, without leaving and re-entering', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
+    note:
+      'R1-06 WI-4 (journey-sync) ports 2 of 15 mockup steps and excludes 13, ' +
+      'per T1 ruling 2026-08-09 (Q5 + Q6). Step 1 reuses knowledge-graph (the ' +
+      'real animated force-graph + node-click-to-article — genuinely covers ' +
+      'steps 3 and 5 too, cited once per the registry\'s uniqueness rule). ' +
+      'Step 9 ("Correct issue hands it to the maintenance agent" — the ' +
+      'mockup\'s own op-correct click) maps onto the NEW knowledge-kb-' +
+      'maintain-session beat: a scratch, per-project-shaped brain ' +
+      '(brain/projects/journey-scratch-kb-maintain/) seeded with exactly one ' +
+      'REAL, deterministically-fixable lint finding (a theme genuinely absent ' +
+      'from its own category index — the "not listed in project category ' +
+      'index" shape cli/bridge-studio-kbs.ts\'s applyDeterministicConsolidate' +
+      'Fixes claims), so [data-action="kb-maintain-session"] drives the real ' +
+      'op=consolidate pipeline to a genuine [data-consolidate-state]="cleared" ' +
+      'terminal and [data-component="kb-health"]\'s data-lint-warnings ' +
+      'GENUINELY drops — no agent spawn needed (CI-safe), never a static ' +
+      '"session started" message. Two step classes are excluded: "Ingest ' +
+      'activity" has no real surface anywhere in the product (decision 3 — ' +
+      'ingest stays reflection-only), and the mockup\'s multi-turn "maintenance ' +
+      'agent" narrating its own findings (duplicates, relinking, multi-project ' +
+      'tagging, a 9/9 accept) is R4-19-F2, unbuilt — the real Consolidate ' +
+      'button is a direct dispatch-and-poll, not a chat session, so that ' +
+      'narration is never faked here even though the underlying LINT-COUNT ' +
+      'reduction it claims is asserted for real.',
   },
   {
     story: 'install-skills-hooks',
