@@ -258,7 +258,7 @@ export const journey = defineJourney({
       {
         id: 'su-onboard-preflight',
         title: 'onboard existing → deterministically resolve a failing clause',
-        narration: 'Onboarding a second, existing-style repo trips real contract clauses. The operator clicks the one auto-fix action for the deterministic gap, then routes the agent-resolvable AGENTS.md clause through the real "Resolve with agent" button — the click, the routing to the instructions builder, and the final re-scan are all real (generation itself is emulated, no live LLM turn) — until the project reports flow-ready.',
+        narration: 'Onboarding a second, existing-style repo trips real contract clauses. Before anything is resolved, the project page\'s permanent contract panel (R4-12-F1) renders honest degradation: this half-onboarded repo has no AGENTS.md/CLAUDE.md yet, no demo, and no declared secrets, so those stages show as [data-checklist-status="absent"] — the panel root still renders, an absent artifact is a row, never a dropped row. The operator then clicks the one auto-fix action for the deterministic gap, and routes the agent-resolvable AGENTS.md clause through the real "Resolve with agent" button — the click, the routing to the instructions builder, and the final re-scan are all real (generation itself is emulated, no live LLM turn) — until the project reports flow-ready.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SU: onboard existing → align to the contract (preflight resolution) ────
@@ -310,6 +310,40 @@ export const journey = defineJourney({
                 const resolutionPanel = await page.waitForSelector('[data-section="contract-resolution"]', { timeout: 15000 }).then(() => true).catch(() => false);
                 check(resolutionPanel, 'SU: contract-resolution panel renders when a clause fails');
                 await frame(page, 'onb-0-failing', 'Part 1 — onboard existing: a contract clause fails preflight (auto-fixable)');
+
+                // ── AT-F1-8: the permanent contract panel renders honest DEGRADATION ──────
+                // The same permanent contract panel (R4-12-F1) sits on THIS project page too,
+                // but this freshly-onboarded existing repo is only PARTIALLY contract-complete:
+                // no AGENTS.md/CLAUDE.md yet (the C8 clause this beat is about to resolve), no
+                // demoProcess, no declared secrets. The panel root must still render and report
+                // those stages as [data-checklist-status="absent"] WITHOUT crashing or blanking
+                // — an absent artifact is a ROW, never a dropped row. Assert the degraded state
+                // now, BEFORE the auto-fix + agent resolution below flip instructions to present.
+                await page.waitForSelector('[data-section="contract-panel"]', { timeout: 15000 }).catch(() => {});
+                const degradedPanel = await page.evaluate(() => {
+                  const panel = document.querySelector('[data-section="contract-panel"]');
+                  if (panel === null) return null;
+                  const rows = [...panel.querySelectorAll('[data-checklist-row]')].map((r) => ({
+                    stage: r.getAttribute('data-checklist-row'), status: r.getAttribute('data-checklist-status'),
+                  }));
+                  return {
+                    rowCount: panel.querySelector('[data-checklist-row-count]')?.getAttribute('data-checklist-row-count') ?? null,
+                    rows,
+                    absentCount: rows.filter((r) => r.status === 'absent').length,
+                  };
+                }).catch(() => null);
+                check(degradedPanel !== null,
+                  'AT-F1-8: the permanent contract panel root still renders on a partially-onboarded project (no crash, no blank)');
+                if (degradedPanel) {
+                  check(degradedPanel.rowCount === '5' && degradedPanel.rows.length === 5,
+                    `AT-F1-8: all five stages are still reported as rows, present or absent (got ${degradedPanel.rowCount}/${degradedPanel.rows.length}) — an absent artifact is a row, never a dropped row`);
+                  check(degradedPanel.absentCount >= 1,
+                    `AT-F1-8: the panel honestly surfaces missing stages as [data-checklist-status="absent"] (got ${degradedPanel.absentCount} absent)`);
+                  const instructionsRow = degradedPanel.rows.find((r) => r.stage === 'instructions');
+                  check(instructionsRow?.status === 'absent',
+                    `AT-F1-8: the instructions stage reads absent — no AGENTS.md/CLAUDE.md yet (the C8 clause resolved below); got "${instructionsRow?.status}"`);
+                }
+                await frame(page, 'onb-0b-contract-panel-degraded', 'Part 1 (R4-12-F1) — the permanent contract panel renders honest degradation: missing stages shown as absent, panel intact', { key: true });
                 // Clip: the FULL staged progression on a fresh context — driven against a
                 // CLIP-ONLY COPY of the onboarded project so the canonical slug's clauses
                 // stay failing for the main page's own resolution story below (the clip

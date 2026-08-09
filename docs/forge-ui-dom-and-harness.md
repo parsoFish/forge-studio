@@ -618,6 +618,41 @@ inventory rather than one shared page-level contract:
   (+ `[data-recovery-commits]` when the worktree has commits, and a
   `[data-recovery-note]` result line after requeue/abandon). The recovery
   API itself (`cli/bridge-recovery.ts`) is unchanged — only the UI moved.
+  The editor aside also carries two PERMANENT read-only surfaces (R4-12), on
+  the project at rest — distinct from the preflight VERDICT surfaces
+  (`ContractReadiness` / `[data-section="contract-resolution"]`).
+  **`[data-section="contract-panel"]` (R4-12-F1)** —
+  `ProjectContractPanel.tsx`, an async server component mounted client-side by
+  the page's `ContractPanelMount`; it issues its OWN
+  `GET /api/studio/projects/:id/contract-stages` (`fetchContractStages`,
+  `cli/contract-stages.ts`'s `deriveContractStages`) and renders the SAME
+  five-stage buildout the onboarding session's `contract-buildout` artifact
+  shows, REUSING that checklist vocabulary verbatim:
+  `[data-section="contract-checklist"][data-checklist-row-count]` with one
+  `[data-checklist-row="contract"|"instructions"|"secrets"|"demo"|"roadmap"]`
+  `[data-checklist-status="present"|"absent"]` per stage (all five ALWAYS
+  rendered, in declared order — an absent artifact is a row, never a dropped
+  row), each carrying its inline `[data-detail-line]` facts (the `secrets`
+  stage's detail is env-var **NAMES ONLY**, driven by
+  `testProcess.acceptance.requiresEnv` — never a value, never a fabricated
+  mask; a creds-free project like `mdtoc` shows `secrets` `absent` with no
+  detail line). Plus `[data-contract-northstar]`
+  (+ `[data-contract-northstar-state="present"|"missing"]`) and
+  `[data-contract-conventions-source]` (the value is the `instructionsSource`,
+  or empty). The panel root ALWAYS renders — a partial/degraded project
+  degrades to `absent` rows and `missing` north-star without crashing or
+  blanking. **`[data-section="project-cycle-ledger"]` (R4-12-F2)** — wraps the
+  SHARED `[data-section="history-ledger"]` (`HistoryLedger.tsx`, the THIRD
+  caller after the flow + agent monitors), fed this project's own RAW
+  `Cycle[]` (`fetchCycles()`, scoped to `c.project === id`) through
+  `deriveProjectCycleLedgerRows` (`forge-ui/lib/project-cycle-ledger.ts`) — no
+  status filter, every cycle is a row. Each row is a real
+  `a[data-ledger-row="true"][data-run-id][data-run-status][data-run-when]`
+  whose `href` carries the FULL `cycleId` AS-IS to
+  `/flows/forge-develop/run/<cycleId>` (the shared flow run-detail surface —
+  a completed `cycleId` resolves there as a `runId`); `data-ledger-cost-usd`
+  is omitted (a `Cycle` carries no cost). An empty ledger honestly renders
+  `[data-component="history-ledger-empty"]`, never a fabricated row.
 - **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
   (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
   transcript left, living artifact right. The three bespoke session pages it

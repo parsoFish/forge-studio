@@ -1,8 +1,8 @@
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  PROJECT, ACT, READ, THINK, caption, FORGE_ROOT, waitForFile, WORK,
+  PROJECT, DATE, ACT, READ, THINK, caption, FORGE_ROOT, waitForFile, WORK,
   cleanOnboardedProject,
   writeInstrStatus, instrEvent, instrBurst, writeInstrQuestions, writeInstrDraft, cleanInstructionsSession,
   writePbStatus, seedStagedBrain, cleanSeededBrain,
@@ -56,6 +56,62 @@ function cleanCreateProjects() {
   cleanOnboardedProject(CREATE_SLUG);
   cleanOnboardedProject(CREATE_CLIP_SLUG);
   cleanOnboardedProject(TEMPLATE_SLUG);
+}
+
+// ── R4-12-F2 LEDGER-NAV SEED (module-local) ─────────────────────────────────
+// A THROWAWAY completed cycle for the permanent cycle-ledger dig-in proof
+// (AT-F2-4). It carries its OWN distinct init id — NEVER the canonical CYCLE_ID
+// the flows-run journey owns (which is not seeded until much later in RUN_ORDER,
+// so mdtoc's ledger is genuinely empty at this beat) — so seeding it never
+// mutates canonical state (state-ownership rule). It mirrors the EXACT on-disk
+// shape a real archived, merged cycle carries — the positive-control shape in
+// cli/bridge-studio-flow-run-detail.test.ts: a `_queue/done/<init>.md` manifest
+// (project: mdtoc, flow_id: forge-develop, cycle_id) + a `_logs/<cycleId>/
+// events.jsonl` (cycle.start → cycle.end complete) — so the REAL scanCycles →
+// deriveProjectCycleLedgerRows → HistoryLedger path renders a REAL, clickable row
+// (never a fabricated one) that resolves as `found` on the shared run-detail
+// surface. Both `_queue/` and `_logs/` are gitignored, so it never dirties git;
+// the beat sweeps it in its own finally (crash-safe — a stray manifest would
+// otherwise trip the next run's daemon guard).
+const LEDGER_INIT = `INIT-${DATE}-r4-12-ledger-nav`;
+const LEDGER_CYCLE_ID = `${new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)}Z_${LEDGER_INIT}`;
+const LEDGER_LOG_DIR = join(FORGE_ROOT, '_logs', LEDGER_CYCLE_ID);
+const LEDGER_MANIFEST = join(FORGE_ROOT, '_queue', 'done', `${LEDGER_INIT}.md`);
+
+function seedLedgerCycle() {
+  mkdirSync(LEDGER_LOG_DIR, { recursive: true });
+  const base = { cycle_id: LEDGER_CYCLE_ID, initiative_id: LEDGER_INIT, input_refs: [], output_refs: [] };
+  const now = new Date().toISOString();
+  const events = [
+    { ...base, event_id: 'EV_lnav_1', phase: 'orchestrator', skill: 'cycle', event_type: 'start', started_at: now, message: 'cycle.start', metadata: { origin: 'architect' } },
+    { ...base, event_id: 'EV_lnav_2', phase: 'developer-loop', skill: 'developer-loop', event_type: 'start', started_at: now },
+    { ...base, event_id: 'EV_lnav_3', phase: 'developer-loop', skill: 'developer-loop', event_type: 'end', started_at: now, metadata: { cost_usd: 1.0 } },
+    { ...base, event_id: 'EV_lnav_4', phase: 'orchestrator', skill: 'cycle', event_type: 'end', started_at: now, message: 'cycle.end', metadata: { status: 'complete' } },
+  ];
+  writeFileSync(join(LEDGER_LOG_DIR, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  mkdirSync(join(FORGE_ROOT, '_queue', 'done'), { recursive: true });
+  writeFileSync(LEDGER_MANIFEST, [
+    '---',
+    `initiative_id: ${LEDGER_INIT}`,
+    `project: ${PROJECT}`,
+    `project_repo_path: ${join(FORGE_ROOT, 'projects', PROJECT)}`,
+    'origin: architect',
+    `created_at: '${now}'`,
+    'iteration_budget: 5',
+    'cost_budget_usd: 2',
+    `cycle_id: ${LEDGER_CYCLE_ID}`,
+    'flow_id: forge-develop',
+    'phase: done',
+    '---',
+    '',
+    `# ${LEDGER_INIT} — throwaway completed cycle seeded for the R4-12-F2 ledger→run-detail nav proof.`,
+    '',
+  ].join('\n'));
+}
+
+function cleanLedgerCycle() {
+  try { rmSync(LEDGER_LOG_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(LEDGER_MANIFEST, { force: true }); } catch { /* */ }
 }
 
 export const journey = defineJourney({
@@ -574,7 +630,7 @@ export const journey = defineJourney({
       {
         id: 'su-create-project-builder',
         title: `Project builder — tune an existing project (/projects/${PROJECT})`,
-        narration: `Contrast with the from-scratch project above: ${PROJECT} already has real content, so its project builder shows the same north star, demo timeline, and contract-readiness surfaces already populated and tuneable at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page.`,
+        narration: `Contrast with the from-scratch project above: ${PROJECT} already has real content, so its project builder shows the same north star, demo timeline, and contract-readiness surfaces already populated and tuneable at a glance; adding a demo step live-flips the dirty flag, proving nothing here is a static page. Two permanent read-only surfaces sit alongside the editor: the contract panel (R4-12-F1) — a live five-stage view of ${PROJECT}'s real artifacts on disk (contract, instructions, secrets, demo, roadmap), with secrets shown by NAME only and, since ${PROJECT} is creds-free, honestly reporting no secrets rather than inventing a masked value — and the permanent cycle ledger (R4-12-F2), this project's own completed cycles, each a row that digs read-only into its full run detail on the shared flow run-detail surface.`,
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               // ── A4: Project builder — the managed project as data ─────────────────────
@@ -656,6 +712,109 @@ export const journey = defineJourney({
                   await frame(page, 'a4-1-project-dirty', `A4 — data-step-count incremented (${before}→${after}), data-dirty="true" (no save)`);
                 } else {
                   check(false, 'project-builder: preset/add-step button present (soft — builder loaded)');
+                }
+
+                // ── AT-F1-7: the PERMANENT contract panel — a live view of the real artifacts ──
+                // Distinct from the preflight VERDICT surfaces above (ContractReadiness /
+                // ContractResolutionPanel): this permanent panel (R4-12-F1) issues its OWN
+                // GET /api/studio/projects/mdtoc/contract-stages and renders the five-stage
+                // buildout off mdtoc's real artifacts on disk. No session is open — this is
+                // the project at rest. The panel's own effect re-fetches once the
+                // north-star state settles, so wait for that settled render (present)
+                // rather than the first transient one — a still-missing state after the
+                // wait is then a REAL failure the evaluate below surfaces honestly.
+                await page.waitForSelector('[data-section="contract-panel"]', { timeout: 15000 }).catch(() => {});
+                await page.waitForSelector('[data-section="contract-panel"] [data-contract-northstar-state="present"]', { timeout: 15000 }).catch(() => {});
+                const contractPanel = await page.evaluate(() => {
+                  const panel = document.querySelector('[data-section="contract-panel"]');
+                  if (panel === null) return null;
+                  const rows = [...panel.querySelectorAll('[data-checklist-row]')].map((r) => ({
+                    stage: r.getAttribute('data-checklist-row'), status: r.getAttribute('data-checklist-status'),
+                  }));
+                  return {
+                    rowCount: panel.querySelector('[data-checklist-row-count]')?.getAttribute('data-checklist-row-count') ?? null,
+                    rows,
+                    detailLines: panel.querySelectorAll('[data-detail-line]').length,
+                    northStar: panel.querySelector('[data-contract-northstar]') !== null,
+                    northStarState: panel.querySelector('[data-contract-northstar]')?.getAttribute('data-contract-northstar-state') ?? null,
+                    conventionsSource: panel.querySelector('[data-contract-conventions-source]') !== null,
+                  };
+                }).catch(() => null);
+                check(contractPanel !== null,
+                  'AT-F1-7: the project page renders the permanent contract panel ([data-section="contract-panel"]) at rest — no session open');
+                if (contractPanel) {
+                  check(contractPanel.rowCount === '5' && contractPanel.rows.length === 5,
+                    `AT-F1-7: the checklist reports all five contract stages (data-checklist-row-count, got ${contractPanel.rowCount}/${contractPanel.rows.length})`);
+                  const stages = contractPanel.rows.map((r) => r.stage).join(',');
+                  check(stages === 'contract,instructions,secrets,demo,roadmap',
+                    `AT-F1-7: the five stage rows are the declared vocabulary in order (got "${stages}")`);
+                  check(contractPanel.detailLines >= 1,
+                    `AT-F1-7: the panel renders real per-stage detail lines off mdtoc's artifacts (got ${contractPanel.detailLines} [data-detail-line])`);
+                  check(contractPanel.northStar && contractPanel.northStarState === 'present',
+                    `AT-F1-7: the north-star block renders present off mdtoc's real north star ([data-contract-northstar-state], got "${contractPanel.northStarState}")`);
+                  check(contractPanel.conventionsSource,
+                    'AT-F1-7: the conventions block renders ([data-contract-conventions-source])');
+                  // HONEST creds-free state (D3 security invariant): mdtoc declares NO secrets
+                  // (testProcess.acceptance.requiresEnv is empty — it is forge's creds-free OOTB
+                  // reference project), so the secrets row is honestly `absent` and carries NO
+                  // detail line — never an invented masked value standing in for a real one. A
+                  // secrets NAME is only ever rendered for a project that actually declares one.
+                  const secrets = contractPanel.rows.find((r) => r.stage === 'secrets');
+                  check(secrets?.status === 'absent',
+                    `AT-F1-7 (D3): mdtoc is creds-free — the secrets row reports absent honestly, no NAMEs and no masked value invented (got "${secrets?.status}")`);
+                }
+                await frame(page, 'a4-1b-contract-panel', 'A4 (R4-12-F1) — the permanent contract panel: five-stage buildout, north star, conventions — a live view of mdtoc\'s real artifacts', { key: true });
+
+                // ── AT-F2-4: the permanent cycle-ledger dig-in → shared run detail ──────────
+                // The project page carries a PERMANENT cycle ledger (R4-12-F2): this project's
+                // own completed cycles, each a row digging into its full run detail. mdtoc's
+                // real archived history accrues as cycles run (the develop cycle later in this
+                // walkthrough is one such producer); at THIS point in RUN_ORDER none has run
+                // yet, so we seed ONE throwaway completed cycle (its own distinct init id,
+                // swept in the finally below) mirroring the exact on-disk shape a real archived
+                // cycle carries — so the REAL fetchCycles → deriveProjectCycleLedgerRows →
+                // HistoryLedger path renders a REAL, clickable row (never a fabricated one) that
+                // navigates READ-ONLY into the shared flow run-detail surface (no run triggered).
+                seedLedgerCycle();
+                try {
+                  // Reload so the page's mount-time fetchCycles picks up the seeded cycle
+                  // (the project page loads cycles once on mount; there is no periodic refetch).
+                  await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+                  await page.waitForFunction(
+                    () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+                    null, { timeout: 20000 },
+                  ).catch(() => {});
+                  const ledgerMounted = await page.evaluate(() =>
+                    document.querySelector('[data-section="project-cycle-ledger"] [data-section="history-ledger"]') !== null).catch(() => false);
+                  check(ledgerMounted,
+                    'AT-F2-4: the project page mounts the permanent cycle ledger ([data-section="project-cycle-ledger"] wrapping the shared [data-section="history-ledger"])');
+                  const ledgerRow = page.locator('[data-section="project-cycle-ledger"] [data-ledger-row="true"]').first();
+                  const rowVisible = await ledgerRow.waitFor({ state: 'visible', timeout: 15000 }).then(() => true).catch(() => false);
+                  check(rowVisible,
+                    'AT-F2-4: the ledger renders a completed-cycle row through the shared deriveProjectCycleLedgerRows engine (a real cycle on disk, not a fabricated row)');
+                  if (rowVisible) {
+                    const rowRunId = await ledgerRow.getAttribute('data-run-id').catch(() => null);
+                    const rowStatus = await ledgerRow.getAttribute('data-run-status').catch(() => null);
+                    check(rowStatus === 'done',
+                      `AT-F2-4: the ledger row carries the cycle's real status verbatim (got "${rowStatus}")`);
+                    await frame(page, 'a4-2-cycle-ledger', 'A4 (R4-12-F2) — the permanent cycle ledger: this project\'s completed cycles, each a dig-in to its run detail');
+                    // Read-only navigation — a plain <a href> to the shared run-detail; no run
+                    // is triggered, the canonical cycle is never touched.
+                    await ledgerRow.click().catch(() => {});
+                    await page.waitForFunction(
+                      () => document.querySelector('main[data-page="flow-run"]')?.hasAttribute('data-run-found') === true,
+                      null, { timeout: 20000 },
+                    ).catch(() => {});
+                    const runPage = await page.evaluate(() => {
+                      const el = document.querySelector('main[data-page="flow-run"]');
+                      return el ? { found: el.getAttribute('data-run-found'), runId: el.getAttribute('data-run-id') } : null;
+                    }).catch(() => null);
+                    check(runPage !== null && runPage.found === 'true' && runPage.runId === rowRunId,
+                      `AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page="flow-run"][data-run-found="true"][data-run-id="${rowRunId}"]) — the F2 producer→consumer proof (got ${JSON.stringify(runPage)})`);
+                    await frame(page, 'a4-3-run-detail', 'A4 (R4-12-F2) — the cycle-ledger dig-in resolves into the shared flow run-detail surface', { key: true });
+                  }
+                } finally {
+                  cleanLedgerCycle();
                 }
               } else {
                 check(false, 'project-builder: page did not become ready — project-builder checks skipped');
