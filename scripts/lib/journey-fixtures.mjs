@@ -727,6 +727,158 @@ export function writeDemoJson(revision) {
   ].join('\n'));
 }
 
+// ── R4-14 SHOWCASE fixtures ─────────────────────────────────────────────────
+// Purpose-built, clip-only cycles for the /projects/[id]/showcase journey —
+// deliberately NOT the shared CYCLE_ID/INIT above (flows-run/roadmap own that
+// lifecycle end-to-end, through to `_queue/done/`, and this journey must
+// leave it byte-unchanged) and NOT demo-builder's `.forge/demo/` dir
+// (cleanDemoBuilderSession unconditionally wipes that shared, non-sid-scoped
+// directory on every run — a showcase cycle seeded there would vanish out
+// from under this journey the moment demo-builder's own cleanup fires).
+//
+// Two real, already-grounded mdtoc roadmap-feature stories, corpus-grounded
+// the same way writeDemoJson (above) is: the OLDER cycle mirrors writeDemoJson's
+// own shipped `--write` in-place TOC injection story; the NEWER cycle mirrors
+// the `--check` CI drift-guard milestone already used as fixture prose in
+// roadmap.mjs's INIT_DEV manifest body ("mdtoc — `--check` mode (CI drift
+// guard)" / "Given a doc whose embedded TOC has drifted, when `mdtoc --check`
+// runs, then it exits non-zero so CI can fail."). A genuinely different real
+// feature — not a relabelled copy — with a different AC/test count, so the
+// refresh beat's data-ac-eval-count flip is a real structural signal. NEVER
+// invented betterado/PR-#61 strings (the mockup's own run-agent-demo-runner
+// script — see story-registry.mjs).
+//
+// Fixed, deterministic cycleId timestamps (no trailing 'Z' — deriveShowcase-
+// CycleId's cycleId-stamp fallback regex requires the timestamp segment to be
+// followed immediately by `_`, which STAMP's real-run-derived 'Z' suffix
+// above breaks; the production cycleId generator, orchestrator/cycle.ts's
+// newCycleId, never appends one — these constants mirror THAT real shape,
+// mirroring agents.mjs's own R6_06_FLOW_CYCLE_ID fixed-timestamp precedent).
+export const SHOWCASE_INIT_1 = 'INIT-r4-14-showcase-evidence-a';
+export const SHOWCASE_CYCLE_ID_1 = `2026-01-01T00-00-00_${SHOWCASE_INIT_1}`;
+export const SHOWCASE_CYCLE_LOG_1 = join(FORGE_ROOT, '_logs', SHOWCASE_CYCLE_ID_1);
+
+// A later leading timestamp than CYCLE_ID_1 — scanCycles() never sets
+// Cycle.startedAt/endedAt from a real bridge scan, so deriveShowcaseCycleId's
+// fallback chain (endedAt ?? startedAt ?? cycleId stamp) always lands on the
+// cycleId stamp here; that is the ONLY thing that needs to be newer.
+export const SHOWCASE_INIT_2 = 'INIT-r4-14-showcase-evidence-b';
+export const SHOWCASE_CYCLE_ID_2 = `2026-01-02T00-00-00_${SHOWCASE_INIT_2}`;
+export const SHOWCASE_CYCLE_LOG_2 = join(FORGE_ROOT, '_logs', SHOWCASE_CYCLE_ID_2);
+
+// A second, distinct project id — NEVER `mdtoc` itself — for the honest-empty
+// beat: carries only an in-flight manifest (real activity, nothing terminal),
+// the "declared-data-fails-open" edge case the page's own WI-2 brief calls
+// out, without mutating the real mdtoc project or its cycle history.
+export const SHOWCASE_EMPTY_PROJECT = `${PROJECT}-showcase-empty-clip`;
+export const SHOWCASE_EMPTY_INIT = 'INIT-r4-14-showcase-empty-inflight';
+
+function showcaseManifest({ initId, project, phase }) {
+  return [
+    '---', `initiative_id: ${initId}`, `project: ${project}`, `project_repo_path: ${projectRoot}`,
+    `created_at: '${new Date().toISOString()}'`, 'iteration_budget: 8', 'cost_budget_usd: 12',
+    `phase: ${phase}`, 'origin: architect',
+    '---', '', `# ${initId} — seeded for the R4-14 demo-showcase journey.`,
+  ].join('\n');
+}
+
+/**
+ * Seed the OLDER showcase-worthy cycle: a `done` manifest + a real-shaped
+ * demo.json (DemoModel — cli/demo-model.ts) mirroring writeDemoJson's own
+ * `--write` TOC-injection story, under distinct clip-only ids.
+ */
+export function writeShowcaseCycleOne() {
+  mkdirSync(QDIR('done'), { recursive: true });
+  writeFileSync(join(QDIR('done'), `${SHOWCASE_INIT_1}.md`), showcaseManifest({ initId: SHOWCASE_INIT_1, project: PROJECT, phase: 'done' }));
+  const artifacts = join(SHOWCASE_CYCLE_LOG_1, 'artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(join(artifacts, 'demo.json'), JSON.stringify({
+    title: 'mdtoc: --write in-place TOC injection',
+    essence: 'Adds a `--write` mode that inserts or refreshes the generated table of contents between <!-- toc --> / <!-- /toc --> markers via a new pure src/inject.ts, wired into the CLI. Idempotent — re-running --write on a current doc produces no diff.',
+    project: PROJECT, initiativeId: SHOWCASE_INIT_1, baseRef: 'main', changedRef: `forge/${SHOWCASE_INIT_1}`,
+    diffStat: ' src/inject.ts       |  38 ++++++++\n src/cli.ts          |  21 +++-\n test/inject.test.ts |  95 ++++++++++++\n 3 files changed, 154 insertions(+)',
+    acEvaluations: [
+      { criterion: 'marker slice + insert: --write replaces only the marker region; acceptance reads back the built CLI', verdict: 'met',
+        evidence: 'injectToc_ReplacesMarkerRegion → PASS (npm test) + npm run acceptance reads back the exact TOC from dist/cli.js, exit 0' },
+      { criterion: 'idempotency: re-running --write on a current doc produces no diff', verdict: 'met',
+        evidence: 'injectToc_IsIdempotent → PASS, diff === "" on the 2nd and 3rd consecutive --write run' },
+    ],
+    summary: { bullets: ['Adds a pure src/inject.ts marker-region injector, wired into the CLI as --write.'], branch: `forge/${SHOWCASE_INIT_1}`, commitSha: 'b7c4e9a' },
+    testEvidence: [
+      { name: 'injectToc_ReplacesMarkerRegion', result: 'pass' },
+      { name: 'injectToc_IsIdempotent', result: 'pass' },
+      { name: 'acceptance: --write read-back vs test/fixtures/release-notes.md', result: 'pass' },
+    ],
+    checkpoints: [
+      { label: 'Unit suite — injectToc_ReplacesMarkerRegion + injectToc_IsIdempotent', kind: 'harness',
+        caption: 'marker-region slice replaces only the TOC; a second --write is byte-identical' },
+    ],
+  }, null, 2));
+}
+
+export function cleanShowcaseCycleOne() {
+  try { rmSync(join(QDIR('done'), `${SHOWCASE_INIT_1}.md`), { force: true }); } catch { /* */ }
+  try { rmSync(SHOWCASE_CYCLE_LOG_1, { recursive: true, force: true }); } catch { /* */ }
+}
+
+/**
+ * Seed the NEWER showcase cycle: a `merged` manifest + a demo.json for a
+ * DIFFERENT, also-grounded mdtoc roadmap feature (roadmap.mjs's INIT_DEV
+ * fixture story: `--check` mode / CI drift guard) — a genuinely different
+ * AC/test count from cycle one, so the showcase's re-derivation onto this
+ * cycle is a real structural (data-ac-eval-count) flip, not a relabel.
+ */
+export function writeShowcaseCycleTwo() {
+  mkdirSync(QDIR('merged'), { recursive: true });
+  writeFileSync(join(QDIR('merged'), `${SHOWCASE_INIT_2}.md`), showcaseManifest({ initId: SHOWCASE_INIT_2, project: PROJECT, phase: 'merged' }));
+  const artifacts = join(SHOWCASE_CYCLE_LOG_2, 'artifacts');
+  mkdirSync(artifacts, { recursive: true });
+  writeFileSync(join(artifacts, 'demo.json'), JSON.stringify({
+    title: 'mdtoc: --check mode (CI drift guard)',
+    essence: 'Given a doc whose embedded TOC has drifted, `mdtoc --check` exits non-zero so CI can fail the build on a stale table of contents.',
+    project: PROJECT, initiativeId: SHOWCASE_INIT_2, baseRef: 'main', changedRef: `forge/${SHOWCASE_INIT_2}`,
+    diffStat: ' src/check.ts        |  24 ++++++\n src/cli.ts          |   9 ++-\n 2 files changed, 31 insertions(+), 2 deletions(-)',
+    acEvaluations: [
+      { criterion: '--check exits non-zero when the embedded TOC has drifted from the generated one', verdict: 'met',
+        evidence: 'checkToc_ExitsNonZeroOnDrift → PASS (npm test)' },
+    ],
+    summary: { bullets: ['Adds a pure src/check.ts comparator + --check CLI wiring for CI.'], branch: `forge/${SHOWCASE_INIT_2}`, commitSha: 'a1c93f0' },
+    testEvidence: [
+      { name: 'checkToc_ExitsNonZeroOnDrift', result: 'pass' },
+      { name: 'checkToc_ExitsZeroWhenCurrent', result: 'pass' },
+    ],
+    checkpoints: [
+      { label: 'Unit suite — checkToc_ExitsNonZeroOnDrift + checkToc_ExitsZeroWhenCurrent', kind: 'harness',
+        caption: '--check exits non-zero on drift, zero when the embedded TOC is current' },
+    ],
+  }, null, 2));
+}
+
+export function cleanShowcaseCycleTwo() {
+  try { rmSync(join(QDIR('merged'), `${SHOWCASE_INIT_2}.md`), { force: true }); } catch { /* */ }
+  try { rmSync(SHOWCASE_CYCLE_LOG_2, { recursive: true, force: true }); } catch { /* */ }
+}
+
+/**
+ * Seed the honest-empty fixture: a distinct project id with only an
+ * in-flight manifest — real activity, nothing terminal — so
+ * deriveShowcaseCycleId legitimately returns null and the showcase page
+ * renders [data-section="showcase-empty"], never a fabricated gallery. No
+ * `_logs/` dir needed: scanCycles() surfaces an in-flight manifest with no
+ * log dir yet via its own "just-claimed, pre-first-event" fallback.
+ */
+export function writeShowcaseEmptyFixture() {
+  mkdirSync(QDIR('in-flight'), { recursive: true });
+  writeFileSync(
+    join(QDIR('in-flight'), `${SHOWCASE_EMPTY_INIT}.md`),
+    showcaseManifest({ initId: SHOWCASE_EMPTY_INIT, project: SHOWCASE_EMPTY_PROJECT, phase: 'in-flight' }),
+  );
+}
+
+export function cleanShowcaseEmptyFixture() {
+  try { rmSync(join(QDIR('in-flight'), `${SHOWCASE_EMPTY_INIT}.md`), { force: true }); } catch { /* */ }
+}
+
 /**
  * R4-08-F3: the adversarial-review findings artifact beside the demo evidence.
  * Mirrors what the real critique pipeline persists (orchestrator/phases/

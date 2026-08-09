@@ -153,6 +153,30 @@ const DECISION_ONE_REF_PER_STORY =
   'real beat ref") — the registry allows exactly one string BeatRef per ' +
   'real beat within a single story\'s port.beats';
 
+// R4-14 (batch D, journey-sync T3) — cited by the excluded steps of
+// run-agent-demo-runner below. R4-14's own scope line (R4-ootb-suite.md
+// R4-14-F1: "Route + page rendering the project's most recent demo-artifact
+// set ... Refresh is data-driven — a new merged cycle's artifacts appear
+// without page changes; the *auto-refresh trigger* (demo-runner on
+// PR-merged project hook) is R2-08-F3's row, consumed here") draws the exact
+// line this port takes: R4-14 ships the SHOWCASE PAGE — the standing
+// evidence surface a merged cycle's demo.json renders into — never the
+// demo-runner AGENT itself (builder navigation, its own run view, or a
+// hook-triggered execution transcript), which is a different surface owned
+// elsewhere (R4-B13 already verified the agent aligned; R2-08 owns the
+// project-hook trigger machinery). The mockup's own steps 3-4 script a
+// specific fabricated example ("PR #61 just merged on betterado") — never
+// scripted as real here, per the demo-seeds honesty rule (corpus-grounded
+// fixtures only, journey-fixtures.mjs's own header comment).
+const DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN =
+  'docs/roadmaps/R4-ootb-suite.md R4-14 "Demo showcase page" / R4-14-F1 ' +
+  '"Showcase surface" ("Route + page rendering the project\'s most recent ' +
+  'demo-artifact set ... Refresh is data-driven ... the *auto-refresh ' +
+  'trigger* (demo-runner on PR-merged project hook) is R2-08-F3\'s row, ' +
+  'consumed here") + R4-14\'s "Out of scope: demo generation (R4-07 demo ' +
+  'agent, done) ... trigger machinery (R2-08)" — R4-14 ports the SHOWCASE ' +
+  'surface only, not the demo-runner agent-builder/agent-run surface';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -811,17 +835,33 @@ export const STORY_REGISTRY = [
   },
   {
     story: 'run-agent-demo-runner',
-    batch: 'C',
-    port: null,
+    batch: 'D',
+    port: {
+      journey: 'demo-showcase',
+      beats: [
+        { excluded: 'goto #/agents/builder/demo-runner ("The Demo Runner can ride a PROJECT hook...") — the agent-builder page is a different surface from the showcase; R4-14 ships the showcase PAGE, not agent-builder navigation', decision: DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN },
+        { excluded: 'hover [data-j=agent-triggers] ("Hook triggers are scoped per project...") — the agent-builder triggers panel is out of scope for R4-14; project-hook trigger SCOPING is R2-08 territory', decision: DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN },
+        { excluded: 'goto #/agents/run/demo-runner, patch agentRun:1 ("PR #61 just merged on betterado — the hook fired.") — a specific fabricated PR/project pairing, never scripted as real; the agent-run view is also a different surface from the showcase page', decision: DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN },
+        { excluded: 'patch agentRun:3 ("Live ADO GETs, portal captures...") — an agent-run execution transcript (R4-B13\'s territory, already verified aligned), not anything the showcase page itself renders', decision: DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN },
+        { excluded: 'patch agentRun:5 ("Output: refreshed demo HTML summary + screenshot set.") — same agent-run-view surface as the prior two steps, not the showcase page', decision: DECISION_R4_14_SHOWCASE_NOT_AGENT_RUN },
+        'demo-showcase-refresh',
+      ],
+    },
     excluded: null,
     note:
       'Agent itself verified aligned by R4-B13 (project-demo-skill ' +
-      'execution with actual-resource evidence; the showcase-page delta ' +
-      'is R4-14 and the project-hook trigger delta is R2-08); batch C\'s ' +
-      'MEASURED at batch-C exit (2026-08-08): batch C did NOT port this ' +
-      'story — 0 of 6 beats. It is also trigger framing 2 of 3 ' +
-      '(project-hook), blocked on the SHIPPED_TRIGGER_KINDS UI mirror ' +
-      'omitting pr-merged. Filed as a batch-D WI (bd forge-gu8).',
+      'execution with actual-resource evidence; the project-hook trigger ' +
+      'delta is R2-08). R4-14 (batch D, journey-sync T3) ships the ' +
+      'showcase-page half of this story\'s closing claim: ' +
+      'demo-showcase-refresh seeds a SECOND, newer merged cycle for the ' +
+      'same project and reloads the showcase — the evidence gallery flips ' +
+      'to the new cycle\'s real demo.json with zero code changes, exactly ' +
+      'step 6\'s "the showcase never goes stale — merges refresh it ' +
+      'automatically". Steps 1-5 (agent-builder navigation, the ' +
+      'hook-trigger scoping hover, and the agentRun-patched agent-run-view ' +
+      'progression — including the fabricated "PR #61 ... betterado" ' +
+      'example) are a DIFFERENT surface this initiative does not ship — ' +
+      'excluded, not silently skipped. Filed as a batch-D WI (bd forge-gu8).',
   },
   {
     story: 'run-agent-reflector',

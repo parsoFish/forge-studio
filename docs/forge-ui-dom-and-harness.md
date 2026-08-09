@@ -699,6 +699,45 @@ inventory rather than one shared page-level contract:
   a completed `cycleId` resolves there as a `runId`); `data-ledger-cost-usd`
   is omitted (a `Cycle` carries no cost). An empty ledger honestly renders
   `[data-component="history-ledger-empty"]`, never a fabricated row.
+- **`/projects/[id]/showcase` — the demo showcase (R4-14, 2026-08-10).** A
+  per-project **standing** demo page — "show someone the project" — distinct
+  from the per-run `/artifact?type=demo` evidence view above: it always
+  renders the project's newest `merged`/`done` cycle's demo, not one the
+  operator has to pick. Entry is gated on the project page itself:
+  `/projects/[id]`'s cycle-ledger header carries
+  `[data-action="open-showcase"]`, rendered only when
+  `showShowcaseEntry` (`forge-ui/lib/project-showcase.ts`) resolves a real
+  eligible cycle for the project — the link is never offered for a project
+  the showcase page would itself render empty for. Page shell:
+  `main[data-page="project-showcase"][data-page-ready][data-project-id]`.
+  Load pipeline (`forge-ui/lib/showcase-load.ts`'s `loadShowcase`):
+  `fetchCycles()` → `deriveShowcaseCycleId` (newest cycle with
+  `status === 'merged' | 'done'` for this project, ranked by
+  `endedAt ?? startedAt ?? <cycleId>`'s own leading timestamp) →
+  `fetchDemoModel(cycleId)`. Two render branches, both derived from the SAME
+  fetch (no separate showcase-only schema):
+  `[data-section="showcase-stats"]` — a small stats strip
+  (`deriveShowcaseStats`, `forge-ui/lib/project-showcase.ts`) of real counts
+  read off the fetched `DemoModel` (test-evidence count, AC met/partial/missed,
+  branch/commit/PR-link tiles when the model carries them) — above
+  `[data-section="showcase-evidence"]`, which wraps the reused
+  `<DemoComparison>` **unchanged** from `/artifact?type=demo` (same
+  `[data-section="demo-comparison"]` / `[data-section="demo-evaluation"]
+  [data-ac-eval-count][data-ac-verdict]` contract documented above — one
+  renderer, two surfaces). **Honest empty:**
+  `[data-section="showcase-empty"]` renders instead whenever there is nothing
+  real to show — either no eligible cycle at all, OR a terminal cycle exists
+  but its `demo.json` never landed (`loadShowcase`'s `{kind:'loaded',
+  model:null}` path) — both collapse to the SAME empty state, never a
+  fabricated or partially-blank gallery. Because entry is gated, this page's
+  own empty branch is reachable only by a direct/stale URL, never the normal
+  click-through — the `demo-showcase` journey's own `demo-showcase-empty` beat
+  drives it that way deliberately (`scripts/journeys/demo-showcase.mjs`).
+  Refresh is data-driven, not cached: the page re-derives on every load, so a
+  newer merged cycle's evidence appears with zero code changes
+  (`demo-showcase-refresh` beat — ported from the mockup's
+  `run-agent-demo-runner` story's own closing claim, "the showcase never goes
+  stale — merges refresh it automatically"; see `scripts/journeys/story-registry.mjs`).
 - **`/sessions/[kind]/[sid]` — the ONE interactive-session surface
   (R2-10-F1, 2026-08-05).** Every interactive agent renders here: chat
   transcript left, living artifact right. The three bespoke session pages it
