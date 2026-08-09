@@ -43,9 +43,10 @@ cli/bridge-studio-runs.ts renameSync 1
 cli/bridge-studio-runs.ts rmSync 1
 cli/bridge-studio-runs.ts spawn 1
 cli/bridge-studio-runs.ts writeFileSync 1
-cli/bridge-studio-skills.ts existsSync 2
-cli/bridge-studio-skills.ts mkdirSync 1
+cli/bridge-studio-skills.ts existsSync 1
+cli/bridge-studio-skills.ts mkdirSync 2
 cli/bridge-studio-skills.ts readFileSync 1
+cli/bridge-studio-skills.ts rmSync 1
 cli/bridge-studio-skills.ts writeFileSync 1
 cli/bridge-studio-writes.ts execFileSync 2
 cli/bridge-studio-writes.ts existsSync 13
@@ -106,6 +107,8 @@ cli/reflect-reconcile.ts existsSync 4
 cli/reflect-reconcile.ts readdirSync 1
 cli/reflect-reconcile.ts readFileSync 2
 cli/reflect-reconcile.ts statSync 1
+cli/skill-staging.ts mkdirSync 1
+cli/skill-staging.ts writeFileSync 1
 cli/studio-path-guard.ts lstatSync 3
 cli/studio-path-guard.ts mkdirSync 1
 cli/studio-path-guard.ts readdirSync 1
@@ -361,10 +364,10 @@ orchestrator/skill-path.ts existsSync 1
 orchestrator/skill-path.ts readdirSync 1
 orchestrator/studio/community-index.ts existsSync 10
 orchestrator/studio/community-index.ts readdirSync 2
-orchestrator/studio/community-index.ts readFileSync 3
+orchestrator/studio/community-index.ts readFileSync 1
 orchestrator/studio/community-index.ts realpathSync 1
-orchestrator/studio/community-install.ts existsSync 6
-orchestrator/studio/community-install.ts mkdirSync 1
+orchestrator/studio/community-install.ts existsSync 5
+orchestrator/studio/community-install.ts mkdirSync 2
 orchestrator/studio/community-install.ts writeFileSync 1
 orchestrator/studio/connection-probe.ts existsSync 3
 orchestrator/studio/connection-probe.ts readFileSync 1
@@ -389,7 +392,7 @@ orchestrator/studio/skill-install-ledger.ts existsSync 1
 orchestrator/studio/skill-install-ledger.ts mkdirSync 1
 orchestrator/studio/skill-install-ledger.ts readFileSync 1
 orchestrator/studio/skill-install-ledger.ts writeFileSync 1
-orchestrator/studio/skill-library.ts existsSync 3
+orchestrator/studio/skill-library.ts existsSync 2
 orchestrator/studio/skill-library.ts mkdirSync 2
 orchestrator/studio/skill-library.ts readdirSync 2
 orchestrator/studio/skill-library.ts readFileSync 7

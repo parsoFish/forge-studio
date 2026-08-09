@@ -61,9 +61,10 @@ import matter from 'gray-matter';
 // same content, silently turning a genuinely malformed SKILL.md into an
 // empty-data success. Passing {} opts out of the cache entirely.
 
-import { skillDir, skillPath, skillsDir, listSkillDirs, listSkillMdDirs } from '../skill-path.ts';
+import { skillDir, skillPath, skillsDir, listSkillDirs, listSkillMdDirs, assertSkillSlug } from '../skill-path.ts';
 import { isStudioAgent, loadAgentDefinition, loadCatalog } from './registry.ts';
 import { readInstallLedger, writeInstallLedgerEntry, type InstalledSkillLedgerEntry } from './skill-install-ledger.ts';
+import { guardedFile } from '../../cli/studio-path-guard.ts';
 import type { AgentDefinition, CommunitySkill } from './types.ts';
 import type { Finding } from './validate.ts';
 
@@ -543,8 +544,23 @@ export function installSkillPackage(input: InstallInput): InstallResult {
     throw new Error(`installSkillPackage: upstream.source is required and must be a non-empty string (installing "${id}")`);
   }
 
+  // `id` no longer reaches skillPath()/skillDir() before the containment guard
+  // below — those slug-validate via assertSkillSlug, but skillsDir() (the guard
+  // root) does not. Validate it explicitly here so an over-long or malformed id
+  // is refused with an actionable message BEFORE any path work, never as a raw
+  // ENAMETOOLONG from a late writeFileSync (AT-84).
+  assertSkillSlug(id);
+
   // Reinstall is idempotent — leave the existing directory byte-identical (AT-24).
-  if (existsSync(skillPath(id, forgeRoot))) {
+  // The idempotency probe goes through the SEC-04 containment guard, NOT a bare
+  // existsSync: existsSync FOLLOWS a symlink, so a pre-planted skills/<id>
+  // symlink aliasing an outside region (or a DIFFERENT real skill) would be
+  // blessed as { alreadyInstalled: true } — a false "installed" that turns
+  // GET /api/studio/skills/<id> into an exfil oracle (SEC-05 q80). guardedFile
+  // returns null for a symlinked/aliased id (per-segment realpath identity
+  // mismatch), so control falls through to the write-phase guard, which refuses
+  // (throws) rather than reporting a false 'already installed'.
+  if (guardedFile(skillsDir(forgeRoot), [id, 'SKILL.md'], 'read') !== null) {
     return { alreadyInstalled: true };
   }
 
@@ -608,25 +624,47 @@ export function installSkillPackage(input: InstallInput): InstallResult {
   if (upstream.ref) provenance.upstreamRef = upstream.ref;
   newData['provenance'] = provenance;
 
-  // Pre-validate every destination path BEFORE any write (AT-21: a failure
-  // here must leave skills/<id>/ absent entirely).
-  const skillDirPath = skillDir(id, forgeRoot);
-  const destBoundary = skillsDir(forgeRoot) + sep;
-  const destinations = files.map((f) => {
-    const destPath = join(skillDirPath, ...f.path.split('/'));
-    if (!resolve(destPath).startsWith(destBoundary)) {
-      throw new Error(`installSkillPackage: destination for "${f.path}" escapes "${skillsDir(forgeRoot)}" — refusing to write`);
-    }
-    return { destPath, file: f };
-  });
+  // The containment ROOT (skills/) is TRUSTED + config-derived — creating it is
+  // safe and is required so the per-entry write guard below can realpath it.
+  // `id` is NEVER folded into this root; it always arrives as a guarded segment.
+  mkdirSync(skillsDir(forgeRoot), { recursive: true });
 
-  mkdirSync(skillDirPath, { recursive: true });
-  for (const { destPath, file } of destinations) {
-    mkdirSync(dirname(destPath), { recursive: true });
+  // PHASE 1 — pre-validate EVERY destination through the SEC-04 containment
+  // guard BEFORE any write (AT-21: a failure here must leave skills/<id>/ absent
+  // entirely). guardedFile routes the WHOLE path — the `id` segment, every
+  // nested tail segment, AND the leaf filename — through resolveGuardedPath's
+  // per-segment realpath identity walk, so a symlinked skills/<id>, a symlinked
+  // NESTED subdir, a symlinked LEAF, and a cross-object same-root alias are all
+  // refused; a lexical resolve().startsWith(skillsDir + sep) could not tell any
+  // of them apart (SEC-05 q80). `id` is a SEGMENT to the fixed
+  // skillsDir(forgeRoot) root, never concatenated into it.
+  const dests = files.map((f) => {
+    const realPath = guardedFile(skillsDir(forgeRoot), [id, ...f.path.split('/')], 'write');
+    if (realPath === null) {
+      throw new Error(`installSkillPackage: destination for "${f.path}" escapes skills/ — refusing`);
+    }
+    return { realPath, file: f };
+  });
+  // Two entries must never resolve to the same real inode (a last-write-wins
+  // collision). Distinct readdir relpaths won't, but pinning uniqueness keeps
+  // the write phase's one-entry-one-file invariant explicit.
+  const seenRealPaths = new Set<string>();
+  for (const { realPath } of dests) {
+    if (seenRealPaths.has(realPath)) {
+      throw new Error(`installSkillPackage: duplicate destination path "${realPath}" — refusing to write`);
+    }
+    seenRealPaths.add(realPath);
+  }
+
+  // PHASE 2 — every destination passed PHASE 1's guard, so no partial write can
+  // land on a mid-loop throw. No standalone mkdirSync(skillDir(id)): `id` is a
+  // guarded segment, so each entry mkdir's its OWN already-blessed parent.
+  for (const { realPath, file } of dests) {
+    mkdirSync(dirname(realPath), { recursive: true });
     if (file.path === 'SKILL.md') {
-      writeFileSync(destPath, matter.stringify('\n' + cleanContent, newData), 'utf8');
+      writeFileSync(realPath, matter.stringify('\n' + cleanContent, newData), 'utf8');
     } else {
-      writeFileSync(destPath, file.body, 'utf8');
+      writeFileSync(realPath, file.body, 'utf8');
     }
   }
 

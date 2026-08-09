@@ -228,6 +228,16 @@ export function targetModules(root = FORGE_ROOT) {
     // blind-spot #b: `join(projectRoot, '.forge', 'project.json')` on an
     // unresolved param, invisible unless the helper's own body is scanned.
     'orchestrator/project-config.ts',
+    // SEC-05 q80 (FORWARD DEFENSE): the skill-package install + vendored-read
+    // helpers the /api/studio/skills/install and community-install/index routes
+    // DELEGATE their per-entry filesystem walk to. Not request handlers
+    // themselves — the request-derived `id` and package entry paths flow into
+    // these bodies, so the guarded-sink scan must cover them going forward.
+    // (This scope-add is standing forward coverage; it does NOT catch the q80
+    // install defect — the per-entry-containment unit pins do.)
+    'orchestrator/studio/skill-library.ts',
+    'orchestrator/studio/community-install.ts',
+    'orchestrator/studio/community-index.ts',
   ];
   const cliDir = join(root, 'cli');
   const glob = [];
@@ -604,10 +614,6 @@ export const ALLOWLIST = [
     reason: 'QUEUE-PROBE: candidate = join(<trusted queuePaths.readyForReview|failed>, INIT_ID_RE filename); boolean.' },
   { file: 'cli/bridge-studio-runs.ts', line: 833, sink: 'writeFileSync',
     reason: 'QUEUE-WRITE: tmpPath = join(queuePaths.pending, `${initiativeId}.md`) + ".tmp"; INIT_ID_RE-validated single segment under trusted queuePaths.pending (atomic write-then-rename), no traversal possible.' },
-
-  // ---- cli/bridge-studio-skills.ts ----
-  { file: 'cli/bridge-studio-skills.ts', line: 177, sink: 'existsSync',
-    reason: 'OPERATOR-LOCAL-PATH + BOOL-PROBE: packageDir is an operator-supplied ABSOLUTE local install path from the request body (the community-connection-install affordance points forge at a package already on the operator\'s disk — no containment ROOT applies by design); existsSync is a boolean 400-gate, no bytes flow. Echoed in openConcerns as the weakest residual (a body value used directly as an fs path).' },
 
   // ---- cli/bridge-studio-writes.ts ----
   { file: 'cli/bridge-studio-writes.ts', line: 854, sink: 'existsSync',

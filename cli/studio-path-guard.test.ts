@@ -375,6 +375,36 @@ test('E (GREEN, non-regression pin): a segment that IS exactly ".." is still rej
   }
 });
 
+test('E2 (RED → GREEN) [SEC-05 q80 GAP 2]: a segment carrying any C0 control char (0x00 NUL / 0x01 / 0x09 / 0x0a / 0x1f) is rejected as an unsafe segment — create-mode must not reassemble a control-char leaf literally', () => {
+  const root = mkdtempSync(join(tmpdir(), 'path-guard-ctrlchar-segment-'));
+  try {
+    // A FRESH/absent sourceId ('fresh-src') makes the walk break into
+    // create-mode immediately, then reassemble the leaf tail literally with no
+    // lstat — so before the fix a control-char leaf returns {ok:true} and the
+    // caller's writeFileSync throws a raw TypeError on NUL (or silently writes a
+    // control-char-named file on the others). isSafeSegment is the correct place
+    // to refuse it (mirrors how it already refuses '.'/'..'/separators): the
+    // rejection must fire in the up-front all-segments validation, before the
+    // walk. Control chars are built from char codes so this SOURCE file carries
+    // no raw control bytes.
+    for (const code of [0, 1, 9, 10, 31]) {
+      const seg = `a${String.fromCharCode(code)}b`;
+      const hex = `0x${code.toString(16).padStart(2, '0')}`;
+      const result = resolveGuardedPath(root, ['fresh-src', seg]);
+      assert.equal(
+        result.ok,
+        false,
+        `expected a segment carrying control char ${hex} to be rejected as unsafe — got ${JSON.stringify(result)}. A fresh/absent leading segment breaks the walk into create-mode, which reassembles this leaf literally WITHOUT any lstat, so an unhardened isSafeSegment lets it return ok:true.`,
+      );
+      if (!result.ok) {
+        assert.match(result.reason, /unsafe path segment/i, `expected the rejection reason to name control char ${hex} as an unsafe segment — got "${result.reason}"`);
+      }
+    }
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 /**
  * ROUND 3 (2026-08-06, guard-attack round, Finding 2, MAJOR) — create-mode
  * skips `isSafeSegment` for every segment AFTER the walk's `break`.

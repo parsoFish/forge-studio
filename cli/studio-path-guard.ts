@@ -183,15 +183,36 @@ function probeExistence(path: string): ExistenceProbe {
   }
 }
 
+/** C0 control characters (U+0000 NUL through U+001F). No legitimate path
+ *  segment — a SLUG_RE-gated id, or a fixed literal ('SKILL.md', '.forge',
+ *  'flow.yaml', 'project.json') — ever contains one. Left unrejected, a control
+ *  char slips past `isSafeSegment`, and because a not-yet-existing (create-mode)
+ *  leaf is reassembled literally WITHOUT any `lstat`, it reaches the caller's
+ *  `writeFileSync`: a NUL segment throws a RAW, untyped OS `TypeError` (whose
+ *  message even leaks an absolute filesystem path, violating this module's own
+ *  no-path-in-diagnostics rule), and any other C0 control silently materialises
+ *  a control-char-named file. Rejecting the whole 0x00-0x1f range here is
+ *  strictly MORE restrictive, so it cannot false-reject any legitimate path
+ *  (SEC-05 q80 GAP 2). */
+const CONTROL_CHAR_RE = /[\u0000-\u001f]/;
+
 /** A path segment is safe to `join()` literally only if it is a single,
- *  non-empty directory-entry NAME — no separators, no `.`/`..`. Every
- *  caller's id/slug is already SLUG_RE-validated before it reaches here
- *  (defense in depth, not a replacement — see each call site's own guard);
- *  the fixed literal segments this module also receives ('SKILL.md',
- *  '.forge', 'flow.yaml', 'project.json') trivially satisfy this too. This
- *  is the belt for whichever suspenders a future caller forgets. */
+ *  non-empty directory-entry NAME — no separators, no `.`/`..`, no control
+ *  characters. Every caller's id/slug is already SLUG_RE-validated before it
+ *  reaches here (defense in depth, not a replacement — see each call site's own
+ *  guard); the fixed literal segments this module also receives ('SKILL.md',
+ *  '.forge', 'flow.yaml', 'project.json') trivially satisfy this too. This is
+ *  the belt for whichever suspenders a future caller forgets. */
 function isSafeSegment(seg: string): boolean {
-  return seg.length > 0 && seg !== '.' && seg !== '..' && !seg.includes('/') && !seg.includes('\\') && !seg.includes(sep);
+  return (
+    seg.length > 0 &&
+    seg !== '.' &&
+    seg !== '..' &&
+    !seg.includes('/') &&
+    !seg.includes('\\') &&
+    !seg.includes(sep) &&
+    !CONTROL_CHAR_RE.test(seg)
+  );
 }
 
 /**

@@ -50,7 +50,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, rmSync, existsSync, symlinkSync, linkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
@@ -466,5 +466,324 @@ describe('installCommunityHookPackage', () => {
       `a package exceeding ${MAX_PACKAGE_BYTES} bytes must be refused, mirroring installSkillPackage's own cap`,
     );
     assert.equal(existsSync(hookYamlPath('too-many-bytes-hook', root)), false, 'an oversized-by-bytes package must write nothing at all, not a partial install');
+  });
+});
+
+// ===========================================================================
+// SEC-05 q80 — COMMUNITY hook/package containment ATs (RED at branch base).
+//
+// These pin the two COMMUNITY-path defects the q80 spec calls out. They import
+// the SAME symbols the merged tests above already use (installCommunityHookPackage
+// from ./community-install.ts; communityItem/listCommunityIndex from
+// ./community-index.ts — the exact functions cli/bridge-studio-community.ts
+// serves at POST/GET /api/studio/community/:kind/:id) — so both are asserted on
+// the real surface, in a test home the CI glob (orchestrator/studio/*.test.ts)
+// actually runs.
+//
+// They must be RED against the CURRENT code and GREEN only once the q80 fix
+// reroutes the write/dedup/leaf reads through cli/studio-path-guard.ts's
+// per-segment-realpath guard (guardedFile 'write'/'read', guardedReadFile).
+// Every assertion is FIX-AGNOSTIC (it asserts the containment INVARIANT — a
+// refusal + no escaped byte — never a particular error string), so it cannot
+// be satisfied by any implementation that still lets a byte cross the boundary.
+// ===========================================================================
+
+import { communityItem, listCommunityIndex, readVendoredPackage } from './community-index.ts';
+
+/** Recursively true iff any file anywhere under `dir` contains `needle`. */
+function anyFileContains(dir: string, needle: string): boolean {
+  if (!existsSync(dir)) return false;
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const p = join(dir, entry.name);
+    if (entry.isDirectory()) {
+      if (anyFileContains(p, needle)) return true;
+    } else if (entry.isFile() && readFileSync(p, 'utf8').includes(needle)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// ---------------------------------------------------------------------------
+// AT-q80-6 — installCommunityHookPackage: dir-symlink zip-slip into the
+// install DESTINATION. The d2 defect: the per-entry destination guard
+// (community-install.ts:163-171) is a LEXICAL `resolve(destPath).startsWith(
+// boundary)` on an UNRESOLVED path, and the reinstall/idempotency dedup
+// (community-install.ts:143) is a bare `existsSync(hookYamlPath(...))`. Neither
+// looks at what `studio/hooks/<id>` actually resolves to on disk. When that
+// install directory is a pre-planted SYMLINK to an external dir, the lexical
+// check passes and `writeFileSync` follows the symlink out of the boundary
+// (`vendoredPackageDir` guards only the SOURCE package, never the destination).
+//
+// KILLS: the community sink's lexical dest guard + the symlink-following dedup.
+// The fix (guardedFile 'write' phase-1 per entry + guardedFile 'read' dedup)
+// resolves each ancestor segment's realpath — a symlinked `<id>` segment yields
+// null → refusal, no escaped write.
+//
+// ACCIDENTALLY-SAFE TRAP NAMED: the idempotency `existsSync` knows nothing
+// about symlinks. Sub-case A keeps the external target ABSENT specifically so
+// that existsSync does NOT short-circuit and the write phase is genuinely
+// reached; sub-case B keeps it PRESENT to prove the same existsSync is FOOLED
+// into a false `alreadyInstalled:true` (the "symlink-following dedup"). In both
+// the load-bearing discriminator is `assert.throws` — RED now (no throw),
+// GREEN only after the guard refuses.
+// ---------------------------------------------------------------------------
+
+describe('AT-q80-6 (SEC-05 q80 d2): installCommunityHookPackage — dir-symlink zip-slip into the install destination', () => {
+  const ZIPSLIP_MARKER = 'ZIPSLIP_q80_6_marker_must_never_escape_studio_hooks';
+
+  /** A legit vendored SOURCE hook whose hook.yaml + run.sh both carry the
+   *  marker — so if the destination symlink is followed, the marker lands in
+   *  the external dir and we can witness the escape by content, not just path. */
+  function vendorMarkedHook(root: string, id: string): void {
+    vendorHookPackage(root, id, `#!/usr/bin/env bash\necho "${ZIPSLIP_MARKER}"\nexit 0\n`);
+    writeFileSync(
+      join(root, 'studio', 'community', 'hooks', id, 'hook.yaml'),
+      yaml.dump({ id, name: ZIPSLIP_MARKER, description: 'zip-slip source', on: 'PreToolUse', script: 'scripts/run.sh', permissions: { env: [], read: [], network: false } }),
+      'utf8',
+    );
+  }
+
+  it('sub-case A — a studio/hooks/<id> symlink to an external dir must NOT let the hook.yaml write escape: install THROWS and the external target stays byte-ABSENT before+after', () => {
+    const root = makeForgeRoot('community-install-q80-6a-');
+    const externalDir = makeForgeRoot('community-install-OUTSIDE-q80-6a-');
+    const externalTarget = join(externalDir, 'hook.yaml');
+
+    // Precondition: external target ABSENT — so the symlink-following
+    // existsSync dedup does NOT short-circuit and the write phase is reached.
+    assert.equal(existsSync(externalTarget), false, 'precondition: the external escape target must be absent so the install actually reaches its write phase (the idempotency existsSync must not short-circuit)');
+
+    vendorMarkedHook(root, 'zipslip-dest-hook');
+
+    // Pre-plant the DESTINATION as a symlink to the external dir (planted
+    // directly on disk, not manufactured through the code under test — so it
+    // cannot become a false negative once the path is fixed).
+    const studioHooks = join(root, 'studio', 'hooks');
+    mkdirSync(studioHooks, { recursive: true });
+    symlinkSync(externalDir, join(studioHooks, 'zipslip-dest-hook'), 'dir');
+
+    assert.throws(
+      () => installCommunityHookPackage({ forgeRoot: root, id: 'zipslip-dest-hook' }),
+      /./,
+      'a symlinked install destination must be refused — the lexical resolve().startsWith guard follows the symlink on write and escapes the boundary',
+    );
+
+    // The ARTIFACT, not the status: no vendored byte may have crossed out.
+    assert.equal(existsSync(externalTarget), false, 'the vendored hook.yaml bytes must NOT have been written through the symlinked destination to the external dir');
+    assert.equal(anyFileContains(externalDir, ZIPSLIP_MARKER), false, 'no vendored byte (hook.yaml name / run.sh body) may reach anywhere under the external dir via the symlinked destination');
+  });
+
+  it('sub-case B — the symlink-following dedup must NOT be fooled: with the external target PRESENT, install THROWS (refuses) instead of laundering it into alreadyInstalled:true, and the external file is byte-unchanged', () => {
+    const root = makeForgeRoot('community-install-q80-6b-');
+    const externalDir = makeForgeRoot('community-install-OUTSIDE-q80-6b-');
+    const externalTarget = join(externalDir, 'hook.yaml');
+    const sentinel = 'PRE_EXISTING_EXTERNAL_SENTINEL_q80_6b';
+    writeFileSync(externalTarget, sentinel, 'utf8');
+
+    vendorMarkedHook(root, 'dedup-fool-hook');
+
+    const studioHooks = join(root, 'studio', 'hooks');
+    mkdirSync(studioHooks, { recursive: true });
+    symlinkSync(externalDir, join(studioHooks, 'dedup-fool-hook'), 'dir');
+
+    // CURRENT (broken) behaviour: existsSync(hookYamlPath) follows the symlink,
+    // sees external/hook.yaml, returns {alreadyInstalled:true} — a FALSE
+    // "success" for an install dir that is really a symlink out of the tree.
+    // The fix must REFUSE (throw) instead of trusting a symlinked install dir.
+    assert.throws(
+      () => installCommunityHookPackage({ forgeRoot: root, id: 'dedup-fool-hook' }),
+      /./,
+      'a symlinked install destination whose target file already exists must be refused, not laundered into alreadyInstalled:true by a symlink-following existsSync dedup',
+    );
+
+    assert.equal(readFileSync(externalTarget, 'utf8'), sentinel, 'the external target file must be byte-unchanged — the dedup must never treat a symlinked install dir as a valid installed copy');
+    assert.equal(anyFileContains(externalDir, ZIPSLIP_MARKER), false, 'no vendored byte may reach the external dir');
+  });
+
+  it('the negative direction still holds: an ORDINARY (non-symlinked) install destination still installs for real — the fix must be scoped, not a blanket refusal', () => {
+    const root = makeForgeRoot('community-install-q80-6neg-');
+    vendorHookPackage(root, 'ordinary-dest-hook', '#!/usr/bin/env bash\necho "ordinary"\nexit 0\n');
+    const result = installCommunityHookPackage({ forgeRoot: root, id: 'ordinary-dest-hook' });
+    assert.equal(result.alreadyInstalled, false);
+    assert.equal(existsSync(hookYamlPath('ordinary-dest-hook', root)), true, 'an ordinary vendored hook must still materialise to studio/hooks/<id>/ — the destination-symlink fix must be scoped');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AT-q80-7 — community-index vendored LEAF reads follow no symlink.
+//
+// The leaf defect: readVendoredHookMeta / readVendoredSkillMeta
+// (community-index.ts:310-323) read a FIXED-FILENAME leaf
+// (`<vendoredPackageDir>/hook.yaml`, `<vendoredPackageDir>/SKILL.md`) with a
+// raw readFileSync/loadYaml and NO leaf identity check. `vendoredPackageDir`
+// only realpath-checks the package DIRECTORY, never the leaf inside it — so a
+// `hook.yaml`/`SKILL.md` that is a SYMLINK to an external secret is read
+// through, and its bytes surface in the CommunityItem (name/description) served
+// at GET /api/studio/community/:kind/:id (communityItem) and the list route
+// (listCommunityIndex).
+//
+// KILLS: a fixed-filename leaf read with no identity check. The fix
+// (guardedReadFile on the leaf → null on a symlink → throw, caught by the
+// builder into the existing `error:` field) never returns the target bytes.
+//
+// PLACEMENT NOTE: these exercise community-index.ts symbols. They live here (not
+// in community-index.test.ts) because (1) this file already imports and drives
+// community-index (vendoredPackageDir) and treats the install+index pair as one
+// containment surface, (2) both test files run under the identical CI glob
+// `orchestrator/studio/*.test.ts`, so CI-reachability — the only property
+// immutable-gates cares about for a security assertion — is equivalent, and
+// (3) the round instruction is to run ONLY this file. Assertion is
+// content-based (secret marker must never appear in the served item), so it is
+// acceptance, not characterization: it is RED now (marker surfaces) and GREEN
+// only when the leaf read refuses.
+// ---------------------------------------------------------------------------
+
+describe('AT-q80-7 (SEC-05 q80 leaf): community-index vendored leaf reads follow no symlink', () => {
+  it('readVendoredHookMeta — a vendored hook.yaml symlinked to an external secret NEVER surfaces those bytes via GET /api/studio/community/hook/:id (communityItem) or the list route', () => {
+    const root = makeForgeRoot('community-index-q80-7-hook-');
+    const externalDir = makeForgeRoot('community-index-OUTSIDE-q80-7-hook-');
+    const secretMarker = 'LEAKED_HOOK_SECRET_MARKER_q80_7_never_surface';
+    const secretFile = join(externalDir, 'secret');
+    // A well-formed YAML doc so the CURRENT (unguarded) read parses it cleanly
+    // and lifts name/description straight out of the secret — the leak.
+    writeFileSync(secretFile, yaml.dump({ id: 'leaky-hook', name: secretMarker, description: `body ${secretMarker}` }), 'utf8');
+
+    // Real vendored package DIR (passes vendoredPackageDir's dir realpath
+    // check); only the hook.yaml LEAF is a symlink out of the tree.
+    const vdir = join(root, 'studio', 'community', 'hooks', 'leaky-hook');
+    mkdirSync(vdir, { recursive: true });
+    symlinkSync(secretFile, join(vdir, 'hook.yaml'), 'file');
+
+    const item = communityItem(root, 'hook', 'leaky-hook');
+    assert.notEqual(item, undefined, 'the detail route must still resolve an item (a well-formed one carrying an error), not crash — the item just must not carry the secret bytes');
+    const serialized = JSON.stringify(item);
+    assert.ok(!serialized.includes(secretMarker), `the symlinked hook.yaml target bytes must never surface in the community detail item; got: ${serialized}`);
+
+    const listed = JSON.stringify(listCommunityIndex(root));
+    assert.ok(!listed.includes(secretMarker), 'the symlinked hook.yaml target bytes must never surface in the community list route either');
+  });
+
+  it('readVendoredSkillMeta — a vendored SKILL.md symlinked to an external secret NEVER surfaces those bytes via GET /api/studio/community/skill/:id (communityItem) or the list route', () => {
+    const root = makeForgeRoot('community-index-q80-7-skill-');
+    const externalDir = makeForgeRoot('community-index-OUTSIDE-q80-7-skill-');
+    const secretMarker = 'LEAKED_SKILL_SECRET_MARKER_q80_7_never_surface';
+    const secretFile = join(externalDir, 'secret');
+    // Front-matter markdown so the CURRENT (unguarded) matter() read lifts
+    // name/description straight out of the secret — the leak.
+    writeFileSync(secretFile, matter.stringify('\nbody\n', { name: secretMarker, description: `desc ${secretMarker}` }), 'utf8');
+
+    const vdir = join(root, 'studio', 'community', 'skills', 'leaky-skill');
+    mkdirSync(vdir, { recursive: true });
+    symlinkSync(secretFile, join(vdir, 'SKILL.md'), 'file');
+
+    const item = communityItem(root, 'skill', 'leaky-skill');
+    assert.notEqual(item, undefined, 'the detail route must still resolve an item (a well-formed one carrying an error), not crash');
+    const serialized = JSON.stringify(item);
+    assert.ok(!serialized.includes(secretMarker), `the symlinked SKILL.md target bytes must never surface in the community detail item; got: ${serialized}`);
+
+    const listed = JSON.stringify(listCommunityIndex(root));
+    assert.ok(!listed.includes(secretMarker), 'the symlinked SKILL.md target bytes must never surface in the community list route either');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AT-q80-8 (SEC-05 q80 extension — GAP 1): readVendoredPackage's `files` payload
+// leaves follow no hardlink/symlink.
+//
+// The consistency gap: the q80 fix routed the META leaf reads
+// (readVendoredSkillMeta/readVendoredHookMeta — name/description) through the
+// shared realpath guard, but readVendoredPackage — which reads the LARGER
+// `files` payload surfaced via GET /api/studio/community/:kind/:id (see
+// cli/bridge-studio-community.ts: `files: readVendoredPackage(...)`) — still
+// read every leaf by name with a raw `readFileSync(absPath)` and NO leaf
+// identity/hardlink check. `vendoredPackageDir` realpath-checks only the package
+// DIRECTORY, never the leaves inside it.
+//
+// The genuine deterministic vector here is a HARDLINKED leaf (SEC-04
+// escape-shape 5): `readdirSync(dir, {withFileTypes:true})` reports a hardlink
+// as `isFile() === true` (it is a real, non-symlink directory entry sharing an
+// inode with the outside file), so the raw walk reads the shared inode's bytes
+// straight into the `files` payload. `realpathSync` is structurally blind to it
+// (nothing to resolve); only `guardedReadFile`'s `nlink === 1` leaf check
+// catches it. A SYMLINKED leaf is, by contrast, already skipped by the same
+// walk (a symlink dirent reports `isFile() === false`), so it never surfaces
+// today either — the symlink sub-case below is a defense-in-depth regression pin
+// that must STAY contained after the fix, not the RED gate.
+//
+// KILLS: a fixed-directory-only guard that raw-reads each leaf by name. The fix
+// routes each leaf through guardedReadFile(vendoredBaseDir(root,kind),
+// [id, ...relPath.split('/')]) — a hardlinked/symlinked leaf yields null → throw
+// → the caller (bridge route try/catch, or installCommunityHookPackage) surfaces
+// a refusal, never the target bytes. Assertion is content-based + fix-agnostic
+// (a refusal-throw is acceptable; the ONLY invariant is the secret marker must
+// never appear in any returned payload), so it is acceptance, not
+// characterization: RED now (hardlink bytes surface) and GREEN only when the
+// leaf read refuses.
+// ---------------------------------------------------------------------------
+
+describe('AT-q80-8 (SEC-05 q80 GAP 1): readVendoredPackage `files` leaves follow no hardlink/symlink', () => {
+  /** Serialize the files payload, treating a refusal-throw as an acceptable
+   *  "no bytes surfaced" outcome — the invariant is byte-containment, not a
+   *  particular return-vs-throw shape (fix-agnostic). */
+  function payloadSerialized(root: string, kind: 'skill' | 'hook', id: string): string {
+    try {
+      return JSON.stringify(readVendoredPackage(root, kind, id));
+    } catch {
+      return ''; // a refusal never surfaces the target bytes — acceptable
+    }
+  }
+
+  it('HARDLINK leaf (RED gate) — a vendored hook script HARDLINKED to an external secret NEVER surfaces its bytes in readVendoredPackage\'s files payload', () => {
+    const root = makeForgeRoot('community-index-q80-8-hardlink-');
+    const externalDir = makeForgeRoot('community-index-OUTSIDE-q80-8-hardlink-');
+    const secretMarker = 'HARDLINKED_LEAF_SECRET_q80_8_never_surface';
+    const secretFile = join(externalDir, 'secret');
+    writeFileSync(secretFile, `outside body ${secretMarker}\n`, 'utf8');
+
+    // A genuinely real, on-disk vendored package DIR (passes vendoredPackageDir's
+    // dir realpath check) with a real hook.yaml — only the scripts/run.sh LEAF is
+    // a HARDLINK to the external secret (a real, non-symlink dirent: isFile()
+    // true, nlink 2). Planted directly on disk, not through the code under test.
+    vendorHookPackage(root, 'hardlink-leaf-hook', '#!/usr/bin/env bash\nexit 0\n');
+    const runSh = join(root, 'studio', 'community', 'hooks', 'hardlink-leaf-hook', 'scripts', 'run.sh');
+    rmSync(runSh, { force: true });
+    linkSync(secretFile, runSh); // hardlink the leaf onto the outside inode
+
+    // Arrange-step self-check: the leaf must genuinely be a shared-inode hardlink
+    // (else the containment assertion below passes vacuously).
+    assert.equal(readFileSync(runSh, 'utf8').includes(secretMarker), true, 'arrange-step failed: the hardlinked leaf must genuinely read back the external secret');
+
+    const serialized = payloadSerialized(root, 'hook', 'hardlink-leaf-hook');
+    assert.ok(!serialized.includes(secretMarker), `a hardlinked leaf's shared-inode bytes must never surface in readVendoredPackage's files payload; got: ${serialized}`);
+
+    // Same invariant across the whole served surface the payload flows through.
+    assert.ok(!JSON.stringify(communityItem(root, 'hook', 'hardlink-leaf-hook')).includes(secretMarker), 'no secret byte may surface via the community detail item either');
+    assert.ok(!JSON.stringify(listCommunityIndex(root)).includes(secretMarker), 'no secret byte may surface via the community list route either');
+  });
+
+  it('SYMLINK leaf (defense-in-depth pin) — a vendored hook script SYMLINKED to an external secret NEVER surfaces its bytes (already skipped by the withFileTypes walk; must STAY contained)', () => {
+    const root = makeForgeRoot('community-index-q80-8-symlink-');
+    const externalDir = makeForgeRoot('community-index-OUTSIDE-q80-8-symlink-');
+    const secretMarker = 'SYMLINKED_LEAF_SECRET_q80_8_never_surface';
+    const secretFile = join(externalDir, 'secret');
+    writeFileSync(secretFile, `outside body ${secretMarker}\n`, 'utf8');
+
+    vendorHookPackage(root, 'symlink-leaf-hook', '#!/usr/bin/env bash\nexit 0\n');
+    const runSh = join(root, 'studio', 'community', 'hooks', 'symlink-leaf-hook', 'scripts', 'run.sh');
+    rmSync(runSh, { force: true });
+    symlinkSync(secretFile, runSh, 'file');
+
+    const serialized = payloadSerialized(root, 'hook', 'symlink-leaf-hook');
+    assert.ok(!serialized.includes(secretMarker), `a symlinked leaf's target bytes must never surface in readVendoredPackage's files payload; got: ${serialized}`);
+  });
+
+  it('the negative direction still holds: an ORDINARY vendored package still reads every real leaf into the files payload (the fix must not refuse everything)', () => {
+    const root = makeForgeRoot('community-index-q80-8-neg-');
+    vendorHookPackage(root, 'ordinary-leaf-hook', '#!/usr/bin/env bash\necho ORDINARY_LEAF_BODY_q80_8\nexit 0\n');
+    const files = readVendoredPackage(root, 'hook', 'ordinary-leaf-hook');
+    const paths = files.map((f) => f.path).sort();
+    assert.deepEqual(paths, ['hook.yaml', 'scripts/run.sh'], 'an ordinary vendored package must still surface all its real leaves — the leaf guard must be scoped, not a blanket refusal');
+    const script = files.find((f) => f.path === 'scripts/run.sh');
+    assert.ok(script !== undefined && script.body.includes('ORDINARY_LEAF_BODY_q80_8'), 'a real (nlink=1, non-symlink) leaf must still read through byte-exact');
   });
 });

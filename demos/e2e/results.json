@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-09T03:10:40.644Z",
+  "generatedAt": "2026-08-09T04:42:59.358Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -187,7 +187,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 5M (got 1967121)",
+              "msg": "clip skill-edit.webm under 5M (got 1972855)",
               "pass": true
             },
             {
@@ -206,7 +206,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 1967121
+              "sizeBytes": 1972855
             }
           ],
           "pass": true
@@ -232,7 +232,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 5M (got 759540)",
+              "msg": "clip sk-create.webm under 5M (got 934163)",
               "pass": true
             },
             {
@@ -255,7 +255,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 759540
+              "sizeBytes": 934163
             },
             {
               "kind": "frame",
@@ -390,7 +390,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-09T02-56-56-2713bde1)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-09T04-29-34-9f071cb3)",
               "pass": true
             },
             {
@@ -406,7 +406,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 5M (got 2010616)",
+              "msg": "clip skill-agentic.webm under 5M (got 1912453)",
               "pass": true
             },
             {
@@ -436,7 +436,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 2010616
+              "sizeBytes": 1912453
             }
           ],
           "pass": true
@@ -706,7 +706,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-blocked.webm under 5M (got 704950)",
+              "msg": "clip hook-blocked.webm under 5M (got 722082)",
               "pass": true
             },
             {
@@ -747,7 +747,7 @@
               "kind": "clip",
               "file": "clips/hook-blocked.webm",
               "caption": "Declaring the exfiltration doesn't excuse it: still blocked, approval refused, then an explicit, recorded override — the verdict never clears",
-              "sizeBytes": 704950
+              "sizeBytes": 722082
             }
           ],
           "pass": true
@@ -813,7 +813,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-bind.webm under 5M (got 911375)",
+              "msg": "clip hook-bind.webm under 5M (got 900926)",
               "pass": true
             },
             {
@@ -848,7 +848,7 @@
               "kind": "clip",
               "file": "clips/hook-bind.webm",
               "caption": "Binding a hook lives only in the Agent Builder — drag it into the dedicated hook zone and save",
-              "sizeBytes": 911375
+              "sizeBytes": 900926
             }
           ],
           "pass": true
@@ -1206,7 +1206,7 @@
               "pass": true
             },
             {
-              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-R4-12/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-R4-12/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-SEC-05/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-SEC-05/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -1385,15 +1385,15 @@
               "pass": true
             },
             {
-              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-09T02-57-49-106-rzga\") — same runner as the agent page",
+              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-09T04-30-27-897-f7ff\") — same runner as the agent page",
               "pass": true
             },
             {
-              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-09T02-57-49-3d237575\")",
+              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-09T04-30-27-a78a1672\")",
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 5M (got 1561718)",
+              "msg": "clip onboard-form.webm under 5M (got 1582685)",
               "pass": true
             },
             {
@@ -1425,7 +1425,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1561718
+              "sizeBytes": 1582685
             }
           ],
           "pass": true
@@ -1435,7 +1435,7 @@
           "narration": "The dispatch the previous beat fired is not fire-and-forget any more: it opened a real staged session on the shared R2-10 shell. Opening it shows the contract building out stage by stage — contract, instructions, secrets, demo, roadmap — each row derived from the project's own artifacts on disk, with secrets shown by NAME only. The same five rows are served by the project-page data contract R4-12-F1 renders in batch D.",
           "checks": [
             {
-              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-09T02-57-49-3d237575\")",
+              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-09T04-30-27-a78a1672\")",
               "pass": true
             },
             {
@@ -1505,7 +1505,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 5M (got 1310693)",
+              "msg": "clip onboard-resolve.webm under 5M (got 1304641)",
               "pass": true
             },
             {
@@ -1549,7 +1549,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1310693
+              "sizeBytes": 1304641
             },
             {
               "kind": "frame",
@@ -1602,7 +1602,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 5M (got 844905)",
+              "msg": "clip project-create.webm under 5M (got 862370)",
               "pass": true
             },
             {
@@ -1625,7 +1625,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 844905
+              "sizeBytes": 862370
             },
             {
               "kind": "frame",
@@ -1825,7 +1825,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 5M (got 1473441)",
+              "msg": "clip instr-generate.webm under 5M (got 1485468)",
               "pass": true
             },
             {
@@ -1848,7 +1848,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1473441
+              "sizeBytes": 1485468
             },
             {
               "kind": "frame",
@@ -1887,7 +1887,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 5M (got 936239)",
+              "msg": "clip pbrain-generate.webm under 5M (got 1066977)",
               "pass": true
             },
             {
@@ -1910,7 +1910,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 936239
+              "sizeBytes": 1066977
             },
             {
               "kind": "frame",
@@ -2009,7 +2009,7 @@
               "pass": true
             },
             {
-              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-09T02-56-06Z_INIT-2026-08-09-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-09T02-56-06Z_INIT-2026-08-09-r4-12-ledger-nav\"})",
+              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-09T04-28-45Z_INIT-2026-08-09-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-09T04-28-45Z_INIT-2026-08-09-r4-12-ledger-nav\"})",
               "pass": true
             }
           ],
@@ -2200,7 +2200,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 5M (got 818708)",
+              "msg": "clip kb-ingest.webm under 5M (got 817111)",
               "pass": true
             },
             {
@@ -2234,7 +2234,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 818708
+              "sizeBytes": 817111
             },
             {
               "kind": "frame",
@@ -2271,7 +2271,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 5M (got 1588085)",
+              "msg": "clip kb-lint.webm under 5M (got 1619340)",
               "pass": true
             }
           ],
@@ -2290,7 +2290,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1588085
+              "sizeBytes": 1619340
             }
           ],
           "pass": true
@@ -2429,7 +2429,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 5M (got 1358423)",
+              "msg": "clip agent-scratch-build.webm under 5M (got 941180)",
               "pass": true
             }
           ],
@@ -2468,7 +2468,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 1358423
+              "sizeBytes": 941180
             }
           ],
           "pass": true
@@ -2534,7 +2534,7 @@
               "pass": true
             },
             {
-              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-09T03-01-39-205-pkwd\")",
+              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-09T04-34-01-924-ia8s\")",
               "pass": true
             },
             {
@@ -2582,7 +2582,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 5M (got 944656)",
+              "msg": "clip agent-build.webm under 5M (got 958758)",
               "pass": true
             }
           ],
@@ -2606,7 +2606,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 944656
+              "sizeBytes": 958758
             }
           ],
           "pass": true
@@ -3089,7 +3089,7 @@
           "narration": "The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx's own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client's own claim. No terminal state is reachable under this harness's no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route's `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.",
           "checks": [
             {
-              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-09T03-02-38-023-4xxy\")",
+              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-09T04-34-58-906-kfmu\")",
               "pass": true
             },
             {
@@ -3167,7 +3167,7 @@
               "pass": true
             },
             {
-              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-09T03-02-38-023-4xxy) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-09T03-02-38-023-4xxy\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
+              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-09T04-34-58-906-kfmu) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-09T04-34-58-906-kfmu\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
               "pass": true
             }
           ],
@@ -3328,7 +3328,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msl7w9gc, fn-msl7w9gn, fn-msl7w9gy, fn-msl7w9h6)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-mslb72yb, fn-mslb72ym, fn-mslb72yx, fn-mslb72z5)",
               "pass": true
             },
             {
@@ -3420,7 +3420,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 5M (got 3665170)",
+              "msg": "clip flow-scratch-build.webm under 5M (got 3888617)",
               "pass": true
             }
           ],
@@ -3474,7 +3474,7 @@
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate",
-              "sizeBytes": 3665170
+              "sizeBytes": 3888617
             }
           ],
           "pass": true
@@ -3638,7 +3638,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 5M (got 1557699)",
+              "msg": "clip run-idea-interview.webm under 5M (got 1547766)",
               "pass": true
             },
             {
@@ -3657,7 +3657,7 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1557699
+              "sizeBytes": 1547766
             },
             {
               "kind": "frame",
@@ -3808,7 +3808,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 5M (got 1109239)",
+              "msg": "clip run-plan-gate.webm under 5M (got 1361359)",
               "pass": true
             }
           ],
@@ -3823,7 +3823,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1109239
+              "sizeBytes": 1361359
             }
           ],
           "pass": true
@@ -4007,7 +4007,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 5M (got 1664766)",
+              "msg": "clip run-build-monitor.webm under 5M (got 1307210)",
               "pass": true
             }
           ],
@@ -4022,7 +4022,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing",
-              "sizeBytes": 1664766
+              "sizeBytes": 1307210
             }
           ],
           "pass": true
@@ -4188,7 +4188,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 5M (got 1323528)",
+              "msg": "clip run-verdict-gate.webm under 5M (got 1152272)",
               "pass": true
             }
           ],
@@ -4203,7 +4203,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1323528
+              "sizeBytes": 1152272
             }
           ],
           "pass": true
@@ -4299,11 +4299,11 @@
               "pass": true
             },
             {
-              "msg": "R6-05: the just-archived run (2026-08-09T02-56-06Z_INIT-2026-08-09-e2e-toc-write-mode) has its own ledger row",
+              "msg": "R6-05: the just-archived run (2026-08-09T04-28-45Z_INIT-2026-08-09-e2e-toc-write-mode) has its own ledger row",
               "pass": true
             },
             {
-              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-09T02-56-06Z_INIT-2026-08-09-e2e-toc-write-mode\")",
+              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-09T04-28-45Z_INIT-2026-08-09-e2e-toc-write-mode\")",
               "pass": true
             },
             {
@@ -4319,7 +4319,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 5M (got 1750130)",
+              "msg": "clip run-reflect-complete.webm under 5M (got 1771620)",
               "pass": true
             }
           ],
@@ -4351,7 +4351,7 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1750130
+              "sizeBytes": 1771620
             }
           ],
           "pass": true
@@ -4451,7 +4451,7 @@
           "narration": "The same gated run's own standalone detail page — every node on the flow with its own real cost and status, not just the ones a live monitor happens to be showing — reached from the SAME run-rail row every earlier beat in this run has already been clicking.",
           "checks": [
             {
-              "msg": "monitor: run rail row [data-run-id=\"2026-08-09T03-09-09Z_INIT-2026-08-09-e2e-studio-demo\"] present (the reachability starting point)",
+              "msg": "monitor: run rail row [data-run-id=\"2026-08-09T04-41-26Z_INIT-2026-08-09-e2e-studio-demo\"] present (the reachability starting point)",
               "pass": true
             },
             {
@@ -4467,15 +4467,15 @@
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-09T03-09-09Z_INIT-2026-08-09-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-09T04-41-26Z_INIT-2026-08-09-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-09T03-09-09Z_INIT-2026-08-09-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-09T04-41-26Z_INIT-2026-08-09-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-09T03-09-09Z_INIT-2026-08-09-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-09T04-41-26Z_INIT-2026-08-09-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
@@ -4580,7 +4580,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786244963690\")",
+              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786250504152\")",
               "pass": true
             },
             {
@@ -4588,7 +4588,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786244963903\")",
+              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786250504371\")",
               "pass": true
             }
           ],
@@ -4782,7 +4782,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its roadmap card; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the timeline itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 5M (got 718861)",
+              "msg": "clip roadmap-drive.webm under 5M (got 858956)",
               "pass": true
             },
             {
@@ -4807,7 +4807,7 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the roadmap, pops a finished initiative’s card, then eyes the \"Start development\" trigger on the one queued up next",
-              "sizeBytes": 718861
+              "sizeBytes": 858956
             },
             {
               "kind": "frame",
@@ -4952,7 +4952,7 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 5M (got 1608324)",
+              "msg": "clip demo-generate.webm under 5M (got 1880443)",
               "pass": true
             }
           ],
@@ -4972,7 +4972,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1608324
+              "sizeBytes": 1880443
             }
           ],
           "pass": true
@@ -5699,7 +5699,7 @@
               "pass": true
             },
             {
-              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-R4-12/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-R4-12/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-SEC-05/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-SEC-05/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
