@@ -394,3 +394,85 @@ test('handleStudioSkillsRoutes returns false for a non-matching URL (passthrough
   const handled = await handleStudioSkillsRoutes(mockReq, mockRes, ctx, '/api/studio/nonexistent', 'GET');
   assert.equal(handled, false, 'a non-matching studio-skills URL must return false');
 });
+
+// ---------------------------------------------------------------------------
+// SEC-05 q80 (d1) — POST /api/studio/skills/install NEW inline-upload {entries}
+// contract (appended; edits no existing AT). RULED fix: the route stops taking
+// a client-supplied packageDir and instead accepts
+//   { id, entries: [{ path, contentBase64 }], upstream: { source, ref? } }
+// minting a SERVER-derived sourceId, staging entries under
+// <forgeRoot>/_skill-staging/<sourceId>/ via cli/skill-staging.ts's guarded
+// stageSkillPackage, copying via installSkillPackage, then rm'ing the staging
+// dir in a `finally`. (The AT-51 packageDir tests above pin TODAY's contract;
+// they are retired with the fix by the impl worker, not here — this file only
+// ADDS the {entries} coverage.)
+// ---------------------------------------------------------------------------
+
+function b64(s: string): string {
+  return Buffer.from(s, 'utf8').toString('base64');
+}
+
+/** Entry names left under <forgeRoot>/_skill-staging (empty === cleaned up). */
+function stagingLeftover(): string[] {
+  const base = join(forgeRoot, '_skill-staging');
+  return existsSync(base) ? readdirSync(base) : [];
+}
+
+test('SEC-05 q80 (RED anchor): POST /api/studio/skills/install with the {entries} contract INSTALLS the skill end-to-end and cleans up _skill-staging', async () => {
+  const skillMd = matter.stringify('\n# Good Skill\n\nBody.\n', {
+    name: 'Good Skill',
+    description: 'installed via the inline-upload entries contract',
+  });
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
+    id: 'good-skill',
+    entries: [{ path: 'SKILL.md', contentBase64: b64(skillMd) }],
+    upstream: { source: 'test://x' },
+  });
+
+  // RED TODAY: the route still requires body.packageDir, so this 400s with no
+  // install. GREEN once the {entries} staging path lands. This status assertion
+  // is the RED anchor — it proves the new contract is wired end-to-end.
+  assert.equal(res.status, 200, 'the {entries} contract must install (200) — RED today because the route still requires packageDir');
+
+  // The skill is really on disk as a draft: entries -> staged dir ->
+  // installSkillPackage copy. (Not merely a 200 — the artifact must exist.)
+  const installedPath = join(forgeRoot, 'skills', 'good-skill', 'SKILL.md');
+  assert.ok(existsSync(installedPath), 'skills/good-skill/SKILL.md must exist after a successful install');
+  const installedData = matter(readFileSync(installedPath, 'utf8')).data as Record<string, unknown>;
+  assert.equal(installedData['status'], 'draft', 'an installed package lands as a draft (installSkillPackage stamps status: draft)');
+
+  // The route's `finally` rm'd the staging dir — no leaked <sourceId> under
+  // _skill-staging (a leaked handle/dir is a real defect an assertion on the
+  // body alone cannot see).
+  assert.deepEqual(stagingLeftover(), [], 'the _skill-staging area must be empty after a successful install (finally rmSync)');
+});
+
+test('SEC-05 q80 (CONTAINMENT): POST /api/studio/skills/install with a traversal entry.path is REJECTED (4xx) and stages/writes NOTHING outside <sourceId>/', async () => {
+  const res = await postJson(`${bridgeUrl}/api/studio/skills/install`, {
+    id: 'evil',
+    entries: [{ path: '../evil', contentBase64: b64('ATTACKER-STAGED-BYTES') }],
+    upstream: { source: 'test://x' },
+  });
+
+  // 4xx — never a 2xx, and never a 500 (a traversal entry is caller input, so
+  // the guarded stage's refusal is a 4xx, mirroring installSkillPackage's
+  // every-throw-is-caller-input contract).
+  assert.ok(res.status >= 400 && res.status < 500, `a traversal entry.path must be a 4xx, got ${res.status}`);
+
+  // ARTIFACT (not a bare "400"): a status-only assertion would pass by accident
+  // BOTH on today's 'packageDir is required' 400 AND on a NAIVE fix that stages
+  // via join(stagingRoot, sourceId, entry.path) — that naive fix ALSO 400s
+  // (installSkillPackage then finds no SKILL.md) yet has ALREADY written the
+  // escape file _skill-staging/evil. These byte-absent assertions are what
+  // distinguish the correct guarded stage from that naive fix:
+  //   - join(stagingRoot, sourceId, '../evil') collapses to <base>/evil,
+  //     independent of the server-minted sourceId, so the target is
+  //     deterministic: <forgeRoot>/_skill-staging/evil.
+  assert.equal(
+    existsSync(join(forgeRoot, '_skill-staging', 'evil')),
+    false,
+    'no bytes may be staged to the out-of-<sourceId> sibling _skill-staging/evil',
+  );
+  assert.equal(existsSync(join(forgeRoot, 'skills', 'evil')), false, 'no skills/evil dir may be authored');
+  assert.deepEqual(stagingLeftover(), [], 'the _skill-staging area must be left clean after a rejected install (finally rmSync)');
+});

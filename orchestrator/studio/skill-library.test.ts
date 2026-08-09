@@ -1612,3 +1612,258 @@ describe('scanSkillPackage — quarantined keys are reported from BOTH top-level
     );
   });
 });
+
+// ===========================================================================
+// SEC-05 q80 — skill/hook package install CONTAINMENT (RED at base).
+//
+// PROVEN defect this pins (d2): installSkillPackage's per-entry destination
+// guard is a LEXICAL check — `resolve(join(skillDir(id), ...f.path)).startsWith(
+// skillsDir + sep)` (skill-library.ts:613-621) — and its idempotency
+// short-circuit is `existsSync(skillPath(id))` (skill-library.ts:547).
+// `resolve()` does NOT dereference symlinks and `existsSync` DOES follow them,
+// so a pre-planted symlink at (or below) `skills/<id>` lets a write escape
+// through it: the lexical path never leaves `skills/`, yet the real inode is
+// outside the root (or is a DIFFERENT skill). The SEC-04 primitive
+// `guardedFile(root, segments, mode)` (cli/studio-path-guard.ts) does
+// per-SEGMENT realpath identity, catching every shape below.
+//
+// SURFACE NOTE (honest scope): this file tests the ORCHESTRATOR function
+// installSkillPackage — i.e. the d2 destination guard. Two sibling q80 vectors
+// are NOT reachable at this surface and are pinned in the bridge/staging suite
+// instead, NOT here:
+//   * d1 "client-named SOURCE root pointing outside both roots" — a bridge
+//     concern (cli/bridge-studio-skills.test.ts); installSkillPackage is
+//     CONTRACTUALLY handed a package directory to copy, so it can never be the
+//     refusal point for the source path (post-fix it receives a server-minted,
+//     already-guarded staging realpath).
+//   * a literal `..`-string ENTRY path ('a/../../../../tmp/OUT/x') — the entry
+//     paths installSkillPackage sees come from a real readdirSync() walk, which
+//     never yields a `..` segment, so that string is only injectable at the
+//     staging layer where `path` is client-supplied (cli/skill-staging.test.ts).
+// Writing either against installSkillPackage would produce a gate that can
+// never go GREEN (immutable-gates: a test must flip, not merely stay red), so
+// the reachable analogs below (a symlinked skills/<id>, and a symlinked NESTED
+// destination segment) carry the intent here.
+//
+// Each test asserts the OUT-OF-ROOT (or cross-object) ARTIFACT is byte-absent /
+// byte-unchanged — never merely that a call "returned an error" — plants and
+// verifies its symlink PRECONDITION before reading the verdict, and pins
+// per-element isolation (one escaping entry refuses the WHOLE install; the
+// sibling-valid entry is never written = no partial write). Named killed impl
+// per test.  (AT q80-1 .. q80-5)
+// ===========================================================================
+
+import { lstatSync } from 'node:fs';
+
+describe('SEC-05 q80 — skill install containment (installSkillPackage, d2)', () => {
+  /** A benign, valid package (SKILL.md + reference.md) in a throwaway tmp dir.
+   *  The SOURCE side is never the vector under test here — every vector below
+   *  is an attacker-planted DESTINATION shape under skills/. */
+  function benignPackage(): string {
+    const dir = makeTmpDir('sec05-q80-pkg-');
+    writeFileSync(
+      join(dir, 'SKILL.md'),
+      matter.stringify('\n# Benign\n\nBody.\n', { name: 'Benign', description: 'benign package' }),
+      'utf8',
+    );
+    writeFileSync(join(dir, 'reference.md'), 'reference content', 'utf8');
+    return dir;
+  }
+
+  /** Recursive, sorted relative listing of an arbitrary directory — proves an
+   *  outside region / sibling skill gains NOTHING, not just that one named
+   *  file is absent. */
+  function listTree(base: string): string[] {
+    if (!existsSync(base)) return [];
+    const out: string[] = [];
+    const walk = (absDir: string, relDir: string): void => {
+      for (const entry of readdirSync(absDir, { withFileTypes: true })) {
+        const rel = relDir ? `${relDir}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) walk(join(absDir, entry.name), rel);
+        else out.push(rel);
+      }
+    };
+    walk(base, '');
+    return out.sort();
+  }
+
+  it('AT-q80-1 (exfil / dedup-follows-symlink): a pre-planted skills/<id> symlink to OUTSIDE both roots must be REFUSED, never blessed as already-installed — kills the existsSync-follows-symlink short-circuit at skill-library.ts:547', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+
+    // A region OUTSIDE both the forge root and skills/ (a sibling temp dir),
+    // pre-seeded to LOOK like an installed package (it has a SKILL.md) and to
+    // hold a secret the attacker wants GET /api/studio/skills/<id> to read back.
+    const outside = makeTmpDir('sec05-q80-outside1-');
+    writeFileSync(
+      join(outside, 'SKILL.md'),
+      matter.stringify('\nAliased body.\n', { name: 'Exfil', description: 'aliased-in from outside both roots' }),
+      'utf8',
+    );
+    const secretPath = join(outside, 'secret.txt');
+    writeFileSync(secretPath, 'TOP SECRET — must never be surfaced through skills/', 'utf8');
+    const secretBefore = readFileSync(secretPath, 'utf8');
+    const outsideBefore = listTree(outside);
+
+    // The attack: skills/exfil-skill is a SYMLINK into that outside region.
+    const aliasPath = skillDir('exfil-skill', root);
+    symlinkSync(outside, aliasPath);
+    assert.ok(lstatSync(aliasPath).isSymbolicLink(), 'precondition: skills/exfil-skill symlink is planted');
+
+    // TODAY (RED): existsSync(skills/exfil-skill/SKILL.md) FOLLOWS the symlink,
+    // finds outside/SKILL.md, and installSkillPackage short-circuits to
+    // { alreadyInstalled: true } — falsely telling the bridge the skill is
+    // installed so GET serves readSkillPackage() → the OUTSIDE secret. The
+    // containment contract is to REFUSE (throw): the fix reads the idempotency
+    // probe through guardedFile('read'), which returns null for the symlink, so
+    // control falls through to the write-phase guard, which throws.
+    assert.throws(() =>
+      installSkillPackage({ forgeRoot: root, id: 'exfil-skill', packageDir: benignPackage(), upstream: { source: 'https://x' } }),
+    );
+
+    // The outside region — including its secret — must be byte-untouched, and
+    // the alias must remain a symlink (never replaced by a real written dir).
+    assert.equal(readFileSync(secretPath, 'utf8'), secretBefore, 'the outside secret must be byte-unchanged');
+    assert.deepEqual(listTree(outside), outsideBefore, 'no package file may be copied into the outside region');
+    assert.ok(lstatSync(aliasPath).isSymbolicLink(), 'the aliased skills/<id> must not be materialised into a real directory');
+  });
+
+  it('AT-q80-2 (dir-symlink zip-slip, write-through): a skills/<id> symlink to OUTSIDE (no SKILL.md at target) must not be written through — kills the lexical resolve().startsWith at skill-library.ts:617', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+
+    // Real outside dir with a marker but NO SKILL.md — so existsSync does NOT
+    // short-circuit and the write-phase is actually reached.
+    const outside = makeTmpDir('sec05-q80-outside2-');
+    const marker = join(outside, 'marker.txt');
+    writeFileSync(marker, 'outside marker', 'utf8');
+
+    const aliasPath = skillDir('evil-dir', root);
+    symlinkSync(outside, aliasPath);
+    assert.ok(lstatSync(aliasPath).isSymbolicLink(), 'precondition: skills/evil-dir symlink is planted');
+    assert.equal(
+      existsSync(join(outside, 'SKILL.md')),
+      false,
+      'precondition: no SKILL.md at the symlink target, so the existsSync dedup cannot short-circuit',
+    );
+
+    // TODAY (RED): install proceeds (dedup miss); resolve(destPath).startsWith
+    // passes because resolve() does NOT dereference the symlink; mkdirSync is a
+    // no-op on the existing dir-symlink; writeFileSync then writes THROUGH it,
+    // materialising outside/SKILL.md OUTSIDE both roots. Also proves the dedup
+    // did NOT report alreadyInstalled (it fell through to the write).
+    assert.throws(() =>
+      installSkillPackage({ forgeRoot: root, id: 'evil-dir', packageDir: benignPackage(), upstream: { source: 'https://x' } }),
+    );
+
+    assert.equal(existsSync(join(outside, 'SKILL.md')), false, 'no SKILL.md may be written through the dir symlink into the outside region');
+    assert.equal(existsSync(join(outside, 'reference.md')), false, 'no package file may escape into the outside region');
+    assert.equal(readFileSync(marker, 'utf8'), 'outside marker', 'the outside region must be otherwise byte-unchanged');
+  });
+
+  it('AT-q80-3 (attack-the-fix, per-segment hoisting): a NESTED destination subdir symlink must be caught segment-by-segment, not just the top-level skills/<id> — kills a guard that blesses skills/<id> then raw-joins the tail', () => {
+    const root = makeForgeRoot();
+    const outside = makeTmpDir('sec05-q80-outside3-');
+    const marker = join(outside, 'marker.txt');
+    writeFileSync(marker, 'outside marker', 'utf8');
+
+    // A REAL skills/good-nested/ (no SKILL.md → no dedup short-circuit) whose
+    // `sub/` is a symlink to the outside region.
+    const skillDirPath = skillDir('good-nested', root);
+    mkdirSync(skillDirPath, { recursive: true });
+    const nestedLink = join(skillDirPath, 'sub');
+    symlinkSync(outside, nestedLink);
+    assert.ok(lstatSync(nestedLink).isSymbolicLink(), 'precondition: skills/good-nested/sub symlink is planted');
+
+    // Package carries a benign SKILL.md (valid dest) AND a nested sub/x entry
+    // (dest escapes through the planted symlink). Two real files, no symlinks
+    // in the package itself — the escape is purely a DESTINATION shape.
+    const pkg = makeTmpDir('sec05-q80-pkg3-');
+    writeFileSync(join(pkg, 'SKILL.md'), matter.stringify('\nBody.\n', { name: 'Nested', description: 'd' }), 'utf8');
+    mkdirSync(join(pkg, 'sub'), { recursive: true });
+    writeFileSync(join(pkg, 'sub', 'x'), 'pwned nested content', 'utf8');
+
+    // (The literal string-`..` entry-path variant 'a/../../../../tmp/OUT/x' is
+    // NOT reachable here — installSkillPackage's entry paths derive from a real
+    // readdir() walk that never yields a `..` segment — so it is pinned at the
+    // staging layer where `path` is client-supplied. The reachable analog is
+    // this nested dir symlink, which a guard that validated only skills/<id>
+    // and then raw-joined the tail would let escape.)
+    assert.throws(() =>
+      installSkillPackage({ forgeRoot: root, id: 'good-nested', packageDir: pkg, upstream: { source: 'https://x' } }),
+    );
+
+    assert.equal(existsSync(join(outside, 'x')), false, 'no file may be written through the nested subdir symlink');
+    assert.equal(readFileSync(marker, 'utf8'), 'outside marker', 'the outside region must be byte-unchanged');
+    // Per-element isolation / no partial write: the sibling-valid SKILL.md must
+    // NOT be written when a sibling entry escapes (whole install refuses).
+    assert.equal(existsSync(join(skillDirPath, 'SKILL.md')), false, 'the valid SKILL.md must not be written when a sibling entry escapes (no partial write)');
+  });
+
+  it('AT-q80-4 (attack-the-fix, symlinked leaf): a symlinked LEAF file inside a real skills/<id> must be caught — kills a raw join(guardedDir, "SKILL.md") that guards the directory but not the leaf', () => {
+    const root = makeForgeRoot();
+    const outside = makeTmpDir('sec05-q80-outside4-');
+    const marker = join(outside, 'marker.txt');
+    writeFileSync(marker, 'outside marker', 'utf8');
+
+    // A REAL skills/good-leaf/ whose SKILL.md is a (dangling) symlink to the
+    // outside region: existsSync follows the dangling link → false → no dedup
+    // short-circuit → writeFileSync follows the link and CREATES the target.
+    const skillDirPath = skillDir('good-leaf', root);
+    mkdirSync(skillDirPath, { recursive: true });
+    const leafLink = join(skillDirPath, 'SKILL.md');
+    symlinkSync(join(outside, 'SKILL.md'), leafLink);
+    assert.ok(lstatSync(leafLink).isSymbolicLink(), 'precondition: skills/good-leaf/SKILL.md symlink is planted');
+    assert.equal(existsSync(join(outside, 'SKILL.md')), false, 'precondition: the symlink target does not yet exist (dangling)');
+
+    const pkg = makeTmpDir('sec05-q80-pkg4-');
+    writeFileSync(join(pkg, 'SKILL.md'), matter.stringify('\nBody.\n', { name: 'Leaf', description: 'd' }), 'utf8');
+    writeFileSync(join(pkg, 'reference.md'), 'reference content', 'utf8');
+
+    // TODAY (RED): writeFileSync(skills/good-leaf/SKILL.md) follows the leaf
+    // symlink and materialises outside/SKILL.md OUTSIDE both roots.
+    assert.throws(() =>
+      installSkillPackage({ forgeRoot: root, id: 'good-leaf', packageDir: pkg, upstream: { source: 'https://x' } }),
+    );
+
+    assert.equal(existsSync(join(outside, 'SKILL.md')), false, 'SKILL.md must not be written through the leaf symlink into the outside region');
+    assert.equal(readFileSync(marker, 'utf8'), 'outside marker', 'the outside region must be byte-unchanged');
+    // No partial write: the sibling reference.md must not land either.
+    assert.equal(existsSync(join(skillDirPath, 'reference.md')), false, 'the sibling reference.md must not be written when the leaf escapes (no partial write)');
+  });
+
+  it('AT-q80-5 (cross-object same-root alias): containment must require IDENTITY, not mere membership under skills/ — kills a "somewhere under the skills root" startsWith check', () => {
+    const root = makeForgeRoot();
+    mkdirSync(skillsDir(root), { recursive: true });
+
+    // A REAL sibling object under skills/. It deliberately has NO SKILL.md at
+    // the aliased probe path: if it did, existsSync(skills/evil-alias/SKILL.md)
+    // would follow the alias, find it, and short-circuit to alreadyInstalled —
+    // the unrelated idempotency check would ACCIDENTALLY mask the escape (green
+    // for the wrong reason). Named per the immutable-gates catalogue
+    // ("accidentally-safe production code"): shaped so the test is genuinely
+    // RED, exercising the cross-object write-through the guard must close.
+    const legitDir = skillDir('legit-real', root);
+    mkdirSync(legitDir, { recursive: true });
+    const legitData = join(legitDir, 'legit-data.md');
+    writeFileSync(legitData, 'legitimate sibling content', 'utf8');
+    const legitBefore = listTree(legitDir);
+
+    // skills/evil-alias -> skills/legit-real: a SAME-ROOT alias. Every write to
+    // evil-alias/* lands inside legit-real/*, which a lexical
+    // resolve().startsWith(skillsRoot) check accepts (it never leaves skills/).
+    const aliasPath = skillDir('evil-alias', root);
+    symlinkSync(legitDir, aliasPath);
+    assert.ok(lstatSync(aliasPath).isSymbolicLink(), 'precondition: skills/evil-alias -> skills/legit-real symlink is planted');
+
+    assert.throws(() =>
+      installSkillPackage({ forgeRoot: root, id: 'evil-alias', packageDir: benignPackage(), upstream: { source: 'https://x' } }),
+    );
+
+    // The sibling object must be byte-identical — no cross-object write-through.
+    assert.deepEqual(listTree(legitDir), legitBefore, 'skills/legit-real must gain no files from the aliased install');
+    assert.equal(existsSync(join(legitDir, 'SKILL.md')), false, 'no SKILL.md may be written into the sibling skill');
+    assert.equal(existsSync(join(legitDir, 'reference.md')), false, 'no package file may be written into the sibling skill');
+    assert.equal(readFileSync(legitData, 'utf8'), 'legitimate sibling content', 'the sibling content must be byte-unchanged');
+  });
+});
