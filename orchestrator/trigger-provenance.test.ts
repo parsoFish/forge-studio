@@ -90,7 +90,11 @@ import { aggregateRun, listRuns } from './run-model.ts';
 import { mintTriggeredInitiative } from './mint-triggered-initiative.ts';
 import { getPaths } from './queue.ts';
 import { normalizeProjectId } from './studio/registry.ts';
-import { buildCronFlowRunRequest } from './test-fixtures/flow-run-request.ts';
+import {
+  buildCronFlowRunRequest,
+  buildWebhookFlowRunRequest,
+  buildAgentCompleteFlowRunRequest,
+} from './test-fixtures/flow-run-request.ts';
 import type { FlowRunRequest } from './flow-run-requests.ts';
 
 // ---------------------------------------------------------------------------
@@ -262,30 +266,18 @@ test('trigger.kind === "webhook" for a run derived from a staged webhook request
   const root = makeTmp();
   try {
     planFlow(root, 'worker-webhook', 'test-project');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder (mirrors the real
+    // cli/bridge-hooks.ts staging shape) — every real webhook call site
+    // now sets sourceFlowId, which the builder's default already does
+    // (round-2 finding: an earlier version of this fixture omitted it and,
+    // to satisfy it, the implementation grew a fallback that reports the
+    // HOOK id as `source` — a value ruled forbidden; see the dedicated
+    // "no sourceFlowId" test below).
+    const run = mintAndDeriveRun(root, buildWebhookFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-webhook' },
-      origin: 'webhook',
       triggeredBy: 'webhook:demo-runner-hook',
-      // Every real webhook call site (cli/bridge-hooks.ts) now sets
-      // sourceFlowId — the declaring flow, already resolved by
-      // findWebhookTrigger. Omitting it here would exercise a fixture shape
-      // no real caller produces (round-2 finding: an earlier version of this
-      // fixture omitted it and, to satisfy it, the implementation grew a
-      // fallback that reports the HOOK id as `source` — a value ruled
-      // forbidden; see the dedicated "no sourceFlowId" test below).
       sourceFlowId: 'demo-runner-declaring-flow',
-      payload: {
-        kind: 'webhook',
-        provider: 'github',
-        event: 'push',
-        repo: 'acme/widgets',
-        ref: 'refs/heads/main',
-        headSha: 'a'.repeat(40),
-        pusherLogin: 'octocat',
-        commitCount: 1,
-        headCommitMessage: 'fix: widget alignment',
-      },
-    });
+    }));
     assert.equal(run.trigger?.kind, 'webhook', `expected trigger.kind 'webhook', got ${JSON.stringify(run.trigger)}`);
   } finally {
     cleanup(root);
@@ -296,12 +288,13 @@ test('trigger.kind === "agent-complete" for a run derived from a staged agent-co
   const root = makeTmp();
   try {
     planFlow(root, 'worker-agent-complete', 'test-project');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder (mirrors the real
+    // flow-trigger.ts `fireAgentCompleteTriggers` staging shape).
+    const run = mintAndDeriveRun(root, buildAgentCompleteFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-agent-complete' },
-      origin: 'agent-complete',
       triggeredBy: 'agent-complete:doc-updater',
       sourceAgent: 'doc-updater',
-    });
+    }));
     assert.equal(run.trigger?.kind, 'agent-complete', `expected trigger.kind 'agent-complete', got ${JSON.stringify(run.trigger)}`);
   } finally {
     cleanup(root);
@@ -388,12 +381,13 @@ test('trigger.source is the sourceAgent slug (agent-complete), never operator pr
   const root = makeTmp();
   try {
     planFlow(root, 'worker-agent-complete-2', 'test-project');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder (mirrors the real
+    // flow-trigger.ts `fireAgentCompleteTriggers` staging shape).
+    const run = mintAndDeriveRun(root, buildAgentCompleteFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-agent-complete-2' },
-      origin: 'agent-complete',
       triggeredBy: 'agent-complete:reviewer-bot',
       sourceAgent: 'reviewer-bot',
-    });
+    }));
     assert.equal(run.trigger?.source, 'reviewer-bot', `expected trigger.source to be the sourceAgent slug 'reviewer-bot', got ${JSON.stringify(run.trigger)}`);
   } finally {
     cleanup(root);
@@ -406,15 +400,15 @@ test('an attacker-controlled webhook payload string never appears anywhere in tr
     planFlow(root, 'worker-webhook-2', 'test-project');
     const hookId = 'demo-runner-hook';
     const declaringFlowId = 'demo-runner-declaring-flow-2';
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder (mirrors the real
+    // cli/bridge-hooks.ts staging shape): sourceFlowId is the declaring
+    // flow, resolved separately from the hook id embedded in triggeredBy.
+    // Round-2 finding: omitting this field here made the implementation
+    // grow a forbidden fallback (strip 'webhook:' off triggeredBy, report
+    // the HOOK id as source) to satisfy this fixture.
+    const run = mintAndDeriveRun(root, buildWebhookFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-webhook-2' },
-      origin: 'webhook',
       triggeredBy: `webhook:${hookId}`,
-      // Mirrors the real call site (cli/bridge-hooks.ts): sourceFlowId is
-      // the declaring flow, resolved separately from the hook id embedded
-      // in triggeredBy. Round-2 finding: omitting this field here made the
-      // implementation grow a forbidden fallback (strip 'webhook:' off
-      // triggeredBy, report the HOOK id as source) to satisfy this fixture.
       sourceFlowId: declaringFlowId,
       payload: {
         kind: 'webhook',
@@ -429,7 +423,7 @@ test('an attacker-controlled webhook payload string never appears anywhere in tr
         // attacker-ish string. Must never leak into the derived trigger.
         headCommitMessage: ATTACKER_STRING,
       },
-    });
+    }));
     assert.ok(run.trigger, 'expected a trigger object to be derived at all');
     const serialized = JSON.stringify(run.trigger);
     assert.ok(
@@ -499,14 +493,16 @@ test('trigger.scope is exactly null (not undefined, not "") when the firing even
     // never sets eventProject ("there is no repo->forge-project-id mapping
     // anywhere in the codebase... a scoped webhook trigger fails closed").
     planFlow(root, 'worker-unscoped', 'test-project');
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder (mirrors the real
+    // cli/bridge-hooks.ts staging shape) — sourceFlowId is independent of
+    // scope (which derives from eventProject, deliberately left at the
+    // builder's default `null` below, mirroring real bridge-hooks.ts, which
+    // never resolves an eventProject for a webhook); omitting sourceFlowId
+    // would exercise the forbidden hook-id fallback instead of the real
+    // derivation path this test targets.
+    const run = mintAndDeriveRun(root, buildWebhookFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-unscoped' },
-      origin: 'webhook',
       triggeredBy: 'webhook:some-hook',
-      // Mirrors the real call site (cli/bridge-hooks.ts) — sourceFlowId is
-      // independent of scope (which derives from eventProject, deliberately
-      // absent below); omitting it would exercise the forbidden hook-id
-      // fallback instead of the real derivation path this test targets.
       sourceFlowId: 'some-hook-declaring-flow',
       payload: {
         kind: 'webhook',
@@ -518,8 +514,7 @@ test('trigger.scope is exactly null (not undefined, not "") when the firing even
         publishedAt: '2026-01-01T00:00:00Z',
         body: 'release notes',
       },
-      // eventProject deliberately absent — mirrors real bridge-hooks.ts.
-    });
+    }));
     assert.ok(run.trigger, 'expected a trigger object to be derived at all');
     assert.equal(run.trigger?.scope, null, `expected scope === null exactly, got ${JSON.stringify(run.trigger?.scope)} (typeof ${typeof run.trigger?.scope})`);
     assert.notEqual(run.trigger?.scope, undefined, 'scope must be present-and-null, not absent');
@@ -552,16 +547,17 @@ test('a webhook request with no sourceFlowId yields trigger ABSENT entirely — 
   try {
     planFlow(root, 'worker-webhook-no-source', 'test-project');
     const hookId = 'some-hook-with-no-declaring-flow';
-    const run = mintAndDeriveRun(root, {
+    // forge-76y: built through the fixture builder, with sourceFlowId
+    // explicitly overridden to `undefined` — simulates a caller that never
+    // resolved (or cannot resolve) the declaring flow. This IS a shape a
+    // real caller could produce (e.g. a future webhook receiver that hasn't
+    // been updated to thread sourceFlowId) — unlike the round-1 fixtures
+    // above, which now all thread it because bridge-hooks.ts always
+    // resolves it today.
+    const run = mintAndDeriveRun(root, buildWebhookFlowRunRequest({
       target: { kind: 'flow', ref: 'worker-webhook-no-source' },
-      origin: 'webhook',
       triggeredBy: `webhook:${hookId}`,
-      // sourceFlowId deliberately OMITTED — simulates a caller that never
-      // resolved (or cannot resolve) the declaring flow. This IS a shape a
-      // real caller could produce (e.g. a future webhook receiver that
-      // hasn't been updated to thread sourceFlowId) — unlike the round-1
-      // fixtures above, which now all thread it because bridge-hooks.ts
-      // always resolves it today.
+      sourceFlowId: undefined,
       payload: {
         kind: 'webhook',
         provider: 'github',
@@ -573,7 +569,7 @@ test('a webhook request with no sourceFlowId yields trigger ABSENT entirely — 
         commitCount: 1,
         headCommitMessage: 'no declaring flow available',
       },
-    });
+    }));
     assert.equal(
       run.trigger,
       undefined,
