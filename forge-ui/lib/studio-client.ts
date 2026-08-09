@@ -203,13 +203,23 @@ export type FlowEdge = {
  *  UI yet (the kind selector below always builds `{kind:'flow', ref}`). */
 export type TriggerTarget = { kind: 'flow' | 'agent'; ref: string };
 
+/**
+ * `pull_request`/`issues` (R2-08-F3) back `on: pr-merged` / `on: issue-raised`
+ * and are GitHub-only in practice (cli/bridge-hooks.ts never resolves either
+ * header for gitea/gitlab); `push`/`release` back `on: webhook`. Mirrors
+ * orchestrator/studio/types.ts's `WebhookTriggerConfig.events` element union
+ * verbatim — forge-ui cannot import orchestrator TS directly (see this
+ * file's header convention).
+ */
+export type WebhookEventName = 'push' | 'release' | 'pull_request' | 'issues';
+
 /** R2-04 (ADR-041): a webhook trigger's receive/trust config. Secrets are
  *  env-var NAMES — the values live in the operator's environment, never in
  *  flow.yaml or this client. */
 export type WebhookTriggerConfig = {
   id: string;
   provider: 'github' | 'gitea' | 'gitlab';
-  events: Array<'push' | 'release'>;
+  events: Array<WebhookEventName>;
   secretEnv: string;
   secretEnvPrevious?: string;
   sources: string[];
@@ -259,6 +269,53 @@ export const SHIPPED_TRIGGER_KINDS = [
 ] as const;
 export type ShippedTriggerKind = (typeof SHIPPED_TRIGGER_KINDS)[number];
 
+/**
+ * zyc review finding 1: the `on:` kinds that carry the `webhook:` config
+ * block. `pr-merged` / `issue-raised` (R2-08-F3, ADR-027's amendment) reuse
+ * the SAME `webhook:` shape `on: webhook` uses — own `on:` value, never a
+ * sub-event under `on: webhook` — so `cli/bridge-hooks.ts`'s
+ * `findWebhookTrigger` (which scans every flow for a trigger whose
+ * `webhook.id === hookId`, regardless of which of the three kinds declared
+ * it) can resolve a delivery for them. Mirrors
+ * orchestrator/studio/validate-triggers.ts's `WEBHOOK_FAMILY_KIND_IDS`
+ * verbatim (forge-ui cannot import orchestrator TS directly — see this
+ * file's header convention).
+ */
+export const WEBHOOK_FAMILY_TRIGGER_KINDS: readonly ShippedTriggerKind[] = ['webhook', 'pr-merged', 'issue-raised'];
+
+/**
+ * zyc review finding 1: `pr-merged` / `issue-raised` are GitHub-only by
+ * ruled design (`cli/bridge-hooks.ts`'s `resolveEventName` only maps
+ * `pull_request`/`issues` under `provider === 'github'` — gitea/gitlab stay
+ * schema-reserved with zero stub handlers for those two kinds). `webhook`
+ * keeps all 3 shipped providers (push/release ARE shipped for gitea/gitlab).
+ * Mirrors validate-triggers.ts's `WEBHOOK_PROVIDERS_BY_KIND` verbatim — kept
+ * `Partial` (never widened to a total `Record`) so a lookup for a
+ * non-webhook-family kind honestly returns `undefined`, not a fabricated
+ * empty/default list.
+ */
+export const WEBHOOK_PROVIDERS_BY_KIND: Readonly<
+  Partial<Record<ShippedTriggerKind, readonly WebhookTriggerConfig['provider'][]>>
+> = {
+  webhook: ['github', 'gitea', 'gitlab'],
+  'pr-merged': ['github'],
+  'issue-raised': ['github'],
+};
+
+/**
+ * zyc review finding 1: each webhook-family kind accepts only its OWN event
+ * name — never a shared set, or `on: webhook` could declare
+ * `events: [pull_request]` (a header bridge-hooks.ts never resolves for that
+ * kind). Mirrors validate-triggers.ts's `WEBHOOK_EVENTS_BY_KIND` verbatim.
+ */
+export const WEBHOOK_EVENTS_BY_KIND: Readonly<
+  Partial<Record<ShippedTriggerKind, readonly WebhookEventName[]>>
+> = {
+  webhook: ['push', 'release'],
+  'pr-merged': ['pull_request'],
+  'issue-raised': ['issues'],
+};
+
 /** Client-side cron syntax check (UX only) — same croner engine as the
  *  server's `trigger-cron` lint (orchestrator/studio/validate.ts), which
  *  remains authoritative on save. Empty/blank counts as invalid (nothing to
@@ -281,12 +338,12 @@ export type TriggerBuilderFields = {
   schedule?: string;
   /** cron only; default `forbid` when omitted. */
   concurrency?: 'allow' | 'forbid';
-  /** webhook only. */
+  /** webhook-family only (webhook / pr-merged / issue-raised). */
   webhookId?: string;
   webhookProvider?: 'github' | 'gitea' | 'gitlab';
-  webhookEvents?: Array<'push' | 'release'>;
+  webhookEvents?: Array<WebhookEventName>;
   webhookSecretEnv?: string;
-  /** webhook only — comma-separated `owner/repo` list, split here. */
+  /** webhook-family only — comma-separated `owner/repo` list, split here. */
   webhookSources?: string;
   /** agent-complete only: the source agent slug whose completion fires this trigger. */
   agentSlug?: string;
@@ -314,7 +371,15 @@ export function buildTriggerDeclaration(
     if (!schedule) return null;
     return { on: kind, target, schedule, concurrency: fields.concurrency ?? 'forbid' };
   }
-  if (kind === 'webhook') {
+  // zyc review finding 1: `pr-merged` / `issue-raised` reuse the SAME
+  // `webhook:` config block `on: webhook` does (WEBHOOK_FAMILY_TRIGGER_KINDS
+  // above) — before this fix only `kind === 'webhook'` reached this branch,
+  // so a pr-merged/issue-raised trigger fell through to the generic
+  // `{on, target}` fallback below with NO webhook block: authorable in the
+  // UI, but cli/bridge-hooks.ts's `findWebhookTrigger` can only resolve a
+  // delivery by scanning for `trigger.webhook.id === hookId` — a row with no
+  // webhook block can never be addressed by any hook URL, permanently dead.
+  if (WEBHOOK_FAMILY_TRIGGER_KINDS.includes(kind)) {
     const sources = (fields.webhookSources ?? '').split(',').map((s) => s.trim()).filter(Boolean);
     const events = fields.webhookEvents ?? [];
     if (!fields.webhookId || !fields.webhookProvider || !fields.webhookSecretEnv) return null;
@@ -337,6 +402,36 @@ export function buildTriggerDeclaration(
     return { on: kind, target, agent };
   }
   return { on: kind, target };
+}
+
+/**
+ * zyc review finding 2 (guard-asymmetry): whether `existing` already
+ * declares the SAME trigger identity as `(kind, targetRef[, forAgent])`.
+ * FlowHeader's add-dedup and its target-flow dropdown filter both need this
+ * "already declared" test and had drifted to two independently-written
+ * (on,target)-only comparisons — silently excluding a valid SECOND
+ * `agent-complete` row aimed at the same target flow with a DIFFERENT
+ * source agent (the server has always supported this:
+ * `orchestrator/flow-trigger.ts`'s `fireAgentCompleteTriggers` matches each
+ * row independently by `trigger.agent === completedAgentSlug`, so two rows
+ * differing only in `agent` are two genuinely distinct, both-real triggers).
+ * A single shared definition here means both call sites can never drift
+ * apart again.
+ *
+ * Every OTHER kind stays (on,target)-only: their dispatch never
+ * differentiates a second identity (a second `flow-complete`/`cron`/
+ * `webhook`/… row at the same target IS a real duplicate), so widening the
+ * compare for them would silently allow one through.
+ */
+export function isSameTriggerIdentity(
+  existing: Pick<FlowTrigger, 'on' | 'target' | 'agent'>,
+  kind: string,
+  targetRef: string,
+  forAgent: string,
+): boolean {
+  if (existing.on !== kind || existing.target.ref !== targetRef) return false;
+  if (kind === 'agent-complete') return (existing.agent ?? '') === forAgent;
+  return true;
 }
 
 /** Stage C — per-flow kickoff kind; drives which launch surface the UI renders. */

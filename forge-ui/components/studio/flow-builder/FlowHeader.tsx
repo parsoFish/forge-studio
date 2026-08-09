@@ -16,8 +16,17 @@
  */
 
 import { useCallback, useEffect, useState } from 'react';
-import { fetchStudioKbs, buildTriggerDeclaration, isValidCronSchedule, SHIPPED_TRIGGER_KINDS } from '@/lib/studio-client';
-import type { Flow, Kb, FlowTrigger, ShippedTriggerKind } from '@/lib/studio-client';
+import {
+  fetchStudioKbs,
+  buildTriggerDeclaration,
+  isValidCronSchedule,
+  SHIPPED_TRIGGER_KINDS,
+  WEBHOOK_FAMILY_TRIGGER_KINDS,
+  WEBHOOK_PROVIDERS_BY_KIND,
+  WEBHOOK_EVENTS_BY_KIND,
+  isSameTriggerIdentity,
+} from '@/lib/studio-client';
+import type { Flow, Kb, FlowTrigger, ShippedTriggerKind, WebhookEventName } from '@/lib/studio-client';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
 
@@ -88,7 +97,7 @@ export function FlowHeader({
   const [cronConcurrency, setCronConcurrency] = useState<'allow' | 'forbid'>('forbid');
   const [webhookId, setWebhookId] = useState('');
   const [webhookProvider, setWebhookProvider] = useState<'github' | 'gitea' | 'gitlab'>('github');
-  const [webhookEvents, setWebhookEvents] = useState<Array<'push' | 'release'>>([]);
+  const [webhookEvents, setWebhookEvents] = useState<WebhookEventName[]>([]);
   const [webhookSecretEnv, setWebhookSecretEnv] = useState('');
   const [webhookSources, setWebhookSources] = useState('');
   const [agentSlug, setAgentSlug] = useState('');
@@ -113,17 +122,25 @@ export function FlowHeader({
 
   const addTrigger = useCallback(() => {
     if (!pendingTrigger || !canAddTrigger) return;
-    if (state.triggers.some((t) => t.on === pendingTrigger.on && t.target.ref === pendingTrigger.target.ref)) return;
+    // zyc review finding 2: dedup by trigger IDENTITY, not raw (on,target) —
+    // an agent-complete row's identity also carries `agent` (two rows may
+    // legitimately share a target with a DIFFERENT source agent; the server
+    // fires each independently, orchestrator/flow-trigger.ts's
+    // fireAgentCompleteTriggers). Every other kind stays (on,target)-only —
+    // isSameTriggerIdentity is the ONE shared definition this callback and
+    // the target-flow dropdown filter below both use, so they can't drift
+    // apart again.
+    if (state.triggers.some((t) => isSameTriggerIdentity(t, pendingTrigger.on, pendingTrigger.target.ref, pendingTrigger.agent ?? ''))) return;
     onChange({ ...state, triggers: [...state.triggers, pendingTrigger] });
     setTriggerTarget('');
     if (triggerKind === 'cron') { setCronSchedule(''); setCronConcurrency('forbid'); }
-    if (triggerKind === 'webhook') {
+    if (WEBHOOK_FAMILY_TRIGGER_KINDS.includes(triggerKind)) {
       setWebhookId(''); setWebhookProvider('github'); setWebhookEvents([]); setWebhookSecretEnv(''); setWebhookSources('');
     }
     if (triggerKind === 'agent-complete') { setAgentSlug(''); }
   }, [pendingTrigger, canAddTrigger, state, onChange, triggerKind]);
 
-  const toggleWebhookEvent = useCallback((ev: 'push' | 'release') => {
+  const toggleWebhookEvent = useCallback((ev: WebhookEventName) => {
     setWebhookEvents((prev) => (prev.includes(ev) ? prev.filter((e) => e !== ev) : [...prev, ev]));
   }, []);
 
@@ -374,7 +391,27 @@ export function FlowHeader({
               the SSOT; forge-ui cannot import orchestrator TS directly). */}
           <select
             value={triggerKind}
-            onChange={(e) => { setTriggerKind(e.target.value as ShippedTriggerKind); setTriggerTarget(''); }}
+            onChange={(e) => {
+              const nextKind = e.target.value as ShippedTriggerKind;
+              setTriggerKind(nextKind);
+              setTriggerTarget('');
+              // zyc review finding 1: pr-merged/issue-raised are GitHub-only
+              // and accept exactly one event id each
+              // (WEBHOOK_PROVIDERS_BY_KIND / WEBHOOK_EVENTS_BY_KIND, mirrors
+              // validate-triggers.ts) — clamp a value carried over from a
+              // prior kind selection so state never sits on an option the
+              // new kind's selects/checkboxes no longer render (a mismatched
+              // -but-invisible stale value would otherwise reach
+              // buildTriggerDeclaration unconstrained).
+              if (WEBHOOK_FAMILY_TRIGGER_KINDS.includes(nextKind)) {
+                const allowedProviders = WEBHOOK_PROVIDERS_BY_KIND[nextKind] ?? [];
+                if (!allowedProviders.includes(webhookProvider)) {
+                  setWebhookProvider((allowedProviders[0] ?? 'github') as 'github' | 'gitea' | 'gitlab');
+                }
+                const allowedEvents = WEBHOOK_EVENTS_BY_KIND[nextKind] ?? [];
+                setWebhookEvents((prev) => prev.filter((ev) => allowedEvents.includes(ev)));
+              }
+            }}
             data-field="trigger-kind"
             style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
           >
@@ -393,7 +430,12 @@ export function FlowHeader({
             style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
           >
             <option value="">trigger a flow…</option>
-            {flows.filter((f) => f.id !== flowId && !state.triggers.some((t) => t.on === triggerKind && t.target.ref === f.id)).map((f) => (
+            {/* zyc review finding 2: same isSameTriggerIdentity the add-dedup
+                above uses — an agent-complete row's identity also carries
+                `agent`, so a target already used by one agent-complete row
+                must NOT be hidden from the dropdown when authoring a SECOND
+                row for a different agent. */}
+            {flows.filter((f) => f.id !== flowId && !state.triggers.some((t) => isSameTriggerIdentity(t, triggerKind, f.id, agentSlug.trim()))).map((f) => (
               <option key={f.id} value={f.id}>{f.name}</option>
             ))}
           </select>
@@ -436,9 +478,20 @@ export function FlowHeader({
             </>
           )}
 
-          {/* webhook — receive/trust config; the endpoint is derived
-              read-only display, not editable. */}
-          {triggerKind === 'webhook' && (
+          {/* webhook family (webhook / pr-merged / issue-raised) — receive/
+              trust config; the endpoint is derived read-only display, not
+              editable. zyc review finding 1: pr-merged/issue-raised reuse
+              this SAME block (own `on:` value, ADR-027's amendment) — before
+              this fix only `on: webhook` rendered it, so a pr-merged/
+              issue-raised trigger had NO way to declare the webhook.id
+              cli/bridge-hooks.ts's findWebhookTrigger needs to route a
+              delivery, making it authorable-but-permanently-dead. Provider
+              options + event checkboxes are constrained PER KIND
+              (WEBHOOK_PROVIDERS_BY_KIND / WEBHOOK_EVENTS_BY_KIND, mirrors
+              validate-triggers.ts) so an operator can never pick a
+              provider/event combination that kind's server-side receiver can
+              never resolve. */}
+          {WEBHOOK_FAMILY_TRIGGER_KINDS.includes(triggerKind) && (
             <>
               <input
                 type="text"
@@ -454,30 +507,22 @@ export function FlowHeader({
                 data-field="webhook-provider"
                 style={{ background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontFamily: 'var(--font-body)', fontSize: 12, padding: '3px 8px', outline: 'none', cursor: 'pointer' }}
               >
-                <option value="github">github</option>
-                <option value="gitea">gitea</option>
-                <option value="gitlab">gitlab</option>
+                {(WEBHOOK_PROVIDERS_BY_KIND[triggerKind] ?? []).map((p) => (
+                  <option key={p} value={p}>{p}</option>
+                ))}
               </select>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--faint)' }}>
-                <input
-                  type="checkbox"
-                  checked={webhookEvents.includes('push')}
-                  onChange={() => toggleWebhookEvent('push')}
-                  data-field="webhook-events"
-                  data-event-value="push"
-                />
-                push
-              </label>
-              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--faint)' }}>
-                <input
-                  type="checkbox"
-                  checked={webhookEvents.includes('release')}
-                  onChange={() => toggleWebhookEvent('release')}
-                  data-field="webhook-events"
-                  data-event-value="release"
-                />
-                release
-              </label>
+              {(WEBHOOK_EVENTS_BY_KIND[triggerKind] ?? []).map((ev) => (
+                <label key={ev} style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 12, color: 'var(--faint)' }}>
+                  <input
+                    type="checkbox"
+                    checked={webhookEvents.includes(ev)}
+                    onChange={() => toggleWebhookEvent(ev)}
+                    data-field="webhook-events"
+                    data-event-value={ev}
+                  />
+                  {ev}
+                </label>
+              ))}
               <input
                 type="text"
                 value={webhookSecretEnv}
