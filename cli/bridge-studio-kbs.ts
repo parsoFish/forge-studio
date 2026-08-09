@@ -18,7 +18,7 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync, realpathSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
@@ -152,12 +152,49 @@ export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
 // Lint-resolution helpers (the guided-resolution UI)
 // ---------------------------------------------------------------------------
 
-/** Keep only findings whose file belongs to this kb's brain dir (matches the
- *  lint route's historical filter; the kbId substring also covers the central
- *  per-project path brain/projects/<kbId>/). */
-function scopeFindingsToKb(findings: Finding[], kbId: string): Finding[] {
-  const brainDir = `brain/${kbId}`;
-  return findings.filter((f) => !f.file || f.file.includes(brainDir) || f.file.includes(kbId));
+/**
+ * R1-06 WI-3 review MAJOR 1 + MAJOR 2 — the ONE exact-dir scoping root both a
+ * KB's health lint COUNT (read) and its consolidate/fix-auto obligation (WRITE)
+ * share. A finding belongs to `kbId` iff its file resolves to a path AT or
+ * nested UNDER the KB's OWN resolved brain dir — `resolveKbBrainDir`, the SAME
+ * resolution consolidate/lint/health use, covering BOTH `brain/<id>` and the
+ * central per-project `brain/projects/<id>` (ADR 035).
+ *
+ * The two shapes this replaces were both live defects:
+ *   - substring `f.file.includes(kbId)` (the old `scopeFindingsToKb`) folded a
+ *     SIBLING like `alpha-two` into `alpha` — and because consolidate turns the
+ *     scope into WRITES, consolidating `alpha` mutated `brain/projects/alpha-two/`
+ *     (cross-KB write, MAJOR 2);
+ *   - the hardcoded `brain/<id>` prefix (buildKbHealth's old filter) matched
+ *     NOTHING for a project brain at `brain/projects/<id>`, so health reported
+ *     lintFlags=0 and hid the Lint section for exactly the project KBs WI-3
+ *     targets (declared-data-fails-open, MAJOR 1).
+ *
+ * Comparison is by identity-after-realpath (not a lexical prefix): the finding's
+ * file is realpath'd where it exists, matching `resolveKbBrainDir`'s own
+ * realpath'd return — so a symlinked forge-root component (e.g. macOS `/tmp`)
+ * can't defeat the prefix check, and a theme reached through a symlink that
+ * escapes the dir is correctly EXCLUDED from a write scope rather than folded in.
+ */
+function findingUnderDir(forgeRoot: string, brainDir: string, f: Finding): boolean {
+  if (!f.file) return false;
+  const abs = resolve(forgeRoot, f.file);
+  // Never let a realpath fs-throw (e.g. a TOCTOU unlink between existsSync and
+  // realpathSync) escape the scoping path and 500 an otherwise-fine lint —
+  // fall back to the lexical absolute path.
+  let real = abs;
+  try {
+    if (existsSync(abs)) real = realpathSync(abs);
+  } catch {
+    real = abs;
+  }
+  return real === brainDir || real.startsWith(brainDir + sep);
+}
+
+function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
+  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!brainDir) return [];
+  return findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
 }
 
 /** Spawn ONE detached `forge brain fix` agent turn; events stream to
@@ -231,6 +268,31 @@ function writeConsolidateTerminalEvent(
     // Best-effort: a run whose terminal event never lands stays 'running'
     // forever, which the caller's own poll-budget timeout surfaces loudly
     // rather than this failing silently in a way that hides the cause.
+  }
+}
+
+/**
+ * R1-06 WI-3 review MINOR 1 (poll-hang on throw): the terminal event for a
+ * consolidate run whose repair phase (the initial `runBrainLint`, or
+ * `applyDeterministicConsolidateFixes`' `ensureLinkedAt` read/write) threw
+ * before the normal `writeConsolidateTerminalEvent` could fire. Without this,
+ * `readBrainFixState` reports 'running' forever and every poller exhausts its
+ * whole budget. Writes an `event_type:'error'` terminal — which
+ * `readBrainFixState` maps to state 'failed' — NOT a vacuous cleared:true
+ * 'end', so the failure is honest rather than a silent success.
+ */
+function writeConsolidateErrorTerminalEvent(forgeRoot: string, runId: string, err: unknown): void {
+  const logDir = join(forgeRoot, '_logs', `_brainfix-${runId}`);
+  try { mkdirSync(logDir, { recursive: true }); } catch { /* dir may already exist; the append below is the real signal */ }
+  const line = JSON.stringify({
+    event_type: 'error',
+    message: 'brain-fix-consolidate.crashed',
+    metadata: { runId, error: err instanceof Error ? err.message : String(err) },
+  });
+  try {
+    appendFileSync(join(logDir, 'events.jsonl'), line + '\n', 'utf8');
+  } catch {
+    // Best-effort — the caller's poll budget still surfaces a stuck run loudly.
   }
 }
 
@@ -423,61 +485,73 @@ function applyDeterministicConsolidateFixes(
  * state deterministically — just with an honest `cleared: false`.
  */
 async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: string): Promise<void> {
-  const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
-  const scoped = scopeFindingsToKb(findings, kbId);
-  const agentTier = scoped.filter(
-    (f): f is AgentFinding => f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
-  );
-
-  const residual = applyDeterministicConsolidateFixes(forgeRoot, agentTier);
-  const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
-
-  if (!noSpawn) {
-    const groups = groupConsolidateFindings(forgeRoot, residual);
-    let i = 0;
-    for (const [targetFile, group] of groups) {
-      const { message, fixHint } = describeConsolidateGroup(group);
-      try {
-        await runBrainFixTurn({
-          runId: `${runId}__${i}`,
-          kbId,
-          file: targetFile,
-          check: group[0].check,
-          kind: group[0].kind,
-          fixHint,
-          message,
-          forgeRoot,
-        });
-      } catch {
-        // One group's agent turn failing must not abort the rest of the
-        // batch — every other scoped group still gets its own attempt.
-      }
-      i++;
-    }
-  }
-  // else: CI-safe seam — any residual (non-deterministic) findings are left
-  // for a real production run; the terminal event below still fires so the
-  // poller never blocks on a turn that will never happen.
-
-  // Re-lint for an ACCURATE cleared count: `runBrainFixTurn`'s own per-run
-  // `cleared` signal is scoped to its `file` argument, which for a grouped,
-  // multi-finding session is the shared INDEX file — not the theme files
-  // the original findings are keyed by — so it would report a vacuous
-  // "cleared" that never actually re-checked anything.
-  let clearedCount = 0;
+  // MINOR 1: the whole body is wrapped so the SINGLE terminal event is
+  // guaranteed even on an unexpected throw in the pre-terminal repair phase
+  // (the initial runBrainLint, or applyDeterministicConsolidateFixes'
+  // ensureLinkedAt read/write). The happy path writes its own terminal at the
+  // end and returns without throwing, so the catch never double-fires.
   try {
-    const { findings: after } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
-    const stillPresent = new Set(
-      scopeFindingsToKb(after, kbId)
-        .filter((f) => f.resolution === 'agent')
-        .map((f) => `${f.kind}::${f.file}`),
+    const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+    const scoped = scopeFindingsToKb(forgeRoot, kbId, findings);
+    const agentTier = scoped.filter(
+      (f): f is AgentFinding => f.resolution === 'agent' && typeof f.check === 'string' && typeof f.kind === 'string',
     );
-    clearedCount = agentTier.filter((f) => !stillPresent.has(`${f.kind}::${f.file}`)).length;
-  } catch {
-    clearedCount = 0;
-  }
 
-  writeConsolidateTerminalEvent(forgeRoot, runId, { total: agentTier.length, clearedCount });
+    const residual = applyDeterministicConsolidateFixes(forgeRoot, agentTier);
+    const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
+
+    if (!noSpawn) {
+      const groups = groupConsolidateFindings(forgeRoot, residual);
+      let i = 0;
+      for (const [targetFile, group] of groups) {
+        const { message, fixHint } = describeConsolidateGroup(group);
+        try {
+          await runBrainFixTurn({
+            runId: `${runId}__${i}`,
+            kbId,
+            file: targetFile,
+            check: group[0].check,
+            kind: group[0].kind,
+            fixHint,
+            message,
+            forgeRoot,
+          });
+        } catch {
+          // One group's agent turn failing must not abort the rest of the
+          // batch — every other scoped group still gets its own attempt.
+        }
+        i++;
+      }
+    }
+    // else: CI-safe seam — any residual (non-deterministic) findings are left
+    // for a real production run; the terminal event below still fires so the
+    // poller never blocks on a turn that will never happen.
+
+    // Re-lint for an ACCURATE cleared count: `runBrainFixTurn`'s own per-run
+    // `cleared` signal is scoped to its `file` argument, which for a grouped,
+    // multi-finding session is the shared INDEX file — not the theme files
+    // the original findings are keyed by — so it would report a vacuous
+    // "cleared" that never actually re-checked anything.
+    let clearedCount = 0;
+    try {
+      const { findings: after } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+      const stillPresent = new Set(
+        scopeFindingsToKb(forgeRoot, kbId, after)
+          .filter((f) => f.resolution === 'agent')
+          .map((f) => `${f.kind}::${f.file}`),
+      );
+      clearedCount = agentTier.filter((f) => !stillPresent.has(`${f.kind}::${f.file}`)).length;
+    } catch {
+      clearedCount = 0;
+    }
+
+    writeConsolidateTerminalEvent(forgeRoot, runId, { total: agentTier.length, clearedCount });
+  } catch (err) {
+    // The repair phase threw before the normal terminal could fire. Emit an
+    // honest error terminal so the poll resolves to 'failed' within its budget
+    // instead of hanging on 'running' forever.
+    writeConsolidateErrorTerminalEvent(forgeRoot, runId, err);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -540,13 +614,16 @@ function buildKbHealth(
     }
   }
 
-  // Run brain-lint and filter findings to this kb's directory
+  // Run brain-lint and filter findings to this kb's directory. MAJOR 1: scope
+  // through the SAME exact-dir helper consolidate/lint use (resolveKbBrainDir),
+  // so a project brain at brain/projects/<id> is counted — the old hardcoded
+  // `resolve(forgeRoot,'brain',kbId)` prefix matched nothing for a project KB
+  // and reported a false 0, hiding the Lint section for exactly those KBs.
   let lintFlags = 0;
   let lintErrors = 0;
   try {
-    const kbDir = resolve(forgeRoot, 'brain', kbId);
     const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
-    const kbFindings = findings.filter((f) => f.file.startsWith(kbDir));
+    const kbFindings = scopeFindingsToKb(forgeRoot, kbId, findings);
     lintFlags = kbFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
     lintErrors = kbFindings.filter((f) => f.category === 'error').length;
   } catch {
@@ -1156,7 +1233,7 @@ export async function handleStudioKbRoutes(
 
       if (op === 'lint') {
         const { findings } = runBrainLint({ cwd: ctx.forgeRoot, scope: 'full' });
-        const scoped = scopeFindingsToKb(findings, kbId);
+        const scoped = scopeFindingsToKb(ctx.forgeRoot, kbId, findings);
         // `ok: true` so the UI's studioPost (which gates success on data.ok, like
         // the sibling `index` op) treats a successful lint as success, not failure.
         sendJson(res, 200, { op: 'lint', ok: true, findings: scoped, total: scoped.length, counts: resolutionCounts(scoped) }, origin);
@@ -1165,9 +1242,11 @@ export async function handleStudioKbRoutes(
       if (op === 'fix-auto') {
         // Apply every deterministic AUTO-tier fix for this kb to a FIXED POINT —
         // one click drains the whole auto tier (re-lints between rounds), no
-        // repeat clicks. Scoped to this kb's findings.
-        const brainDir = `brain/${kbId}`;
-        const inKb = (f: Finding): boolean => !f.file || f.file.includes(brainDir) || f.file.includes(kbId);
+        // repeat clicks. MAJOR 2: fix-auto also WRITES, so it must share the
+        // exact-dir scope — the old substring `includes(kbId)` folded a sibling
+        // (e.g. `alpha-two` into `alpha`) into this KB's auto-fix write set.
+        const kbBrainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        const inKb = (f: Finding): boolean => kbBrainDir !== null && findingUnderDir(ctx.forgeRoot, kbBrainDir, f);
         const result = applyAutoFixesUntilStable(ctx.forgeRoot, { filter: inKb });
         sendJson(res, 200, { op: 'fix-auto', ok: true, applied: result.applied, skipped: result.skipped, rounds: result.rounds, remaining: result.remaining, counts: resolutionCounts(result.remaining) }, origin);
         return true;

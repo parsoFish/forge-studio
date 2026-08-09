@@ -24,7 +24,9 @@ import { startBridge } from './ui-bridge.ts';
 import { loadKbDescriptors } from './bridge-studio-kbs.ts';
 // AT-4on-9 (SEC-05 4on REOPEN #1) needs existsSync for a fixture precondition —
 // added as a second scoped node:fs import so the existing import stays untouched.
-import { existsSync } from 'node:fs';
+// R1-06 WI-3 review pins (M1/M2/MINOR1) additionally need readFileSync for the
+// cross-KB write-isolation byte-compare.
+import { existsSync, readFileSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -76,6 +78,25 @@ function consolidateFixtureTheme(slug: string, n: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// R1-06 WI-3 review MAJOR 1 fixture: a SEPARATE, never-consolidated project KB
+// (so its finding count stays fixed for the whole file) whose brain lives at
+// brain/projects/<id> — the exact shape buildKbHealth's OLD hardcoded
+// `resolve(forgeRoot,'brain',<id>)` prefix misses (that path is
+// brain/<id>, so the health lint filter yielded 0 and hid the Lint section for
+// project KBs). Three unlisted pattern themes ⇒ 3 checkProjectBrainIndexes
+// 'flag' findings ⇒ health.lintFlags MUST be 3 once the health filter scopes
+// via resolveKbBrainDir like consolidate/lint already do. NEVER mutated.
+// ---------------------------------------------------------------------------
+const HEALTH_KB_ID = 'r1-06-health';
+const HEALTH_KB_YAML =
+  `id: ${HEALTH_KB_ID}\nname: R1-06 Health Fixture (scratch)\n` +
+  `binding: { kind: project, ref: ${HEALTH_KB_ID} }\n` +
+  `desc: Synthetic scratch project KB seeded ONLY for the WI-3 review MAJOR 1 health-count pin — never consolidated.\n` +
+  `backend: filesystem\n`;
+const HEALTH_PATTERNS_INDEX =
+  `# r1-06-health — Patterns\n\n> Category index — deliberately left without theme links (fixture).\n\n## Theme pages\n`;
+
+// ---------------------------------------------------------------------------
 // Bridge lifecycle
 // ---------------------------------------------------------------------------
 
@@ -112,6 +133,16 @@ before(async () => {
   writeFileSync(join(consolidateDir, 'patterns.md'), CONSOLIDATE_PATTERNS_INDEX);
   for (const [slug, n] of [['theme-a', 1], ['theme-b', 2], ['theme-c', 3]] as const) {
     writeFileSync(join(consolidateDir, 'themes', `${slug}.md`), consolidateFixtureTheme(slug, n));
+  }
+
+  // KB: r1-06-health (scratch project brain, MAJOR 1 fixture — never
+  // consolidated, so its 3 checkProjectBrainIndexes flags stay fixed).
+  const healthDir = join(forgeRoot, 'brain', 'projects', HEALTH_KB_ID);
+  mkdirSync(join(healthDir, 'themes'), { recursive: true });
+  writeFileSync(join(healthDir, 'kb.yaml'), HEALTH_KB_YAML);
+  writeFileSync(join(healthDir, 'patterns.md'), HEALTH_PATTERNS_INDEX);
+  for (const [slug, n] of [['h-one', 1], ['h-two', 2], ['h-three', 3]] as const) {
+    writeFileSync(join(healthDir, 'themes', `${slug}.md`), consolidateFixtureTheme(slug, n));
   }
 
   const result = await startBridge({ forgeRoot, port: 0 });
@@ -321,6 +352,78 @@ async function pollUntilTerminal(
   return { state: 'running', cleared: false };
 }
 
+// ---------------------------------------------------------------------------
+// R1-06 WI-3 review pins (MAJOR 2 write-isolation, MINOR 1 poll-hang) need an
+// ISOLATED forge-root + bridge each: MAJOR 2 mutates on-disk brains, and
+// MINOR 1's directory-as-index makes runBrainLint(scope:'full') throw for the
+// WHOLE root — either would corrupt the shared bridge's other tests. Minimal
+// _queue/_logs scaffold mirrors the shared `before()`.
+// ---------------------------------------------------------------------------
+async function makeIsolatedForge(): Promise<{ root: string; url: string; close: () => Promise<void> }> {
+  const root = mkdtempSync(join(tmpdir(), 'kbs-review-pin-'));
+  for (const state of ['in-flight', 'done', 'failed', 'pending']) {
+    mkdirSync(join(root, '_queue', state), { recursive: true });
+  }
+  mkdirSync(join(root, '_logs'), { recursive: true });
+  const { url, close } = await startBridge({ forgeRoot: root, port: 0 });
+  return { root, url, close };
+}
+
+async function postAt(
+  base: string,
+  path: string,
+  body?: Record<string, unknown>,
+): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await fetch(`${base}${path}`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forge-csrf': '1' },
+    body: body !== undefined ? JSON.stringify(body) : undefined,
+  });
+  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+}
+
+/** Poll an isolated bridge's fix-agent state until terminal (or budget spent —
+ *  returned as-is so the caller's assertion, not a silent timeout, reports). */
+async function pollTerminalAt(
+  base: string,
+  kbId: string,
+  runId: string,
+  maxAttempts = 40,
+  intervalMs = 250,
+): Promise<{ state: string; cleared: boolean }> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const res = await fetch(`${base}/api/studio/kbs/${kbId}/fix-agent/${runId}`);
+    const json = (await res.json()) as Record<string, unknown>;
+    const state = json['state'] as string;
+    if (state && state !== 'running') return { state, cleared: json['cleared'] === true };
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return { state: 'running', cleared: false };
+}
+
+/** A synthetic project brain: kb.yaml (project binding) + a category index + N
+ *  unlisted `pattern` themes ⇒ N checkProjectBrainIndexes 'not listed' findings.
+ *  `patternsAsDir:true` makes patterns.md a DIRECTORY (MINOR 1 throw injection —
+ *  readIndexEntries' readFileSync throws EISDIR on a dir). */
+function seedProjectBrain(
+  root: string,
+  id: string,
+  themeSlugs: readonly string[],
+  opts?: { patternsAsDir?: boolean },
+): void {
+  const dir = join(root, 'brain', 'projects', id);
+  mkdirSync(join(dir, 'themes'), { recursive: true });
+  writeFileSync(
+    join(dir, 'kb.yaml'),
+    `id: ${id}\nname: ${id}\nbinding: { kind: project, ref: ${id} }\ndesc: isolated review-pin fixture.\nbackend: filesystem\n`,
+  );
+  if (opts?.patternsAsDir) mkdirSync(join(dir, 'patterns.md'), { recursive: true });
+  else writeFileSync(join(dir, 'patterns.md'), `# ${id} — Patterns\n\n> fixture index.\n\n## Theme pages\n`);
+  themeSlugs.forEach((slug, i) => {
+    writeFileSync(join(dir, 'themes', `${slug}.md`), consolidateFixtureTheme(slug, i + 1));
+  });
+}
+
 test('R1-06 WI-3 group A red-pin: POST maintenance op=consolidate is accepted (200 ok:true + runId) — RED today (op not in the allow-list)', async () => {
   const { status, json } = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
   assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(json)}`);
@@ -414,6 +517,146 @@ test('R1-06 WI-3 group A companion: pre-existing single-finding lint-resolution 
   } finally {
     if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
     else process.env.FORGE_DRY_BRIDGE = prior;
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-3 review MAJOR 1 (mis-scoped health count / declared-data-fails-open):
+// buildKbHealth scoped its lint filter with the HARDCODED
+// `resolve(forgeRoot,'brain',<id>)` prefix (= brain/<id>), so for a project KB
+// living at brain/projects/<id> the filter matched nothing and health reported
+// lintFlags=0 — hiding the Lint section for exactly the project KBs WI-3 targets,
+// while op=lint/op=consolidate reported the real count. The health filter must
+// scope via resolveKbBrainDir (the SAME resolution consolidate/lint use).
+//
+// RED today: GET health for r1-06-health reports lintFlags=0 (not 3).
+// ---------------------------------------------------------------------------
+test('R1-06 WI-3 MAJOR 1 red-pin: GET health for a project KB reports the REAL checkProjectBrainIndexes count (not 0) — RED today', async () => {
+  // Fixture precondition, asserted BEFORE the verdict: op=lint (which already
+  // scopes correctly) sees exactly 3 checkProjectBrainIndexes findings for this
+  // project KB, so a health count of 0 is a mis-scope, not an empty corpus.
+  const lint = await post(`/api/studio/kbs/${HEALTH_KB_ID}/maintenance`, { op: 'lint' });
+  assert.equal(lint.status, 200, JSON.stringify(lint.json));
+  const projectFindings = (lint.json['findings'] as Array<{ check?: string; category?: string }>).filter(
+    (f) => f.check === 'checkProjectBrainIndexes',
+  );
+  assert.equal(
+    projectFindings.length,
+    3,
+    `fixture precondition failed: expected 3 checkProjectBrainIndexes findings via op=lint, got ${projectFindings.length}`,
+  );
+
+  // Verdict: the health object's lintFlags must reflect those same 3 findings.
+  const detail = await get(`/api/studio/kbs/${HEALTH_KB_ID}`);
+  assert.equal(detail.status, 200, JSON.stringify(detail.json));
+  const health = detail.json['health'] as { lintFlags?: number; lintErrors?: number } | undefined;
+  assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
+  assert.equal(
+    health!.lintFlags,
+    3,
+    `expected health.lintFlags=3 for a project KB with 3 checkProjectBrainIndexes flags, got ${health!.lintFlags} — the health filter is mis-scoped to brain/<id> instead of brain/projects/<id>`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-3 review MAJOR 2 (cross-KB mutation / write-isolation): scopeFindingsToKb
+// kept any finding whose path .includes(kbId) (substring). runBrainConsolidateNow
+// turns that scope into WRITES (applyDeterministicConsolidateFixes). Two project
+// brains "alpha" and "alpha-two": consolidating "alpha" matched alpha-two's
+// findings too (its path contains "alpha") and appended a link line into
+// brain/projects/alpha-two/patterns.md. The scope must be an EXACT resolved-dir
+// match, never a substring — for BOTH the read (count) and write (consolidate).
+//
+// RED today: alpha-two/patterns.md is mutated by consolidating alpha.
+// ---------------------------------------------------------------------------
+test('R1-06 WI-3 MAJOR 2 red-pin: consolidating "alpha" leaves sibling "alpha-two" byte-unchanged — RED today', async () => {
+  const iso = await makeIsolatedForge();
+  try {
+    seedProjectBrain(iso.root, 'alpha', ['a-one', 'a-two']);
+    seedProjectBrain(iso.root, 'alpha-two', ['b-one']);
+    const alphaTwoIndex = join(iso.root, 'brain', 'projects', 'alpha-two', 'patterns.md');
+
+    // Fixture precondition (before any verdict): alpha-two's index does NOT yet
+    // link its theme, so any cross-KB append is detectable, and alpha-two really
+    // has its own unlisted-theme finding to be (wrongly) swept in.
+    const before = readFileSync(alphaTwoIndex, 'utf8');
+    assert.ok(!before.includes('b-one'), 'precondition: alpha-two index must not already link b-one');
+    const lintTwoBefore = await postAt(iso.url, `/api/studio/kbs/alpha-two/maintenance`, { op: 'lint' });
+    const twoFindingsBefore = (lintTwoBefore.json['findings'] as Array<{ check?: string }>).filter(
+      (f) => f.check === 'checkProjectBrainIndexes',
+    );
+    assert.equal(twoFindingsBefore.length, 1, `precondition: alpha-two must have exactly 1 project-index finding, got ${twoFindingsBefore.length}`);
+
+    // Dispatch consolidate for ALPHA only, drain to terminal.
+    const dispatch = await postAt(iso.url, `/api/studio/kbs/alpha/maintenance`, { op: 'consolidate' });
+    assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
+    const runId = dispatch.json['runId'] as string;
+    assert.equal(typeof runId, 'string', `expected runId, got ${JSON.stringify(dispatch.json)}`);
+    const terminal = await pollTerminalAt(iso.url, 'alpha', runId);
+    assert.notEqual(terminal.state, 'running', 'alpha consolidate never reached terminal');
+
+    // Verdict 1 (write-isolation): alpha-two's index file is byte-identical.
+    const after = readFileSync(alphaTwoIndex, 'utf8');
+    assert.equal(after, before, 'consolidating "alpha" mutated sibling "alpha-two" patterns.md (substring cross-KB write)');
+
+    // Verdict 2 (count-isolation): alpha-two still reports its own unlisted
+    // finding — alpha's run must not have cleared it.
+    const lintTwoAfter = await postAt(iso.url, `/api/studio/kbs/alpha-two/maintenance`, { op: 'lint' });
+    const twoFindingsAfter = (lintTwoAfter.json['findings'] as Array<{ check?: string }>).filter(
+      (f) => f.check === 'checkProjectBrainIndexes',
+    );
+    assert.equal(twoFindingsAfter.length, 1, `alpha's consolidate cleared alpha-two's finding (cross-KB), ${twoFindingsAfter.length} remain`);
+
+    // Sanity: alpha's OWN findings did drain (the fix scopes, it does not disable).
+    const lintAlphaAfter = await postAt(iso.url, `/api/studio/kbs/alpha/maintenance`, { op: 'lint' });
+    const alphaFindingsAfter = (lintAlphaAfter.json['findings'] as Array<{ check?: string }>).filter(
+      (f) => f.check === 'checkProjectBrainIndexes',
+    );
+    assert.equal(alphaFindingsAfter.length, 0, `alpha's own findings should be drained, ${alphaFindingsAfter.length} remain`);
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-3 review MINOR 1 (poll-hang on throw): the pre-terminal repair phase
+// (initial runBrainLint + applyDeterministicConsolidateFixes' ensureLinkedAt
+// read/write) was unwrapped. When it throws (here: a category index that is a
+// DIRECTORY, so readIndexEntries' readFileSync throws EISDIR), the run rejected
+// before writeConsolidateTerminalEvent — readBrainFixState returns 'running'
+// forever and the poll exhausts its budget. A single honest terminal must fire
+// even on an unexpected throw.
+//
+// RED today: the run never leaves 'running'.
+// ---------------------------------------------------------------------------
+test('R1-06 WI-3 MINOR 1 red-pin: a consolidate whose repair phase throws still reaches a terminal state — RED today', async () => {
+  const iso = await makeIsolatedForge();
+  try {
+    // patterns.md is a DIRECTORY → readIndexEntries' readFileSync throws EISDIR.
+    seedProjectBrain(iso.root, 'throwkb', ['t-one'], { patternsAsDir: true });
+    // Fixture precondition (before verdict): the index path really is a directory.
+    assert.ok(
+      existsSync(join(iso.root, 'brain', 'projects', 'throwkb', 'patterns.md')),
+      'precondition: throwkb patterns.md (as a directory) must exist',
+    );
+
+    const dispatch = await postAt(iso.url, `/api/studio/kbs/throwkb/maintenance`, { op: 'consolidate' });
+    assert.equal(dispatch.status, 200, `dispatch must be accepted async, got ${JSON.stringify(dispatch.json)}`);
+    const runId = dispatch.json['runId'] as string;
+    assert.equal(typeof runId, 'string', `expected runId, got ${JSON.stringify(dispatch.json)}`);
+
+    // Tighter budget (3s): the error terminal lands within ~1 poll on GREEN;
+    // on RED this bounds how long the demonstrated hang costs the suite.
+    const terminal = await pollTerminalAt(iso.url, 'throwkb', runId, 20, 150);
+    assert.notEqual(
+      terminal.state,
+      'running',
+      'a consolidate whose repair phase threw never reached a terminal state — the poll hung to budget',
+    );
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
   }
 });
 
