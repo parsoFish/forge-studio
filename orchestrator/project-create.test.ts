@@ -831,3 +831,125 @@ test('AT-4on-8 (RED-today) [SEC-05 4on] a stale marker-less orphan is reconciled
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ===========================================================================
+// SEC-05 / forge-4on REOPEN #1 — the transactional create fix LEAKS
+// `.staging-<id>-<rand>` orphans. Two ways they arise: a rename-loser under
+// concurrency (two creates for the same id both stage, one wins the rename and
+// the other's staged tree is stranded) and a hard-kill DURING staging (the
+// process dies after `copyTemplate`/`seedProjectBrain` wrote into
+// `.staging-*` but before the rename). Both leave a real, fully-formed staging
+// tree in `projectsRoot`/`brain/projects/` — which then SURFACES as a
+// phantom project (AT-4on-9, discoverProjects — a sibling test file) or a
+// phantom KB (AT-4on-9, loadKbDescriptors — a sibling test file), because
+// neither listing filters dot-prefixed dirs, and the pre-create reconcile
+// (project-create.ts:240-251) never sweeps `.staging-*` at all.
+//
+// AT-4on-10 pins the SWEEP (RED today: the reconcile ignores `.staging-*`).
+// AT-4on-11a/-11b pin the completion-marker SEMANTICS the sweep hinges on
+// (green-lock today; named killed impls so the widened reconcile can't regress
+// them into deleting a genuinely-complete project or dropping the marker).
+// ===========================================================================
+
+test('AT-4on-10 (RED) [SEC-05 4on] a stale `.staging-<id>-<rand>` orphan is swept (not adopted) and the fresh create succeeds clean', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const stagingProj = join(forgeRoot, 'projects', `.staging-${id}-deadbeef`);
+  const stagingBrain = join(forgeRoot, 'brain', 'projects', `.staging-${id}-deadbeef`);
+  try {
+    // Plant BOTH halves of a crashed-during-staging leftover, each carrying a
+    // SENTINEL that a real fresh scaffold (its staging name is a fresh random
+    // hex, never "deadbeef") would never itself write.
+    mkdirSync(stagingProj, { recursive: true });
+    writeFileSync(join(stagingProj, 'STAGING_SENTINEL.txt'), 'rename-loser / hard-kill leftover\n', 'utf8');
+    mkdirSync(stagingBrain, { recursive: true });
+    writeFileSync(join(stagingBrain, 'STAGING_SENTINEL.txt'), 'rename-loser / hard-kill leftover\n', 'utf8');
+    // Fixture precondition (before any verdict): both leftovers really exist.
+    assert.ok(existsSync(join(stagingProj, 'STAGING_SENTINEL.txt')), 'precondition: projects/.staging-* leftover planted');
+    assert.ok(existsSync(join(stagingBrain, 'STAGING_SENTINEL.txt')), 'precondition: brain/projects/.staging-* leftover planted');
+
+    const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
+
+    // The create must SUCCEED with a clean, complete project (+ completion marker).
+    // (These PASS at base too — the RED here is the SWEEP assertions below, so the
+    // test fails for the right reason: `.staging-*` was never reconciled away.)
+    assert.equal(out.id, id, 'the fresh create must succeed over a `.staging-*`-littered root');
+    assert.ok(existsSync(join(forgeRoot, 'projects', id, '.forge', 'project.json')), 'the create must produce a complete scaffold');
+    assert.ok(existsSync(join(forgeRoot, 'projects', id, '.forge', '.create-complete')), 'the completed project must carry the completion marker');
+
+    // The verdict — RED at base: the leftover `.staging-*` trees must be GONE
+    // (swept), with their SENTINELs absent — proving a SWEEP, not adoption.
+    // Kills: a reconcile that GCs only projects/<id> + brain/projects/<id> and
+    // ignores the sibling `.staging-*` orphans it must also sweep.
+    assert.ok(!existsSync(stagingProj), `a stale projects/.staging-${id}-deadbeef orphan survived the create — the reconcile must sweep it`);
+    assert.ok(!existsSync(stagingBrain), `a stale brain/projects/.staging-${id}-deadbeef orphan survived the create — the reconcile must sweep it`);
+    assert.ok(!existsSync(join(stagingProj, 'STAGING_SENTINEL.txt')), 'the projects staging SENTINEL must be gone (swept, not adopted)');
+    assert.ok(!existsSync(join(stagingBrain, 'STAGING_SENTINEL.txt')), 'the brain staging SENTINEL must be gone (swept, not adopted)');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// AT-4on-11 (green-lock) — the completion-marker semantics the reconcile (and
+// AT-4on-8/-10's sweep) hinge on. TWO invariants, BOTH green at base today;
+// pinned so the transactional-reconcile fix cannot regress them.
+//   (a) marker-exists-after-success — a SUCCESSFUL create writes
+//       <projectsRoot>/<id>/.forge/.create-complete (project-create.ts:311-312,
+//       LAST, after both renames). Kills: a fix that drops the marker write, or
+//       writes it at the wrong path — without it the reconcile cannot tell a
+//       COMPLETE project from a crash orphan and would sweep real projects.
+//   (b) marker-present-refused-and-untouched — a projects/<id> that DOES carry
+//       the marker is the genuinely-complete case: it must be REFUSED
+//       ("already exists", project-create.ts:240-243) and NEVER swept. Kills: a
+//       reconcile widened to rmSync projects/<id> unconditionally (marker-blind)
+//       — the over-reach twin of the AT-4on-10 sweep; the untouched SENTINEL is
+//       the tell.
+// EXPIRY: both stay green after the fix. If a future change makes a
+// marker-present collision non-fatal (ADOPTING or SWEEPING a complete project),
+// (b)'s throw + SENTINEL assertions catch it — re-audit rather than relax.
+test('AT-4on-11a (green-lock) [SEC-05 4on] a successful create writes the .forge/.create-complete marker LAST', () => {
+  const forgeRoot = isolatedForgeRoot();
+  try {
+    const out = scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot });
+    // Fixture precondition: the create really produced a project.
+    assert.ok(existsSync(join(out.projectDir, '.forge', 'project.json')), 'precondition: the create produced a scaffold');
+    // Verdict: the completion marker is present at the contracted path.
+    assert.ok(
+      existsSync(join(out.projectDir, '.forge', '.create-complete')),
+      'a completed create must write .forge/.create-complete — the reconcile relies on it to tell a complete project from a crash orphan',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('AT-4on-11b (green-lock) [SEC-05 4on] a marker-PRESENT projects/<id> is refused ("already exists"), never swept', () => {
+  const forgeRoot = isolatedForgeRoot();
+  const id = 'my-tool';
+  const projectDir = join(forgeRoot, 'projects', id);
+  try {
+    // Plant a genuinely-COMPLETE project: a valid .forge/project.json + the
+    // completion marker + a SENTINEL a sweep-then-rescaffold would destroy.
+    mkdirSync(join(projectDir, '.forge'), { recursive: true });
+    writeFileSync(join(projectDir, '.forge', 'project.json'), '{"name":"my-tool"}', 'utf8');
+    writeFileSync(join(projectDir, '.forge', '.create-complete'), `${new Date().toISOString()}\n`, 'utf8');
+    writeFileSync(join(projectDir, 'COMPLETE_SENTINEL.txt'), 'a real, complete project — must not be swept\n', 'utf8');
+    // Fixture precondition (before any verdict): the marker + sentinel are on disk.
+    assert.ok(existsSync(join(projectDir, '.forge', '.create-complete')), 'precondition: the marker is planted');
+    assert.ok(existsSync(join(projectDir, 'COMPLETE_SENTINEL.txt')), 'precondition: the sentinel is planted');
+
+    // Verdict 1: a marker-present slot is REFUSED, not reconciled away.
+    assert.throws(
+      () => scaffoldGreenfieldProject({ manifest: manifest(), forgeRoot }),
+      /already exists/,
+      'a marker-present (genuinely complete) projects/<id> must be refused, never swept',
+    );
+    // Verdict 2 (assert the ARTIFACT, not just the throw): the pre-existing
+    // complete project is byte-untouched — a marker-blind sweep would have
+    // rmSync'd the SENTINEL before throwing/rescaffolding.
+    assert.ok(existsSync(join(projectDir, 'COMPLETE_SENTINEL.txt')), 'the complete project must be left UNTOUCHED — a marker-blind sweep would have deleted the SENTINEL');
+    assert.equal(readFileSync(join(projectDir, '.forge', 'project.json'), 'utf8'), '{"name":"my-tool"}', 'the pre-existing project.json must be byte-untouched');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});

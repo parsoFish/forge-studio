@@ -22,6 +22,9 @@ import { tmpdir } from 'node:os';
 
 import { startBridge } from './ui-bridge.ts';
 import { loadKbDescriptors } from './bridge-studio-kbs.ts';
+// AT-4on-9 (SEC-05 4on REOPEN #1) needs existsSync for a fixture precondition —
+// added as a second scoped node:fs import so the existing import stays untouched.
+import { existsSync } from 'node:fs';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -264,6 +267,55 @@ test('loadKbDescriptors: includes central per-project brains under brain/project
     const gp = kbs.find((k) => k.id === 'gitpulse');
     assert.deepEqual(gp?.binding, { kind: 'project', ref: 'gitpulse' });
     assert.equal(gp?.counts.themes, 2, 'gitpulse theme count should reflect its themes/ dir');
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AT-4on-9 (loadKbDescriptors) [SEC-05 4on REOPEN #1] — a `.staging-<id>-<rand>`
+// orphan under brain/projects/ (a rename-loser under concurrency, or a
+// hard-kill DURING staging, of the transactional create fix) must NEVER surface
+// as a phantom KB. loadKbDescriptors walks brain/projects/ via subDirs()
+// (bridge-studio-kbs.ts:68-77 + :132-133), which filters ONLY on isDirectory()
+// with no dot-prefix filter; isSafeSegment() in the path guard accepts a
+// leading-dot segment (it rejects only '.'/'..'), and loadKbDescriptor reads the
+// KB id straight from the yaml with no dir cross-check — so a real
+// `.staging-decoy-abc123/kb.yaml` loads and is pushed. That is a phantom KB
+// bound to a project that was never created — the exact "leaks
+// .staging-<id>-<rand> orphans which SURFACE as phantom-KBs" vector this REOPEN
+// closes.
+//
+// RED at base: loadKbDescriptors returns a kb with id 'staging-decoy-abc123'.
+// Kills: a KB listing that walks brain/projects/ with no `.`-prefix filter. The
+// `cycles` control proves the scan actually reached disk (not an accidental
+// empty pass).
+// ---------------------------------------------------------------------------
+test('AT-4on-9: a `.staging-*` brain leftover is never surfaced as a phantom KB (control `cycles` still surfaced)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'kb-staging-dotdir-'));
+  try {
+    // Control: a real top-level brain — proves the scan reaches disk.
+    mkdirSync(join(root, 'brain', 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(root, 'brain', 'cycles', 'kb.yaml'), CYCLES_KB_YAML);
+    // Decoy: a `.staging-<id>-<rand>` leftover under brain/projects/ carrying a
+    // VALID kb.yaml (id taken straight from the yaml, no dir cross-check).
+    const decoy = join(root, 'brain', 'projects', '.staging-decoy-abc123');
+    mkdirSync(join(decoy, 'themes'), { recursive: true });
+    const decoyYaml = join(decoy, 'kb.yaml');
+    writeFileSync(
+      decoyYaml,
+      'id: staging-decoy-abc123\nname: Staging Decoy\nbinding: { kind: project, ref: staging-decoy-abc123 }\ndesc: A rename-loser staging orphan.\nbackend: filesystem\n',
+    );
+    // Fixture precondition (before any verdict): the decoy kb.yaml is on disk.
+    assert.ok(existsSync(decoyYaml), 'precondition: the decoy kb.yaml must be planted');
+
+    const kbs = loadKbDescriptors(root);
+    const ids = kbs.map((k) => k.id);
+    // The scan works: the control brain surfaces (guards accidental-empty).
+    assert.ok(ids.includes('cycles'), `control brain must surface — got ${JSON.stringify(ids)}`);
+    // The verdict: the staging leftover is NOT surfaced as a phantom KB.
+    assert.ok(!ids.includes('staging-decoy-abc123'), `a .staging-* brain leftover surfaced as a phantom KB id "staging-decoy-abc123" — got ${JSON.stringify(ids)}`);
+    assert.ok(!ids.includes('.staging-decoy-abc123'), `a .staging-* brain leftover surfaced verbatim — got ${JSON.stringify(ids)}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
