@@ -39,6 +39,43 @@ const FORGE_DEV_KB_YAML = `id: forge-dev\nname: Forge Dev Brain\nbinding: { kind
 const TEST_THEME_MD = `# Test Theme\n\nThis is a test theme node.\n`;
 
 // ---------------------------------------------------------------------------
+// R1-06 WI-3 group A fixture: a SCRATCH project KB (never cycles/forge-dev)
+// carrying real-corpus-shaped lint-warning findings, for the maintenance
+// op:'consolidate' RED pins below. checkFrontmatter / checkIndexSync /
+// checkStaleness / checkOrphans (cli/brain-lint.ts) are all hardcoded to
+// THEME_SUBDIRS = ['cycles','forge-dev'] and never scan brain/projects/*; the
+// ONLY forge-side lint check that covers a project brain at all is
+// checkProjectBrainIndexes (cli/brain-lint.ts:337), whose "not listed in
+// project category index" finding classifies as resolution:'agent' (line
+// 1042-1043) — a real, agent-tier, per-theme finding. Three fixture themes
+// with valid frontmatter/category but deliberately absent from patterns.md
+// gives 3 independently-clearable findings, so a follow-up lint can prove
+// consolidate drained the FULL scoped set, not just one.
+// ---------------------------------------------------------------------------
+const CONSOLIDATE_KB_ID = 'r1-06-consolidate';
+const CONSOLIDATE_KB_YAML =
+  `id: ${CONSOLIDATE_KB_ID}\nname: R1-06 Consolidate Fixture (scratch)\n` +
+  `binding: { kind: project, ref: ${CONSOLIDATE_KB_ID} }\n` +
+  `desc: Synthetic scratch project KB seeded ONLY for the WI-3 group A op='consolidate' RED pin — never a real project brain.\n` +
+  `backend: filesystem\n`;
+const CONSOLIDATE_PATTERNS_INDEX =
+  `# r1-06-consolidate — Patterns\n\n> Category index — deliberately left without theme links (fixture; see cli/bridge-studio-kbs.test.ts).\n\n## Theme pages\n`;
+
+function consolidateFixtureTheme(slug: string, n: number): string {
+  return (
+    '---\n' +
+    `title: "R1-06 consolidate fixture theme ${n}"\n` +
+    `description: "Synthetic real-corpus-shaped lint-warning fixture (WI-3 group A) — deliberately left out of patterns.md so checkProjectBrainIndexes raises an agent-tier finding."\n` +
+    'category: pattern\n' +
+    'created_at: "2026-08-01T00:00:00Z"\n' +
+    'updated_at: "2026-08-01T00:00:00Z"\n' +
+    '---\n\n' +
+    `# R1-06 consolidate fixture theme ${n}\n\n` +
+    `Synthetic fixture theme (slug \`${slug}\`) for the maintenance op='consolidate' RED pin. Not a real cycle learning — safe to delete.\n`
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Bridge lifecycle
 // ---------------------------------------------------------------------------
 
@@ -66,6 +103,16 @@ before(async () => {
   mkdirSync(join(forgeRoot, 'brain', 'forge-dev', 'themes'), { recursive: true });
   mkdirSync(join(forgeRoot, 'brain', 'forge-dev', '_raw'), { recursive: true });
   writeFileSync(join(forgeRoot, 'brain', 'forge-dev', 'kb.yaml'), FORGE_DEV_KB_YAML);
+
+  // KB: r1-06-consolidate (scratch project brain, WI-3 group A fixture — see
+  // the fixture-helpers comment above). NEVER cycles/forge-dev.
+  const consolidateDir = join(forgeRoot, 'brain', 'projects', CONSOLIDATE_KB_ID);
+  mkdirSync(join(consolidateDir, 'themes'), { recursive: true });
+  writeFileSync(join(consolidateDir, 'kb.yaml'), CONSOLIDATE_KB_YAML);
+  writeFileSync(join(consolidateDir, 'patterns.md'), CONSOLIDATE_PATTERNS_INDEX);
+  for (const [slug, n] of [['theme-a', 1], ['theme-b', 2], ['theme-c', 3]] as const) {
+    writeFileSync(join(consolidateDir, 'themes', `${slug}.md`), consolidateFixtureTheme(slug, n));
+  }
 
   const result = await startBridge({ forgeRoot, port: 0 });
   bridgeUrl = result.url;
@@ -242,6 +289,132 @@ test('GET fix-agent/:runId for an unknown run → running', async () => {
   const { status, json } = await get('/api/studio/kbs/cycles/fix-agent/nonexistent-run-123');
   assert.equal(status, 200, JSON.stringify(json));
   assert.equal(json['state'], 'running');
+});
+
+// ---------------------------------------------------------------------------
+// R1-06 WI-3 group A — the maintenance `op:'consolidate'` op (RED pins).
+//
+// Today the op allow-list (bridge-studio-kbs.ts:925) is
+// `lint | fix-auto | fix-agent | index` — `consolidate` falls through to the
+// default 400. These pins target the missing KB-wide consolidate obligation
+// (DEFAULT_KB_CONSOLIDATE, orchestrator/studio/kb-descriptor.ts:138 — builtin
+// 'brain-fix') dispatched over the FULL scoped finding set, not one finding at
+// a time the way op:'fix-agent' already does. Fixture: CONSOLIDATE_KB_ID (see
+// the fixture-helpers comment above the shared `before()` block).
+// ---------------------------------------------------------------------------
+
+/** Poll the existing fix-agent state shape until the run leaves 'running'
+ *  (or the budget is exhausted — returned as-is so the caller's assertion
+ *  produces the failure message, not a silent timeout). */
+async function pollUntilTerminal(
+  kbId: string,
+  runId: string,
+  maxAttempts = 40,
+  intervalMs = 250,
+): Promise<{ state: string; cleared: boolean }> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const { json } = await get(`/api/studio/kbs/${kbId}/fix-agent/${runId}`);
+    const state = json['state'] as string;
+    if (state && state !== 'running') return { state, cleared: json['cleared'] === true };
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+  return { state: 'running', cleared: false };
+}
+
+test('R1-06 WI-3 group A red-pin: POST maintenance op=consolidate is accepted (200 ok:true + runId) — RED today (op not in the allow-list)', async () => {
+  const { status, json } = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
+  assert.equal(status, 200, `expected 200, got ${status}: ${JSON.stringify(json)}`);
+  assert.equal(json['ok'], true, JSON.stringify(json));
+  assert.equal(typeof json['runId'], 'string', `expected a string runId, got ${JSON.stringify(json)}`);
+  assert.ok((json['runId'] as string).length > 0, 'runId must be non-empty');
+});
+
+test('R1-06 WI-3 group A ratchet: op=consolidate drains the FULL scoped finding set to a terminal state — RED today', async () => {
+  // Fixture precondition, asserted BEFORE any verdict: the 3 seeded themes
+  // really do produce 3 independent checkProjectBrainIndexes findings.
+  const baseline = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'lint' });
+  assert.equal(baseline.status, 200, JSON.stringify(baseline.json));
+  const baselineFindings = (baseline.json['findings'] as Array<{ check?: string }>).filter(
+    (f) => f.check === 'checkProjectBrainIndexes',
+  );
+  assert.equal(
+    baselineFindings.length,
+    3,
+    `fixture precondition failed: expected 3 seeded checkProjectBrainIndexes findings, got ${baselineFindings.length} — ${JSON.stringify(baselineFindings)}`,
+  );
+
+  // Dispatch consolidate — must accept the op and hand back an async run
+  // handle (the fix-agent shape), not the synchronous fix-auto shape.
+  const dispatch = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'consolidate' });
+  assert.equal(dispatch.status, 200, JSON.stringify(dispatch.json));
+  assert.equal(dispatch.json['ok'], true, JSON.stringify(dispatch.json));
+  const runId = dispatch.json['runId'];
+  assert.equal(typeof runId, 'string', `expected a string runId, got ${JSON.stringify(dispatch.json)}`);
+
+  // Poll the existing fix-agent poll shape until the consolidate run reaches
+  // a terminal state — 'running' forever is a fail.
+  const terminal = await pollUntilTerminal(CONSOLIDATE_KB_ID, runId as string);
+  assert.notEqual(terminal.state, 'running', 'consolidate run never reached a terminal state within the poll budget');
+
+  // The obligation ran over the FULL scoped finding set, not a single
+  // finding: a follow-up lint must show every seeded finding cleared, not
+  // just one (a shallow single-finding "consolidate" would leave some behind).
+  const after = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'lint' });
+  assert.equal(after.status, 200, JSON.stringify(after.json));
+  const afterFindings = (after.json['findings'] as Array<{ check?: string }>).filter(
+    (f) => f.check === 'checkProjectBrainIndexes',
+  );
+  assert.equal(
+    afterFindings.length,
+    0,
+    `expected consolidate to clear the FULL scoped finding set (3 seeded), but ${afterFindings.length} remain — ${JSON.stringify(afterFindings)}`,
+  );
+});
+
+test('R1-06 WI-3 group A companion: pre-existing single-finding lint-resolution tiers (lint/fix-auto/fix-agent) stay intact on the consolidate fixture KB', async () => {
+  // op=lint — response shape unchanged.
+  const lint = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'lint' });
+  assert.equal(lint.status, 200, JSON.stringify(lint.json));
+  assert.equal(lint.json['ok'], true, JSON.stringify(lint.json));
+  assert.equal(lint.json['op'], 'lint');
+  assert.ok(Array.isArray(lint.json['findings']), 'findings must be an array');
+  const counts = lint.json['counts'] as Record<string, number>;
+  assert.ok(
+    counts && typeof counts.auto === 'number' && typeof counts.agent === 'number' && typeof counts.user === 'number',
+    `counts must carry auto/agent/user tallies, got ${JSON.stringify(lint.json['counts'])}`,
+  );
+
+  // op=fix-auto — response shape unchanged (synchronous applied/skipped/remaining/counts).
+  const fixAuto = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, { op: 'fix-auto' });
+  assert.equal(fixAuto.status, 200, JSON.stringify(fixAuto.json));
+  assert.equal(fixAuto.json['ok'], true, JSON.stringify(fixAuto.json));
+  assert.ok(Array.isArray(fixAuto.json['applied']), 'applied[]');
+  assert.ok(Array.isArray(fixAuto.json['skipped']), 'skipped[]');
+  assert.ok(Array.isArray(fixAuto.json['remaining']), 'remaining[]');
+  assert.ok(fixAuto.json['counts'], 'counts');
+
+  // op=fix-agent — still a single-finding dispatch: missing file/check/kind → 400.
+  const missing = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, {
+    op: 'fix-agent', check: 'checkProjectBrainIndexes', kind: 'index.project',
+  });
+  assert.equal(missing.status, 400, JSON.stringify(missing.json));
+
+  // op=fix-agent — dry-bridge still refuses the single-finding dispatch with
+  // the typed 409, no run dispatched (unaffected by consolidate's addition).
+  const prior = process.env.FORGE_DRY_BRIDGE;
+  process.env.FORGE_DRY_BRIDGE = '1';
+  try {
+    const themeFile = join(forgeRoot, 'brain', 'projects', CONSOLIDATE_KB_ID, 'themes', 'theme-a.md');
+    const dry = await post(`/api/studio/kbs/${CONSOLIDATE_KB_ID}/maintenance`, {
+      op: 'fix-agent', file: themeFile, check: 'checkProjectBrainIndexes', kind: 'index.project',
+    });
+    assert.equal(dry.status, 409, JSON.stringify(dry.json));
+    assert.equal(dry.json['error'], 'dry-bridge');
+    assert.equal(dry.json['action'], 'spawn-agent');
+  } finally {
+    if (prior === undefined) delete process.env.FORGE_DRY_BRIDGE;
+    else process.env.FORGE_DRY_BRIDGE = prior;
+  }
 });
 
 // ADR 035: per-project brains live at brain/projects/<id>/. loadKbDescriptors
