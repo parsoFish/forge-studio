@@ -20,6 +20,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, openSync, closeSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
+import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
 import { resolveGuardedPath, type PathGuardResult } from './studio-path-guard.ts';
 
@@ -30,6 +31,8 @@ import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding } from '../orchestrator/studio/types.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
+import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -293,6 +296,20 @@ const GUIDANCE_MAX_BYTES = 8 * 1024; // 8 KiB
  */
 function guardKbTail(kbDir: string, ...tail: readonly string[]): PathGuardResult {
   return resolveGuardedPath(dirname(kbDir), [basename(kbDir), ...tail]);
+}
+
+/**
+ * R1-06-F2: session id for the project-brain hand-off a successful KB create
+ * starts. Same shape as the architect/instructions/demo-builder family's
+ * `newArchitectSessionId` (cli/ui-bridge.ts) — a chronologically-sortable
+ * ISO-ish timestamp plus a hex entropy suffix (SAFE_ID_RE-compatible), so a
+ * same-second double-create can never collide. Kept local rather than
+ * imported: that helper is a private, unexported function of ui-bridge.ts.
+ */
+function newProjectBrainSessionId(): string {
+  const stamp = new Date().toISOString().replace(/:/g, '-').replace(/\..+$/, '');
+  const entropy = randomBytes(4).toString('hex');
+  return `${stamp}-${entropy}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -608,7 +625,45 @@ export async function handleStudioKbRoutes(
       // 9. Verify loadKbDescriptor can round-trip it
       loadKbDescriptor(kbYamlPath);
 
-      sendJson(res, 200, { ok: true, id }, origin);
+      // 10. R1-06-F2: hand off to a project-brain seeding session — mirrors
+      // POST /api/project-brain/start's `{ ok: true, sessionId }` contract
+      // (cli/ui-bridge.ts:3797-3826) plus its status.json write, so the new,
+      // still-empty KB gets a REAL agentic seeding pass through the SAME
+      // shell (GET /api/studio/sessions/project-brain/:sessionId) rather
+      // than a separate, competing seed path (T1 ruling Q3 removed the old
+      // POST .../bootstrap route for exactly this reason). The session
+      // carries the created KB's OWN descriptor (kb_id/kb_binding) so a
+      // flow/band-scoped KB seeds against its real scope, not a re-derived
+      // `{kind:'project'}` guess (T1 ruling Q4).
+      //
+      // Session-dir anchor: a project binding nests the session under its
+      // own project dir (the established architect/instructions/demo-builder
+      // shape); every other binding kind has no natural project home, so it
+      // nests under the new KB's own id instead — a legitimate, not-yet
+      // existing `projects/<id>/` dir (create-mode, same as any other
+      // freshly-started session).
+      const projectsRoot = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const sessionProject = binding.kind === 'project' ? binding.ref : id;
+      const sessionId = newProjectBrainSessionId();
+      const sessionWritten = guardedWriteSessionStatus<ProjectBrainStatus>(
+        projectsRoot,
+        [sessionProject, '_project-brain', sessionId],
+        {
+          session_id: sessionId,
+          project: sessionProject,
+          project_repo_path: join(projectsRoot, sessionProject),
+          phase: 'briefing',
+          prompt: '',
+          updated_at: new Date().toISOString(),
+          kb_id: id,
+          kb_binding: binding,
+        },
+      );
+      if (sessionWritten === null) {
+        throw new Error(`kb create: hand-off session status.json for "${id}" failed containment`);
+      }
+
+      sendJson(res, 200, { ok: true, id, sessionId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
@@ -771,64 +826,6 @@ export async function handleStudioKbRoutes(
       writeFileSync(filePath, frontmatterLines.join('\n'), 'utf8');
 
       sendJson(res, 200, { ok: true, file: `brain/${kbId}/_guidance/${filename}` }, origin);
-    } catch (err) {
-      sendJson(res, 500, { error: sanitizeError(err) }, origin);
-    }
-    return true;
-  }
-
-  // ---- POST /api/studio/kbs/:id/bootstrap (P3) — give a new brain real content --
-  const bootstrapMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/bootstrap$/);
-  if (bootstrapMatch && method === 'POST') {
-    try {
-      const kbId = decodeURIComponent(bootstrapMatch[1]);
-      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
-      // Containment via the guarded choke point (bd `forge-wze`) — replaces a
-      // vacuous lexical check, and also reaches per-project brains
-      // (`brain/projects/<id>`) the old `brain/<id>`-only build could not.
-      const kbDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
-      if (!kbDir) {
-        sendJson(res, 404, { error: 'unknown kb (create it first)' }, origin); return true;
-      }
-      let body: unknown;
-      try { body = await readJson(req); } catch { body = {}; }
-      const b = (body ?? {}) as Record<string, unknown>;
-      const name = typeof b['name'] === 'string' && b['name'].trim() ? b['name'].trim() : kbId;
-      const summary = typeof b['summary'] === 'string' ? b['summary'].trim() : '';
-
-      // Seed a real profile node (Brain-3 convention) so the brain isn't an empty
-      // single node — a readable starting point cycles then build on.
-      // The guard's existence probe is `lstat`-based, so a DANGLING symlink at
-      // `profile.md` counts as "there" and is routed into the realpath check
-      // (which rejects) rather than mistaken for a free creation slot. That is
-      // the fix for the confirmed arbitrary-file-CREATE here: `existsSync` is
-      // `stat`-based and reported a dangling symlink as absent, after which
-      // `writeFileSync`'s default `O_CREAT` (no `O_NOFOLLOW`) created the file
-      // at whatever outside path the link named. A hardlinked `profile.md` is
-      // caught by the same call's `nlink` check.
-      const profileGuard = guardKbTail(kbDir, 'profile.md');
-      if (!profileGuard.ok) {
-        sendJson(res, 400, { error: 'path traversal detected' }, origin); return true;
-      }
-      const profilePath = profileGuard.realPath;
-      if (!profileGuard.exists) {
-        writeFileSync(profilePath, [
-          `# ${name}`,
-          '',
-          summary || '_Project knowledge base. Populated as cycles run and the reflector ingests learnings._',
-          '',
-          '## Themes',
-          '',
-          '_(none yet — the reflector adds a theme per durable learning)_',
-          '',
-          '## Known failure modes',
-          '',
-          '_(none recorded yet)_',
-          '',
-        ].join('\n'), 'utf8');
-      }
-      const result = regenerateBrainIndex({ cwd: ctx.forgeRoot });
-      sendJson(res, 200, { ok: true, seeded: ['profile.md'], result }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
