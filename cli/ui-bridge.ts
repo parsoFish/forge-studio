@@ -67,6 +67,7 @@ import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
+import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
 import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
@@ -1389,6 +1390,7 @@ async function handleHttp(
   if (await handleStudioKbRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioSkillsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioHooksRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
+  if (await handleStudioAuthoringRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioTemplatesRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
   if (await handleStudioInstructionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot }, url, method)) return;
@@ -1988,18 +1990,33 @@ async function handleHttp(
 
 // ---- Architect routes (ADR 020) -------------------------------------------
 
-/** The 4 detached-runner turn families the bridge spawns — each `verb` maps
- *  1:1 to `orchestrator/cli.ts <verb> run <sid> --project <project>`, and
- *  `logPrefix` names the `_logs/_<logPrefix>-<sid>/` capture dir. `demo-builder`
- *  is the one case where the two diverge (verb `demo-builder`, log prefix
- *  `demo`) — preserved exactly from the pre-collapse per-agent functions. */
-type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain';
+/** The 5 detached-runner turn families the bridge spawns — each `argvPrefix`
+ *  is prepended to `<sid> --project <project>` to build the full argv passed
+ *  to `orchestrator/cli.ts`, and `logPrefix` names the `_logs/_<logPrefix>-
+ *  <sid>/` capture dir. `demo-builder` is the one legacy case where verb and
+ *  log prefix diverge (verb `demo-builder`, log prefix `demo`) — preserved
+ *  exactly from the pre-collapse per-agent functions.
+ *
+ *  R4-21 phase 2, WI-2 (D5's sibling concern): `authoring` is the first row
+ *  that does NOT go through a bespoke `<verb> run <sid> --project <p>` CLI
+ *  command — it rides the GENERIC `forge agent run <agent-id> <sid> --project
+ *  <p>` dispatch fork (ADR-043 §3, `cli/agent-run.ts`'s `cmdAgentRun`), so its
+ *  argvPrefix is `['agent', 'run', 'authoring']` rather than `['<verb>',
+ *  'run']`. The 4 legacy rows carry an EXPLICIT argv prefix instead of the
+ *  former `{verb}` + implicit `'run'` shape specifically so this one row can
+ *  differ in SHAPE (3 tokens, not 2) while the legacy rows stay
+ *  byte-equivalent to their pre-existing argv — `['architect','run']`,
+ *  `['instructions','run']`, `['demo-builder','run']`,
+ *  `['project-brain','run']` are the SAME tokens the old `{verb}+'run'`
+ *  construction produced, just spelled as a literal array. */
+type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring';
 
-const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { verb: string; logPrefix: string }> = {
-  architect: { verb: 'architect', logPrefix: 'architect' },
-  instructions: { verb: 'instructions', logPrefix: 'instructions' },
-  'demo-builder': { verb: 'demo-builder', logPrefix: 'demo' },
-  'project-brain': { verb: 'project-brain', logPrefix: 'project-brain' },
+const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
+  architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
+  instructions: { argvPrefix: ['instructions', 'run'], logPrefix: 'instructions' },
+  'demo-builder': { argvPrefix: ['demo-builder', 'run'], logPrefix: 'demo' },
+  'project-brain': { argvPrefix: ['project-brain', 'run'], logPrefix: 'project-brain' },
+  authoring: { argvPrefix: ['agent', 'run', 'authoring'], logPrefix: 'authoring' },
 };
 
 /** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
@@ -2030,14 +2047,14 @@ function spawnAgentTurn(forgeRoot: string, agentId: SpawnableAgentId, project: s
     console.error(`spawnAgentTurn: unsafe sessionId (path-traversal risk), refusing to spawn: ${JSON.stringify(sessionId)}`);
     return;
   }
-  const { verb, logPrefix } = SPAWN_AGENT_SPECS[agentId];
+  const { argvPrefix, logPrefix } = SPAWN_AGENT_SPECS[agentId];
   try {
     const logDir = join(forgeRoot, '_logs', `_${logPrefix}-${sessionId}`);
     mkdirSync(logDir, { recursive: true });
     const stderrFd = openSync(join(logDir, 'stderr.log'), 'a');
     const proc = spawn(
       process.execPath,
-      ['--experimental-strip-types', 'orchestrator/cli.ts', verb, 'run', sessionId, '--project', project],
+      ['--experimental-strip-types', 'orchestrator/cli.ts', ...argvPrefix, sessionId, '--project', project],
       { cwd: forgeRoot, detached: true, stdio: ['ignore', 'ignore', stderrFd] },
     );
     closeSync(stderrFd);
@@ -2240,6 +2257,13 @@ const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
  *  entirely (reproduced live: AT-36). */
 const MAX_GENERATION_PROJECT_LENGTH = MAX_SKILL_ID_LENGTH;
 const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
+
+/** R4-21 (T3) — the authoring session's initial free-text description
+ *  (`POST /api/studio/authoring/start`'s `prompt`, written verbatim to
+ *  `prompt.md`). A generous bound on an operator-typed field, no different
+ *  in spirit from every other length-capped text input in this file — just
+ *  named for its own route rather than reusing an unrelated cap. */
+const MAX_AUTHORING_PROMPT_LENGTH = 4000;
 
 function invalidGenerationProjectReason(id: string): string | null {
   if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
@@ -3416,6 +3440,49 @@ export function writeOnboardingSession(
   return { sessionDir };
 }
 
+/**
+ * R4-21 (T3, BLOCKER-2 fix) — create the authoring session's own directory
+ * and write its two files (`status.json`, `prompt.md`). Byte-for-byte the
+ * SAME three independent closes as `writeOnboardingSession`, directly above
+ * (exclusive dir create, exclusive leaf writes, a server-generated
+ * `sessionId`) — see that function's own docstring for the full rationale;
+ * not restated here. The only difference is the seed content: one free-text
+ * `prompt` (the operator's initial description of the skill/hook to build)
+ * instead of a multi-field `inputs` record, written verbatim — no fabricated
+ * interview question, same D8 rationale `renderOnboardingPrompt` documents.
+ *
+ * R4-21 phase 2, WI-2: `prompt` is ALSO written INTO `status.json` (alongside
+ * `phase`/`project`/`runId`/`startedAt`), not just into `prompt.md`. Verified
+ * by reading `buildTurnPrompt` (`orchestrator/interactive-runner.ts`): the
+ * generic spine composes its turn prompt from the SKILL.md + the phase row +
+ * a JSON dump of `status.json` — it never reads `prompt.md`. Without this,
+ * the operator's description of what to build is silently dropped and the
+ * agent drafts from nothing. `prompt.md` is kept too — it stays the
+ * operator-visible artifact the session's file-package/transcript pane reads.
+ */
+export function writeAuthoringSession(
+  authoringParent: string,
+  sessionId: string,
+  project: string,
+  runId: string,
+  prompt: string,
+): { sessionDir: string } {
+  if (!SAFE_ID_RE.test(sessionId)) {
+    throw new Error(`invalid authoring sessionId: ${JSON.stringify(sessionId)}`);
+  }
+  const sessionDir = join(authoringParent, sessionId);
+  // Close 1: exclusive directory CREATE. No `recursive` — a pre-existing
+  // entry at this exact path is a hard EEXIST error, never silently reused.
+  mkdirSync(sessionDir);
+  writeFileSync(
+    join(sessionDir, 'status.json'),
+    JSON.stringify({ phase: 'analyzing', project, runId, prompt, startedAt: new Date().toISOString() }, null, 2),
+    { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
+  );
+  writeFileSync(join(sessionDir, 'prompt.md'), `${prompt}\n`, { encoding: 'utf8', flag: 'wx' });
+  return { sessionDir };
+}
+
 /** Returns true if the request was a demo-builder route (and was handled). */
 async function handleDemoBuilder(
   req: IncomingMessage,
@@ -3997,6 +4064,89 @@ async function handleDemoBuilder(
       sendJson(
         res, 200,
         { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/onboarding/start', sessionId) },
+        origin,
+      );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/studio/authoring/start {project, prompt} — R4-21, the
+  // authoring session's kickoff route. Mirrors `POST /api/studio/onboarding/
+  // start` EXACTLY: SLUG_RE + length-cap project validation via
+  // `invalidGenerationProjectReason`, resolved through the SAME
+  // `resolveContainedProjectDir`, a server-generated `sessionId` (never
+  // request-derived), and the identical
+  // mkdir-then-realpath-verify-the-parent-BEFORE-creating-the-session-dir
+  // shape (see the onboarding route's own D5/D6 comments, directly above,
+  // for the full security rationale — not restated here). `inputs` becomes
+  // a single free-text `prompt` (creation-agent's session is seeded by one
+  // operator description, not a multi-field form) written verbatim to
+  // `prompt.md` AND into `status.json` — no fabricated interview question,
+  // same D8 rationale as `renderOnboardingPrompt`.
+  //
+  // R4-21 phase 2, WI-2: the KNOWN GAP a prior round of this route disclosed
+  // here — `spawnAgentDispatch` invoking the generic dispatch host, which
+  // `resolveDispatchableAgent` refuses for `surface: interactive` defs like
+  // `creation-agent` — is CLOSED. `spawnAgentTurn(forgeRoot, 'authoring',
+  // project, sessionId)` below spawns `forge agent run authoring <sid>
+  // --project <p>`, which reaches the generic `runInteractiveTurn` spine
+  // (ADR-043 §3, `cli/agent-run.ts`'s `cmdAgentRun` dispatch fork) via the
+  // `authoring` session-kind's `turnSpec` — the SAME bounded-turn shape
+  // architect/instructions/demo-builder/project-brain already use, just
+  // through the generic spine rather than a bespoke `*-runner.ts`.
+  if (method === 'POST' && url === '/api/studio/authoring/start') {
+    try {
+      const body = (await readJson(req)) as { project?: unknown; prompt?: unknown };
+      if (typeof body.project !== 'string') {
+        sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      const projectReason = invalidGenerationProjectReason(body.project);
+      if (projectReason) {
+        sendJson(res, 400, { error: projectReason }, origin);
+        return true;
+      }
+      const project = body.project;
+
+      if (typeof body.prompt !== 'string' || body.prompt.trim() === '') {
+        sendJson(res, 400, { error: 'prompt is required and must be a non-empty string' }, origin);
+        return true;
+      }
+      if (body.prompt.length > MAX_AUTHORING_PROMPT_LENGTH) {
+        sendJson(res, 400, { error: `prompt exceeds the ${MAX_AUTHORING_PROMPT_LENGTH}-character cap` }, origin);
+        return true;
+      }
+      const prompt = body.prompt;
+
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const realProjectDir = resolveContainedProjectDir(projectsRoot, project);
+      if (realProjectDir === null) {
+        sendJson(res, 404, { error: `project not found: ${project}` }, origin);
+        return true;
+      }
+
+      const sessionId = newArchitectSessionId();
+      const runId = `_agent-creation-agent-${newRunStamp()}`;
+      // Same two-level containment shape as onboarding's start route: the
+      // `_authoring` parent is created + realpath-verified BEFORE the
+      // session dir is created beneath it (a project repo could carry a
+      // committed symlink named `_authoring`, redirecting every write here —
+      // "validating a root does not validate what you write beneath it").
+      const authoringParent = join(realProjectDir, '_authoring');
+      mkdirSync(authoringParent, { recursive: true });
+      const realAuthoringParent = realpathSync(authoringParent);
+      if (!realAuthoringParent.startsWith(realProjectDir + sep)) {
+        sendJson(res, 400, { error: `authoring session directory for project "${project}" resolves outside the project` }, origin);
+        return true;
+      }
+      writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt);
+
+      spawnAgentTurn(ctx.forgeRoot, 'authoring', project, sessionId);
+      sendJson(
+        res, 200,
+        { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/authoring/start', sessionId) },
         origin,
       );
     } catch (err) {

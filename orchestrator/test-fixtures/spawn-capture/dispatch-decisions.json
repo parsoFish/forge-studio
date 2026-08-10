@@ -128,6 +128,14 @@
       "inComposableRoster": true
     },
     {
+      "slug": "creation-agent",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
       "slug": "demo-agent",
       "band": "demo-band",
       "canonicalSlug": "demo-agent",

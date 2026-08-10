@@ -29,7 +29,7 @@ import {
   resolveInteractiveAgent,
   buildStandaloneRunPrompt,
 } from './agent-dispatch.ts';
-import { listAgentDefinitions } from './studio/registry.ts';
+import { listAgentDefinitions, loadAgentDefinition } from './studio/registry.ts';
 import type { AgentDefinition } from './studio/types.ts';
 import type { StreamQueryFn } from './pinned-sdk-query.ts';
 
@@ -324,6 +324,56 @@ test('TWIN-REFUSAL PIN: resolveDispatchableAgent refuses an interactive agent wi
   }
   assert.ok(threw instanceof Error, 'expected resolveDispatchableAgent to throw for an interactive agent');
   assert.equal((threw as Error).message, expected);
+});
+
+// ---------------------------------------------------------------------------
+// R4-21 phase 2, WI-2 (_wave5/unit-specs/R4-21-phase2.md) — the unit-spec's
+// own literal bullet: "resolveDispatchableAgent('creation-agent', defs)
+// STILL refuses (the twin-refusal boundary is not softened by this WI) — a
+// pin test." The TWIN-REFUSAL PIN above already proves the GENERIC boundary
+// with a SYNTHESIZED fixture (spread from project-scoped-review, `surface`
+// overridden by the test) — it never touches creation-agent's own SKILL.md
+// at all. This test closes that gap: it loads creation-agent's REAL,
+// checked-in AgentDefinition (`skills/creation-agent/SKILL.md` — `surface:
+// interactive`, `library: false`) directly via `loadAgentDefinition` (NOT
+// `listAgentDefinitions`, which excludes `library: false` defs from its
+// roster entirely — verified empirically: creation-agent is absent from
+// `listAgentDefinitions(SKILLS)`'s 11-agent roster today), so a future edit
+// to the REAL file (e.g. an implementer "wiring up authoring for the new
+// spine" flips `surface:` away from `interactive`, thinking the generic
+// dispatch host is now the right place for it) is what this test actually
+// catches — the synthetic TWIN-REFUSAL PIN structurally cannot.
+//
+// This is a MUST-STAY-GREEN characterization pin, not a fresh RED (WI-2 does
+// not touch resolveDispatchableAgent or creation-agent's SKILL.md) — proven
+// by mutation per this WI's own T3 report (temporarily removed the
+// interactivity check from resolveDispatchableAgent, confirmed this test
+// fails, reverted, confirmed green again).
+// ---------------------------------------------------------------------------
+
+test('R4-21 phase 2, WI-2: resolveDispatchableAgent("creation-agent", defs) STILL refuses the REAL creation-agent def — the twin-refusal boundary is not softened by this WI', () => {
+  const skillMdPath = join(SKILLS, 'creation-agent', 'SKILL.md');
+  assert.ok(existsSync(skillMdPath), 'arrange: skills/creation-agent/SKILL.md must exist on this branch');
+  const creationAgentDef = loadAgentDefinition(skillMdPath);
+  // Fixture preconditions, asserted before reading any verdict.
+  assert.equal(creationAgentDef.slug, 'creation-agent');
+  assert.equal(creationAgentDef.surface, 'interactive', 'arrange: creation-agent must genuinely declare surface: interactive or this pin is vacuous');
+  assert.equal(
+    listAgentDefinitions(SKILLS).some((d) => d.slug === 'creation-agent'),
+    false,
+    'arrange: creation-agent (library: false) must NOT be in the listAgentDefinitions roster — this test loads it directly instead',
+  );
+
+  let threw: unknown;
+  try {
+    resolveDispatchableAgent('creation-agent', [creationAgentDef]);
+  } catch (err) {
+    threw = err;
+  }
+  assert.ok(threw instanceof Error, 'expected resolveDispatchableAgent to throw for the real creation-agent def');
+  assert.match((threw as Error).message, /"creation-agent"/, 'must name the slug');
+  assert.match((threw as Error).message, /is interactive/i, 'must state the interactive-boundary refusal, not the unknown-slug branch');
+  assert.match((threw as Error).message, /not the generic run host/i);
 });
 
 test('NON-DISTURBANCE PIN: resolveDispatchableAgent still ACCEPTS a normal non-interactive agent unchanged (positive control for the twin-refusal pin above)', () => {

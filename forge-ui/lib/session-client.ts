@@ -264,12 +264,30 @@ export type ContractBuildoutArtifact = {
   sourcesScanned: string[];
 };
 
+// R4-21: "file-package" — the creation-agent authoring session's
+// accumulating skill/hook draft package. Mirrors orchestrator/studio/
+// session-transcript.ts's FilePackageArtifact exactly (hand-mirrored, per
+// this file's convention — never a cross-boundary import of the orchestrator
+// type). Shares the {path, body} file shape with BrainStructureFile but is
+// declared as its own type — the two artifacts are unrelated on the wire,
+// and this file's convention is one type per artifact kind, not a shared
+// structural type reused across kinds.
+
+export type FilePackageFile = { path: string; body: string };
+
+export type FilePackageArtifact = {
+  kind: 'file-package';
+  label: string;
+  files: FilePackageFile[];
+};
+
 export type SessionArtifactPayload =
   | RoadmapDraftArtifact
   | MarkdownDraftArtifact
   | BrainStructureArtifact
   | GenerationGalleryArtifact
-  | ContractBuildoutArtifact;
+  | ContractBuildoutArtifact
+  | FilePackageArtifact;
 
 function parseRoadmapDraftRow(raw: unknown, index: number): RoadmapDraftRow {
   if (!isPlainObject(raw)) {
@@ -413,6 +431,26 @@ export function parseContractStageRow(raw: unknown, index: number): ContractStag
   return { stage, status, source, detail, bytes: bytesRaw };
 }
 
+function parseFilePackageFile(raw: unknown, index: number): FilePackageFile {
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed file-package file[${index}]: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  return { path: requireString(raw, 'path'), body: requireString(raw, 'body') };
+}
+
+function parseFilePackageArtifact(r: Record<string, unknown>): FilePackageArtifact {
+  const label = requireString(r, 'label');
+  const filesRaw = r['files'];
+  if (!Array.isArray(filesRaw)) {
+    throw new Error(`missing or invalid "files": expected an array, got ${JSON.stringify(filesRaw)}`);
+  }
+  return {
+    kind: 'file-package',
+    label,
+    files: filesRaw.map((f, i) => parseFilePackageFile(f, i)),
+  };
+}
+
 function parseContractBuildoutArtifact(r: Record<string, unknown>): ContractBuildoutArtifact {
   const label = requireString(r, 'label');
   const stagesRaw = r['stages'];
@@ -446,6 +484,16 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
       return parseBrainStructureArtifact(raw);
     case 'generation-gallery':
       return parseGenerationGalleryArtifact(raw);
+    case 'file-package':
+      // Wrapped so EVERY internal field failure still names "file-package"
+      // (mirrors contract-buildout's own wrap immediately below — AT-21
+      // asserts this even for a bare `{kind:'file-package'}` object, which
+      // fails on the very first required field, "label").
+      try {
+        return parseFilePackageArtifact(raw);
+      } catch (err) {
+        throw new Error(`malformed file-package artifact: ${err instanceof Error ? err.message : String(err)}`);
+      }
     case 'contract-buildout':
       // Wrapped so EVERY internal field failure still names "contract-buildout"
       // (AT-21 pins this even for a bare `{kind:'contract-buildout'}` object,

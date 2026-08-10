@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
+import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createHook, HOOK_LIFECYCLE_EVENTS, type HookLifecycleEvent } from '@/lib/hook-client';
+import { fetchStudioProjects } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
 // Hook builder — /hooks/new (R3-03-F4). Mirrors /skills/new exactly. Author
@@ -25,6 +27,15 @@ export default function HookBuilderPage() {
   const [permNetwork, setPermNetwork] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStudioProjects()
+      .then((projects) => { if (!cancelled) setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort()); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const canSubmit = name.trim().length > 0 && description.trim().length > 0 && scriptBody.trim().length > 0;
 
@@ -125,6 +136,12 @@ export default function HookBuilderPage() {
             </button>
             {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name, description + script are required.</span>}
           </div>
+          <AuthoringLauncher
+            knownProjects={knownProjects}
+            onStarted={(sessionId, project) =>
+              router.push(`/sessions/authoring/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`)
+            }
+          />
         </div>
       </div>
     </main>

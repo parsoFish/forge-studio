@@ -143,6 +143,8 @@ export function SessionArtifactPane({
           />
         ) : view.kind === 'contract-buildout' ? (
           <ContractBuildout view={view} activeStage={activeStage} />
+        ) : view.kind === 'file-package' ? (
+          <FilePackageBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'file-package' }>} />
         ) : (
           <UnhandledArtifactBody kind={artifact.kind} error={`sessionArtifactView returned an unhandled view kind ${JSON.stringify((view as { kind: string }).kind)}`} />
         )}
@@ -244,6 +246,10 @@ function BrainStructureBody({ artifact }: { artifact: Extract<SessionArtifactPay
       <FilePackage files={artifact.files} />
     </div>
   );
+}
+
+function FilePackageBody({ artifact }: { artifact: Extract<SessionArtifactPayload, { kind: 'file-package' }> }): JSX.Element {
+  return <FilePackage files={artifact.files} />;
 }
 
 /** D10's explicit failure state: an artifact kind `sessionArtifactView` could

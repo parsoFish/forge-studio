@@ -884,6 +884,52 @@ export async function fetchStagedThemes(project: string, sessionId: string): Pro
   return body.themes ?? [];
 }
 
+// ---- Authoring (R4-21 T3, BLOCKER-2 fix — the creation-agent session) ----
+
+/**
+ * Start an authoring session (kind: 'authoring', agent: creation-agent) —
+ * mirrors {@link startProjectBrain}/{@link startInstructions}'s shape
+ * exactly: POSTs the operator's own words (never a fabricated form-field
+ * label) and returns the real, server-minted `sessionId`. The session is a
+ * scratch working directory only — `project` picks WHERE the session's
+ * bookkeeping lives (the generic session-shell's `<project>/_<kind>/<id>`
+ * convention every kind uses), not what the drafted skill/hook belongs to;
+ * skills and hooks are forge-wide, project-agnostic library artifacts.
+ */
+export async function startAuthoring(input: { project: string; prompt: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/studio/authoring/start', { project: input.project, prompt: input.prompt });
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+}
+
+/**
+ * Save an authoring session's CURRENT drafted package into the real skill or
+ * hook library — `POST /api/studio/authoring/finalize`
+ * (`cli/bridge-studio-authoring.ts`). R4-21 phase 2, WI-2 (D5): the wire
+ * contract is EXACTLY `{project, sessionId, kind, id}` — the route drives the
+ * session's own `committing` turn server-side and installs the LANDED
+ * package; no package bytes, hook metadata, or `upstream` ride on this
+ * request (the operator reviews the drafted package in the session's own
+ * file-package artifact pane, not a form here). Lands as a DRAFT
+ * (`paletteVisible:false` for a skill; unbound for a hook) — approval /
+ * binding stay the operator's own SEPARATE, later act (D6 — never
+ * auto-approved here).
+ */
+export async function finalizeAuthoring(input: {
+  project: string;
+  sessionId: string;
+  kind: 'skill' | 'hook';
+  id: string;
+}): Promise<{ ok: boolean; kind?: 'skill' | 'hook'; id?: string; error?: string }> {
+  const r = await bridgePost('/api/studio/authoring/finalize', input);
+  if (!r.ok) return { ok: false, error: r.error };
+  return {
+    ok: true,
+    kind: r.data?.kind === 'skill' || r.data?.kind === 'hook' ? r.data.kind : undefined,
+    id: typeof r.data?.id === 'string' ? r.data.id : undefined,
+  };
+}
+
 /** One demo-element kind from the forge library (the demoProcess composition palette). */
 export type DemoElementSummary = {
   id: string;

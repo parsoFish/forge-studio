@@ -408,6 +408,63 @@ lint-passed and never run the check.
   seeds a genuinely real `_logs/<cycleId>/events.jsonl` from a real `runFlow`
   run, never a hand-authored log.
 
+### R4-B18 The authoring session, creation-agent on the generic interactive spine (implemented)
+
+R4-21 landed in two halves: the session/agent/save infrastructure in wave-5
+batch D, and its live turn execution in batch E once R4-22 shipped the
+`turnSpec` spine. Before it, no roster agent authored an artifact package at
+all, so the `file-package` artifact row was reserved and the `build-skill` /
+`build-hook` parity stories had no producer to port against.
+
+- **Consumer #1 of ADR-043, on pure data.** The `authoring` descriptor's
+  `turnSpec` (`studio/session-kinds.yaml`) is ADR-043 §1's ratified table
+  verbatim — `kindDir: _authoring`, `style: agent`, and the four rows
+  `analyzing → awaiting-review → committing → committed`. **No fifth
+  `AGENT_RUNNERS` entry and no new `orchestrator/` symbol were added**; the
+  turn runs on `runInteractiveTurn`, which is exactly the cap-dissolution
+  ADR-043 promised. `AGENT_RUNNERS` and the four legacy runners are untouched.
+- **The session draft directory is `staging/`**, matching the ADR's own
+  `writes: [staging]` row and the finalizer's source dir. It was `package/`
+  on the batch-D infra branch — the two literals had already drifted once
+  (the finalizer landed `staging` first), which is exactly the class the
+  rename closes; a source-text ratchet now fails the suite the moment the
+  derivation side and the finalizer side disagree again.
+- **A declared `writes:` that produced nothing REFUSES the phase advance.** A
+  drafting turn that crashes or writes nothing used to advance to
+  `awaiting-review` with an empty package and no error anywhere. It now
+  throws a named `InteractiveRunnerError` and leaves the phase at `analyzing`,
+  so the session is re-runnable rather than silently empty.
+- **Finalize is the operator's ONE commit act, and it is check-then-write.**
+  `POST /api/studio/authoring/finalize {project, sessionId, kind, id}` requires
+  `phase === 'awaiting-review'` (409 otherwise), advances to `committing`, runs
+  the same spine the CLI drives, and installs from the LANDED package —
+  package bytes are never taken from the request body, and `upstream` is
+  server-minted (`{source:'forge-authoring', ref:<sessionId>}`) rather than
+  client-claimed. A hook's `name`/`description`/`on`/`matcher`/`permissions`
+  are parsed from the DRAFTED `hook.yaml`, so what the operator reviewed in the
+  artifact pane is what ships. **Any failure after the phase advance reverts
+  the session to `awaiting-review`**, and an `id` that collides with an
+  existing library skill returns 409 instead of the silent 200 that used to
+  discard the operator's draft.
+- **Finalize NEVER approves.** A finalized skill is library-visible as a
+  `draft` with `paletteVisible:false`; palette visibility remains the separate,
+  pre-existing `POST /api/studio/skills/:id/approve` act. A finalized hook
+  lands unbound.
+- **Stated limit:** after a failed install where the package had ALREADY landed
+  in `_interactive-library/<id>/`, retrying with the SAME id fails on the
+  finalizer's `O_EXCL` destination write until that directory is cleared. The
+  session still recovers to `awaiting-review`, and the 409 already tells the
+  operator to choose a different id, but the same-id retry path is not clean.
+- **Contract + journey:** journeys `skills`/`hooks` gain `skills-agentic-build`
+  and `hooks-agentic-build`; the `build-skill` and `build-hook` stories flip
+  from pending to ported. The drafting turn cannot spawn under the journey's
+  suppressed-spawn env, so its `staging/` seed is the **verbatim output of a
+  real recorded Claude turn** (committed under
+  `scripts/journeys/fixtures/r4-21-live-capture/`), never hand-invented;
+  everything after the seed — the session shell, the artifact pane, the
+  finalize route, the draft page, the approve action and the palette source —
+  is the real product.
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -1820,8 +1877,9 @@ lint-passed and never run the check.
 
 ### R4-21 OOTB authoring agent (skill/hook package producer)
 
-- **Status:** planned  ·  **Wave:** 5, batch D (module: per-OOTB-agent —
-  authoring)
+- **Status:** implemented  ·  **Wave:** 5, batch D infra + batch E live proof
+  (module: per-OOTB-agent — authoring)  ·  As-built:
+  [R4-B18](#r4-b18-the-authoring-session-creation-agent-on-the-generic-interactive-spine-implemented)
 - **Depends on:** R2-10 (session shell, implemented — authoring sessions
   render through it), R3-01-F3/F4 (FilePackage renderer + install/palette
   pipeline, implemented — the package surface + library landing).
@@ -1868,7 +1926,7 @@ lint-passed and never run the check.
 
 ### R4-22 Generic interactive-surface primitive
 
-- **Status:** partial — **F1 + F2 implemented** (2026-08-10, PR #117: `turnSpec` + `orchestrator/interactive-runner.ts` + the `cmdAgentRun` fork, 4 legacy runners byte-for-byte green behind it); **F3 ships with R4-21** (the `authoring` descriptor's `turnSpec` row lives only on `feat/r4-21-authoring-agent`, so WI-6 was out of this lane's scope); **F4 staged** (batch-E-proper or later) · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../decisions/043-generic-interactive-surface.md) (Accepted 2026-08-10)
+- **Status:** partial — **F1 + F2 implemented** (2026-08-10, PR #117: `turnSpec` + `orchestrator/interactive-runner.ts` + the `cmdAgentRun` fork, 4 legacy runners byte-for-byte green behind it); **F3 implemented** (2026-08-11, with R4-21 — the `authoring` descriptor carries ADR-043 §1's `turnSpec` table verbatim and creation-agent drafted a real skill AND a real hook package live on the spine; see [R4-B18](#r4-b18-the-authoring-session-creation-agent-on-the-generic-interactive-spine-implemented)); **F4 staged** (batch-E-proper or later — no runner migrated yet, so the promised orchestrator-surface decrease is still owed) · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../decisions/043-generic-interactive-surface.md) (Accepted 2026-08-10)
 - **Depends on:** R2-10 (session shell — the read half is already generic), R4-21 (its infra is consumer #1, built + green on `feat/r4-21-authoring-agent`).
 - **Depended on by:** R4-21 (live drafting), R4-18 (onboard-flow — a consumer once generalised), R4-19-F2 (brain-maintenance — a consumer, deferred-large).
 - **Context:** The interactive-session **read** half is already generic over data (the `SessionKindDescriptor` yaml row drives route + transcript + artifact pane with no per-kind code). The **producer/state-machine** half is still four hand-written `orchestrator/*-runner.ts` behind `AGENT_RUNNERS` — and a fifth (creation-agent) parking against the ADR-042 surface cap is the third time the same shape parked in batch D (R4-18, R4-19-F2 [mislabelled], R4-21). Same shape three times ⇒ a missing generalisation, not three exceptions. Operator directive (2026-08-10): make the interactive surface a **generic, operator-authorable, artifact-like, multi-instance** primitive.
@@ -2117,3 +2175,26 @@ gitignored campaign dir):
   `--project` on the new road only). Two tripwires stand: the WI-0 golden byte-capture, and a new standing
   invariant failing if any legacy-colliding session-kind id gains a `turnSpec` — added because the golden suite
   provably cannot see that (verified by mutation).
+
+- 2026-08-11 — **R4-21 implemented + R4-22-F3 implemented** (wave 5, batch E phase 2). The `authoring`
+  descriptor gains ADR-043 §1's `turnSpec` table verbatim, making creation-agent **consumer #1 of the
+  generic interactive spine on pure data** — no fifth `AGENT_RUNNERS` entry, no new `orchestrator/`
+  symbol, the four legacy runners untouched. Status `planned → implemented`; as-built absorbed into new
+  baseline entry **R4-B18**. The session draft dir is renamed `package/ → staging/` to match the ADR's
+  own `writes:` row and the finalizer's source (the two literals had already drifted once; a source-text
+  ratchet now closes the class). `runInteractiveTurn` gains a fail-loud refusal when a declared `writes:`
+  produces no files — a crashed drafting turn no longer advances a session to review with an empty
+  package. The finalize route becomes the operator's single commit act: it requires `awaiting-review`
+  (409 otherwise), drives the committing turn on the same spine the CLI uses, installs **from the landed
+  package rather than from the request body**, mints `upstream` server-side, parses hook metadata from the
+  DRAFTED `hook.yaml`, reverts the session to `awaiting-review` on ANY failure, and surfaces an id
+  collision as 409 instead of a 200 that discarded the draft. Finalize never approves — palette
+  visibility stays the separate existing act. `runTurnSpecAgent` now resolves the projects root through
+  `resolveProjectsDir` so the CLI and the bridge agree under a non-default `projectsDir`. Closure
+  journeys `skills`/`hooks` gain `skills-agentic-build` / `hooks-agentic-build`, flipping **`build-skill`
+  and `build-hook` from pending to ported**, seeded with the verbatim output of a real recorded Claude
+  turn. **Batch-E ruling 45 discharged live, not emulated:** a real (non-dry-bridge) `forge agent run
+  authoring` drafted a real skill package in 21 s and a real hook package in 31 s, both landed
+  byte-identical via `copyStagingToLibrary`, the skill installed as a draft and then approved to
+  palette-visible, and seven traversal shapes (including a raw percent-encoded one) were refused with the
+  attack artifacts provably absent.

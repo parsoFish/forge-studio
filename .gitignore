@@ -61,6 +61,13 @@ _worktrees/
 # Runtime, never source.
 _skill-staging/
 
+# R4-21 phase 2 / ADR-043: the generic interactive-runner's finalize landing
+# root (<forgeRoot>/_interactive-library). `copyStagingToLibrary`
+# (orchestrator/interactive-finalizers.ts) lands a session's drafted package
+# here before cli/bridge-studio-authoring.ts installs it into skills/<id>/ or
+# studio/hooks/<id>/. Runtime, never source.
+_interactive-library/
+
 # Unifier scratchpad + DEMO bundle directories — these belong to a
 # worktree, but occasionally leak to the forge root when a worktree's
 # fast-forward into main carries gitignored-elsewhere paths. Pin them

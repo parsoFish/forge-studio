@@ -87,7 +87,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -183,6 +183,30 @@ function onboardingDescriptor(overrides: Partial<SessionKindDescriptor> = {}): S
   } as SessionKindDescriptor;
 }
 
+/** R4-21: the new "authoring" session kind (studio/session-kinds.yaml — not
+ *  shipped yet at branch base; see session-kinds.test.ts's RED-1a..1d). One
+ *  OOTB interactive agent (`creation-agent`, skills/creation-agent/SKILL.md —
+ *  does not exist yet either) that authors a skill/hook file-package through
+ *  an R2-10 session; artifact kind 'file-package' (this file's RED-2a/b/c,
+ *  below). `stages`/`defaultStage` deliberately use the CURRENT,
+ *  already-shipped 'roadmap' token rather than the not-yet-shipped
+ *  'authoring' SESSION_STAGES token — deriveSessionArtifact (unlike
+ *  deriveSessionTranscript) never reads `stages` at all, so this keeps the
+ *  file-package fixtures below fully decoupled from the SEPARATE
+ *  SESSION_STAGES extension pinned in session-kinds.test.ts. */
+function authoringDescriptor(overrides: Partial<SessionKindDescriptor> = {}): SessionKindDescriptor {
+  return {
+    id: 'authoring',
+    agent: 'creation-agent',
+    title: 'Authoring session',
+    legacyRoutes: [],
+    stages: ['roadmap'],
+    defaultStage: 'roadmap',
+    artifact: { kind: 'file-package', label: 'Draft package' },
+    ...overrides,
+  } as SessionKindDescriptor;
+}
+
 /** A minimal, hand-fixtured `ContractStageRow[]` — deliberately NOT imported
  *  from cli/contract-stages.ts (this module stays a pure, fs-only
  *  derivation with no business importing the derivation module that
@@ -244,6 +268,30 @@ function writeGeneration(
     ...(opts.extraMetaFields ?? {}),
   };
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+}
+
+/** Writes one file into a file-package session's `staging/` subdirectory
+ *  (R4-21 phase 2, D2) — mirrors this file's own `manifests/`/`themes/`/
+ *  `generations/` fixture idiom (see writeGeneration's own header note): a
+ *  DEDICATED subdirectory, never the bare session root, so a creation-agent
+ *  session's accumulating draft package can never collide with the fixed
+ *  CANDIDATE_SOURCE_FILES transcript scan (idea.md/prompt.md/answers.json/
+ *  questions.json/feedback.md) that deriveSessionTranscript unconditionally
+ *  scans on every session dir regardless of kind.
+ *
+ *  RENAMED from `package/` (R4-21 phase 1) to `staging/` (R4-21 phase 2, D2,
+ *  `_wave5/unit-specs/R4-21-phase2.md`): ADR-043 §1's ratified turnSpec row
+ *  declares `writes: [staging]` for the `analyzing` phase, and
+ *  `copyStagingToLibrary` (orchestrator/interactive-finalizers.ts) sources
+ *  `<sessionDir>/staging/` — `package/` predates the ADR and has zero
+ *  production users, so it is renamed to match the ratified data rather than
+ *  parameterising the finalizer. The rename is COMPLETE, not additive — see
+ *  RED-2f below, which pins that a leftover `package/` dir is no longer
+ *  scanned at all. */
+function writeStagingFile(sessionDir: string, relPath: string, body: string): void {
+  const abs = join(sessionDir, 'staging', relPath);
+  mkdirSync(join(abs, '..'), { recursive: true });
+  writeFileSync(abs, body, 'utf8');
 }
 
 function okTurns(result: ReturnType<typeof deriveSessionTranscript>): Array<{ index: number; role: string; stage: string; text: string; source: string }> {
@@ -637,13 +685,174 @@ describe('deriveSessionArtifact — brain-structure (shared PackageFile shape)',
 // deriveSessionArtifact — reserved kind (AT-34)
 // ===========================================================================
 
-describe('deriveSessionArtifact — a reserved artifact kind is never a stub', () => {
-  it('AT-34: a descriptor whose artifact.kind is a RESERVED row (e.g. "file-package") → throws, naming the reserved kind', () => {
+// AT-34 RETARGETED (R4-21, documented edit — T3): this AT used 'file-package'
+// as its RESERVED-row example — but file-package is THE row R4-21 flips
+// reserved→live (see this file's RED-2a/b/c, below), and per
+// session-kinds.test.ts's AT-2 it was already the LAST reserved row in the
+// whole vocabulary, so after this round SESSION_ARTIFACT_KINDS carries ZERO
+// reserved rows — there is no other genuinely-reserved kind left anywhere to
+// build a fresh fixture from. Retargeted (per the task brief's own
+// instruction) rather than deleted: the underlying claim this AT protects —
+// "an unrecognised artifact kind is never a stub, it throws naming itself" —
+// still has a live code path to pin (deriveSessionArtifact's `state ===
+// undefined` branch), so this AT now exercises THAT branch via a kind that
+// is not, and never was, a member of SESSION_ARTIFACT_KINDS at all — proving
+// the same "never a stub" contract without depending on a reserved row that
+// no longer exists. GREEN both before and after the R4-21 flip lands (an
+// entirely-unknown kind's behaviour is untouched by this round) — kept as
+// coverage, not a fresh RED pin; RED-2a/b/c (below) are this round's actual
+// RED pins for file-package itself.
+describe('deriveSessionArtifact — an unrecognised artifact kind is never a stub', () => {
+  it('AT-34 (retargeted): a descriptor whose artifact.kind is not a member of SESSION_ARTIFACT_KINDS at all → throws, naming the unrecognised kind', () => {
     const sessionDir = makeTmpDir('artifact-reserved-');
-    const descriptor = architectDescriptor({ artifact: { kind: 'file-package' as SessionKindDescriptor['artifact']['kind'], label: 'Reserved' } });
+    const descriptor = architectDescriptor({ artifact: { kind: 'no-such-artifact-kind-at-all-9911' as SessionKindDescriptor['artifact']['kind'], label: 'Unrecognised' } });
     assert.throws(
       () => deriveSessionArtifact({ descriptor, sessionDir }),
-      (err: unknown) => { assert.ok(err instanceof Error); assert.match(err.message, /file-package/); return true; },
+      (err: unknown) => { assert.ok(err instanceof Error); assert.match(err.message, /no-such-artifact-kind-at-all-9911/); return true; },
+    );
+  });
+});
+
+// ===========================================================================
+// R4-21 — deriveSessionArtifact — file-package (creation-agent authoring
+// session). RED-2a/b/c (T3 pins for the OOTB authoring agent / skill-hook
+// package producer): file-package flips reserved→live, backed by a real
+// derivation reading the session's own `staging/` subdirectory (R4-21 phase
+// 2, D2 rename — see writeStagingFile's own header note). Mirrors AT-33
+// (brain-structure)'s file-derivation shape and AT-36/37's symlink-escape
+// positive-control idiom exactly.
+// ===========================================================================
+
+describe('deriveSessionArtifact — file-package (R4-21, creation-agent authoring session)', () => {
+  it('RED-2a: kind:"file-package" does NOT throw — returns {kind, label, files} reading the session dir\'s real staging/ files (RED today: deriveFilePackage still reads the phase-1 package/ dir, not staging/ — D2\'s rename has not landed)', () => {
+    const sessionDir = makeTmpDir('artifact-filepackage-');
+    writeStagingFile(sessionDir, 'SKILL.md', '# Authored Skill\n\nBody.\n');
+    writeStagingFile(sessionDir, 'reference.md', 'Supporting reference content.\n');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+      kind: string;
+      label: string;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(artifact.kind, 'file-package');
+    assert.equal(artifact.files.length, 2, `expected 2 package files, got: ${JSON.stringify(artifact.files)}`);
+    const byPath = new Map(artifact.files.map((f) => [f.path, f.body]));
+    assert.equal(byPath.get('SKILL.md'), '# Authored Skill\n\nBody.\n');
+    assert.equal(byPath.get('reference.md'), 'Supporting reference content.\n');
+  });
+
+  it('RED-2b (containment): a staging/ entry that is a symlink pointing OUTSIDE sessionDir contributes NO file, but a real sibling staged file IS surfaced (positive control) — mirrors safeReadFileInSession\'s existing containment contract exactly (AT-36/37\'s idiom)', () => {
+    const outsideDir = makeTmpDir('filepackage-escape-outside-');
+    const SECRET_MARKER = 'TOP-SECRET-PACKAGE-MARKER-6614';
+    const secretPath = join(outsideDir, 'secret.md');
+    writeFileSync(secretPath, SECRET_MARKER, 'utf8');
+
+    const sessionDir = makeTmpDir('filepackage-escape-session-');
+    const stagingDir = join(sessionDir, 'staging');
+    mkdirSync(stagingDir, { recursive: true });
+    symlinkSync(secretPath, join(stagingDir, 'evil.md'));
+    // Positive control: a plain, non-symlinked sibling staged file — MUST
+    // surface as a real file.
+    const REAL_MARKER = 'REAL-NON-ESCAPED-PACKAGE-CONTENT-2207';
+    writeFileSync(join(stagingDir, 'SKILL.md'), REAL_MARKER, 'utf8');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir });
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(SECRET_MARKER), 'the escaped file\'s content must never appear in the derived file-package artifact');
+    assert.ok(serialized.includes(REAL_MARKER), 'a plain, non-symlinked sibling staged file MUST still surface — the guard must discriminate, not just refuse to read anything');
+  });
+
+  it('RED-2c: the file-package artifact\'s label is threaded verbatim from descriptor.artifact.label, never re-derived', () => {
+    const sessionDir = makeTmpDir('filepackage-label-');
+    writeStagingFile(sessionDir, 'SKILL.md', '# x\n');
+    const descriptor = authoringDescriptor({ artifact: { kind: 'file-package', label: 'Totally Custom Draft Label 8827' } });
+
+    const artifact = deriveSessionArtifact({ descriptor, sessionDir }) as { label: string };
+    assert.equal(artifact.label, 'Totally Custom Draft Label 8827', 'label must come from descriptor.artifact.label — never a hardcoded/re-derived string');
+  });
+
+  // -------------------------------------------------------------------------
+  // T3 fix round (adversarial-review BLOCKER-1, R4-21 phase 1): deriveFilePackage
+  // previously scanned only the TOP LEVEL of `staging/` via a flat
+  // `listDirEntries` + per-name `safeReadFileInSession` read. A nested file
+  // (e.g. `staging/scripts/run.sh` — exactly the shape skills/creation-agent/
+  // SKILL.md instructs a hook draft to write: `staging/hook.yaml` +
+  // `staging/scripts/run.sh`) has a DIRECTORY as its top-level `staging/`
+  // entry name (`scripts`); `readFileSync` on a directory throws EISDIR,
+  // caught by the existing try/catch, and the entry was dropped SILENTLY —
+  // indistinguishable from a blocked symlink escape (declared-data-fails-open:
+  // a real, non-malicious nested file vanishes with no signal). RED-2d pins
+  // the fix: the walk must DESCEND a real directory entry, never attempt to
+  // read it as a file.
+  // -------------------------------------------------------------------------
+  it('RED-2d (BLOCKER-1): a staging/ entry that is a real directory (e.g. staging/scripts/) is DESCENDED, not read-as-file — a nested file surfaces with its path relative to staging/, alongside a top-level sibling', () => {
+    const sessionDir = makeTmpDir('filepackage-nested-');
+    writeStagingFile(sessionDir, 'hook.yaml', 'name: test-hook\ndescription: a draft hook\n');
+    writeStagingFile(sessionDir, 'scripts/run.sh', '#!/bin/sh\necho hi\n');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+      kind: string;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(artifact.kind, 'file-package');
+    const byPath = new Map(artifact.files.map((f) => [f.path, f.body]));
+    assert.equal(byPath.get('hook.yaml'), 'name: test-hook\ndescription: a draft hook\n', 'the top-level sibling must still surface');
+    assert.equal(
+      byPath.get('scripts/run.sh'),
+      '#!/bin/sh\necho hi\n',
+      'the nested file must surface with a path RELATIVE TO staging/ (PackageFile.path convention) — this is RED before D2\'s rename lands (deriveFilePackage still walks the phase-1 package/ dir, not staging/)',
+    );
+    assert.equal(artifact.files.length, 2, `expected exactly the 2 real files (1 top-level + 1 nested), got: ${JSON.stringify(artifact.files)}`);
+  });
+
+  it('RED-2e (BLOCKER-1 containment): a symlink NESTED inside a staging/ subdirectory that points OUTSIDE sessionDir contributes NO file, while a real sibling file in the SAME subdirectory still surfaces (positive control) — proves the recursive walk preserves the module\'s existing symlink-escape guard at every depth, not just the top level (mirrors RED-2b\'s idiom one level deeper)', () => {
+    const outsideDir = makeTmpDir('filepackage-nested-escape-outside-');
+    const SECRET_MARKER = 'TOP-SECRET-NESTED-PACKAGE-MARKER-7731';
+    const secretPath = join(outsideDir, 'secret.md');
+    writeFileSync(secretPath, SECRET_MARKER, 'utf8');
+
+    const sessionDir = makeTmpDir('filepackage-nested-escape-session-');
+    const scriptsDir = join(sessionDir, 'staging', 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    symlinkSync(secretPath, join(scriptsDir, 'evil.sh'));
+    const REAL_MARKER = 'REAL-NESTED-NON-ESCAPED-SCRIPT-9013';
+    writeFileSync(join(scriptsDir, 'run.sh'), REAL_MARKER, 'utf8');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir });
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(SECRET_MARKER), 'the nested escaped file\'s content must never appear in the derived file-package artifact');
+    assert.ok(serialized.includes(REAL_MARKER), 'a plain, non-symlinked sibling file in the same nested subdirectory MUST still surface');
+  });
+
+  // -------------------------------------------------------------------------
+  // RED-2f (R4-21 phase 2, D2): the rename is COMPLETE, not additive. A
+  // session dir carrying ONLY a leftover `package/` (the phase-1 dirname,
+  // never renamed on disk by a real session that started before this phase)
+  // must surface NOTHING — proves deriveFilePackage no longer scans `package/`
+  // at all, rather than scanning BOTH dirs (which would silently resurrect a
+  // stale phase-1 draft alongside a genuine staging/ one, or worse, let a
+  // stale package/ masquerade as the session's current draft when staging/
+  // is empty). Kills an "additive" fix that keeps the old package/ scan
+  // around instead of replacing it.
+  // -------------------------------------------------------------------------
+  it('RED-2f (D2, rename is complete not additive): a session dir carrying ONLY a leftover package/ (no staging/ at all) surfaces ZERO files — the old dirname is never scanned, not even as a fallback', () => {
+    const sessionDir = makeTmpDir('filepackage-leftover-package-');
+    const leftoverDir = join(sessionDir, 'package');
+    mkdirSync(leftoverDir, { recursive: true });
+    writeFileSync(join(leftoverDir, 'SKILL.md'), '# STALE phase-1 leftover — must never surface\n', 'utf8');
+    // Precondition, asserted before reading any verdict: the leftover file is
+    // really there on disk.
+    assert.ok(existsSync(join(leftoverDir, 'SKILL.md')), 'arrange: the leftover package/SKILL.md must exist before deriving');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+      kind: string;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(artifact.kind, 'file-package');
+    assert.deepEqual(
+      artifact.files,
+      [],
+      `a leftover package/ dir must contribute NOTHING once the session draft dir is staging/ — got: ${JSON.stringify(artifact.files)}`,
     );
   });
 });

@@ -72,13 +72,14 @@ against the tables by counting; a count of line references could not be.
 
 | | Rows |
 |---|---|
-| Classified rows below | 55 |
-| — `guarded` | 14 |
+| Classified rows below | 57 |
+| — `guarded` | 16 |
 | — fixed in this sweep (all were `unguarded`) | 12 |
 | — fixed later in SEC-02 (`forge-d1f`) | 3 |
 | — fixed later in R4-16 (the four `/start` routes' `projectRepoPath`) | 1 |
 | — fixed later in SEC-03 | 4 |
 | — guarded, new in R4-17 (the onboarding session's contract-stages surface) | 2 |
+| — guarded, new in R4-21 T3 (the `deriveFilePackage` recursive walk + the authoring-session start route) | 2 |
 | — `unguarded`, filed for follow-up | 10 |
 | — `accidentally-safe` (accident named on each) | 9 |
 | `[unver]` items, listed separately and never counted safe | 7 |
@@ -551,6 +552,88 @@ failure, for a `sessionDir` under a real `projectsRoot`), and AT-D7-3 pins D6
 byte-identical to before this flag existed — unaffected, since the containment
 check only runs when the flag is given).
 
+### Guarded in R4-21 — the authoring-session finalize route (SUPERSEDED — see "Guarded in R4-21 phase 2" below)
+
+**Superseded, 2026-08-11 (R4-21 phase 2, WI-2, D5, `_wave5/unit-specs/R4-21-phase2.md`).**
+The rows immediately below described the PHASE-1 wire contract: a
+client-supplied `entries`/`upstream` (skill) or `name`/`description`/`on`/
+`scriptBody`/`matcher`/`permissions` (hook) body, staged through
+`cli/skill-staging.ts` / written directly by `finalizeHook`. That contract —
+and the `finalizeSkill`/`finalizeHook` functions these rows name — no longer
+exist. The route now reads `{project, sessionId, kind, id}` ONLY and sources
+the installed bytes from a SERVER-LANDED package (see the new section below).
+Rows kept for history; do not use them to reason about the current route.
+
+One new file, `cli/bridge-studio-authoring.ts` (`POST /api/studio/authoring/finalize`,
+the creation-agent authoring session's save path), flagged by
+`scripts/check-request-path-sinks.mjs` on first use (baseline 0 -> `mkdirSync`
+2, `rmSync` 1, `writeFileSync` 2) — the ratchet working exactly as designed on
+a brand-new file. The route composes two EXISTING, already-guarded write
+paths rather than inventing a third; no new containment shape is introduced.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `cli/bridge-studio-authoring.ts:153` (`finalizeSkill`) | `mkdirSync` | none — `stagingRoot = resolve(ctx.forgeRoot, '_skill-staging')` | guarded `[read]` | Fixed, config-derived root, no request data in the path at all — byte-identical rationale and call shape to `cli/bridge-studio-skills.ts`'s `POST /api/studio/skills/install` route's own `mkdirSync(stagingRoot, {recursive:true})` (same constant, same purpose: the private staging root must exist before `resolveGuardedPath` can realpath it). |
+| `cli/bridge-studio-authoring.ts:179` (`finalizeSkill`, `finally`) | `rmSync` | none — `sourceId` is SERVER-MINTED (`newSourceId()`, a timestamp + 4 random base36 chars), never derived from the request body | guarded `[read]` | Cleans exactly `<stagingRoot>/<sourceId>` on both success and throw; mirrors `cli/bridge-studio-skills.ts`'s identical `finally`-block cleanup. `force:true` makes it a no-op when staging never wrote (an early body-validation 400). |
+| `cli/bridge-studio-authoring.ts:153` (`finalizeSkill`, via `stageSkillPackage`) then `installSkillPackage` | (per-entry containment, inside `cli/skill-staging.ts` / `orchestrator/studio/skill-library.ts`) | body `id`, `entries[].path`, `upstream.source`/`ref` | guarded `[read]` | **New caller of an existing, already-guarded primitive — "one sink, many entry points."** `finalizeSkill` re-validates the request body shape (mirrors `POST /api/studio/skills/install`'s own inline checks: non-empty `id`; `entries` a non-empty array of `{path, contentBase64}` with no absolute or `..`-containing `path`, capped at 1 MiB decoded; `upstream.source` required) and then calls the SAME `stageSkillPackage(stagingRoot, sourceId, entries)` and `installSkillPackage({forgeRoot, id, packageDir, upstream})` the `/install` route calls — both already carry their own realpath-based per-segment containment (`resolveGuardedPath`/`guardedFile`), documented at this table's `cli/bridge-studio-skills.ts:136,147`-style rows above. No new validation or write logic was written for this path; RED-4b/RED-4d (`cli/bridge-studio-authoring.test.ts`) exercise the missing-`SKILL.md`, traversal-`entry.path`, over-cap, and symlinked-`skills/<id>`-directory shapes through THIS route and pass, confirming the shared guard fires identically from the new call site. |
+| `cli/bridge-studio-authoring.ts:290-292` (`finalizeHook`) | `mkdirSync`, `writeFileSync` ×2 | body `id`/`name` (slug derivation), `on`, `scriptBody`, `matcher?` | guarded `[read]` | Byte-identical shape to `cli/bridge-studio-hooks.ts`'s `POST /api/studio/hooks` route (the `unguarded [exec]` rows above are that route's PRE-fix history; its current code — read at the time this row was written — resolves both destinations via `resolveGuardedPath(hooksDir(forgeRoot), [slug, 'hook.yaml'])` / `[slug, 'scripts', 'run.sh']` before any write, refusing on `!guard.ok` and 409-ing on a pre-existing `hook.yaml`). This route re-states the identical two `resolveGuardedPath` calls and writes only through their returned `realPath`s — never a fresh `join()`. `FORBIDDEN_HOOK_BINDING_KEYS` is checked before any of this runs, so a binding-key body 400s before any fs call. Pinned by RED-4c (`cli/bridge-studio-authoring.test.ts`) for the write shape and the binding-key rejection; RED-4d covers the symlinked-directory escape for the sibling skill path (the hook path's containment is the SAME `resolveGuardedPath` call already covered by this table's existing rows for that function — not re-executed against this specific route in this round). |
+
+### Guarded in R4-21 phase 2 (WI-2, D5) — finalize becomes the operator COMMIT act; `orchestrator/interactive-runner.ts` + `interactive-finalizers.ts` become bridge-reachable
+
+`cli/bridge-studio-authoring.ts` was REWRITTEN (see the superseded section
+above): the wire contract narrows to `{project, sessionId, kind, id}`, and the
+route now (1) guarded-reads/writes the session's own `status.json`
+(`orchestrator/interactive-session.ts`'s `guardedReadSessionStatus`/
+`guardedWriteSessionStatus` — already-guarded siblings, no new primitive),
+(2) DYNAMICALLY imports `orchestrator/interactive-runner.ts` and runs ONE
+`committing` turn through `runInteractiveTurn` (the SAME spine `forge agent
+run` dispatches to — R4-22 WI-3, already audited for its OWN containment in
+that module's header), and (3) reads the LANDED package back out through
+`resolveGuardedPath(forgeRoot, ['_interactive-library', id, ...])` before
+installing it. `scripts/check-request-path-sinks.mjs` flagged two
+consequences of step (2), both expected and both already-guarded:
+
+- **`cli/bridge-studio-authoring.ts` itself tightened** (fewer raw sinks, not
+  more): the old inline `_skill-staging` mkdir/rmSync pair is gone (`mkdirSync`
+  2→1, `rmSync` 1→0) — the one remaining `mkdirSync` is
+  `finalizeHookFromLanded`'s `mkdirSync(dirname(scriptGuard.realPath))`,
+  writing only through a `resolveGuardedPath`-returned `realPath`.
+- **`orchestrator/interactive-runner.ts` and `orchestrator/
+  interactive-finalizers.ts` become reachable from a bridge route for the
+  FIRST time** (baseline 0 for every sink in both files) — before this WI,
+  both modules were reachable only from `cli/agent-run.ts` (a CLI entry
+  point, not an HTTP route), so the ratchet had never scanned them. The
+  dynamic `import('../orchestrator/interactive-runner.ts')` inside
+  `runFinalize` makes the WHOLE file (and its own static import of
+  `interactive-finalizers.ts`) reachable per this ratchet's file-level
+  reachability model — not a claim that the finalize route's ONE `committing`
+  turn executes every function in either file (it does not: e.g.
+  `readSkillPrompt`'s `readFileSync` only runs on the `agent`-step path,
+  never on `committing`).
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/interactive-finalizers.ts` (`discoverStagingEntries`) | `realpathSync`, `readdirSync`, `lstatSync` | none directly — `sessionDir` is the CALLER's already-SEC-04-guarded value (`cli/bridge-studio-authoring.ts` → `runInteractiveTurn`'s own preamble, `resolveGuardedPath(projectsRoot, [project, '_authoring', sessionId])`); every discovered entry is re-verified through `resolveGuardedPath(sessionDir, ['staging', ...relParts])` BEFORE this file ever `readdirSync`s into it | guarded `[read]` | `realpathSync(stagingRoot)` resolves the trusted `<sessionDir>/staging` literal (no request field folded in); `readdirSync`/`lstatSync` only run on paths that already passed the per-segment identity walk (this module's own header — "the guard check on the entry itself runs before any recursion into it"). No new containment primitive; reuses `resolveGuardedPath` on both source and destination sides, as the module's own extensive header documents (already audited when R4-22 WI-2 landed this file). |
+| `orchestrator/interactive-finalizers.ts` (`copyStagingToLibrary`) | `mkdirSync` | none — `dirname(destPath)`, where `destPath` is `resolveGuardedPath(libraryRoot, [packageId, ...relParts]).realPath`; `packageId` is request-derived (the finalize route's `id`) but rides as its OWN guarded segment, never folded into `libraryRoot` | guarded `[read]` | `mkdirSync` only ever creates a directory UNDER an already-guard-verified `realPath` — never a fresh `join()` on unresolved input. |
+| `orchestrator/interactive-finalizers.ts` (`readValidatedStagedFile`/`writeValidatedLibraryFile`) | `openSync` ×2 | same `srcRealPath`/`destPath` as above | guarded `[read]` | The TOCTOU-closing fd-reopen the module's own header documents at length: `O_NOFOLLOW` (both) and `O_EXCL` (write side) make the `openSync` call itself fail on a symlink swapped in between the Phase-1 guard check and this Phase-2 use — the containment mechanism IS this call's own flags, not a separate check preceding it. |
+| `orchestrator/interactive-runner.ts` (`listWrittenFiles`) | `lstatSync`, `readdirSync` | `guarded.realPath`, where `guarded = resolveGuardedPath(sessionDir, segments)` inside the SAME function, for every `turnSpec.phases[].writes` entry | guarded `[read]` | Identical shape to the `interactive-finalizers.ts` walk above — the guard check runs before recursion, and these two sinks only ever see an already-identity-verified `realPath`. Not reachable from the finalize (`committing`) step in practice (`listWrittenFiles` is called from the `agent`-step branch, `runAgentStyleStep`) — counted here because file-level reachability, not per-function reachability, is what the ratchet measures. |
+| `orchestrator/interactive-runner.ts` (`runFinalizeStep`) | `mkdirSync` | none — `libraryRootGuard.realPath`, where `libraryRootGuard = resolveGuardedPath(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME])`; `forgeRoot` is config-derived, never request data | guarded `[read]` | GUARD-TERMINAL create: only runs when the dedicated `_interactive-library/` root does not exist yet (a fresh forge install), and only creates the already-guard-verified `realPath` — never a fresh root. **This IS on the finalize (`committing`) path** — the one sink among this section's rows that the route's own turn actually executes. |
+| `orchestrator/interactive-runner.ts` (`readSkillPrompt`) | `readFileSync` | `skillPath(agentId)`, where `agentId = descriptor.agent` — a value from the trusted, server-loaded `studio/session-kinds.yaml` descriptor, never from the HTTP request body | guarded `[read]` | Fixed, config-derived path (the agent's own `SKILL.md` under the real forge install) — no request data reaches this call at all. Not reachable from the finalize (`committing`) step (see the file-level-vs-per-function note above); documented for completeness since the ratchet counts the whole file. |
+
+### Guarded in R4-21 T3 — the `deriveFilePackage` recursive walk (BLOCKER-1) + the authoring-session start route (BLOCKER-2)
+
+An adversarial-review pass on R4-21 found two confirmed blockers, both fixed
+in the same round. Fixing them grew `scripts/check-request-path-sinks.mjs`'s
+tracked sink counts (`cli/ui-bridge.ts`: `mkdirSync` 5→7, `realpathSync` 1→2,
+`writeFileSync` 2→4; `orchestrator/studio/session-transcript.ts`: `readdirSync`
+1→2, `realpathSync` 4→6) — the ratchet firing exactly as designed on two new
+call sites, neither of which introduces a new containment SHAPE.
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/studio/session-transcript.ts` (`listDirEntriesTyped`, new) | `readdirSync` (`{withFileTypes:true}`), `realpathSync` ×2 | session dir + a `package/`-relative subpath built entirely from EARLIER `readdirSync` entry names (never a request field directly) | guarded `[read]` | BLOCKER-1 fix: `deriveFilePackage` previously scanned only the TOP LEVEL of `package/` via the existing `listDirEntries` (flat, extension-filtered) + a per-name `safeReadFileInSession` read — a nested file (e.g. `package/scripts/run.sh`) has a DIRECTORY as its top-level entry, and `readFileSync` on a directory threw `EISDIR`, caught, silently dropping the entry (declared-data-fails-open). `listDirEntriesTyped` is `listDirEntries`'s realpath-containment guard verbatim (same two `realpathSync` calls, same `startsWith(realSessionDir + sep)` boundary, same "escaping/missing directory ⇒ `[]`, treated as absent" contract) with `Dirent[]` returned instead of filtered name strings, so the new recursive walker (`walkPackageFiles`) can tell a REAL subdirectory (`entry.isDirectory()`) from everything else (a plain file, or a symlink of any kind — `fs.Dirent`'s type check never reports a symlink as `isDirectory()`/`isFile()`) without a second stat call. Only a real directory is descended; every other entry — including a symlink to a file OR a directory, in-bounds or escaping — is attempted ONLY through the pre-existing `safeReadFileInSession` choke point, which fails closed on any escape exactly as it already does for the flat `manifests/`/`themes/` scans. No new containment PRIMITIVE was written; the recursion is bounded by the existing `MAX_PACKAGE_FILES`/`MAX_PACKAGE_BYTES` caps (`orchestrator/studio/skill-library.ts`) reused as a soft read-side DoS bound. Pinned by `orchestrator/studio/session-transcript.test.ts`'s RED-2d (nested file surfaces) and RED-2e (a symlink nested inside a `package/` subdirectory pointing outside `sessionDir` contributes no file, with a real sibling positive control) — RED-2d was RED before this fix (the nested file was silently dropped), GREEN after. |
+| `cli/ui-bridge.ts` (`POST /api/studio/authoring/start`, new) + `writeAuthoringSession` | `mkdirSync` ×2, `realpathSync` ×1, `writeFileSync` ×2 | body `project` (session-scratch container only — see below), server-generated `sessionId`/`runId` | guarded `[read]` | BLOCKER-2 fix: the launcher this route backs had no start mechanism at all before this fix. Byte-for-byte the SAME shape as the already-guarded `POST /api/studio/onboarding/start` row (Table 1, "Guarded in R4-17"): `project` is `SLUG_RE`+length-cap validated (`invalidGenerationProjectReason`) BEFORE any fs call, then resolved through the SAME `resolveContainedProjectDir` (`cli/contract-stages.ts`) that route already calls — by import, not a second implementation. `sessionId` is server-generated (`newArchitectSessionId()`), never request-derived. The `_authoring` parent is created (`mkdirSync(authoringParent, {recursive:true})`) and realpath-re-verified (`realpathSync` + `startsWith(realProjectDir + sep)`) BEFORE the session dir is created beneath it — "validating a root does not validate what you write beneath it," the same lesson the onboarding row documents for a project repo that could carry a committed symlink named `_authoring`. `writeAuthoringSession` (mirrors `writeOnboardingSession`) then applies the SAME three independent closes: exclusive directory create (no `recursive` — a pre-existing entry, including a symlink, is a hard `EEXIST`), and both leaf writes (`status.json`, `prompt.md`) use `{flag:'wx'}` (`O_CREAT\|O_EXCL`), never following an existing symlink. No new validation or containment logic was written for this route — every check is a call into an existing, already-guarded primitive. **Disclosed, not a containment gap:** the route's own `spawnAgentDispatch(forgeRoot, 'creation-agent', ...)` call will be refused inside the detached child process on a REAL (non-dry-bridge) run, because `creation-agent` declares `surface: interactive` and no dedicated bounded-turn runner exists yet for it — a functional gap (the session never actually gets a drafted package), not a security one; see the route's own comment in `cli/ui-bridge.ts` and the T3 report for the follow-up this implies. |
+
 ### Accidentally-safe — the accident is the protection, and nothing knows it
 
 These are **not** fixed. Each is blocked by a side effect of unrelated code; a refactor of that unrelated code removes the protection silently. Every one carries a regression-lock test with the accident named in a comment.
@@ -587,7 +670,7 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 |---|---|---|
 | `orchestrator/brain-paths.ts` | `resolveKbBrainDir` | **fixed** |
 | `orchestrator/kb-graph.ts` | themes / `_raw` / `_guidance` / `INDEX.md` / node-leaf / `listPendingGuidance` / `deleteGuidanceFile` | **fixed** |
-| `orchestrator/studio/session-transcript.ts` | `safeReadFileInSession`, `listDirEntries` | guarded |
+| `orchestrator/studio/session-transcript.ts` | `safeReadFileInSession`, `listDirEntries`, `listDirEntriesTyped` (R4-21 T3, BLOCKER-1 fix — `deriveFilePackage`'s recursive `package/` walk) | guarded |
 | `orchestrator/studio/hook-library.ts` | `resolveHookScriptPath`; `hookDir` / `hookYamlPath` | guarded; the latter two **fixed at the call sites** |
 | `orchestrator/skill-path.ts` | `skillPath` / `skillDir` | **fixed at the call sites** |
 | `orchestrator/project-config.ts` | `readAgentInstructionsFile`, `readQualityGateSidecar` | unguarded → `forge-2zz` |

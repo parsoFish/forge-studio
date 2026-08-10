@@ -8,10 +8,12 @@
  * Mirrors flow-trigger.ts's shipped/reserved-row precedent: SESSION_STAGES
  * and SESSION_ARTIFACT_KINDS are frozen, rows-as-data vocabularies. A
  * `reserved` artifact kind PARSES fine (loadSessionKinds is purely
- * structural) but is a lint ERROR on use (validateSessionKinds) — R4-15/16/17
+ * structural) but is a lint ERROR on use (validateSessionKinds) — R4-15/16/17/21
  * extend this registry by adding a descriptor (not a page) plus, when they
  * ship, a renderer that promotes the matching row from reserved to live.
- * Zero stub renderers exist anywhere for the three reserved kinds today.
+ * R4-21's 'file-package' flip was the LAST reserved row — the vocabulary is
+ * now 6-live/0-reserved; a future extension re-opens the pattern by adding a
+ * new row starting `reserved`.
  *
  * Mirrors template-library.ts's load/validate split (also drawn identically
  * in validate.ts for agents/flows): `loadSessionKinds` throws only on a
@@ -50,9 +52,15 @@ import type { Finding } from './validate.ts';
 // Closed vocabularies (frozen — rows-as-data, mirrors TRIGGER_KINDS)
 // ---------------------------------------------------------------------------
 
-/** The six session stages, order significant (the session shell's tab/stepper
+/** The session stages, order significant (the session shell's tab/stepper
  *  order). Closed — a descriptor's `stages`/`defaultStage` must draw from
- *  this set (enforced by validateSessionKinds, not the loader). */
+ *  this set (enforced by validateSessionKinds, not the loader).
+ *
+ *  R4-21: 'authoring' is the vocabulary's FIRST-EVER extension — a 7th
+ *  token, appended at the end, backing the new single-stage `authoring`
+ *  session kind (creation-agent). It is unrelated to the ordered onboarding
+ *  sequence (contract→instructions→secrets→demo→roadmap→brain) the other six
+ *  tokens encode. */
 export const SESSION_STAGES = Object.freeze([
   'contract',
   'instructions',
@@ -60,6 +68,7 @@ export const SESSION_STAGES = Object.freeze([
   'demo',
   'roadmap',
   'brain',
+  'authoring',
 ] as const);
 export type SessionStage = (typeof SESSION_STAGES)[number];
 
@@ -80,7 +89,11 @@ export const SESSION_ARTIFACT_KINDS: readonly SessionArtifactKindRow[] = Object.
   Object.freeze({ id: 'roadmap-draft', status: 'live' }),
   Object.freeze({ id: 'markdown-draft', status: 'live' }),
   Object.freeze({ id: 'brain-structure', status: 'live' }),
-  Object.freeze({ id: 'file-package', status: 'reserved' }),
+  // R4-21: the creation-agent authoring session's 'file-package' case in
+  // deriveSessionArtifact (session-transcript.ts) ships a real renderer —
+  // flips reserved→live. Declaration order is unchanged; only status flips.
+  // This is the LAST reserved row — the vocabulary is now 6-live/0-reserved.
+  Object.freeze({ id: 'file-package', status: 'live' }),
   // R4-17: the onboarding session's 'contract-buildout' case in
   // deriveSessionArtifact (session-transcript.ts) ships a real renderer —
   // flips reserved→live. It consumes ALREADY-DERIVED rows the caller

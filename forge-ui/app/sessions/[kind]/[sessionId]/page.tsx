@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { useCycleEvents } from '@/lib/use-cycle-events';
@@ -24,6 +24,7 @@ import { SessionArtifactPane } from '@/components/studio/session/SessionArtifact
 import { SessionArchitectPanel } from '@/components/studio/session/SessionArchitectPanel';
 import { SessionInstructionsPanel } from '@/components/studio/session/SessionInstructionsPanel';
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
+import { SessionAuthoringPanel } from '@/components/studio/session/SessionAuthoringPanel';
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -76,6 +77,7 @@ export default function SessionShellPage({
   const kind = decodeURIComponent(params.kind);
   const sessionId = decodeURIComponent(params.sessionId);
   const queryProject = useSearchParams().get('project');
+  const router = useRouter();
 
   // ---- per-kind session summary (drives the live interactive panel) -------
 
@@ -190,6 +192,13 @@ export default function SessionShellPage({
               <SessionInstructionsPanel session={summary.data} events={events} nowMs={nowMs} onRefresh={refreshSummary} />
             ) : summary && summary.kind === 'project-brain' ? (
               <SessionProjectBrainPanel session={summary.data} themes={themes} onRefresh={refreshSummary} />
+            ) : kind === 'authoring' ? (
+              <SessionAuthoringPanel
+                sessionId={sessionId}
+                project={project}
+                artifact={viewState.artifact}
+                onFinalized={(savedKind, id) => router.push(savedKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
+              />
             ) : null}
           </SessionTranscript>
           <SessionArtifactPane artifact={viewState.artifact} activeStage={viewState.selectedStage} />

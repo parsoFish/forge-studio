@@ -528,7 +528,18 @@ async function runTurnSpecAgent(
   // project name rides as its OWN guarded SEGMENT under the trusted projects root,
   // never folded into it. This closes `..`, `/abs`, `.`, separators and control
   // chars at the door rather than inheriting the legacy hole N times over.
-  const projectGuard = resolveGuardedPath(resolve('projects'), [projectArg]);
+  //
+  // R4-21 phase 2, correction B: the ROOT itself is now resolveProjectsDir's
+  // single source of truth (honouring FORGE_PROJECTS_DIR / forge.config.json's
+  // projectsDir), not a hardcoded `resolve('projects')` — every bridge route
+  // already resolves the projects root this way (e.g. cli/ui-bridge.ts's
+  // POST /api/studio/authoring/start), and this CLI entry point is what
+  // POST /api/studio/authoring/start's spawned turn actually runs, so the two
+  // must agree or a session created under a non-default projectsDir is
+  // unreachable by its own turn. The guarded-SEGMENT shape for `projectArg`
+  // itself is UNCHANGED (AT-B3 regression pin).
+  const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
+  const projectGuard = resolveGuardedPath(projectsRoot, [projectArg]);
   if (!projectGuard.ok) {
     console.error(`forge agent run ${agentId}: --project "${projectArg}" is not a valid project name — ${projectGuard.reason}`);
     process.exit(2);

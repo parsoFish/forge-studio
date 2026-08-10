@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { StudioNav } from '@/components/StudioNav';
-import { createSkill } from '@/lib/studio-client';
+import { AuthoringLauncher } from '@/components/AuthoringLauncher';
+import { createSkill, fetchStudioProjects } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
 // Skill builder (P2) — author a plain composable skill in-platform. Minimal:
@@ -18,6 +19,15 @@ export default function SkillBuilderPage() {
   const [body, setBody] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [knownProjects, setKnownProjects] = useState<string[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStudioProjects()
+      .then((projects) => { if (!cancelled) setKnownProjects(projects.map((p) => p.name).filter(Boolean).sort()); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   const slug = name.trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
   const canSubmit = name.trim().length > 0 && description.trim().length > 0;
@@ -74,6 +84,12 @@ export default function SkillBuilderPage() {
             </button>
             {!canSubmit && <span style={{ fontSize: 11.5, color: 'var(--faint)' }}>Name + description are required.</span>}
           </div>
+          <AuthoringLauncher
+            knownProjects={knownProjects}
+            onStarted={(sessionId, project) =>
+              router.push(`/sessions/authoring/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`)
+            }
+          />
         </div>
       </div>
     </main>

@@ -510,6 +510,47 @@ const DECISION_R4_18_GATE_RED_NOT_GREEN =
   'via the honest RED path; re-running the identical real gate a second time ' +
   'for the mirror-image GREEN outcome would add cost without new evidence';
 
+// R4-21 phase 2 (T3, journey-sync port) — cited by build-skill's step-6
+// exclusion below. The live-capture fixture this port seeds
+// (scripts/journeys/fixtures/r4-21-live-capture/skill/SKILL.md, provenance +
+// sha256 in scripts/lib/journey-fixtures.mjs) is a REAL, captured
+// creation-agent turn's output for a skill of this shape — and that real
+// turn drafted exactly ONE file (SKILL.md at the package root; no
+// scripts/templates directory). The mockup's own steps 5-6 script a
+// TWO-file package ("the collector script" / "the output template") — this
+// is a genuine capture-shape fact, not a fixture choice this port could have
+// made differently without hand-inventing bytes the real turn never
+// produced (forbidden by the T3 brief's own binding provenance rule).
+const DECISION_BUILD_SKILL_SINGLE_FILE_PACKAGE =
+  'scripts/journeys/fixtures/r4-21-live-capture/skill/SKILL.md (the real, ' +
+  'captured creation-agent turn this port seeds — a single-file package, no ' +
+  'scripts/ or templates/ directory) + scripts/lib/journey-fixtures.mjs\'s ' +
+  'own provenance comment (sha256 f8c53c4fd15c31b88554d9f62933d506e360f92' +
+  'bd566990bb762ff4e288305c5) — the mockup\'s two-tab framing does not match ' +
+  'what this real turn actually drafted, and inventing a second file would ' +
+  'violate the T3 brief\'s own binding rule against hand-invented agent output';
+
+// R4-21 phase 2 (T3, journey-sync port) — cited by build-skill's steps
+// 10-13. Binding a freshly authored (plain, non-agentic) skill into an
+// agent's Skills zone via the catalog is NOT new work this port owns — R2-09
+// already shipped and journey-proved the exact mechanism (click-to-add a
+// catalog skill chip into an agent's composition + save), just on a
+// DIFFERENT journey ('agents', not 'skills') and a different agent
+// (developer-ralph, not the mockup's reflector) — single-journey-per-entry
+// (story-parity.mjs Rule 8/10) means that real proof cannot be cited as a
+// string BeatRef inside this story's own port.beats, mirroring
+// DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY's own cross-journey pattern
+// exactly.
+const DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY =
+  'scripts/lib/story-parity.mjs validateEntry Rule 8/10 (single-journey-' +
+  'per-entry port.beats) + scripts/journeys/agents.mjs agents-edit-catalog-' +
+  'click-add (R2-09 C2 — click-to-add a catalog skill chip into an agent\'s ' +
+  'composition, proven idempotent) + agents-edit-save (the compound save ' +
+  'landing composition.skills on the real SKILL.md) — the identical drag/' +
+  'click-into-zone-then-save mechanism the mockup depicts for the ' +
+  'Reflector + release-notes is already real and journey-proved, just on a ' +
+  'different journey/agent pairing';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -892,83 +933,107 @@ export const STORY_REGISTRY = [
   {
     story: 'build-hook',
     batch: 'A',
-    port: null,
+    port: {
+      journey: 'hooks',
+      beats: [
+        'hooks-library',
+        { excluded: '\'sub-hooks\' sub-nav click — already demonstrated by the SAME beat cited at step 1 (hooks-library), which lands directly on the real /hooks library; the mockup\'s two-step library-home-then-sub-nav framing collapses to one real destination', decision: DECISION_ONE_REF_PER_STORY },
+        'hooks-detail',
+        'hooks-agentic-build',
+        { excluded: '\'Describe the automation…\' — already demonstrated by the SAME beat cited at step 4 (hooks-agentic-build), which fills the real [data-field="authoring-launcher-prompt"] and drives the real POST /api/studio/authoring/start', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '\'…it becomes a PreToolUse guard … HOST-AGNOSTIC\' — already demonstrated by the SAME beat cited at step 4, whose seeded draft is a real PreToolUse hook.yaml with no binding field of any kind (a generic, host-agnostic definition — FORBIDDEN_HOOK_BINDING_KEYS is enforced server-side on the LANDED hook.yaml at finalize)', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '\'Where does it attach? Nowhere, from here\' — already demonstrated by the SAME beat cited at step 4, whose closing assertion is exactly this: the finalized hook lands with data-carried-by-count="0" and the literal "Unbound — bind it from an agent\'s builder" text', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'hfile-tab-1 click (\'A hook is a PACKAGE: hook.yaml plus the guard script it runs.\') — already demonstrated by the SAME beat cited at step 4, which clicks the first of the two real [data-file-tab] elements', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'hfile-tab-2 click (\'And the replay evidence rides along.\') — already demonstrated by the SAME beat cited at step 4, which clicks the second real [data-file-tab] and asserts the two paths are distinct', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'accept-btn click — already demonstrated by the SAME beat cited at step 4, whose real [data-action="finalize-authoring"] click runs the actual finalize route end to end', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '\'On the shelf: event shown, "unbound — add from Agent Builder"\' — already demonstrated by the SAME beat cited at step 4, whose closing frame is the landed hook\'s own detail page, unbound, with a clean security scan', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'goto #/agents/builder/developer — already demonstrated by the SAME beat cited at step 13 (hooks-bind), which opens developer-ralph\'s real builder', decision: DECISION_ONE_REF_PER_STORY },
+        'hooks-bind',
+        { excluded: 'hover zone-hooks — already demonstrated by the SAME beat cited at step 13, which asserts the dedicated [data-accepts="hook"] zone is distinct from [data-accepts="guard"] before dropping into it', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'save-agent click — already demonstrated by the SAME beat cited at step 13, whose real [data-action="save-agent"] click persists composition.hooks on the real developer-ralph/SKILL.md and flips carried-by 0→1', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
     note:
-      'R3-03-F4 (this initiative) shipped the hooks pillar (/hooks, ' +
-      '/hooks/[id], /hooks/new, Agent-Builder binding) and the new `hooks` ' +
-      'journey makes beats 1-3 and 11-15 real (mockup 1-indexed): beat 1 ' +
-      '(goto \'#/library\') and beat 2 (\'sub-hooks\' sub-nav click) land on ' +
-      'the real /hooks library (hooks-library beat); beat 3 (hover ' +
-      'lib-pre-pr-security-review to see its event + who carries it) is the ' +
-      'SAME real library card plus the real /hooks/pre-pr-security-review ' +
-      'detail page (hooks-library + hooks-detail beats) — both OOTB seeds, ' +
-      'carried-by DERIVED from real agent composition.hooks. Beats 4-10 ' +
-      '(click build-hook-btn through the accept click) are an AGENTIC ' +
-      "AUTHORING SESSION — journeys-data.jsx routes build-hook-btn to " +
-      "go('agents','session','build-hook'), i.e. the R2-10 interactive " +
-      'session shell (batch B), which does not exist; the real product ' +
-      'authors a hook through the /hooks/new FORM instead (hooks-create ' +
-      'beat), typed by the operator, not generated by an agentic turn — not ' +
-      'ported here, and NOT the same interaction shape, so no beat ref ' +
-      'stands in for it. Beat 11 ("on the shelf: event shown, unbound") is ' +
-      'real — the hooks-create beat\'s freshly authored hook lands on its ' +
-      'own detail page with data-carried-by-count="0" and the literal ' +
-      '"Unbound — bind it from an agent\'s builder" text. Beats 12-15 (open ' +
-      'the Developer\'s builder, click the new hook into the catalog, hover ' +
-      'the hooks zone, save) are real — the hooks-bind beat drags the ' +
-      'hooks-create beat\'s hook into developer-ralph\'s [data-accepts="hook"] ' +
-      'zone (proven distinct from [data-accepts="guard"]) and saves; ' +
-      'carried-by flips 0→1 on the hook\'s own detail page afterward. The ' +
-      'security-scan discipline the mockup never scripts at all (blocked ' +
-      'verdict, refused approval, a distinct recorded override) is the ' +
-      'hooks-security beat — real, valuable, and simply absent from this ' +
-      'mockup story. Net: 8 of 15 mockup beats are genuinely backed by a ' +
-      'real beat id; 7 (the session shell) are not, so port stays null — ' +
-      'claiming ported would misrepresent the 7 unbacked beats as real. ' +
-      'R4-17 ASSESSED the inherited beats (2026-08-06, batch B\'s last ' +
-      'initiative) and does NOT own them, with the blocker now named precisely ' +
-      'rather than left as "the session shell": the shell EXISTS since R2-10, ' +
-      'and R4-17 proved a new session kind plugs into it with no route code ' +
-      '(the `onboarding` descriptor). What is missing is the PRODUCER — beats ' +
-      '4-10 are an authoring session with a "Creation Agent" that drafts a ' +
-      'hook PACKAGE, and no such agent exists: grep for a runtime: block in ' +
-      'skills/*/SKILL.md yields 16 agents, none of which authors a hook. That ' +
-      'is also why the `file-package` artifact row is still RESERVED in ' +
-      'SESSION_ARTIFACT_KINDS: shipping a renderer with no producer would be ' +
-      'exactly the stub the reserved-row convention exists to forbid. The ' +
-      'remaining work is one OOTB authoring agent plus its runner, which is an ' +
-      'initiative, not a rider on this one.',
+      'R4-21 phase 2 (T3, journey-sync port, 2026-08-10/11) — this is the ' +
+      'blocker the original note named precisely: "the remaining work is one ' +
+      'OOTB authoring agent plus its runner." That agent (creation-agent) and ' +
+      'its runner now exist for real: `POST /api/studio/authoring/start` opens ' +
+      'a genuine session at /sessions/authoring/<sid> (SessionAuthoringPanel, ' +
+      'the `file-package` artifact row flipped LIVE), and ' +
+      '`POST /api/studio/authoring/finalize` runs the REAL copyStagingToLibrary ' +
+      'commit turn end to end, installing the landed package exactly like the ' +
+      'manual /hooks/new form does. Since the drafting SDK turn itself still ' +
+      'cannot run under this harness\'s FORGE_ARCHITECT_NO_SPAWN=1 seam, the new ' +
+      'hooks-agentic-build beat seeds staging/ with the VERBATIM bytes of a ' +
+      'real, live, unsuppressed creation-agent turn the orchestrator captured ' +
+      'for this port (scripts/journeys/fixtures/r4-21-live-capture/hook/, ' +
+      'sha256-verified provenance in scripts/lib/journey-fixtures.mjs) — never ' +
+      'hand-invented — then drives every step after that for real: the file-' +
+      'package pane rendering both drafted files, the real finalize click ' +
+      '(hook metadata parsed from the DRAFTED hook.yaml server-side, never a ' +
+      'parallel form), and the landed hook\'s own detail page reading unbound, ' +
+      'with a clean security scan, exactly like a manually authored one. ' +
+      'Binding it into an agent afterward reuses the ALREADY-real hooks-bind ' +
+      'beat in this same journey (a different, pre-existing hook fixture, ' +
+      'proving the identical drag-into-[data-accepts="hook"]-then-save ' +
+      'mechanism) — no new work needed there. Net: 15 of 15 mockup beats are ' +
+      'now accounted for — 4 real, distinct beat refs (hooks-library, hooks-' +
+      'detail, hooks-agentic-build, hooks-bind) plus 11 honest ' +
+      'DECISION_ONE_REF_PER_STORY dup-exclusions for steps the SAME cited beat ' +
+      'already demonstrates. The `file-package` SESSION_ARTIFACT_KINDS row is ' +
+      'no longer reserved (flipped live, R4-21) and this port is the first ' +
+      'beat-level proof it actually renders drafted content, not a stub.',
   },
   {
     story: 'build-skill',
     batch: 'A',
-    port: null,
+    port: {
+      journey: 'skills',
+      beats: [
+        'skills-library',
+        'skills-agentic-build',
+        { excluded: '\'What should it do?\' — already demonstrated by the SAME beat cited at step 2 (skills-agentic-build), which fills the real [data-field="authoring-launcher-prompt"] and drives the real POST /api/studio/authoring/start', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '\'It drafts a PACKAGE: SKILL.md + the scripts and templates it references.\' — already demonstrated by the SAME beat cited at step 2, whose real file-package artifact pane renders the drafted SKILL.md', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'file-tab-1 click (\'The collector script, in full\') — already demonstrated by the SAME beat cited at step 2, which asserts the real file-package pane renders the drafted content', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'file-tab-2 click (\'And the output template that keeps the operator voice.\') — the real, captured creation-agent turn this port seeds drafted exactly ONE file (SKILL.md, no scripts/templates directory) — there is no second tab to click, a genuine capture-shape fact, not a fixture choice', decision: DECISION_BUILD_SKILL_SINGLE_FILE_PACKAGE },
+        { excluded: '\'File it — unbound, like every fresh definition.\' — not a distinct UI action; already demonstrated by the SAME beat cited at step 2, whose finalize click lands the package as an unapproved draft', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'accept-btn click — already demonstrated by the SAME beat cited at step 2, whose real [data-action="finalize-authoring"] click runs the actual finalize route end to end', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '\'On the shelf, marked unbound.\' — already demonstrated by the SAME beat cited at step 2, whose closing assertions go further than the mockup depicts here: the landed draft, a real approve click, and palette-visibility checked against the REAL agent-builder catalog', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'goto #/agents/builder/reflector — ordinary agent-builder skill composition (drag/click a catalog skill chip into Skills + save), already real and journey-proved on a different journey/agent pairing', decision: DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY },
+        { excluded: 'click release-notes into the catalog — same cross-journey mechanism as the prior step', decision: DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY },
+        { excluded: 'hover zone-skills — same cross-journey mechanism', decision: DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY },
+        { excluded: 'save-agent click — same cross-journey mechanism', decision: DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY },
+      ],
+    },
     excluded: null,
     note:
-      'R3-01-F3/F4 (this initiative) made mockup beat 1 real — ' +
-      "goto '#/library/skills' now lands on the real /skills library " +
-      '(local + community sections, derived used-by, install/approve). ' +
-      'Beats 2-8 (click build-skill-btn through the accept click) are an ' +
-      "AGENTIC AUTHORING SESSION — mockups/studio-endstate-v2/views-library.jsx:108 " +
-      "routes build-skill-btn to go('agents','session','build-skill'), i.e. " +
-      'the R2-10 interactive session shell (batch B), which does not exist; ' +
-      'the real product authors a plain skill through the /skills/new form ' +
-      'instead, not an agentic session. Beat 9 ("on the shelf, marked ' +
-      'unbound") is that same session\'s own confirmation state, so it also ' +
-      'awaits R2-10 — not ported here. Beats 10-13 (open the Reflector\'s ' +
-      'builder, click release-notes into the catalog, save the binding) ' +
-      'exercise ordinary agent-builder skill composition, which already ' +
-      'shipped before this wave (R3-01-F1/F2\'s unified palette) — real, but ' +
-      'not new work this initiative owns or ported as a beat. ' +
-      'R4-17 ASSESSED the inherited beats (2026-08-06) and does NOT own them, ' +
-      'for the same reason recorded on build-hook: R2-10 shipped the session ' +
-      'shell and R4-17 proved a new kind plugs into it with no route code, but ' +
-      'beats 2-8 need a "Creation Agent" that drafts a SKILL PACKAGE and no ' +
-      'such agent exists in skills/ (16 runtime-bearing agents, none authoring ' +
-      'a skill). `file-package` therefore stays a RESERVED artifact row — a ' +
-      'renderer with no producer is the stub that convention forbids. The ' +
-      'shipped alternative remains the /skills/new form.',
+      'R4-21 phase 2 (T3, journey-sync port, 2026-08-10/11) — the blocker the ' +
+      'original note named precisely ("a Creation Agent that drafts a SKILL ' +
+      'PACKAGE and no such agent exists") is closed: creation-agent and its ' +
+      'runner are real. `POST /api/studio/authoring/start` opens a genuine ' +
+      'session at /sessions/authoring/<sid>, and `POST /api/studio/authoring/' +
+      'finalize` runs the REAL copyStagingToLibrary commit turn, installing a ' +
+      'DRAFT skill exactly like the /skills/new form does (never auto-' +
+      'approved — D6). The drafting SDK turn itself still cannot run under ' +
+      'this harness\'s FORGE_ARCHITECT_NO_SPAWN=1 seam, so the new skills-' +
+      'agentic-build beat seeds staging/SKILL.md with the VERBATIM bytes of a ' +
+      'real, live, unsuppressed creation-agent turn the orchestrator captured ' +
+      'for this port (scripts/journeys/fixtures/r4-21-live-capture/skill/, ' +
+      'sha256-verified provenance in scripts/lib/journey-fixtures.mjs) — never ' +
+      'hand-invented — then drives every step after that for real: the file-' +
+      'package pane, the finalize click, the landed draft on its own detail ' +
+      'page, a real approve click, and a palette-visibility check against the ' +
+      'REAL agent-builder catalog (not merely a page re-render — the exact bar ' +
+      'the T3 brief set). Net: 13 of 13 mockup beats are now accounted for — 2 ' +
+      'real, distinct beat refs (skills-library, skills-agentic-build) plus 6 ' +
+      'DECISION_ONE_REF_PER_STORY dup-exclusions for steps the same cited beat ' +
+      'already demonstrates, 1 genuine capture-shape gap (the real turn drafted ' +
+      'one file, not two), and 4 cross-journey exclusions for ordinary skill-' +
+      'composition binding that R2-09 already shipped and journey-proved ' +
+      'elsewhere. The `file-package` SESSION_ARTIFACT_KINDS row is no longer ' +
+      'reserved (flipped live, R4-21) and this port is the first beat-level ' +
+      'proof it actually renders drafted content end to end, not a stub.',
   },
   {
     story: 'install-connections',

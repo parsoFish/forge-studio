@@ -275,12 +275,26 @@ function writeForgeUiRoute(root: string, routePath: string): void {
 // ===========================================================================
 
 describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () => {
-  it('AT-1: SESSION_STAGES is exactly the 6-token ordered vocabulary, frozen', () => {
-    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain']);
+  // AT-1 UPDATED (R4-21, documented edit — T3, fulfils the RED-1a pin): the
+  // frozen 6-token SESSION_STAGES vocabulary gains its FIRST-EVER extension —
+  // a 7th token, 'authoring', backing the new single-stage `authoring`
+  // session kind (creation-agent). Appended at the end (it is a standalone
+  // single-stage session, unrelated to the ordered onboarding sequence
+  // contract→instructions→secrets→demo→roadmap→brain the other 6 tokens
+  // encode). RED at branch base: today's real, unmodified session-kinds.ts
+  // still exports exactly the 6-token array with no 'authoring' member —
+  // this deepEqual (which subsumes plain membership, RED-1a's ask) fails
+  // until the extension lands.
+  it('AT-1: SESSION_STAGES is exactly the 7-token ordered vocabulary (R4-21 adds "authoring"), frozen', () => {
+    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain', 'authoring']);
+    assert.ok(
+      (SESSION_STAGES as readonly string[]).includes('authoring'),
+      'RED-1a: SESSION_STAGES must include the new "authoring" token',
+    );
     assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
   });
 
-  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 5 live + 1 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer)', () => {
+  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 6 live + 0 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer; R4-21: file-package flips reserved→live, the creation-agent authoring session\'s renderer)', () => {
     const ids = SESSION_ARTIFACT_KINDS.map((k) => k.id);
     assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
     const live = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'live').map((k) => k.id);
@@ -291,21 +305,30 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     // unchanged (contract-buildout still sits between file-package and
     // generation-gallery); only its status flips, so the LIVE set gains it
     // at its DECLARED position (before generation-gallery), not appended at
-    // the end. This assertion is RED at branch base — today's real
-    // session-kinds.ts still lists it reserved — and is the pin for that
-    // flip (kills an implementation that ships deriveContractBuildout but
-    // forgets to promote the row, leaving the onboarding descriptor a
-    // permanent lint error per validateSessionKinds's
+    // the end.
+    // R4-21 (this round): file-package — the LAST remaining reserved row —
+    // also flips to live, backing the creation-agent authoring session's
+    // deriveSessionArtifact case. This makes the whole vocabulary 6-live /
+    // 0-reserved. This assertion is RED at branch base — today's real
+    // session-kinds.ts still lists file-package reserved — and is the pin
+    // for that flip (kills an implementation that ships the authoring
+    // session's renderer but forgets to promote the row, leaving the
+    // authoring descriptor a permanent lint error per validateSessionKinds's
     // reserved-artifact-kind check).
-    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'contract-buildout', 'generation-gallery']);
-    assert.deepEqual(reserved, ['file-package']);
+    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
+    assert.deepEqual(reserved, [], 'R4-21 empties the reserved set entirely — file-package was the last row');
     assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS));
   });
 
   it('AT-3: sessionArtifactKindState is a total function — live/reserved/unknown, never throws', () => {
     assert.equal(sessionArtifactKindState('roadmap-draft'), 'live');
     assert.equal(sessionArtifactKindState('brain-structure'), 'live');
-    assert.equal(sessionArtifactKindState('file-package'), 'reserved');
+    // R4-21 (this round): file-package is now LIVE, not reserved — kills a
+    // vocabulary edit that flips SESSION_ARTIFACT_KINDS's declaration
+    // without also flipping this total function's answer (same evidence as
+    // AT-2, checked through the OTHER accessor). RED at branch base — the
+    // real, unmodified session-kinds.ts still answers 'reserved' here.
+    assert.equal(sessionArtifactKindState('file-package'), 'live');
     // R4-16 AT-21: generation-gallery is now LIVE, not reserved — kills a
     // vocabulary edit that flips SESSION_ARTIFACT_KINDS's declaration
     // without also flipping this total function's answer (they read the
@@ -410,16 +433,37 @@ describe('validateSessionKinds — semantic errors', () => {
     for (const k of SESSION_ARTIFACT_KINDS.map((x) => x.id)) assert.ok(f!.message.includes(k), `message must name the allowed set (missing "${k}")`);
   });
 
-  it('AT-10: an artifact kind that IS a reserved row → error, DISTINCT check id from "unknown kind" (parses ok, lint error)', () => {
+  // AT-10 RETARGETED (R4-21, documented edit — T3): this AT used
+  // 'file-package' as its "IS a reserved row" fixture — but file-package is
+  // THE row R4-21 flips reserved→live, and (per AT-2) it was already the
+  // LAST reserved row in the whole vocabulary, so after this round
+  // SESSION_ARTIFACT_KINDS carries ZERO reserved rows — there is no other
+  // real kind left to build a fresh "still-reserved" fixture from. Deleting
+  // this AT outright would silently drop the "reserved vs unknown are
+  // DISTINCT findings" coverage it also carried; instead it is retargeted
+  // (mirrors the ruling on session-transcript.test.ts's AT-34, same file
+  // pair, same reason) to pin the INVERSE now that the flip has landed: a
+  // descriptor declaring file-package produces ZERO reserved-artifact-kind
+  // findings AND zero unknown-artifact-kind findings — proving the flip
+  // reaches THIS validator (not just the raw SESSION_ARTIFACT_KINDS/
+  // sessionArtifactKindState accessors AT-2/AT-3 already cover). RED at
+  // branch base: today's real, unmodified session-kinds.ts still lists
+  // file-package reserved, so this descriptor DOES trip
+  // reserved-artifact-kind today — the assertion below fails until the flip
+  // lands.
+  it('AT-10 (retargeted, R4-21): file-package, now live, trips NEITHER reserved-artifact-kind NOR unknown-artifact-kind', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     writeSessionKindsYaml(root, [baseDescriptor({ artifact: { kind: 'file-package', label: 'x' } })]);
     const findings = validateSessionKinds(root);
-    const f = findings.find((x) => x.check === 'session-kinds/reserved-artifact-kind');
-    assert.ok(f, `expected a session-kinds/reserved-artifact-kind finding, got: ${JSON.stringify(findings)}`);
-    assert.equal(f!.level, 'error');
-    assert.ok(f!.message.includes('file-package'));
-    assert.ok(!findings.some((x) => x.check === 'session-kinds/unknown-artifact-kind'), 'a reserved kind must NOT also trip the unknown-kind check — they are distinct findings');
+    assert.ok(
+      !findings.some((x) => x.check === 'session-kinds/reserved-artifact-kind'),
+      `file-package must no longer trip reserved-artifact-kind once it is live, got: ${JSON.stringify(findings)}`,
+    );
+    assert.ok(
+      !findings.some((x) => x.check === 'session-kinds/unknown-artifact-kind'),
+      `file-package must resolve as a KNOWN (live) kind, never fall through to unknown-artifact-kind, got: ${JSON.stringify(findings)}`,
+    );
   });
 
   it('AT-11: duplicate descriptor ids → error naming the id', () => {
@@ -522,9 +566,9 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
   });
 
-  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 5 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding")', () => {
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 6 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding"; R4-21 adds "authoring")', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 5, `expected exactly 5 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 6, `expected exactly 6 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding", R4-21 adds "authoring"), got ids: ${descs.map((d) => d.id).join(', ')}`);
 
     const architect = byId(descs, 'architect');
     assert.equal(architect.agent, 'architect');
@@ -582,6 +626,82 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
       { kind: 'contract-buildout', label: 'Contract build-out' },
       'the label is verbatim from the mockup (mockups/studio-endstate-v2/data.jsx SESSIONS[\'project-onboarding\'].artifactLabel) — pinned exactly, not paraphrased',
     );
+
+    // R4-21: the new "authoring" session kind (creation-agent, file-package —
+    // this file's RED-1a..1d above pin the SESSION_STAGES/SESSION_ARTIFACT_KINDS
+    // vocabulary extensions this descriptor relies on). legacyRoutes:[] —
+    // there was no predecessor authoring session ROUTE before this initiative
+    // (creation-agent is new). A single-stage session: 'authoring' is
+    // SESSION_STAGES's first-ever extension, unrelated to the ordered
+    // onboarding sequence the other six tokens encode.
+    const authoring = byId(descs, 'authoring');
+    assert.equal(authoring.agent, 'creation-agent');
+    assert.deepEqual(authoring.legacyRoutes, []);
+    assert.deepEqual(authoring.stages, ['authoring']);
+    assert.equal(authoring.defaultStage, 'authoring');
+    assert.deepEqual(authoring.artifact, { kind: 'file-package', label: 'Package' });
+  });
+});
+
+// ===========================================================================
+// R4-21 — the new `authoring` session kind (creation-agent, file-package)
+// (RED-1c, RED-1d — T3 pins for the OOTB authoring agent / skill-hook
+// package producer). Mirrors AT-6 (unknown-stage) and AT-12 (unknown-agent)'s
+// existing shapes exactly — see those tests above for the sibling idiom this
+// section follows.
+// ===========================================================================
+
+describe('R4-21 — the "authoring" session kind (creation-agent, file-package)', () => {
+  // RED-1c: isolates the unknown-agent CHECK specifically — the descriptor's
+  // stage/artifact fields are deliberately kept on TODAY's already-valid
+  // vocabulary (stages:['roadmap'], artifact.kind:'roadmap-draft') so this
+  // assertion is not entangled with RED-1a/RED-1d's SEPARATE "authoring" is
+  // not yet a member of SESSION_STAGES concern. `discoverRuntimeAgentIds` is
+  // strictly `skillsDir(forgeRoot)`-scoped with no fallback to the real repo
+  // (confirmed empirically — a fixture root with no seeded skills/ dir at all
+  // can never resolve "creation-agent" regardless of what exists on disk
+  // elsewhere), so this fixture seeds it via `writeAgentSkill` exactly like
+  // every other positive-case fixture in this file (AT-6/7/12's own idiom) —
+  // `libraryFalse: true` since the real creation-agent ships `library: false`
+  // (an operator-driven bridge-dispatched helper, mirrors demo-builder/
+  // instructions-creator, never part of the composable Studio roster).
+  it('RED-1c: a descriptor whose agent is "creation-agent" resolves via discoverRuntimeAgentIds with zero unknown-agent findings', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'creation-agent', { libraryFalse: true });
+    writeSessionKindsYaml(root, [
+      baseDescriptor({ id: 'authoring', agent: 'creation-agent', stages: ['roadmap'], defaultStage: 'roadmap', artifact: { kind: 'roadmap-draft', label: 'Authored package' } }),
+    ]);
+    const findings = validateSessionKinds(root);
+    const unknownAgentFindings = findings.filter((f) => f.check === 'session-kinds/unknown-agent');
+    assert.deepEqual(
+      unknownAgentFindings,
+      [],
+      `expected zero unknown-agent findings once creation-agent resolves as a real runtime-bearing skill, got: ${JSON.stringify(unknownAgentFindings)}`,
+    );
+  });
+
+  // RED-1d (fail-closed, mirrors AT-6 exactly): proves the vocabulary stays
+  // CLOSED even after this round's extension — an out-of-vocabulary stage
+  // token must still be rejected, and the rejection message must enumerate
+  // the FULL, now-7-token allowed set (not just the 6 tokens SESSION_STAGES
+  // carries today). The 7 expected tokens are hardcoded here (not read off
+  // the live SESSION_STAGES import) deliberately — reading them off the
+  // import would make this assertion trivially self-fulfilling regardless of
+  // whether "authoring" was ever actually added, which is exactly the
+  // declared-data-fails-open shape this module's own header warns against.
+  it('RED-1d: a stage token outside SESSION_STAGES still yields session-kinds/unknown-stage naming the value + the FULL 7-token allowed set (proves the vocab stays closed after the "authoring" extension)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ stages: ['not-a-real-stage'], defaultStage: 'not-a-real-stage' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/unknown-stage');
+    assert.ok(f, `expected a session-kinds/unknown-stage finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('not-a-real-stage'), 'message must name the offending value');
+    const expectedSevenTokens = ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain', 'authoring'];
+    for (const s of expectedSevenTokens) {
+      assert.ok(f!.message.includes(s), `message must name the full 7-token allowed set (missing "${s}") — got: ${f!.message}`);
+    }
   });
 });
 
@@ -948,14 +1068,56 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
     assert.deepEqual(findings, [], `expected zero turnspec-* findings for the well-formed ADR example, got: ${JSON.stringify(findings)}`);
   });
 
-  it('AT-R422-5: ADDITIVE-OPTIONAL, proven against the REAL repo — every shipped studio/session-kinds.yaml row today has no turnSpec at all; loadSessionKinds/validateSessionKinds(REPO_ROOT) must behave EXACTLY as before (already true today at branch base — this is a must-STAY-green regression pin, not a fresh RED, honestly reported per this file\'s own AT-64..66 precedent; kills an implementation that makes turnSpec required, or that emits a finding merely for its absence)', () => {
+  // UPDATED (R4-21 phase 2, WI-1, D1 — _wave5/unit-specs/R4-21-phase2.md):
+  // this AT was written during R4-22 WI-1, when the real repo shipped 5
+  // session kinds and NONE carried a turnSpec. R4-21 phase 1 (this branch,
+  // rebased post-R4-22) already added a 6th real descriptor, "authoring" —
+  // so the OLD assertion ("exactly 5, none with turnSpec") is stale on its
+  // own terms (verified: it fails at branch base today, `6 !== 5`, BEFORE
+  // this edit — a pre-existing broken pin from the rebase, not something WI-1
+  // introduces). D1 makes "authoring" WI-1's own turnSpec consumer (ADR-043
+  // §1's worked example IS this descriptor) — the additive-optionality
+  // guarantee this AT exists to pin now has ONE declared exception, not zero.
+  //
+  // OLD assertion: descs.length === 5; every descriptor's turnSpec is
+  // undefined.
+  // NEW assertion: descs.length === 6; every descriptor OTHER than
+  // "authoring" still has turnSpec === undefined (the additive-optionality
+  // guarantee stays intact for the other 5 — NOT weakened by this edit);
+  // "authoring" carries a turnSpec that deep-equals ADR-043 §1's exact table
+  // (the same `wellFormedTurnSpec()` fixture this file's own AT-R422-9
+  // positive control already uses), and validateSessionKinds emits zero
+  // turnspec-* findings scoped to session-kind:authoring specifically (a
+  // narrower, more targeted version of "zero findings for it" than AT-17's
+  // repo-wide zero-error-findings check, which also covers this once
+  // turnSpec is well-formed).
+  // Why this is a CONTRACT CHANGE, not a weakening: the property "a
+  // turnSpec-less descriptor is untouched by turnSpec validation" is
+  // PRESERVED for every one of the 5 pre-existing kinds — this only adds the
+  // POSITIVE half (a turnSpec-bearing real descriptor validates clean and
+  // matches the ratified table) for the ONE kind D1 explicitly wires it onto.
+  it('AT-R422-5 (updated for R4-21 phase 2, WI-1, D1): ADDITIVE-OPTIONAL, proven against the REAL repo — 5 of the 6 real session kinds still carry no turnSpec at all (loadSessionKinds/validateSessionKinds(REPO_ROOT) behaves EXACTLY as before for them); "authoring" is the ONE declared exception and its turnSpec deep-equals ADR-043 §1\'s table exactly (kills an implementation that makes turnSpec required on every kind, that emits a finding merely for its absence on the OTHER 5, or that ships "authoring" with a turnSpec that drifts from the ratified table)', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 5, 'the 5 real shipped session kinds must still load — turnSpec must never become a required field');
+    assert.equal(descs.length, 6, `expected exactly 6 real session kinds (R4-16 "demo", R4-17 "onboarding", R4-21 "authoring"), got ids: ${descs.map((d) => d.id).join(', ')}`);
     for (const d of descs) {
-      assert.equal((d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec, undefined, `descriptor "${d.id}" has no turnSpec in the real yaml — must remain undefined, never defaulted to some non-optional shape`);
+      if (d.id === 'authoring') continue;
+      assert.equal(
+        (d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec,
+        undefined,
+        `descriptor "${d.id}" has no turnSpec in the real yaml — must remain undefined, never defaulted to some non-optional shape`,
+      );
     }
-    const findings = turnspecFindings(validateSessionKinds(REPO_ROOT));
-    assert.deepEqual(findings, [], `a turnSpec-less descriptor must never trip a turnspec-* finding, got: ${JSON.stringify(findings)}`);
+
+    const authoring = byId(descs, 'authoring');
+    assert.ok(authoring.turnSpec, 'expected the real "authoring" descriptor to carry a turnSpec (D1 — ADR-043 §1 verbatim)');
+    assert.deepEqual(
+      authoring.turnSpec,
+      wellFormedTurnSpec(),
+      `authoring's real turnSpec must deep-equal ADR-043 §1's exact 4-phase table (kindDir:_authoring, style:agent, analyzing→awaiting-review→committing→committed), got: ${JSON.stringify(authoring.turnSpec)}`,
+    );
+
+    const findings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:authoring');
+    assert.deepEqual(findings, [], `expected zero turnspec-* findings for the real "authoring" descriptor, got: ${JSON.stringify(findings)}`);
   });
 });
 
