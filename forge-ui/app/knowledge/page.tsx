@@ -1,17 +1,35 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
-import { fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance, deleteKb } from '@/lib/studio-client';
-import type { Kb, KbDetail, KbNodeArticle } from '@/lib/studio-client';
+import { useSearchParams, useRouter } from 'next/navigation';
+import {
+  fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance, deleteKb,
+  fetchKbIngestActivity,
+} from '@/lib/studio-client';
+import type { Kb, KbDetail, KbNodeArticle, KbIngestEvent } from '@/lib/studio-client';
 import { runConsolidateToTerminal, consolidateResultLabel } from '@/lib/kb-consolidate';
 import { StudioNav } from '@/components/StudioNav';
 import { KbGraph } from '@/components/studio/knowledge/KbGraph';
 import { NodeArticle } from '@/components/studio/knowledge/NodeArticle';
+import { ThemeList } from '@/components/studio/knowledge/ThemeList';
 import { KbHealth } from '@/components/studio/knowledge/KbHealth';
 import { GuidancePanel } from '@/components/studio/knowledge/GuidancePanel';
 import { LintResolutionPanel } from '@/components/studio/knowledge/LintResolutionPanel';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
+
+// ── Tabs (R6-08 WI-3, RULING 5: URL-synced via ?tab=) ─────────────────────────
+
+type TabId = 'explore' | 'health' | 'ingest-activity';
+
+function tabButtonStyle(active: boolean): React.CSSProperties {
+  return {
+    background: 'none', border: 'none', cursor: 'pointer',
+    fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 600,
+    color: active ? 'var(--text)' : 'var(--faint)',
+    padding: '10px 14px 8px',
+    borderBottom: active ? '2px solid var(--c-kb)' : '2px solid transparent',
+  };
+}
 
 // ── Scope badge class ─────────────────────────────────────────────────────────
 
@@ -39,9 +57,25 @@ export default function KnowledgePage() {
 // ── Inner page component ──────────────────────────────────────────────────────
 
 function KnowledgePageInner() {
+  const router       = useRouter();
   const searchParams = useSearchParams();
   const idParam      = searchParams.get('id') ?? '';
   const nodeParam    = searchParams.get('node') ?? '';
+  // RULING 1 — ?theme= is a THIN ALIAS onto the existing ?node= selection
+  // machinery below, restricted to theme-layer nodes (see pendingIsThemeRef).
+  const themeParam   = searchParams.get('theme') ?? '';
+
+  // RULING 5 — tab state is URL-synced via ?tab=, deep-linkable like ?node=/?id=.
+  const tabParam: TabId =
+    searchParams.get('tab') === 'health' || searchParams.get('tab') === 'ingest-activity'
+      ? (searchParams.get('tab') as TabId)
+      : 'explore';
+  const tab = tabParam;
+  const setTab = useCallback((next: TabId) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', next);
+    router.push(`/knowledge?${params.toString()}`);
+  }, [searchParams, router]);
 
   const [allKbs,       setAllKbs]       = useState<Kb[]>([]);
   const [currentId,    setCurrentId]    = useState<string>('');
@@ -52,6 +86,9 @@ function KnowledgePageInner() {
   const [ready,        setReady]        = useState(false);
   // Pending node to select once the KB detail is loaded
   const pendingNodeRef = useRef<string | null>(null);
+  // RULING 1 — true iff the pending node came ONLY from ?theme= (never
+  // ?node=), so the detail-load effect can restrict it to theme-layer nodes.
+  const pendingIsThemeRef = useRef<boolean>(false);
 
   // track mounted signal to avoid setState on unmounted
   const mountedRef = useRef(true);
@@ -68,33 +105,40 @@ function KnowledgePageInner() {
   }, []);
 
   // ── Resolve active KB id (from URL params → first KB) ────────────────────
-  // Priority: ?node= drives KB resolution via resolve-node endpoint.
+  // Priority: ?node= (or its ?theme= alias, RULING 1) drives KB resolution
+  //           via resolve-node endpoint.
   //           ?id= selects a KB directly.
   //           Falls back to first KB in list.
   useEffect(() => {
-    if (nodeParam) {
-      // ?node= given — resolve which KB owns this node, then set it as active.
-      // Store the node slug so the detail-load effect can select it.
-      pendingNodeRef.current = nodeParam;
+    // ?node= takes priority; ?theme= is a thin alias onto the SAME machinery
+    // when ?node= is absent — no parallel selection effect (RULING 1).
+    const pendingParam = nodeParam || themeParam;
+    if (pendingParam) {
+      // Resolve which KB owns this node, then set it as active. Store the
+      // slug so the detail-load effect can select it.
+      pendingNodeRef.current = pendingParam;
+      pendingIsThemeRef.current = !nodeParam && !!themeParam;
       if (idParam) {
-        // Both ?id= and ?node= given: trust the id, just queue the node selection.
+        // Both ?id= and ?node=/?theme= given: trust the id, just queue the node selection.
         setCurrentId(idParam);
         return;
       }
-      // Only ?node= given: call resolve-node to find the owning KB.
+      // Only ?node=/?theme= given: call resolve-node to find the owning KB.
       const signal = { cancelled: false };
-      resolveKbNode(nodeParam).then((result) => {
+      resolveKbNode(pendingParam).then((result) => {
         if (signal.cancelled) return;
         if (result?.kbId) {
           setCurrentId(result.kbId);
         } else if (allKbs.length > 0) {
           // Node not found in any KB — fall back to first KB, clear pending node.
           pendingNodeRef.current = null;
+          pendingIsThemeRef.current = false;
           setCurrentId(allKbs[0].id);
         }
       }).catch(() => {
         if (signal.cancelled) return;
         pendingNodeRef.current = null;
+        pendingIsThemeRef.current = false;
         if (allKbs.length > 0) setCurrentId(allKbs[0].id);
       });
       return () => { signal.cancelled = true; };
@@ -110,7 +154,7 @@ function KnowledgePageInner() {
       setCurrentId(allKbs[0].id);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idParam, nodeParam, allKbs]);
+  }, [idParam, nodeParam, themeParam, allKbs]);
 
   // ── Load KB detail when id changes ────────────────────────────────────────
   useEffect(() => {
@@ -125,12 +169,18 @@ function KnowledgePageInner() {
       if (signal.cancelled) return;
       setKbDetail(detail);
       setReady(true);
-      // If a node was requested via ?node=, select it now that the graph is loaded.
+      // If a node was requested via ?node= (or its ?theme= alias), select it
+      // now that the graph is loaded.
       const pending = pendingNodeRef.current;
       if (pending) {
         pendingNodeRef.current = null;
-        // Verify the node exists in this graph before selecting.
-        const nodeExists = detail?.graph?.nodes.some((n) => n.id === pending) ?? false;
+        const isThemeOnly = pendingIsThemeRef.current;
+        pendingIsThemeRef.current = false;
+        // Verify the node exists in this graph before selecting. RULING 1: a
+        // ?theme=-sourced pending selection is restricted to theme-layer
+        // nodes — the alias never selects an index/raw/guidance node.
+        const pendingNode = detail?.graph?.nodes.find((n) => n.id === pending);
+        const nodeExists = !!pendingNode && (!isThemeOnly || pendingNode.layer === 'theme');
         if (nodeExists) {
           setSelectedNode(pending);
           // Fetch its article immediately.
@@ -246,35 +296,81 @@ function KnowledgePageInner() {
         </div>
       </div>
 
-      {/* Body: graph (left) + right rail */}
-      <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+      {/* Tab bar (R6-08 WI-3, RULING 5 — URL-synced via ?tab=) */}
+      <div style={{
+        display: 'flex', alignItems: 'center', gap: 2, padding: '0 20px',
+        borderBottom: '1px solid var(--line)', background: 'var(--bg-2)', flexShrink: 0,
+      }}>
+        <button
+          data-tab="explore"
+          data-tab-active={tab === 'explore' ? 'true' : 'false'}
+          onClick={() => setTab('explore')}
+          style={tabButtonStyle(tab === 'explore')}
+        >
+          Explore
+        </button>
+        <button
+          data-tab="health"
+          data-tab-active={tab === 'health' ? 'true' : 'false'}
+          onClick={() => setTab('health')}
+          style={tabButtonStyle(tab === 'health')}
+        >
+          Health
+        </button>
+        <button
+          data-tab="ingest-activity"
+          data-tab-active={tab === 'ingest-activity' ? 'true' : 'false'}
+          onClick={() => setTab('ingest-activity')}
+          style={tabButtonStyle(tab === 'ingest-activity')}
+        >
+          Ingest Activity
+        </button>
+      </div>
 
-        {/* Graph area */}
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
-          {kbDetail ? (
-            <KbGraph
-              kbId={currentId}
-              graph={kbDetail.graph}
+      {/* Explore tab: graph (left) + reader rail (right) — the pre-existing
+          body, re-anchored under this tab; node-click→article is unchanged. */}
+      {tab === 'explore' && (
+        <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
+
+          {/* Graph area */}
+          <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+            {kbDetail ? (
+              <KbGraph
+                kbId={currentId}
+                graph={kbDetail.graph}
+                selectedNodeId={selectedNode}
+                onSelectNode={handleSelectNode}
+              />
+            ) : (
+              <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 14 }}>
+                {ready ? 'No KB data available.' : 'Loading…'}
+              </div>
+            )}
+          </div>
+
+          {/* Right rail */}
+          <div style={{
+            width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column',
+            borderLeft: '1px solid var(--line)', overflowY: 'auto', background: 'var(--bg-2)',
+          }}>
+            <NodeArticle
+              article={article}
+              loading={articleLoading}
+              onJump={handleJump}
+            />
+            <ThemeList
+              nodes={kbDetail?.graph.nodes ?? []}
               selectedNodeId={selectedNode}
               onSelectNode={handleSelectNode}
             />
-          ) : (
-            <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'var(--faint)', fontSize: 14 }}>
-              {ready ? 'No KB data available.' : 'Loading…'}
-            </div>
-          )}
+          </div>
         </div>
+      )}
 
-        {/* Right rail */}
-        <div style={{
-          width: 360, flexShrink: 0, display: 'flex', flexDirection: 'column',
-          borderLeft: '1px solid var(--line)', overflowY: 'auto', background: 'var(--bg-2)',
-        }}>
-          <NodeArticle
-            article={article}
-            loading={articleLoading}
-            onJump={handleJump}
-          />
+      {/* Health tab: lint resolution + guidance + KB health, moved under this
+          branch (F1 — not rendered unconditionally). */}
+      {tab === 'health' && (
+        <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20, display: 'flex', flexDirection: 'column', gap: 16 }}>
           {currentId && (
             <LintResolutionPanel kbId={currentId} onChanged={handlePinned} />
           )}
@@ -287,8 +383,63 @@ function KnowledgePageInner() {
             <KbHealth health={kbDetail.health} />
           )}
         </div>
-      </div>
+      )}
+
+      {/* Ingest-activity tab: read-only reflect.kb-ingest feed (WI-2). */}
+      {tab === 'ingest-activity' && (
+        <IngestActivityPanel kbId={currentId} />
+      )}
     </main>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// IngestActivityPanel (R6-08 WI-2) — read-only reflect.kb-ingest feed.
+// NO button, NO data-action anywhere in this component: nothing here can
+// trigger an ingest (ingest stays reflection-only, operator decision 3).
+// ---------------------------------------------------------------------------
+function IngestActivityPanel({ kbId }: { kbId: string }) {
+  const [events, setEvents] = useState<KbIngestEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!kbId) { setEvents([]); return; }
+    setLoading(true);
+    const signal = { cancelled: false };
+    fetchKbIngestActivity(kbId).then((evs) => {
+      if (signal.cancelled) return;
+      setEvents(evs);
+      setLoading(false);
+    }).catch(() => { if (!signal.cancelled) setLoading(false); });
+    return () => { signal.cancelled = true; };
+  }, [kbId]);
+
+  return (
+    <div
+      data-component="ingest-activity"
+      data-ingest-event-count={events.length}
+      style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: 20 }}
+    >
+      <div className="panel-head">INGEST ACTIVITY</div>
+      {loading && <div style={{ color: 'var(--dim)', fontSize: 12.5, marginTop: 8 }}>Loading…</div>}
+      {!loading && events.length === 0 && (
+        <div style={{ color: 'var(--faint)', fontSize: 12.5, marginTop: 8 }}>No ingest activity recorded yet.</div>
+      )}
+      {events.map((e, i) => (
+        <div
+          key={`${e.cycleId}-${i}`}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 14, padding: '7px 4px',
+            borderBottom: '1px solid var(--line)', fontSize: 12.5, color: 'var(--dim)',
+          }}
+        >
+          <span data-ingest-kb={e.kb} style={{ fontFamily: 'var(--font-mono)', color: 'var(--text)' }}>{e.kb}</span>
+          <span data-ingest-fresh-themes={e.freshThemes}>{e.freshThemes} fresh theme{e.freshThemes !== 1 ? 's' : ''}</span>
+          <span data-ingest-impl={e.impl} style={{ color: 'var(--faint)' }}>{e.impl}</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--faint)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>{e.cycleId}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 
