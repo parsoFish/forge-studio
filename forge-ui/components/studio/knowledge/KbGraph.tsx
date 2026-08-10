@@ -29,6 +29,24 @@ function readStoredPreset(kbId: string): LayoutPreset {
   return 'balanced';
 }
 
+// R6-08 WI-3 (RULING 4) — `tension` is a SEPARATE, independent low/med/high
+// control, orthogonal to the density preset above (not a combined 9-way
+// matrix). Its numeric value overrides whichever preset's own default
+// `tension` is currently active.
+type TensionLevel = 'low' | 'med' | 'high';
+const TENSION_STORAGE_PREFIX = 'kb-tension:';
+const TENSION_LABELS: Record<TensionLevel, string> = { low: 'Low', med: 'Med', high: 'High' };
+const TENSION_VALUES: Record<TensionLevel, number> = { low: 0.3, med: 1, high: 3 };
+
+function readStoredTension(kbId: string): TensionLevel {
+  if (typeof window === 'undefined') return 'med';
+  try {
+    const raw = window.localStorage.getItem(TENSION_STORAGE_PREFIX + kbId);
+    if (raw === 'low' || raw === 'med' || raw === 'high') return raw;
+  } catch { /* localStorage unavailable */ }
+  return 'med';
+}
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 interface Props {
@@ -49,15 +67,21 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
   const [, forceRender] = useState(0);
 
   const [layoutPreset, setLayoutPreset] = useState<LayoutPreset>('balanced');
+  const [tension, setTensionState] = useState<TensionLevel>('med');
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
 
   const onTick = useCallback(() => { forceRender((n) => n + 1); }, []);
   const { start: simStart, stop: simStop, reheat, simRef } = useForceSim(onTick);
 
-  // ── On KB change: load the persisted density preset ───────────────────────
-  useEffect(() => { setLayoutPreset(readStoredPreset(kbId)); }, [kbId]);
+  // ── On KB change: load the persisted density preset + tension level ───────
+  useEffect(() => {
+    setLayoutPreset(readStoredPreset(kbId));
+    setTensionState(readStoredTension(kbId));
+  }, [kbId]);
 
-  // ── On graph data / preset change: (re)build + start the d3-force sim ──────
+  // ── On graph data / preset / tension change: (re)build + start the d3-force
+  //    sim. `tension` (RULING 4) overrides the active preset's own default —
+  //    the two controls stay independent, never a combined matrix. ──────────
   useEffect(() => {
     const svg = svgRef.current;
     const W = svg?.clientWidth || 700;
@@ -67,10 +91,10 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
     linksRef.current = simLinks;
     setHoveredNode(null);
     forceRender((n) => n + 1);
-    simStart(simNodes, simLinks, W, H, LAYOUT_PRESETS[layoutPreset]);
+    simStart(simNodes, simLinks, W, H, { ...LAYOUT_PRESETS[layoutPreset], tension: TENSION_VALUES[tension] });
     return () => simStop();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [kbId, graph, layoutPreset]);
+  }, [kbId, graph, layoutPreset, tension]);
 
   // ── Pan/zoom — d3-zoom owns the viewport transform (imperative, no stale
   //    closures). The zoom ignores pointer-downs that land on a node (those
@@ -166,6 +190,15 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
     setLayoutPreset(preset);
     if (typeof window !== 'undefined') {
       try { window.localStorage.setItem(LAYOUT_STORAGE_PREFIX + kbId, preset); } catch { /* */ }
+    }
+  }, [kbId]);
+
+  // ── Hub-anchor tension (RULING 4 — a SEPARATE control from the preset
+  //    above; persisted per-KB; sim rebuilds via the effect) ─────────────────
+  const changeTension = useCallback((level: TensionLevel) => {
+    setTensionState(level);
+    if (typeof window !== 'undefined') {
+      try { window.localStorage.setItem(TENSION_STORAGE_PREFIX + kbId, level); } catch { /* */ }
     }
   }, [kbId]);
 
@@ -311,6 +344,45 @@ export function KbGraph({ kbId, graph, selectedNodeId, onSelectNode }: Props) {
             }}
           >
             {PRESET_LABELS[preset]}
+          </button>
+        ))}
+      </div>
+
+      {/* Hub-anchor tension (top-left, below layout presets) — RULING 4: a
+          SEPARATE, independent low/med/high control, not a combined preset
+          matrix. Mirrors the layout-preset control's own shape/style. */}
+      <div
+        data-component="kb-tension-controls"
+        data-tension={tension}
+        style={{ position: 'absolute', top: 44, left: 10, zIndex: 5, display: 'flex', alignItems: 'center', gap: 4 }}
+      >
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 10.5, color: 'var(--faint)', marginRight: 2 }}>
+          tension
+        </span>
+        {(['low', 'med', 'high'] as TensionLevel[]).map((level) => (
+          <button
+            key={level}
+            type="button"
+            title={`${TENSION_LABELS[level]} tension`}
+            aria-label={`${TENSION_LABELS[level]} tension`}
+            aria-pressed={tension === level}
+            data-tension-level={level}
+            {...(tension === level ? { 'data-active': 'true' } : {})}
+            onClick={() => changeTension(level)}
+            style={{
+              background: tension === level ? 'rgba(92,200,255,.12)' : 'var(--panel)',
+              color: tension === level ? 'var(--steel)' : 'var(--dim)',
+              border: `1px solid ${tension === level ? 'rgba(92,200,255,.4)' : 'var(--line)'}`,
+              borderRadius: 4,
+              cursor: 'pointer',
+              fontFamily: 'var(--font-display)',
+              fontSize: 10.5,
+              fontWeight: 600,
+              padding: '3px 8px',
+              lineHeight: 1,
+            }}
+          >
+            {TENSION_LABELS[level]}
           </button>
         ))}
       </div>

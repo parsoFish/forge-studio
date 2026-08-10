@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, append
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { resolveGuardedPath, type PathGuardResult } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedReadFile, guardedReadDir, type PathGuardResult } from './studio-path-guard.ts';
 // gray-matter has no usable types; treated as `any` like cli/brain-lint.ts and
 // cli/brain-fix-auto.ts, which import it the same way.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -39,7 +39,8 @@ import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.t
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
-import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
+import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, type Finding } from './brain-lint.ts';
+import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import {
@@ -558,6 +559,74 @@ async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: st
 // KB health computation
 // ---------------------------------------------------------------------------
 
+/** R6-08 WI-1 — per-check itemization row. `status` is 'unknown' only when
+ *  the whole lint run threw (RULING 3) — never a per-check outcome otherwise.
+ *
+ *  R6-08 4on (declared-data-fails-open fix) — `status:'n/a'` means this check
+ *  never actually inspected THIS KB's content: neither the shared full-scope
+ *  scan (`readThemeFiles`-based, forge-cycles/forge-dev only) nor this KB's
+ *  own theme files (via `lintThemeFiles`) cover it. THE HONESTY INVARIANT: a
+ *  check reports `'pass'` ONLY when it genuinely ran over this KB's content
+ *  and found nothing — a check that never looked reports `'n/a'`, never a
+ *  silent `'pass'`. */
+type CheckHealthStatus = 'pass' | 'warn' | 'fail' | 'unknown' | 'n/a';
+type CheckHealthEntry = { check: string; status: CheckHealthStatus; errorCount: number; flagCount: number };
+
+/** Index/category pages that live alongside a KB's `themes/` dir siblings but
+ *  are never themselves a theme — excluded from the KB's OWN theme-file list.
+ *  Mirrors `orchestrator/kb-health.ts`'s `THEME_INDEX_FILES` listing style
+ *  (kept local rather than imported — that module lives under `orchestrator/`,
+ *  which this fix does not touch). */
+const KB_OWN_THEME_INDEX_FILES = new Set([
+  'README.md',
+  'patterns.md',
+  'antipatterns.md',
+  'operations.md',
+  'decisions.md',
+  'reference.md',
+]);
+
+/**
+ * R6-08 4on — a KB's OWN theme files (`<brainDir>/themes/*.md`, index pages
+ * excluded), for ANY KB kind — including project/band KBs whose themes the
+ * shared `readThemeFiles`-based checks (cli/brain-lint.ts) never scan. This is
+ * what lets `buildKbHealth` give those KBs a REAL (not silently-passing)
+ * verdict on the `LINT_THEME_FILE_CHECKS` subset via `lintThemeFiles`.
+ *
+ * Routed through `guardedReadDir` (a recognized containment-guard producer,
+ * cli/studio-path-guard.ts) rather than a raw `readdirSync` — `brainDir` is
+ * split back into its trusted base + its own leaf segment (mirrors this
+ * file's `guardKbTail` convention) so the leaf re-enters as a `segments[]`
+ * element and is identity-checked, never folded into the guard's `root`.
+ */
+function listOwnThemeFiles(brainDir: string): string[] {
+  const names = guardedReadDir(dirname(brainDir), [basename(brainDir), 'themes']);
+  if (!names) return [];
+  return names
+    .filter((name) => name.endsWith('.md') && !KB_OWN_THEME_INDEX_FILES.has(name))
+    .map((name) => join(brainDir, 'themes', name));
+}
+
+/** Stable identity for a Finding, used to union `scopedFull` and `ownFindings`
+ *  without double-counting the SAME defect surfaced by both lenses (e.g. a
+ *  forge-side KB's theme scanned by both the shared `readThemeFiles`-based
+ *  check and `lintThemeFiles` emit byte-identical check/file/message). Two
+ *  DIFFERENT checks (e.g. `checkProjectBrainIndexes` vs `checkIndexSync`)
+ *  independently flagging the same underlying theme are NOT deduped — they
+ *  are two genuinely distinct, now-real per-check verdicts. */
+function findingIdentity(f: Finding): string {
+  return `${f.check ?? ''}::${f.file}::${f.message}`;
+}
+
+/** Union two finding lists by `findingIdentity`, preserving `a`'s findings
+ *  first then any of `b`'s not already present. */
+function unionFindings(a: readonly Finding[], b: readonly Finding[]): Finding[] {
+  const seen = new Map<string, Finding>();
+  for (const f of a) seen.set(findingIdentity(f), f);
+  for (const f of b) if (!seen.has(findingIdentity(f))) seen.set(findingIdentity(f), f);
+  return [...seen.values()];
+}
+
 type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
   orphans: number;
@@ -565,6 +634,12 @@ type KbHealth = {
   staleness: { staleRawCount: number; staleThemeCount: number };
   lintFlags: number;
   lintErrors: number;
+  /** R6-08 WI-1 — one entry per CHECK_NAMES, always present (never omitted
+   *  for a clean check — status:'pass', count 0). */
+  checks: CheckHealthEntry[];
+  /** R6-08 WI-1 RULING 3 — set iff the lint run itself threw; every `checks[]`
+   *  entry is 'unknown' in that case, never a silent 0/0 pass. */
+  healthError?: string;
 };
 
 /**
@@ -573,6 +648,10 @@ type KbHealth = {
  *   2. Running runBrainLint(scope:'full') and filtering findings to this kb's dir.
  *   3. Deriving orphans (nodes with degree 0), link density (edges/nodes),
  *      and staleness (nodes with updated_at older than 30 days).
+ *   4. Itemizing findings per CHECK_NAMES (R6-08 WI-1) — the aggregate
+ *      lintFlags/lintErrors fields are KEPT (RULING 2), derived as a roll-up
+ *      over `checks[]` rather than computed independently, so the two can
+ *      never diverge.
  */
 function buildKbHealth(
   forgeRoot: string,
@@ -614,23 +693,108 @@ function buildKbHealth(
     }
   }
 
-  // Run brain-lint and filter findings to this kb's directory. MAJOR 1: scope
-  // through the SAME exact-dir helper consolidate/lint use (resolveKbBrainDir),
-  // so a project brain at brain/projects/<id> is counted — the old hardcoded
-  // `resolve(forgeRoot,'brain',kbId)` prefix matched nothing for a project KB
-  // and reported a false 0, hiding the Lint section for exactly those KBs.
+  // Run brain-lint and combine it with the KB's OWN theme files (R6-08 4on —
+  // fix for 3 adversarial-review-confirmed declared-data-fails-open MAJORs):
+  //
+  //   scopedFull  — findings from the shared, readThemeFiles-based full-scope
+  //                 scan, filtered to this KB's dir (MAJOR 1 fix: scope through
+  //                 the SAME exact-dir helper consolidate/lint use,
+  //                 resolveKbBrainDir/scopeFindingsToKb, so a project brain at
+  //                 brain/projects/<id> is counted).
+  //   ownFindings — findings from lintThemeFiles run over the KB's OWN theme
+  //                 files (listOwnThemeFiles), covering LINT_THEME_FILE_CHECKS
+  //                 for ANY kb kind — including project/band KBs whose themes
+  //                 the shared scan never sees at all (F1 fix: those KBs used
+  //                 to report 8 of 10 checks 'pass' despite never being
+  //                 scanned; F2 fix: checkReflectorLoss is a GLOBAL advisory
+  //                 over _queue/done, never scoped to any one KB, so it must
+  //                 never claim to have verified one — see CHECK_SCOPE).
+  //
+  // THE HONESTY INVARIANT: a check reports 'pass' ONLY if it actually
+  // inspected THIS KB and found nothing. A check neither in this KB's scan
+  // domain (CHECK_SCOPE) NOR covered by its own theme files
+  // (LINT_THEME_FILE_CHECKS) reports 'n/a' — NEVER 'pass'.
+  //
+  // RULING 3 (unchanged): if the lint run itself throws (e.g. a category
+  // index that is a directory — readIndexEntries' readFileSync throws EISDIR
+  // inside checkProjectBrainIndexes, uncaught by runBrainLint), every check
+  // reports status:'unknown' plus a top-level healthError — never a silent
+  // 0/0 "clean" pass.
   let lintFlags = 0;
   let lintErrors = 0;
+  let checks: CheckHealthEntry[];
+  let healthError: string | undefined;
   try {
+    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+    const brainRoot = join(forgeRoot, 'brain');
+
     const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
-    const kbFindings = scopeFindingsToKb(forgeRoot, kbId, findings);
-    lintFlags = kbFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
-    lintErrors = kbFindings.filter((f) => f.category === 'error').length;
-  } catch {
-    // Non-fatal: lint failure doesn't break the health response
+    const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
+
+    const ownThemeFiles = brainDir ? listOwnThemeFiles(brainDir) : [];
+    const ownFindings = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
+
+    // Is this KB's brain dir within a given check's CHECK_SCOPE domain?
+    const isApplicableScoped = (name: string): boolean => {
+      if (!brainDir) return false;
+      switch (CHECK_SCOPE[name]) {
+        case 'forge-themes':
+          // readThemeFiles (brain-lint.ts) only ever walks brain/cycles/themes
+          // and brain/forge-dev/themes — a project/band KB's dir is never one
+          // of these two exact top-level dirs.
+          return brainDir === join(brainRoot, 'cycles') || brainDir === join(brainRoot, 'forge-dev');
+        case 'project-indexes':
+          // checkProjectBrainIndexes walks brain/projects/* — applicable iff
+          // this KB's dir is a direct child of brain/projects/.
+          return dirname(brainDir) === join(brainRoot, 'projects');
+        case 'global':
+        default:
+          // checkReflectorLoss (_queue/done) is never scoped to any one KB.
+          return false;
+      }
+    };
+    const isCoveredByOwn = (name: string): boolean => LINT_THEME_FILE_CHECKS.has(name) && ownThemeFiles.length > 0;
+
+    checks = CHECK_NAMES.map((name) => {
+      const applicable = isApplicableScoped(name);
+      const coveredByOwn = isCoveredByOwn(name);
+      if (!applicable && !coveredByOwn) {
+        // Never scanned THIS kb for this check — honest 'n/a', never 'pass'.
+        return { check: name, status: 'n/a' as const, errorCount: 0, flagCount: 0 };
+      }
+      const fromScoped = applicable ? scopedFull.filter((f) => f.check === name) : [];
+      const fromOwn = coveredByOwn ? ownFindings.filter((f) => f.check === name) : [];
+      const list = unionFindings(fromScoped, fromOwn);
+      const errorCount = list.filter((f) => f.category === 'error').length;
+      const flagCount = list.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+      const status: CheckHealthStatus = errorCount > 0 ? 'fail' : flagCount > 0 ? 'warn' : 'pass';
+      return { check: name, status, errorCount, flagCount };
+    });
+
+    // F3: the aggregate rolls up over the FULL union of scopedFull ∪
+    // ownFindings — EVERY finding, regardless of whether its `check` is one
+    // of CHECK_NAMES — so a finding whose check name isn't itemized is never
+    // silently dropped from the totals (the bug this WI's F3 also fixes).
+    const allFindings = unionFindings(scopedFull, ownFindings);
+    lintErrors = allFindings.filter((f) => f.category === 'error').length;
+    lintFlags = allFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+  } catch (err) {
+    checks = CHECK_NAMES.map((name) => ({ check: name, status: 'unknown' as const, errorCount: 0, flagCount: 0 }));
+    healthError = err instanceof Error ? err.message : String(err);
+    lintFlags = 0;
+    lintErrors = 0;
   }
 
-  return { layerBalance, orphans, linkDensity, staleness: { staleRawCount, staleThemeCount }, lintFlags, lintErrors };
+  return {
+    layerBalance,
+    orphans,
+    linkDensity,
+    staleness: { staleRawCount, staleThemeCount },
+    lintFlags,
+    lintErrors,
+    checks,
+    ...(healthError !== undefined ? { healthError } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -1218,6 +1382,47 @@ export async function handleStudioKbRoutes(
     const runId = decodeURIComponent(fixStatusMatch[2]);
     if (!SAFE_ID_RE.test(runId)) { sendJson(res, 400, { error: 'invalid run id' }, origin); return true; }
     sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
+    return true;
+  }
+
+  // ---- GET /api/studio/kbs/:id/ingest-activity (R6-08 WI-2) — READ-ONLY -----
+  // Lists real `reflect.kb-ingest` events (orchestrator/kb-health.ts) for this
+  // KB, discovered via a listCycles-style walk of `_logs/<cycleId>/events.jsonl`
+  // (mirroring cli/metrics.ts's summariseCycle: guardedReadFile with cycleId as
+  // its OWN segments[] element, never folded into the root). The kbId filter is
+  // applied AFTER the guarded read, on the parsed event's own metadata — never
+  // folded into the filesystem path. GET-only: no dispatch branch exists on
+  // this URL pattern, so nothing here can trigger an ingest (see
+  // scripts/check-kb-ingest-affordance.test.ts's standing ratchet).
+  const ingestActivityMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/ingest-activity$/);
+  if (ingestActivityMatch && method === 'GET') {
+    try {
+      const kbId = decodeURIComponent(ingestActivityMatch[1]);
+      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+
+      const events: Array<{ kb: string; freshThemes: number; impl: string; cycleId: string }> = [];
+      for (const cycleId of listCycles(ctx.logsRoot)) {
+        const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
+        if (raw === null) continue;
+        for (const line of raw.split('\n')) {
+          if (!line.trim()) continue;
+          let ev: { message?: string; metadata?: Record<string, unknown> };
+          try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.message !== 'reflect.kb-ingest') continue;
+          const md = ev.metadata ?? {};
+          if (md['kb'] !== kbId) continue;
+          events.push({
+            kb: kbId,
+            freshThemes: typeof md['fresh_themes'] === 'number' ? md['fresh_themes'] : 0,
+            impl: typeof md['impl'] === 'string' ? md['impl'] : 'unknown',
+            cycleId,
+          });
+        }
+      }
+      sendJson(res, 200, { events }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
     return true;
   }
 

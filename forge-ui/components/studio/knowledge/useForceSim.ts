@@ -58,14 +58,21 @@ export type SimLink = {
 
 export type KbSimulation = Simulation<SimNode, SimLink>;
 
-// Layout density — link rest length + n-body charge. The operator picks a preset.
-export type LayoutForces = { linkDistance: number; charge: number };
+// Layout density — link rest length + n-body charge — plus `tension`, the
+// strength of an ADDITIONAL hub-anchor pull toward each node's nearest
+// index-layer hub (R6-08 WI-3, RULING 4). `tension` is a SEPARATE,
+// independent axis from the compact/balanced/spread density preset — the UI
+// (KbGraph.tsx) exposes its own low/med/high control that overrides whichever
+// preset's default is active, rather than a combined 9-way preset matrix.
+// Each preset still carries its OWN default so `LAYOUT_PRESETS[preset]` alone
+// remains a complete, valid `LayoutForces` value.
+export type LayoutForces = { linkDistance: number; charge: number; tension: number };
 export type LayoutPreset = 'compact' | 'balanced' | 'spread';
 
 export const LAYOUT_PRESETS: Record<LayoutPreset, LayoutForces> = {
-  compact:  { linkDistance: 70,  charge: -200 },
-  balanced: { linkDistance: 120, charge: -360 },
-  spread:   { linkDistance: 200, charge: -680 },
+  compact:  { linkDistance: 70,  charge: -200, tension: 0.5 },
+  balanced: { linkDistance: 120, charge: -360, tension: 1 },
+  spread:   { linkDistance: 200, charge: -680, tension: 1.5 },
 };
 
 export const DEFAULT_FORCES: LayoutForces = LAYOUT_PRESETS.balanced;
@@ -127,6 +134,51 @@ export function buildSimData(
   return { simNodes, simLinks };
 }
 
+/**
+ * R6-08 WI-3 (RULING 4) — each node's nearest index-layer hub, computed
+ * CLIENT-side from the graph's own edges (no server change: orchestrator/
+ * kb-graph.ts already emits catIndex→theme and rootIndex→theme edges — see
+ * buildKbGraph's INDEX → themes pass). A node's hub is the source of any
+ * edge that targets it whose source is an 'index'-layer node — the direct
+ * parent index (a category index when present, the root index otherwise).
+ */
+function computeHubMap(simNodes: SimNode[], simLinks: SimLink[]): Map<string, string> {
+  const nodeById = new Map(simNodes.map((n) => [n.id, n]));
+  const hubOf = new Map<string, string>();
+  for (const link of simLinks) {
+    if (hubOf.has(link.toId)) continue;
+    const fromNode = nodeById.get(link.fromId);
+    if (fromNode?.layer === 'index') hubOf.set(link.toId, link.fromId);
+  }
+  return hubOf;
+}
+
+/**
+ * A custom d3-force: on every tick, nudge each hub-having node's velocity
+ * toward its hub's current position, scaled by `tension` (and by `alpha`,
+ * mirroring how every other force here cools as the simulation settles —
+ * see `.alphaDecay` below). This is additive to the existing force chain,
+ * not a replacement for the 'link' force already pulling along the same
+ * edge — higher tension simply pulls harder, so a theme settles measurably
+ * closer to its hub under high tension than under low tension.
+ */
+function hubAnchorForce(
+  hubOf: Map<string, string>,
+  nodeById: Map<string, SimNode>,
+  tension: number,
+): (alpha: number) => void {
+  return (alpha: number) => {
+    for (const [nodeId, hubId] of hubOf) {
+      const node = nodeById.get(nodeId);
+      const hub = nodeById.get(hubId);
+      if (!node || !hub) continue;
+      const k = tension * alpha * 0.03;
+      node.vx = (node.vx ?? 0) + (hub.x - node.x) * k;
+      node.vy = (node.vy ?? 0) + (hub.y - node.y) * k;
+    }
+  };
+}
+
 // ── Simulation hook ───────────────────────────────────────────────────────────
 
 export function useForceSim(onTick: () => void) {
@@ -140,6 +192,8 @@ export function useForceSim(onTick: () => void) {
   const start = useCallback(
     (simNodes: SimNode[], simLinks: SimLink[], W: number, H: number, forces: LayoutForces) => {
       simRef.current?.stop();
+      const nodeById = new Map(simNodes.map((n) => [n.id, n]));
+      const hubOf = computeHubMap(simNodes, simLinks);
       const sim = forceSimulation<SimNode>(simNodes)
         .force(
           'link',
@@ -153,6 +207,9 @@ export function useForceSim(onTick: () => void) {
         .force('x', forceX<SimNode>(W / 2).strength(0.03))
         .force('y', forceY<SimNode>(H / 2).strength(0.03))
         .force('collide', forceCollide<SimNode>().radius((d) => LAYER_RADIUS[d.layer] + 7).strength(0.85))
+        // R6-08 WI-3 (RULING 4) — additive hub-anchor pull, strength set by
+        // the SEPARATE `tension` control (not folded into the density preset).
+        .force('hub', hubAnchorForce(hubOf, nodeById, forces.tension))
         .alpha(1)
         .alphaDecay(0.028)
         .on('tick', onTick);

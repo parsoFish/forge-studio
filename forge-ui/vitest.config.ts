@@ -31,6 +31,12 @@ export default defineConfig({
   },
   test: {
     environment: 'node',
-    include: ['lib/**/*.test.ts'],
+    // R6-08 WI-3 (T3 test-writer addition): `components/**/*.test.ts` added
+    // alongside the pre-existing `lib/**/*.test.ts` so
+    // components/studio/knowledge/useForceSim.test.ts (the first pure-fn test
+    // co-located with its source module rather than under lib/) is actually
+    // discovered. No existing test moves or changes scope — this only widens
+    // discovery to a directory that previously had zero test files in it.
+    include: ['lib/**/*.test.ts', 'components/**/*.test.ts'],
   },
 });

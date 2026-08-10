@@ -529,6 +529,19 @@ export type KbEdge = { from: string; to: string };
 
 export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
 
+/** R6-08 WI-1 — one per-check itemization row (see cli/bridge-studio-kbs.ts's
+ *  buildKbHealth). `status: 'unknown'` only ever appears when the whole lint
+ *  run threw (RULING 3), reflected via the sibling `KbHealth.healthError`.
+ *  R6-08 4on — `status: 'n/a'` means this check never actually inspected
+ *  THIS kb (neither the shared full-scope scan nor this kb's own theme files
+ *  cover it) — the honest alternative to a declared-data-fails-open 'pass'. */
+export type KbHealthCheck = {
+  check: string;
+  status: 'pass' | 'warn' | 'fail' | 'unknown' | 'n/a';
+  errorCount: number;
+  flagCount: number;
+};
+
 export type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
   orphans: number;
@@ -536,6 +549,11 @@ export type KbHealth = {
   staleness: { staleRawCount: number; staleThemeCount: number };
   lintFlags: number;
   lintErrors: number;
+  /** R6-08 WI-1 — optional for older fixtures/tests that don't set it; a
+   *  real bridge response always includes one entry per CHECK_NAMES. */
+  checks?: KbHealthCheck[];
+  /** R6-08 WI-1 RULING 3 — present iff the server's lint run threw. */
+  healthError?: string;
 };
 
 export type KbNodeArticle = {
@@ -916,6 +934,24 @@ export async function fetchKbNode(id: string, nodeId: string): Promise<KbNodeArt
     null,
   );
   return body?.node ?? null;
+}
+
+/** R6-08 WI-2 — one real `reflect.kb-ingest` event, read-only. */
+export type KbIngestEvent = {
+  kb: string;
+  freshThemes: number;
+  impl: string;
+  cycleId: string;
+};
+
+/** Fetch a KB's read-only ingest-activity feed (R6-08 WI-2). GET-only — this
+ *  never triggers an ingest; it only lists past `reflect.kb-ingest` events. */
+export async function fetchKbIngestActivity(id: string): Promise<KbIngestEvent[]> {
+  const body = await studioGet<{ events?: KbIngestEvent[] }>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/ingest-activity`,
+    { events: [] },
+  );
+  return body.events ?? [];
 }
 
 /** Fetch the studio catalog. */

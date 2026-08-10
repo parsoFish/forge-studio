@@ -85,6 +85,110 @@ describe('KbHealth — structural data-* hooks (R1-06 WI-3 group B, 2)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// R6-08 WI-1 RED-D — per-check itemization rows. `buildKbHealth` (WI-1,
+// cli/bridge-studio-kbs.ts) gains a `checks: Array<{check,status,errorCount,
+// flagCount}>` field (see cli/bridge-studio-kbs.test.ts's RED-A/B/C for the
+// backend RED pins); this pins the F2 Health tab's RENDER of that field —
+// one `[data-check="<name>"]` row per entry, carrying `data-check-status`
+// and `data-check-count`. `KbHealthData` (lib/studio-client.ts) does not
+// declare `checks` yet — that file is a WI-1 implementation target, not
+// edited by this RED-pin pass — so the fixture below widens the type
+// locally via `@ts-expect-error` (harmless at runtime: vitest's oxc
+// transform strips types and never enforces this; the directive only
+// matters for a separate `tsc --noEmit` pass, where it correctly suppresses
+// the genuine excess-property error until studio-client.ts adds the field).
+// KbHealth.tsx renders none of this today (component-source-verified: it
+// destructures only layerBalance/orphans/linkDensity/staleness/lintFlags/
+// lintErrors), so passing `checks` is silently ignored by the CURRENT
+// component — a legitimate RED via absent markup, not a crash.
+// ---------------------------------------------------------------------------
+describe('KbHealth — per-check itemization rows (R6-08 WI-1 RED-D)', () => {
+  // @ts-expect-error — `checks` is the R6-08 WI-1 addition to KbHealthData;
+  // not yet declared on the type (studio-client.ts is an implementation
+  // target). See the block comment above for why this is safe under vitest.
+  const health = baseHealth({
+    lintErrors: 1,
+    lintFlags: 0,
+    checks: [
+      { check: 'checkFrontmatter', status: 'fail', errorCount: 1, flagCount: 0 },
+      { check: 'checkOrphans', status: 'pass', errorCount: 0, flagCount: 0 },
+    ],
+  });
+  const html = render(health);
+
+  it('RED: renders one [data-check="<name>"] row per checks[] entry', () => {
+    expect(html).toContain('data-check="checkFrontmatter"');
+    expect(html).toContain('data-check="checkOrphans"');
+  });
+
+  it('RED: each row carries data-check-status reflecting the entry\'s status', () => {
+    expect(html).toContain('data-check-status="fail"');
+    expect(html).toContain('data-check-status="pass"');
+  });
+
+  it('RED: each row carries data-check-count reflecting the entry\'s finding count', () => {
+    // checkFrontmatter: errorCount 1 + flagCount 0 → 1. checkOrphans: 0 + 0 → 0.
+    expect(html).toContain('data-check-count="1"');
+    expect(html).toContain('data-check-count="0"');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// R6-08 4on — 'n/a' check status must render honestly: distinct data-* value,
+// AND visually distinct from a real 'pass' (not a green dot) — otherwise the
+// UI itself would re-introduce the declared-data-fails-open defect the
+// backend fix (buildKbHealth) just closed, one layer up in the render.
+// ---------------------------------------------------------------------------
+describe('KbHealth — "n/a" check status renders honestly, distinct from "pass" (R6-08 4on)', () => {
+  // @ts-expect-error — `checks` widened locally, same rationale as the RED-D
+  // block above (studio-client.ts's KbHealthCheck.status now includes 'n/a').
+  const health = baseHealth({
+    lintErrors: 0,
+    lintFlags: 0,
+    checks: [
+      { check: 'checkOrphans', status: 'pass', errorCount: 0, flagCount: 0 },
+      { check: 'checkReflectorLoss', status: 'n/a', errorCount: 0, flagCount: 0 },
+    ],
+  });
+  const html = render(health);
+
+  it('renders data-check-status="n/a" for an n/a check', () => {
+    expect(html).toContain('data-check-status="n/a"');
+  });
+
+  it('renders the n/a row with an honest, non-"pass" label (never claims a clean scan)', () => {
+    // Extract the checkReflectorLoss row's own markup slice so this assertion
+    // can't accidentally match text belonging to the sibling checkOrphans row.
+    const rowStart = html.indexOf('data-check="checkReflectorLoss"');
+    const rowEnd = html.indexOf('data-check="', rowStart + 1);
+    const row = html.slice(rowStart, rowEnd === -1 ? undefined : rowEnd);
+    expect(row).not.toContain('>pass<');
+    expect(row.toLowerCase()).toContain('n/a');
+  });
+
+  it('gives the n/a row a visually distinct marker from a real "pass" (not the same green dot)', () => {
+    const passRowStart = html.indexOf('data-check="checkOrphans"');
+    const passRowEnd = html.indexOf('data-check="', passRowStart + 1);
+    const passRow = html.slice(passRowStart, passRowEnd === -1 ? undefined : passRowEnd);
+
+    const naRowStart = html.indexOf('data-check="checkReflectorLoss"');
+    // Bound to the row's OWN closing tag (each check row is a single flat
+    // <div>...</div> — no nested divs), not `.slice(naRowStart)` to end of
+    // document, which would spuriously pick up unrelated later markup (e.g.
+    // the Staleness section, which legitimately uses the same green token).
+    const naRowEnd = html.indexOf('</div>', naRowStart);
+    const naRow = html.slice(naRowStart, naRowEnd === -1 ? undefined : naRowEnd);
+
+    // The pass row's marker uses the KB-green token; the n/a row's marker
+    // must NOT use that same color — asserted on the actual per-row markup
+    // slices, not a whole-page substring check (which could false-pass on
+    // markup emitted by an unrelated part of the panel).
+    expect(passRow).toContain('var(--c-kb)');
+    expect(naRow).not.toContain('var(--c-kb)');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (4) REGRESSION companion — the EXISTING prose rendering (lint error/warning
 // counts) this WI must not break while adding the data-* hooks above.
 // ---------------------------------------------------------------------------
