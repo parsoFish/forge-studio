@@ -228,8 +228,11 @@ test('A3 (lint surface) SUPERSEDED: forge studio lint reports a legacy compositi
 // not re-proving the wiring.
 // ---------------------------------------------------------------------------
 
-test('A3 SUPERSEDED (exhaustive): every one of the nine legacy PLATFORM_GUARD_IDS values fires hook-library/guard-in-hooks under composition.hooks', () => {
-  assert.strictEqual(PLATFORM_GUARD_IDS.length, 9, 'sanity: the migration note claims nine legacy values — pin the count so this sweep cannot silently under-cover');
+// R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
+// joins PLATFORM_GUARD_IDS — the count pin below is now ten, not nine. RED
+// until R4-18's production change lands (orchestrator/agent-bands.ts).
+test('A3 SUPERSEDED (exhaustive): every one of the ten legacy PLATFORM_GUARD_IDS values fires hook-library/guard-in-hooks under composition.hooks', () => {
+  assert.strictEqual(PLATFORM_GUARD_IDS.length, 10, 'sanity: the migration note claims ten legacy values — pin the count so this sweep cannot silently under-cover');
 
   for (const hookId of PLATFORM_GUARD_IDS) {
     const dir = mkdtempSync(join(tmpdir(), `guards-migration-legacy-sweep-${hookId}-`));

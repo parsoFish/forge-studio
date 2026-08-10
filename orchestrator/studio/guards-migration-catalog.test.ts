@@ -46,9 +46,13 @@ import type { Catalog } from './types.ts';
 const FORGE_ROOT = resolve(import.meta.dirname, '..', '..');
 const REAL_CATALOG_PATH = resolve(FORGE_ROOT, 'studio', 'catalog.yaml');
 
-const EXPECTED_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'demo-band', 'review-band'];
+const EXPECTED_GUARD_IDS = ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight'];
 
-test('B1: studio/catalog.yaml has a guards: section with exactly the 9 known ids, and NO hooks: section (RED until migrated)', () => {
+// R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
+// joins the vocabulary — EXPECTED_GUARD_IDS now names 10 ids, not 9. RED
+// until R4-18's production change adds the matching studio/catalog.yaml row
+// (see orchestrator/onboard-flow-gate.test.ts AT-2).
+test('B1: studio/catalog.yaml has a guards: section with exactly the 10 known ids, and NO hooks: section (RED until migrated)', () => {
   const raw = loadYaml(REAL_CATALOG_PATH);
   const guards = raw['guards'];
   assert.ok(Array.isArray(guards), `expected studio/catalog.yaml to have a "guards:" array section — got: ${JSON.stringify(guards)}`);
