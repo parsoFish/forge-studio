@@ -34,6 +34,8 @@ import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/b
 import { skillsDir } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { createLogger } from '../orchestrator/logging.ts';
+import { runInteractiveTurn } from '../orchestrator/interactive-runner.ts';
+import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 
 type AgentTurnInput = { sessionId: string; projectRoot: string; forgeRoot?: string };
 type AgentTurnFn = (input: AgentTurnInput) => Promise<unknown>;
@@ -445,6 +447,89 @@ export async function cmdAgentDispatch(
 }
 
 /**
+ * ADR-043 §3 (R4-22 WI-5) — dispatch-fork lookup for `cmdAgentRun`. Resolves
+ * `agentId`'s session-kind descriptor from `studio/session-kinds.yaml`, if
+ * any. `loadSessionKinds` throws on a missing file / unparseable YAML; none
+ * of the 4 legacy `AGENT_RUNNERS` ids need this file at all, so a broken or
+ * absent `studio/session-kinds.yaml` must never break them — the throw is
+ * caught here and downgraded to "no descriptor found", falling through to
+ * the existing `AGENT_RUNNERS` lookup below, untouched. This is deliberately
+ * NOT a silent swallow (the codebase's "fail loud; no silent fallbacks"
+ * rule): the failure is still printed to stderr, so an operator pointing at
+ * a genuinely broken `studio/session-kinds.yaml` sees why a turnSpec id
+ * disappeared instead of a bare "unknown agent-id" with no clue — while a
+ * legacy id (found in `AGENT_RUNNERS` regardless of this file's health)
+ * still runs to completion.
+ */
+function findSessionKindDescriptor(agentId: string, forgeRoot: string): SessionKindDescriptor | undefined {
+  let descriptors: SessionKindDescriptor[];
+  try {
+    descriptors = loadSessionKinds(forgeRoot);
+  } catch (err) {
+    console.error(`forge agent run: studio/session-kinds.yaml failed to load — ${(err as Error).message}`);
+    return undefined;
+  }
+  return descriptors.find((d) => d.id === agentId);
+}
+
+/**
+ * ADR-043 §3 (R4-22 WI-5) — the "new road": a `turnSpec`-bearing session-kind
+ * descriptor (by construction, one with NO `AGENT_RUNNERS` entry) drives the
+ * generic `runInteractiveTurn` spine (`orchestrator/interactive-runner.ts`,
+ * R4-22 WI-3) instead of one of the 4 bespoke runners below. `args` is
+ * `cmdAgentRun`'s `rest.slice(1)` — `args[0]` is the session-id, the
+ * remainder is flags — mirroring the legacy skeleton's own `rest[1]` /
+ * `rest.slice(2)` split one level up, reusing the same `--project` parsing
+ * shape rather than a second parser that could drift from it.
+ *
+ * `--project <name>` is REQUIRED on this road (AT-6, this WI's own pinned
+ * contract) — there is no `entry.verb`-driven `findSessionProject`
+ * auto-discovery fallback (architect's legacy quirk); omitting it is a loud
+ * usage error, mirroring the legacy `requiresProject` entries' two-line
+ * shape as closely as possible without an `entry.verb` to draw the exact
+ * prefix from.
+ */
+async function runTurnSpecAgent(
+  agentId: string,
+  descriptor: SessionKindDescriptor,
+  args: string[],
+  forgeRoot: string,
+): Promise<void> {
+  const sessionId = args[0];
+  const flagRest = args.slice(1);
+  const projectIdx = flagRest.indexOf('--project');
+  const projectArg = projectIdx >= 0 ? flagRest[projectIdx + 1] : undefined;
+
+  if (!sessionId) {
+    console.error(`forge agent run ${agentId}: missing <session-id>`);
+    console.error(`Usage: forge agent run ${agentId} <session-id> --project <name>`);
+    process.exit(2);
+    return;
+  }
+
+  if (!projectArg) {
+    console.error(`forge agent run ${agentId}: --project <name> is required`);
+    console.error(`Usage: forge agent run ${agentId} <session-id> --project <name>`);
+    process.exit(2);
+    return;
+  }
+
+  const projectRoot = resolve('projects', projectArg);
+  if (!existsSync(projectRoot)) {
+    console.error(`forge agent run ${agentId}: project root not found: ${projectRoot}`);
+    process.exit(2);
+    return;
+  }
+
+  const result = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot });
+  console.log(`${agentId} turn complete — phase=${result.phase}`);
+  if (result.wrote.length) {
+    console.log(`  wrote ${result.wrote.length} file(s):`);
+    for (const p of result.wrote) console.log(`    ${p}`);
+  }
+}
+
+/**
  * The shared parse/resolve/guard/call/print skeleton for ALL agent-id run
  * verbs — both the new `forge agent run <agent-id> <sid>` path and the 4
  * legacy `<verb> run <sid>` commands in `orchestrator/cli.ts`, which delegate
@@ -452,6 +537,24 @@ export async function cmdAgentDispatch(
  */
 export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<void> {
   const agentId = rest[0];
+
+  // ADR-043 §3 dispatch fork (R4-22 WI-5) — evaluated BEFORE the
+  // unknown-agent-id bail-out below. A turnSpec-bearing session kind has NO
+  // AGENT_RUNNERS entry, so checking `entry` first would reject every
+  // new-style kind as "unknown agent-id" before this lookup is ever
+  // consulted (see findSessionKindDescriptor's own doc for the
+  // broken-yaml-must-not-break-legacy-runners decision). Routing key is
+  // `descriptor?.turnSpec` presence ALONE — not whether an AGENT_RUNNERS
+  // entry also exists for the same id (a descriptor sharing an id with a
+  // real AGENT_RUNNERS entry, but carrying no turnSpec, still falls through
+  // to the untouched legacy path below).
+  if (agentId) {
+    const descriptor = findSessionKindDescriptor(agentId, forgeRoot);
+    if (descriptor?.turnSpec) {
+      return await runTurnSpecAgent(agentId, descriptor, rest.slice(1), forgeRoot);
+    }
+  }
+
   const entry = agentId ? AGENT_RUNNERS[agentId] : undefined;
   if (!entry) {
     console.error(`forge agent run: unknown agent-id: ${agentId ?? '(missing)'}`);
