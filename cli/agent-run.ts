@@ -24,7 +24,7 @@
 
 import { existsSync, readdirSync, realpathSync, statSync } from 'node:fs';
 import { join, relative, resolve, sep } from 'node:path';
-import { guardedReadFile, guardedWriteFile } from './studio-path-guard.ts';
+import { guardedReadFile, guardedWriteFile, resolveGuardedPath } from './studio-path-guard.ts';
 import { runArchitectTurn } from '../orchestrator/architect-runner.ts';
 import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
@@ -514,7 +514,27 @@ async function runTurnSpecAgent(
     return;
   }
 
-  const projectRoot = resolve('projects', projectArg);
+  // CONTAINMENT (R4-22 WI-5 review finding 1). The legacy skeleton below does a
+  // bare `resolve('projects', projectArg)`, which folds an unvalidated CLI value
+  // into the ROOT: `--project /etc` discards `projects/` entirely and `--project ..`
+  // walks out of it, and `resolveGuardedPath` performs NO identity check on its
+  // `root` argument (see cli/studio-path-guard.ts's CONTRACT section, which names
+  // this "root-folding" shape a total containment bypass — the spine's SEC-04
+  // preamble then guards [kindDir, sessionId] RELATIVE to an already-escaped root,
+  // making the comparison tautological). That gap is INHERITED and left untouched on
+  // the legacy road (ruling 44: the 4 legacy runners stay byte-for-byte identical),
+  // but this is NEW code with no back-compat obligation, and ADR-043 makes this the
+  // durable home every future interactive kind funnels through — so the untrusted
+  // project name rides as its OWN guarded SEGMENT under the trusted projects root,
+  // never folded into it. This closes `..`, `/abs`, `.`, separators and control
+  // chars at the door rather than inheriting the legacy hole N times over.
+  const projectGuard = resolveGuardedPath(resolve('projects'), [projectArg]);
+  if (!projectGuard.ok) {
+    console.error(`forge agent run ${agentId}: --project "${projectArg}" is not a valid project name — ${projectGuard.reason}`);
+    process.exit(2);
+    return;
+  }
+  const projectRoot = projectGuard.realPath;
   if (!existsSync(projectRoot)) {
     console.error(`forge agent run ${agentId}: project root not found: ${projectRoot}`);
     process.exit(2);

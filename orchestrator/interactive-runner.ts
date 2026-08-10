@@ -398,7 +398,7 @@ async function runFinalizeStep(args: {
   // preferred over the raw request identity `ctx.sessionId`; either way the
   // resolved value MUST be `SLUG_RE`-valid or this refuses loudly — never
   // silently sanitized/invented (see header note design call #2).
-  const statusPackageId = (status as Record<string, unknown>).session_id;
+  const statusPackageId = (status as Record<string, unknown>).package_id;
   const rawPackageId = typeof statusPackageId === 'string' ? statusPackageId : ctx.sessionId;
   if (!SLUG_RE.test(rawPackageId)) {
     throw new InteractiveRunnerError(

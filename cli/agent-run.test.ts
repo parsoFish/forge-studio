@@ -82,6 +82,7 @@ import {
   rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 
 import { cmdAgentRun, AGENT_RUNNERS } from './agent-run.ts';
@@ -383,4 +384,61 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
+});
+
+// ---------------------------------------------------------------------------
+// R4-22 WI-5, AT-7 (STANDING INVARIANT — added by T2 after the WI-5 adversarial
+// review proved the existing tripwire has a hole for exactly the event it
+// exists to detect).
+//
+// The fork keys ONLY on `descriptor?.turnSpec` and is evaluated BEFORE the
+// `AGENT_RUNNERS` lookup, so the moment a descriptor whose id COLLIDES with a
+// legacy runner key gains a `turnSpec`, that bespoke runner is silently
+// bypassed. Three real ids collide today: `architect`, `instructions`,
+// `project-brain` (`demo` deliberately does not — the yaml's id differs from
+// the `demo-builder` runner key).
+//
+// ADR-043 says that switch is INTENTIONAL — it is precisely how each runner
+// migrates in batch E. The danger is that it can also happen BY ACCIDENT, and
+// the review established by inspection that nothing would catch it:
+// `orchestrator/interactive-runners-golden.test.ts` imports the four turn
+// functions DIRECTLY and never imports `cmdAgentRun`/`loadSessionKinds`, so it
+// stubs strictly BELOW the routing decision and would stay 4/4 green while the
+// live CLI silently took the new road.
+//
+// This test is the missing tripwire. It reads the REAL shipped
+// `studio/session-kinds.yaml` (not a fixture) and fails if any legacy-colliding
+// id carries a `turnSpec`. It is DELIBERATELY expected to go red on the first
+// real migration — that is its purpose: the migration must be an explicit,
+// reviewed act that updates this invariant, never a silent yaml edit.
+// KILLS: an accidental `turnSpec:` added to a legacy row, which would bypass a
+// bespoke runner in production with every existing suite still green.
+test('R4-22 WI-5, AT-7 (standing invariant): no legacy AGENT_RUNNERS id in the REAL session-kinds.yaml carries a turnSpec', () => {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  const descriptors = loadSessionKinds(repoRoot);
+
+  // Arrange-assert: prove the fixture premise before reading any verdict — if
+  // the real yaml failed to load or the collision set were empty, this test
+  // would pass vacuously and protect nothing.
+  assert.ok(descriptors.length > 0, 'arrange: the real studio/session-kinds.yaml must load with at least one descriptor');
+  const legacyIds = Object.keys(AGENT_RUNNERS);
+  assert.ok(legacyIds.length > 0, 'arrange: AGENT_RUNNERS must be non-empty');
+  const colliding = descriptors.filter((d) => legacyIds.includes(d.id));
+  assert.ok(
+    colliding.length > 0,
+    `arrange: at least one descriptor id must collide with an AGENT_RUNNERS key, else this invariant is vacuous ` +
+      `(descriptor ids: ${descriptors.map((d) => d.id).join(', ')}; legacy ids: ${legacyIds.join(', ')})`,
+  );
+
+  const hijacked = colliding.filter((d) => d.turnSpec !== undefined).map((d) => d.id);
+  assert.deepEqual(
+    hijacked,
+    [],
+    `session-kind(s) ${hijacked.join(', ')} share an id with a legacy AGENT_RUNNERS entry AND declare a turnSpec, so ` +
+      `cmdAgentRun's fork now routes them to the generic spine and their bespoke runner is DEAD CODE. If this is a ` +
+      `deliberate batch-E migration (ADR-043), that is fine — but it must be explicit: migrate the runner, retire its ` +
+      `AGENT_RUNNERS entry, and update this invariant in the same PR. If you did not intend to change routing, remove ` +
+      `the turnSpec. The golden-capture suite CANNOT catch this: it calls the four turn functions directly and never ` +
+      `exercises the fork.`,
+  );
 });

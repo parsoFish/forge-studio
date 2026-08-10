@@ -194,7 +194,7 @@ const FIXTURE_SESSION_KINDS_YAML = `
 // nothing depends on process.cwd() or ambient state.
 // ---------------------------------------------------------------------------
 
-type TestStatus = { session_id: string; phase: string; updated_at: string };
+type TestStatus = { session_id: string; phase: string; updated_at: string; package_id?: string };
 
 type Fixture = {
   root: string;
@@ -370,7 +370,7 @@ test('turnSpec committing (step:finalize, finalizer:copyStagingToLibrary): runs 
   mkdirSync(join(forgeRoot, 'studio', 'library'), { recursive: true });
 
   mkdirSync(sessionDir, { recursive: true });
-  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date().toISOString() });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date().toISOString(), package_id: 'at3-finalize-package' });
   const stagingDir = join(sessionDir, 'staging');
   mkdirSync(stagingDir, { recursive: true });
   const STAGED_CONTENT = '# committed package\ncontent-marker-9f3a\n';
