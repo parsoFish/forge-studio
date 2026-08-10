@@ -55,10 +55,10 @@ you draft it, they give feedback, you revise, and they save when it is ready.
    hook should do, and which shape (skill vs hook) they want. Do not guess —
    if it is ambiguous, ask.
 
-2. **Draft under `package/`.** Write the draft package's files into this
-   session's own `package/` subdirectory (`package/SKILL.md`,
-   `package/reference.md`, ... for a skill; `package/hook.yaml`,
-   `package/scripts/run.sh` for a hook). This directory IS the operator-facing
+2. **Draft under `staging/`.** Write the draft package's files into this
+   session's own `staging/` subdirectory (`staging/SKILL.md`,
+   `staging/reference.md`, ... for a skill; `staging/hook.yaml`,
+   `staging/scripts/run.sh` for a hook). This directory IS the operator-facing
    artifact — everything you write there is what they review, turn by turn.
    Keep it small and focused: one clear job per package, not a kitchen sink.
 
@@ -77,7 +77,7 @@ you draft it, they give feedback, you revise, and they save when it is ready.
 
 ## Contract
 
-- Write only under this session's own `package/` directory — nowhere else.
+- Write only under this session's own `staging/` directory — nowhere else.
 - Never invent a package the operator didn't describe; ask when unsure.
 - A skill draft's frontmatter never carries `runtime:`, `allowed-tools:`, or
   `library:`. A hook draft never carries a binding field.

@@ -3452,7 +3452,7 @@ export function writeAuthoringSession(
   mkdirSync(sessionDir);
   writeFileSync(
     join(sessionDir, 'status.json'),
-    JSON.stringify({ phase: 'running', project, runId, startedAt: new Date().toISOString() }, null, 2),
+    JSON.stringify({ phase: 'analyzing', project, runId, startedAt: new Date().toISOString() }, null, 2),
     { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
   );
   writeFileSync(join(sessionDir, 'prompt.md'), `${prompt}\n`, { encoding: 'utf8', flag: 'wx' });

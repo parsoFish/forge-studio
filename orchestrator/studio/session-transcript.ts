@@ -557,7 +557,7 @@ export type ContractBuildoutArtifact = {
 
 // ---------------------------------------------------------------------------
 // file-package (R4-21) — the creation-agent authoring session's accumulating
-// draft skill/hook package. Reads the session dir's own `package/`
+// draft skill/hook package. Reads the session dir's own `staging/`
 // subdirectory (a DEDICATED subdirectory, never the bare session root — see
 // this module's shared `manifests/`/`themes/` per-kind-subdirectory
 // convention, mirrored exactly here, so a creation-agent session's
@@ -566,9 +566,17 @@ export type ContractBuildoutArtifact = {
 // scanned against regardless of kind). Reuses the SAME realpath-guarded
 // choke points (`safeReadFileInSession`/`listDirEntries`) every other
 // derivation in this module already goes through — no new fs call path.
+//
+// R4-21 phase 2, WI-1, D2 (_wave5/unit-specs/R4-21-phase2.md): this
+// subdirectory was named `package/` in R4-21 phase 1, predating ADR-043
+// (docs/decisions/043-generic-interactive-surface.md §1), whose ratified
+// `turnSpec` table declares `writes: [staging]`. Renamed here to match the
+// ratified data rather than parameterising the finalizer. The rename is
+// COMPLETE, not additive — a leftover `package/` dir is never scanned, not
+// even as a fallback (RED-2f, session-transcript.test.ts).
 // ---------------------------------------------------------------------------
 
-const PACKAGE_DIRNAME = 'package';
+const PACKAGE_DIRNAME = 'staging';
 
 export type FilePackageArtifact = {
   readonly kind: 'file-package';
@@ -587,7 +595,7 @@ export type FilePackageArtifact = {
  *  yields `[]` — exactly `listDirEntries`'s contract, just with entry TYPE
  *  preserved. Sorted by name for deterministic output. Not a replacement
  *  for `listDirEntries` (every other derivation in this module keeps using
- *  that flat, extension-filtered scan unchanged) — this is `package/`'s own
+ *  that flat, extension-filtered scan unchanged) — this is `staging/`'s own
  *  recursive-walk primitive (R4-21 BLOCKER-1 fix, see `walkPackageFiles`). */
 function listDirEntriesTyped(sessionDir: string, dirRel: string): Dirent[] {
   const abs = join(sessionDir, dirRel);
@@ -613,8 +621,8 @@ function listDirEntriesTyped(sessionDir: string, dirRel: string): Dirent[] {
   }
 }
 
-/** Recursively walks `package/` (and every REAL subdirectory beneath it),
- *  appending each file found into `out` with a path RELATIVE TO `package/`,
+/** Recursively walks `staging/` (and every REAL subdirectory beneath it),
+ *  appending each file found into `out` with a path RELATIVE TO `staging/`,
  *  POSIX-separated (`PackageFile.path` convention — e.g. `scripts/run.sh`,
  *  matching `installSkillPackage`/`readSkillPackage`'s own recursive-walk
  *  path shape in skill-library.ts).
@@ -622,7 +630,7 @@ function listDirEntriesTyped(sessionDir: string, dirRel: string): Dirent[] {
  *  R4-21 BLOCKER-1 fix: the previous flat, single-level scan
  *  (`listDirEntries(sessionDir, 'package', '')` + per-name
  *  `safeReadFileInSession`) called `readFileSync` on every top-level
- *  `package/` entry NAME unconditionally — including a DIRECTORY entry
+ *  `staging/` entry NAME unconditionally — including a DIRECTORY entry
  *  (e.g. `scripts/`, written by a hook draft alongside `hook.yaml` per
  *  skills/creation-agent/SKILL.md). `readFileSync` on a directory throws
  *  EISDIR, caught by the existing try/catch, and the entry was dropped
@@ -676,8 +684,8 @@ function walkPackageFiles(sessionDir: string, dirRelToSession: string, dirRelToP
   }
 }
 
-/** `package/` — recursively walks every real file under the session dir's
- *  `package/` subdirectory (a package may legitimately carry SKILL.md,
+/** `staging/` — recursively walks every real file under the session dir's
+ *  `staging/` subdirectory (a package may legitimately carry SKILL.md,
  *  reference.md, scripts/run.sh, ...) via `walkPackageFiles` (R4-21
  *  BLOCKER-1 fix — see that function's header for the nested-file defect
  *  this replaces and the containment/DoS-bound contract it preserves). An

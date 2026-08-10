@@ -105,7 +105,17 @@
 # [] — there was no predecessor authoring session ROUTE at all before this
 # initiative (creation-agent is new). artifact.kind is 'file-package' — the
 # session's accumulating draft skill/hook package (deriveFilePackage reads
-# the session dir's own package/ subdirectory).
+# the session dir's own staging/ subdirectory).
+#
+# turnSpec (R4-21 phase 2, WI-1, D1) is ADR-043 §1's ratified table verbatim
+# (docs/decisions/043-generic-interactive-surface.md#1-the-primitive--one-
+# additive-optional-turnspec-field) — the ADR's own worked example IS this
+# descriptor. kindDir is the one SEC-04 containment segment
+# (resolveGuardedPath(projectRoot, [kindDir, sessionId])); style:agent picks
+# runAgentTurn. Four phases: analyzing (runs the agent, writes staging/,
+# advances to awaiting-review) -> awaiting-review (operator review, noop) ->
+# committing (runs the copyStagingToLibrary finalizer, advances to committed)
+# -> committed (terminal).
 - id: authoring
   agent: creation-agent
   title: Authoring session
@@ -115,3 +125,11 @@
   artifact:
     kind: file-package
     label: Package
+  turnSpec:
+    kindDir: _authoring
+    style: agent
+    phases:
+      - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
+      - { phase: awaiting-review, step: noop }
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
+      - { phase: committed, step: terminal }
