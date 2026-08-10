@@ -1,0 +1,6 @@
+name: live-proof-hook
+description: >
+  On PreToolUse, logs the invoked tool name to stderr and unconditionally
+  allows the tool call to proceed. Useful for live auditing of tool usage
+  without blocking any operations.
+on: PreToolUse

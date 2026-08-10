@@ -9,6 +9,8 @@ import {
   DEMO_DESIGN_SKILL_DIR, writeDemoDesignSkill,
   demoEvent, demoBurst, cleanDemoBuilderSession,
   SK_INSTALL_ID, SK_INSTALL_DIR, cleanSkillInstallArtifacts,
+  AUTH_SKILL_ID, AUTH_SKILL_DIR, authoringDir, authoringSidFromUrl,
+  seedAuthoringSkillDraft, cleanAuthoringSkillArtifacts,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -621,6 +623,99 @@ export const journey = defineJourney({
               try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
               cleanDemoBuilderSession(clipSid);
               check(!existsSync(DEMO_DESIGN_SKILL_DIR), 'SK-4: the staged demo-design artifact is cleaned up (next run starts from the real failing state)');
+
+        },
+      },
+      {
+        id: 'skills-agentic-build',
+        title: 'Build a skill with the creation agent (authoring session)',
+        narration: 'The library\'s OTHER creation path: instead of filling in the manual form, describe the skill to the creation agent. A real session opens at /sessions/authoring/<sid> — under this harness the drafting turn itself is suppressed, so the journey seeds exactly the bytes a real, captured creation-agent turn produced (provenance in journey-fixtures.mjs, sha256 verified). Everything after that is real, unsuppressed product code: the file-package pane renders the drafted SKILL.md, Save runs the real finalize route end to end (landing a draft skill), and Approve flips it palette-visible — checked against the REAL agent-builder catalog, not merely a page re-render.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── SK-6: build a skill through the creation-agent authoring session ──────
+              console.log('\n[SK-6] Build a skill with the creation agent (authoring session)');
+              cleanAuthoringSkillArtifacts(null); // stale-state sweep first (crash-safe, this beat's own artifacts only)
+
+              // Entry: the /skills library's own "new skill" affordance lands on
+              // /skills/new, where AuthoringLauncher renders ALONGSIDE the manual
+              // form (D2, T3 report) — the SAME entry point skills-create already
+              // proves for the manual form, now proving the agentic alternative.
+              await page.goto(watch.uiUrl + '/skills', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 }).catch(() => {});
+              await page.locator('[data-action="new-skill"]').click().catch(() => {});
+              await page.waitForURL('**/skills/new', { timeout: 10000 }).catch(() => {});
+              await page.waitForSelector('[data-section="authoring-launcher"]', { timeout: 15000 }).catch(() => {});
+              check(await page.locator('[data-section="authoring-launcher"]').count() > 0,
+                'SK-6: /skills/new renders the authoring launcher alongside the manual form');
+              await caption(page, 'Or describe it to the creation agent instead — the same entry point, an agentic alternative to the manual form.');
+
+              await page.locator('[data-field="authoring-launcher-project"]').fill(PROJECT).catch(() => {});
+              await page.locator('[data-field="authoring-launcher-prompt"]').fill(
+                'Summarise a git diff into three bullet points: what changed, why it matters, what to test.',
+              ).catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="authoring-launcher"]')?.getAttribute('data-authoring-launcher-ready') === 'true',
+                null, { timeout: 5000 }).catch(() => {});
+              await frame(page, 'sk-10-authoring-launcher', 'Part 2 (skills) — the authoring launcher: describe it to the creation agent', { key: true });
+
+              await page.locator('[data-action="start-authoring"]').click().catch(() => {});
+              await page.waitForURL(/\/sessions\/authoring\//, { timeout: 15000 }).catch(() => {});
+              const sid = authoringSidFromUrl(page.url());
+              check(!!sid, `SK-6: starting opens a real session at /sessions/authoring/<sid> (${page.url()})`);
+
+              check(await page.locator('main[data-page="session"][data-session-kind="authoring"]').count() > 0,
+                'SK-6: the shared session shell renders for the authoring kind');
+              const statusPath = join(authoringDir(sid ?? ''), 'status.json');
+              const startedReal = sid ? await waitForFile(statusPath, 8000) : false;
+              check(startedReal, `SK-6: the real POST /start route wrote projects/${PROJECT}/_authoring/${sid}/status.json`);
+              const preSeedPhase = startedReal ? JSON.parse(readFileSync(statusPath, 'utf8')).phase : null;
+              check(preSeedPhase === 'analyzing', `SK-6: the suppressed spawn leaves the session at phase "analyzing" (got "${preSeedPhase}")`);
+
+              // SEED: exactly what the suppressed creation-agent turn would have
+              // written — the captured live-capture SKILL.md, verbatim — then the
+              // SAME analyzing -> awaiting-review transition the turnSpec table
+              // itself declares (studio/session-kinds.yaml).
+              if (sid) seedAuthoringSkillDraft(sid);
+              await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'awaiting-review',
+                null, { timeout: 10000 }).catch(() => {});
+              check(await page.evaluate(() => document.querySelector('[data-section="authoring-status"]')?.getAttribute('data-authoring-shape')) === 'skill',
+                'SK-6: the panel detects the drafted shape by file PRESENCE (SKILL.md at the package root)');
+              check(await page.locator('[data-section="session-artifact"] [data-component="file-package"]').count() > 0,
+                'SK-6: the real file-package artifact pane renders the drafted SKILL.md');
+              const draftedText = await page.evaluate(() =>
+                document.querySelector('[data-section="session-artifact"] [data-component="file-package"]')?.textContent ?? '');
+              check(draftedText.includes('Live Proof Skill'), 'SK-6: the pane shows the REAL captured turn\'s content, not a placeholder');
+              await frame(page, 'sk-11-drafted', 'Part 2 (skills) — the drafted SKILL.md in the real file-package pane', { key: true });
+
+              await page.locator('[data-field="authoring-id"]').fill(AUTH_SKILL_ID).catch(() => {});
+              await page.locator('[data-action="finalize-authoring"]').click().catch(() => {});
+              await page.waitForURL(new RegExp(`/skills/${AUTH_SKILL_ID}`), { timeout: 15000 }).catch(() => {});
+              await page.waitForFunction(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+              check(existsSync(join(AUTH_SKILL_DIR, 'SKILL.md')), `SK-6: finalize lands the real skills/${AUTH_SKILL_ID}/SKILL.md`);
+              check(await page.evaluate(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust')) === 'draft',
+                'SK-6: the finalized package lands as a DRAFT (never auto-approved)');
+              check(await page.locator('[data-section="approval-gate"]').count() > 0, 'SK-6: the approval gate renders for the draft');
+              await caption(page, 'Finalize ran the real commit turn end to end — landed as a draft skill, awaiting approval.');
+              await frame(page, 'sk-12-draft', 'Part 2 (skills) — the creation agent\'s package, landed as a real draft skill', { key: true });
+
+              await page.locator('[data-action="approve-skill"]').click().catch(() => {});
+              await page.waitForFunction(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust') === 'ready', null, { timeout: 10000 }).catch(() => {});
+              check(await page.evaluate(() => document.querySelector('[data-page="skill-detail"]')?.getAttribute('data-skill-trust')) === 'ready',
+                'SK-6: approving flips trust to ready');
+
+              await page.goto(watch.uiUrl + '/agents/new', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(() => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+              const inPalette = await page.locator(`[data-component="catalog-palette"] [data-kind="skill"][data-id="${AUTH_SKILL_ID}"]`).count();
+              check(inPalette > 0, `SK-6: the agent-authored skill is palette-visible from the REAL agent-builder catalog source (found ${inPalette})`);
+              await caption(page, 'Palette-visible — from the real agent-builder catalog source, not merely a page re-render.');
+              await frame(page, 'sk-13-palette', 'Part 2 (skills) — the agent-authored skill, approved and palette-visible', { key: true });
+
+              cleanAuthoringSkillArtifacts(sid);
+              check(!existsSync(AUTH_SKILL_DIR), `SK-6: skills/${AUTH_SKILL_ID}/ removed after the beat (self-cleaning)`);
 
         },
       },

@@ -1221,7 +1221,17 @@ inventory rather than one shared page-level contract:
   (see that page's entry, above, for its full `data-*` contract) —
   `[data-section="authoring-launcher"]` alongside the manual form, POSTing to
   `POST /api/studio/authoring/start` and navigating to
-  `/sessions/authoring/<sessionId>?project=<p>`.
+  `/sessions/authoring/<sessionId>?project=<p>`. **R4-21 phase 2, T3 (journey-
+  sync port):** the whole authoring arc — launcher → real session →
+  file-package pane → finalize → the landed skill's own detail page → approve
+  → the REAL agent-builder palette — is now driven end to end by the
+  `skills-agentic-build` beat (`scripts/journeys/skills.mjs`), the hook side
+  by `hooks-agentic-build` (`scripts/journeys/hooks.mjs`); the drafted bytes
+  both seed are a committed, sha256-verified copy of a real captured
+  creation-agent turn (`scripts/journeys/fixtures/r4-21-live-capture/`,
+  provenance in `scripts/lib/journey-fixtures.mjs`) — see `build-skill` /
+  `build-hook` in `scripts/journeys/story-registry.mjs` for the full
+  mockup-beat mapping.
   **R3-07 update (2026-08-05): the per-card manual install affordance was
   REMOVED.** `[data-action="install-skill"]`, `[data-install-skill-id]`, and
   the card-local `[data-install-state]` no longer exist — that box (a

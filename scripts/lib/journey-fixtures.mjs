@@ -1463,6 +1463,12 @@ export function cleanSkillArtifacts() {
   }
   try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
   cleanSkillInstallArtifacts(); // crash-safe backstop for the install-approve beat too
+  // R4-21 T3 — crash-safe backstop for the build-skill beat (authoring
+  // session + its landed/installed package); AUTH_SKILL_DIR/landed dir
+  // removal + the shared ledger restore, defined below cleanSkillInstallArtifacts.
+  try { rmSync(AUTH_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(AUTH_LANDED_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  cleanAuthoringSessions();
 }
 
 // ── HOOKS-PILLAR HELPERS (R3-03-F4) ─────────────────────────────────────────
@@ -1560,6 +1566,11 @@ export function cleanHookArtifacts() {
   cleanHookSecurityArtifacts();
   cleanHookCreateArtifacts();
   restoreHookBindAgent();
+  // R4-21 T3 — crash-safe backstop for the build-hook beat (authoring
+  // session + its landed/installed package).
+  try { rmSync(AUTH_HOOK_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(AUTH_LANDED_HOOK_DIR, { recursive: true, force: true }); } catch { /* */ }
+  cleanAuthoringSessions();
 }
 
 // ── ONBOARD-EXISTING HELPERS ────────────────────────────────────────────────────
@@ -1569,6 +1580,140 @@ export const ONB_EXISTING_SLUG = 'journey-onboard-existing';
 export function cleanOnboardedProject(slug) {
   try { rmSync(join(FORGE_ROOT, 'projects', slug), { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(join(FORGE_ROOT, 'brain', 'projects', slug), { recursive: true, force: true }); } catch { /* */ }
+}
+
+// ── AUTHORING-SESSION HELPERS (R4-21 phase 2, T3 — build-skill/build-hook) ──
+// The creation-agent authoring session (/sessions/authoring/<sid>) drafts a
+// skill or hook PACKAGE into the session's own `staging/` subdirectory
+// (studio/session-kinds.yaml's `authoring` descriptor: turnSpec phase
+// `analyzing: {step: agent, writes: [staging], next: awaiting-review}`).
+// Under this harness's FORGE_ARCHITECT_NO_SPAWN=1 the real spawn
+// (`forge agent run authoring <sid> --project <p>`, cli/dry-bridge.ts) is a
+// no-op, so after the REAL `POST /api/studio/authoring/start` the session
+// sits at status.json `phase:'analyzing'` with an empty `staging/`. The seed
+// functions below write exactly what that suppressed turn would have
+// written — the drafted package + the `analyzing -> awaiting-review`
+// transition the turnSpec table itself declares — as a merge-patch onto the
+// REAL status.json the start route already wrote (project/runId/prompt/
+// startedAt all stay real). Everything from there on is unsuppressed, real
+// product code: `POST /api/studio/authoring/finalize` runs the real
+// `copyStagingToLibrary` finalizer + the real skill/hook install.
+//
+// PROVENANCE (binding — never hand-invent an agent's output): the seeded
+// bytes are committed, byte-identical copies of a real, live, unsuppressed
+// creation-agent turn the orchestrator captured for this port
+// (session R4-21-live-capture) — copied via `cp`, never retyped, from
+// `_wave5/gate-logs/R4-21-live-capture/{skill/SKILL.md,hook/hook.yaml,
+// hook/scripts/run.sh}` (that path is gitignored campaign scratch, cited
+// here ONLY as the provenance record — nothing at runtime reads from it) into
+// this repo's own `scripts/journeys/fixtures/r4-21-live-capture/`, which IS
+// what the seed functions below read. sha256 verified equal on both sides
+// after the copy:
+//   skill/SKILL.md       f8c53c4fd15c31b88554d9f62933d506e360f92bd566990bb762ff4e288305c5
+//   hook/hook.yaml        266e3356cd32f030a999e0648ba9f230f7b16b676fc5fc2426d18f12552a9681
+//   hook/scripts/run.sh   337873ab28280df413d72fdcbbaebf2799aff33436f101adc74a85bdfb4f69ac
+const AUTH_FIXTURES_DIR = join(FORGE_ROOT, 'scripts', 'journeys', 'fixtures', 'r4-21-live-capture');
+const AUTH_LIVE_SKILL_MD = readFileSync(join(AUTH_FIXTURES_DIR, 'skill', 'SKILL.md'), 'utf8');
+const AUTH_LIVE_HOOK_YAML = readFileSync(join(AUTH_FIXTURES_DIR, 'hook', 'hook.yaml'), 'utf8');
+const AUTH_LIVE_HOOK_RUN_SH = readFileSync(join(AUTH_FIXTURES_DIR, 'hook', 'scripts', 'run.sh'), 'utf8');
+
+// Fixed ids (mirrors HK_NEW_ID's own fixed-slug precedent) — the operator
+// types this into [data-field="authoring-id"] at finalize time; it need not
+// match the drafted content's own `name:`, but doing so keeps the fixture
+// honest (this id names the SAME package the captured turn drafted).
+export const AUTH_SKILL_ID = 'journey-live-proof-skill';
+export const AUTH_SKILL_DIR = join(FORGE_ROOT, 'skills', AUTH_SKILL_ID);
+export const AUTH_HOOK_ID = 'journey-live-proof-hook';
+export const AUTH_HOOK_DIR = join(FORGE_ROOT, 'studio', 'hooks', AUTH_HOOK_ID);
+// `_interactive-library/<id>/` — the finalize route's own landing root
+// (INTERACTIVE_LIBRARY_DIRNAME, cli/bridge-studio-authoring.ts), gitignored.
+const AUTH_LANDED_SKILL_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_SKILL_ID);
+const AUTH_LANDED_HOOK_DIR = join(FORGE_ROOT, '_interactive-library', AUTH_HOOK_ID);
+
+export function authoringDir(sid) { return join(projectRoot, '_authoring', sid); }
+
+/** Parse a real authoring session id out of a `/sessions/authoring/<sid>` URL
+ *  (null if not there) — shared by both skills.mjs and hooks.mjs's own new
+ *  build beats, mirroring instrSidFromUrl/pbSidFromUrl's own loose
+ *  substring-match shape in stand-up-create.mjs. */
+export function authoringSidFromUrl(url) {
+  const m = /\/authoring\/([^/?#]+)/.exec(url);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Merge-patch the REAL status.json the real POST /start already wrote
+ *  (phase/project/runId/prompt/startedAt) — every field the real route wrote
+ *  stays real; only the fields named in `patch` move. Mirrors writePbStatus's
+ *  shape but PATCHES rather than overwrites, since (unlike project-brain/
+ *  instructions, whose sessions this harness originates itself) an authoring
+ *  session's status.json is always seeded by a REAL bridge route first. */
+function patchAuthoringStatus(sid, patch) {
+  const path = join(authoringDir(sid), 'status.json');
+  const current = JSON.parse(readFileSync(path, 'utf8'));
+  writeFileSync(path, JSON.stringify({ ...current, ...patch }, null, 2));
+}
+
+/** Seeds the real, suppressed creation-agent turn's would-be output — the
+ *  drafted SKILL.md at staging/SKILL.md — then flips phase to
+ *  'awaiting-review', the exact analyzing -> awaiting-review transition the
+ *  turnSpec table declares, minus the spawn itself. */
+export function seedAuthoringSkillDraft(sid) {
+  const staging = join(authoringDir(sid), 'staging');
+  mkdirSync(staging, { recursive: true });
+  writeFileSync(join(staging, 'SKILL.md'), AUTH_LIVE_SKILL_MD);
+  patchAuthoringStatus(sid, { phase: 'awaiting-review' });
+}
+
+/** Same shape for a hook draft — staging/hook.yaml + staging/scripts/run.sh,
+ *  the 2-file package shape skills/creation-agent/SKILL.md itself declares. */
+export function seedAuthoringHookDraft(sid) {
+  const staging = join(authoringDir(sid), 'staging');
+  mkdirSync(join(staging, 'scripts'), { recursive: true });
+  writeFileSync(join(staging, 'hook.yaml'), AUTH_LIVE_HOOK_YAML);
+  writeFileSync(join(staging, 'scripts', 'run.sh'), AUTH_LIVE_HOOK_RUN_SH);
+  patchAuthoringStatus(sid, { phase: 'awaiting-review' });
+}
+
+/** Removes ONE session's own `_authoring/<sid>/` dir — the crash-safe,
+ *  per-session cleanup a runner finally block calls via ctx.seeded. */
+export function cleanAuthoringSession(sid) {
+  if (!sid) return;
+  try { rmSync(authoringDir(sid), { recursive: true, force: true }); } catch { /* */ }
+}
+
+/** Broad sweep — every `_authoring/` session under this project, regardless
+ *  of id (session dirs are server-minted timestamps, never a fixed slug this
+ *  module could name individually). Safe to call unconditionally: `_authoring`
+ *  is exclusively this R4-21 kind's own scratch — nothing else in forge ever
+ *  writes there, and no `_authoring` content is ever checked into mdtoc. */
+export function cleanAuthoringSessions() {
+  try { rmSync(join(projectRoot, '_authoring'), { recursive: true, force: true }); } catch { /* */ }
+}
+
+/** Narrow sweep for the build-skill beat's own installed artifact — the
+ *  landed package, the installed skill dir, AND (mirrors
+ *  cleanSkillInstallArtifacts' own ledger-restore discipline exactly, since
+ *  installSkillPackage always writes studio/installed-skills.yaml
+ *  regardless of upstream.source) the shared install ledger, via the SAME
+ *  exported sweep skills-install-approve already uses — one shared stash,
+ *  restored to its true pre-run state regardless of which beat touched it
+ *  first. */
+export function cleanAuthoringSkillArtifacts(sid) {
+  cleanAuthoringSession(sid);
+  try { rmSync(AUTH_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(AUTH_LANDED_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
+  cleanSkillInstallArtifacts();
+}
+
+/** Narrow sweep for the build-hook beat's own installed artifact — the
+ *  landed package + the installed hook dir. No approval ledger to restore
+ *  here (unlike hooks-security's HK_SECURITY/HK_UNDECLARED arc): this beat
+ *  never approves or overrides, so studio/hook-approvals.yaml is never
+ *  touched. */
+export function cleanAuthoringHookArtifacts(sid) {
+  cleanAuthoringSession(sid);
+  try { rmSync(AUTH_HOOK_DIR, { recursive: true, force: true }); } catch { /* */ }
+  try { rmSync(AUTH_LANDED_HOOK_DIR, { recursive: true, force: true }); } catch { /* */ }
 }
 
 // ── FLOW MONITOR NAV ─────────────────────────────────────────────────────────

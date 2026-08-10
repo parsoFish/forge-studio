@@ -39,7 +39,10 @@
  * skills-edit
  * restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
- * sessions, agents-scratch-build/agents-builder each clean up their own
+ * sessions, skills-agentic-build/hooks-agentic-build (R4-21 phase 2, T3) each
+ * clean up their own authoring session + landed/installed package inline,
+ * with cleanSkillArtifacts/cleanHookArtifacts as the crash-safe backstop
+ * (journey-fixtures.mjs), agents-scratch-build/agents-builder each clean up their own
  * skill-dir/stashed-SKILL.md, agents-materials-declare cleans its own
  * throwaway scratch agent, flows-author-scratch-build's SCRATCH_FLOW is swept
  * only by the top-level pre-run sweep / finally block in scripts/e2e-
@@ -217,12 +220,14 @@ export const RUN_ORDER = [
   ['skills', 'skills-create'],
   ['skills', 'skills-install-approve'],
   ['skills', 'skills-agentic-author'],
+  ['skills', 'skills-agentic-build'],
 
   ['hooks', 'hooks-library'],
   ['hooks', 'hooks-detail'],
   ['hooks', 'hooks-create'],
   ['hooks', 'hooks-security'],
   ['hooks', 'hooks-bind'],
+  ['hooks', 'hooks-agentic-build'],
 
   ['templates', 'templates-library'],
   ['templates', 'templates-search'],

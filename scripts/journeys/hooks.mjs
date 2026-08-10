@@ -3,12 +3,14 @@ import { join } from 'node:path';
 import yaml from 'js-yaml';
 import { defineJourney } from '../lib/journey-runtime.mjs';
 import {
-  FORGE_ROOT, caption, THINK, waitForFile,
+  FORGE_ROOT, PROJECT, caption, THINK, waitForFile,
   HK_NEW_ID, HK_NEW_DIR, HK_SECURITY_ID, HK_SECURITY_DIR,
   HK_UNDECLARED_ID, HK_UNDECLARED_DIR,
   HK_BIND_AGENT_SLUG, HK_BIND_AGENT_PATH,
   stashHookBindAgent, restoreHookBindAgent,
   cleanHookArtifacts, cleanHookSecurityArtifacts, cleanHookCreateArtifacts,
+  AUTH_HOOK_ID, AUTH_HOOK_DIR, authoringDir, authoringSidFromUrl,
+  seedAuthoringHookDraft, cleanAuthoringHookArtifacts,
 } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
@@ -607,6 +609,104 @@ export const journey = defineJourney({
               check(!existsSync(HK_NEW_DIR), `HK-4: studio/hooks/${HK_NEW_ID}/ removed after the beat (self-cleaning)`);
               check(!readFileSync(HK_BIND_AGENT_PATH, 'utf8').includes(HK_NEW_ID),
                 `HK-4: the real ${HK_BIND_AGENT_SLUG}/SKILL.md is restored byte-for-byte after the beat`);
+
+        },
+      },
+      {
+        id: 'hooks-agentic-build',
+        title: 'Build a hook with the creation agent (authoring session)',
+        narration: 'The library\'s OTHER creation path: describe the automation to the creation agent instead of filling in the manual form. A real session opens at /sessions/authoring/<sid> — under this harness the drafting turn is suppressed, so the journey seeds exactly the bytes a real, captured creation-agent turn produced: hook.yaml plus the script it runs (provenance in journey-fixtures.mjs, sha256 verified). Everything after that is real, unsuppressed product code: the file-package pane renders both drafted files, Save runs the real finalize route — hook metadata parsed from the DRAFTED hook.yaml server-side, never a parallel form — and the freshly authored hook lands on its own detail page exactly like a manually authored one: unbound, a clean security scan, ready to be bound from an agent\'s builder.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              // ── HK-5: build a hook through the creation-agent authoring session ───────
+              console.log('\n[HK-5] Build a hook with the creation agent (authoring session)');
+              cleanAuthoringHookArtifacts(null); // stale-state sweep first (crash-safe, this beat's own artifacts only)
+
+              await page.goto(watch.uiUrl + '/hooks', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="hook-library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 }).catch(() => {});
+              await page.locator('[data-action="new-hook"]').click().catch(() => {});
+              await page.waitForURL('**/hooks/new', { timeout: 10000 }).catch(() => {});
+              await page.waitForSelector('[data-section="authoring-launcher"]', { timeout: 15000 }).catch(() => {});
+              check(await page.locator('[data-section="authoring-launcher"]').count() > 0,
+                'HK-5: /hooks/new renders the SAME authoring launcher component the skills side uses (one component, two mount points)');
+              await caption(page, 'Or describe the automation to the creation agent — the same launcher component /skills/new uses.');
+
+              await page.locator('[data-field="authoring-launcher-project"]').fill(PROJECT).catch(() => {});
+              await page.locator('[data-field="authoring-launcher-prompt"]').fill(
+                'On PreToolUse, log the invoked tool name to stderr and always allow the call to proceed.',
+              ).catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-section="authoring-launcher"]')?.getAttribute('data-authoring-launcher-ready') === 'true',
+                null, { timeout: 5000 }).catch(() => {});
+              await frame(page, 'hk-10-authoring-launcher', 'Part 2 (hooks) — the authoring launcher, describing the automation', { key: true });
+
+              await page.locator('[data-action="start-authoring"]').click().catch(() => {});
+              await page.waitForURL(/\/sessions\/authoring\//, { timeout: 15000 }).catch(() => {});
+              const sid = authoringSidFromUrl(page.url());
+              check(!!sid, `HK-5: starting opens a real session at /sessions/authoring/<sid> (${page.url()})`);
+
+              check(await page.locator('main[data-page="session"][data-session-kind="authoring"]').count() > 0,
+                'HK-5: the shared session shell renders for the authoring kind');
+              const statusPath = join(authoringDir(sid ?? ''), 'status.json');
+              const startedReal = sid ? await waitForFile(statusPath, 8000) : false;
+              check(startedReal, `HK-5: the real POST /start route wrote projects/${PROJECT}/_authoring/${sid}/status.json`);
+
+              // SEED: exactly what the suppressed creation-agent turn would have
+              // written — the captured live-capture hook.yaml + scripts/run.sh,
+              // verbatim — then the SAME analyzing -> awaiting-review transition
+              // the turnSpec table itself declares.
+              if (sid) seedAuthoringHookDraft(sid);
+              await page.reload({ waitUntil: 'domcontentloaded' }).catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'awaiting-review',
+                null, { timeout: 10000 }).catch(() => {});
+              check(await page.evaluate(() => document.querySelector('[data-section="authoring-status"]')?.getAttribute('data-authoring-shape')) === 'hook',
+                'HK-5: the panel detects a HOOK draft by file PRESENCE (hook.yaml at the package root)');
+              check(await page.locator('[data-section="session-artifact"] [data-component="file-package"]').count() > 0,
+                'HK-5: the real file-package artifact pane renders the drafted package');
+              const fileCount = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-section="session-artifact"] [data-component="file-package"]')?.getAttribute('data-file-count') ?? '-1', 10));
+              check(fileCount === 2, `HK-5: the drafted hook package carries both real captured files (hook.yaml + scripts/run.sh) (got ${fileCount})`);
+
+              // Click through both real tabs — the mockup's own hfile-tab-1/hfile-tab-2.
+              const firstTab = page.locator('[data-section="session-artifact"] [data-file-tab]').first();
+              const firstPath = await firstTab.getAttribute('data-file-path');
+              await firstTab.click().catch(() => {});
+              await page.waitForFunction(
+                (p) => document.querySelector('[data-section="session-artifact"] [data-component="file-package"]')?.getAttribute('data-active-file') === p,
+                firstPath, { timeout: 5000 }).catch(() => {});
+              const secondTab = page.locator('[data-section="session-artifact"] [data-file-tab]').nth(1);
+              const secondPath = await secondTab.getAttribute('data-file-path');
+              await secondTab.click().catch(() => {});
+              await page.waitForFunction(
+                (p) => document.querySelector('[data-section="session-artifact"] [data-component="file-package"]')?.getAttribute('data-active-file') === p,
+                secondPath, { timeout: 5000 }).catch(() => {});
+              check(!!firstPath && !!secondPath && secondPath !== firstPath,
+                `HK-5: the pane exposes two distinct real files, both clicked through (${firstPath}, ${secondPath})`);
+              await frame(page, 'hk-11-drafted', 'Part 2 (hooks) — the drafted hook.yaml + script, both real files in the pane', { key: true });
+
+              await page.locator('[data-field="authoring-id"]').fill(AUTH_HOOK_ID).catch(() => {});
+              await page.locator('[data-action="finalize-authoring"]').click().catch(() => {});
+              await page.waitForURL(new RegExp(`/hooks/${AUTH_HOOK_ID}`), { timeout: 15000 }).catch(() => {});
+              await page.waitForFunction(() => document.querySelector('[data-page="hook-detail"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
+              check(existsSync(join(AUTH_HOOK_DIR, 'hook.yaml')), `HK-5: finalize lands the real studio/hooks/${AUTH_HOOK_ID}/hook.yaml`);
+              check(existsSync(join(AUTH_HOOK_DIR, 'scripts', 'run.sh')), `HK-5: finalize lands the real studio/hooks/${AUTH_HOOK_ID}/scripts/run.sh`);
+
+              const domEvent = await page.evaluate(() => document.querySelector('[data-page="hook-detail"]')?.getAttribute('data-hook-event'));
+              check(domEvent === 'PreToolUse', `HK-5: hook metadata came from the DRAFTED hook.yaml, parsed server-side, never a parallel form (data-hook-event="${domEvent}")`);
+              const verdict = await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-scan-verdict'));
+              check(verdict !== 'blocked', `HK-5: the captured turn's benign script scans clean, not blocked (got "${verdict}")`);
+              check(await page.locator('[data-section="carried-by"][data-carried-by-count="0"]').count() > 0,
+                'HK-5: the agent-authored hook lands UNBOUND, exactly like a manually authored one (data-carried-by-count="0")');
+              const carriedByText = (await page.locator('[data-section="carried-by"]').innerText().catch(() => '')).toLowerCase();
+              check(carriedByText.includes('unbound'), 'HK-5: the page states it explicitly — "Unbound — bind it from an agent\'s builder."');
+              await caption(page, 'On the shelf, real and unbound — exactly like a manually authored hook. Binding happens only in the Agent Builder.');
+              await frame(page, 'hk-12-unbound', 'Part 2 (hooks) — the agent-authored hook, landed real and unbound', { key: true });
+
+              cleanAuthoringHookArtifacts(sid);
+              check(!existsSync(AUTH_HOOK_DIR), `HK-5: studio/hooks/${AUTH_HOOK_ID}/ removed after the beat (self-cleaning)`);
 
         },
       },
