@@ -652,6 +652,8 @@ export const journey = defineJourney({
               const statusPath = join(authoringDir(sid ?? ''), 'status.json');
               const startedReal = sid ? await waitForFile(statusPath, 8000) : false;
               check(startedReal, `HK-5: the real POST /start route wrote projects/${PROJECT}/_authoring/${sid}/status.json`);
+              const preSeedPhase = startedReal ? JSON.parse(readFileSync(statusPath, 'utf8')).phase : null;
+              check(preSeedPhase === 'analyzing', `HK-5: the suppressed spawn leaves the session at phase "analyzing" (got "${preSeedPhase}")`);
 
               // SEED: exactly what the suppressed creation-agent turn would have
               // written — the captured live-capture hook.yaml + scripts/run.sh,
@@ -697,7 +699,9 @@ export const journey = defineJourney({
               const domEvent = await page.evaluate(() => document.querySelector('[data-page="hook-detail"]')?.getAttribute('data-hook-event'));
               check(domEvent === 'PreToolUse', `HK-5: hook metadata came from the DRAFTED hook.yaml, parsed server-side, never a parallel form (data-hook-event="${domEvent}")`);
               const verdict = await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-scan-verdict'));
-              check(verdict !== 'blocked', `HK-5: the captured turn's benign script scans clean, not blocked (got "${verdict}")`);
+              check(verdict === 'clean', `HK-5: the captured turn's benign script scans clean — verdict "clean" (got "${verdict}")`);
+              const findingCount = await page.evaluate(() => document.querySelector('[data-section="scan-report"]')?.getAttribute('data-finding-count'));
+              check(findingCount === '0', `HK-5: zero findings (got ${findingCount})`);
               check(await page.locator('[data-section="carried-by"][data-carried-by-count="0"]').count() > 0,
                 'HK-5: the agent-authored hook lands UNBOUND, exactly like a manually authored one (data-carried-by-count="0")');
               const carriedByText = (await page.locator('[data-section="carried-by"]').innerText().catch(() => '')).toLowerCase();

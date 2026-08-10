@@ -1697,9 +1697,23 @@ export function cleanAuthoringSessions() {
  *  regardless of upstream.source) the shared install ledger, via the SAME
  *  exported sweep skills-install-approve already uses — one shared stash,
  *  restored to its true pre-run state regardless of which beat touched it
- *  first. */
+ *  first.
+ *
+ *  R4-21 T3 pin round 6, correction C: called with `sid === null` at the
+ *  beat's OWN start as a crash-safe stale-state sweep (the same idiom every
+ *  other beat's pre-sweep uses) — but `cleanAuthoringSession(null)`
+ *  early-returns (session dirs are server-minted timestamps this module
+ *  cannot name individually), so that pre-sweep call was a documented no-op
+ *  in prose only, never in effect: a session dir orphaned by a crashed prior
+ *  run would survive every subsequent run's "stale-state sweep" untouched.
+ *  Fixed by routing the no-`sid` case through the BROAD, journey-scoped
+ *  `cleanAuthoringSessions()` (every `_authoring/` session under this
+ *  project, regardless of id) instead — the same sweep `cleanSkillArtifacts`
+ *  already uses as ITS crash-safe backstop. The per-`sid` path (every
+ *  end-of-beat call, which always has a real sid) is untouched — narrow and
+ *  exact there, same as before. */
 export function cleanAuthoringSkillArtifacts(sid) {
-  cleanAuthoringSession(sid);
+  if (sid) cleanAuthoringSession(sid); else cleanAuthoringSessions();
   try { rmSync(AUTH_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(AUTH_LANDED_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
   cleanSkillInstallArtifacts();
@@ -1709,9 +1723,12 @@ export function cleanAuthoringSkillArtifacts(sid) {
  *  landed package + the installed hook dir. No approval ledger to restore
  *  here (unlike hooks-security's HK_SECURITY/HK_UNDECLARED arc): this beat
  *  never approves or overrides, so studio/hook-approvals.yaml is never
- *  touched. */
+ *  touched.
+ *
+ *  R4-21 T3 pin round 6, correction C: same fix as
+ *  `cleanAuthoringSkillArtifacts` above, same reason — see its doc comment. */
 export function cleanAuthoringHookArtifacts(sid) {
-  cleanAuthoringSession(sid);
+  if (sid) cleanAuthoringSession(sid); else cleanAuthoringSessions();
   try { rmSync(AUTH_HOOK_DIR, { recursive: true, force: true }); } catch { /* */ }
   try { rmSync(AUTH_LANDED_HOOK_DIR, { recursive: true, force: true }); } catch { /* */ }
 }

@@ -896,6 +896,115 @@ test('P7-3-empty: an empty (or whitespace-only) finalize id is refused at the ro
 });
 
 // ===========================================================================
+// P8 (T3 pin round 6, adversarial-review correction D) — a THIRD collision
+// surface, structurally identical to P6's skill/hook id collisions but at a
+// layer neither P6 test touches: `copyStagingToLibrary` (step 5, the GENERIC
+// landing copy every finalize runs before the kind-specific install step)
+// writes into `<forgeRoot>/_interactive-library/<id>/` with O_EXCL, and that
+// directory is NEVER cleaned up on any outcome — success OR failure. So once
+// ANY finalize attempt reaches step 5 under a given `id`, a same-id retry's
+// OWN step 5 collides with the leftover landed files from the first attempt
+// and throws a raw `InteractiveFinalizerError` ("... could not be created at
+// write time ... EEXIST: file already exists ..."), which `runFinalize`'s
+// outer catch (cli/bridge-studio-authoring.ts) reports as an undifferentiated
+// 500 whose message is an EEXIST implementation detail — even when the FIRST
+// attempt failed at a LATER step (step 6, kind-specific validation) and
+// correctly reverted its own session to "awaiting-review".
+//
+// Live-reproduced exactly as the reviewer found it: a hook draft carrying a
+// FORBIDDEN_HOOK_BINDING_KEYS key (the SAME shape WI2-3b pins) lands cleanly
+// at step 5 — the generic copy has no hook-shape awareness (file header
+// design call #2) — then is correctly refused at step 6 with a 400, and the
+// session correctly reverts. But `_interactive-library/<id>/` is left
+// behind. A SECOND finalize attempt under the SAME id (a different session,
+// a VALID draft this time) 500s today with the raw EEXIST detail instead of
+// a clean, actionable 409.
+//
+// The corrected contract this pins: once a landed `_interactive-library/<id>/`
+// exists from ANY prior attempt, a same-id finalize must return 409 naming
+// the id and telling the operator to choose a different one — never a 500,
+// never an EEXIST/copyStagingToLibrary implementation detail — and (composed
+// with P5) the session must still recover to "awaiting-review". The fixture
+// below builds the collision the way the reviewer did — letting the FIRST
+// attempt genuinely land and then genuinely fail one step later — rather
+// than hand-planting `_interactive-library/<id>/` directly, so this test
+// exercises the real sequence, not a synthetic stand-in for it.
+// ===========================================================================
+
+test('P8-1 (third collision surface — landed _interactive-library/<id>/ is never cleaned up): a same-id retry after an attempt that landed-then-failed-later returns 409 naming the id (never a 500/EEXIST internal detail); the session recovers to awaiting-review; the previously-landed package is byte-unchanged', async () => {
+  const collidingId = 'collision-surface-hook';
+  const landedYamlPath = join(forgeRoot, '_interactive-library', collidingId, 'hook.yaml');
+  const landedScriptPath = join(forgeRoot, '_interactive-library', collidingId, 'scripts', 'run.sh');
+
+  // ---- Attempt 1: a hook draft that lands cleanly at step 5 (the generic
+  // copy has no hook-shape awareness) then is refused at step 6 (a forbidden
+  // binding key) — the SAME shape WI2-3b pins, reused here to build a REAL
+  // landed-then-reverted precondition instead of hand-planting one. ----
+  assert.ok(FORBIDDEN_HOOK_BINDING_KEYS.includes('agent'), 'arrange: "agent" must be a real forbidden binding key');
+  const forbiddenDraftYaml = hookYamlDraft({
+    name: 'Collision Surface Hook (attempt 1)',
+    description: 'declares a forbidden binding key -- lands at step 5, refused at step 6',
+    on: 'PreToolUse',
+    script: 'scripts/run.sh',
+    agent: 'some-agent-slug', // FORBIDDEN
+  });
+  const ATTEMPT_1_SCRIPT = '#!/usr/bin/env bash\necho "attempt 1 -- must land then be left behind"\n';
+  const attempt1 = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': forbiddenDraftYaml, 'scripts/run.sh': ATTEMPT_1_SCRIPT },
+  });
+
+  const res1 = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: attempt1.sessionId, kind: 'hook', id: collidingId });
+  const text1 = await res1.text();
+  assert.equal(res1.status, 400, `arrange: attempt 1 must be refused at step 6 (forbidden binding key), got ${res1.status}: ${text1}`);
+  assert.equal(readStatusPhase(attempt1.sessionDir), 'awaiting-review', 'arrange: attempt 1 must correctly revert its own session');
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', collidingId)), false, 'arrange: the refused attempt must install nothing under studio/hooks/');
+
+  // Fixture precondition: attempt 1's step 5 REALLY landed the package —
+  // this is the whole point (a genuine sequence, not a hand-planted dir).
+  assert.ok(existsSync(landedYamlPath), `arrange (fixture precondition): attempt 1's generic copy must have landed ${landedYamlPath} before the later hook-shape refusal`);
+  assert.ok(existsSync(landedScriptPath), `arrange (fixture precondition): attempt 1's generic copy must have landed ${landedScriptPath} too`);
+  const landedYamlBefore = readFileSync(landedYamlPath, 'utf8');
+  const landedScriptBefore = readFileSync(landedScriptPath, 'utf8');
+
+  // ---- Attempt 2: a DIFFERENT session, a VALID draft, the SAME id. Today
+  // this 500s with a raw EEXIST detail from copyStagingToLibrary; the
+  // corrected contract is a clean 409. ----
+  const validDraftYaml = hookYamlDraft({
+    name: 'Collision Surface Hook (attempt 2)',
+    description: 'a valid draft -- the retry that collides with attempt 1\'s leftover landed package',
+    on: 'PreToolUse',
+    script: 'scripts/run.sh',
+  });
+  const attempt2 = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': validDraftYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho "attempt 2 -- must never land"\n' },
+  });
+
+  const res2 = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: attempt2.sessionId, kind: 'hook', id: collidingId });
+  const text2 = await res2.text();
+
+  assert.equal(res2.status, 409, `a same-id retry against a landed-but-abandoned _interactive-library/${collidingId}/ must return 409, not a raw 500 (got ${res2.status}: ${text2})`);
+  const body2 = JSON.parse(text2) as { error?: string };
+  assert.ok(body2.error && body2.error.includes(collidingId), `409 body must name the colliding id "${collidingId}", got: ${JSON.stringify(body2)}`);
+  assert.ok(body2.error && /different id/i.test(body2.error), `409 body must tell the operator to choose a different id, got: ${JSON.stringify(body2)}`);
+  assert.ok(body2.error && !/EEXIST/.test(body2.error), `409 body must NEVER leak the raw EEXIST implementation detail, got: ${JSON.stringify(body2)}`);
+  assert.ok(body2.error && !/copyStagingToLibrary/.test(body2.error), `409 body must NEVER leak the internal finalizer name "copyStagingToLibrary", got: ${JSON.stringify(body2)}`);
+
+  assert.equal(
+    readStatusPhase(attempt2.sessionDir),
+    'awaiting-review',
+    'composed with P5: the third collision surface must ALSO leave the session recoverable at awaiting-review, never bricked at "committing"',
+  );
+
+  // ARTIFACT: attempt 1's landed package must be byte-unchanged — attempt
+  // 2's failed retry must not have partially overwritten or corrupted it.
+  assert.equal(readFileSync(landedYamlPath, 'utf8'), landedYamlBefore, 'the previously-landed hook.yaml must be BYTE-UNCHANGED after the refused retry');
+  assert.equal(readFileSync(landedScriptPath, 'utf8'), landedScriptBefore, 'the previously-landed scripts/run.sh must be BYTE-UNCHANGED after the refused retry');
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', collidingId)), false, 'attempt 2 must install nothing under studio/hooks/ either');
+});
+
+// ===========================================================================
 // Handler contract — direct invocation (unchanged passthrough contract).
 // ===========================================================================
 
