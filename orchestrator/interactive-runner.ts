@@ -210,7 +210,35 @@ export async function runInteractiveTurn(
 
   const forgeRoot = ctx.forgeRoot ?? resolve('.');
   const logsRoot = ctx.logsRoot ?? resolve(forgeRoot, '_logs');
-  const cycleId = `_interactive-${descriptor.id}-${ctx.sessionId}`;
+  // The event-log DIRECTORY is `_<descriptor.id>-<sessionId>` — the convention
+  // every consumer of an interactive session's live log already derives
+  // independently, and which the spine must therefore match rather than invent:
+  //   - `forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` builds
+  //     `` `_${kind}-${sessionId}` `` and hands it to `useCycleEvents`;
+  //   - `cli/ui-bridge.ts`'s `spawnAgentTurn` writes THIS SAME TURN's
+  //     `stderr.log` into `` `_logs/_${logPrefix}-${sessionId}` ``, where
+  //     `SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring'`;
+  //   - the four legacy `ensure*Tail` helpers use `_architect-` /
+  //     `_instructions-` / `_demo-` / `_project-brain-`.
+  // This previously read `_interactive-<id>-<sid>`, which agreed with NOTHING:
+  // an `authoring` turn's events landed in `_interactive-authoring-<sid>` while
+  // its own stderr landed in `_authoring-<sid>` and the UI subscribed to a third
+  // (empty) place, so the live activity panel could never show anything and a
+  // failed turn's two halves were in different directories. Pinned by AT-a/AT-b
+  // (`cli/agent-run.test.ts`) and by the co-location ratchet
+  // (`cli/agent-run-log-dir-colocation.test.ts`), which fails if this template
+  // and the bridge's `logDir` template ever resolve differently again.
+  //
+  // Consequence, deliberate: for a kind id that also names a legacy runner, this
+  // directory is now INDISTINGUISHABLE from that runner's own — which is exactly
+  // what a future R4-22-F4 migration needs (the log dir survives the migration),
+  // and is why the tests' "which road did the fork take" discriminator moved off
+  // the directory name and onto `RUNNER_SKILL` below, which no legacy runner emits.
+  //
+  // `initiativeId` is an event FIELD, not a directory, and no consumer derives it
+  // — it keeps its `interactive-` marker so the spine's events stay identifiable
+  // once the directory name no longer distinguishes them.
+  const cycleId = `_${descriptor.id}-${ctx.sessionId}`;
   const initiativeId = `interactive-${descriptor.id}-${ctx.sessionId}`;
   const logger = ctx.logger ?? createLogger(cycleId, logsRoot);
   const queryFn: QueryFn = ctx.queryFn ?? (sdkQuery as unknown as QueryFn);
