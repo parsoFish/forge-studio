@@ -146,8 +146,14 @@ test('RED-4a: POST /api/studio/authoring/finalize (kind:"skill") installs a vali
     ],
     upstream: { source: 'forge://authoring-session/authored-skill' },
   });
-  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${await res.text()}`);
-  const body = (await res.json()) as { ok: boolean; id: string; kind?: string };
+  // Read the body ONCE — a Response body is single-read; the earlier shape
+  // (`await res.text()` inside the assert message, THEN `await res.json()`)
+  // unconditionally consumed it twice regardless of status, throwing "Body
+  // already read" independent of what the server returned (a test-harness
+  // bug, not a spec change — verified the route itself is correct).
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; id: string; kind?: string };
   assert.equal(body.ok, true);
   assert.equal(body.id, 'authored-skill');
 
@@ -236,8 +242,10 @@ test('RED-4c: POST /api/studio/authoring/finalize (kind:"hook") writes the exist
     scriptBody: '#!/usr/bin/env bash\necho "authored hook ran"\n',
     permissions: DENY_ALL,
   });
-  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${await res.text()}`);
-  const body = (await res.json()) as { ok: boolean; id: string };
+  // Read the body ONCE — see RED-4a's identical comment above for why.
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; id: string };
   assert.equal(body.ok, true);
 
   const yamlBody = readFileSync(join(forgeRoot, 'studio', 'hooks', body.id, 'hook.yaml'), 'utf8');

@@ -566,9 +566,9 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
   });
 
-  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 5 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding")', () => {
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 6 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding"; R4-21 adds "authoring")', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 5, `expected exactly 5 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 6, `expected exactly 6 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding", R4-21 adds "authoring"), got ids: ${descs.map((d) => d.id).join(', ')}`);
 
     const architect = byId(descs, 'architect');
     assert.equal(architect.agent, 'architect');
@@ -626,6 +626,20 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
       { kind: 'contract-buildout', label: 'Contract build-out' },
       'the label is verbatim from the mockup (mockups/studio-endstate-v2/data.jsx SESSIONS[\'project-onboarding\'].artifactLabel) — pinned exactly, not paraphrased',
     );
+
+    // R4-21: the new "authoring" session kind (creation-agent, file-package —
+    // this file's RED-1a..1d above pin the SESSION_STAGES/SESSION_ARTIFACT_KINDS
+    // vocabulary extensions this descriptor relies on). legacyRoutes:[] —
+    // there was no predecessor authoring session ROUTE before this initiative
+    // (creation-agent is new). A single-stage session: 'authoring' is
+    // SESSION_STAGES's first-ever extension, unrelated to the ordered
+    // onboarding sequence the other six tokens encode.
+    const authoring = byId(descs, 'authoring');
+    assert.equal(authoring.agent, 'creation-agent');
+    assert.deepEqual(authoring.legacyRoutes, []);
+    assert.deepEqual(authoring.stages, ['authoring']);
+    assert.equal(authoring.defaultStage, 'authoring');
+    assert.deepEqual(authoring.artifact, { kind: 'file-package', label: 'Package' });
   });
 });
 
@@ -642,17 +656,18 @@ describe('R4-21 — the "authoring" session kind (creation-agent, file-package)'
   // stage/artifact fields are deliberately kept on TODAY's already-valid
   // vocabulary (stages:['roadmap'], artifact.kind:'roadmap-draft') so this
   // assertion is not entangled with RED-1a/RED-1d's SEPARATE "authoring" is
-  // not yet a member of SESSION_STAGES concern. `creation-agent` is
-  // deliberately NOT seeded via writeAgentSkill here — skills/creation-agent/
-  // SKILL.md genuinely does not exist anywhere yet (this initiative's own
-  // agent), so discoverRuntimeAgentIds (session-kinds.ts) cannot resolve it,
-  // and validateSessionKinds must emit a session-kinds/unknown-agent finding
-  // naming it — which is exactly why this assertion (expecting ZERO such
-  // findings) is RED today.
-  it('RED-1c: a descriptor whose agent is "creation-agent" resolves via discoverRuntimeAgentIds with zero unknown-agent findings (RED: skills/creation-agent/SKILL.md does not exist yet, anywhere)', () => {
+  // not yet a member of SESSION_STAGES concern. `discoverRuntimeAgentIds` is
+  // strictly `skillsDir(forgeRoot)`-scoped with no fallback to the real repo
+  // (confirmed empirically — a fixture root with no seeded skills/ dir at all
+  // can never resolve "creation-agent" regardless of what exists on disk
+  // elsewhere), so this fixture seeds it via `writeAgentSkill` exactly like
+  // every other positive-case fixture in this file (AT-6/7/12's own idiom) —
+  // `libraryFalse: true` since the real creation-agent ships `library: false`
+  // (an operator-driven bridge-dispatched helper, mirrors demo-builder/
+  // instructions-creator, never part of the composable Studio roster).
+  it('RED-1c: a descriptor whose agent is "creation-agent" resolves via discoverRuntimeAgentIds with zero unknown-agent findings', () => {
     const root = makeForgeRoot();
-    // No writeAgentSkill(root, 'creation-agent') call — its absence IS the
-    // RED reason, mirroring the real repo's current state exactly.
+    writeAgentSkill(root, 'creation-agent', { libraryFalse: true });
     writeSessionKindsYaml(root, [
       baseDescriptor({ id: 'authoring', agent: 'creation-agent', stages: ['roadmap'], defaultStage: 'roadmap', artifact: { kind: 'roadmap-draft', label: 'Authored package' } }),
     ]);

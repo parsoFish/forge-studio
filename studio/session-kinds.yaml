@@ -97,3 +97,21 @@
   artifact:
     kind: contract-buildout
     label: Contract build-out
+
+# R4-21 — the authoring session (creation-agent). A single-stage session:
+# 'authoring' is SESSION_STAGES's first-ever extension (session-kinds.ts),
+# added purely to back this descriptor — unrelated to the ordered onboarding
+# sequence the other six stage tokens encode. legacyRoutes is deliberately
+# [] — there was no predecessor authoring session ROUTE at all before this
+# initiative (creation-agent is new). artifact.kind is 'file-package' — the
+# session's accumulating draft skill/hook package (deriveFilePackage reads
+# the session dir's own package/ subdirectory).
+- id: authoring
+  agent: creation-agent
+  title: Authoring session
+  legacyRoutes: []
+  stages: [authoring]
+  defaultStage: authoring
+  artifact:
+    kind: file-package
+    label: Package
