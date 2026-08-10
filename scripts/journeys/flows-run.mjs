@@ -879,7 +879,7 @@ export const journey = defineJourney({
               // about the canonical cycle is mutated. The hex click just opens/observes the
               // phase drawer (read-only), mirroring the established expectHexOpensDrawer
               // visual without asserting inside the clip.
-              await recordClip(browser, watch, 'run-build-monitor', '/', async (p) => {
+              await recordClip(browser, watch, 'run-build-monitor', '/library', async (p) => {
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },

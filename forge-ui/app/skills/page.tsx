@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { fetchSkillLibrary, type SkillLibraryEntry } from '@/lib/skill-client';
 import { groupSkillLibrary, skillBadges, filterSkills } from '@/lib/skill-library-view';
 import { fetchCommunityIndex, type CommunityItem } from '@/lib/community-client';
@@ -104,37 +104,34 @@ export default function SkillLibraryPage() {
   const grouped = groupSkillLibrary(filtered);
 
   return (
-    <main
-      data-page="skill-library"
-      data-page-ready={status !== 'loading' ? 'true' : 'false'}
-      data-community-join={communityJoinStatus}
-      data-skill-count={grouped.total}
-      data-local-count={grouped.localCount}
-      data-community-count={grouped.communityCount}
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    <StudioPage
+      dataPage="skill-library"
+      ready={status !== 'loading'}
+      data={{
+        'data-community-join': communityJoinStatus,
+        'data-skill-count': grouped.total,
+        'data-local-count': grouped.localCount,
+        'data-community-count': grouped.communityCount,
+      }}
+      title="Skills"
+      lede={
+        <>
+          Reusable instruction packets an agent composes. Hand-authored skills are ready
+          immediately; a skill installed from the community starts as a draft until you
+          approve it.
+        </>
+      }
+      actions={
+        <>
+          <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
+            Browse community
+          </Link>
+          <Link href="/skills/new" data-action="new-skill" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+            + New skill
+          </Link>
+        </>
+      }
     >
-      <StudioNav />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-              Skills
-            </h1>
-            <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 560, lineHeight: 1.6 }}>
-              Reusable instruction packets an agent composes. Hand-authored skills are ready
-              immediately; a skill installed from the community starts as a draft until you
-              approve it.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
-              Browse community
-            </Link>
-            <Link href="/skills/new" data-action="new-skill" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
-              + New skill
-            </Link>
-          </div>
-        </div>
 
         <input
           type="text"
@@ -176,8 +173,7 @@ export default function SkillLibraryPage() {
         {status === 'ready' && grouped.community.length > 0 && (
           <SkillSection title="Community" entries={grouped.community} communityItems={communityItems} />
         )}
-      </div>
-    </main>
+    </StudioPage>
   );
 }
 

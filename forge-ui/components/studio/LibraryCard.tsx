@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import type { Agent, Flow, Kb, Project, Run } from '@/lib/studio-client';
+import { ProvenanceBadge, provenanceOfFlowOrigin } from '@/components/ProvenanceBadge';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -108,6 +109,7 @@ export function FlowCard({
 
   const proj = flow.project ? projects.find((p) => p.id === flow.project) : null;
   const triggers = flow.triggers ?? [];
+  const provenance = provenanceOfFlowOrigin(flow.origin);
 
   // Runs for this flow
   const flowRuns = runs.filter((r) => r.flowId === flow.id);
@@ -121,10 +123,12 @@ export function FlowCard({
       className="lib-card"
       data-card-type="flow"
       data-card-id={flow.id}
+      data-provenance={provenance}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{flow.name}</span>
+        <ProvenanceBadge provenance={provenance} />
         <span className="badge badge-flow">flow</span>
       </div>
       <p className="card-body">{truncate(flow.goal, 110)}</p>

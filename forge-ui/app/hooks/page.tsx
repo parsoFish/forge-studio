@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { fetchHookLibrary, type HookLibraryEntry } from '@/lib/hook-client';
 import { filterHooks, needsReviewCountOf, hookBadges } from '@/lib/hook-library-view';
 
@@ -48,35 +48,32 @@ export default function HookLibraryPage() {
   const needsReviewCount = needsReviewCountOf(entries);
 
   return (
-    <main
-      data-page="hook-library"
-      data-page-ready={status !== 'loading' ? 'true' : 'false'}
-      data-hook-count={filtered.length}
-      data-needs-review-count={needsReviewCount}
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    <StudioPage
+      dataPage="hook-library"
+      ready={status !== 'loading'}
+      data={{
+        'data-hook-count': filtered.length,
+        'data-needs-review-count': needsReviewCount,
+      }}
+      title="Hooks"
+      lede={
+        <>
+          Agent-lifecycle customisations — scripts an agent runs on a lifecycle event (a tool
+          use, session start/end, ...). Every hook is scanned before it can run, and an
+          operator must explicitly approve or override it.
+        </>
+      }
+      actions={
+        <>
+          <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
+            Browse community
+          </Link>
+          <Link href="/hooks/new" data-action="new-hook" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
+            + New hook
+          </Link>
+        </>
+      }
     >
-      <StudioNav />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-              Hooks
-            </h1>
-            <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 560, lineHeight: 1.6 }}>
-              Agent-lifecycle customisations — scripts an agent runs on a lifecycle event (a tool
-              use, session start/end, ...). Every hook is scanned before it can run, and an
-              operator must explicitly approve or override it.
-            </p>
-          </div>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
-              Browse community
-            </Link>
-            <Link href="/hooks/new" data-action="new-hook" className="btn btn-primary" style={{ whiteSpace: 'nowrap' }}>
-              + New hook
-            </Link>
-          </div>
-        </div>
 
         <input
           type="text"
@@ -118,8 +115,7 @@ export default function HookLibraryPage() {
             ))}
           </div>
         )}
-      </div>
-    </main>
+    </StudioPage>
   );
 }
 

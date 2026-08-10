@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { fetchCommunityIndex, COMMUNITY_KINDS, type CommunityItem, type CommunityHubWithCount, type CommunityKind } from '@/lib/community-client';
 import { filterByKind, filterCommunityItems, installStateLabel, signalsLabel, hubLabel } from '@/lib/community-view';
 
@@ -59,26 +59,23 @@ export default function CommunityBrowserPage() {
   const filtered = filterCommunityItems(byKind, query);
 
   return (
-    <main
-      data-page="community-browser"
-      data-page-ready={status !== 'loading' ? 'true' : 'false'}
-      data-item-count={filtered.length}
-      data-kind-filter={kind}
-      data-hub-count={hubs.length}
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    <StudioPage
+      dataPage="community-browser"
+      ready={status !== 'loading'}
+      data={{
+        'data-item-count': filtered.length,
+        'data-kind-filter': kind,
+        'data-hub-count': hubs.length,
+      }}
+      title="Community"
+      lede={
+        <>
+          One browser over every source hub — skills, hooks, MCP servers and tools. Installing pulls a copy
+          into the matching local library with provenance and hub signals kept; approval (if the object needs
+          it) happens on its own owning page, never here.
+        </>
+      }
     >
-      <StudioNav />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-            Community
-          </h1>
-          <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 640, lineHeight: 1.6 }}>
-            One browser over every source hub — skills, hooks, MCP servers and tools. Installing pulls a copy
-            into the matching local library with provenance and hub signals kept; approval (if the object needs
-            it) happens on its own owning page, never here.
-          </p>
-        </div>
 
         {status === 'ready' && (
           <div data-component="hub-strip" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 18 }}>
@@ -156,8 +153,7 @@ export default function CommunityBrowserPage() {
             ))}
           </div>
         )}
-      </div>
-    </main>
+    </StudioPage>
   );
 }
 

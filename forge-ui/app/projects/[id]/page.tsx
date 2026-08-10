@@ -22,6 +22,7 @@ import { groupCyclesByInitiative, type InitiativeGroup } from '@/lib/cycle-group
 import { showShowcaseEntry } from '@/lib/project-showcase';
 import { topoLevels } from '@/lib/dep-layout';
 import { StudioNav } from '@/components/StudioNav';
+import { PageHeader } from '@/components/StudioPage';
 import { RoadmapDag } from '@/components/studio/RoadmapDag';
 import { SaveStatus } from '@/components/SaveStatus';
 import { useSaveState } from '@/lib/useSaveState';
@@ -784,16 +785,18 @@ function ProjectOnboardForm() {
     >
       <StudioNav />
       <div data-section="project-onboard" style={{ maxWidth: 640, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-          Onboard a project
-        </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 24px' }}>
-          Register a code project so a flow can build it. You only need a name, the command that
-          proves a change is good (the quality gate), and a one-line north star. Everything else has
-          a sensible default. The repo path must point at an <strong>existing git repository</strong>
-          {' '}(clone or symlink it under <code>projects/</code> first); onboarding scaffolds the
-          contract files and <code>git init</code>s the dir if it is not already a repo.
-        </p>
+        <PageHeader
+          title="Onboard a project"
+          lede={
+            <>
+              Register a code project so a flow can build it. You only need a name, the command that
+              proves a change is good (the quality gate), and a one-line north star. Everything else has
+              a sensible default. The repo path must point at an <strong>existing git repository</strong>
+              {' '}(clone or symlink it under <code>projects/</code> first); onboarding scaffolds the
+              contract files and <code>git init</code>s the dir if it is not already a repo.
+            </>
+          }
+        />
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>

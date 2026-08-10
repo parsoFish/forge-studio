@@ -16,7 +16,7 @@ export default function RecoveryRedirect(): JSX.Element {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace('/');
+    router.replace('/library');
   }, [router]);
 
   return (

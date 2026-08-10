@@ -44,7 +44,7 @@ export const journey = defineJourney({
               // the project appears in the library, lint stays green.
               console.log('\n[J4] Onboard a project from the UI');
               cleanFirstProject();
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
@@ -155,7 +155,7 @@ export const journey = defineJourney({
               // canonical J4_PROJECT above. Starts at the LIBRARY, the entry point a user
               // would actually use, not the /projects/new URL directly.
               const j4ClipSlug = `${J4_PROJECT}-clip`;
-              await recordClip(browser, watch, 'onboard-form', '/', async (p) => {
+              await recordClip(browser, watch, 'onboard-form', '/library', async (p) => {
                 await p.waitForFunction(() => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
                 await sleep(1400); // dwell — the library's "+ New Project" CTA (same onboarding entry as create-new)
                 await p.locator('[data-action="new-project"]').click().catch(() => {});
@@ -170,7 +170,7 @@ export const journey = defineJourney({
               cleanOnboardedProject(j4ClipSlug);
 
               // The project now appears in the library.
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
