@@ -51,6 +51,17 @@
  * RED-NOW: the entire suite fails at import time ("Cannot find module
  * './interactive-finalizers.ts'") because the module does not exist yet —
  * see the run output recorded in this WI's report.
+ *
+ * ADDENDUM (T3 second pass, R4-22 WI-2): a TOCTOU test pinning an
+ * adversarial-review-REPRODUCED finding (not discovered by this file) was
+ * added at the bottom — `copyStagingToLibrary`'s CHECK-THEN-WRITE is two
+ * PHASES (`discoverStagingEntries` validates + records every entry's
+ * `srcRealPath`; a later, separate loop `readFileSync`s each recorded path)
+ * with a real gap between them: a staged entry swapped for a symlink to an
+ * outside secret AFTER it passes Phase-1 containment but BEFORE Phase-2
+ * reads it is followed straight into the library. See that test's own
+ * header comment for the full mechanism, the determinism approach, and the
+ * two dead-end probe attempts it documents to avoid repeating.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -65,10 +76,12 @@ import {
   realpathSync,
   symlinkSync,
   linkSync,
+  unlinkSync,
   rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire, syncBuiltinESMExports } from 'node:module';
 
 import { FINALIZERS, resolveFinalizer, copyStagingToLibrary } from './interactive-finalizers.ts';
 
@@ -660,3 +673,249 @@ test('CHECK-THEN-WRITE: one legit entry (encountered first) + one escaping entry
     rmSync(outside, { recursive: true, force: true });
   }
 });
+
+// ---------------------------------------------------------------------------
+// TOCTOU — R4-22 WI-2 reproduced finding (adversarial-review pass; the race
+// was ALREADY reproduced 3/3 deterministic runs before this test was
+// written — this test PINS it, it does not discover it).
+//
+// copyStagingToLibrary's containment is CHECK-THEN-WRITE across TWO PHASES
+// with a real gap between them, not one atomic check-then-use:
+//   Phase 1 — discoverStagingEntries validates EVERY staged entry through
+//     resolveGuardedPath and records each entry's `srcRealPath` (a PATH
+//     STRING) into an array. This runs to completion for the WHOLE tree
+//     before phase 2 starts.
+//   Phase 2 — a separate loop (interactive-finalizers.ts ~246-250) later
+//     does `readFileSync(srcRealPath)` for each recorded entry and writes
+//     the result into the library.
+// Between "aaa.txt passed its Phase-1 check and got recorded" and "Phase 2
+// reads aaa.txt's recorded path", NOTHING re-verifies that the thing living
+// at that path is still the same regular, non-symlinked, single-link file
+// Phase 1 actually looked at. Swap it for a symlink to an outside secret in
+// that window and readFileSync follows the symlink straight into the
+// library, while every resolveGuardedPath call along the way reported
+// {ok:true}. Phase separation WIDENS this window relative to an immediate
+// check-then-use — the module's header (lines ~53-61) currently frames
+// check-then-write purely as an atomicity property and does not disclose
+// that cost; fixing that framing is the implementer's job, not this file's.
+//
+// KILLS: any Phase-2 read that trusts a Phase-1-recorded path string as-is
+// (e.g. a bare `readFileSync(srcRealPath)`) without re-verifying, AT READ
+// TIME, that the path still resolves to a regular file with nlink===1 and is
+// not a symlink. The planned fix — openSync(path, O_RDONLY | O_NOFOLLOW) +
+// an fstatSync re-verification on the returned fd — is deliberately NOT
+// asserted on below; only the security OUTCOME is (a swapped-in refusal is
+// just as acceptable a fix as a throw, so long as the secret's bytes never
+// reach the library).
+//
+// DETERMINISM — how the swap is triggered, and the two dead ends to avoid
+// repeating (both empirically probed before landing on this approach; see
+// this WI's report for the throwaway two-file harness that proved each):
+//
+//   1. Trigger KEY: the hook below fires on an EXACT match of the absolute
+//      real path of the SECOND staged entry ("bbb-trigger.txt", which sorts
+//      after "aaa-swap-target.txt" and is therefore validated strictly
+//      AFTER aaa.txt is already recorded). An exact-path match — never a
+//      filename substring — matters because this test's OWN cleanup
+//      (`rmSync(base, {recursive:true})` in the `finally` below) walks the
+//      very same tree and would otherwise risk re-matching a loosely-keyed
+//      trigger; a prior probe that used a substring/name-based trigger saw
+//      its one-shot flag silently consumed by rmSync's own internal walk
+//      BEFORE the real copyStagingToLibrary walk ever ran, printing a false
+//      "swap performed: true" while the swap had never actually fired
+//      against the SUT. Here the hook is installed immediately before, and
+//      uninstalled immediately after, the single `callAndCapture` call —
+//      it is never live during cleanup at all, so that failure mode cannot
+//      recur, and `swapPerformed`/a direct `lstatSync(...).isSymbolicLink()`
+//      check on the swapped path are asserted true BEFORE any verdict is
+//      read, so a hook that silently didn't fire cannot be mistaken for a
+//      passing (or a meaningfully failing) containment check.
+//
+//   2. Patch MECHANISM: a bare `require('node:fs').lstatSync = patched` (via
+//      `createRequire`) is SILENTLY INERT here — proven with a throwaway
+//      two-file probe (a "producer" module statically importing
+//      `{ lstatSync } from 'node:fs'`, plus a "patcher" file shaped exactly
+//      like this one: its own top-level static `import { ... } from
+//      'node:fs'` for scratch-fs helpers, then a require()-based patch of
+//      the CJS fs object). The probe's patched function was never invoked:
+//      this file, like interactive-finalizers.ts itself, has a top-level
+//      static `import { ... } from 'node:fs'`, and Node materializes
+//      concrete function values onto node:fs's synthetic ESM namespace the
+//      first time ANY code anywhere in the process statically imports it —
+//      a snapshot taken once, process-wide, not a live view of the CJS
+//      exports object. Later CJS-side mutation alone is never observed by
+//      an already-loaded static importer, no matter which file performs the
+//      require() or in what order. `syncBuiltinESMExports()` — a
+//      documented, NON-experimental `node:module` API ("updates all the
+//      live bindings for builtin ES Modules to match the properties of the
+//      CommonJS exports") — is the one mechanism that reaches back into an
+//      already-materialized facade; the same throwaway probe, re-run with a
+//      `syncBuiltinESMExports()` call added right after the CJS-side patch,
+//      DID observe the patched function fire from the statically-importing
+//      producer. That is the mechanism `installLstatTrigger` below uses.
+// ---------------------------------------------------------------------------
+
+/** Recursively reads every regular file's utf8 content under `root` (or `[]`
+ *  if `root` does not exist). Used ONLY to prove the ARTIFACT-level claim —
+ *  "no file ANYWHERE under the library contains the secret's bytes" — not
+ *  merely that one particular expected destination path is absent; a
+ *  symlink-follow escape could in principle land leaked content somewhere
+ *  other than the naively-expected path, and this check must catch that
+ *  too. Directories are walked (not followed if they were symlinks — this
+ *  finalizer's own contract never plants symlinked directories in a
+ *  freshly-written library, so `isFile()`/`isDirectory()` on a bare
+ *  `lstatSync` is sufficient here). */
+function collectFileContentsRecursively(root: string): string[] {
+  if (!existsSync(root)) return [];
+  const out: string[] = [];
+  function walk(dir: string): void {
+    for (const name of readdirSync(dir)) {
+      const full = join(dir, name);
+      const st = lstatSync(full);
+      if (st.isDirectory()) {
+        walk(full);
+      } else if (st.isFile()) {
+        out.push(readFileSync(full, 'utf8'));
+      }
+    }
+  }
+  walk(root);
+  return out;
+}
+
+/**
+ * Monkeypatches node:fs's `lstatSync` (CJS side, pushed into the already-
+ * materialized ESM facade via `syncBuiltinESMExports()` — see the section
+ * header above for why a bare CJS-side patch alone is inert) so the FIRST
+ * call whose `path` argument is EXACTLY `triggerPath` invokes `onTrigger()`
+ * before falling through to the real implementation. Every other call
+ * (including a SECOND call with the same path) passes through untouched.
+ * Returns an uninstall function; callers MUST call it (in a `finally`) so
+ * the patch never leaks into a later test running in this same process.
+ */
+function installLstatTrigger(triggerPath: string, onTrigger: () => void): () => void {
+  const require = createRequire(import.meta.url);
+  const fsCjs = require('node:fs') as unknown as { lstatSync: unknown };
+  const original = fsCjs.lstatSync as (...args: unknown[]) => unknown;
+  let fired = false;
+  const patched = (...args: unknown[]): unknown => {
+    if (!fired && args[0] === triggerPath) {
+      fired = true;
+      onTrigger();
+    }
+    return original(...args);
+  };
+  fsCjs.lstatSync = patched;
+  syncBuiltinESMExports();
+
+  return function uninstall(): void {
+    fsCjs.lstatSync = original;
+    syncBuiltinESMExports();
+  };
+}
+
+test(
+  'ESCAPE (TOCTOU, R4-22 WI-2 reproduced finding): a staged entry swapped for a symlink AFTER it passes Phase-1 ' +
+    "containment but BEFORE Phase-2 reads it still lands the outside secret's bytes in the library",
+  async (t) => {
+    const { base, forgeRoot, libraryRoot, sessionDir, stagingDir } = mkScratch('finalizer-toctou-');
+    const outside = mkdtempSync(join(tmpdir(), 'finalizer-toctou-OUTSIDE-'));
+    let uninstall: (() => void) | null = null;
+    try {
+      // Alphabetical order matters (discoverStagingEntries sorts): aaa is
+      // validated, and its srcRealPath recorded, strictly BEFORE bbb.
+      const aaaPath = join(stagingDir, 'aaa-swap-target.txt');
+      const bbbPath = join(stagingDir, 'bbb-trigger.txt');
+      const originalAaaBytes = 'ORIGINAL-AAA-CONTENT-legit-2f6c19';
+      writeFileSync(aaaPath, originalAaaBytes);
+      writeFileSync(bbbPath, 'BBB-CONTENT-just-needs-to-exist-and-sort-after-aaa');
+
+      const secretFile = join(outside, 'outside-secret.txt');
+      const secretBytes = 'OUTSIDE-SECRET-MUST-NEVER-REACH-THE-LIBRARY-9a41ee';
+      writeFileSync(secretFile, secretBytes);
+
+      // Arrange preconditions BEFORE the call, not after.
+      assert.equal(readFileSync(secretFile, 'utf8'), secretBytes, 'arrange: outside secret has known bytes');
+      assert.equal(readFileSync(aaaPath, 'utf8'), originalAaaBytes, 'arrange: aaa.txt starts as a real, legit file');
+      assert.ok(!lstatSync(aaaPath).isSymbolicLink(), 'arrange: aaa.txt is not yet a symlink');
+
+      const stagingReal = realpathSync(stagingDir);
+      const aaaRealPath = join(stagingReal, 'aaa-swap-target.txt');
+      const bbbExpectedPath = join(stagingReal, 'bbb-trigger.txt'); // EXACT-match trigger key — see header
+
+      let swapPerformed = false;
+      let symlinkCreationUnavailable = false;
+      let swapArrangeError: unknown = null;
+
+      uninstall = installLstatTrigger(bbbExpectedPath, () => {
+        // Fires the FIRST time anything lstat()s bbb's exact staging path —
+        // i.e. strictly after aaa.txt has already passed its own Phase-1
+        // guard check and been pushed into discoverStagingEntries' out[]
+        // (aaa sorts first and is fully processed — including its own
+        // explicit isFile() lstat — before the walk ever touches bbb).
+        unlinkSync(aaaRealPath);
+        try {
+          symlinkSync(secretFile, aaaRealPath);
+          swapPerformed = true;
+        } catch (err) {
+          symlinkCreationUnavailable = true;
+          swapArrangeError = err;
+        }
+      });
+
+      const { error, wrote } = await callAndCapture({ sessionDir, forgeRoot, libraryRoot, packageId: 'toctou-pkg' });
+
+      if (symlinkCreationUnavailable) {
+        t.skip(`symlink creation unavailable in this environment: ${String(swapArrangeError)}`);
+        return;
+      }
+
+      // Prove the hook actually fired and the swap actually happened —
+      // never trust a verdict behind a trigger that might have silently
+      // misfired (the exact false-"no race" trap a prior probe of this
+      // race hit; see the section header above).
+      assert.ok(
+        swapPerformed,
+        'arrange: the lstatSync trigger keyed on bbb\'s exact staging path must have fired and swapped aaa.txt ' +
+          'for a symlink — if this is false the whole test is vacuous (the race never happened)',
+      );
+      assert.ok(
+        lstatSync(aaaRealPath).isSymbolicLink(),
+        "arrange: aaa.txt's staging path must genuinely be a symlink after the swap — proves the trigger fired " +
+          'for real against the live filesystem, not merely that an in-memory flag was set',
+      );
+      assert.equal(
+        realpathSync(aaaRealPath),
+        realpathSync(secretFile),
+        'arrange: the planted symlink must genuinely resolve to the outside secret file',
+      );
+
+      // ---- THE SECURITY ASSERTION — this is what fails RED today ----
+
+      // The outside secret itself must always be untouched regardless of
+      // what copyStagingToLibrary does with it.
+      assert.equal(readFileSync(secretFile, 'utf8'), secretBytes, 'the outside secret file must be byte-unchanged');
+
+      // No file ANYWHERE under libraryRoot may contain the secret's bytes —
+      // whichever way the call resolves. A bare "it must throw" is NOT
+      // enough here: today's implementation does not throw AT ALL for this
+      // attack — readFileSync(srcRealPath) happily follows the planted
+      // symlink, writeFileSync happily writes the result, and the call
+      // returns normally with `wrote` naming the poisoned destination.
+      const leakedContent = collectFileContentsRecursively(libraryRoot).some((bytes) => bytes === secretBytes);
+      assert.ok(
+        !leakedContent,
+        'no file anywhere under libraryRoot may contain the outside secret\'s bytes. Kills a Phase-2 read ' +
+          '(readFileSync(srcRealPath), interactive-finalizers.ts ~246-250) that reuses a Phase-1-recorded PATH ' +
+          'STRING without re-verifying, AT READ TIME, that whatever now sits at that path is still the same ' +
+          'regular, non-symlinked, single-link file Phase 1 actually validated — the reproduced R4-22 WI-2 TOCTOU ' +
+          `finding. Observed outcome: error=${error ? `${error.name}: ${error.message}` : 'none (call returned normally)'}, ` +
+          `wrote=${JSON.stringify(wrote)}.`,
+      );
+    } finally {
+      if (uninstall) uninstall();
+      cleanup(base);
+      rmSync(outside, { recursive: true, force: true });
+    }
+  },
+);
