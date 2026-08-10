@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-10T00:31:09.142Z",
+  "generatedAt": "2026-08-10T02:03:04.199Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -189,7 +189,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 5M (got 1927093)",
+              "msg": "clip skill-edit.webm under 5M (got 1813812)",
               "pass": true
             },
             {
@@ -208,7 +208,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 1927093
+              "sizeBytes": 1813812
             }
           ],
           "pass": true
@@ -234,7 +234,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 5M (got 770972)",
+              "msg": "clip sk-create.webm under 5M (got 758224)",
               "pass": true
             },
             {
@@ -257,7 +257,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 770972
+              "sizeBytes": 758224
             },
             {
               "kind": "frame",
@@ -392,7 +392,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-10T00-17-03-67c85038)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-10T01-49-01-9812954d)",
               "pass": true
             },
             {
@@ -408,7 +408,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 5M (got 1916322)",
+              "msg": "clip skill-agentic.webm under 5M (got 1871076)",
               "pass": true
             },
             {
@@ -438,7 +438,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 1916322
+              "sizeBytes": 1871076
             }
           ],
           "pass": true
@@ -708,7 +708,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-blocked.webm under 5M (got 661366)",
+              "msg": "clip hook-blocked.webm under 5M (got 645556)",
               "pass": true
             },
             {
@@ -749,7 +749,7 @@
               "kind": "clip",
               "file": "clips/hook-blocked.webm",
               "caption": "Declaring the exfiltration doesn't excuse it: still blocked, approval refused, then an explicit, recorded override — the verdict never clears",
-              "sizeBytes": 661366
+              "sizeBytes": 645556
             }
           ],
           "pass": true
@@ -815,7 +815,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-bind.webm under 5M (got 911375)",
+              "msg": "clip hook-bind.webm under 5M (got 883310)",
               "pass": true
             },
             {
@@ -850,7 +850,7 @@
               "kind": "clip",
               "file": "clips/hook-bind.webm",
               "caption": "Binding a hook lives only in the Agent Builder — drag it into the dedicated hook zone and save",
-              "sizeBytes": 911375
+              "sizeBytes": 883310
             }
           ],
           "pass": true
@@ -1208,7 +1208,7 @@
               "pass": true
             },
             {
-              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ports/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ports/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-jports2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-jports2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -1387,15 +1387,15 @@
               "pass": true
             },
             {
-              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-10T00-17-56-535-jvgv\") — same runner as the agent page",
+              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-10T01-49-54-014-flbg\") — same runner as the agent page",
               "pass": true
             },
             {
-              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-10T00-17-56-4afa980f\")",
+              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-10T01-49-54-b8184413\")",
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 5M (got 1559337)",
+              "msg": "clip onboard-form.webm under 5M (got 1586466)",
               "pass": true
             },
             {
@@ -1427,7 +1427,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1559337
+              "sizeBytes": 1586466
             }
           ],
           "pass": true
@@ -1437,7 +1437,7 @@
           "narration": "The dispatch the previous beat fired is not fire-and-forget any more: it opened a real staged session on the shared R2-10 shell. Opening it shows the contract building out stage by stage — contract, instructions, secrets, demo, roadmap — each row derived from the project's own artifacts on disk, with secrets shown by NAME only. The same five rows are served by the project-page data contract R4-12-F1 renders in batch D.",
           "checks": [
             {
-              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-10T00-17-56-4afa980f\")",
+              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-10T01-49-54-b8184413\")",
               "pass": true
             },
             {
@@ -1507,7 +1507,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 5M (got 1273955)",
+              "msg": "clip onboard-resolve.webm under 5M (got 1293819)",
               "pass": true
             },
             {
@@ -1551,7 +1551,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1273955
+              "sizeBytes": 1293819
             },
             {
               "kind": "frame",
@@ -1604,7 +1604,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 5M (got 861822)",
+              "msg": "clip project-create.webm under 5M (got 839531)",
               "pass": true
             },
             {
@@ -1627,7 +1627,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 861822
+              "sizeBytes": 839531
             },
             {
               "kind": "frame",
@@ -1827,7 +1827,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 5M (got 1423736)",
+              "msg": "clip instr-generate.webm under 5M (got 1485779)",
               "pass": true
             },
             {
@@ -1850,7 +1850,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1423736
+              "sizeBytes": 1485779
             },
             {
               "kind": "frame",
@@ -1889,7 +1889,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 5M (got 1011866)",
+              "msg": "clip pbrain-generate.webm under 5M (got 1055563)",
               "pass": true
             },
             {
@@ -1912,7 +1912,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 1011866
+              "sizeBytes": 1055563
             },
             {
               "kind": "frame",
@@ -2011,7 +2011,7 @@
               "pass": true
             },
             {
-              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-10T00-16-14Z_INIT-2026-08-10-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-10T00-16-14Z_INIT-2026-08-10-r4-12-ledger-nav\"})",
+              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-10T01-48-13Z_INIT-2026-08-10-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-10T01-48-13Z_INIT-2026-08-10-r4-12-ledger-nav\"})",
               "pass": true
             }
           ],
@@ -2174,7 +2174,7 @@
               "pass": true
             },
             {
-              "msg": "kb-create: the project-brain seeding session is viewable at /sessions/project-brain/2026-08-10T00-20-37-9c865879?project=mdtoc",
+              "msg": "kb-create: the project-brain seeding session is viewable at /sessions/project-brain/2026-08-10T01-52-37-49979acf?project=mdtoc",
               "pass": true
             },
             {
@@ -2182,7 +2182,7 @@
               "pass": true
             },
             {
-              "msg": "kb-create: data-session-id=\"2026-08-10T00-20-37-9c865879\" (got \"2026-08-10T00-20-37-9c865879\")",
+              "msg": "kb-create: data-session-id=\"2026-08-10T01-52-37-49979acf\" (got \"2026-08-10T01-52-37-49979acf\")",
               "pass": true
             },
             {
@@ -2205,7 +2205,7 @@
             {
               "kind": "frame",
               "file": "65-kb-2b-create-session-viewable.png",
-              "caption": "Knowledge — the create hand-off's seeding session, viewable at /sessions/project-brain/2026-08-10T00-20-37-9c865879 (real project anchor, mdtoc)",
+              "caption": "Knowledge — the create hand-off's seeding session, viewable at /sessions/project-brain/2026-08-10T01-52-37-49979acf (real project anchor, mdtoc)",
               "key": true
             }
           ],
@@ -2228,7 +2228,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 5M (got 847956)",
+              "msg": "clip kb-ingest.webm under 5M (got 832320)",
               "pass": true
             },
             {
@@ -2262,7 +2262,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 847956
+              "sizeBytes": 832320
             },
             {
               "kind": "frame",
@@ -2299,7 +2299,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 5M (got 1591205)",
+              "msg": "clip kb-lint.webm under 5M (got 1645607)",
               "pass": true
             }
           ],
@@ -2318,7 +2318,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1591205
+              "sizeBytes": 1645607
             }
           ],
           "pass": true
@@ -2388,7 +2388,7 @@
               "pass": true
             },
             {
-              "msg": "kb-band-seed: data-session-id=\"2026-08-10T00-21-15-851ba242\" (got \"2026-08-10T00-21-15-851ba242\")",
+              "msg": "kb-band-seed: data-session-id=\"2026-08-10T01-53-12-146bd0bd\" (got \"2026-08-10T01-53-12-146bd0bd\")",
               "pass": true
             },
             {
@@ -2662,7 +2662,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 5M (got 1157221)",
+              "msg": "clip agent-scratch-build.webm under 5M (got 1163937)",
               "pass": true
             }
           ],
@@ -2701,7 +2701,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 1157221
+              "sizeBytes": 1163937
             }
           ],
           "pass": true
@@ -2767,7 +2767,7 @@
               "pass": true
             },
             {
-              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-10T00-21-58-954-350d\")",
+              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-10T01-53-55-730-grdq\")",
               "pass": true
             },
             {
@@ -2815,7 +2815,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 5M (got 961719)",
+              "msg": "clip agent-build.webm under 5M (got 963243)",
               "pass": true
             }
           ],
@@ -2839,7 +2839,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 961719
+              "sizeBytes": 963243
             }
           ],
           "pass": true
@@ -3322,7 +3322,7 @@
           "narration": "The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx's own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client's own claim. No terminal state is reachable under this harness's no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route's `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.",
           "checks": [
             {
-              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-10T00-22-55-956-c36p\")",
+              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-10T01-54-52-516-w66e\")",
               "pass": true
             },
             {
@@ -3400,7 +3400,7 @@
               "pass": true
             },
             {
-              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-10T00-22-55-956-c36p) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-09T23-48-27-981-w6g7\",\"_agent-journey-kickoff-agent-2026-08-10T00-07-39-475-an1v\",\"_agent-journey-kickoff-agent-2026-08-10T00-22-55-956-c36p\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
+              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-10T01-54-52-516-w66e) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-10T01-21-12-417-t5cs\",\"_agent-journey-kickoff-agent-2026-08-10T01-39-26-044-m0g4\",\"_agent-journey-kickoff-agent-2026-08-10T01-54-52-516-w66e\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
               "pass": true
             }
           ],
@@ -3480,10 +3480,168 @@
             }
           ],
           "pass": true
+        },
+        "agents-run-developer-entry": {
+          "title": "The Developer's own page — the generic run surface, real flow usage, and its real guard (not hook) composition",
+          "narration": "run-agent-developer's mockup route (`#/agents/builder/developer`) names a fictional slug — the real roster agent is `developer-ralph` (studio/flows/forge-develop/flow.yaml's own `{id: dev, agent: developer-ralph}`), reached at its real `/agents/developer-ralph` page. \"Any agent can run standalone\" is the same R6-04-F1 generic Run affordance every unattended agent page carries. \"Its triggers: auto inside the flow\" is the real, rendered Used-in-Flows chip (forge-develop's dev node) — not a fabricated toggle, since no UI surface narrates an \"auto vs manual\" duality for a specific agent. And the mockup's \"security-review hook rides along\" claim is checked against the real definition, not assumed: developer-ralph's composition carries GUARDS (event-log, cost-guard, stall-watchdog, scratch-strip — ADR-039's dispatch-key vocabulary), and its Hooks zone is genuinely empty by default — the claim is not backed by the shipped agent, so the next beat's seeded run never repeats it.",
+          "checks": [
+            {
+              "msg": "agents-run-developer-entry: landed on the real developer-ralph agent page (got \"developer-ralph\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-entry: the generic Run affordance (R6-04-F1) is present on developer-ralph's page",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-entry: [data-component=\"used-in-flows\"] renders",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-entry: developer-ralph shows real flow usage, not the empty state — it is forge-develop's own dev node (got \"USED IN FLOWS\nFORGE DEVELOP\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-entry: developer-ralph's real Guards zone carries ≥1 bound guard chip (event-log/cost-guard/stall-watchdog/scratch-strip) (got \"4\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-entry: developer-ralph carries NO bound hook by default (data-count=\"0\") — the mockup's \"security-review hook rides along\" claim is not backed by the real shipped definition (ADR-039 guard/hook split)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "111-ard-1-entry.png",
+              "caption": "The Developer's real page — generic Run surface + real \"Used in Flows\" (forge-develop)",
+              "key": true
+            },
+            {
+              "kind": "frame",
+              "file": "112-ard-2-guards.png",
+              "caption": "developer-ralph's real composition: guards bound, no hook — checked live, not assumed"
+            }
+          ],
+          "pass": true
+        },
+        "agents-run-developer-fixture": {
+          "title": "The Developer's standalone run view — real TDD-red-to-green content, honest ceiling/materials/outputs/trigger",
+          "narration": "A hand-seeded `_logs/<runId>` fixture (no real standalone `_agent-*` run exists anywhere on this machine, measured — this file's own R6_06_STANDALONE_RUN_ID header) mirrors the SAME production emitter shape `runAgent()` writes, carrying the SAME real WI-1 content flows-run.mjs already seeds for the mdtoc `--write` cycle: gate.expected-fail's real stderr, the real Edit/Bash tool sequence, gate.pass, and the real cumulative cost/tokens. Live-dispatching developer-ralph for real here would only ever reproduce the SAME shallow, content-free 1-event skeleton agents-kickoff-dispatch/agents-kickoff-run-view already prove for issue-triage (this harness's no-spawn seam suppresses every real child spawn) — never this TDD narrative, which only exists inside a real, unspawned SDK turn. The run view's honest gaps are asserted too, not glossed over: typed outputs stay 0 (no wired data source for a generic dispatched agent's artifacts), materials render the honest-empty state (developer-ralph declares no `materials:` kinds — no roster agent does yet), and the trigger-provenance section is genuinely absent (no server-side path writes a standalone run's trigger origin yet — client-side plumbing only, forge-pet's own commit message).",
+          "checks": [
+            {
+              "msg": "agents-run-developer-fixture: the run view finds the seeded developer-ralph run (got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the seeded TDD-red-to-green content renders as log lines (got 10)",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the real gate.expected-fail line (TDD red) renders verbatim",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the real gate.pass line (TDD green) renders",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the real Edit/Bash tool_use events classify as kind=\"tool\" (got 5)",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the run's real accrued cost renders (got \"0.6676270500000001\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the $0.60 per-kickoff ceiling was recorded (data-ceiling-set=\"true\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the recorded ceiling is the real seeded $0.60 (got \"0.6\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: materials render the honest-empty state — developer-ralph declares no materials: kinds",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: typed outputs stay honestly 0 — no wired data source exists yet (got \"0\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-developer-fixture: the trigger-provenance section is genuinely absent — no server-side path writes a standalone run's trigger yet",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "113-ard-3-log.png",
+              "caption": "The Developer's standalone run — real TDD-red-to-green log content",
+              "key": true
+            },
+            {
+              "kind": "frame",
+              "file": "114-ard-4-honest-gaps.png",
+              "caption": "The Developer's standalone run — honest gaps: no materials, no typed outputs, no trigger provenance"
+            }
+          ],
+          "pass": true
+        },
+        "agents-run-adversarial-review-entry": {
+          "title": "Adversarial Review's standalone run view — real navigation, honestly absent trigger provenance",
+          "narration": "run-agent-adversarial-review's mockup route (`#/agents/run/adversarial-review`) needs a concrete run id in reality (`/agents/<id>/run/<runId>`) — a hand-seeded fixture (same corpus-provenance discipline as the Developer's own fixture, no real `_agent-*` run exists on this machine) supplies one. The mockup's \"the trigger is on the run header: auto, on Developer completion\" is checked against reality, not narrated as shown: `data-section=\"run-trigger\"` genuinely attaches structurally now (forge-pet, PR #106) but ONLY when the server body actually carries a `trigger` field — and no standalone-dispatch path writes one yet (client-side plumbing only, per that PR's own commit message). This beat proves the section is honestly ABSENT on this real run, the true current state, not the mockup's populated header.",
+          "checks": [
+            {
+              "msg": "agents-run-adversarial-review-entry: the run view finds the seeded adversarial-review run (got \"true\")",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-adversarial-review-entry: [data-section=\"run-trigger\"] is genuinely absent — no server-side path writes a standalone run's trigger origin yet (client-side plumbing only, forge-pet)",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "115-aar-1-entry.png",
+              "caption": "Adversarial Review's standalone run — real navigation; trigger provenance honestly absent, not fabricated",
+              "key": true
+            }
+          ],
+          "pass": true
+        },
+        "agents-run-adversarial-review-findings": {
+          "title": "Adversarial Review's real findings vocabulary — a clean pass, zero findings, every severity bucket honestly zero",
+          "narration": "The seeded run's own log carries the SAME real message vocabulary the flow-run's adversarial-review node already emits (review.input.assembled, review.findings.authored) — proving the standalone path produces the identical artifact shape a flow-node dispatch does (R4-10-F3's \"ship-both\" principle). \"Five claims, each refuted... all five survive\" is the agent's own internal SDK-turn reasoning (SKILL.md: candidate issues are weighed before any becomes a reported finding) — this harness spawns no real turn, so that claim-by-claim trace is honestly unavailable; what IS real and rendered is the COUNT-level outcome: total 0, every severity bucket 0, the real \"zero findings\" a verdict gate would actually read green against.",
+          "checks": [
+            {
+              "msg": "agents-run-adversarial-review-findings: the real review.input.assembled line renders (the diff assembled for critique)",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-adversarial-review-findings: the real review.findings.authored line renders (the terminal claims-weighed outcome)",
+              "pass": true
+            },
+            {
+              "msg": "agents-run-adversarial-review-findings: the run's real accrued cost renders (got \"0.47\")",
+              "pass": true
+            }
+          ],
+          "captures": [
+            {
+              "kind": "frame",
+              "file": "116-aar-2-findings.png",
+              "caption": "Adversarial Review's real vocabulary — a clean pass, zero findings, every severity bucket honestly zero",
+              "key": true
+            }
+          ],
+          "pass": true
         }
       },
       "pass": true,
-      "checksTotal": 147,
+      "checksTotal": 169,
       "checksFailed": 0
     },
     "flows-author": {
@@ -3542,17 +3700,17 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "111-j3-0-new-flow-seeded.png",
+              "file": "117-j3-0-new-flow-seeded.png",
               "caption": "J3 — new flow seeded from the basic starter (plan → dev → review)"
             },
             {
               "kind": "frame",
-              "file": "112-j3-1-flow-arranged.png",
+              "file": "118-j3-1-flow-arranged.png",
               "caption": "J3 — authored flow, node hand-arranged on the canvas"
             },
             {
               "kind": "frame",
-              "file": "113-j3-2-flow-persisted.png",
+              "file": "119-j3-2-flow-persisted.png",
               "caption": "J3 — node positions persist across reload (authored flow is durable)"
             }
           ],
@@ -3595,7 +3753,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msmhmx51, fn-msmhmx5b, fn-msmhmx5j, fn-msmhmx5u)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msmkx7hi, fn-msmkx7ht, fn-msmkx7i1, fn-msmkx7ic)",
               "pass": true
             },
             {
@@ -3687,61 +3845,61 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 5M (got 3698129)",
+              "msg": "clip flow-scratch-build.webm under 5M (got 3703967)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "114-a2-0b-capability-gate.png",
+              "file": "120-a2-0b-capability-gate.png",
               "caption": "A2 — the BUILD tab gates interactive-agent placement (R2-02-F3): a non-placeable palette chip, and a rejected drop, both driven by the F1 capability descriptor"
             },
             {
               "kind": "frame",
-              "file": "115-a2-0-blank-canvas.png",
+              "file": "121-a2-0-blank-canvas.png",
               "caption": "A2 — a genuinely blank canvas: cleared, ready to author from scratch"
             },
             {
               "kind": "frame",
-              "file": "116-a2-1-nodes-dropped.png",
+              "file": "122-a2-1-nodes-dropped.png",
               "caption": "A2 — dev → demo → adversarial-review → gate agent nodes dropped from the palette (real HTML5 DnD)"
             },
             {
               "kind": "frame",
-              "file": "117-a2-2-edges-wired.png",
+              "file": "123-a2-2-edges-wired.png",
               "caption": "A2 — edges wired by real handle-drag; ArtifactPicker labels each (wi-branches, pr, review-findings)"
             },
             {
               "kind": "frame",
-              "file": "118-a2-3-gate-toggled.png",
+              "file": "124-a2-3-gate-toggled.png",
               "caption": "A2 — the terminal node gated: a human verdict is required before this flow can complete"
             },
             {
               "kind": "frame",
-              "file": "119-a2-3b-fanout-gate.png",
+              "file": "125-a2-3b-fanout-gate.png",
               "caption": "A2 — the fanout toggle is enabled only on fanout-capable agents (R2-03-F3): developer-ralph on, demo-agent off"
             },
             {
               "kind": "frame",
-              "file": "120-a2-3b-trigger-merged.png",
+              "file": "126-a2-3b-trigger-merged.png",
               "caption": "A2 — a \"merged\" trigger authored via the kind selector: on merged → Reflect"
             },
             {
               "kind": "frame",
-              "file": "121-a2-3c-cron-validated.png",
+              "file": "127-a2-3c-cron-validated.png",
               "caption": "A2 — cron pattern validated client-side (invalid → flagged + add disabled; valid → clears), never saved (this scratch flow has no project bound)"
             },
             {
               "kind": "frame",
-              "file": "122-a2-4-saved.png",
+              "file": "128-a2-4-saved.png",
               "caption": "A2 — \"Forge Develop Scratch\" saved: a from-scratch flow, authored entirely in the UI"
             },
             {
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate",
-              "sizeBytes": 3698129
+              "sizeBytes": 3703967
             }
           ],
           "pass": true
@@ -3782,7 +3940,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "123-j5-0-authored-run.png",
+              "file": "129-j5-0-authored-run.png",
               "caption": "J5 — the authored flow, given work, runs plan → dev → review to the verdict gate"
             }
           ],
@@ -3808,7 +3966,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "124-flows-shelf-return.png",
+              "file": "130-flows-shelf-return.png",
               "caption": "flows-author — the from-scratch flow on the shelf, beside forge-develop, in the SAME library flows section"
             }
           ],
@@ -3839,7 +3997,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "125-r1-0-idea-typed.png",
+              "file": "131-r1-0-idea-typed.png",
               "caption": "R1 — operator types a real mdtoc feature idea"
             }
           ],
@@ -3869,12 +4027,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "126-r1-1-activity-midstream.png",
+              "file": "132-r1-1-activity-midstream.png",
               "caption": "R1 (mid-stream) — P3 activity panel filling while the architect reads the CLI source"
             },
             {
               "kind": "frame",
-              "file": "127-r1-1-activity-settled.png",
+              "file": "133-r1-1-activity-settled.png",
               "caption": "R1 (settled) — P3 activity panel: tool calls + reasoning rows persisted"
             }
           ],
@@ -3912,7 +4070,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "128-r1-2-questions.png",
+              "file": "134-r1-2-questions.png",
               "caption": "R1 — architect returns 2 clarifying questions (schema design + acc fixture)"
             }
           ],
@@ -3931,7 +4089,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 5M (got 1599140)",
+              "msg": "clip run-idea-interview.webm under 5M (got 1521166)",
               "pass": true
             },
             {
@@ -3942,7 +4100,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "129-r1-3-freetext.png",
+              "file": "135-r1-3-freetext.png",
               "caption": "R1 — P2: operator types a free-text answer on Q2 (overriding the option list)",
               "key": true
             },
@@ -3950,16 +4108,16 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1599140
+              "sizeBytes": 1521166
             },
             {
               "kind": "frame",
-              "file": "130-r1-3a-exploring.png",
+              "file": "136-r1-3a-exploring.png",
               "caption": "R1 — planning: the architect explores edge cases before drafting (R4-04-F4)"
             },
             {
               "kind": "frame",
-              "file": "131-r1-3b-drafting.png",
+              "file": "137-r1-3b-drafting.png",
               "caption": "R1 — planning: architect drafts with the answers folded in",
               "key": true
             }
@@ -3990,7 +4148,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "132-r1-4-stale-warning.png",
+              "file": "138-r1-4-stale-warning.png",
               "caption": "R1 — P1: StuckWarning renders when the architect goes quiet for >2 min"
             }
           ],
@@ -4003,7 +4161,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "133-r1-5-architect-cost.png",
+              "file": "139-r1-5-architect-cost.png",
               "caption": "R1 — P4: architect hex greens ($0.00 — real cycles meter it out-of-cycle)"
             }
           ],
@@ -4085,7 +4243,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "134-r1-6-roadmap-dag.png",
+              "file": "140-r1-6-roadmap-dag.png",
               "caption": "R1 — R4-15: the roadmap draft renders as a dependency DAG with its out-of-draft edge surfaced",
               "key": true
             }
@@ -4101,14 +4259,14 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 5M (got 1400454)",
+              "msg": "clip run-plan-gate.webm under 5M (got 1497250)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "135-r2-0-plan-html.png",
+              "file": "141-r2-0-plan-html.png",
               "caption": "R2 — rich PLAN.html with Given/When/Then AC cards",
               "key": true
             },
@@ -4116,7 +4274,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1400454
+              "sizeBytes": 1497250
             }
           ],
           "pass": true
@@ -4128,12 +4286,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "136-r2-1-send-back.png",
+              "file": "142-r2-1-send-back.png",
               "caption": "R2 — operator sends the plan back with feedback"
             },
             {
               "kind": "frame",
-              "file": "137-r2-1b-revised-plan.png",
+              "file": "143-r2-1b-revised-plan.png",
               "caption": "R2 — revised plan re-presented with (revised) badge"
             }
           ],
@@ -4159,17 +4317,17 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "138-r2-2-approve.png",
+              "file": "144-r2-2-approve.png",
               "caption": "R2 — operator approves the plan (human decision #1 complete)"
             },
             {
               "kind": "frame",
-              "file": "139-r2-2b-monitor-landing.png",
+              "file": "145-r2-2b-monitor-landing.png",
               "caption": "R2 — \"Watch it build →\" lands on the Studio flow monitor"
             },
             {
               "kind": "frame",
-              "file": "140-r2-2c-monitor-live.png",
+              "file": "146-r2-2c-monitor-live.png",
               "caption": "R2 — Forge Develop monitor shows the build slice live (run rail + topology)"
             }
           ],
@@ -4195,22 +4353,22 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "141-r3-0-pm-midpulse.png",
+              "file": "147-r3-0-pm-midpulse.png",
               "caption": "R3 (mid-pulse) — PM hex active as it emits work items"
             },
             {
               "kind": "frame",
-              "file": "142-r3-0b-pm-settled.png",
+              "file": "148-r3-0b-pm-settled.png",
               "caption": "R3 — PM decomposed ACs into 2 dependency-ordered work items"
             },
             {
               "kind": "frame",
-              "file": "143-hex-detail-phase.png",
+              "file": "149-hex-detail-phase.png",
               "caption": "Phase drawer — phase hex opens the detail drawer (held open)"
             },
             {
               "kind": "frame",
-              "file": "144-hex-detail-wi.png",
+              "file": "150-hex-detail-wi.png",
               "caption": "Phase drawer — wi hex opens the detail drawer (held open)"
             }
           ],
@@ -4223,7 +4381,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "145-r3-1-gate-fail.png",
+              "file": "151-r3-1-gate-fail.png",
               "caption": "R3 — TDD red: gate.expected-fail — the inject test fails before src/inject.ts exists"
             }
           ],
@@ -4236,7 +4394,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "146-r3-2-grind.png",
+              "file": "152-r3-2-grind.png",
               "caption": "R3 (fast-forward) — dev-loop implementing WI-1; token/cost bar growing"
             }
           ],
@@ -4249,12 +4407,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "147-r3-3-wi1-green.png",
+              "file": "153-r3-3-wi1-green.png",
               "caption": "R3 — gate.pass; WI-1 green; WI-2 (depends on WI-1) only now starts"
             },
             {
               "kind": "frame",
-              "file": "148-r3-3b-devloop-green.png",
+              "file": "154-r3-3b-devloop-green.png",
               "caption": "R3 — dev-loop hex greens (both WIs done); the demo node runs next on its own hex"
             }
           ],
@@ -4276,12 +4434,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "149-r3-4-demo-midpulse.png",
+              "file": "155-r3-4-demo-midpulse.png",
               "caption": "R3 (mid-pulse) — demo hex active, composing demo.json + the PR body from the develop output"
             },
             {
               "kind": "frame",
-              "file": "150-r3-4b-demo-review-green.png",
+              "file": "156-r3-4b-demo-review-green.png",
               "caption": "R3 — demo + adversarial-review nodes green on their own hexes (demo authored, diff critiqued)"
             }
           ],
@@ -4300,14 +4458,14 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 5M (got 1573053)",
+              "msg": "clip run-build-monitor.webm under 5M (got 1507794)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "151-r3-5-cost-rollup.png",
+              "file": "157-r3-5-cost-rollup.png",
               "caption": "R3 — cost rollup across the spine (Studio monitor)",
               "key": true
             },
@@ -4315,7 +4473,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing",
-              "sizeBytes": 1573053
+              "sizeBytes": 1507794
             }
           ],
           "pass": true
@@ -4356,17 +4514,17 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "152-r4-0-review-partial.png",
+              "file": "158-r4-0-review-partial.png",
               "caption": "R4 — review demo: AC-1 MET (CLI read-back), AC-2 PARTIAL (newline drift on re-write)"
             },
             {
               "kind": "frame",
-              "file": "153-r4-0b-slider.png",
+              "file": "159-r4-0b-slider.png",
               "caption": "R4 — before/after image-comparison slider for the TOC region"
             },
             {
               "kind": "frame",
-              "file": "154-r4-0c-findings.png",
+              "file": "160-r4-0c-findings.png",
               "caption": "R4-08 — the adversarial critique beside the demo evidence: one major finding on the idempotency AC"
             }
           ],
@@ -4412,12 +4570,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "155-r4-1-comment.png",
+              "file": "161-r4-1-comment.png",
               "caption": "R4 — a blocking comment anchored to AC-2 (the send-back, on the page)"
             },
             {
               "kind": "frame",
-              "file": "156-r4-1b-send-back.png",
+              "file": "162-r4-1b-send-back.png",
               "caption": "R4 — the comment persists; the derived verdict is \"send back\""
             }
           ],
@@ -4454,7 +4612,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "157-r4-2-rerun.png",
+              "file": "163-r4-2-rerun.png",
               "caption": "R4 (fast-forward) — dev-loop reran on the new criterion; back to \"Review →\""
             }
           ],
@@ -4481,14 +4639,14 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 5M (got 1316149)",
+              "msg": "clip run-verdict-gate.webm under 5M (got 1305258)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "158-r4-3-rereview-met.png",
+              "file": "164-r4-3-rereview-met.png",
               "caption": "R4 — re-review: AC-2 now MET (PARTIAL→MET payoff)",
               "key": true
             },
@@ -4496,7 +4654,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1316149
+              "sizeBytes": 1305258
             }
           ],
           "pass": true
@@ -4545,27 +4703,27 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "159-r4-4-approve.png",
+              "file": "165-r4-4-approve.png",
               "caption": "R4 — operator approves (human decision #2 complete)"
             },
             {
               "kind": "frame",
-              "file": "160-r4-4b-reflect-link.png",
+              "file": "166-r4-4b-reflect-link.png",
               "caption": "R4 — merged; \"Reflect on this cycle →\" surfaces the final human moment"
             },
             {
               "kind": "frame",
-              "file": "161-r4-4c-spine-complete.png",
+              "file": "167-r4-4c-spine-complete.png",
               "caption": "R4 — merged; the spine holds at \"active\" while reflection finishes out-of-band"
             },
             {
               "kind": "frame",
-              "file": "162-r4-4d-verdict-view.png",
+              "file": "168-r4-4d-verdict-view.png",
               "caption": "R4-08 — the durable verdict record: real decision stamp + the critique that informed it"
             },
             {
               "kind": "frame",
-              "file": "163-r4-4d-architect-flow.png",
+              "file": "169-r4-4d-architect-flow.png",
               "caption": "The Forge Architect flow on its own monitor — architect + PM hexes only, no dev/demo/review"
             }
           ],
@@ -4592,11 +4750,11 @@
               "pass": true
             },
             {
-              "msg": "R6-05: the just-archived run (2026-08-10T00-16-14Z_INIT-2026-08-10-e2e-toc-write-mode) has its own ledger row",
+              "msg": "R6-05: the just-archived run (2026-08-10T01-48-13Z_INIT-2026-08-10-e2e-toc-write-mode) has its own ledger row",
               "pass": true
             },
             {
-              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-10T00-16-14Z_INIT-2026-08-10-e2e-toc-write-mode\")",
+              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-10T01-48-13Z_INIT-2026-08-10-e2e-toc-write-mode\")",
               "pass": true
             },
             {
@@ -4612,31 +4770,31 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 5M (got 1749387)",
+              "msg": "clip run-reflect-complete.webm under 5M (got 1778818)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "164-r5-0-reflect-page.png",
+              "file": "170-r5-0-reflect-page.png",
               "caption": "R5 — reflection screen: WI-sizing + repeated-actions/roadblocks + general-notes (the S8 deeper retro)"
             },
             {
               "kind": "frame",
-              "file": "165-r5-0b-reflected.png",
+              "file": "171-r5-0b-reflected.png",
               "caption": "R5 — feedback captured; reflector folds it into the brain",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "166-r5-1-reflect-flow.png",
+              "file": "172-r5-1-reflect-flow.png",
               "caption": "The Forge Reflect flow on its own monitor — the single reflect hex, fired automatically on merge",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "167-r6-05-history-ledger.png",
+              "file": "173-r6-05-history-ledger.png",
               "caption": "R6-05 — the flow monitor's history ledger: the just-archived run's own row, its narrative kinds pinned as structured data",
               "key": true
             },
@@ -4644,7 +4802,7 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1749387
+              "sizeBytes": 1778818
             }
           ],
           "pass": true
@@ -4677,7 +4835,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "168-r5-2-automated-reflection.png",
+              "file": "174-r5-2-automated-reflection.png",
               "caption": "R5 — automated reflection: inferred answers rendered read-only with provenance badges",
               "key": true
             }
@@ -4728,12 +4886,12 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "169-s1-0-monitor.png",
+              "file": "175-s1-0-monitor.png",
               "caption": "S1 — Forge Develop slice: WI fan-out + demo + adversarial-review + review"
             },
             {
               "kind": "frame",
-              "file": "170-s1-0b-monitor-drawer.png",
+              "file": "176-s1-0b-monitor-drawer.png",
               "caption": "S1 — phase drawer open: the demo node's phase log visible"
             }
           ],
@@ -4744,7 +4902,7 @@
           "narration": "The same gated run's own standalone detail page — every node on the flow with its own real cost and status, not just the ones a live monitor happens to be showing — reached from the SAME run-rail row every earlier beat in this run has already been clicking.",
           "checks": [
             {
-              "msg": "monitor: run rail row [data-run-id=\"2026-08-10T00-29-31Z_INIT-2026-08-10-e2e-studio-demo\"] present (the reachability starting point)",
+              "msg": "monitor: run rail row [data-run-id=\"2026-08-10T02-01-30Z_INIT-2026-08-10-e2e-studio-demo\"] present (the reachability starting point)",
               "pass": true
             },
             {
@@ -4760,15 +4918,15 @@
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-10T00-29-31Z_INIT-2026-08-10-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-10T02-01-30Z_INIT-2026-08-10-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-10T00-29-31Z_INIT-2026-08-10-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-10T02-01-30Z_INIT-2026-08-10-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-10T00-29-31Z_INIT-2026-08-10-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-10T02-01-30Z_INIT-2026-08-10-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
@@ -4847,13 +5005,13 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "171-r6-01wi2-run-detail.png",
+              "file": "177-r6-01wi2-run-detail.png",
               "caption": "R6-01 WI-2 — the flow run-detail page: every node, its own real cost and status, reached from the monitor run rail",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "172-r6-01wi3-node-log.png",
+              "file": "178-r6-01wi3-node-log.png",
               "caption": "R6-01 WI-3 — a run-detail node expanded: that node's own log lines, through the shared RunLog renderer",
               "key": true
             }
@@ -4873,7 +5031,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786321788812\")",
+              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786327304758\")",
               "pass": true
             },
             {
@@ -4881,19 +5039,19 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786321789041\")",
+              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786327304955\")",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "173-r6-01-drawer-live-tail.png",
+              "file": "179-r6-01-drawer-live-tail.png",
               "caption": "R6-01 — the phase-log drawer refreshes on a brand-new line even though it is a non-progress event type"
             },
             {
               "kind": "frame",
-              "file": "174-r6-01b-drawer-live-terminal.png",
+              "file": "180-r6-01b-drawer-live-terminal.png",
               "caption": "R6-01 — the drawer surfaces a node's own terminal (failed) line even though that SAME event flips the node to terminal status in the same render"
             }
           ],
@@ -4919,7 +5077,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "175-s1-1-start-run.png",
+              "file": "181-s1-1-start-run.png",
               "caption": "S1 — engine: Start Run CTA enabled on a flow with no runs"
             }
           ],
@@ -4945,7 +5103,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "176-s1-2-gate-control.png",
+              "file": "182-s1-2-gate-control.png",
               "caption": "S1 — engine: gated run parked, cost metered against the flow ceiling"
             }
           ],
@@ -5024,18 +5182,18 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "177-r6-0-roadmap-tab.png",
+              "file": "183-r6-0-roadmap-tab.png",
               "caption": "R4-13 — per-project Roadmap tab: the initiatives as a dependency DAG, edges drawn prerequisite → dependent",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "178-r6-0b-popover.png",
+              "file": "184-r6-0b-popover.png",
               "caption": "R4-13 — a DAG node's detail card: its real work items, run links, and demo tie-in, laid out inline"
             },
             {
               "kind": "frame",
-              "file": "179-r6-0c-demo-link.png",
+              "file": "185-r6-0c-demo-link.png",
               "caption": "R4-07-F3 — the DAG node's card links straight to the demo surface"
             }
           ],
@@ -5069,13 +5227,13 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "180-r4-11-2-plan-trigger.png",
+              "file": "186-r4-11-2-plan-trigger.png",
               "caption": "R4-11-F2 — the Plan trigger + blocked-until-planned lock on a WI-less initiative",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "181-r4-11-2b-planning-started.png",
+              "file": "187-r4-11-2b-planning-started.png",
               "caption": "R4-11-F2 — planning started: the initiative will be decomposed into work items",
               "key": true
             }
@@ -5087,7 +5245,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its DAG node; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the roadmap node itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 5M (got 1212053)",
+              "msg": "clip roadmap-drive.webm under 5M (got 1194093)",
               "pass": true
             },
             {
@@ -5112,16 +5270,16 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the dependency DAG, toggles a finished initiative’s card, then eyes the \"Start development\" trigger on the initiative queued up next",
-              "sizeBytes": 1212053
+              "sizeBytes": 1194093
             },
             {
               "kind": "frame",
-              "file": "182-r6-1-start-development.png",
+              "file": "188-r6-1-start-development.png",
               "caption": "R4-13 — the \"start development\" trigger on a ready DAG node"
             },
             {
               "kind": "frame",
-              "file": "183-r6-1b-development-started.png",
+              "file": "189-r6-1b-development-started.png",
               "caption": "R6 — development started: dev → demo → adversarial-review → verdict, ending at a PR for review",
               "key": true
             }
@@ -5160,18 +5318,18 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "184-r4-11-t3-0-recovery-affordances.png",
+              "file": "190-r4-11-t3-0-recovery-affordances.png",
               "caption": "R4-11-T3 — inspect/requeue/abandon on a recoverable initiative's roadmap card",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "185-r4-11-t3-1-inspect.png",
+              "file": "191-r4-11-t3-1-inspect.png",
               "caption": "R4-11-T3 — Inspect reveals the preserved worktree state (none here — the fixture never ran a real cycle)"
             },
             {
               "kind": "frame",
-              "file": "186-r4-11-t3-2-requeue-refused.png",
+              "file": "192-r4-11-t3-2-requeue-refused.png",
               "caption": "R4-11-T3 — under the harness's safety seam, requeue honestly refuses rather than faking success"
             }
           ],
@@ -5207,27 +5365,27 @@
               "pass": true
             },
             {
-              "msg": "clip showcase-entry.webm under 5M (got 793269)",
+              "msg": "clip showcase-entry.webm under 5M (got 801204)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "187-showcase-0-entry.png",
+              "file": "193-showcase-0-entry.png",
               "caption": "R4-14 — the gated showcase entry on the project page",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "188-showcase-1-landed.png",
+              "file": "194-showcase-1-landed.png",
               "caption": "R4-14 — landed on the demo showcase, derived from the real demo manifest"
             },
             {
               "kind": "clip",
               "file": "clips/showcase-entry.webm",
               "caption": "From the project page — \"Open showcase\" leads straight into the project's standing demo evidence.",
-              "sizeBytes": 793269
+              "sizeBytes": 801204
             }
           ],
           "pass": true
@@ -5268,7 +5426,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "189-showcase-2-render.png",
+              "file": "195-showcase-2-render.png",
               "caption": "R4-14 — the demo showcase: a real stats strip above the reused evidence gallery",
               "key": true
             }
@@ -5299,7 +5457,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "190-showcase-3-empty.png",
+              "file": "196-showcase-3-empty.png",
               "caption": "R4-14 — the honest empty state: real activity, nothing terminal yet",
               "key": true
             }
@@ -5330,7 +5488,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "191-showcase-4-refresh.png",
+              "file": "197-showcase-4-refresh.png",
               "caption": "R4-14 — the showcase re-derives to the newest merged cycle, no code change needed",
               "key": true
             }
@@ -5370,7 +5528,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "192-demo-0-briefing.png",
+              "file": "198-demo-0-briefing.png",
               "caption": "The demo agent — briefing before it runs"
             }
           ],
@@ -5417,19 +5575,19 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 5M (got 1810839)",
+              "msg": "clip demo-generate.webm under 5M (got 1719891)",
               "pass": true
             }
           ],
           "captures": [
             {
               "kind": "frame",
-              "file": "193-demo-1-generating.png",
+              "file": "199-demo-1-generating.png",
               "caption": "The demo agent composes the page, element by element"
             },
             {
               "kind": "frame",
-              "file": "194-demo-2-review.png",
+              "file": "200-demo-2-review.png",
               "caption": "The demo agent — composed demo ready for review",
               "key": true
             },
@@ -5437,7 +5595,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1810839
+              "sizeBytes": 1719891
             }
           ],
           "pass": true
@@ -5482,13 +5640,13 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "195-demo-3-generations.png",
+              "file": "201-demo-3-generations.png",
               "caption": "Generations accumulate — feedback drives the next one",
               "key": true
             },
             {
               "kind": "frame",
-              "file": "196-demo-4-generation-picked.png",
+              "file": "202-demo-4-generation-picked.png",
               "caption": "The operator sits on generation 1 — the choice holds across the poll"
             }
           ],
@@ -5518,7 +5676,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "197-demo-5-locked.png",
+              "file": "203-demo-5-locked.png",
               "caption": "The chosen generation — locked in as the reproducible demo artifact"
             }
           ],
@@ -5581,7 +5739,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "198-cm-1-skills-card-signals.png",
+              "file": "204-cm-1-skills-card-signals.png",
               "caption": "Part 2 (community) — a community card already carries its derived hub + signals on the /skills shelf",
               "key": true
             }
@@ -5644,7 +5802,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "199-cm-2-hub-strip.png",
+              "file": "205-cm-2-hub-strip.png",
               "caption": "Part 2 (community) — the hub strip: real per-hub counts, an honest zero for skills.sh",
               "key": true
             }
@@ -5671,7 +5829,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "200-cm-3-filter-skill.png",
+              "file": "206-cm-3-filter-skill.png",
               "caption": "Part 2 (community) — kind filtering: skill",
               "key": true
             }
@@ -5718,7 +5876,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "201-cm-4-skill-detail.png",
+              "file": "207-cm-4-skill-detail.png",
               "caption": "Part 2 (community) — the vendored skill's pre-install detail page: hub resolved, no fabricated signals",
               "key": true
             }
@@ -5761,7 +5919,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "202-cm-5-skill-preview.png",
+              "file": "208-cm-5-skill-preview.png",
               "caption": "Part 2 (community) — SKILL.md preview (real bytes) + the catalog-signals cross-check",
               "key": true
             }
@@ -5808,7 +5966,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "203-cm-6-skill-draft.png",
+              "file": "209-cm-6-skill-draft.png",
               "caption": "Part 2 (community) — install routes to R3-01-F4: a draft, not palette-visible",
               "key": true
             }
@@ -5855,7 +6013,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "204-cm-7-hook-scan.png",
+              "file": "210-cm-7-hook-scan.png",
               "caption": "Part 2 (community) — the vendored hook's pre-install SECURITY SCAN: clean, zero findings",
               "key": true
             }
@@ -5910,7 +6068,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "205-cm-8-hook-installed.png",
+              "file": "211-cm-8-hook-installed.png",
               "caption": "Part 2 (community) — installed, still not runnable: clean scan, no approval-ledger entry",
               "key": true
             }
@@ -5941,7 +6099,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "206-cm-9-skills-shelf-return.png",
+              "file": "212-cm-9-skills-shelf-return.png",
               "caption": "Part 2 (community) — back on the local shelf: installed, provenance kept, still a draft",
               "key": true
             }
@@ -5968,7 +6126,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "207-cm-10-skills-provenance.png",
+              "file": "213-cm-10-skills-provenance.png",
               "caption": "Part 2 (community) — the skill's own detail page: real provenance, R3-01's approval gate",
               "key": true
             }
@@ -6011,7 +6169,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "208-cm-11-approved-palette.png",
+              "file": "214-cm-11-approved-palette.png",
               "caption": "Part 2 (community) — approved on R3-01's own surface: now palette-visible",
               "key": true
             }
@@ -6074,7 +6232,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "209-cm-12-filter-mcp.png",
+              "file": "215-cm-12-filter-mcp.png",
               "caption": "Part 2 (community) — kind filtering: mcp",
               "key": true
             }
@@ -6117,7 +6275,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "210-cm-13-mcp-detail.png",
+              "file": "216-cm-13-mcp-detail.png",
               "caption": "Part 2 (community) — an MCP's pre-install detail page: real pin, real provenance",
               "key": true
             }
@@ -6140,7 +6298,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "211-cm-14-mcp-capabilities.png",
+              "file": "217-cm-14-mcp-capabilities.png",
               "caption": "Part 2 (community) — the MCP's curated capability list",
               "key": true
             }
@@ -6164,7 +6322,7 @@
               "pass": true
             },
             {
-              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ports/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ports/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-jports2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-jports2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -6183,7 +6341,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "212-cm-15-mcp-suppressed.png",
+              "file": "218-cm-15-mcp-suppressed.png",
               "caption": "Part 2 (community) — a SUPPRESSED install: byte-exact argv shown, nothing executed",
               "key": true
             }
@@ -6226,7 +6384,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "213-cm-16-connections-local-shelf.png",
+              "file": "219-cm-16-connections-local-shelf.png",
               "caption": "Part 2 (community) — the local connections shelf: the real state, still true",
               "key": true
             }
@@ -6257,7 +6415,7 @@
           "captures": [
             {
               "kind": "frame",
-              "file": "214-cm-17-connections-used-by.png",
+              "file": "220-cm-17-connections-used-by.png",
               "caption": "Part 2 (community) — used-by is derived; nothing else to wire",
               "key": true
             }
@@ -6274,9 +6432,9 @@
     "captures": []
   },
   "totals": {
-    "checksTotal": 922,
+    "checksTotal": 944,
     "checksFailed": 0,
-    "framesTotal": 214,
+    "framesTotal": 220,
     "clipsTotal": 23
   },
   "exitCode": 0
