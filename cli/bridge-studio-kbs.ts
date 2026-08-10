@@ -22,7 +22,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, append
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { resolveGuardedPath, type PathGuardResult } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from './studio-path-guard.ts';
 // gray-matter has no usable types; treated as `any` like cli/brain-lint.ts and
 // cli/brain-fix-auto.ts, which import it the same way.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -40,6 +40,7 @@ import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-r
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
 import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, CHECK_NAMES, type Finding } from './brain-lint.ts';
+import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import {
@@ -1269,6 +1270,47 @@ export async function handleStudioKbRoutes(
     const runId = decodeURIComponent(fixStatusMatch[2]);
     if (!SAFE_ID_RE.test(runId)) { sendJson(res, 400, { error: 'invalid run id' }, origin); return true; }
     sendJson(res, 200, { ok: true, runId, ...readBrainFixState(ctx.forgeRoot, runId) }, origin);
+    return true;
+  }
+
+  // ---- GET /api/studio/kbs/:id/ingest-activity (R6-08 WI-2) — READ-ONLY -----
+  // Lists real `reflect.kb-ingest` events (orchestrator/kb-health.ts) for this
+  // KB, discovered via a listCycles-style walk of `_logs/<cycleId>/events.jsonl`
+  // (mirroring cli/metrics.ts's summariseCycle: guardedReadFile with cycleId as
+  // its OWN segments[] element, never folded into the root). The kbId filter is
+  // applied AFTER the guarded read, on the parsed event's own metadata — never
+  // folded into the filesystem path. GET-only: no dispatch branch exists on
+  // this URL pattern, so nothing here can trigger an ingest (see
+  // scripts/check-kb-ingest-affordance.test.ts's standing ratchet).
+  const ingestActivityMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/ingest-activity$/);
+  if (ingestActivityMatch && method === 'GET') {
+    try {
+      const kbId = decodeURIComponent(ingestActivityMatch[1]);
+      if (!SLUG_RE.test(kbId)) { sendJson(res, 400, { error: 'invalid kb id' }, origin); return true; }
+
+      const events: Array<{ kb: string; freshThemes: number; impl: string; cycleId: string }> = [];
+      for (const cycleId of listCycles(ctx.logsRoot)) {
+        const raw = guardedReadFile(ctx.logsRoot, [cycleId, 'events.jsonl']);
+        if (raw === null) continue;
+        for (const line of raw.split('\n')) {
+          if (!line.trim()) continue;
+          let ev: { message?: string; metadata?: Record<string, unknown> };
+          try { ev = JSON.parse(line); } catch { continue; }
+          if (ev.message !== 'reflect.kb-ingest') continue;
+          const md = ev.metadata ?? {};
+          if (md['kb'] !== kbId) continue;
+          events.push({
+            kb: kbId,
+            freshThemes: typeof md['fresh_themes'] === 'number' ? md['fresh_themes'] : 0,
+            impl: typeof md['impl'] === 'string' ? md['impl'] : 'unknown',
+            cycleId,
+          });
+        }
+      }
+      sendJson(res, 200, { events }, origin);
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
     return true;
   }
 

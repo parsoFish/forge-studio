@@ -933,6 +933,24 @@ export async function fetchKbNode(id: string, nodeId: string): Promise<KbNodeArt
   return body?.node ?? null;
 }
 
+/** R6-08 WI-2 — one real `reflect.kb-ingest` event, read-only. */
+export type KbIngestEvent = {
+  kb: string;
+  freshThemes: number;
+  impl: string;
+  cycleId: string;
+};
+
+/** Fetch a KB's read-only ingest-activity feed (R6-08 WI-2). GET-only — this
+ *  never triggers an ingest; it only lists past `reflect.kb-ingest` events. */
+export async function fetchKbIngestActivity(id: string): Promise<KbIngestEvent[]> {
+  const body = await studioGet<{ events?: KbIngestEvent[] }>(
+    `/api/studio/kbs/${encodeURIComponent(id)}/ingest-activity`,
+    { events: [] },
+  );
+  return body.events ?? [];
+}
+
 /** Fetch the studio catalog. */
 export async function fetchStudioCatalog(): Promise<Catalog> {
   const body = await studioGet<{ catalog?: Catalog }>('/api/studio/catalog', {});
