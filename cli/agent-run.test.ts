@@ -521,3 +521,148 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
     rmSync(forgeRoot, { recursive: true, force: true });
   }
 });
+
+// ===========================================================================
+// R4-21 phase 2, amendment round 2, correction B (_wave5/unit-specs/
+// R4-21-phase2.md's own T2 spec does not cover this — the T3 amendment brief
+// does): `runTurnSpecAgent` (cli/agent-run.ts) resolves the projects root
+// with a HARDCODED `resolveGuardedPath(resolve('projects'), [projectArg])` —
+// `<cwd>/projects`, ignoring `forge.config.json`'s `projectsDir` and the
+// `FORGE_PROJECTS_DIR` env var entirely. Every bridge route instead resolves
+// the projects root via `resolveProjectsDir(forgeRoot, loadConfig(
+// defaultConfigPath(forgeRoot)))` (orchestrator/config.ts:143) — the single
+// source of truth for "where do managed projects live", honouring BOTH
+// overrides. Because R4-21's `POST /api/studio/authoring/start` route SPAWNS
+// `forge agent run authoring <sid> --project <p>` (WI-2, D5's sibling
+// concern), a non-default `projectsDir` makes a UI-created session
+// UNREACHABLE by its own turn — this CLI entry point looks in the wrong
+// place while the bridge that created the session looked in the right one.
+//
+// RED-NOW: `runTurnSpecAgent` never calls `resolveProjectsDir` at all, so a
+// session seeded under a CONFIGURED (non-default) projects dir is invisible
+// to it — the guard resolves `<forgeRoot>/projects/<projectArg>`, which
+// either does not exist at all (a fresh forgeRoot with no `projects/` dir)
+// or, if it does, does not contain this test's session — either way,
+// `cmdAgentRun` exits 2 rather than running the turn.
+// ===========================================================================
+
+type ProjectsDirMode =
+  | { kind: 'default' }
+  | { kind: 'config'; relativeDirName: string }
+  | { kind: 'env'; absoluteDir: string };
+
+/** Mirrors `setupTurnspecFixture` above, but places the fixture project under
+ *  a projects root chosen by `mode` instead of always `<forgeRoot>/projects`
+ *  — `'config'` writes a `forge.config.json` declaring `projectsDir`;
+ *  `'env'` expects the caller to have already set `FORGE_PROJECTS_DIR` (this
+ *  function does not touch process.env itself, so the caller controls
+ *  restore-in-finally around it). */
+function setupTurnspecFixtureWithProjectsDir(mode: ProjectsDirMode): TurnspecFixture {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'r421-correctionB-agentrun-'));
+  mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), FIXTURE_SESSION_KINDS_YAML);
+
+  let projectsDirAbs: string;
+  if (mode.kind === 'default') {
+    projectsDirAbs = join(forgeRoot, 'projects');
+  } else if (mode.kind === 'config') {
+    projectsDirAbs = join(forgeRoot, mode.relativeDirName);
+    writeFileSync(join(forgeRoot, 'forge.config.json'), JSON.stringify({ projectsDir: mode.relativeDirName }, null, 2));
+  } else {
+    projectsDirAbs = mode.absoluteDir;
+  }
+
+  const projectArg = 'fixtureproj';
+  const projectRoot = join(projectsDirAbs, projectArg);
+  const sessionId = '2026-08-11T00-00-00-correctionb';
+  const sessionDir = join(projectRoot, KIND_DIR, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'p1', updated_at: new Date(0).toISOString() });
+
+  return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
+}
+
+test('R4-21 phase 2, correction B, AT-B1: cmdAgentRun resolves the projects root via forge.config.json\'s "projectsDir" (resolveProjectsDir), not a hardcoded <cwd>/projects', async () => {
+  const fx = setupTurnspecFixtureWithProjectsDir({ kind: 'config', relativeDirName: 'custom-projects' });
+  try {
+    // Fixture preconditions — proven BEFORE reading any verdict, per this
+    // file's own established idiom.
+    assert.ok(existsSync(fx.sessionDir), 'arrange: the session must exist under the CONFIGURED custom-projects/ dir');
+    assert.equal(
+      existsSync(join(fx.forgeRoot, 'projects', fx.projectArg)),
+      false,
+      'arrange: the session must NOT also exist under the default projects/ dir — a hardcoded resolve(\'projects\') coincidentally finding it would falsify this test',
+    );
+
+    const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', fx.projectArg], fx.forgeRoot));
+    assert.equal(
+      r.exitCode, null,
+      `expected the turn to resolve the session under the CONFIGURED projectsDir and run it — got exit(${r.exitCode}), stdout: ${r.out}, stderr: ${r.err}`,
+    );
+
+    const logPath = join(fx.forgeRoot, '_logs', `_interactive-${TURNSPEC_ONLY_ID}-${fx.sessionId}`, 'events.jsonl');
+    assert.ok(
+      existsSync(logPath),
+      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means the session under the ` +
+        `CONFIGURED projectsDir was never found (stdout: ${r.out}, stderr: ${r.err})`,
+    );
+  } finally {
+    rmSync(fx.forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('R4-21 phase 2, correction B, AT-B2: cmdAgentRun resolves the projects root via FORGE_PROJECTS_DIR (env override wins over config/default)', async () => {
+  const externalProjectsDir = mkdtempSync(join(tmpdir(), 'r421-correctionb-external-projects-'));
+  const fx = setupTurnspecFixtureWithProjectsDir({ kind: 'env', absoluteDir: externalProjectsDir });
+  const prevEnv = process.env.FORGE_PROJECTS_DIR;
+  process.env.FORGE_PROJECTS_DIR = externalProjectsDir;
+  try {
+    assert.ok(existsSync(fx.sessionDir), 'arrange: the session must exist under the env-pointed external projects dir');
+    assert.equal(
+      existsSync(join(fx.forgeRoot, 'projects', fx.projectArg)),
+      false,
+      'arrange: the session must NOT also exist under the default projects/ dir',
+    );
+
+    const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', fx.projectArg], fx.forgeRoot));
+    assert.equal(
+      r.exitCode, null,
+      `expected the turn to resolve the session via FORGE_PROJECTS_DIR and run it — got exit(${r.exitCode}), stdout: ${r.out}, stderr: ${r.err}`,
+    );
+
+    const logPath = join(fx.forgeRoot, '_logs', `_interactive-${TURNSPEC_ONLY_ID}-${fx.sessionId}`, 'events.jsonl');
+    assert.ok(
+      existsSync(logPath),
+      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means FORGE_PROJECTS_DIR was not honoured (stdout: ${r.out}, stderr: ${r.err})`,
+    );
+  } finally {
+    if (prevEnv === undefined) delete process.env.FORGE_PROJECTS_DIR;
+    else process.env.FORGE_PROJECTS_DIR = prevEnv;
+    rmSync(fx.forgeRoot, { recursive: true, force: true });
+    rmSync(externalProjectsDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AT-B3 — regression pin: the fix above must not regress the EXISTING
+// guarded-segment containment (R4-22 WI-5 review finding 1 / ADR-043 §3's own
+// "root-folding" closure) — an untrusted --project value must still ride as
+// its OWN guarded segment against whichever projects root is in effect,
+// never folded into it. GREEN on arrival (the guard already exists in
+// runTurnSpecAgent today); mutation-proved below rather than trusted at face
+// value.
+// ---------------------------------------------------------------------------
+
+test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides as its OWN guarded segment under a reconfigured projectsDir — "..", an absolute path, and a "/"-bearing name are all refused', async () => {
+  const fx = setupTurnspecFixtureWithProjectsDir({ kind: 'config', relativeDirName: 'custom-projects' });
+  try {
+    for (const bad of ['..', '/etc', 'a/b']) {
+      const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', bad], fx.forgeRoot));
+      assert.equal(r.exitCode, 2, `--project ${JSON.stringify(bad)} must be refused, got exit(${r.exitCode}), stdout: ${r.out}`);
+      assert.match(r.err, /not a valid project name/, `expected the guarded-segment refusal text for ${JSON.stringify(bad)}, got: ${r.err}`);
+    }
+    assertNoInteractiveLogDir(fx.forgeRoot, TURNSPEC_ONLY_ID, 'a refused --project value must never reach runInteractiveTurn');
+  } finally {
+    rmSync(fx.forgeRoot, { recursive: true, force: true });
+  }
+});

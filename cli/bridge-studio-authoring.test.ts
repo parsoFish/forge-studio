@@ -1,74 +1,88 @@
 /**
- * Acceptance tests for cli/bridge-studio-authoring.ts (R4-21 phase 2, WI-2 —
- * `_wave5/unit-specs/R4-21-phase2.md`, D5: finalize route = the operator
- * commit act). REPLACES this file's previous (R4-21 phase 1) body wholesale:
- * phase 1's finalize contract (`{kind,id,entries,upstream}` with
- * client-supplied package bytes) is the thing D5 explicitly retires — "The
- * route stops sourcing package CONTENT from the client body." A rewrite, not
- * an amendment, mirrors this repo's own precedent for a superseded route
- * contract (`cli/bridge-studio-authoring.test.ts`'s OWN prior header:
- * "Do not stub the module into existence to turn this green; red is the
- * deliverable of this round" — the same discipline applies to a superseded
- * contract as to a not-yet-existing module).
+ * Acceptance tests for cli/bridge-studio-authoring.ts (R4-21 phase 2, WI-2,
+ * AMENDMENT ROUND 2 — `_wave5/unit-specs/R4-21-phase2.md`, D5: finalize route
+ * = the operator commit act). This is a T3 amendment-round-2 REWRITE, not an
+ * incremental patch: round 1's own body (commit `4a8b6257`) pinned a request
+ * body that still carried hook METADATA fields (`name, description, on,
+ * matcher?, permissions?`) and a client-supplied `upstream` — round 1's file
+ * header called that its own explicit "design call #2", stated openly rather
+ * than silently guessed. Amendment-round-2 SUPERSEDES that call: the correct
+ * wire contract is narrower.
  *
  * ---------------------------------------------------------------------------
- * THE NEW CONTRACT (D5, verbatim from the unit-spec) THIS FILE PINS
+ * THE CORRECTED CONTRACT (round 2) THIS FILE PINS
  * ---------------------------------------------------------------------------
  *
- *  POST /api/studio/authoring/finalize {project, sessionId, kind, id, upstream?, ...}
+ *  POST /api/studio/authoring/finalize { project, sessionId, kind, id } —
+ *  NOTHING ELSE. Any other body field is DEAD DATA: the server never reads
+ *  it, and the installed artifact is provably unaffected by it (RED-4-wire
+ *  below).
+ *
  *   (1) guarded-read the session status;
  *   (2) require phase === 'awaiting-review' -> 409 otherwise;
  *   (3) guarded-write package_id (= the request's `id`) + phase:'committing';
- *   (4) await runInteractiveTurn(descriptor, ctx) — the SAME spine
- *       `forge agent run` dispatches to (the committing step performs NO SDK
- *       spawn — a fast, deterministic in-process call) — this runs
- *       copyStagingToLibrary, landing the session's staging/ tree at
+ *   (4) await runInteractiveTurn(descriptor, ctx) — runs copyStagingToLibrary,
+ *       landing the session's staging/ tree VERBATIM at
  *       <forgeRoot>/_interactive-library/<id>/ and advancing status to
- *       'committed';
+ *       'committed'. This step is GENERIC — it does not understand skill vs.
+ *       hook shape at all (interactive-finalizers.ts's own "scope discipline"
+ *       header: "does not validate frontmatter, enforce skill/hook-specific
+ *       semantics"). A hook-specific defect (forbidden binding key, bad `on`,
+ *       malformed hook.yaml) is therefore NOT caught here — the landed copy
+ *       always succeeds if the staged tree itself is containment-clean; the
+ *       defect surfaces one step later, at (5).
  *   (5) read the landed _interactive-library/<id>/ through the guard and
- *       install: skill -> stageSkillPackage + installSkillPackage (DRAFT,
- *       never approved — D2 of the batch-D plan); hook -> the existing
- *       2-file hook.yaml + scripts/run.sh write;
+ *       install:
+ *         - skill -> stageSkillPackage + installSkillPackage (DRAFT, never
+ *           approved — D2 of the batch-D plan). `upstream` is SERVER-MINTED —
+ *           never read from the request body — because the provenance of an
+ *           authored package IS the session that authored it: `{ source:
+ *           'forge-authoring', ref: sessionId }`. A client-supplied
+ *           `upstream` would be unverifiable (it asserts its own origin).
+ *         - hook -> hook METADATA (`name, description, on, matcher?,
+ *           permissions?`) is read from the DRAFTED hook.yaml at
+ *           `_interactive-library/<id>/hook.yaml` — parsed server-side —
+ *           NEVER from parallel request-body fields. Rationale: the operator
+ *           reviews the drafted hook.yaml in the session's file-package
+ *           artifact pane (the ACTUAL thing that will ship); if the installed
+ *           hook's `on`/`matcher`/`permissions` came from separate form
+ *           fields instead, the reviewed artifact would not be what ships —
+ *           a live divergence between declared data and installed data, the
+ *           exact declared-data-fails-open shape this codebase's own
+ *           standing rule guards against. The existing 2-file write contract
+ *           (`hooks/<id>/hook.yaml` + `hooks/<id>/scripts/run.sh`, script
+ *           always at the fixed relative path `scripts/run.sh`) and D-6's
+ *           FORBIDDEN_HOOK_BINDING_KEYS / HOOK_LIFECYCLE_EVENTS checks now
+ *           run against the LANDED hook.yaml's own fields, not the body's.
  *   (6) { ok:true, kind, id }.
  *
  * ---------------------------------------------------------------------------
- * T3 DESIGN CALLS (the unit-spec leaves these open; stated explicitly here,
- * mirroring this repo's own "MY CALL" precedent — e.g.
- * orchestrator/interactive-runner.test.ts's file header — rather than
- * silently guessed):
+ * T3 DESIGN CALLS THIS AMENDMENT MAKES (stated explicitly, matching this
+ * repo's own "MY CALL" precedent):
  * ---------------------------------------------------------------------------
  *
- *   1. `ctx.forgeRoot` is what the finalize route resolves BOTH
- *      `studio/session-kinds.yaml` (to find the "authoring" descriptor for
- *      step 4's `runInteractiveTurn` call) AND `_interactive-library/`
- *      against — mirroring every other bridge route's existing convention of
- *      resolving studio config relative to `ctx.forgeRoot`
- *      (`cli/agent-run.ts`'s `findSessionKindDescriptor(agentId, forgeRoot)`
- *      takes the identical explicit-root shape). This file's `before()`
- *      therefore seeds `<forgeRoot>/studio/session-kinds.yaml` with the REAL,
- *      checked-in file content (byte-for-byte, read at test time) — the
- *      real production "authoring" row, not a hand-rolled duplicate that
- *      could drift from it.
- *   2. Hook finalize's body still carries the operator-supplied hook METADATA
- *      fields (`name, description, on, matcher?, permissions?`) — the
- *      unit-spec's own body shape literally lists "hook fields" alongside
- *      `project, sessionId, kind, id, upstream?`. Only the SCRIPT BYTES move
- *      server-side (read from the landed `_interactive-library/<id>/
- *      scripts/run.sh`, mirroring `staging/scripts/run.sh`'s own convention
- *      already pinned by session-transcript.test.ts's RED-2d). RED-4c-wire
- *      below proves this half of the contract directly: a body that (still)
- *      carries a `scriptBody` field (the phase-1 field name) is IGNORED —
- *      the installed script is the LANDED bytes, never the body's.
+ *   1. `ctx.forgeRoot` resolution — UNCHANGED from round 1's call #1: the
+ *      REAL, checked-in `studio/session-kinds.yaml` is copied byte-for-byte
+ *      into the fixture forgeRoot at `before()` time.
+ *   2. A hook-specific validation failure at step (5) does NOT roll back
+ *      step (4)'s already-successful generic copy — nothing in D5 describes
+ *      a rollback, and interactive-finalizers.ts's own header disclaims any
+ *      hook-shape awareness at that layer. The negative hook tests below
+ *      therefore assert the ARTIFACT that step (5) alone owns
+ *      (`hooks/<id>/` absent) rather than guessing whether status.json's
+ *      phase gets reverted — an unspecified, implementation-owned detail.
  *   3. The session dir for these tests is seeded DIRECTLY (status.json +
- *      staging/ written by the test, not by a real `analyzing` turn) — the
- *      finalize route's OWN job starts at `awaiting-review` regardless of
- *      how the session got there; this mirrors
- *      orchestrator/interactive-runner.test.ts's own committing-phase
- *      fixture idiom exactly.
+ *      staging/ written by the test) — UNCHANGED from round 1's call #3.
+ *   4. Server-minted upstream shape — pinned EXACTLY as the T3 brief states:
+ *      `{ source: 'forge-authoring', ref: <sessionId> }`. Read back through
+ *      `orchestrator/studio/skill-library.ts`'s own `extractProvenance`
+ *      shape (`provenance.source` / `provenance.upstreamRef`) — the actual
+ *      thing `installSkillPackage` persists (verified by reading that
+ *      module's source, not guessed).
  *
  * Style: real bridge (startBridge) + fetch, mirroring
  * cli/bridge-studio-skills.test.ts / cli/bridge-studio-hooks.test.ts's
- * tmp-forge-root harness exactly (same as this file's own prior body).
+ * tmp-forge-root harness exactly (unchanged from round 1).
  */
 
 import { test, before, after } from 'node:test';
@@ -91,10 +105,12 @@ import yaml from 'js-yaml';
 
 import { startBridge } from './ui-bridge.ts';
 // Does not exist in the NEW shape yet — the current cli/bridge-studio-authoring.ts
-// still implements the phase-1 {kind,id,entries,upstream} contract. Every
-// test below is expected RED against it (see the T3 report for the captured
-// failure per test).
+// still implements the phase-1 {kind,id,entries,upstream} contract (round 1
+// already proved this RED; this amendment additionally proves the NARROWER
+// {project,sessionId,kind,id}-only contract RED for a DIFFERENT reason on the
+// happy paths — see the T3 report for the exact captured failure per test).
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
+import { FORBIDDEN_HOOK_BINDING_KEYS, HOOK_LIFECYCLE_EVENTS } from '../orchestrator/studio/hook-library.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture helpers
@@ -108,7 +124,7 @@ const REPO_ROOT = fileURLToPath(new URL('..', import.meta.url));
 const PROJECT = 'demoproj';
 
 before(async () => {
-  forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-authoring-'));
+  forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-studio-authoring-amend2-'));
 
   for (const state of ['in-flight', 'done', 'failed', 'pending']) {
     mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
@@ -121,8 +137,8 @@ before(async () => {
     join(forgeRoot, 'studio', 'catalog.yaml'),
     ['sdks: []', 'models: []', 'tools: []', 'mcps: []', 'guards: []', 'community-skills: []', ''].join('\n'),
   );
-  // Design call #1 (file header): the REAL, checked-in session-kinds.yaml —
-  // byte-for-byte, not a hand-rolled duplicate of the "authoring" row.
+  // Design call #1: the REAL, checked-in session-kinds.yaml — byte-for-byte,
+  // not a hand-rolled duplicate of the "authoring" row.
   const realSessionKindsYaml = readFileSync(join(REPO_ROOT, 'studio', 'session-kinds.yaml'), 'utf8');
   writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), realSessionKindsYaml);
 
@@ -160,9 +176,10 @@ async function postRaw(url: string, rawBody: string): Promise<Response> {
 
 let sessionCounter = 0;
 /** Seeds `<forgeRoot>/projects/<project>/_authoring/<sessionId>/status.json`
- *  (+ optional staging/ files) DIRECTLY — the finalize route's own job starts
- *  at whatever phase is seeded; see file header design call #3. Returns a
- *  fresh, never-reused sessionId so tests never collide. */
+ *  (+ optional staging/ files) DIRECTLY at an arbitrary location — the
+ *  finalize route's own job starts at whatever phase is seeded; see file
+ *  header design call #3. Returns a fresh, never-reused sessionId so tests
+ *  never collide. */
 function seedAuthoringSession(opts: {
   project?: string;
   phase: string;
@@ -173,11 +190,23 @@ function seedAuthoringSession(opts: {
   sessionCounter += 1;
   const sessionId = `2026-08-11T00-00-${String(sessionCounter).padStart(2, '0')}-fx`;
   const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  writeSeededSession(sessionDir, opts);
+  return { sessionId, sessionDir };
+}
+
+/** Writes a session's status.json + staging/ files at an EXPLICIT directory —
+ *  factored out of `seedAuthoringSession` so the containment tests below can
+ *  plant an identical, genuinely-valid session at a NAIVE-JOIN escape target
+ *  (proving a bypassed guard would actually succeed, not merely "no error"). */
+function writeSeededSession(
+  sessionDir: string,
+  opts: { phase: string; packageId?: string; staging?: Record<string, string> },
+): void {
   mkdirSync(sessionDir, { recursive: true });
   writeFileSync(
     join(sessionDir, 'status.json'),
     JSON.stringify(
-      { session_id: sessionId, phase: opts.phase, ...(opts.packageId ? { package_id: opts.packageId } : {}) },
+      { session_id: 'seed', phase: opts.phase, ...(opts.packageId ? { package_id: opts.packageId } : {}) },
       null,
       2,
     ),
@@ -187,7 +216,6 @@ function seedAuthoringSession(opts: {
     mkdirSync(join(abs, '..'), { recursive: true });
     writeFileSync(abs, body, 'utf8');
   }
-  return { sessionId, sessionDir };
 }
 
 function readStatusPhase(sessionDir: string): string {
@@ -196,6 +224,10 @@ function readStatusPhase(sessionDir: string): string {
 
 const FINALIZE_URL = () => `${bridgeUrl}/api/studio/authoring/finalize`;
 
+function hookYamlDraft(fields: Record<string, unknown>): string {
+  return yaml.dump(fields);
+}
+
 // ===========================================================================
 // D5 step 2 — the declared-stage fails-open kill-assertion: finalize at any
 // phase OTHER than awaiting-review is a 409, never a silent 200.
@@ -203,7 +235,6 @@ const FINALIZE_URL = () => `${bridgeUrl}/api/studio/authoring/finalize`;
 
 test('WI2-1: finalize at phase:"analyzing" -> 409, body naming the required phase; status.json and the filesystem are untouched', async () => {
   const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'analyzing' });
-  // Precondition, asserted before reading any verdict.
   assert.equal(readStatusPhase(sessionDir), 'analyzing', 'arrange: seeded status must start in analyzing');
 
   const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'should-not-install' });
@@ -211,19 +242,17 @@ test('WI2-1: finalize at phase:"analyzing" -> 409, body naming the required phas
   const body = (await res.json()) as { error?: string };
   assert.ok(body.error && /awaiting-review/.test(body.error), `409 body must name the required phase ("awaiting-review"), got: ${JSON.stringify(body)}`);
 
-  // Assert the ARTIFACT, not just the status code (rule: never a silent 200,
-  // and never a silent partial write either).
   assert.equal(readStatusPhase(sessionDir), 'analyzing', 'a 409 must leave status.json phase untouched — no committing/committed side effect');
   assert.equal(existsSync(join(forgeRoot, 'skills', 'should-not-install')), false, 'a refused finalize must write nothing to skills/');
 });
 
 // ===========================================================================
 // D5 happy path (skill) — installs the LANDED package (from staging/ via
-// copyStagingToLibrary), as a DRAFT, palette-invisible until the SEPARATE
-// approve route.
+// copyStagingToLibrary), as a DRAFT, palette-invisible; upstream is
+// SERVER-MINTED, never read from the (now-nonexistent) body field.
 // ===========================================================================
 
-test('WI2-2: finalize (skill) on a session at awaiting-review with staging/SKILL.md -> 200 {ok,kind:"skill",id}; skills/<id>/SKILL.md exists; listSkillLibrary shows draft+paletteVisible:false; the SEPARATE approve route flips paletteVisible true', async () => {
+test('WI2-2: finalize (skill) body is EXACTLY {project,sessionId,kind,id} -> 200; skills/<id>/SKILL.md exists with the STAGED bytes; provenance is SERVER-MINTED {source:"forge-authoring",ref:sessionId}; draft+paletteVisible:false; the SEPARATE approve route flips paletteVisible true', async () => {
   const STAGED_CONTENT = matter.stringify('\n# Authored Skill\n\nBody.\n', { name: 'Authored Skill', description: 'authored via the creation-agent authoring session' });
   const { sessionId, sessionDir } = seedAuthoringSession({
     phase: 'awaiting-review',
@@ -231,13 +260,9 @@ test('WI2-2: finalize (skill) on a session at awaiting-review with staging/SKILL
   });
   assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: seeded status must start in awaiting-review');
 
-  const res = await postJson(FINALIZE_URL(), {
-    project: PROJECT,
-    sessionId,
-    kind: 'skill',
-    id: 'authored-skill',
-    upstream: { source: 'forge://authoring-session/authored-skill' },
-  });
+  // The body is EXACTLY the 4 fields the corrected contract admits — no
+  // upstream, no entries.
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'authored-skill' });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { ok: boolean; kind: string; id: string };
@@ -245,20 +270,24 @@ test('WI2-2: finalize (skill) on a session at awaiting-review with staging/SKILL
   assert.equal(body.kind, 'skill');
   assert.equal(body.id, 'authored-skill');
 
-  // Step 4's artifact: the turn landed the package at _interactive-library/.
   const landedPath = join(forgeRoot, '_interactive-library', 'authored-skill', 'SKILL.md');
   assert.ok(existsSync(landedPath), `copyStagingToLibrary must have landed the package at ${landedPath}`);
   assert.equal(readStatusPhase(sessionDir), 'committed', 'status.json on disk must reflect the committing->committed advance');
 
-  // Step 5's artifact: the SAME content installed into skills/<id>/.
   const installedMdPath = join(forgeRoot, 'skills', 'authored-skill', 'SKILL.md');
   assert.ok(existsSync(installedMdPath), 'skills/authored-skill/SKILL.md must exist on disk');
-  assert.equal(readFileSync(installedMdPath, 'utf8'), STAGED_CONTENT, 'the installed bytes must be the STAGED bytes verbatim');
   assert.ok(existsSync(join(forgeRoot, 'skills', 'authored-skill', 'reference.md')), 'the second package file must land too — the WHOLE package installs');
 
   const installedData = matter(readFileSync(installedMdPath, 'utf8')).data as Record<string, unknown>;
   assert.equal(installedData['status'], 'draft', 'finalize lands as a DRAFT — installSkillPackage stamps status: draft');
   assert.equal(installedData['library'], false, 'finalize never auto-approves — library stays false until the SEPARATE /skills/:id/approve route runs');
+
+  // SERVER-MINTED upstream — the wire contract carries no upstream field at
+  // all; the provenance below can therefore ONLY have come from the server.
+  const provenance = installedData['provenance'] as Record<string, unknown> | undefined;
+  assert.ok(provenance, 'installed SKILL.md must carry a provenance block');
+  assert.equal(provenance!['source'], 'forge-authoring', 'provenance.source must be the server-minted "forge-authoring" — the finalize body carries no upstream field to have supplied any other value');
+  assert.equal(provenance!['upstreamRef'], sessionId, 'provenance.upstreamRef must be the SESSION that authored the package — the provenance of an authored package IS the session, not an operator-suppliable value');
 
   const listRes = await fetch(`${bridgeUrl}/api/studio/skills`);
   const listBody = (await listRes.json()) as { skills: Array<{ id: string; trust: string; paletteVisible: boolean }> };
@@ -279,36 +308,45 @@ test('WI2-2: finalize (skill) on a session at awaiting-review with staging/SKILL
 });
 
 // ===========================================================================
-// D5 happy path (hook) — install writes the existing 2-file shape; unbound.
+// D5 happy path (hook) — hook METADATA comes from the DRAFTED hook.yaml, not
+// the (now-nonexistent) body fields.
 // ===========================================================================
 
-test('WI2-3: finalize (hook) on a session at awaiting-review with staging/scripts/run.sh -> 200; hooks/<id>/hook.yaml + hooks/<id>/scripts/run.sh exist; GET /api/studio/hooks/<id> resolves with carriedBy:[] (unbound)', async () => {
+test('WI2-3: finalize (hook) body is EXACTLY {project,sessionId,kind,id} -> 200; hooks/<id>/hook.yaml carries the DRAFTED name/description/on/matcher/permissions + script:"scripts/run.sh"; hooks/<id>/scripts/run.sh carries the drafted script bytes; unbound', async () => {
   const STAGED_SCRIPT = '#!/usr/bin/env bash\necho "authored hook ran"\n';
-  const { sessionId, sessionDir } = seedAuthoringSession({
-    phase: 'awaiting-review',
-    staging: { 'scripts/run.sh': STAGED_SCRIPT },
-  });
-  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: seeded status must start in awaiting-review');
-
-  const res = await postJson(FINALIZE_URL(), {
-    project: PROJECT,
-    sessionId,
-    kind: 'hook',
-    id: 'authored-hook',
+  const draftedYaml = hookYamlDraft({
     name: 'Authored Hook',
     description: 'authored via the creation-agent authoring session',
     on: 'PreToolUse',
+    matcher: 'Bash',
+    script: 'scripts/run.sh',
+    permissions: { env: ['FORGE_ROOT'], read: ['/tmp'], network: false },
   });
+  const { sessionId, sessionDir } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': STAGED_SCRIPT },
+  });
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: seeded status must start in awaiting-review');
+
+  // The body carries NO hook metadata at all — everything must come from the
+  // drafted hook.yaml the operator actually reviewed.
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: 'authored-hook' });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { ok: boolean; kind: string; id: string };
   assert.equal(body.ok, true);
   assert.equal(body.kind, 'hook');
+  assert.equal(body.id, 'authored-hook');
 
   const yamlBody = readFileSync(join(forgeRoot, 'studio', 'hooks', body.id, 'hook.yaml'), 'utf8');
   const doc = yaml.load(yamlBody) as Record<string, unknown>;
-  assert.equal(doc['on'], 'PreToolUse');
+  assert.equal(doc['name'], 'Authored Hook', 'installed name must be the DRAFTED value');
+  assert.equal(doc['description'], 'authored via the creation-agent authoring session', 'installed description must be the DRAFTED value');
+  assert.equal(doc['on'], 'PreToolUse', 'installed "on" must be the DRAFTED value');
+  assert.equal(doc['matcher'], 'Bash', 'installed matcher must be the DRAFTED value');
   assert.equal(doc['script'], 'scripts/run.sh', 'finalize must reuse the SAME fixed relative script path POST /api/studio/hooks always writes');
+  assert.deepEqual(doc['permissions'], { env: ['FORGE_ROOT'], read: ['/tmp'], network: false }, 'installed permissions must be the DRAFTED values');
+
   const scriptOnDisk = readFileSync(join(forgeRoot, 'studio', 'hooks', body.id, 'scripts', 'run.sh'), 'utf8');
   assert.equal(scriptOnDisk, STAGED_SCRIPT, 'the installed script bytes must be the LANDED (staged) bytes verbatim');
 
@@ -320,12 +358,98 @@ test('WI2-3: finalize (hook) on a session at awaiting-review with staging/script
 });
 
 // ===========================================================================
-// Wire contract (rule 38): the installed bytes are the bytes of
-// _interactive-library/<id>/…, NEVER anything in the request body. Seeds a
-// DIFFERENT, poisoned body-supplied payload and proves it is ignored.
+// D5 hook negative paths — validated against the DRAFTED hook.yaml, before
+// any hooks/<id> write. All three assert the ARTIFACT (dir absence), not
+// just the status code.
 // ===========================================================================
 
-test('WI2-4-wire (skill): a body carrying a poisoned "entries" field (the phase-1 field name) is IGNORED — the installed SKILL.md is the STAGED content, not the body\'s', async () => {
+test('WI2-3b: a drafted hook.yaml declaring a FORBIDDEN_HOOK_BINDING_KEYS key -> 400 naming the offending key; nothing written under hooks/<id>', async () => {
+  // Precondition: prove the fixture premise (the forbidden-key list is real
+  // and non-empty) before relying on it.
+  assert.ok(FORBIDDEN_HOOK_BINDING_KEYS.includes('agent'), 'arrange: "agent" must be a real forbidden binding key');
+
+  const draftedYaml = hookYamlDraft({
+    name: 'Binding Hook',
+    description: 'declares a forbidden binding key',
+    on: 'PreToolUse',
+    script: 'scripts/run.sh',
+    agent: 'some-agent-slug', // FORBIDDEN — a definition must never name its own binding
+  });
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: 'binding-hook' });
+  const text = await res.text();
+  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.ok(body.error && /agent/.test(body.error), `400 body must name the offending key "agent", got: ${JSON.stringify(body)}`);
+
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', 'binding-hook')), false, 'a forbidden-binding-key hook.yaml must result in NOTHING written under hooks/<id>');
+});
+
+test('WI2-3c: a drafted hook.yaml whose "on" is outside HOOK_LIFECYCLE_EVENTS -> 400 naming the value and the allowed set; nothing written under hooks/<id>', async () => {
+  const draftedYaml = hookYamlDraft({
+    name: 'Bad Event Hook',
+    description: 'declares an unknown lifecycle event',
+    on: 'BogusLifecycleEvent',
+    script: 'scripts/run.sh',
+  });
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: 'bad-event-hook' });
+  const text = await res.text();
+  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.ok(body.error && /BogusLifecycleEvent/.test(body.error), `400 body must name the offending value, got: ${JSON.stringify(body)}`);
+  for (const ev of HOOK_LIFECYCLE_EVENTS) {
+    assert.ok(body.error!.includes(ev), `400 body must name the allowed set (missing "${ev}"), got: ${JSON.stringify(body)}`);
+  }
+
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', 'bad-event-hook')), false, 'an invalid "on" hook.yaml must result in NOTHING written under hooks/<id>');
+});
+
+const MALFORMED_HOOK_DRAFTS: { label: string; staging: Record<string, string> }[] = [
+  {
+    label: 'missing hook.yaml entirely',
+    staging: { 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  },
+  {
+    label: 'unparseable YAML',
+    staging: { 'hook.yaml': 'name: [unterminated\n  - broken\n', 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  },
+  {
+    label: 'a YAML scalar, not a mapping',
+    staging: { 'hook.yaml': 'just-a-bare-scalar-string\n', 'scripts/run.sh': '#!/usr/bin/env bash\necho x\n' },
+  },
+];
+
+for (const { label, staging } of MALFORMED_HOOK_DRAFTS) {
+  test(`WI2-3d: a drafted hook.yaml that is ${label} -> 400, nothing written under hooks/<id> (fail loud, never a fabricated default)`, async () => {
+    const { sessionId } = seedAuthoringSession({ phase: 'awaiting-review', staging });
+    const id = `malformed-${label.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
+
+    const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id });
+    const text = await res.text();
+    assert.equal(res.status, 400, `expected 400 for "${label}", got ${res.status}: ${text}`);
+
+    assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', id)), false, `"${label}" must result in NOTHING written under hooks/<id>`);
+  });
+}
+
+// ===========================================================================
+// Wire contract (rule 38): the installed artifact is the LANDED package,
+// NEVER anything the request body carries. Poisons EVERY field the corrected
+// contract removed (entries, upstream, name, description, on, matcher,
+// scriptBody, permissions) with contradicting values and proves each is
+// ignored.
+// ===========================================================================
+
+test('WI2-4-wire (skill): a body carrying poisoned entries/upstream (removed fields) is IGNORED — the installed SKILL.md + provenance are the STAGED/server-minted values, not the body\'s', async () => {
   const STAGED_CONTENT = matter.stringify('\n# Real Staged Skill\n', { name: 'Real Staged Skill', description: 'd' });
   const { sessionId } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'SKILL.md': STAGED_CONTENT } });
 
@@ -335,41 +459,52 @@ test('WI2-4-wire (skill): a body carrying a poisoned "entries" field (the phase-
     sessionId,
     kind: 'skill',
     id: 'wire-contract-skill',
-    // A phase-1-shaped "entries" field — the new contract defines no such
-    // body field; a naive implementation that never fully deleted the old
-    // request-parsing code path could still read it.
     entries: [{ path: 'SKILL.md', contentBase64: poisonedBase64 }],
-    upstream: { source: 'forge://authoring-session/wire-contract-skill' },
+    upstream: { source: 'ATTACKER-CLAIMED-SOURCE', ref: 'attacker-ref' },
+    name: 'ATTACKER', description: 'ATTACKER', on: 'PreToolUse', matcher: 'ATTACKER', scriptBody: 'ATTACKER',
   });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
 
   const installedMdPath = join(forgeRoot, 'skills', 'wire-contract-skill', 'SKILL.md');
   assert.ok(existsSync(installedMdPath), 'the skill must still install (from the REAL staged content)');
-  const installed = readFileSync(installedMdPath, 'utf8');
-  assert.equal(installed, STAGED_CONTENT, 'the installed content must be the STAGED bytes');
-  assert.ok(!installed.includes('ATTACKER-SUPPLIED-BODY-CONTENT'), 'the body-supplied "entries" payload must never reach disk');
+  const installed = matter(readFileSync(installedMdPath, 'utf8'));
+  assert.ok(!readFileSync(installedMdPath, 'utf8').includes('ATTACKER-SUPPLIED-BODY-CONTENT'), 'the body-supplied "entries" payload must never reach disk');
+  assert.equal((installed.data as Record<string, unknown>)['provenance'] && ((installed.data as Record<string, unknown>)['provenance'] as Record<string, unknown>)['source'], 'forge-authoring', 'the body-supplied poisoned "upstream" must never override the server-minted provenance.source');
 });
 
-test('WI2-4-wire (hook): a body carrying a poisoned "scriptBody" field (the phase-1 field name) is IGNORED — the installed script is the LANDED (staged) bytes, not the body\'s', async () => {
+test('WI2-4-wire (hook): a body carrying poisoned name/description/on/matcher/scriptBody/permissions/upstream (removed fields) is IGNORED — the installed hook.yaml + script are the DRAFTED values, not the body\'s', async () => {
   const STAGED_SCRIPT = '#!/usr/bin/env bash\necho "REAL staged script"\n';
-  const { sessionId } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'scripts/run.sh': STAGED_SCRIPT } });
+  const draftedYaml = hookYamlDraft({
+    name: 'Real Drafted Hook',
+    description: 'the real drafted description',
+    on: 'PreToolUse',
+    script: 'scripts/run.sh',
+  });
+  const { sessionId } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': STAGED_SCRIPT },
+  });
 
   const res = await postJson(FINALIZE_URL(), {
     project: PROJECT,
     sessionId,
     kind: 'hook',
     id: 'wire-contract-hook',
-    name: 'wire-contract-hook',
-    description: 'd',
-    on: 'PreToolUse',
-    // The phase-1 field name — the new contract sources script bytes
-    // server-side; this must be ignored entirely.
+    name: 'ATTACKER', description: 'ATTACKER', on: 'PostToolUse', matcher: 'ATTACKER',
     scriptBody: '#!/usr/bin/env bash\necho ATTACKER\n',
+    permissions: { env: ['ATTACKER'], read: ['/'], network: true },
+    upstream: { source: 'ATTACKER-CLAIMED-SOURCE' },
   });
   const text = await res.text();
   assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
   const body = JSON.parse(text) as { id: string };
+
+  const yamlBody = readFileSync(join(forgeRoot, 'studio', 'hooks', body.id, 'hook.yaml'), 'utf8');
+  const doc = yaml.load(yamlBody) as Record<string, unknown>;
+  assert.equal(doc['name'], 'Real Drafted Hook', 'installed name must be the DRAFTED value, never the body\'s');
+  assert.equal(doc['on'], 'PreToolUse', 'installed "on" must be the DRAFTED value, never the body\'s');
+  assert.equal(doc['matcher'], undefined, 'installed matcher must be the DRAFTED value (absent), never the body\'s poisoned value');
 
   const scriptOnDisk = readFileSync(join(forgeRoot, 'studio', 'hooks', body.id, 'scripts', 'run.sh'), 'utf8');
   assert.equal(scriptOnDisk, STAGED_SCRIPT, 'the installed script must be the LANDED bytes');
@@ -377,71 +512,83 @@ test('WI2-4-wire (hook): a body carrying a poisoned "scriptBody" field (the phas
 });
 
 // ===========================================================================
-// Containment — traversal-shaped sessionId (4 variants incl. a RAW-request
-// percent-encoded one) is refused with NO filesystem write anywhere outside
-// the session root. Assert the ARTIFACT (outside file byte-unchanged /
-// absent), not just the status code.
+// Containment — traversal-shaped sessionId. Two variants are backed by a
+// REAL, genuinely-installable session planted at the exact location a NAIVE
+// (unguarded) `join(_authoring, sessionId, ...)` would resolve to — proving
+// this is a genuine RED-if-unfixed pin (rule: a test that would pass with an
+// unguarded implementation swapped in is not an acceptance test), not merely
+// "returns some 4xx". Two further variants (an absolute-path-shaped segment,
+// and a RAW-request percent-encoded segment) are pure segment-shape
+// rejections — inherently caught before any join is attempted — asserted by
+// artifact absence alone.
 // ===========================================================================
 
-test('WI2-5-containment: traversal-shaped sessionId ("../../etc", "..", an absolute path, and a RAW-request percent-encoded "%2e%2e%2f") are all refused — nothing is written outside the session root', async () => {
-  // A canary planted where a naive join(_authoring, sessionId, 'status.json')
-  // traversal could plausibly land — one level above the _authoring parent,
-  // inside the project dir.
-  const canaryPath = join(forgeRoot, 'projects', PROJECT, 'CANARY.md');
-  const CANARY_CONTENT = 'canary — must survive byte-unchanged\n';
-  writeFileSync(canaryPath, CANARY_CONTENT, 'utf8');
-  // Precondition, asserted before reading any verdict.
-  assert.equal(readFileSync(canaryPath, 'utf8'), CANARY_CONTENT, 'arrange: canary must exist before any traversal attempt');
+test('WI2-5-containment: traversal-shaped sessionId is refused — nothing is written outside the session root, even where a naive unguarded join would land on a REAL valid session', async () => {
+  const validSkillMd = matter.stringify('\n# escaped\n', { name: 'escaped', description: 'd' });
+
+  // Variant 1: sessionId "../evil-sibling" — a naive join(authoringRoot,
+  // '../evil-sibling', 'status.json') cancels the _authoring segment and
+  // lands at <projectRoot>/evil-sibling/status.json. Plant a REAL, valid,
+  // awaiting-review session there.
+  const projectRoot = join(forgeRoot, 'projects', PROJECT);
+  const evilSiblingDir = join(projectRoot, 'evil-sibling');
+  writeSeededSession(evilSiblingDir, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });
+  assert.equal(readStatusPhase(evilSiblingDir), 'awaiting-review', 'arrange: the naive-join-1 target must be a genuinely valid session');
+
+  // Variant 2: sessionId ".." alone — a naive join(authoringRoot, '..',
+  // 'status.json') cancels the _authoring segment and lands directly at
+  // <projectRoot>/status.json. Plant a REAL, valid, awaiting-review session
+  // directly in projectRoot (alongside its existing _authoring/ subdir).
+  writeSeededSession(projectRoot, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });
+  assert.equal(readStatusPhase(projectRoot), 'awaiting-review', 'arrange: the naive-join-2 target must be a genuinely valid session');
 
   const beforeEntries = readdirSync(forgeRoot, { recursive: true } as { recursive: true }).sort();
 
-  // Every request below ALSO carries a fully valid, installable skill package
-  // (entries + upstream) — deliberately, so a request that ignores sessionId
-  // containment entirely would actually SUCCEED (200, a real install) rather
-  // than coincidentally 400 on an unrelated "entries is required" check. This
-  // is what makes the assertion below a genuine RED-now pin rather than a
-  // pass-for-the-wrong-reason (rule: a test that would pass with the pre-fix
-  // code swapped back in is not an acceptance test).
-  const validSkillMd = matter.stringify('\n# x\n', { name: 'x', description: 'd' });
-  const validPackageBody = (id: string) => ({
-    entries: [{ path: 'SKILL.md', contentBase64: Buffer.from(validSkillMd, 'utf8').toString('base64') }],
-    upstream: { source: `forge://authoring-session/${id}` },
-  });
-
-  const jsonVariants = ['../../etc', '..', '/etc/passwd-shaped-absolute-path'];
-  for (const poisoned of jsonVariants) {
-    const id = `traversal-${jsonVariants.indexOf(poisoned)}`;
-    const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: poisoned, kind: 'skill', id, ...validPackageBody(id) });
+  const genuineVariants = ['../evil-sibling', '..'];
+  for (const poisoned of genuineVariants) {
+    const id = `traversal-genuine-${genuineVariants.indexOf(poisoned)}`;
+    const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: poisoned, kind: 'skill', id });
     assert.ok(res.status >= 400 && res.status < 500, `sessionId ${JSON.stringify(poisoned)} must be refused with a 4xx, got ${res.status}`);
     assert.equal(existsSync(join(forgeRoot, 'skills', id)), false, `a traversal-shaped sessionId must never result in an installed skill at skills/${id}`);
   }
 
-  // RAW-request variant (rule 38): the literal text %2e%2e%2f as a JSON
-  // string VALUE — never percent-decoded by a JSON body (no URL routing
-  // layer touches it), so this specifically catches an implementation that
-  // (incorrectly) decodes a request-derived string before validating it as a
-  // path segment.
-  const encodedId = 'traversal-encoded';
-  const rawBody = JSON.stringify({ project: PROJECT, sessionId: '%2e%2e%2f', kind: 'skill', id: encodedId, ...validPackageBody(encodedId) });
+  // Variant 3: an absolute-path-shaped segment — caught by segment-shape
+  // validation (contains "/"), never even attempts a join.
+  const absId = 'traversal-absolute';
+  const absRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId: '/etc/passwd-shaped-absolute-path', kind: 'skill', id: absId });
+  assert.ok(absRes.status >= 400 && absRes.status < 500, `an absolute-shaped sessionId must be refused with a 4xx, got ${absRes.status}`);
+  assert.equal(existsSync(join(forgeRoot, 'skills', absId)), false, 'an absolute-shaped sessionId must never result in an installed skill');
+
+  // Variant 4: RAW-request percent-encoded sessionId (rule 38) — the literal
+  // text "%2e%2e%2f" as a JSON string VALUE, never percent-decoded by a JSON
+  // body. Catches an implementation that (incorrectly) decodes a
+  // request-derived string before validating it as a path segment.
+  const encId = 'traversal-encoded';
+  const rawBody = JSON.stringify({ project: PROJECT, sessionId: '%2e%2e%2f', kind: 'skill', id: encId });
   const rawRes = await postRaw(FINALIZE_URL(), rawBody);
   assert.ok(rawRes.status >= 400 && rawRes.status < 500, `the RAW percent-encoded sessionId must be refused with a 4xx, got ${rawRes.status}`);
-  assert.equal(existsSync(join(forgeRoot, 'skills', encodedId)), false, 'a RAW percent-encoded traversal sessionId must never result in an installed skill');
+  assert.equal(existsSync(join(forgeRoot, 'skills', encId)), false, 'a RAW percent-encoded traversal sessionId must never result in an installed skill');
 
-  // Assert the ARTIFACT: the canary is byte-unchanged, and no new file
-  // anywhere under forgeRoot was created by any of the 4 attempts.
-  assert.equal(readFileSync(canaryPath, 'utf8'), CANARY_CONTENT, 'the canary must be byte-unchanged after every traversal attempt');
+  // Assert the ARTIFACT: nothing new appeared anywhere under forgeRoot beyond
+  // this test's own two legitimate plants (both already reflected in
+  // beforeEntries, captured after planting them) — proving all 4 attempts
+  // were fully refused, not partially processed.
   const afterEntries = readdirSync(forgeRoot, { recursive: true } as { recursive: true }).sort();
   assert.deepEqual(afterEntries, beforeEntries, 'no traversal attempt may create any new file or directory anywhere under forgeRoot');
+  // And the two genuinely-valid plants must be byte-unchanged (never mutated
+  // into "committed" by a bypassed guard).
+  assert.equal(readStatusPhase(evilSiblingDir), 'awaiting-review', 'the naive-join-1 target must be untouched — a bypassed guard would have advanced it to "committed"');
+  assert.equal(readStatusPhase(projectRoot), 'awaiting-review', 'the naive-join-2 target must be untouched — a bypassed guard would have advanced it to "committed"');
 });
 
 // ===========================================================================
 // Containment — a project that resolves outside the projects root is
-// refused (mirrors cli/ui-bridge-onboarding-start.test.ts's AT-9 idiom).
+// refused, even when a REAL, genuinely-installable session sits at the exact
+// location the symlink points at (proving genuine RED-if-unfixed).
 // ===========================================================================
 
-test('WI2-6-containment: a "project" whose dir is a symlink escaping the projects root is refused — nothing is written through it', async () => {
+test('WI2-6-containment: a "project" whose dir is a symlink escaping the projects root is refused — nothing is written through it, even though a REAL valid session sits at the escape target', async () => {
   const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-authoring-finalize-project-outside-'));
-  const outsideEntriesBefore = readdirSync(outsideDir).sort();
   const escapeProject = 'escape-finalize-project';
   const linkPath = join(forgeRoot, 'projects', escapeProject);
   try {
@@ -451,21 +598,25 @@ test('WI2-6-containment: a "project" whose dir is a symlink escaping the project
     return; // symlinks unsupported on this filesystem/platform — skip
   }
   try {
-    // Carries a fully valid, installable skill package (see WI2-5's identical
-    // rationale) so a request that ignores project containment entirely would
-    // actually SUCCEED rather than coincidentally 400 on an unrelated check.
     const validSkillMd = matter.stringify('\n# x\n', { name: 'x', description: 'd' });
+    const sessionId = '2026-08-11T00-00-99-fx';
+    const sessionDir = join(outsideDir, '_authoring', sessionId);
+    writeSeededSession(sessionDir, { phase: 'awaiting-review', staging: { 'SKILL.md': validSkillMd } });
+    assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: the escape target must hold a genuinely valid session');
+
+    const outsideEntriesBefore = readdirSync(outsideDir, { recursive: true } as { recursive: true }).sort();
+
     const res = await postJson(FINALIZE_URL(), {
       project: escapeProject,
-      sessionId: '2026-08-11T00-00-99-fx',
+      sessionId,
       kind: 'skill',
       id: 'escape-project-skill',
-      entries: [{ path: 'SKILL.md', contentBase64: Buffer.from(validSkillMd, 'utf8').toString('base64') }],
-      upstream: { source: 'forge://authoring-session/escape-project-skill' },
     });
     assert.ok(res.status >= 400, `a project resolving outside the projects root must be refused, got ${res.status}`);
-    const outsideEntriesAfter = readdirSync(outsideDir).sort();
-    assert.deepEqual(outsideEntriesAfter, outsideEntriesBefore, 'nothing may be created inside the out-of-tree directory the symlinked project points at');
+
+    const outsideEntriesAfter = readdirSync(outsideDir, { recursive: true } as { recursive: true }).sort();
+    assert.deepEqual(outsideEntriesAfter, outsideEntriesBefore, 'nothing may be created or mutated inside the out-of-tree directory the symlinked project points at');
+    assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'the escape-target session must be untouched — a bypassed guard would have advanced it to "committed"');
     assert.equal(existsSync(join(forgeRoot, 'skills', 'escape-project-skill')), false, 'nothing may be installed to skills/ from a request whose project escapes the projects root');
   } finally {
     rmSync(linkPath, { force: true });
@@ -474,8 +625,7 @@ test('WI2-6-containment: a "project" whose dir is a symlink escaping the project
 });
 
 // ===========================================================================
-// Handler contract — direct invocation (unchanged passthrough contract,
-// mirrors bridge-studio-skills.test.ts's / bridge-studio.test.ts's idiom).
+// Handler contract — direct invocation (unchanged passthrough contract).
 // ===========================================================================
 
 test('handleStudioAuthoringRoutes returns false for a non-matching URL (passthrough contract)', async () => {
