@@ -139,9 +139,24 @@ export const journey = defineJourney({
               check(formPresent, 'A0: /projects/new renders the onboarding form (create-new shares the same form as onboard-existing)');
               await frame(page, 'a0-0-create-form', 'A0 — creating a project from nothing: name, north star, quality-gate command');
 
-              await page.locator('[data-field="project-name"]').fill(CREATE_NAME);
-              await page.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
-              await page.locator('[data-field="north-star"]').fill(CREATE_NORTH_STAR);
+              // Hydration-robust fill: /projects/new ships data-page-ready static,
+              // so a plain .fill() can land before React wires the inputs — leaving
+              // canSubmit false and the Onboard button disabled (the same pattern the
+              // skills builder beat guards against). Settle, fill, and re-fill once if
+              // the submit hasn't enabled.
+              const fillCreateForm = async () => {
+                await page.locator('[data-field="project-name"]').fill(CREATE_NAME);
+                await page.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
+                await page.locator('[data-field="north-star"]').fill(CREATE_NORTH_STAR);
+              };
+              await page.waitForSelector('[data-field="project-name"]', { timeout: 10000 }).catch(() => {});
+              await sleep(600); // let the onboard form hydrate before typing
+              await fillCreateForm();
+              const createEnabled = () => page.waitForFunction(() => {
+                const b = document.querySelector('[data-action="onboard-project"]');
+                return b !== null && !b.hasAttribute('disabled');
+              }, null, { timeout: 6000 }).then(() => true).catch(() => false);
+              if (!(await createEnabled())) { await fillCreateForm(); await createEnabled(); }
               await page.locator('[data-action="onboard-project"]').click();
 
               const createJsonPath = join(FORGE_ROOT, 'projects', CREATE_SLUG, '.forge', 'project.json');
@@ -187,9 +202,18 @@ export const journey = defineJourney({
                 await p.locator('[data-action="new-project"]').click().catch(() => {});
                 await p.waitForURL('**/projects/new', { timeout: 10000 }).catch(() => {});
                 await p.waitForSelector('[data-section="project-onboard"]', { timeout: 10000 }).catch(() => {});
-                await p.locator('[data-field="project-name"]').fill(CREATE_CLIP_NAME).catch(() => {});
-                await p.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
-                await p.locator('[data-field="north-star"]').fill(CREATE_CLIP_NORTH_STAR).catch(() => {});
+                await sleep(500); // hydrate the onboard form before typing
+                const fillClip = async () => {
+                  await p.locator('[data-field="project-name"]').fill(CREATE_CLIP_NAME).catch(() => {});
+                  await p.locator('[data-field="quality-gate"]').fill(CREATE_QUALITY_GATE).catch(() => {});
+                  await p.locator('[data-field="north-star"]').fill(CREATE_CLIP_NORTH_STAR).catch(() => {});
+                };
+                await fillClip();
+                const clipEnabled = await p.waitForFunction(() => {
+                  const b = document.querySelector('[data-action="onboard-project"]');
+                  return b !== null && !b.hasAttribute('disabled');
+                }, null, { timeout: 5000 }).then(() => true).catch(() => false);
+                if (!clipEnabled) await fillClip();
                 await p.locator('[data-action="onboard-project"]').click().catch(() => {});
                 // Contract-green birth (R1-03-F1): the form navigates to the new
                 // project's page rather than parking on a failing checklist.
