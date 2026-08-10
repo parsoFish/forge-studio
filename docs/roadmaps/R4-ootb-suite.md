@@ -1702,7 +1702,8 @@ contract produced which artifact.
 
 ### R4-20 Brain-tune OOTB flow
 
-- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-flow — brain-tune)
+- **Status:** resolved — keep-as-is  ·  **Wave:** 5 (module: per-OOTB-flow —
+  brain-tune)
 - **Depends on:** R4-09 (reflect agent, done), R2-08-F2 (soft —
   `agent-complete`/on-completion chaining it's triggered by).
 - **Context:** Wave-5 cut. Mockup `brain-tune` flow (`provenance: 'vision'`):
@@ -1711,6 +1712,36 @@ contract produced which artifact.
   As-built: `forge-reflect` exists as a seed flow triggered `on: merged`;
   ingest/lint run inside the reflect pipeline, not as visible flow nodes
   with a gate (`as-built-inventory.md` §2).
+- **Decision (2026-08-10, T1 keep-as-is):** R4-20-F1 resolves KEEP-AS-IS, not
+  evolve. (1) The brain-tune loop already runs orchestrator-owned on EVERY
+  merge — the reflector post-run pipeline
+  (`orchestrator/phases/reflector.ts` S6A brain-lint trigger ~:452-464,
+  REF-4 ingest ~:475-476), dispatched via forge-develop's `{on: merged,
+  target: {kind: agent, ref: reflector}}` standing trigger
+  (`studio/flows/forge-develop/flow.yaml`), resolved through
+  `orchestrator/finalize-merged.ts`'s reflection-close band hook.
+  (2) Evolve's "a lint gate node executing the real `forge brain lint`
+  (ADR-036 orchestrator-owned)" would need a NEW row in
+  `orchestrator/flow-runner.ts`'s closed `GATE_KIND` dispatch table
+  (currently only `{plan, verdict}`, ~:299-302) — an ADR-042
+  orchestrator-surface increase, ask-first/PARK, the same class as
+  R4-18/R4-19-F2. (3) R4-09-F1 already RETIRED the single-node
+  `forge-reflect` flow wrapper as the *shipped* shape
+  (`studio/flows/forge-reflect/flow.yaml` itself carries a comment saying
+  so; its `kickoff` is `trigger-only`) — evolving would re-introduce
+  exactly what R4-09 deliberately removed. (4) Simplest-thing-that-works
+  (PRINCIPLES.md #3): the learning loop already works and is already
+  surfaced via `/agents/reflector`'s real standing trigger; a re-badged
+  visible flow adds orchestrator surface for marginal operator-visibility
+  gain. **Disclosed follow-up:** evolve remains an operator-authorizable
+  follow-up — it would need ADR-042 sign-off for the `GATE_KIND` gate node.
+  The loop's outcomes ARE observable today (reflect artifacts + the brain
+  accumulation + the `/agents/reflector` standing-trigger view). Mockup
+  corrected in the same pass
+  (`mockups/studio-endstate-v2/journeys-data.jsx`'s `run-flow-brain-tune`
+  entry); the `run-flow-brain-tune` journey ported onto the real
+  `/agents/reflector` standing-trigger surface
+  (`scripts/journeys/story-registry.mjs`).
 - **Features:**
   - **R4-20-F1 Flow alignment decision + packaging.** Diff `forge-reflect`
     against the mockup topology and either evolve it (rename/re-badge +

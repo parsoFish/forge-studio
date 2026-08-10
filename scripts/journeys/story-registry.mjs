@@ -247,6 +247,36 @@ const DECISION_REFLECTOR_NO_LIVE_RUN =
   '"evidence-backed" judgment) is honestly unavailable; the agent\'s real ' +
   'declared composition + a genuine `forge brain lint` run are ported instead';
 
+// Batch-D journey-sync (T3, R4-20) — cited by run-flow-brain-tune's note
+// below. R4-20-F1's own decision block (docs/roadmaps/R4-ootb-suite.md,
+// dated 2026-08-10, T1 ruling) resolves KEEP-AS-IS, not evolve: the
+// brain-tune loop already runs orchestrator-owned on every merge (the
+// reflector post-run pipeline — orchestrator/phases/reflector.ts's S6A
+// brain-lint trigger + REF-4 ingest — dispatched via forge-develop's
+// `{on: merged, target: {kind: agent, ref: reflector}}` standing trigger),
+// and evolving into a visible flow with its own lint GATE node would need a
+// NEW row in orchestrator/flow-runner.ts's closed GATE_KIND dispatch table
+// (currently only {plan, verdict}) — an ADR-042 orchestrator-surface
+// increase, ask-first/PARK. R4-09-F1 already retired the single-node
+// forge-reflect flow wrapper as the shipped shape (studio/flows/
+// forge-reflect/flow.yaml is authorable-only, kickoff: trigger-only) — a
+// visible `#/flows/monitor/brain-tune` route and a discrete lint GATE node
+// never existed and will not exist under this ruling. The mockup
+// (mockups/studio-endstate-v2/journeys-data.jsx's run-flow-brain-tune
+// entry) is corrected in this same pass to depict the real surface instead
+// of deferring that correction to a port-time exclusion.
+const DECISION_R4_20_KEEP_AS_IS =
+  'docs/roadmaps/R4-ootb-suite.md R4-20 "Decision (2026-08-10, T1 ' +
+  'keep-as-is)" ("R4-20-F1 resolves KEEP-AS-IS, not evolve ... the ' +
+  'brain-tune loop already runs orchestrator-owned on EVERY merge ... ' +
+  'evolve would need a NEW row in orchestrator/flow-runner.ts\'s closed ' +
+  'GATE_KIND dispatch table ... an ADR-042 orchestrator-surface increase, ' +
+  'ask-first/PARK") + orchestrator/phases/reflector.ts (S6A brain-lint ' +
+  'trigger ~:452-464, REF-4 ingest ~:475-476) + studio/flows/forge-develop/' +
+  'flow.yaml (`{on: merged, target: {kind: agent, ref: reflector}}`) — a ' +
+  'visible `#/flows/monitor/brain-tune` route and a discrete lint GATE ' +
+  'node never existed and will not exist under this ruling';
+
 // Batch-D journey-sync (T3, forge-tuy) — cited by run-flow's steps 1-10
 // below. story-parity.mjs's own validateEntry Rule 8/10 ("port.journey must
 // exist" / "string BeatRef must be a real beat of that journey") binds a
@@ -1448,7 +1478,54 @@ export const STORY_REGISTRY = [
   {
     story: 'run-flow-brain-tune',
     batch: 'D',
-    port: null,
+    port: {
+      journey: 'agents',
+      beats: [
+        'agents-kickoff-standing-triggers',
+        { excluded: '"the trigger lives on the agent itself" restates the same real standing trigger already cited at step 1 — no distinct UI action beyond it', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: '"two durable lessons from the cycle" is a specific run\'s OWN output content (a count) — genuinely unavailable without a real reflector SDK turn, and this harness spawns none (FORGE_ARCHITECT_NO_SPAWN=1), honestly excluded rather than fabricated', decision: DECISION_REFLECTOR_NO_LIVE_RUN },
+        { excluded: 'the corrected caption itself makes the R4-20 point ("written straight into the brain by the SAME run, no separate node") — ingest never ran, nor will run, as a discrete visible flow node under keep-as-is; the SAME real Skills-zone brain-ingest chip cited at the beat below is the honest substitute for the capability, not a per-run "themes, edges, index" count', decision: DECISION_R4_20_KEEP_AS_IS },
+        'agents-run-reflector-detail',
+        { excluded: 'closing narrative line summarising the auto-triggered, self-tuning loop — not a distinct UI action beyond the real standing trigger already cited at step 1', decision: DECISION_REFLECTOR_NO_LIVE_RUN },
+      ],
+    },
     excluded: null,
+    note:
+      'R4-20-F1 (journey-sync T3, 2026-08-10, T1 ruling — see ' +
+      'DECISION_R4_20_KEEP_AS_IS) resolves KEEP-AS-IS: the mockup\'s ' +
+      'ORIGINAL run-flow-brain-tune steps depicted a visible `#/flows/' +
+      'monitor/brain-tune` flow route (step 1) with a discrete lint GATE ' +
+      'node (step 5) — neither exists, nor will exist under keep-as-is, so ' +
+      'this pass corrects the mockup itself (same PR) rather than ' +
+      'deferring the correction to a port-time exclusion: step 1 now goes ' +
+      'to `#/agents/builder/reflector` (the reflector agent\'s own real ' +
+      'page, the SAME route the pre-existing build-skill story already ' +
+      'drives) and step 5\'s cap now explicitly reads "not a gated flow ' +
+      'step". That correction is what makes this story portable at all — ' +
+      'its real content and run-agent-reflector\'s (R4-B13, batch C/D, ' +
+      '#110) are now literally the SAME page. Step 1 (auto-trigger) reuses ' +
+      'the pre-existing agents-kickoff-standing-triggers beat (R6-01 WI-4), ' +
+      'exactly as run-agent-reflector\'s own port does — the SAME real ' +
+      '`{on: merged, target: {kind: agent, ref: reflector}}` standing ' +
+      'trigger declared on forge-develop. Step 5 (the corrected "lint gate ' +
+      '... not a gated flow step") reuses agents-run-reflector-detail from ' +
+      'that same prior port — it runs a genuine `forge brain lint`, proving ' +
+      'brain/ actually passes its real 9-check suite right now, the honest ' +
+      'substitute for both the fictional gate node and the fictional ' +
+      'per-run "9/9" claim. No new beat was warranted: the two reused beats ' +
+      'already cover everything real this story depicts (the standing ' +
+      'trigger, the agent\'s declared brain-access composition, and a live ' +
+      'lint proof) — nothing here needed a third real beat. Steps 2, 3, 4 ' +
+      'and 6 (the trigger restated, a specific lesson count, specific ' +
+      'ingest content, and the closing narrative) are excluded: step 2 ' +
+      'under DECISION_ONE_REF_PER_STORY (a repeat of step 1\'s beat); steps ' +
+      '3 and 6 under DECISION_REFLECTOR_NO_LIVE_RUN (live per-cycle SDK-turn ' +
+      'content no static UI surface renders, mirroring run-agent-' +
+      'reflector\'s own precedent); step 4 under DECISION_R4_20_KEEP_AS_IS ' +
+      '(no discrete ingest flow-node exists or will exist under keep-as-is, ' +
+      'the more specific reason its own corrected caption text names). Net: ' +
+      '2 of 6 mockup steps carry a literal string BeatRef, both reused from ' +
+      'run-agent-reflector\'s own port; the other 4 are explicit, ' +
+      'decision-cited exclusions.',
   },
 ];

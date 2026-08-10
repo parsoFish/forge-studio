@@ -433,15 +433,27 @@ const JOURNEYS = {
     ],
   },
 
+  // R4-20 keep-as-is correction (2026-08-10, T1 ruling — docs/roadmaps/
+  // R4-ootb-suite.md R4-20 "Brain-tune OOTB flow"): brain-tune stays a LOOP,
+  // not a separate visible flow with its own lint-GATE node — that loop
+  // already runs orchestrator-owned (reflector -> ingest -> brain-lint) on
+  // every forge-develop merge, dispatched via the reflector agent's own real
+  // standing trigger (forge-develop's `{on: merged, target: {kind: agent,
+  // ref: reflector}}`). This entry no longer walks a `#/flows/monitor/
+  // brain-tune` route or a discrete lint GATE node — neither exists, nor
+  // will under keep-as-is — it walks the reflector agent's own builder page
+  // instead, where the standing trigger + skills + brain-lint outcome are
+  // the real, observable surface (the SAME `#/agents/builder/reflector`
+  // route the `build-skill` story already navigates to, above).
   'run-flow-brain-tune': {
-    title: 'Run the brain-tune flow — auto-triggered',
+    title: 'Brain-tune — the reflector\'s own standing-trigger loop, not a separate flow',
     steps: [
-      { cap: 'brain-tune never starts by hand: it fires when a forge-develop run completes.', goto: '#/flows/monitor/brain-tune', patch: { flowRun: 0, flowRunFlow: 'brain-tune' }, ms: 3600 },
-      { cap: 'The trigger is on the run: auto, from the INIT-3 completion.', ms: 3000 },
-      { cap: 'Reflector: two durable lessons from the cycle.', patch: { flowRun: 1 }, ms: 3000 },
-      { cap: 'Ingest: themes, edges, index — into projects/gitpulse.', patch: { flowRun: 2 }, ms: 3000 },
-      { cap: 'Lint gate: 9/9 green. Complete.', patch: { flowRun: 'done' }, ms: 3200 },
-      { cap: 'Learning is a flow too — and it runs itself.', ms: 2800 },
+      { cap: 'Brain-tune never starts by hand, and it is not a separate flow: it is the reflector agent\'s own standing trigger, firing when a forge-develop run completes.', goto: '#/agents/builder/reflector', ms: 3600 },
+      { cap: 'The trigger lives on the agent itself: auto, on merge — from the INIT-3 completion.', hover: '[data-j=agent-triggers]', ms: 3000 },
+      { cap: 'Reflector: two durable lessons from the cycle.', ms: 3000 },
+      { cap: 'Ingest: themes, edges, index — written straight into the brain by the SAME run, no separate node.', ms: 3000 },
+      { cap: 'Brain lint: 9/9 green — run inline by the reflector, not a gated flow step. Complete.', ms: 3200 },
+      { cap: 'Learning is a loop, not a flow — and it already runs itself.', ms: 2800 },
     ],
   },
 };
