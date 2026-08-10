@@ -333,6 +333,9 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
 .badge-kb { color: var(--c-kb); border-color: rgba(74,222,128,.4); background: rgba(74,222,128,.08); }
 .badge-artifact { color: var(--c-artifact); border-color: rgba(251,191,36,.4); background: rgba(251,191,36,.08); }
 .badge-dim { color: var(--dim); border-color: var(--line-2); background: var(--panel-2); }
+/* OOTB provenance — a subtle ember chip marking objects forge ships out of the
+   box (operator-authored objects carry no badge). R6-03-F3. */
+.badge-ootb { color: var(--ember); border-color: rgba(255,158,74,.3); background: rgba(255,158,74,.07); }
 
 .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
 .status-dot[data-status="pending"] { background: var(--faint); }
