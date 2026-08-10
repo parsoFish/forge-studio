@@ -94,6 +94,8 @@ import {
   readFileSync,
   readdirSync,
   existsSync,
+  symlinkSync,
+  lstatSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -105,6 +107,9 @@ import { runInteractiveTurn } from './interactive-runner.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from './studio/session-kinds.ts';
 import { writeSessionStatus, readSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
+import { modelForSpec } from './phase-agent.ts';
+import { deriveAgentSpec } from './studio/derive.ts';
+import { skillPathRelative, SLUG_RE } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // Fixture yaml — three rows, all real-parsed through loadSessionKinds.
@@ -148,7 +153,41 @@ const FIXTURE_SESSION_KINDS_YAML = `
     style: agent
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
+- id: test-kind-ghost-next-agent
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (Finding 1 - ghost next, agent step)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-ghostnext-agent
+    style: agent
+    phases:
+      - { phase: analyzing, step: agent, next: ghost-next-phase }
+- id: test-kind-ghost-next-finalize
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (Finding 1 - ghost next, finalize step)
+  stages: [committing]
+  defaultStage: committing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-ghostnext-finalize
+    style: agent
+    phases:
+      - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: ghost-next-phase }
 `;
+// NOTE (Finding 1 fixtures): both "-ghost-next-*" rows above declare a
+// `next` naming a phase absent from their OWN `phases` list. This is
+// deliberately NOT rejected by loadSessionKinds (a purely structural
+// parse — see parseTurnSpec's own doc comment) nor by this file's
+// loadFixtureDescriptor helper, which calls ONLY loadSessionKinds, never
+// validateSessionKinds (the separate semantic/lint pass that DOES have a
+// CHECK_TURNSPEC_DANGLING_NEXT rule, used by `forge studio lint`, not by
+// the runtime runInteractiveTurn path this suite exercises). That split is
+// exactly Finding 1's live gap: the static lint can catch an authoring
+// typo, but the generic runner itself has no equivalent runtime defense —
+// a session whose `next` was valid at lint time but drifts (or a
+// lint-skipped hand-edit) still bricks a live session today.
 
 // ---------------------------------------------------------------------------
 // Shared fixture helpers — every test builds its own isolated tempdir tree;
@@ -193,6 +232,20 @@ const logger = (logsRoot: string, sid: string) => createLogger(`_interactive-run
 function neverCalledQueryFn(): QueryFn {
   return () => {
     throw new Error('queryFn must not be called for this test — the runner must refuse before reaching a turn');
+  };
+}
+
+/** A queryFn stub for an `agent`-style step that does no filesystem work of
+ *  its own (unlike AT-1's stub) — used by tests where the fixture ALREADY
+ *  planted whatever staging/ content matters and only needs the turn to
+ *  complete normally so the runner reaches its post-turn dispatch logic
+ *  (the `next`-write / listWrittenFiles code this file's new pins target). */
+function noopAgentQueryFn(): QueryFn {
+  return () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
   };
 }
 
@@ -498,5 +551,421 @@ test('a turnSpec finalizer id absent from FINALIZERS fails loud rather than sile
         logger: logger(logsRoot, sessionId),
       }),
     /totallyBogusFinalizerId/,
+  );
+});
+
+// =============================================================================
+// R4-22 WI-3 adversarial-review round — four reviewer-confirmed findings
+// (Finding 1, Finding 2/3, Finding 4, Finding 5), pinned as RED tests against
+// the REAL module (not a hypothetical). Findings 1-4 are reviewer-reproduced
+// defects in the shipped spine; Finding 5 is an orchestrator-ruled design
+// change the current code has not yet implemented. TEST-WRITER ONLY — no
+// implementation code lives in this file.
+// =============================================================================
+
+// ---------------------------------------------------------------------------
+// Finding 1 (reviewer-reproduced): `phaseRow.next` is written to status.json
+// unconditionally whenever it is set, with NO check that `next` names a real
+// row in turnSpec.phases. Reproduced: a turnSpec with `next: ghost-next-phase`
+// runs the turn successfully, returns `{"phase":"ghost-next-phase",...}`,
+// PERSISTS that phase to status.json, and only the NEXT invocation throws —
+// bricking the session a turn late with no recovery but a manual status.json
+// edit. Two call sites share the defect: runAgentStyleStep (~313-316) and
+// runFinalizeStep (~376-379) — pinned separately below since they are
+// separate code paths that could be fixed (or left unfixed) independently.
+// ---------------------------------------------------------------------------
+
+// Kills: a runner that writes `phaseRow.next` to status.json unconditionally
+// whenever it is set, without checking it names a real row in
+// turnSpec.phases (interactive-runner.ts runAgentStyleStep, ~313-316).
+// Reviewer-reproduced: today this turn resolves SUCCESSFULLY with
+// result.phase === "ghost-next-phase" and status.json is advanced to it —
+// the throw only happens on the NEXT turn, a session-bricking typo
+// discovered one turn late. This pin requires the throw on THIS triggering
+// turn, and requires status.json to remain un-advanced (the artifact, not
+// just the caught error, is the proof).
+test('Finding 1: an agent-step phase whose `next` names a phase absent from turnSpec.phases throws LOUD on the triggering turn and does NOT persist the ghost phase to status.json', async () => {
+  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-ghost-next-agent');
+  assert.equal(descriptor.turnSpec?.phases[0]?.next, 'ghost-next-phase', 'arrange: fixture next must genuinely be dangling');
+  const sessionId = 'ghost-next-agent-001';
+  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  // Precondition, asserted before reading any verdict.
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: noopAgentQueryFn(),
+        logger: logger(logsRoot, sessionId),
+      }),
+    /ghost-next-phase/,
+    'must throw on the SAME turn that declares the ghost `next`, naming the offending value',
+  );
+
+  assert.equal(
+    readSessionStatus<TestStatus>(sessionDir)?.phase,
+    'analyzing',
+    'status.json on disk must NOT have been advanced to the ghost phase — asserting the ARTIFACT, not merely that a throw happened',
+  );
+});
+
+// Kills: runFinalizeStep's identical unconditional `next` write
+// (interactive-runner.ts ~376-379) — the same defect at the OTHER call site
+// the finding names. The finalizer itself (copyStagingToLibrary) succeeds
+// normally here (a real staged file, a real destination) — the bug is
+// strictly in what happens to status.json AFTER a successful finalize.
+test('Finding 1: a finalize-step phase whose `next` names a phase absent from turnSpec.phases throws LOUD on the triggering turn and does NOT persist the ghost phase to status.json', async () => {
+  const { forgeRoot, projectRoot, logsRoot } = setup();
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-ghost-next-finalize');
+  assert.equal(descriptor.turnSpec?.phases[0]?.next, 'ghost-next-phase', 'arrange: fixture next must genuinely be dangling');
+  const sessionId = 'ghost-next-finalize-001';
+  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, sessionId);
+  const stagingDir = join(sessionDir, 'staging');
+  mkdirSync(stagingDir, { recursive: true });
+  writeFileSync(join(stagingDir, 'x.md'), 'x');
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date().toISOString() });
+  // Precondition, asserted before reading any verdict.
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'committing', 'arrange: seeded status must start in committing');
+
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: neverCalledQueryFn(),
+        logger: logger(logsRoot, sessionId),
+      }),
+    /ghost-next-phase/,
+    'must throw on the SAME turn that declares the ghost `next`, naming the offending value',
+  );
+
+  assert.equal(
+    readSessionStatus<TestStatus>(sessionDir)?.phase,
+    'committing',
+    'status.json on disk must NOT have been advanced to the ghost phase — asserting the ARTIFACT, not merely that a throw happened',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Finding 2/3 (reviewer-reproduced): `listWrittenFiles` silently drops a
+// guard-rejected entry (`if (p === null) continue;`) instead of throwing —
+// unlike its own claimed sibling, `interactive-finalizers.ts`'s
+// `discoverStagingEntries`, which THROWS a named error on the identical
+// rejection shape. Both shapes fail CLOSED (no disclosure/write escape) but
+// `result.wrote` silently under-reports. Two escape shapes, both pinned
+// below, PLUS the deliberate legitimate-negative carve-out that must
+// survive whatever fix lands.
+// ---------------------------------------------------------------------------
+
+// Kills: `listWrittenFiles`'s `if (p === null) continue;` (interactive-
+// runner.ts ~408-434) silently dropping a guard-rejected entry found while
+// walking a `writes:` dir. Reviewer-reproduced shape 1: a symlink planted
+// INSIDE an otherwise-real `writes:` dir, pointing outside the session.
+// Today this entry simply vanishes from `result.wrote` with zero signal;
+// this pin requires a named, entry-identifying throw instead, matching
+// `discoverStagingEntries`'s own convention (interactive-finalizers.ts
+// ~208-212).
+test('Finding 2/3: a guard-rejected FILE symlink inside a writes: dir throws a named error identifying the offending entry, not a silent drop', async (t) => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  const stagingDir = join(sessionDir, 'staging');
+  mkdirSync(stagingDir, { recursive: true });
+  const outsideDir = mkdtempSync(join(tmpdir(), 'interactive-runner-f23-outside-'));
+  const outsideFile = join(outsideDir, 'secret.txt');
+  const SECRET_BYTES = 'SECRET-OUTSIDE-CONTENT-f23a';
+  writeFileSync(outsideFile, SECRET_BYTES);
+  const evilLink = join(stagingDir, 'evil-link.txt');
+  try {
+    symlinkSync(outsideFile, evilLink);
+  } catch {
+    t.skip('symlink creation unavailable in this environment');
+    return;
+  }
+  assert.ok(lstatSync(evilLink).isSymbolicLink(), 'arrange: evil-link.txt must genuinely be a symlink or the test is vacuous');
+  // Precondition, asserted before reading any verdict.
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: noopAgentQueryFn(),
+        logger: logger(logsRoot, sessionId),
+      }),
+    /evil-link/,
+    'a guard-rejected entry inside a writes: dir must throw a NAMED error identifying the offending entry — matching discoverStagingEntries\'s own convention, not silently "continue"',
+  );
+
+  assert.equal(readFileSync(outsideFile, 'utf8'), SECRET_BYTES, 'the outside file must be byte-unchanged (this is a disclosure-signal fix, not a containment fix — both shapes already fail closed)');
+});
+
+// Kills: the same `if (p === null) continue;` drop, at the TOP-LEVEL
+// `writes:` dir itself. Reviewer-reproduced shape 2: the declared `writes:`
+// dir is ITSELF a symlink pointing outside the session. Today this
+// collapses to `result.wrote: []` with zero signal — INDISTINGUISHABLE from
+// the legitimate "this phase hasn't populated writes: yet" case (the next
+// test pins that legitimate case must still return `[]`, not throw, so a
+// fix cannot conflate the two).
+test('Finding 2/3: a writes: dir that is ITSELF a symlink to an outside dir throws a named error, not a silent wrote:[] indistinguishable from "not yet populated"', async (t) => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  const outsideDir = mkdtempSync(join(tmpdir(), 'interactive-runner-f23-dirsym-outside-'));
+  writeFileSync(join(outsideDir, 'marker.txt'), 'OUTSIDE-DIR-MARKER-f23b');
+  const stagingPath = join(sessionDir, 'staging');
+  try {
+    symlinkSync(outsideDir, stagingPath);
+  } catch {
+    t.skip('symlink creation unavailable in this environment');
+    return;
+  }
+  assert.ok(lstatSync(stagingPath).isSymbolicLink(), 'arrange: staging must genuinely be a symlink or the test is vacuous');
+  // Precondition, asserted before reading any verdict.
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: noopAgentQueryFn(),
+        logger: logger(logsRoot, sessionId),
+      }),
+    /staging/,
+    'a writes: dir that is itself a guard-rejected symlink must throw a named error — collapsing to wrote:[] is exactly the finding\'s reported ambiguity with the legitimate "not yet populated" case',
+  );
+});
+
+// The deliberate carve-out that must SURVIVE the Finding 2/3 fix: a
+// `writes:` dir that genuinely does not exist yet (this phase's agent
+// simply hasn't populated it this turn) is NOT an error and must still
+// yield `wrote: []`. Unlike the two ESCAPE tests above, this is NOT
+// expected to be red against the current (unfixed) implementation — it
+// pins behavior that is ALREADY correct today, so a future fix for the
+// silent-drop defect cannot overcorrect into throwing on mere absence.
+test('Finding 2/3 (deliberate carve-out, must survive the fix): a writes: dir that simply does not exist yet does NOT throw and yields wrote: []', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  // Precondition, asserted before reading any verdict: staging/ genuinely
+  // absent (not merely un-checked).
+  assert.ok(!existsSync(join(sessionDir, 'staging')), 'arrange: staging/ must genuinely not exist yet');
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  // This queryFn deliberately does NOT create staging/ — the agent simply
+  // hasn't written anything yet this turn.
+  const result = await runInteractiveTurn(descriptor, {
+    sessionId,
+    projectRoot,
+    forgeRoot,
+    logsRoot,
+    queryFn: noopAgentQueryFn(),
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.deepEqual(result.wrote, [], 'an absent writes: dir must yield wrote: [] — not a throw');
+  assert.equal(result.phase, 'awaiting-review', 'the phase must still advance normally; an unpopulated writes: dir is not itself an error');
+});
+
+// ---------------------------------------------------------------------------
+// Finding 4 (reviewer-confirmed test gap): AT-1's stub queryFn ignores its
+// own prompt/options arguments entirely, so a defect threading the wrong
+// model, an empty allowedTools, or the wrong cwd into the real turn would
+// still pass unnoticed. This pin captures the {prompt, options} the spine
+// actually hands queryFn and asserts the ADR-024 derivation — derived from
+// the REAL helpers here, never hardcoded, so the pin cannot rot.
+// ---------------------------------------------------------------------------
+
+// Kills: any refactor of runAgentStyleStep that threads the wrong model
+// (e.g. a hardcoded default instead of `modelForSpec(deriveAgentSpec(...))`),
+// an empty/wrong `allowedTools` (e.g. forgetting to pass `agentSpec.
+// allowedTools` through to `runAgentTurn`), or otherwise breaks the ADR-024
+// derivation chain between `descriptor.agent` and what queryFn actually
+// receives — none of which AT-1 itself would catch, since AT-1's queryFn
+// stub never inspects its own arguments.
+test('Finding 4: the ADR-024 derivation actually threads into the queryFn call — model + allowedTools match the real skill-derived spec', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  // Precondition, asserted before reading any verdict.
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+
+  let captured: { prompt: string; options?: Record<string, unknown> } | undefined;
+  const queryFn: QueryFn = (params) => {
+    captured = params;
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged output\n');
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  await runInteractiveTurn(descriptor, {
+    sessionId,
+    projectRoot,
+    forgeRoot,
+    logsRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.ok(captured, 'queryFn must have been invoked with a captured call record');
+
+  // Derive the EXPECTED values from the real helpers, exactly as the spine
+  // itself does (deriveAgentSpec resolves against the REAL forge install
+  // root — the default parameter — never the fixture forgeRoot; see the
+  // runner's own header note) — never hardcoded literals, so this pin
+  // cannot rot as the underlying SKILL.md/tier mapping changes.
+  const expectedSpec = deriveAgentSpec(skillPathRelative(descriptor.agent));
+  const expectedModel = modelForSpec(expectedSpec);
+
+  const options = captured!.options ?? {};
+  assert.equal(
+    options.model,
+    expectedModel,
+    'the model handed to queryFn must be the ADR-024-derived model (modelForSpec(deriveAgentSpec(skillPathRelative(descriptor.agent)))), not a hardcoded/default one',
+  );
+  assert.ok(
+    Array.isArray(options.allowedTools) && (options.allowedTools as unknown[]).length > 0,
+    'allowedTools handed to queryFn must be present and non-empty',
+  );
+  assert.deepEqual(
+    options.allowedTools,
+    expectedSpec.allowedTools,
+    'allowedTools handed to queryFn must equal the derived spec\'s own grant exactly — the "assert the call record, not just the outcome" discipline',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// Finding 5 (orchestrator-ruled design change, NOT yet implemented): the
+// finalize destination must NOT be the live skills registry
+// (`skillsDir(forgeRoot)` == `<forgeRoot>/skills`, the tree production agent
+// discovery actually scans — `listAgentDefinitions`/`discoverRuntimeAgentIds`
+// treat ANY `SKILL.md` carrying a `runtime:` key as dispatchable, no slug
+// gate). Ruling: the destination becomes a dedicated, NON-scanned root
+// `<forgeRoot>/_interactive-library/<packageId>/...` (underscore-prefixed,
+// matching `_queue`/`_logs`), and `packageId` must be slug-validated. Three
+// pins: (a) lands under _interactive-library/, not skills/; (b) skills/ is
+// not created as a side effect when absent; (c) a non-slug packageId is
+// refused.
+// ---------------------------------------------------------------------------
+
+// Kills: the current `libraryRoot = skillsDir(forgeRoot)` — a finalize that
+// installs a session-produced package into the SAME tree
+// `listAgentDefinitions`/`discoverRuntimeAgentIds` scan for dispatchable
+// agents (orchestrator/flow-runner.ts:1285, cli/ui-bridge.ts:1678). Pins
+// (a) the correct destination root and (b) that a fresh forgeRoot's
+// (previously absent) skills/ is never auto-created as a side effect of a
+// finalize that should never have touched it. Uses ITS OWN valid-slug
+// packageId (not the shared fixture's ISO-shaped sessionId) so this test
+// stays green independent of whichever order Finding 5(c)'s slug gate lands
+// in — an invalid packageId would otherwise make this test's own finalize
+// fail for an unrelated reason.
+test('Finding 5(a)+(b): finalize lands the package under <forgeRoot>/_interactive-library/, NOT <forgeRoot>/skills, and does not create skills/ as a side effect', async () => {
+  const { forgeRoot, logsRoot } = setup();
+  const projectRoot = mkdtempSync(join(tmpdir(), 'interactive-runner-f5ab-proj-'));
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  const packageId = 'finding5-valid-slug';
+  assert.match(packageId, SLUG_RE, 'arrange: packageId fixture must itself be a genuinely valid slug (SLUG_RE) or the test is vacuous');
+  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, packageId);
+
+  // Precondition, asserted before reading any verdict — doubles as pin (b)'s
+  // baseline: skills/ must not pre-exist so a later re-appearance is
+  // unambiguously this finalize's own doing.
+  assert.ok(!existsSync(join(forgeRoot, 'skills')), 'arrange: forgeRoot/skills must not pre-exist');
+
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: packageId, phase: 'committing', updated_at: new Date().toISOString() });
+  const stagingDir = join(sessionDir, 'staging');
+  mkdirSync(stagingDir, { recursive: true });
+  const STAGED_CONTENT = '# committed package (Finding 5)\ncontent-marker-f5ab\n';
+  writeFileSync(join(stagingDir, 'README.md'), STAGED_CONTENT);
+  assert.equal(readFileSync(join(stagingDir, 'README.md'), 'utf8'), STAGED_CONTENT, 'arrange: staged file present');
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'committing', 'arrange: seeded status must start in committing');
+
+  const result = await runInteractiveTurn(descriptor, {
+    sessionId: packageId,
+    projectRoot,
+    forgeRoot,
+    logsRoot,
+    queryFn: neverCalledQueryFn(),
+    logger: logger(logsRoot, packageId),
+  });
+
+  assert.equal(result.phase, 'committed');
+  assert.ok(result.wrote.length > 0, 'the finalize step must report at least one written path');
+  const expectedLibraryRoot = join(forgeRoot, '_interactive-library');
+  const liveSkillsRoot = join(forgeRoot, 'skills');
+  for (const p of result.wrote) {
+    assert.ok(
+      p.startsWith(expectedLibraryRoot + '/') || p.startsWith(expectedLibraryRoot + '\\'),
+      `written path must land under the dedicated, non-scanned _interactive-library/ root, not: ${p}`,
+    );
+    assert.ok(
+      !p.startsWith(liveSkillsRoot),
+      `written path must NOT land under forgeRoot/skills (the live, scanned skill-discovery tree): ${p}`,
+    );
+  }
+  assert.ok(
+    !existsSync(liveSkillsRoot),
+    'forgeRoot/skills must not be created as a side effect of a finalize that never needed it',
+  );
+});
+
+// Kills: the absence of ANY slug validation on `FinalizerContext.packageId`
+// (today only the generic `isSafeSegment` runs, via `resolveGuardedPath`
+// inside copyStagingToLibrary) — a raw session id lands as a directory name
+// verbatim. Uses the shared fixture's own ISO-shaped sessionId
+// ('2026-08-10T00-00-00') as the deliberately-invalid packageId: it starts
+// with a digit and contains uppercase 'T', both illegal under SLUG_RE
+// (orchestrator/skill-path.ts:43, `/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/` — a
+// leading lowercase letter is required), while still passing today's looser
+// isSafeSegment check — exactly the gap the finding names.
+test('Finding 5(c): a packageId that is not a valid slug (per SLUG_RE) is refused, not silently accepted into an oddly-named library directory', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  // Precondition, asserted before reading any verdict.
+  assert.doesNotMatch(sessionId, SLUG_RE, 'arrange: fixture sessionId must genuinely be an invalid slug or the test is vacuous');
+
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'committing', updated_at: new Date().toISOString() });
+  const stagingDir = join(sessionDir, 'staging');
+  mkdirSync(stagingDir, { recursive: true });
+  writeFileSync(join(stagingDir, 'README.md'), '# package\n');
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'committing', 'arrange: seeded status must start in committing');
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: neverCalledQueryFn(),
+        logger: logger(logsRoot, sessionId),
+      }),
+    /slug/i,
+    'a non-slug packageId must be refused loudly, not silently accepted into the library under an oddly-named directory',
   );
 });
