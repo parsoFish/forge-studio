@@ -222,9 +222,21 @@ export async function runInteractiveTurn(
   //     `_instructions-` / `_demo-` / `_project-brain-`.
   // This previously read `_interactive-<id>-<sid>`, which agreed with NOTHING:
   // an `authoring` turn's events landed in `_interactive-authoring-<sid>` while
-  // its own stderr landed in `_authoring-<sid>` and the UI subscribed to a third
-  // (empty) place, so the live activity panel could never show anything and a
-  // failed turn's two halves were in different directories. Pinned by AT-a/AT-b
+  // its own stderr landed in `_authoring-<sid>`, and both the UI and
+  // `readSessionLogFacts` (`cli/ui-bridge.ts`, the session list's `when`/`costUsd`)
+  // looked in the latter and found no events file at all — so a failed turn's two
+  // halves sat in different directories and every authoring row reported an
+  // honest-absent timestamp.
+  //
+  // PRECISION, because "the live panel is fixed" would overclaim (measured by the
+  // WI's adversarial review): `use-cycle-events.ts` takes a one-shot REST snapshot
+  // (`GET /api/events/<cycleId>`) that is independent of the tail machinery, so
+  // after this change the panel DOES render real accumulated events on page load.
+  // Live incremental push still never fires for `authoring`, because no
+  // `ensureAuthoringTail` call site exists anywhere (only the four legacy kinds
+  // have one) — tracked separately, deliberately not fixed here. `costUsd` also
+  // stays `null`: this spine emits no `cost_usd` on any event, tracked separately.
+  // Pinned by AT-a/AT-b
   // (`cli/agent-run.test.ts`) and by the co-location ratchet
   // (`cli/agent-run-log-dir-colocation.test.ts`), which fails if this template
   // and the bridge's `logDir` template ever resolve differently again.
