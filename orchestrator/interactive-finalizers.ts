@@ -54,11 +54,54 @@
  * validation) and the destination-guard loop below it run to completion —
  * validating EVERY entry the operation will touch — with ZERO filesystem
  * writes, before `copyStagingToLibrary`'s second half performs any
- * `mkdirSync`/`writeFileSync`. An escaping entry anywhere in the staged tree
- * throws before the write phase starts, so a package directory with one
- * legitimate entry and one escaping entry never gets its legitimate entry
- * written either — moving a writing operation earlier only changes which
- * artifact gets orphaned, so nothing here writes speculatively.
+ * `mkdirSync`/write. An escaping entry anywhere in the staged tree throws
+ * before the write phase starts, so a package directory with one legitimate
+ * entry and one escaping entry never gets its legitimate entry written
+ * either — moving a writing operation earlier only changes which artifact
+ * gets orphaned, so nothing here writes speculatively. That is the ONE
+ * property phase separation buys: no partial package.
+ *
+ * WHAT PHASE SEPARATION COSTS (stated honestly — R4-22 WI-2, an
+ * adversarial-review-REPRODUCED finding this module previously did NOT
+ * disclose): validating every entry before writing any also WIDENS the
+ * window between "an entry was checked" and "that entry is used", relative
+ * to an immediate check-then-use. Phase 1 records each entry's realpath as a
+ * PATH STRING; for the first entry discovered, that string then sits unused
+ * across the validation of every OTHER entry plus the whole destination
+ * pass before Phase 2 ever opens it. A staged entry unlinked and re-created
+ * as a symlink to an outside file inside that window is — if Phase 2 trusts
+ * the recorded string and reopens it BY NAME — followed straight into the
+ * library, with every `resolveGuardedPath` call along the way having
+ * reported `{ok:true}` (this exact race was reproduced, twice, before this
+ * sentence was written). This is a *widening* of the residual TOCTOU gap
+ * `cli/studio-path-guard.ts`'s own header already discloses as un-closed by
+ * that module alone ("between this function's realpathSync/lstatSync calls
+ * and a caller's later readFileSync/writeFileSync"): a caller that turns a
+ * two-phase check into a two-phase check-then-USE makes that caller's own
+ * slice of the gap longer, not shorter.
+ *
+ * THE FIX, without abandoning check-then-write (the no-partial-package
+ * property above is separately load-bearing and stays): Phase 2 never
+ * reopens a Phase-1-recorded path BY NAME. Every read (`readValidatedStagedFile`)
+ * and every write (`writeValidatedLibraryFile`) goes through
+ * `openSync(path, O_NOFOLLOW | ...)` — which fails outright if the final
+ * path component is now a symlink, exactly the swap the finding
+ * demonstrates — followed by `fstatSync` on the returned FILE DESCRIPTOR
+ * (not the path) re-verifying `isFile()` and, on the read side, `nlink===1`
+ * (closing the hardlink-swap variant too). Re-verifying on the fd closes the
+ * gap between "checked" and "used" to zero: there is no second name lookup
+ * left to race, because nothing after the `openSync` call ever looks the
+ * path up again.
+ *
+ * RESIDUAL (disclosed, not closed here): `O_NOFOLLOW` guards only the FINAL
+ * path component. Neither this fix nor `resolveGuardedPath`'s own walk
+ * re-verifies each INTERMEDIATE directory component of `srcRealPath` /
+ * `destPath` at the moment `mkdirSync`/`openSync` actually traverses it —
+ * an attacker who could swap an intermediate directory (not the leaf)
+ * between the Phase-1 check and the Phase-2 open could still redirect the
+ * walk. Closing that would require a per-segment `openat`-style walk with
+ * `O_NOFOLLOW` at every level, not just the leaf; out of scope for this fix,
+ * which closes exactly the reproduced leaf-swap shape.
  *
  * Recursive, not top-level-only: `discoverStagingEntries` branches explicitly
  * on `isDirectory()` vs `isFile()` (never silently swallowing an EISDIR from
@@ -67,7 +110,18 @@
  * ---------------------------------------------------------------------------
  */
 
-import { readdirSync, lstatSync, realpathSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import {
+  readdirSync,
+  lstatSync,
+  realpathSync,
+  mkdirSync,
+  openSync,
+  fstatSync,
+  readSync,
+  writeSync,
+  closeSync,
+  constants as fsConstants,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
@@ -208,6 +262,92 @@ function discoverStagingEntries(sessionDir: string): StagedEntry[] {
 }
 
 /**
+ * Read a Phase-1-validated staged entry's bytes AT READ TIME, closing the
+ * TOCTOU window between validation and use (R4-22 WI-2 reproduced finding —
+ * see the module header). `openSync(..., O_NOFOLLOW)` makes the open itself
+ * FAIL if the final path component is now a symlink — exactly the swap the
+ * finding demonstrates. `fstatSync` then re-verifies on the returned FILE
+ * DESCRIPTOR, not the path string, so nothing between "opened" and
+ * "verified" is a second name lookup left to race: `isFile()` (refuses a
+ * FIFO/device/anything-but-regular swapped in), and `nlink === 1` (refuses a
+ * hardlink swap — `realpath` is structurally blind to a shared inode, the fd
+ * stat is not). Closes the fd in `finally` on every path, including every
+ * throw, so a rejected entry never leaks a descriptor.
+ */
+function readValidatedStagedFile(srcRealPath: string, relLabel: string): Buffer {
+  let fd: number;
+  try {
+    fd = openSync(srcRealPath, fsConstants.O_RDONLY | fsConstants.O_NOFOLLOW);
+  } catch (err) {
+    throw new InteractiveFinalizerError(
+      `copyStagingToLibrary: staged entry "${relLabel}" could not be opened for read at write time — changed since ` +
+        `its Phase-1 check (most likely swapped for a symlink): ${(err as NodeJS.ErrnoException).message}`,
+    );
+  }
+  try {
+    const st = fstatSync(fd);
+    if (!st.isFile()) {
+      throw new InteractiveFinalizerError(
+        `copyStagingToLibrary: staged entry "${relLabel}" is no longer a regular file at read time — refusing ` +
+          `(TOCTOU guard).`,
+      );
+    }
+    if (st.nlink !== 1) {
+      throw new InteractiveFinalizerError(
+        `copyStagingToLibrary: staged entry "${relLabel}" gained additional hard links between its Phase-1 check ` +
+          `and read time (nlink=${st.nlink}) — refusing (TOCTOU guard).`,
+      );
+    }
+    const size = st.size;
+    const buf = Buffer.alloc(size);
+    let readTotal = 0;
+    while (readTotal < size) {
+      const n = readSync(fd, buf, readTotal, size - readTotal, readTotal);
+      if (n === 0) break; // EOF before the fstat'd size — file shrank under us; take what we got, never hang.
+      readTotal += n;
+    }
+    return readTotal === size ? buf : buf.subarray(0, readTotal);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
+ * Write `buf` to `destPath` with the SAME fd-based discipline as the read
+ * side, closing the SYMMETRIC destination-side gap: `resolveGuardedPath`
+ * verified `destPath` at Phase-1 check time, but re-opening it BY NAME at
+ * write time (a plain `writeFileSync`) would happily follow a symlink an
+ * attacker plants at that exact leaf in the window between the check and
+ * this write. `O_EXCL` refuses to open through anything that already exists
+ * at that leaf — symlink or otherwise — so this only ever creates a brand
+ * new destination file, never overwrites one; `O_NOFOLLOW` is
+ * belt-and-suspenders for the identical reason as the read side. Closes the
+ * fd in `finally` on every path.
+ */
+function writeValidatedLibraryFile(destPath: string, buf: Buffer, relLabel: string): void {
+  let fd: number;
+  try {
+    fd = openSync(
+      destPath,
+      fsConstants.O_WRONLY | fsConstants.O_CREAT | fsConstants.O_EXCL | fsConstants.O_NOFOLLOW,
+    );
+  } catch (err) {
+    throw new InteractiveFinalizerError(
+      `copyStagingToLibrary: destination for "${relLabel}" could not be created at write time — already exists or ` +
+        `was swapped for a symlink since its Phase-1 check: ${(err as NodeJS.ErrnoException).message}`,
+    );
+  }
+  try {
+    let written = 0;
+    while (written < buf.length) {
+      written += writeSync(fd, buf, written, buf.length - written);
+    }
+  } finally {
+    closeSync(fd);
+  }
+}
+
+/**
  * Install the package drafted at `<sessionDir>/staging/` into
  * `<libraryRoot>/<packageId>/<relPath...>`. Synchronous (matches the
  * existing finalizer-equivalents `runCommitStep`/`runLockStep`). Throws
@@ -229,7 +369,7 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 
   const staged = discoverStagingEntries(sessionDir);
 
-  const planned: { destPath: string; srcRealPath: string }[] = [];
+  const planned: { destPath: string; srcRealPath: string; relLabel: string }[] = [];
   for (const entry of staged) {
     const destGuard = resolveGuardedPath(libraryRoot, [packageId, ...entry.relParts]);
     if (!destGuard.ok) {
@@ -237,15 +377,20 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
         `copyStagingToLibrary: destination for "${entry.relParts.join('/')}" failed containment (${destGuard.reason}).`,
       );
     }
-    planned.push({ destPath: destGuard.realPath, srcRealPath: entry.srcRealPath });
+    planned.push({ destPath: destGuard.realPath, srcRealPath: entry.srcRealPath, relLabel: entry.relParts.join('/') });
   }
 
-  // ---- Phase 2: write. Every entry above already passed both guards. ----
+  // ---- Phase 2: use. Every entry above already passed both guards; the
+  // read and write below each re-verify AT THE POINT OF USE (on the open
+  // file descriptor, never by re-resolving the path string) so nothing in
+  // this loop trusts a Phase-1 check across the gap to when it is actually
+  // used — see readValidatedStagedFile / writeValidatedLibraryFile above. ----
 
   const wrote: string[] = [];
-  for (const { destPath, srcRealPath } of planned) {
+  for (const { destPath, srcRealPath, relLabel } of planned) {
+    const buf = readValidatedStagedFile(srcRealPath, relLabel);
     mkdirSync(dirname(destPath), { recursive: true });
-    writeFileSync(destPath, readFileSync(srcRealPath));
+    writeValidatedLibraryFile(destPath, buf, relLabel);
     wrote.push(destPath);
   }
 
