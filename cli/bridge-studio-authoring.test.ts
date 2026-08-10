@@ -222,6 +222,17 @@ function readStatusPhase(sessionDir: string): string {
   return (JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string }).phase;
 }
 
+/** P7 — a recursive listing of `root`, EXCLUDING `_logs/` (every attempted
+ *  `runInteractiveTurn` call, success or failure, legitimately writes its
+ *  own operational `events.jsonl` — a benign side effect unrelated to the
+ *  containment property these tests pin). Used to assert "nothing else was
+ *  created" without false-failing on that expected logging noise. */
+function entriesExcludingLogs(root: string): string[] {
+  return (readdirSync(root, { recursive: true } as { recursive: true }) as string[])
+    .filter((p) => p !== '_logs' && !p.startsWith('_logs/'))
+    .sort();
+}
+
 const FINALIZE_URL = () => `${bridgeUrl}/api/studio/authoring/finalize`;
 
 function hookYamlDraft(fields: Record<string, unknown>): string {
@@ -622,6 +633,266 @@ test('WI2-6-containment: a "project" whose dir is a symlink escaping the project
     rmSync(linkPath, { force: true });
     rmSync(outsideDir, { recursive: true, force: true });
   }
+});
+
+// ===========================================================================
+// P5 (T3 pin round 5, BLOCKER — state corruption) — `runFinalize` guarded-
+// writes `phase:'committing'` BEFORE running the turn, and NOTHING today
+// reverts it on a downstream failure. Live-reproduced: an invalid `id` (an
+// ordinary operator typo — SLUG_RE requires a leading lowercase letter, so a
+// leading capital or digit bricks the session) or a session whose staging/
+// dir is missing (the drafting turn crashed) both 500 and leave the session
+// stuck at "committing" FOREVER — every subsequent retry, even with a VALID
+// id, then 409s ("required phase is awaiting-review"). There is no route and
+// no UI affordance to recover; only hand-editing status.json unbricks it.
+//
+// The corrected contract: on ANY failure after the phase was advanced to
+// "committing", status.json must be returned to "awaiting-review" so the
+// operator can retry, and a subsequent finalize with a VALID id (or, for the
+// missing-staging case, once real staging/ content exists) must actually
+// SUCCEED — not just report a recoverable-looking phase. P5-3 is the control:
+// a session that reaches "committed" via a REAL success must stay committed
+// — the revert must never fire on the success path.
+// ===========================================================================
+
+test('P5-1 (recoverability, invalid id): finalize with an operator-typo id that fails SLUG_RE downstream (leading capital, not a crafted attack string) -> 500; the session recovers to "awaiting-review" (never bricked at "committing" forever); nothing installed; a RETRY with a valid id then SUCCEEDS', async () => {
+  const STAGED_CONTENT = matter.stringify('\n# P5 Skill\n', { name: 'P5 Skill', description: 'd' });
+  const { sessionId, sessionDir } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'SKILL.md': STAGED_CONTENT },
+  });
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: seeded status must start in awaiting-review');
+
+  const badRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'TypoSkill' });
+  assert.equal(badRes.status, 500, `expected 500 for a SLUG_RE-invalid id, got ${badRes.status}`);
+
+  assert.equal(
+    readStatusPhase(sessionDir),
+    'awaiting-review',
+    'BLOCKER: a failed finalize must leave the session RECOVERABLE at "awaiting-review", never bricked at "committing" forever',
+  );
+  assert.equal(existsSync(join(forgeRoot, '_interactive-library', 'TypoSkill')), false, 'nothing must be landed for the failed id');
+  assert.equal(existsSync(join(forgeRoot, 'skills', 'TypoSkill')), false, 'nothing must be installed for the failed id');
+
+  // The corrected contract: a SUBSEQUENT finalize with a VALID id must
+  // SUCCEED — proving the session genuinely recovered, not merely that its
+  // phase field superficially reads "awaiting-review".
+  const goodRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'typo-fixed-skill' });
+  const goodText = await goodRes.text();
+  assert.equal(goodRes.status, 200, `expected the retry with a valid id to succeed, got ${goodRes.status}: ${goodText}`);
+  assert.ok(existsSync(join(forgeRoot, 'skills', 'typo-fixed-skill', 'SKILL.md')), 'the retry must actually install the package');
+});
+
+test('P5-2 (recoverability, missing staging/): finalize on a session whose staging/ dir is missing (the drafting turn crashed before writing anything) -> 500; the session recovers to "awaiting-review"; nothing installed; after real staging content is added, a RETRY SUCCEEDS', async () => {
+  const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'awaiting-review' }); // no `staging` option -> staging/ genuinely does not exist
+  assert.equal(existsSync(join(sessionDir, 'staging')), false, 'arrange: the fixture premise is that staging/ genuinely does not exist');
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'arrange: seeded status must start in awaiting-review');
+
+  const badRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'missing-staging-skill' });
+  assert.equal(badRes.status, 500, `expected 500 for a missing staging/ dir, got ${badRes.status}`);
+
+  assert.equal(
+    readStatusPhase(sessionDir),
+    'awaiting-review',
+    'BLOCKER: a failed finalize must leave the session RECOVERABLE at "awaiting-review", never bricked at "committing" forever',
+  );
+  assert.equal(existsSync(join(forgeRoot, 'skills', 'missing-staging-skill')), false, 'nothing must be installed for the failed attempt');
+
+  // Add REAL staging content directly (mirrors the operator re-running the
+  // drafting turn), then retry finalize.
+  const STAGED_CONTENT = matter.stringify('\n# Recovered Skill\n', { name: 'Recovered Skill', description: 'd' });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), STAGED_CONTENT, 'utf8');
+
+  const goodRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'missing-staging-skill' });
+  const goodText = await goodRes.text();
+  assert.equal(goodRes.status, 200, `expected the retry to succeed once staging/ exists, got ${goodRes.status}: ${goodText}`);
+  assert.ok(existsSync(join(forgeRoot, 'skills', 'missing-staging-skill', 'SKILL.md')), 'the retry must actually install the package');
+});
+
+test('P5-3 (control — the revert must NOT fire on SUCCESS): a committed session STAYS committed; re-finalizing after a real success still 409s, never a silent revert to awaiting-review', async () => {
+  const STAGED_CONTENT = matter.stringify('\n# Stays Committed\n', { name: 'Stays Committed', description: 'd' });
+  const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'SKILL.md': STAGED_CONTENT } });
+
+  const okRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'p5-3-committed-skill' });
+  assert.equal(okRes.status, 200, `arrange: the initial finalize must succeed, got ${okRes.status}`);
+  assert.equal(readStatusPhase(sessionDir), 'committed', 'arrange: a successful finalize must leave phase "committed"');
+
+  const reRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: 'p5-3-committed-skill-again' });
+  const reText = await reRes.text();
+  assert.equal(reRes.status, 409, `a re-finalize of an already-committed session must still 409, got ${reRes.status}: ${reText}`);
+  const reBody = JSON.parse(reText) as { error?: string };
+  assert.ok(reBody.error && /awaiting-review/.test(reBody.error), `409 body must still name "awaiting-review" as required, got: ${JSON.stringify(reBody)}`);
+
+  assert.equal(
+    readStatusPhase(sessionDir),
+    'committed',
+    'a committed session must NEVER be silently reverted to awaiting-review by a later failed re-finalize attempt',
+  );
+});
+
+// ===========================================================================
+// P6 (T3 pin round 5, declared-data / silent-discard) — `installSkillPackage`
+// is idempotent BY DESIGN: if `skills/<id>/SKILL.md` already exists it
+// returns `{alreadyInstalled:true}` and writes NOTHING. `finalizeSkillFromLanded`
+// discards that return value today and unconditionally sends `200
+// {ok:true}` — the operator's authored draft is silently thrown away, the
+// pre-existing skill stays byte-unchanged, the session closes as
+// "committed" with no retry path, and NOTHING anywhere signals a problem.
+// Both sibling callers of installSkillPackage (bridge-studio-skills.ts,
+// bridge-studio-community.ts) DO surface `alreadyInstalled`; this route is
+// the lone swallower.
+//
+// The hook path's own duplicate check (`yamlGuard.exists` -> 409) is ALREADY
+// correct on the status-code axis — P6-2 pins that it must ALSO (composed
+// with P5) leave the session recoverable, which nothing does today.
+// ===========================================================================
+
+test('P6-1 (skill id collision must not silently succeed): finalizing with an id that already exists in skills/ -> NON-2xx (409) naming the collision; the pre-existing skills/<id>/SKILL.md is byte-unchanged; composed with P5 the session recovers to awaiting-review so a retry under a DIFFERENT id SUCCEEDS', async () => {
+  const collidingId = 'pre-existing-skill';
+  const PRE_EXISTING_CONTENT = matter.stringify('\n# Pre-existing, must not change\n', { name: 'Pre-existing', description: 'must not change' });
+  mkdirSync(join(forgeRoot, 'skills', collidingId), { recursive: true });
+  writeFileSync(join(forgeRoot, 'skills', collidingId, 'SKILL.md'), PRE_EXISTING_CONTENT, 'utf8');
+
+  const DRAFT_CONTENT = matter.stringify('\n# Authored draft, must be discarded\n', { name: 'Authored draft', description: 'must never silently overwrite the pre-existing skill' });
+  const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'SKILL.md': DRAFT_CONTENT } });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: collidingId });
+  const text = await res.text();
+  assert.notEqual(res.status, 200, `a collision with an existing skill must NEVER report success, got ${res.status}: ${text}`);
+  assert.equal(res.status, 409, `expected 409 naming the collision, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.ok(body.error && body.error.includes(collidingId), `409 body must name the colliding id "${collidingId}", got: ${JSON.stringify(body)}`);
+
+  const afterContent = readFileSync(join(forgeRoot, 'skills', collidingId, 'SKILL.md'), 'utf8');
+  assert.equal(afterContent, PRE_EXISTING_CONTENT, 'the pre-existing skill must be BYTE-UNCHANGED — silent discard is the defect being pinned here');
+
+  assert.equal(
+    readStatusPhase(sessionDir),
+    'awaiting-review',
+    'composed with P5: a collision failure must also leave the session recoverable at awaiting-review',
+  );
+
+  const retryId = 'not-colliding-skill';
+  const retryRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: retryId });
+  const retryText = await retryRes.text();
+  assert.equal(retryRes.status, 200, `the retry under a DIFFERENT id must succeed, got ${retryRes.status}: ${retryText}`);
+  assert.ok(existsSync(join(forgeRoot, 'skills', retryId, 'SKILL.md')), 'the retry must actually install under the new id');
+});
+
+test('P6-2 (hook id collision — the EXISTING 409 must also leave the session recoverable): finalizing with an id that already exists in studio/hooks/ -> 409 (already correct today); the pre-existing hook.yaml/run.sh are byte-unchanged; composed with P5 the session recovers to awaiting-review so a retry under a DIFFERENT id SUCCEEDS', async () => {
+  const collidingId = 'pre-existing-hook';
+  const PRE_EXISTING_YAML = hookYamlDraft({ name: 'Pre-existing Hook', description: 'must not change', on: 'PreToolUse', script: 'scripts/run.sh' });
+  const PRE_EXISTING_SCRIPT = '#!/usr/bin/env bash\necho "pre-existing, must not change"\n';
+  mkdirSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'scripts'), { recursive: true });
+  writeFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'hook.yaml'), PRE_EXISTING_YAML, 'utf8');
+  writeFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'scripts', 'run.sh'), PRE_EXISTING_SCRIPT, 'utf8');
+
+  const draftedYaml = hookYamlDraft({ name: 'Authored draft hook', description: 'discarded on collision', on: 'PreToolUse', script: 'scripts/run.sh' });
+  const { sessionId, sessionDir } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'hook.yaml': draftedYaml, 'scripts/run.sh': '#!/usr/bin/env bash\necho draft\n' },
+  });
+
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: collidingId });
+  const text = await res.text();
+  assert.equal(res.status, 409, `expected the EXISTING duplicate-hook 409 to still fire, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { error?: string };
+  assert.ok(body.error && body.error.includes(collidingId), `409 body must name the colliding id "${collidingId}", got: ${JSON.stringify(body)}`);
+
+  assert.equal(readFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'hook.yaml'), 'utf8'), PRE_EXISTING_YAML, 'the pre-existing hook.yaml must be BYTE-UNCHANGED');
+  assert.equal(readFileSync(join(forgeRoot, 'studio', 'hooks', collidingId, 'scripts', 'run.sh'), 'utf8'), PRE_EXISTING_SCRIPT, 'the pre-existing script must be BYTE-UNCHANGED');
+
+  assert.equal(
+    readStatusPhase(sessionDir),
+    'awaiting-review',
+    'composed with P5: a hook-collision failure (already 409ing today) must ALSO leave the session recoverable at awaiting-review',
+  );
+
+  const retryId = 'not-colliding-hook';
+  const retryRes = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'hook', id: retryId });
+  const retryText = await retryRes.text();
+  assert.equal(retryRes.status, 200, `the retry under a DIFFERENT id must succeed, got ${retryRes.status}: ${retryText}`);
+  assert.ok(existsSync(join(forgeRoot, 'studio', 'hooks', retryId, 'hook.yaml')), 'the retry must actually install under the new id');
+});
+
+// ===========================================================================
+// P7 (T3 pin round 5) — the suite already pins containment variants for
+// `sessionId` (WI2-5) and `project` (WI2-6), but NONE for the finalize
+// `id`, even though `id` is a request-derived value that becomes a
+// directory name in TWO libraries (`_interactive-library/<id>/`,
+// `skills/<id>/` or `studio/hooks/<id>/`). It is live-safe today only
+// because guards TWO MODULES AWAY (`SLUG_RE` in
+// orchestrator/interactive-runner.ts, `assertSkillSlug` in
+// installSkillPackage/hookDir) happen to catch it. Pinned HERE so a
+// regression in either upstream guard is caught by THIS module's own suite,
+// not only by that other module's.
+// ===========================================================================
+
+const ID_TRAVERSAL_VARIANTS: { label: string; id: string; raw?: boolean }[] = [
+  { label: 'relative traversal', id: '../../../../../../../../tmp/forge-authoring-p7-attack' },
+  { label: 'absolute path', id: '/tmp/forge-authoring-p7-attack-abs' },
+  { label: 'bare dot-dot', id: '..' },
+  { label: 'RAW percent-encoded (rule 38 — never decoded by this route)', id: '%2e%2e%2f', raw: true },
+];
+
+test('P7-1-containment (id-shaped traversal, pinned in THIS route\'s own suite): a traversal/absolute/dot-dot/percent-encoded finalize `id` is refused; no file or dir created outside the library roots (e.g. /tmp/... absent), for every variant', async () => {
+  const STAGED_CONTENT = matter.stringify('\n# P7 Skill\n', { name: 'P7 Skill', description: 'd' });
+  const attackOutsidePath = join(tmpdir(), 'forge-authoring-p7-attack');
+  const attackOutsidePathAbs = join(tmpdir(), 'forge-authoring-p7-attack-abs');
+  rmSync(attackOutsidePath, { recursive: true, force: true });
+  rmSync(attackOutsidePathAbs, { recursive: true, force: true });
+
+  for (const variant of ID_TRAVERSAL_VARIANTS) {
+    const { sessionId } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'SKILL.md': STAGED_CONTENT } });
+    const beforeEntries = entriesExcludingLogs(forgeRoot);
+
+    const res = variant.raw
+      ? await postRaw(FINALIZE_URL(), JSON.stringify({ project: PROJECT, sessionId, kind: 'skill', id: variant.id }))
+      : await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: variant.id });
+    assert.ok(res.status >= 400, `id ${JSON.stringify(variant.id)} (${variant.label}) must be refused with a 4xx/5xx, got ${res.status}`);
+
+    // `_logs/` is excluded: attempting (and failing) the committing turn
+    // legitimately writes an operational events.jsonl regardless of outcome
+    // (runInteractiveTurn's own logger) — that is not the artifact this test
+    // cares about; the library roots (`_interactive-library/`, `skills/`,
+    // `studio/hooks/`) and everything else under forgeRoot are still
+    // covered.
+    const afterEntries = entriesExcludingLogs(forgeRoot);
+    assert.deepEqual(afterEntries, beforeEntries, `id ${JSON.stringify(variant.id)} (${variant.label}) must create nothing (besides its own operational log) anywhere under forgeRoot`);
+  }
+
+  assert.equal(existsSync(attackOutsidePath), false, 'the relative-traversal variant must never create a file outside forgeRoot');
+  assert.equal(existsSync(attackOutsidePathAbs), false, 'the absolute-path variant must never create a file outside forgeRoot');
+});
+
+test('P7-2-recoverability (composed with P5): the SAME id-shaped traversal variants must ALSO leave the session recoverable at awaiting-review, not bricked at committing', async () => {
+  const STAGED_CONTENT = matter.stringify('\n# P7 Skill\n', { name: 'P7 Skill', description: 'd' });
+
+  for (const variant of ID_TRAVERSAL_VARIANTS) {
+    const { sessionId, sessionDir } = seedAuthoringSession({ phase: 'awaiting-review', staging: { 'SKILL.md': STAGED_CONTENT } });
+
+    const res = variant.raw
+      ? await postRaw(FINALIZE_URL(), JSON.stringify({ project: PROJECT, sessionId, kind: 'skill', id: variant.id }))
+      : await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: variant.id });
+    assert.ok(res.status >= 400, `id ${JSON.stringify(variant.id)} (${variant.label}) must be refused with a 4xx/5xx, got ${res.status}`);
+
+    assert.equal(
+      readStatusPhase(sessionDir),
+      'awaiting-review',
+      `composed with P5: a refused id-traversal attempt (${variant.label}) must also leave the session recoverable at awaiting-review`,
+    );
+  }
+});
+
+test('P7-3-empty: an empty (or whitespace-only) finalize id is refused at the route boundary — 400, session never even reaches the committing turn', async () => {
+  const { sessionId, sessionDir } = seedAuthoringSession({
+    phase: 'awaiting-review',
+    staging: { 'SKILL.md': matter.stringify('\n# x\n', { name: 'x', description: 'd' }) },
+  });
+  const res = await postJson(FINALIZE_URL(), { project: PROJECT, sessionId, kind: 'skill', id: '   ' });
+  assert.equal(res.status, 400, `expected 400 for a whitespace-only id, got ${res.status}`);
+  assert.equal(readStatusPhase(sessionDir), 'awaiting-review', 'an id-less request must never even attempt the committing turn');
 });
 
 // ===========================================================================
