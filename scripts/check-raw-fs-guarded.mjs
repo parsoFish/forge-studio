@@ -217,6 +217,11 @@ export function targetModules(root = FORGE_ROOT) {
     'cli/agent-run.ts',
     'cli/architect-plan.ts',
     'orchestrator/interactive-session.ts',
+    // R4-22 WI-2: the FINALIZERS registry's sole row today,
+    // copyStagingToLibrary — session-derived staging paths + a
+    // request-derived packageId both reach fs writes; same class as the
+    // legacy interactive runners above.
+    'orchestrator/interactive-finalizers.ts',
     'orchestrator/architect-runner.ts',
     'orchestrator/instructions-runner.ts',
     'orchestrator/project-brain-builder-runner.ts',
