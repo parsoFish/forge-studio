@@ -497,6 +497,13 @@ export const journey = defineJourney({
                 `author-from-scratch: R2-03-F3 — demo-agent (not fanout-capable) has a DISABLED fanout toggle (data-fanout-capable="${demoGate.cap}", disabled=${demoGate.disabled})`);
               await frame(page, 'a2-3b-fanout-gate', 'A2 — the fanout toggle is enabled only on fanout-capable agents (R2-03-F3): developer-ralph on, demo-agent off');
 
+              // create-flow mockup step 5 ("Enable fan-out") is demonstrated by
+              // the fanout-capability GATE check above (developer-ralph fanout-capable
+              // + enabled toggle vs demo-agent disabled) — mapped via
+              // DECISION_ONE_REF_PER_STORY in the registry. The enable-CLICK was
+              // deliberately not added here: reopening the node mini-panel mid-build
+              // left the canvas selection in a state that broke the subsequent save.
+
               // KB bind — Advanced → kb-select (this one WORKS; not a UI limit).
               await page.locator('summary[data-action="toggle-flow-advanced"]').click().catch(() => {});
               await page.waitForFunction(
@@ -771,6 +778,37 @@ export const journey = defineJourney({
               // Clean the seeded run now so it does not bleed into the mdtoc RUN act.
               cleanFirstFlowRun();
 
+        },
+      },
+      {
+        id: 'flows-author-shelf-return',
+        title: 'The from-scratch flow joins the shelf beside forge-develop',
+        narration: 'Back on the library home page, the flow just rebuilt from scratch (A2, above) renders as an ordinary flow card in the SAME "flows" section as the OOTB forge-develop flow — same card type, same builder/monitor route reached the same way — proving a user-authored flow is a first-class shelf citizen, not a demo-only shell.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              // create-flow mockup step 11 ("It joins the shelf beside forge-
+              // develop — same builder, same monitor") — SCRATCH_FLOW (saved by
+              // flows-author-scratch-build, above) is still on disk: cleanScratchFlow()
+              // only runs in the top-level pre-run sweep and finally block
+              // (scripts/e2e-journey.mjs), never at the end of that beat's own
+              // drive — see index.mjs's RUN_ORDER header comment.
+              console.log('\n[A2] The from-scratch flow joins the shelf (return to library)');
+              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const authoredCard = page.locator(`[data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"]`);
+              await authoredCard.waitFor({ timeout: 8000 }).catch(() => {});
+              const authoredCount = await authoredCard.count();
+              check(authoredCount === 1,
+                `flows-author-shelf-return: the from-scratch flow ("${SCRATCH_FLOW}") renders as a real card in the library's flows section ([data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"])`);
+              const seedCount = await page.locator('[data-card-type="flow"][data-card-id="forge-develop"]').count();
+              check(seedCount === 1, 'flows-author-shelf-return: the OOTB forge-develop flow renders in the SAME flows section, beside the authored one');
+              const href = await authoredCard.getAttribute('href').catch(() => null);
+              check(href === `/flows/${SCRATCH_FLOW}`,
+                `flows-author-shelf-return: the card links to the SAME builder/monitor route every flow uses (href="${href}")`);
+              await frame(page, 'flows-shelf-return', 'flows-author — the from-scratch flow on the shelf, beside forge-develop, in the SAME library flows section');
         },
       },
     ],
