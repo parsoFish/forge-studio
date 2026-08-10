@@ -222,6 +222,15 @@ export function targetModules(root = FORGE_ROOT) {
     // request-derived packageId both reach fs writes; same class as the
     // legacy interactive runners above.
     'orchestrator/interactive-finalizers.ts',
+    // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine. It cannot
+    // be reached by check-request-path-sinks.mjs's reachability walker (that
+    // script follows relative imports from the bridge entry points; the
+    // cli/agent-run.ts -> runInteractiveTurn dispatch crosses a process-spawn
+    // boundary, so this module is structurally outside that walk) — this
+    // manual list is therefore the ONLY mechanism that lints it. Same class
+    // as the four legacy runners above: session-derived (kindDir, sessionId)
+    // and finalizer-bound (packageId) paths reach fs sinks.
+    'orchestrator/interactive-runner.ts',
     'orchestrator/architect-runner.ts',
     'orchestrator/instructions-runner.ts',
     'orchestrator/project-brain-builder-runner.ts',
