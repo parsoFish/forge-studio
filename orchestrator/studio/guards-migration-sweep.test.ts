@@ -1,22 +1,28 @@
 /**
  * MIGRATION ACCEPTANCE TEST (must be RED on today's code) — sweep
  * completeness for the ADR-027-amendment-#2 `composition.hooks` →
- * `composition.guards` rename (the 9 ids are unchanged: the 5 toggles
+ * `composition.guards` rename (at that migration's landing the 9 ids were
+ * unchanged: the 5 toggles
  * `event-log`/`cost-guard`/`stall-watchdog`/`merge-gate`/`scratch-strip` and
- * the 4 bands `wi-contract`/`reflection-close`/`demo-band`/`review-band`).
+ * the 4 bands `wi-contract`/`reflection-close`/`demo-band`/`review-band`.
+ * R4-18 later added a 10th id, the 5th band `onboard-preflight` — see
+ * `EXPECTED_GUARDS_BY_SLUG` and `agent-bands.ts`'s `BAND_GUARD_IDS` for the
+ * current set).
  *
  * This is the STRONGEST acceptance test in the migration suite: it proves
  * the eventual sweep commit moved every single declared guard id across all
- * 16 composition-bearing SKILL.mds and dropped none.
+ * 17 composition-bearing SKILL.mds and dropped none.
  *
  * A1 — `EXPECTED_GUARDS_BY_SLUG` below is a HARDCODED literal table, GENERATED
  * by reading the on-disk `composition.hooks` data (`grep`/manual transcription)
  * BEFORE any sweep happens — frozen ground truth, deliberately independent of
- * whatever the sweep commit does to disk. It covers all 16 SKILL.mds that
+ * whatever the sweep commit does to disk. It covers all 17 SKILL.mds that
  * declare a `composition:` block (`architect`, `architect-completeness-critic`,
  * `brain-fix`, `demo-builder`, `instructions-creator`, `preflight-fix`,
- * `project-brain-builder` included — NOT just the 10 in the composable
+ * `project-brain-builder` included — NOT just the 11 in the composable
  * roster; the rename sweeps every SKILL.md regardless of `library: false`).
+ * R4-18 added `contract-check` — a 17th composition-bearing SKILL.md that is
+ * also the 11th member of the composable roster (it declares `library: true`).
  * The test asserts `composition.guards` (once it exists) deep-equals this
  * table for every one of them, sorted for stable comparison.
  *
@@ -76,6 +82,9 @@ const EXPECTED_GUARDS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
   'architect-completeness-critic': ['event-log'],
   'brain-fix': ['event-log'],
   'brain-ingest': ['event-log'],
+  // R4-18: contract-check declares the onboard-preflight band guard (its
+  // display identity + composition.guards entry — see skills/contract-check).
+  'contract-check': ['event-log', 'onboard-preflight'],
   'demo-agent': ['demo-band', 'event-log'],
   'demo-builder': ['event-log'],
   'developer-ralph': ['cost-guard', 'event-log', 'scratch-strip', 'stall-watchdog'],
@@ -114,7 +123,7 @@ test('A1: every composition-bearing SKILL.md carries composition.guards matching
   assert.deepEqual(
     foundSlugs,
     expectedSlugs,
-    'sanity: the frozen table must cover exactly the composition-bearing SKILL.mds on disk today (16) — if this fails, the table itself is stale, not the migration',
+    'sanity: the frozen table must cover exactly the composition-bearing SKILL.mds on disk today (17) — if this fails, the table itself is stale, not the migration',
   );
 
   const mismatches: Array<{ slug: string; expected: readonly string[]; actual: string[] | undefined }> = [];

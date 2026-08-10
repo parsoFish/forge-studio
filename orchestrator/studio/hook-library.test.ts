@@ -18,10 +18,12 @@
  *
  *   composition.guards (renamed from composition.hooks by the immediately
  *   preceding PR, #76 / commit 7984a548) stays the platform dispatch-key
- *   vocabulary — 5 toggle ids (event-log, cost-guard, stall-watchdog,
- *   merge-gate, scratch-strip) + 4 band ids (wi-contract, reflection-close,
- *   demo-band, review-band), all listed in studio/catalog.yaml's `guards:`
- *   section. composition.hooks is REINTRODUCED by this round meaning ONLY
+ *   vocabulary — at that PR's landing, 5 toggle ids (event-log, cost-guard,
+ *   stall-watchdog, merge-gate, scratch-strip) + 4 band ids (wi-contract,
+ *   reflection-close, demo-band, review-band), all listed in
+ *   studio/catalog.yaml's `guards:` section (R4-18 later added a 5th band,
+ *   onboard-preflight — see PLATFORM_GUARD_IDS in agent-bands.ts for the
+ *   current 10-id set). composition.hooks is REINTRODUCED by this round meaning ONLY
  *   library hook ids. Enforcement must be SYMMETRIC: a guard id under
  *   composition.hooks is an error, and a hook id under composition.guards is
  *   an error — both directions, because a one-directional check is the

@@ -1227,12 +1227,12 @@ inventory rather than one shared page-level contract:
 - **`/templates` + `/templates/[id]` — the templates library (R3-06).** One
   registry unifying three previously-siloed on-disk sources into a single
   browsable library: `studio/artifact-templates/*.md` (category `planning`,
-  7 templates — `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
+  8 templates — `contract`, `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
   `demo-fix-spec`, `review-findings`), `studio/demo-elements/*.md` (category
   `demo-output`, 6 templates — `screenshot`, `cli-capture`, `code-diff`,
   `api-verify`, `test-evidence`, `narrative`), and
   `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
-  — `typescript-api`, `typescript-cli`, `typescript-web`); 16 entries total
+  — `typescript-api`, `typescript-cli`, `typescript-web`); 17 entries total
   (`orchestrator/studio/template-library.ts`). `usedBy` is DERIVED, never a
   declared field: planning usage scans the real flow graph
   (`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's

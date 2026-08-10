@@ -4,8 +4,9 @@
  * targeting `studio/catalog.yaml` + `orchestrator/studio/registry.ts`'s
  * `loadCatalog` + `orchestrator/studio/validate.ts`'s `validateCatalog`.
  *
- * The 9 ids are unchanged (5 toggles, 4 bands — `BAND_GUARD_IDS`); what moves
- * is the section name (`hooks:` → `guards:`) and what's NEW is a DERIVED
+ * At that migration's landing the 9 ids were unchanged (5 toggles, 4 bands —
+ * `BAND_GUARD_IDS`); what moved is the section name (`hooks:` → `guards:`)
+ * and what's NEW is a DERIVED
  * `kind` (`band`/`toggle`) per entry — derived from `BAND_GUARD_IDS`, never
  * declared in the YAML (the anti-"declared-data-fails-open" point of B2).
  *
