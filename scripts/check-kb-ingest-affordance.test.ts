@@ -79,6 +79,10 @@ function walk(dirAbs: string, exts: string[], skip: (p: string) => boolean): str
 
 const GLOBAL_SKIP = (p: string): boolean =>
   p.includes(`${join('node_modules')}`) || p.includes(`${join('.git')}`) ||
+  // Transient git worktrees are duplicate checkouts of the repo (e.g. parked
+  // lane worktrees), not additional repo state — scanning them double-counts
+  // the same allowed reflection files under a path the allowlist can't match.
+  p.includes(`${join('.claude', 'worktrees')}`) ||
   p.includes(`${join('brain')}`) || p.includes(`${join('mockups')}`) ||
   p.includes(`${join('demos')}`) || isTestFile(p);
 

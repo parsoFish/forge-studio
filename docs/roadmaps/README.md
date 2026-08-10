@@ -803,3 +803,34 @@ genuinely "planned but not yet built".
   per criterion naming its producing WI — per the batch-C retro's first
   recommendation; a criterion with no named producer is deleted, not carried
   as aspiration.
+
+- 2026-08-10 — **Batch D CLOSED (close SHA `e6304039`).** 18 of 21 exit rows
+  closed and merge-ancestry-verified; 3 open items carry to the D→E bridge.
+  Rows closed: KB create/maintain (R1-06 #107) + itemized Health tab (R6-08
+  #112); brain-creation agent (R4-19-F1 #109); brain-tune reasoned keep-as-is
+  (R4-20 #113); projects detail/roadmap/demo-showcase (R4-12/13/14
+  #102/#104/#108); all six journey-port debts (#110/#111); trigger plumbing
+  (debt-T #106); SEC-05 (#101/#103/#105). **BATCH-D-EXIT gate green** on the
+  close SHA (build · npm test dual-env · test:ui · raw-fs/request-path · parity
+  27/15 · deadpaths · lint/docs-claims/adr-index · studio/brain lint · ui:journey
+  963/963); the only failure was the KB-ingest ratchet double-counting the two
+  parked lane worktrees — fixed by excluding `.claude/worktrees` from its scan.
+  **Ratification:** zero new `orchestrator/` files; every landed export is
+  disclose-not-park (additive-optional field, pure-fn-for-tests) or a
+  net-negative security ratchet (`_wave5/batch-d-ratification-record.md`) — three
+  items (`persistManifestCostCeiling`, `checkProjectBrainSeedContainment`, the
+  SEC-04 guarded-session family) were T1-ruled in-campaign and await operator
+  ratification sign-off. **Honesty caveat:** row 15 (run-agent-demo-runner) is
+  REFRAMED, and the three trigger-framings are carried RECORD-ONLY (met by
+  exclusion/emulation, not real-product demonstration — the parked live runners
+  are the blocker) — see `_wave5/batch-d-exit-disposition.md`. **3 open items →
+  the D→E bridge:** R4-18 (onboard-flow gate executor, genuine ADR-042 park),
+  R4-21 (authoring agent — infra built + green on `feat/r4-21-authoring-agent`;
+  its live runner folds into the generic interactive-surface work), and R4-19-F2
+  (re-classified: a deferred **large** initiative — generic dispatch, no new
+  runner — not an ADR-042 park). **D→E BRIDGE (tightly scoped, operator-directed
+  2026-08-10):** generalise the interactive-session surface into a generic,
+  operator-authorable primitive (input/output-artifact-like, multi-instance) that
+  the four bespoke `*-runner.ts` refactor onto and creation-agent adopts as
+  consumer #1 — the principled generalisation dissolving the recurring
+  per-agent-runner ADR-042 cap pressure. Retro: `_wave5/batch-d-retro.md`.
