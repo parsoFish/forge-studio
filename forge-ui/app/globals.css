@@ -5,8 +5,27 @@
      project = steel blue, agent = ember, flow = violet,
      knowledge = green, artifact = amber.
 
-   System-font fallbacks throughout (no Google Fonts dep).
+   Signature display face (Space Grotesk) + data/mono face (JetBrains Mono)
+   are SELF-HOSTED — bundled woff2 served from /public/fonts, no external
+   font fetch ever leaves the origin (R6-03-F3 rider). Body stays on the
+   system sans stack. See scripts/font-selfhost.test.ts.
    ============================================================ */
+
+/* Self-hosted variable faces — same-origin /public/fonts only, no CDN fetch. */
+@font-face {
+  font-family: 'Space Grotesk';
+  src: url('/fonts/space-grotesk-var.woff2') format('woff2-variations');
+  font-weight: 300 700;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'JetBrains Mono';
+  src: url('/fonts/jetbrains-mono-var.woff2') format('woff2-variations');
+  font-weight: 100 800;
+  font-style: normal;
+  font-display: swap;
+}
 
 :root {
   /* surfaces */
