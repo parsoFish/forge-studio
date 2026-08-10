@@ -1804,6 +1804,20 @@ contract produced which artifact.
   — excluded, T1 ruling 2026-08-06, README §4); the creation agent's
   project scope (R4-03); marketplace publishing (R3-07).
 
+### R4-22 Generic interactive-surface primitive
+
+- **Status:** planned · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../decisions/043-generic-interactive-surface.md) (Proposed)
+- **Depends on:** R2-10 (session shell — the read half is already generic), R4-21 (its infra is consumer #1, built + green on `feat/r4-21-authoring-agent`).
+- **Depended on by:** R4-21 (live drafting), R4-18 (onboard-flow — a consumer once generalised), R4-19-F2 (brain-maintenance — a consumer, deferred-large).
+- **Context:** The interactive-session **read** half is already generic over data (the `SessionKindDescriptor` yaml row drives route + transcript + artifact pane with no per-kind code). The **producer/state-machine** half is still four hand-written `orchestrator/*-runner.ts` behind `AGENT_RUNNERS` — and a fifth (creation-agent) parking against the ADR-042 surface cap is the third time the same shape parked in batch D (R4-18, R4-19-F2 [mislabelled], R4-21). Same shape three times ⇒ a missing generalisation, not three exceptions. Operator directive (2026-08-10): make the interactive surface a **generic, operator-authorable, artifact-like, multi-instance** primitive.
+- **Features (the tight D→E bridge; full WI plan in `_wave5/plans/generic-interactive-surface-plan.md`):**
+  - **R4-22-F1 The `turnSpec` primitive + generic runner.** One additive-optional `turnSpec` field on `SessionKindDescriptor` (the producer half, authored as yaml data: kindDir, style structured|agent, a phase table with step/writes/next/finalizer, resolved against a deep-frozen vocabulary; structural-load / semantic-validate split; affordances **derived** from the phase table, not authored) + one generic `orchestrator/interactive-runner.ts` owning once the SEC-04 preamble + ADR-024 spec/model/prompt derivation + telemetry + the dispatch loop.
+  - **R4-22-F2 Dispatch fork (migration-safe keystone).** `cmdAgentRun` forks on `turnSpec` presence: present → the generic runner; absent → the existing `AGENT_RUNNERS` (the 4 bespoke runners keep working, untouched).
+  - **R4-22-F3 Consumer #1 — creation-agent on pure data.** The `authoring` descriptor gains its `turnSpec`; R4-21's creation-agent drafts a real skill/hook package **live end-to-end** on the shared spine (closes R4-21 exit rows build-skill/build-hook for real, not emulated).
+  - **R4-22-F4 (staged, batch E or later) The 4-runner refactor.** Migrate architect/instructions/demo-builder/project-brain onto the primitive incrementally behind the fork (architect-council special case defers); each migration is a no-regression WI. **Operator-authorable UI + multi-instance management are batch-E-proper follow-ons, not the bridge.**
+- **ADR-042 note:** R4-22 is the **one-time ratified generalisation** ADR-043 sanctions — the generic runner is disclosed new orchestrator/ surface once, so future interactive kinds are authored as data and never re-open the cap question.
+- **Acceptance references:** mockup journeys `build-skill` / `build-hook` (real, live); the 4 legacy runners stay green behind the fork.
+
 ## Deferred
 
 ### R4-D1 Architect-flow retirement

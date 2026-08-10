@@ -65,7 +65,7 @@ Canonical initiative skeleton (IDs are fixed and never reused):
 - **R1**: R1-01 KB contract type · R1-02 KB seam completion · R1-03 Project contract: demo + test processes · R1-04 Project contract: instructions + release + build processes · R1-05 Contract machine-checks · R1-06 KB create & maintain *(wave 5)* · R1-D1 *(deferred)* Holistic-metrics clause + exploration-initiative support
 - **R2**: R2-01 Agent-as-runnable primitive · R2-02 Agent-def-driven builder · R2-03 Fanout capability (research spike first) · R2-04 Trigger expansion · R2-05 Dynamic artifact surfaces · R2-06 Runtime-adapter realization · R2-07 Composition single-source · R2-08 Triggers runtime *(wave 5)* · R2-09 Agent-builder definition parity *(wave 5)* · R2-10 Interactive sessions surface *(wave 5)* · R2-11 Legacy invocation path budget-aware *(unwaved, minted mid-batch-C)* · R2-D1 *(deferred, closed-rejected)* Parallel-work merge-resolution · R2-D2 *(deferred/parked)* Plan-band read-only parallelism
 - **R3**: R3-01 Skills first-class management · R3-02 Skill-generator flow · R3-03 Hooks library (lifecycle re-scope) · R3-04 Connections (tools/MCPs/CLIs) library · R3-05 Instructions library · R3-06 Templates library *(wave 5)* · R3-07 Community browser *(wave 5)*
-- **R4**: R4-01 Platform→artifact migration · R4-02 Project onboarding agent · R4-03 Project creation agent · R4-04 Architect agent refinement · R4-05 Plan agent · R4-06 Develop agent refinement · R4-07 Demo agent · R4-08 Adversarial review agent · R4-09 Reflect agent · R4-10 Develop-cycle OOTB flow · R4-11 Roadmap & attention surface · R4-12 Project detail alignment *(wave 5)* · R4-13 Project roadmap tab *(wave 5)* · R4-14 Demo showcase page *(wave 5)* · R4-15 Architect/planning session ⚑ *(wave 5)* · R4-16 Demo-builder generation gallery *(wave 5)* · R4-17 Onboarding session staging *(wave 5)* · R4-18 Onboard-project OOTB flow *(wave 5)* · R4-19 Brain creation & maintenance agents *(wave 5)* · R4-20 Brain-tune OOTB flow *(wave 5)* · R4-21 OOTB authoring agent *(wave 5, batch D — minted at batch-C planning)* · R4-D1 *(deferred)* Architect-flow retirement
+- **R4**: R4-01 Platform→artifact migration · R4-02 Project onboarding agent · R4-03 Project creation agent · R4-04 Architect agent refinement · R4-05 Plan agent · R4-06 Develop agent refinement · R4-07 Demo agent · R4-08 Adversarial review agent · R4-09 Reflect agent · R4-10 Develop-cycle OOTB flow · R4-11 Roadmap & attention surface · R4-12 Project detail alignment *(wave 5)* · R4-13 Project roadmap tab *(wave 5)* · R4-14 Demo showcase page *(wave 5)* · R4-15 Architect/planning session ⚑ *(wave 5)* · R4-16 Demo-builder generation gallery *(wave 5)* · R4-17 Onboarding session staging *(wave 5)* · R4-18 Onboard-project OOTB flow *(wave 5)* · R4-19 Brain creation & maintenance agents *(wave 5)* · R4-20 Brain-tune OOTB flow *(wave 5)* · R4-21 OOTB authoring agent *(wave 5, batch D — minted at batch-C planning)* · R4-22 Generic interactive-surface primitive *(wave 5, batch E — ADR-043, minted 2026-08-10)* · R4-D1 *(deferred)* Architect-flow retirement
 - **R5**: R5-01 Dry-bridge seam · R5-02 G8 env-pin at spawn seam · R5-03 Cost integrity · R5-04 Flow edit-lock verification · R5-05 Known-gaps residue · R5-06 Demo/harness backlog · R5-07 SSOT reconciliation · R5-08 Dead-code & component minimisation *(wave 5)* · R5-09 Docs ground-truth restructure *(wave 5)*
 - **R6**: R6-01 Run-observability depth · R6-02 Human-readable operations · R6-03 IA & convention stewardship · R6-04 Run kickoff & consolidation *(wave 5)* · R6-05 Flow monitor ledger *(wave 5)* · R6-06 Agent monitor linkage *(wave 5)* · R6-07 Home dashboard *(wave 5)* · R6-08 KB explore *(wave 5)* · R6-D1 *(deferred)* Notification transport beyond the blade
 - **R7**: R7-01 Bench rebuild (corpus-anchored) · R7-02 Journey platform evolution · R7-03 verify-ground & corpus stewardship · R7-04 CI & drift-guard growth
@@ -295,10 +295,13 @@ execution detail; THIS table is the driving view.
 | **B — Sessions & builder** | sessions-surface · agent-builder · per-OOTB sessions | R2-10 · R2-09 · R4-15 · R4-16 · R4-17 | create-agent · edit-agent · onboard-project · create-project · run-agent-{architect, demo-builder, onboarding} |
 | **C — Runs, triggers & monitors** | triggers-runtime · agent-kickoff+run · flow-run-detail · flows-home/monitor · agents-home/monitor | R2-08 · R6-04 · R6-01-F1/F4/F5 (+the R2-05 slice typed outputs need) · R6-05 · R6-06 | run-agent · run-flow · run-agent-{developer, adversarial-review, demo-runner, reflector} — all three trigger framings |
 | **D — Projects & knowledge** | projects-list/detail · project-roadmap-tab · demo-showcase · kb-create/maintain · kb-explore · per-OOTB flows · per-OOTB authoring | R4-12 · R4-13 · R4-14 · R1-06 · R6-08 · R4-19 · R4-18 · R4-20 · R4-21 | create-kb-project · create-kb-cycle · kb-maintain · run-agent-brain-creation · run-flow-onboard · run-flow-brain-tune · build-skill · build-hook |
-| **E — IA & Home** | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav + Home live; nav/landing beats across the gallery |
-| **F — Refinement & ground truth** | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep clean; three-scope docs (operate / develop / plan) |
+| **E — Interactive runtime bridge** | interactive-runtime-primitive · authoring-agent · onboard-flow · brain-maintenance | R4-22 · R4-21 · R4-18 · R4-19-F2 | build-skill · build-hook (real, live) · run-flow-onboard · run-agent-brain-maintenance — the 4 legacy runners stay green behind the dispatch fork |
+| **F — IA & Home** | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav + Home live; nav/landing beats across the gallery |
+| **G — Refinement & ground truth** | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep clean; three-scope docs (operate / develop / plan) |
 
-Batch rules: order **A→F**, dependencies flow forward only; one batch = one
+Batch rules: order **A→G** (batch E — interactive-runtime bridge — inserted
+2026-08-10, shifting the former E/F to F/G; see the change log), dependencies
+flow forward only; one batch = one
 merged arc (sessions inside it can parallelize where deps allow); **every
 batch PR deletes what it obsoletes** (R5-08-F1 — no zombie surfaces); a batch
 closes when its journeys run against the real product via journey-sync, not
@@ -834,3 +837,20 @@ genuinely "planned but not yet built".
   the four bespoke `*-runner.ts` refactor onto and creation-agent adopts as
   consumer #1 — the principled generalisation dissolving the recurring
   per-agent-runner ADR-042 cap pressure. Retro: `_wave5/batch-d-retro.md`.
+
+- 2026-08-10 — **Batch E minted: the interactive-runtime bridge (operator
+  directive).** The batch-D closeout's D→E bridge is formalised into the batch
+  plan as its own batch, per clean-module-separation. **New batch E —
+  Interactive runtime bridge** (R4-22 generic interactive-surface primitive +
+  R4-21 as consumer #1 + R4-18 + R4-19-F2 as consumers on the primitive);
+  the former **E (IA & Home) → F**, **F (Refinement & ground truth) → G**
+  (neither started; forward order A→G preserved). **R4-22 minted**
+  (`R4-ootb-suite.md`, ADR 043) — one `turnSpec` descriptor field + one generic
+  `orchestrator/interactive-runner.ts` + a dispatch fork; the one-time ratified
+  ADR-042 generalisation dissolving the per-agent-runner park that recurred 3×
+  in batch D. Exit: creation-agent drafts live end-to-end on the shared spine,
+  the 4 legacy runners stay green behind the fork; the 4-runner refactor +
+  operator-authorable UI + multi-instance are staged (R4-22-F4 / batch-E-proper).
+  Goal pack `_wave5/goal-packs/batch-E.md`; WI plan
+  `_wave5/plans/generic-interactive-surface-plan.md`. ADR-043 accept (PR #115)
+  gates the start.
