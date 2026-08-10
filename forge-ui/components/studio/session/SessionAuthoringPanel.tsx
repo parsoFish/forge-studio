@@ -3,17 +3,13 @@
 import { useMemo, useState } from 'react';
 
 import { finalizeAuthoring } from '@/lib/bridge-client';
-import { HOOK_LIFECYCLE_EVENTS, type HookLifecycleEvent } from '@/lib/hook-client';
 import type { SessionArtifactPayload, FilePackageFile } from '@/lib/session-client';
 
 // ---------------------------------------------------------------------------
-// SessionAuthoringPanel — the "authoring" kind's live interactive affordance
-// (R4-21 T3, BLOCKER-2 fix). Unlike architect/instructions/project-brain,
-// this kind's status.json carries no rich multi-phase state machine yet (see
-// cli/ui-bridge.ts's POST /api/studio/authoring/start "KNOWN GAP" comment —
-// the bounded-turn runner is a separate, not-yet-built follow-up), so this
-// panel does not fetch a per-kind summary at all: it works ENTIRELY off the
-// `file-package` artifact the generic session-shell route already derives
+// SessionAuthoringPanel — the "authoring" kind's live interactive affordance.
+// This kind's status.json carries no rich multi-phase state machine the
+// panel itself needs to read, so it works ENTIRELY off the `file-package`
+// artifact the generic session-shell route already derives
 // (`viewState.artifact`, passed down from the session page) — no second
 // fetch, no new GET route.
 //
@@ -23,19 +19,30 @@ import type { SessionArtifactPayload, FilePackageFile } from '@/lib/session-clie
 // mirroring this whole module family's "derive from what's really there,
 // never fabricate" convention. Neither present yet ⇒ "still drafting".
 //
-// Finalize (Save) is the ONE explicit save act (D5 — never auto-saved): it
-// reads the CURRENT file-package artifact and POSTs it to
-// `POST /api/studio/authoring/finalize`, then calls `onFinalized(kind, id)`
-// so the PAGE (not this component) navigates to `/skills/<id>` or
-// `/hooks/<id>` — this panel does not call `useRouter()` itself (the App
-// Router's `useRouter` throws "invariant expected app router to be mounted"
-// under `renderToStaticMarkup`, the harness `SessionAuthoringPanel.test.ts`
-// renders this component with; bubbling the navigation decision up to the
-// page keeps this component render-testable in isolation, mirroring
-// `SessionInstructionsPanel`'s own `onRefresh`-callback convention rather
-// than `SessionProjectBrainPanel`'s in-component `useRouter` call). Palette-
-// visibility / binding stay the operator's own SEPARATE, later act at that
-// destination page — this panel never approves or binds anything itself.
+// Finalize (Save) is the ONE explicit save act (D5, `_wave5/unit-specs/
+// R4-21-phase2.md` — never auto-saved): it POSTs `{project, sessionId, kind,
+// id}` to `POST /api/studio/authoring/finalize`, which drives the session's
+// own `committing` turn server-side and installs the LANDED package — this
+// panel never sends package bytes or hook metadata itself (R4-21 phase 2,
+// T3 correction A/C). The hook-specific form fields a phase-1 round of this
+// panel rendered (name/description/lifecycle-event/matcher) are GONE: hook
+// metadata now comes from the DRAFTED hook.yaml the operator already reviews
+// in the artifact pane on the right, never from a parallel form that could
+// diverge from what actually ships. Only the library id (`authoring-id`,
+// D4 — an operator decision the drafted package cannot make for itself)
+// survives for both shapes.
+//
+// `onFinalized(kind, id)` is called on success so the PAGE (not this
+// component) navigates to `/skills/<id>` or `/hooks/<id>` — this panel does
+// not call `useRouter()` itself (the App Router's `useRouter` throws
+// "invariant expected app router to be mounted" under `renderToStaticMarkup`,
+// the harness `SessionAuthoringPanel.test.ts` renders this component with;
+// bubbling the navigation decision up to the page keeps this component
+// render-testable in isolation, mirroring `SessionInstructionsPanel`'s own
+// `onRefresh`-callback convention rather than `SessionProjectBrainPanel`'s
+// in-component `useRouter` call). Palette-visibility / binding stay the
+// operator's own SEPARATE, later act at that destination page — this panel
+// never approves or binds anything itself.
 // ---------------------------------------------------------------------------
 
 type DraftShape = 'skill' | 'hook' | 'unknown';
@@ -46,16 +53,20 @@ function draftShapeOf(files: readonly FilePackageFile[]): DraftShape {
   return 'unknown';
 }
 
-function fileBody(files: readonly FilePackageFile[], path: string): string {
-  return files.find((f) => f.path === path)?.body ?? '';
-}
-
 export function SessionAuthoringPanel({
   sessionId,
+  project = null,
   artifact,
   onFinalized,
 }: {
   sessionId: string;
+  /** The session's own project — threaded from the page (the same source
+   *  `sessionId` already arrives from) since the wire contract now requires
+   *  it on every finalize request (D5). Optional (defaults to `null`) so an
+   *  isolated render (e.g. this component's own DOM regression suite, which
+   *  does not fetch a page-level session summary) can omit it; `onSave` stays
+   *  disabled until a real project is known. */
+  project?: string | null;
   artifact: SessionArtifactPayload | null;
   /** Called with the saved library kind + id on a successful finalize — the
    *  PAGE navigates (`/skills/<id>` or `/hooks/<id>`); see this file's own
@@ -66,38 +77,17 @@ export function SessionAuthoringPanel({
   const shape = useMemo(() => draftShapeOf(files), [files]);
 
   const [id, setId] = useState('');
-  const [hookName, setHookName] = useState('');
-  const [hookDescription, setHookDescription] = useState('');
-  const [hookOn, setHookOn] = useState<HookLifecycleEvent>('PreToolUse');
-  const [hookMatcher, setHookMatcher] = useState('');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const canSave =
-    id.trim().length > 0 && (shape === 'skill' || (shape === 'hook' && hookName.trim().length > 0 && hookDescription.trim().length > 0));
+  const canSave = id.trim().length > 0 && Boolean(project);
 
   async function onSave(): Promise<void> {
-    if (!canSave || saving) return;
+    if (!canSave || saving || !project) return;
     setSaving(true);
     setError(null);
     const savedId = id.trim();
-    const result =
-      shape === 'skill'
-        ? await finalizeAuthoring({
-            kind: 'skill',
-            id: savedId,
-            files,
-            upstream: { source: `forge://authoring-session/${sessionId}` },
-          })
-        : await finalizeAuthoring({
-            kind: 'hook',
-            id: savedId,
-            name: hookName.trim(),
-            description: hookDescription.trim(),
-            on: hookOn,
-            scriptBody: fileBody(files, 'scripts/run.sh'),
-            ...(hookMatcher.trim() ? { matcher: hookMatcher.trim() } : {}),
-          });
+    const result = await finalizeAuthoring({ project, sessionId, kind: shape === 'hook' ? 'hook' : 'skill', id: savedId });
     if (result.ok && result.id && result.kind) {
       onFinalized?.(result.kind, result.id);
       return;
@@ -128,27 +118,6 @@ export function SessionAuthoringPanel({
           <FieldLabel htmlFor="authoring-id">{shape === 'skill' ? 'Skill id (directory name)' : 'Hook id (directory name)'}</FieldLabel>
           <input id="authoring-id" data-field="authoring-id" style={inputStyle} value={id} placeholder="e.g. pr-diff-summary"
             onChange={(e) => setId(e.target.value)} />
-
-          {shape === 'hook' && (
-            <>
-              <FieldLabel htmlFor="authoring-hook-name">Name</FieldLabel>
-              <input id="authoring-hook-name" data-field="authoring-hook-name" style={inputStyle} value={hookName}
-                onChange={(e) => setHookName(e.target.value)} />
-              <FieldLabel htmlFor="authoring-hook-description">Description</FieldLabel>
-              <input id="authoring-hook-description" data-field="authoring-hook-description" style={inputStyle} value={hookDescription}
-                onChange={(e) => setHookDescription(e.target.value)} />
-              <FieldLabel htmlFor="authoring-hook-on">Lifecycle event</FieldLabel>
-              <select id="authoring-hook-on" data-field="authoring-hook-on" style={inputStyle} value={hookOn}
-                onChange={(e) => setHookOn(e.target.value as HookLifecycleEvent)}>
-                {HOOK_LIFECYCLE_EVENTS.map((ev) => (
-                  <option key={ev} value={ev}>{ev}</option>
-                ))}
-              </select>
-              <FieldLabel htmlFor="authoring-hook-matcher">Matcher (optional)</FieldLabel>
-              <input id="authoring-hook-matcher" data-field="authoring-hook-matcher" style={inputStyle} value={hookMatcher}
-                onChange={(e) => setHookMatcher(e.target.value)} />
-            </>
-          )}
 
           {error && <div style={{ fontSize: 12.5, color: 'var(--red)' }}>{error}</div>}
           <div>

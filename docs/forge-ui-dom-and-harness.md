@@ -804,26 +804,35 @@ inventory rather than one shared page-level contract:
   (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
   `[data-component="brain-brief-input"]`, and
   `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"bind-and-return"]`;
-  and — **R4-21 T3 addition (BLOCKER-2 fix)** — the authoring kind's
-  `SessionAuthoringPanel` (`components/studio/session/SessionAuthoringPanel.tsx`),
-  the creation-agent session's live affordance. Unlike the other four kinds it
-  fetches NO per-kind summary (`authoring` has no bounded-turn runner yet —
-  see `cli/ui-bridge.ts`'s `POST /api/studio/authoring/start` "KNOWN GAP"
-  comment); it works entirely off the shell's own `file-package` artifact.
+  and — **R4-21 phase 2** — the authoring kind's `SessionAuthoringPanel`
+  (`components/studio/session/SessionAuthoringPanel.tsx`), the creation-agent
+  session's live affordance. Unlike the other four kinds it fetches NO
+  per-kind summary; it works entirely off the shell's own `file-package`
+  artifact.
   `[data-component="authoring-panel"][data-section="authoring-status"][data-authoring-shape="unknown"|"skill"|"hook"]`
   — the shape is detected purely by file PRESENCE in the artifact (`SKILL.md`
   at the package root ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒ still drafting).
   Once a shape is known, `[data-section="authoring-finalize"]` renders the
-  Save form: `[data-field="authoring-id"]` always, plus
-  `[data-field="authoring-hook-name"|"authoring-hook-description"|"authoring-hook-on"|"authoring-hook-matcher"]`
-  for a hook draft only. `[data-action="finalize-authoring"]` POSTs
-  `POST /api/studio/authoring/finalize` (D5 — the ONE explicit save act,
-  never auto-saved) and, on success, navigates to `/skills/<id>` or
-  `/hooks/<id>` — palette-visibility / binding stay the operator's own
-  SEPARATE, later act at that destination page. The launcher that starts
-  this session lives on `/skills/new` and `/hooks/new` (see those pages'
-  entries, above) — `AuthoringLauncher`, POSTing
-  `POST /api/studio/authoring/start`.
+  Save form: `[data-field="authoring-id"]` ONLY, for both shapes — the
+  phase-1 hook-specific fields (`authoring-hook-name` /
+  `authoring-hook-description` / `authoring-hook-on` / `authoring-hook-matcher`)
+  are GONE (R4-21 phase 2, T3 correction A/C): hook metadata now comes from
+  the DRAFTED `hook.yaml` the operator already reviews in the artifact pane,
+  never a parallel form that could diverge from what actually ships.
+  `[data-action="finalize-authoring"]` POSTs `POST /api/studio/authoring/finalize
+  {project, sessionId, kind, id}` (D5, `_wave5/unit-specs/R4-21-phase2.md` —
+  the ONE explicit operator COMMIT act, never auto-saved): the route drives
+  the session's own `committing` turn server-side (the generic
+  `runInteractiveTurn` spine, ADR-043 §2) and installs the LANDED package —
+  no package bytes or hook metadata ride on the request. On success the panel
+  navigates to `/skills/<id>` or `/hooks/<id>` — palette-visibility / binding
+  stay the operator's own SEPARATE, later act at that destination page. The
+  launcher that starts this session lives on `/skills/new` and `/hooks/new`
+  (see those pages' entries, above) — `AuthoringLauncher`, POSTing
+  `POST /api/studio/authoring/start`, which now spawns
+  `forge agent run authoring <sid> --project <p>` (the generic dispatch fork,
+  `cli/agent-run.ts`'s `cmdAgentRun`) rather than the generic one-shot
+  dispatch host.
   The two question forms are now ONE component parameterised on its submit fn
   and section name — both `data-section` values are unchanged.
   **`/architect/new` stays** as the native "start a run" entry that replaced

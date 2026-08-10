@@ -21,8 +21,7 @@ cli/bridge-recovery.ts mkdirSync 1
 cli/bridge-recovery.ts readFileSync 3
 cli/bridge-recovery.ts renameSync 1
 cli/bridge-recovery.ts rmSync 1
-cli/bridge-studio-authoring.ts mkdirSync 2
-cli/bridge-studio-authoring.ts rmSync 1
+cli/bridge-studio-authoring.ts mkdirSync 1
 cli/bridge-studio-authoring.ts writeFileSync 2
 cli/bridge-studio-community.ts existsSync 1
 cli/bridge-studio-community.ts spawnSync 1
@@ -232,6 +231,15 @@ orchestrator/instructions-runner.ts existsSync 2
 orchestrator/instructions-runner.ts mkdirSync 1
 orchestrator/instructions-runner.ts readFileSync 2
 orchestrator/instructions-runner.ts writeFileSync 1
+orchestrator/interactive-finalizers.ts lstatSync 1
+orchestrator/interactive-finalizers.ts mkdirSync 1
+orchestrator/interactive-finalizers.ts openSync 2
+orchestrator/interactive-finalizers.ts readdirSync 1
+orchestrator/interactive-finalizers.ts realpathSync 1
+orchestrator/interactive-runner.ts lstatSync 1
+orchestrator/interactive-runner.ts mkdirSync 1
+orchestrator/interactive-runner.ts readdirSync 1
+orchestrator/interactive-runner.ts readFileSync 1
 orchestrator/interactive-session.ts existsSync 2
 orchestrator/interactive-session.ts mkdirSync 4
 orchestrator/interactive-session.ts readFileSync 3

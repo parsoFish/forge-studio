@@ -902,73 +902,32 @@ export async function startAuthoring(input: { project: string; prompt: string })
   return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
 }
 
-/** One file of an authoring session's drafted skill/hook package — mirrors
- *  `lib/session-client.ts`'s `FilePackageFile` (this module does not import
- *  that one; see this file's own hand-mirrored-type convention, same
- *  rationale as `session-client.ts`'s own header note on `FilePackageArtifact`). */
-export type AuthoringFinalizeFile = { path: string; body: string };
-
 /**
  * Save an authoring session's CURRENT drafted package into the real skill or
  * hook library — `POST /api/studio/authoring/finalize`
- * (`cli/bridge-studio-authoring.ts`). The caller reads the package files from
- * the session's own `file-package` artifact (already fetched via
- * `fetchSessionShell`) and passes them here verbatim; this route does not
- * read the session dir itself (D-2/D-3, cli/bridge-studio-authoring.ts's own
- * header) — the operator's explicit Save action is what moves bytes into the
- * real library, never an implicit auto-save. Lands as a DRAFT
+ * (`cli/bridge-studio-authoring.ts`). R4-21 phase 2, WI-2 (D5): the wire
+ * contract is EXACTLY `{project, sessionId, kind, id}` — the route drives the
+ * session's own `committing` turn server-side and installs the LANDED
+ * package; no package bytes, hook metadata, or `upstream` ride on this
+ * request (the operator reviews the drafted package in the session's own
+ * file-package artifact pane, not a form here). Lands as a DRAFT
  * (`paletteVisible:false` for a skill; unbound for a hook) — approval /
- * binding stay the operator's own SEPARATE, later act (D2 — never
+ * binding stay the operator's own SEPARATE, later act (D6 — never
  * auto-approved here).
  */
-export async function finalizeAuthoring(
-  input:
-    | { kind: 'skill'; id: string; files: AuthoringFinalizeFile[]; upstream: { source: string; ref?: string } }
-    | {
-        kind: 'hook';
-        id: string;
-        name: string;
-        description: string;
-        on: string;
-        scriptBody: string;
-        matcher?: string;
-        permissions?: { env?: string[]; read?: string[]; network?: boolean };
-      },
-): Promise<{ ok: boolean; kind?: 'skill' | 'hook'; id?: string; error?: string }> {
-  const body =
-    input.kind === 'skill'
-      ? {
-          kind: 'skill',
-          id: input.id,
-          entries: input.files.map((f) => ({ path: f.path, contentBase64: toBase64(f.body) })),
-          upstream: input.upstream,
-        }
-      : {
-          kind: 'hook',
-          id: input.id,
-          name: input.name,
-          description: input.description,
-          on: input.on,
-          scriptBody: input.scriptBody,
-          ...(input.matcher ? { matcher: input.matcher } : {}),
-          ...(input.permissions ? { permissions: input.permissions } : {}),
-        };
-  const r = await bridgePost('/api/studio/authoring/finalize', body);
+export async function finalizeAuthoring(input: {
+  project: string;
+  sessionId: string;
+  kind: 'skill' | 'hook';
+  id: string;
+}): Promise<{ ok: boolean; kind?: 'skill' | 'hook'; id?: string; error?: string }> {
+  const r = await bridgePost('/api/studio/authoring/finalize', input);
   if (!r.ok) return { ok: false, error: r.error };
   return {
     ok: true,
     kind: r.data?.kind === 'skill' || r.data?.kind === 'hook' ? r.data.kind : undefined,
     id: typeof r.data?.id === 'string' ? r.data.id : undefined,
   };
-}
-
-/** UTF-8 string -> base64, browser-safe (no Buffer). */
-function toBase64(s: string): string {
-  if (typeof Buffer !== 'undefined') return Buffer.from(s, 'utf8').toString('base64');
-  const bytes = new TextEncoder().encode(s);
-  let binary = '';
-  for (const b of bytes) binary += String.fromCharCode(b);
-  return btoa(binary);
 }
 
 /** One demo-element kind from the forge library (the demoProcess composition palette). */

@@ -1,63 +1,83 @@
 /**
- * Forge Studio authoring-session finalize route (R4-21, WI-2: the OOTB
- * authoring agent / skill-hook package producer, save path).
+ * Forge Studio authoring-session finalize route (R4-21 phase 2, WI-2 — the
+ * OOTB authoring agent / skill-hook package producer, save path).
  *
  * Owns the ONE `/api/studio/authoring*` route:
  *
- *   POST /api/studio/authoring/finalize   → save the creation-agent
- *                                            session's drafted package into
- *                                            the real skill or hook library
+ *   POST /api/studio/authoring/finalize   → the operator's COMMIT act: drive
+ *                                            the creation-agent session's
+ *                                            `committing` turn and install
+ *                                            the LANDED package into the real
+ *                                            skill or hook library
  *
  * ---------------------------------------------------------------------------
- * CONTRACT DECISIONS (mirrored from cli/bridge-studio-authoring.test.ts's own
- * header — that file is this module's spec):
+ * CONTRACT (D5, `_wave5/unit-specs/R4-21-phase2.md`; mirrored from
+ * `cli/bridge-studio-authoring.test.ts`'s own header — that file is this
+ * module's spec):
  *
- *  D-1. ONE route: `POST /api/studio/authoring/finalize`. A `kind` field
- *       discriminates skill vs. hook — the two existing library write paths
- *       this route composes stay entirely unchanged and unmoved.
- *  D-2. Skill finalize (`kind:'skill'`) reuses EXACTLY the existing inline-
- *       upload contract `POST /api/studio/skills/install` already accepts
- *       (SEC-05 q80): `{ id, entries: [{path, contentBase64}], upstream:
- *       {source, ref?} }`, staged via the same server-side guarded stage
- *       (cli/skill-staging.ts) and installed via the SAME
- *       `installSkillPackage` (orchestrator/studio/skill-library.ts) —
- *       check-then-write, whole-package validation BEFORE any write, so a
- *       rejected draft leaves no half-written `skills/<id>/`.
- *  D-3. Hook finalize (`kind:'hook'`) reuses EXACTLY the existing
- *       `POST /api/studio/hooks` body shape (`name, description, on,
- *       scriptBody, matcher?, permissions?`) and its write contract: always
- *       writes the script to the fixed relative path `scripts/run.sh` inside
- *       the new hook's directory, and rejects (400) any body carrying one of
- *       `hook-library.ts`'s `FORBIDDEN_HOOK_BINDING_KEYS` before any
- *       filesystem write.
- *  D-4. Response envelope: `{ ok: true, kind, id }` on success — mirrors both
- *       source routes' flat `{ ok: true, id }` shape, with `kind` added so a
- *       caller that only has the finalize response (not the request it sent)
- *       can still tell which library the id landed in.
- *  D-5. Finalize installs a skill as a DRAFT (`status: 'draft', library:
- *       false`) — it NEVER auto-approves. Palette visibility is gated behind
- *       the EXISTING, SEPARATE `POST /api/studio/skills/:id/approve` route —
- *       a skill finalized through this route is listSkillLibrary-visible
- *       immediately but `paletteVisible:false` until that separate act.
- *  D-6. Containment for BOTH kinds goes through the SAME choke points the
- *       existing routes already use — `resolveGuardedPath`/`guardedFile`
- *       (cli/studio-path-guard.ts) for the id-derived destination, and
- *       `stageSkillPackage`'s own guarded stage for skill entries — never a
- *       fresh lexical `startsWith` reimplementation specific to this route.
+ *  Wire contract: `POST /api/studio/authoring/finalize { project, sessionId,
+ *  kind: 'skill'|'hook', id }` — NOTHING ELSE is read from the body. The
+ *  installed artifact's bytes come from the server-landed package, never the
+ *  request body (closes the client-supplied-content sink the phase-1 shape
+ *  had).
  *
- * The validation/write STEPS for each kind are intentionally re-stated here
- * (not cross-imported handler-to-handler) rather than factored out of
- * cli/bridge-studio-skills.ts / cli/bridge-studio-hooks.ts — the underlying
- * PRIMITIVES those routes write through (`stageSkillPackage`,
- * `installSkillPackage`, `resolveGuardedPath`, `hooksDir`/`hookDir`,
- * `HOOK_LIFECYCLE_EVENTS`, `FORBIDDEN_HOOK_BINDING_KEYS`) are the SAME ones
- * this route calls — there is exactly one write path per kind, just reached
- * from two request shapes.
+ *  Sequence:
+ *   1. Resolve the projects root the SAME way every other bridge route does
+ *      (`resolveProjectsDir` + `loadConfig`/`defaultConfigPath`) — never a
+ *      hardcoded `<cwd>/projects`.
+ *   2. Resolve the session dir with `project` and `sessionId` EACH riding as
+ *      their own guarded segment — `resolveGuardedPath(projectsRoot,
+ *      [project, '_authoring', sessionId])`. Never folded into the root (that
+ *      would make containment tautological — see
+ *      `cli/studio-path-guard.ts`'s own CONTRACT section).
+ *   3. Read `status.json` through the guarded read (leaf included, via
+ *      `orchestrator/interactive-session.ts`'s `guardedReadSessionStatus` —
+ *      the SAME primitive `runInteractiveTurn` itself uses). Require
+ *      `phase === 'awaiting-review'` → 409 naming the current AND required
+ *      phase otherwise. Never a silent 200.
+ *   4. Guarded-write the status with `package_id: id` and `phase:
+ *      'committing'` (`guardedWriteSessionStatus`).
+ *   5. Run ONE turn on the SAME spine the CLI dispatches to —
+ *      `runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot })`
+ *      — imported DYNAMICALLY (see below). The `committing` step performs no
+ *      SDK spawn (it runs `copyStagingToLibrary`), so this call is fast and
+ *      deterministic. Assert the returned phase is `committed`; anything else
+ *      fails loud (5xx), never a silent success on an unfinished turn.
+ *   6. Read the LANDED package at `<forgeRoot>/_interactive-library/<id>/`
+ *      through the guard and install:
+ *        - `kind:'skill'` → `installSkillPackage` with a SERVER-MINTED
+ *          `upstream: { source: 'forge-authoring', ref: sessionId }` — never
+ *          read from the request body (a client cannot supply its own
+ *          provenance). Lands a DRAFT; `approveSkillDraft` is NEVER called
+ *          here — palette visibility stays the operator's separate, later
+ *          act at `POST /api/studio/skills/:id/approve` (D6).
+ *        - `kind:'hook'` → hook metadata is read from the LANDED
+ *          `hook.yaml` (parsed server-side), never from body fields: refuse
+ *          (400, nothing written) on a `FORBIDDEN_HOOK_BINDING_KEYS` key, an
+ *          `on` outside `HOOK_LIFECYCLE_EVENTS`, or a hook.yaml that is
+ *          missing/unparseable/not a mapping — fail loud, never fabricate a
+ *          default. Otherwise write the existing 2-file shape (`hook.yaml` +
+ *          the fixed relative `scripts/run.sh`) through the SAME guarded
+ *          choke points `POST /api/studio/hooks` already uses.
+ *   7. `{ ok: true, kind, id }`.
+ *
+ *  Design call: a hook-specific validation failure at step 6 does NOT roll
+ *  back step 5's already-successful generic copy — nothing in D5 describes a
+ *  rollback, and `interactive-finalizers.ts`'s own header disclaims any
+ *  hook-shape awareness at that layer (it is a generic COPY primitive). The
+ *  negative hook paths below therefore assert the ARTIFACT step 6 alone owns
+ *  (`hooks/<id>/` absent), not whether the session's `status.json` phase gets
+ *  reverted — an unspecified, implementation-owned detail.
+ *
+ *  Every refusal leaves the filesystem untouched at the layer it owns — the
+ *  pinned tests assert the ARTIFACT (file/dir absence), not just the status
+ *  code.
+ * ---------------------------------------------------------------------------
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname } from 'node:path';
 import yaml from 'js-yaml';
 
 import {
@@ -68,8 +88,7 @@ import {
   pathOnly,
   type StudioContext,
 } from './bridge-studio.ts';
-import { resolveGuardedPath } from './studio-path-guard.ts';
-import { stageSkillPackage } from './skill-staging.ts';
+import { resolveGuardedPath, guardedReadFile } from './studio-path-guard.ts';
 import { installSkillPackage } from '../orchestrator/studio/skill-library.ts';
 import {
   hookDir,
@@ -79,129 +98,48 @@ import {
   type HookLifecycleEvent,
   type HookPermissionManifest,
 } from '../orchestrator/studio/hook-library.ts';
+import { reqString, optString, oneOf } from '../orchestrator/studio/yaml-fields.ts';
+import { resolveProjectsDir, loadConfig, defaultConfigPath } from '../orchestrator/config.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+// Type-only — erased by --experimental-strip-types, so this does NOT pull the
+// Claude Agent SDK into bridge start-up. The runtime function is imported
+// DYNAMICALLY, inside runFinalize, below (mirrors cli/agent-run.ts's own
+// project-brain-builder-runner dynamic-import precedent).
+import type { InteractiveTurnStatus, RunInteractiveTurnResult } from '../orchestrator/interactive-runner.ts';
 
 const FINALIZE_URL = '/api/studio/authoring/finalize';
 
-// SEC-05 q80 (d1) mirror: total decoded-bytes cap on an inline-upload
-// finalize, same value and rationale as cli/bridge-studio-skills.ts's
-// MAX_STAGED_PACKAGE_BYTES (kept at or below the transport's MAX_BODY_BYTES
-// so a staged package can never exceed what the body reader already admits).
-const MAX_STAGED_PACKAGE_BYTES = 1 * 1024 * 1024; // 1 MiB
+/** Server-minted provenance for every package this route installs — the
+ *  provenance of an authored package IS the session that authored it. Never
+ *  read from the request body (a client-supplied upstream is unverifiable). */
+const AUTHORING_UPSTREAM_SOURCE = 'forge-authoring';
 
-/** Server-minted, unpredictable staging id — mirrors
- *  cli/bridge-studio-skills.ts's own `newSourceId` exactly (never derived
- *  from client input: the guarded stage's containment proof rests on this
- *  being fully server-controlled). */
-function newSourceId(): string {
-  const ts = new Date().toISOString().replace(/[:.]/g, '-').replace('Z', '');
-  return `${ts}-${Math.random().toString(36).slice(2, 6)}`;
-}
+/** The dedicated, non-scanned landing root `runInteractiveTurn`'s
+ *  `copyStagingToLibrary` finalizer writes into (`orchestrator/
+ *  interactive-runner.ts`'s own `INTERACTIVE_LIBRARY_DIRNAME` constant,
+ *  mirrored here since that one is module-private). */
+const INTERACTIVE_LIBRARY_DIRNAME = '_interactive-library';
 
-// ---------------------------------------------------------------------------
-// kind:"skill" — D-2, reuses the EXACT inline-upload contract + write path
-// POST /api/studio/skills/install already uses.
-// ---------------------------------------------------------------------------
-
-async function finalizeSkill(
-  b: Record<string, unknown>,
-  ctx: StudioContext,
-  res: ServerResponse,
-  origin: string,
-): Promise<void> {
-  const sourceId = newSourceId();
-  const stagingRoot = resolve(ctx.forgeRoot, '_skill-staging');
-  try {
-    const id = typeof b['id'] === 'string' ? b['id'].trim() : '';
-    if (!id) { sendJson(res, 400, { error: 'id is required' }, origin); return; }
-
-    const rawEntries = b['entries'];
-    if (!Array.isArray(rawEntries) || rawEntries.length === 0) {
-      sendJson(res, 400, { error: 'entries is required (a non-empty array of { path, contentBase64 })' }, origin); return;
-    }
-    const entries: Array<{ path: string; contentBase64: string }> = [];
-    let totalDecodedBytes = 0;
-    for (const raw of rawEntries) {
-      if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
-        sendJson(res, 400, { error: 'each entry must be an object { path, contentBase64 }' }, origin); return;
-      }
-      const e = raw as Record<string, unknown>;
-      const entryPath = typeof e['path'] === 'string' ? e['path'] : '';
-      if (!entryPath) { sendJson(res, 400, { error: 'each entry.path must be a non-empty string' }, origin); return; }
-      if (entryPath.startsWith('/')) { sendJson(res, 400, { error: `entry.path "${entryPath}" must not be absolute` }, origin); return; }
-      if (entryPath.split('/').includes('..')) { sendJson(res, 400, { error: `entry.path "${entryPath}" must not contain a ".." segment` }, origin); return; }
-      if (typeof e['contentBase64'] !== 'string') { sendJson(res, 400, { error: `entry "${entryPath}" contentBase64 must be a string` }, origin); return; }
-      const contentBase64 = e['contentBase64'];
-      totalDecodedBytes += Buffer.from(contentBase64, 'base64').length;
-      if (totalDecodedBytes > MAX_STAGED_PACKAGE_BYTES) {
-        sendJson(res, 413, { error: `staged package exceeds the ${MAX_STAGED_PACKAGE_BYTES}-byte cap` }, origin); return;
-      }
-      entries.push({ path: entryPath, contentBase64 });
-    }
-
-    const rawUpstream = b['upstream'];
-    if (rawUpstream === null || typeof rawUpstream !== 'object' || Array.isArray(rawUpstream)) {
-      sendJson(res, 400, { error: 'upstream is required (upstream.source)' }, origin); return;
-    }
-    const upstreamObj = rawUpstream as Record<string, unknown>;
-    const source = typeof upstreamObj['source'] === 'string' ? upstreamObj['source'].trim() : '';
-    if (!source) { sendJson(res, 400, { error: 'upstream.source is required' }, origin); return; }
-    const ref = typeof upstreamObj['ref'] === 'string' && upstreamObj['ref'].trim() ? upstreamObj['ref'].trim() : undefined;
-
-    try {
-      // stagingRoot must exist before the guard resolves against it
-      // (resolveGuardedPath realpath's its root and refuses a missing one).
-      mkdirSync(stagingRoot, { recursive: true });
-      const stagedDir = stageSkillPackage(stagingRoot, sourceId, entries);
-      // D-5: installSkillPackage always lands status:draft/library:false —
-      // finalize never calls approveSkillDraft. Palette visibility is the
-      // operator's separate, later act at POST /api/studio/skills/:id/approve.
-      installSkillPackage({
-        forgeRoot: ctx.forgeRoot,
-        id,
-        packageDir: stagedDir,
-        upstream: ref ? { source, ref } : { source },
-      });
-      sendJson(res, 200, { ok: true, kind: 'skill', id }, origin);
-    } catch (err) {
-      // Every stageSkillPackage / installSkillPackage throw (traversal entry,
-      // duplicate target, bad slug, cap exceeded, binary file, no SKILL.md at
-      // the package root, escaping skills/<id> destination, ...) is a
-      // caller-input problem by contract — 400, never a 500 here.
-      sendJson(res, 400, { error: sanitizeError(err) }, origin);
-    }
-  } catch (err) {
-    sendJson(res, 500, { error: sanitizeError(err) }, origin);
-  } finally {
-    // Clean the private staging dir on BOTH success and throw — sourceId is
-    // server-minted, so this join targets exactly this request's dir; force
-    // makes it a no-op when staging never wrote (e.g. a body-validation 400
-    // that returned before the mkdir above).
-    rmSync(join(stagingRoot, sourceId), { recursive: true, force: true });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// kind:"hook" — D-3, reuses the EXACT 2-file write contract + D-6 rejection
-// POST /api/studio/hooks already uses.
-// ---------------------------------------------------------------------------
+const REQUIRED_PHASE = 'awaiting-review';
 
 function parseFinalizeHookPermissions(raw: unknown): HookPermissionManifest | { error: string } {
   if (raw === undefined) return { env: [], read: [], network: false };
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { error: 'permissions must be an object' };
+    return { error: 'hook.yaml permissions must be an object' };
   }
   const p = raw as Record<string, unknown>;
   const env = p['env'];
   const read = p['read'];
   const network = p['network'];
   if (env !== undefined && (!Array.isArray(env) || !env.every((x) => typeof x === 'string'))) {
-    return { error: 'permissions.env must be an array of strings' };
+    return { error: 'hook.yaml permissions.env must be an array of strings' };
   }
   if (read !== undefined && (!Array.isArray(read) || !read.every((x) => typeof x === 'string'))) {
-    return { error: 'permissions.read must be an array of strings' };
+    return { error: 'hook.yaml permissions.read must be an array of strings' };
   }
   if (network !== undefined && typeof network !== 'boolean') {
-    return { error: 'permissions.network must be a boolean' };
+    return { error: 'hook.yaml permissions.network must be a boolean' };
   }
   return {
     env: Array.isArray(env) ? (env as string[]) : [],
@@ -210,88 +148,238 @@ function parseFinalizeHookPermissions(raw: unknown): HookPermissionManifest | { 
   };
 }
 
-async function finalizeHook(
-  b: Record<string, unknown>,
-  ctx: StudioContext,
+// ---------------------------------------------------------------------------
+// kind:"skill" — installs the LANDED package (_interactive-library/<id>/) via
+// the SAME installSkillPackage every other skill-install path uses.
+// ---------------------------------------------------------------------------
+
+async function finalizeSkillFromLanded(
+  forgeRoot: string,
+  packageDir: string,
+  id: string,
+  sessionId: string,
   res: ServerResponse,
   origin: string,
 ): Promise<void> {
   try {
-    // D-6: the SAME forbidden-binding-key rejection POST /api/studio/hooks
-    // enforces, checked BEFORE any filesystem write.
-    for (const key of FORBIDDEN_HOOK_BINDING_KEYS) {
-      if (key in b) {
-        sendJson(res, 400, {
-          error: `hook creation must not declare a binding field "${key}" — a library hook definition is generic and host-agnostic; binding happens only in the Agent Builder`,
-        }, origin);
-        return;
-      }
-    }
+    // D-5/D6: always lands a DRAFT (status:'draft', library:false) —
+    // approveSkillDraft is never called from this route. Upstream is
+    // SERVER-MINTED, never read from the request body.
+    installSkillPackage({
+      forgeRoot,
+      id,
+      packageDir,
+      upstream: { source: AUTHORING_UPSTREAM_SOURCE, ref: sessionId },
+    });
+    sendJson(res, 200, { ok: true, kind: 'skill', id }, origin);
+  } catch (err) {
+    // Every installSkillPackage throw (bad slug, no SKILL.md at the package
+    // root, cap exceeded, binary file, escaping destination, ...) is a
+    // caller-input problem by contract — 400, never a 500 here.
+    sendJson(res, 400, { error: sanitizeError(err) }, origin);
+  }
+}
 
-    const name = typeof b['name'] === 'string' ? b['name'].trim() : '';
-    const description = typeof b['description'] === 'string' ? b['description'].trim() : '';
-    const on = typeof b['on'] === 'string' ? b['on'] : '';
-    const scriptBody = typeof b['scriptBody'] === 'string' ? b['scriptBody'] : '';
-    const matcher = typeof b['matcher'] === 'string' && b['matcher'].trim() ? b['matcher'].trim() : undefined;
+// ---------------------------------------------------------------------------
+// kind:"hook" — hook METADATA comes from the LANDED, DRAFTED hook.yaml,
+// parsed server-side, never from parallel request-body fields.
+// ---------------------------------------------------------------------------
 
-    if (!name) { sendJson(res, 400, { error: 'name is required' }, origin); return; }
-    if (!description) { sendJson(res, 400, { error: 'description is required' }, origin); return; }
-    if (!on) { sendJson(res, 400, { error: 'on is required' }, origin); return; }
-    if (!(HOOK_LIFECYCLE_EVENTS as readonly string[]).includes(on)) {
-      sendJson(res, 400, { error: `"on" must be one of ${HOOK_LIFECYCLE_EVENTS.join(', ')} — got "${on}"` }, origin);
+function finalizeHookFromLanded(forgeRoot: string, id: string, res: ServerResponse, origin: string): void {
+  const yamlRaw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, 'hook.yaml']);
+  if (yamlRaw === null) {
+    sendJson(res, 400, { error: `drafted hook.yaml is missing from the landed package "${id}"` }, origin);
+    return;
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = yaml.load(yamlRaw);
+  } catch (err) {
+    sendJson(res, 400, { error: `drafted hook.yaml is not valid YAML: ${sanitizeError(err)}` }, origin);
+    return;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    sendJson(res, 400, { error: 'drafted hook.yaml must be a YAML mapping (object), not a scalar/array/null' }, origin);
+    return;
+  }
+  const doc = parsed as Record<string, unknown>;
+
+  // The SAME forbidden-binding-key rejection POST /api/studio/hooks
+  // enforces, checked BEFORE any filesystem write — now against the LANDED
+  // hook.yaml's own fields.
+  for (const key of FORBIDDEN_HOOK_BINDING_KEYS) {
+    if (key in doc) {
+      sendJson(res, 400, {
+        error: `drafted hook.yaml must not declare a binding field "${key}" — a library hook definition is generic and host-agnostic; binding happens only in the Agent Builder`,
+      }, origin);
       return;
     }
-    if (!scriptBody) { sendJson(res, 400, { error: 'scriptBody is required' }, origin); return; }
+  }
 
-    const permissions = parseFinalizeHookPermissions(b['permissions']);
-    if ('error' in permissions) { sendJson(res, 400, { error: permissions.error }, origin); return; }
+  let name: string;
+  let description: string;
+  let on: HookLifecycleEvent;
+  try {
+    name = reqString(doc, 'name', 'hook.yaml');
+    description = reqString(doc, 'description', 'hook.yaml');
+    on = oneOf(reqString(doc, 'on', 'hook.yaml'), HOOK_LIFECYCLE_EVENTS, 'hook.yaml', 'on');
+  } catch (err) {
+    sendJson(res, 400, { error: sanitizeError(err) }, origin);
+    return;
+  }
+  const matcher = optString(doc, 'matcher');
 
-    const slug = (typeof b['id'] === 'string' && b['id'].trim() ? b['id'].trim() : name)
-      .toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  const permissions = parseFinalizeHookPermissions(doc['permissions']);
+  if ('error' in permissions) {
+    sendJson(res, 400, { error: permissions.error }, origin);
+    return;
+  }
 
-    // Layer 1 — SHAPE: `hookDir` runs `assertSkillSlug` (charset only).
+  const scriptRaw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, 'scripts', 'run.sh']);
+  if (scriptRaw === null) {
+    sendJson(res, 400, { error: `drafted scripts/run.sh is missing from the landed package "${id}"` }, origin);
+    return;
+  }
+
+  // Layer 1 — SHAPE: `hookDir` runs `assertSkillSlug` (charset only).
+  try {
+    hookDir(id, forgeRoot);
+  } catch (err) {
+    sendJson(res, 400, { error: sanitizeError(err) }, origin);
+    return;
+  }
+
+  // Layer 2 — CONTAINMENT: the SAME guarded choke point
+  // POST /api/studio/hooks uses — never a fresh lexical startsWith.
+  const yamlGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'hook.yaml']);
+  if (!yamlGuard.ok) {
+    sendJson(res, 400, { error: 'path traversal detected' }, origin);
+    return;
+  }
+  if (yamlGuard.exists) {
+    sendJson(res, 409, { error: `hook "${id}" already exists` }, origin);
+    return;
+  }
+  const scriptGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'scripts', 'run.sh']);
+  if (!scriptGuard.ok) {
+    sendJson(res, 400, { error: 'path traversal detected' }, origin);
+    return;
+  }
+
+  const outDoc: Record<string, unknown> = {
+    name,
+    description,
+    on,
+    ...(matcher ? { matcher } : {}),
+    // The SAME fixed relative script path POST /api/studio/hooks always
+    // writes — never the drafted hook.yaml's own (unvalidated) script field.
+    script: 'scripts/run.sh',
+    permissions,
+  };
+
+  mkdirSync(dirname(scriptGuard.realPath), { recursive: true });
+  writeFileSync(scriptGuard.realPath, scriptRaw, 'utf8');
+  writeFileSync(yamlGuard.realPath, yaml.dump(outDoc), 'utf8');
+
+  sendJson(res, 200, { ok: true, kind: 'hook', id }, origin);
+}
+
+// ---------------------------------------------------------------------------
+// D5 — the finalize sequence.
+// ---------------------------------------------------------------------------
+
+async function runFinalize(
+  ctx: StudioContext,
+  res: ServerResponse,
+  origin: string,
+  input: { project: string; sessionId: string; kind: 'skill' | 'hook'; id: string },
+): Promise<void> {
+  const { project, sessionId, kind, id } = input;
+
+  try {
+    // Step 1 — the projects root, resolved the way every other bridge route
+    // does. Never a hardcoded `<cwd>/projects`.
+    const projectsRoot = resolveProjectsDir(ctx.forgeRoot, loadConfig(defaultConfigPath(ctx.forgeRoot)));
+
+    // Step 2 — `project` and `sessionId` EACH ride as their OWN guarded
+    // segment. Never folded into the root.
+    const dirSegments = [project, '_authoring', sessionId];
+    const sessionGuard = resolveGuardedPath(projectsRoot, dirSegments);
+    if (!sessionGuard.ok) {
+      sendJson(res, 400, { error: 'invalid project or session' }, origin);
+      return;
+    }
+    if (!sessionGuard.exists) {
+      sendJson(res, 404, { error: 'session not found' }, origin);
+      return;
+    }
+
+    // Step 3 — the guarded read (leaf included) — the SAME primitive
+    // runInteractiveTurn itself uses for its own status reads.
+    const status = guardedReadSessionStatus<InteractiveTurnStatus>(projectsRoot, dirSegments);
+    if (!status) {
+      sendJson(res, 404, { error: 'session status not found' }, origin);
+      return;
+    }
+    if (status.phase !== REQUIRED_PHASE) {
+      sendJson(res, 409, {
+        error: `cannot finalize: session is in phase "${status.phase}", required phase is "${REQUIRED_PHASE}"`,
+      }, origin);
+      return;
+    }
+
+    // Step 4 — guarded-write package_id + phase:'committing'.
+    const written = guardedWriteSessionStatus(projectsRoot, dirSegments, { ...status, package_id: id, phase: 'committing' });
+    if (written === null) {
+      sendJson(res, 500, { error: 'failed to advance session status to "committing"' }, origin);
+      return;
+    }
+
+    // sessionGuard.realPath === <projectsRoot realpath>/<project>/_authoring/
+    // <sessionId> (resolveGuardedPath's own per-segment join order) — the
+    // project root is the same value with the trailing two segments
+    // stripped. No second guard call needed: the identity of `project` was
+    // already fully verified by the walk above.
+    const projectRoot = dirname(dirname(sessionGuard.realPath));
+
+    // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
+    // Dynamically imported so a static import never pulls the Claude Agent
+    // SDK into bridge start-up (cli/ui-bridge.ts does not import
+    // cli/agent-run.ts today) — mirrors cli/agent-run.ts's own
+    // project-brain-builder-runner dynamic-import precedent.
+    const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'authoring');
+    if (!descriptor) {
+      sendJson(res, 500, { error: 'authoring session-kind descriptor not found' }, origin);
+      return;
+    }
+    const { runInteractiveTurn } = await import('../orchestrator/interactive-runner.ts');
+    let turnResult: RunInteractiveTurnResult;
     try {
-      hookDir(slug, ctx.forgeRoot);
+      turnResult = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot: ctx.forgeRoot });
     } catch (err) {
-      sendJson(res, 400, { error: sanitizeError(err) }, origin);
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+      return;
+    }
+    if (turnResult.phase !== 'committed') {
+      // Never report success on an unfinished turn.
+      sendJson(res, 500, { error: `finalize turn did not reach phase "committed" (got "${turnResult.phase}")` }, origin);
       return;
     }
 
-    // Layer 2 — CONTAINMENT (D-6): the SAME guarded choke point
-    // POST /api/studio/hooks uses — never a fresh lexical startsWith.
-    const yamlGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [slug, 'hook.yaml']);
-    if (!yamlGuard.ok) {
-      sendJson(res, 400, { error: 'path traversal detected' }, origin);
+    // Step 6 — read the LANDED package through the guard and install. The
+    // bytes come from here, NEVER from the request body.
+    const landedGuard = resolveGuardedPath(ctx.forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id]);
+    if (!landedGuard.ok || !landedGuard.exists) {
+      sendJson(res, 500, { error: 'landed package not found after commit' }, origin);
       return;
     }
-    if (yamlGuard.exists) {
-      sendJson(res, 409, { error: `hook "${slug}" already exists` }, origin);
-      return;
+
+    if (kind === 'skill') {
+      await finalizeSkillFromLanded(ctx.forgeRoot, landedGuard.realPath, id, sessionId, res, origin);
+    } else {
+      finalizeHookFromLanded(ctx.forgeRoot, id, res, origin);
     }
-    const scriptGuard = resolveGuardedPath(hooksDir(ctx.forgeRoot), [slug, 'scripts', 'run.sh']);
-    if (!scriptGuard.ok) {
-      sendJson(res, 400, { error: 'path traversal detected' }, origin);
-      return;
-    }
-    const hookYaml = yamlGuard.realPath;
-    const hookScript = scriptGuard.realPath;
-
-    const doc: Record<string, unknown> = {
-      name,
-      description,
-      on: on as HookLifecycleEvent,
-      ...(matcher ? { matcher } : {}),
-      // D-3: the SAME fixed relative script path POST /api/studio/hooks
-      // always writes — no client-supplied script path, ever.
-      script: 'scripts/run.sh',
-      permissions,
-    };
-
-    mkdirSync(dirname(hookScript), { recursive: true });
-    writeFileSync(hookScript, scriptBody, 'utf8');
-    writeFileSync(hookYaml, yaml.dump(doc), 'utf8');
-
-    sendJson(res, 200, { ok: true, kind: 'hook', id: slug }, origin);
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
   }
@@ -328,15 +416,30 @@ export async function handleStudioAuthoringRoutes(
     return true;
   }
 
+  // The wire contract is EXACTLY {project, sessionId, kind, id} — nothing
+  // else is ever read from the body (D5, WI2-4-wire).
+  const project = typeof b['project'] === 'string' ? b['project'] : '';
+  const sessionId = typeof b['sessionId'] === 'string' ? b['sessionId'] : '';
   const kind = b['kind'];
-  if (kind === 'skill') {
-    await finalizeSkill(b, ctx, res, origin);
+  const id = typeof b['id'] === 'string' ? b['id'].trim() : '';
+
+  if (!project) {
+    sendJson(res, 400, { error: 'project is required' }, origin);
     return true;
   }
-  if (kind === 'hook') {
-    await finalizeHook(b, ctx, res, origin);
+  if (!sessionId) {
+    sendJson(res, 400, { error: 'sessionId is required' }, origin);
     return true;
   }
-  sendJson(res, 400, { error: 'kind is required and must be "skill" or "hook"' }, origin);
+  if (kind !== 'skill' && kind !== 'hook') {
+    sendJson(res, 400, { error: 'kind is required and must be "skill" or "hook"' }, origin);
+    return true;
+  }
+  if (!id) {
+    sendJson(res, 400, { error: 'id is required' }, origin);
+    return true;
+  }
+
+  await runFinalize(ctx, res, origin, { project, sessionId, kind, id });
   return true;
 }

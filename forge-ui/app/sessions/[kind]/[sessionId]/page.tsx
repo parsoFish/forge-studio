@@ -195,6 +195,7 @@ export default function SessionShellPage({
             ) : kind === 'authoring' ? (
               <SessionAuthoringPanel
                 sessionId={sessionId}
+                project={project}
                 artifact={viewState.artifact}
                 onFinalized={(savedKind, id) => router.push(savedKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
               />
