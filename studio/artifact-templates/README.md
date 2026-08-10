@@ -10,7 +10,7 @@ Studio UI at `/templates` (category `planning`) and `/templates/[id]`, alongside
 `studio/demo-elements/` (`demo-output`) and `studio/starters/projects/` (`project-scaffold`) —
 see `orchestrator/studio/template-library.ts` for the unifying registry.
 
-## The 7 templates
+## The 8 templates
 
 | id | name | kind | producer → consumer | edge-backed? |
 |---|---|---|---|---|
@@ -21,9 +21,10 @@ see `orchestrator/studio/template-library.ts` for the unifying registry.
 | `review-findings` | Review Findings | file | adversarial-review → review | yes — `forge-develop` (`adversarial-review→review`) |
 | `verdict` | Verdict | file | review → reflector | no — orchestrator-band re-entry |
 | `demo-fix-spec` | Demo Fix Spec | file | demo-agent → developer-ralph | no — orchestrator-band re-entry |
+| `contract` | Contract | file | onboarding-agent → contract-check | yes — `onboard-project` (`onboard→contract-check`) |
 
 **Edge-backed** means the artifact is the declared `artifact:` label on a real edge in one of
-the three seed flows (`studio/flows/*/flow.yaml`) — its producer/consumer can be
+the four seed flows (`studio/flows/*/flow.yaml`) — its producer/consumer can be
 cross-validated against the flow graph's actual node topology
 (`verifyTemplateEndpoints`, `orchestrator/studio/template-library.ts`), and the templates
 library's `/templates/[id]` detail page renders `endpointsVerified: true` for it.
@@ -46,7 +47,7 @@ directions, to this directory's id set by a CI-enforced parity test
 (`forge-ui/lib/flow-artifact-catalog.test.ts`) — a template added or removed here without that
 list following is a red CI run, not a silent drift.
 
-Adding an 8th template means: a new `.md` file here (gray-matter frontmatter + contract body),
+Adding another template means: a new `.md` file here (gray-matter frontmatter + contract body),
 a lint pass (`forge studio lint`), and — if it is meant to be pickable from the flow builder's
 ArtifactPicker — an entry added to `ARTIFACTS` in the same PR (the parity test will otherwise
 fail red, which is the point).

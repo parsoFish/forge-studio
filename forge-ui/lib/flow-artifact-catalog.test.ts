@@ -61,9 +61,14 @@ test('AT-52: the picker catalog id set is EXACTLY the on-disk studio/artifact-te
 
 // AT-53 -------------------------------------------------------------------
 
-test('AT-53: the two known orphans ("reflection", "demo") are gone — the catalog has exactly 7 entries', () => {
+// R4-18 mechanical amendment (2026-08-10): the `contract` template (the
+// onboard-project flow's onboard → contract-check edge) is the 8th entry —
+// the count grows from 7 to 8, same as `studio/artifact-templates/`'s
+// on-disk set (see AT-52 above, which stays the source of truth for the id
+// SET; this test only pins the orphan-free count).
+test('AT-53: the two known orphans ("reflection", "demo") are gone — the catalog has exactly 8 entries', () => {
   const ids = ARTIFACTS.map((a: ArtifactDef) => a.id);
   expect(ids).not.toContain('reflection');
   expect(ids).not.toContain('demo');
-  expect(ARTIFACTS.length).toBe(7);
+  expect(ARTIFACTS.length).toBe(8);
 });

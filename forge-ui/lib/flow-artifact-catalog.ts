@@ -34,4 +34,6 @@ export const ARTIFACTS: ArtifactDef[] = [
   // R4-07/R4-08: the wave-4 successor-agent artifacts (registered templates).
   { id: 'demo-fix-spec', name: 'demo-fix-spec.json', desc: 'Demo AC-miss judgment: scoped fix proposals for the develop agent.' },
   { id: 'review-findings', name: 'review-findings.json', desc: 'Adversarial critique: severity-ranked findings with file:line evidence.' },
+  // R4-18: the onboard-project flow's onboard → contract-check edge.
+  { id: 'contract', name: 'Contract', desc: 'Onboarding convergence signal: the project is ready for the real forge↔project contract preflight.' },
 ];

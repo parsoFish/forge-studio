@@ -183,6 +183,7 @@ guards:
   - { id: reflection-close, name: Reflection close band, desc: "Reflect-agent band: merged-guard, retention/lint/recap, merged→done promote (ADR-039)." }
   - { id: demo-band, name: Demo band, desc: "Demo-agent band: demo pipeline, pr-description authoring + dev-loop close gates (ADR-039, R4-10-F1)." }
   - { id: review-band, name: Review band, desc: "Adversarial-review band: critique pipeline, findings artifact for the verdict gate (ADR-039, R4-10-F1)." }
+  - { id: onboard-preflight, name: Onboard preflight band, desc: "Contract-check band: runs the real forge↔project contract preflight orchestrator-side, no agent spawn (ADR-036/039, R4-18)." }
 # Curated showcase of proven community skills forge ships in its OOTB library
 # (reference metadata only — `source` is upstream). Which forge agents actually
 # compose a skill is DERIVED from real agent composition.skills, never declared

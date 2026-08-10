@@ -22,6 +22,13 @@
       "dispatchPath": "generic"
     },
     {
+      "slug": "contract-check",
+      "band": "onboard-preflight",
+      "canonicalSlug": "contract-check",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:onboard-preflight"
+    },
+    {
       "slug": "demo-agent",
       "band": "demo-band",
       "canonicalSlug": "demo-agent",
@@ -110,6 +117,14 @@
       "canonicalSlug": null,
       "loopStrategy": null,
       "dispatchPath": "generic",
+      "inComposableRoster": true
+    },
+    {
+      "slug": "contract-check",
+      "band": "onboard-preflight",
+      "canonicalSlug": "contract-check",
+      "loopStrategy": "one-shot",
+      "dispatchPath": "band:onboard-preflight",
       "inComposableRoster": true
     },
     {
@@ -205,13 +220,15 @@
     "wi-contract",
     "reflection-close",
     "demo-band",
-    "review-band"
+    "review-band",
+    "onboard-preflight"
   ],
   "bandCanonicalSlug": {
     "wi-contract": "project-manager",
     "reflection-close": "reflector",
     "demo-band": "demo-agent",
-    "review-band": "adversarial-review"
+    "review-band": "adversarial-review",
+    "onboard-preflight": "contract-check"
   },
   "flows": [
     {
@@ -260,6 +277,21 @@
         {
           "id": "reflect",
           "agent": "reflector",
+          "resolvedKind": "agent"
+        }
+      ]
+    },
+    {
+      "id": "onboard-project",
+      "nodes": [
+        {
+          "id": "onboard",
+          "agent": "onboarding-agent",
+          "resolvedKind": "agent"
+        },
+        {
+          "id": "contract-check",
+          "agent": "contract-check",
           "resolvedKind": "agent"
         }
       ]

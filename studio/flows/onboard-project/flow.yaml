@@ -1,0 +1,43 @@
+id: onboard-project
+name: Onboard Project
+version: 1
+goal: Bring a project up to the forge↔project contract, then gate it against the real preflight before forge develops it unattended.
+project: null
+kb: cycles
+costCeilingUsd: 5
+origin: seed
+# R4-18: the flow packaging of a fresh onboarding run.
+#
+# (a) Why `contract-check` carries BOTH `agent:"contract-check"` and
+# `gate:"contract"` (ADR-039 declared dispatch, no privileged executor enum):
+# the `agent:` field is what makes the node a real roster reference —
+# `forge studio lint`'s `agent-ref`/`node-executor` checks, the agent-builder
+# palette, and `resolveBandGuard` all need a real def to inspect. The `gate:`
+# field is what satisfies `validateFlow`'s `zero-gate` rule (every unattended
+# flow needs ≥1 human/structural gate) and — via `flow-runner.ts`'s
+# `GATE_KIND['contract'] = 'agent'` row — makes a `contract-check` node that
+# LOST its `agent:` field fail LOUD (execAgent's "no agent definition" throw)
+# instead of silently no-opping through the generic unknown-node path. Neither
+# field alone gives you both guarantees.
+#
+# (b) `project: null` means this flow carries no fixed project binding — the
+# project identity arrives at DISPATCH time, via `CycleInput.projectRepoPath`
+# (the same seam `execOnboardPreflight` reads directly to call the real
+# `runPreflight`). This mirrors `forge-architect`/`forge-develop`, whose
+# `project: null` likewise defers to the per-run `CycleInput`.
+#
+# (c) Honest limit: this flow does NOT wrap R4-17's independently-dispatched
+# onboarding session (`POST /api/studio/onboarding/start`, `cli/ui-bridge.ts`)
+# — that surface stays a standalone, fire-and-forget agent dispatch outside
+# any flow. This flow is a SEPARATE, flow-shaped way to run a fresh onboarding
+# pass (`onboard` → the real preflight gate) through the generic flow engine,
+# for operators who want the onboard step inside a DAG (with its own cost
+# ceiling, event log, and gate) rather than the bespoke session surface.
+nodes:
+  - { id: onboard, agent: onboarding-agent }
+  - { id: contract-check, agent: contract-check, gate: contract }
+edges:
+  - { from: onboard, to: contract-check, artifact: contract }
+triggers: []
+# Deliberately NO kickoff: block — the generic Start-Run affordance handles
+# it (Stage C's per-flow kickoff surfaces are opt-in, not mandatory).

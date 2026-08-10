@@ -20,9 +20,14 @@ import type { AgentDefinition } from './studio/types.ts';
 /**
  * The band-selecting guard ids. Every id here also has a display row in
  * `studio/catalog.yaml`'s `guards:` section (the palette surface) and an
- * executor registered in flow-runner's band table.
+ * executor registered in flow-runner's band table. `onboard-preflight`
+ * (R4-18) is the 5th band: it routes a `{gate:'contract'}` flow node to
+ * `execOnboardPreflight`, which runs the REAL forge↔project contract
+ * preflight (`runPreflight`, `cli/preflight.ts`) orchestrator-side — no
+ * agent spawn (ADR-036: the orchestrator runs gates, the agent never
+ * self-certifies).
  */
-export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band'] as const;
+export const BAND_GUARD_IDS = ['wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight'] as const;
 export type BandGuardId = (typeof BAND_GUARD_IDS)[number];
 
 /**
@@ -38,7 +43,7 @@ export type ToggleGuardId = (typeof TOGGLE_GUARD_IDS)[number];
 
 /**
  * The full closed set of platform guard ids (ADR-027 R3-03 amendment) — the
- * union of the 5 toggle ids and the 4 band ids. This is the "is this id
+ * union of the 5 toggle ids and the 5 band ids. This is the "is this id
  * platform machinery, not a library hook" check `lintHookComposition`
  * (`orchestrator/studio/hook-library.ts`) needs to enforce the
  * `composition.hooks` vs `composition.guards` split — sourced as a fixed
@@ -63,6 +68,7 @@ export const BAND_CANONICAL_SLUG: Readonly<Record<BandGuardId, string>> = {
   'reflection-close': 'reflector',
   'demo-band': 'demo-agent',
   'review-band': 'adversarial-review',
+  'onboard-preflight': 'contract-check',
 };
 
 /**
