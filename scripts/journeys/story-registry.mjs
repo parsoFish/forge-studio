@@ -247,6 +247,139 @@ const DECISION_REFLECTOR_NO_LIVE_RUN =
   '"evidence-backed" judgment) is honestly unavailable; the agent\'s real ' +
   'declared composition + a genuine `forge brain lint` run are ported instead';
 
+// Batch-D journey-sync (T3, forge-tuy) — cited by run-flow's steps 1-10
+// below. story-parity.mjs's own validateEntry Rule 8/10 ("port.journey must
+// exist" / "string BeatRef must be a real beat of that journey") binds a
+// registry entry's port.beats to exactly ONE real journey — run-flow's
+// mockup opens on a project's roadmap tab (R4-13) and its inline kickoff
+// trigger, both real, shipped surfaces that live in scripts/journeys/
+// roadmap.mjs's own roadmap-tab / roadmap-start-development beats, a
+// DIFFERENT journey from this entry's chosen journey: 'flows-run' (most of
+// the story's real content lands there — see the note below). They are
+// cited here by name in prose — real, already ported under roadmap.mjs's
+// own RUN_ORDER slot — never fabricated or silently dropped. What
+// roadmap-start-development's real trigger actually is, checked against
+// forge-shc (PR #106, 2026-08-09, docs/forge-ui-dom-and-harness.md's "an
+// optional per-kickoff cost-ceiling input" paragraph): a single
+// [data-action="start-development"] click, INLINE on the roadmap DAG node
+// card the operator is already looking at — no separate flow-monitor
+// pre-visit, no separate project/initiative <select> (the node IS the
+// binding, mirroring R6-04-F2's own agent-kickoff precedent — "the real
+// kickoff panel is already inline") — and, as of forge-shc, an OPTIONAL
+// per-kickoff cost-ceiling input on the SAME roadmap header. The
+// materials-upload half of R6-04-F2's flow-kickoff AC ("Flow kickoff gains
+// the same ceiling + materials treatment") remains genuinely unbuilt: no
+// materials-attach control exists on roadmap-start-development's real path
+// today (only the AGENT-kickoff path, R6-04 WI-1/2/3, has one) — an honest
+// capability gap, not merely a cross-journey citation limit.
+const DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY =
+  'scripts/lib/story-parity.mjs validateEntry Rule 8/10 (single-journey-' +
+  'per-entry port.beats) + scripts/journeys/roadmap.mjs roadmap-tab / ' +
+  'roadmap-start-development (R4-13) + docs/forge-ui-dom-and-harness.md\'s ' +
+  'forge-shc per-kickoff cost-ceiling paragraph (PR #106, 2026-08-09) + ' +
+  'docs/roadmaps/R6-operator-experience.md R6-04-F2 ("Flow kickoff gains ' +
+  'the same ceiling + materials treatment") — the real flow-kickoff trigger ' +
+  'is roadmap.mjs\'s own inline DAG-node action, a different journey from ' +
+  'this entry\'s "flows-run"; its cost-ceiling half is now built (forge-' +
+  'shc), its materials-upload half remains unbuilt';
+
+// Batch-D journey-sync (T3, forge-tuy) — cited by run-flow's step-20
+// exclusion below. flows-run-detail-reachable (cited at step 17) click-
+// through-expands only the 'dev' timeline row — the adversarial-review
+// row's own click-through was never exercised by any existing beat, and its
+// real seeded content (flows-run-demo-review's adversarialReviewEvent()
+// calls) carries generic findings-count metadata (total/blocker/major/
+// minor/info), never a claim-by-claim "refute-first" transcript — that
+// per-claim reasoning is a real SDK turn's own internal content this
+// harness never spawns (FORGE_ARCHITECT_NO_SPAWN=1). The dedicated
+// run-agent-adversarial-review story (this same batch-D pass, agents.mjs's
+// new agents-run-adversarial-review-findings beat) is where that agent's
+// real findings vocabulary is actually ported — reproducing a second,
+// weaker proof of the same fact here under the mockup's fictional
+// "ISO-week/memoization" framing would be redundant AND dishonest about
+// what this fixture's own log lines say.
+const DECISION_RUN_FLOW_ADVERSARIAL_LOG_GAP =
+  'scripts/journeys/flows-run.mjs flows-run-detail-reachable (only the ' +
+  '\'dev\' row is click-tested) + flows-run-demo-review\'s real ' +
+  'adversarialReviewEvent() metadata (generic findings counts, no claim-by-' +
+  'claim transcript) + the dedicated run-agent-adversarial-review story ' +
+  '(agents.mjs agents-run-adversarial-review-findings, same batch-D pass) ' +
+  'which actually ports this agent\'s real findings vocabulary';
+
+// Batch-D journey-sync (T3, forge-11w) — cited by run-agent-developer's
+// steps 3/6 below. A live click-through dispatch of developer-ralph under
+// this harness's no-spawn seam (FORGE_ARCHITECT_NO_SPAWN=1) would only ever
+// reproduce the SAME shallow, content-free skeleton agents-kickoff-dispatch
+// / agents-kickoff-run-view (a DIFFERENT story's beats, R6-04) already prove
+// for issue-triage — never the rich TDD-red-to-green narrative these steps
+// depict, which exists only inside a real, unspawned SDK turn. Re-driving
+// the identical Run-click wire mechanism a second time here would add cost
+// without new evidence, so this port seeds the run directly instead
+// (agents-run-developer-fixture) — the genuinely uncovered arc (a rich
+// standalone run's log/cost/ceiling render honestly) rather than the
+// already-proven arc (the click POSTs the right body).
+const DECISION_RUN_AGENT_DEV_NO_LIVE_DISPATCH =
+  'scripts/journeys/agents.mjs agents-kickoff-dispatch / agents-kickoff-' +
+  'run-view (the real wire-level Run-click proof, a different story\'s ' +
+  'beats) + orchestrator/run-agent.ts\'s FORGE_ARCHITECT_NO_SPAWN suppression ' +
+  '— a live dispatch under this harness never reaches the rich dev-loop ' +
+  'content these steps depict, so agents-run-developer-fixture seeds it ' +
+  'directly instead';
+
+// Batch-D journey-sync (T3, forge-11w) — cited by run-agent-developer's
+// step 4. docs/roadmaps/R2-runnable-componentry.md R2-B11's own text: "no
+// roster agent declares `materials:` yet" — developer-ralph's real shipped
+// SKILL.md carries no `materials:` key at all, so no materials-attach
+// section exists on its real kickoff path today.
+const DECISION_RUN_AGENT_DEV_MATERIALS_GAP =
+  'docs/roadmaps/R2-runnable-componentry.md R2-B11 ("no roster agent ' +
+  'declares `materials:` yet") — developer-ralph\'s real shipped SKILL.md ' +
+  'declares no materials: kinds, so no materials-attach control exists on ' +
+  'its real kickoff path';
+
+// Batch-D journey-sync (T3, forge-11w) — cited by run-agent-developer's
+// step 9. forge-ui/lib/run-view-client.ts's own header: "there is no wired
+// data source for a generic dispatched agent's artifact outputs yet ...
+// `outputs` is honestly always `[]` here rather than fabricated" —
+// confirmed live by agents-run-developer-fixture's own data-outputs-count
+// assertion.
+const DECISION_RUN_AGENT_TYPED_OUTPUTS_GAP =
+  'forge-ui/lib/run-view-client.ts (header: "there is no wired data source ' +
+  'for a generic dispatched agent\'s artifact outputs yet ... honestly ' +
+  'always `[]`") — confirmed live by agents-run-developer-fixture\'s own ' +
+  'data-outputs-count="0" assertion';
+
+// Batch-D journey-sync (T3, forge-928) — cited by run-agent-adversarial-
+// review's step 2. forge-pet's own commit (d27bc873, "fix: pet — attach
+// trigger-provenance section to the standalone agent run view") attaches
+// [data-section="run-trigger"] STRUCTURALLY (RunView.tsx renders it when
+// the wire body carries a `trigger` field) but its own message says
+// "Client-side only per T1 ruling — no server field wired (no producer
+// exists yet; becomes live when one lands)" — GET /api/agents/runs/:runId
+// (cli/ui-bridge.ts) never emits a `trigger` field for ANY run today, so
+// the section is genuinely absent on every real (or seeded) standalone run,
+// never merely narrated as populated.
+const DECISION_RUN_TRIGGER_NO_SERVER_PRODUCER =
+  'commit d27bc873 "fix: pet — attach trigger-provenance section to the ' +
+  'standalone agent run view" ("Client-side only per T1 ruling — no server ' +
+  'field wired") + cli/ui-bridge.ts\'s GET /api/agents/runs/:runId (never ' +
+  'emits a `trigger` field for any run) — [data-section="run-trigger"] is ' +
+  'genuinely absent on every real or seeded standalone run today';
+
+// Batch-D journey-sync (T3, forge-928) — cited by run-agent-adversarial-
+// review's step 4. "Year-boundary fixture against the ISO-week claim.
+// Cold/warm timing against memoization" is fictional specific business
+// content tied to a scenario no roster agent's real, shipped work touches
+// — adversarial-review's real subject in this harness is mdtoc's
+// `--write` TOC-injection story (the same grounding flows-run.mjs's own
+// review-findings fixture uses), never an ISO-week/memoization codebase.
+const DECISION_RUN_AGENT_ADV_FICTIONAL_SCENARIO =
+  'skills/adversarial-review/SKILL.md (the real agent\'s actual mission) + ' +
+  'scripts/lib/journey-fixtures.mjs writeReviewFindings (the real, ' +
+  'mdtoc-grounded review-findings shape this harness uses) — the mockup\'s ' +
+  '"ISO-week claim" / "memoization" scenario is fictional content tied to ' +
+  'a codebase no roster agent\'s real work touches';
+
 export const STORY_REGISTRY = [
   {
     story: 'onboard-project',
@@ -510,17 +643,61 @@ export const STORY_REGISTRY = [
   },
   {
     story: 'run-flow',
-    batch: 'C',
-    port: null,
+    batch: 'D',
+    port: {
+      journey: 'flows-run',
+      beats: [
+        { excluded: "goto '#/projects/detail/gitpulse' (\"Runs start from the work: a project's roadmap tab.\") — mdtoc, not gitpulse (CLAUDE.md: gitpulse is a separate, independent repo this harness never checks out); the real project-detail + roadmap-tab surface (R4-13) lives on roadmap.mjs's own roadmap-tab beat, a different journey from this entry's 'flows-run'", decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'click [data-j=ptab-roadmap] ("The full-page dependency DAG — completed initiatives are diggable.") — real, and already ported: roadmap-tab\'s own [data-roadmap-dag] + per-initiative [data-roadmap-node] cards, cross-journey', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'hover [data-j=roadmap-dag] ("Every pill with a run opens its breakdown.") — the real DAG node\'s detail card is default-EXPANDED (R4-13), not a hover-to-reveal pill; its per-initiative [data-section="initiative-runs"] run links are roadmap-tab\'s own real surface, cross-journey', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'click [data-j=rm-INIT-2] ("Open a COMPLETED one: its full run breakdown is one click away.") — real: roadmap-tab\'s own [data-section="initiative-runs"] [data-run-link] per completed attempt, cross-journey', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: "goto '#/flows/monitor/forge-develop' (\"Now the next initiative. To the flow monitor —\") — not a real precondition: the real kickoff (roadmap-start-development) is reached directly from the SAME roadmap page, never via a flow-monitor pre-visit", decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'click [data-j=kickoff-btn] ("Runs start from an explicit kickoff, not a hidden trigger.") — real and genuinely explicit: [data-action="start-development"] on the roadmap DAG node, roadmap.mjs\'s own roadmap-start-development beat, cross-journey', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'select [data-j=kick-project]=gitpulse ("Bind the run to a project…") — no separate selector exists: the DAG node IS the project binding (it\'s already on that project\'s roadmap page) — inline, not a kickoff-screen field', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'select [data-j=kick-initiative]=INIT-3 ("…and ONE initiative from its roadmap — the unit of unattended work.") — no separate selector exists: the clicked DAG node IS the initiative binding', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'click [data-j=mat-zone] ("Attach input materials — a perf trace, a design sketch — anything that aids the run.") — a genuine, honest gap: R6-04-F2\'s flow-kickoff materials-upload AC is unbuilt; only the agent-kickoff path (R6-04) has a materials-attach control', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        { excluded: 'click [data-j=start-run] ("Cost ceiling, fan-out cap, gates — limits are explicit. Start.") — real: the SAME [data-action="start-development"] click, now carrying an optional per-kickoff cost ceiling (forge-shc, PR #106) — cross-journey; "fan-out cap" beyond the cost ceiling is not a separately configurable field', decision: DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY },
+        'flows-run-pm-decompose',
+        'flows-run-grind',
+        'flows-run-demo-review',
+        { excluded: 'patch flowRun:3 ("Adversarial review verifies every claim against the evidence.") — already demonstrated by the SAME beat cited at step 13 (flows-run-demo-review), which seeds BOTH the demo AND adversarial-review nodes and asserts both reach data-status="complete" on their own hexes', decision: DECISION_ONE_REF_PER_STORY },
+        'flows-run-cost-rollup',
+        'flows-run-approve-merge',
+        'flows-run-detail-reachable',
+        { excluded: 'click [data-j=run-node-1] ("Click any node for its FULL agent log…") — already demonstrated by the SAME beat cited at step 17 (flows-run-detail-reachable), which clicks the dev timeline row open to its own full RunLog', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'hover .nlog ("…thought process, tool use, artifacts — every line a structured event.") — already demonstrated by the SAME beat cited at step 17, which asserts the real think/tool/out log-kind classification on the expanded dev row', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'click [data-j=run-node-3] ("The reviewer\'s log too: refute-first, claim by claim.") — the real flow-run detail page\'s node click-through is proven only for the \'dev\' row; the adversarial-review node\'s own real seeded content is generic findings-count metadata, not a claim-by-claim refute-first transcript — that lives, honestly, on the dedicated run-agent-adversarial-review story instead', decision: DECISION_RUN_FLOW_ADVERSARIAL_LOG_GAP },
+        { excluded: 'closing narrative line summarising the initiative-in / merged-PR-out arc — not a distinct UI action', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
     note:
       "Flow topology verified aligned by R4-B13; the mockup's extra " +
       '"Initiative intake" node is presentation of the existing queue ' +
-      "claim, not a new flow node. MEASURED at batch-C exit (2026-08-08): " +
-      'batch C did NOT port this story — 0 of 21 beats. The run surfaces it ' +
-      'walks shipped (R6-04/R6-01/R6-05), but the flow-kickoff half of ' +
-      'R6-04-F2 is neither built nor excluded, and the story also opens on ' +
-      'R4-12/R4-13 (batch D). Port filed as a batch-D WI (bd forge-tuy).',
+      'claim, not a new flow node. R4-12/R4-13 (batch D, both merged — #102, ' +
+      '#104) ship the story\'s opening steps (project detail contract panel + ' +
+      'permanent cycle view; the roadmap tab\'s dependency DAG) and forge-shc ' +
+      '(PR #106, batch D) resolves R6-04-F2\'s cost-ceiling half of the ' +
+      'flow-kickoff AC — but ALL of that real surface lives in roadmap.mjs, a ' +
+      'DIFFERENT journey from this entry\'s single \'flows-run\' citation ' +
+      '(story-parity.mjs Rule 8/10 permits only one journey per entry), so ' +
+      'steps 1-10 are honestly excluded rather than fabricated as ' +
+      "flows-run beats — see DECISION_RUN_FLOW_KICKOFF_CROSS_JOURNEY. " +
+      "This initiative (T3, journey-sync) ports the story's REMAINING real " +
+      'arc (steps 11-21, the run\'s own progression from PM decompose through ' +
+      'the verdict gate, approve+merge, and the standalone run-detail page\'s ' +
+      'per-node log) predominantly onto the EXISTING scripts/journeys/' +
+      'flows-run.mjs beats (29 beats, 143 checks) — no new flows-run beats ' +
+      'were needed. Net: 6 of 21 mockup steps carry the literal string ' +
+      'BeatRef (flows-run-pm-decompose, flows-run-grind, flows-run-demo-' +
+      'review, flows-run-cost-rollup, flows-run-approve-merge, flows-run-' +
+      'detail-reachable); the other 15 are explicit, decision-cited ' +
+      'exclusions — 10 cross-journey (steps 1-10), 3 ONE_REF_PER_STORY ' +
+      '(steps 14, 18, 19 — already demonstrated by a beat cited elsewhere in ' +
+      'this same port), 1 a genuine content gap (step 20, the adversarial-' +
+      'review node\'s own log carries no refute-first transcript — honestly ' +
+      'covered by the dedicated run-agent-adversarial-review story instead), ' +
+      'and 1 closing narrative (step 21). Filed as bd forge-tuy.',
   },
   {
     story: 'run-agent',
@@ -939,27 +1116,91 @@ export const STORY_REGISTRY = [
   },
   {
     story: 'run-agent-developer',
-    batch: 'C',
-    port: null,
+    batch: 'D',
+    port: {
+      journey: 'agents',
+      beats: [
+        'agents-run-developer-entry',
+        { excluded: 'hover [data-j=agent-triggers] ("Its triggers: auto inside the flow, or manual on a single work item.") — already demonstrated by the SAME beat cited at step 1 (agents-run-developer-entry), which asserts the real "Used in Flows" chip (forge-develop\'s dev node)', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'click [data-j=run-agent-btn] ("Run it.") — the real Run-click wire mechanism is already proven for real by a different story\'s beats (agents-kickoff-dispatch); re-driving it here would only ever reproduce the same shallow suppressed skeleton, never the rich TDD content these steps depict — this port seeds the run directly instead', decision: DECISION_RUN_AGENT_DEV_NO_LIVE_DISPATCH },
+        { excluded: 'click [data-j=mat-zone] ("Bound to gitpulse, with the work-item spec attached as input material.") — developer-ralph\'s real shipped SKILL.md declares no materials: kinds (no roster agent does yet); also mdtoc, not gitpulse (CLAUDE.md — gitpulse is a separate repo this harness never checks out)', decision: DECISION_RUN_AGENT_DEV_MATERIALS_GAP },
+        { excluded: 'already demonstrated by the SAME beat cited at step 7 (agents-run-developer-fixture), which asserts the real seeded $0.60 ceiling-provenance (data-ceiling-set="true" data-ceiling-usd="0.6")', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'click [data-j=start-run] ("Start.") — same no-live-dispatch substitution as step 3', decision: DECISION_RUN_AGENT_DEV_NO_LIVE_DISPATCH },
+        'agents-run-developer-fixture',
+        { excluded: 'already demonstrated by the SAME beat cited at step 7 (the real gate.pass / tool_use "loop tightens" content); the "security-review hook rides along" half of this step is checked and refuted for real at step 1\'s beat (agents-run-developer-entry) — developer-ralph carries GUARDS, not a bound hook, by default', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'patch agentRun:5 ("Output: a pushed branch + the demo note the Demo Runner will pick up.") — typed outputs stay honestly 0 on the standalone run view; no wired data source exists for a generic dispatched agent\'s artifacts yet', decision: DECISION_RUN_AGENT_TYPED_OUTPUTS_GAP },
+        { excluded: 'closing narrative line summarising the ralph-loop-with-or-without-a-flow arc — not a distinct UI action', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
     note:
       'Agent itself verified aligned by R4-B13 (ralph loop, per-WI ' +
-      "fanout, write-first continuity). MEASURED at batch-C exit (2026-08-08): " +
-      'batch C did NOT port this story — 0 of 10 beats. No product work is ' +
-      'needed; it is a journey-sync duty on a seeded _logs/<runId> fixture. ' +
-      'Filed as a batch-D WI (bd forge-11w).',
+      'fanout, write-first continuity). The mockup\'s route ' +
+      '(#/agents/builder/developer) names a fictional slug — the real ' +
+      'roster agent is developer-ralph (studio/flows/forge-develop/' +
+      "flow.yaml's own {id: dev, agent: developer-ralph}), reached at its " +
+      "real /agents/developer-ralph page. This initiative (T3, journey-" +
+      "sync) ports the story with TWO new beats, agents-run-developer-" +
+      'entry (the real generic run surface + Used-in-Flows + a LIVE check ' +
+      'that developer-ralph carries no bound security-review hook by ' +
+      'default, only guards — ADR-039\'s vocabulary split) and agents-run-' +
+      'developer-fixture (a hand-seeded _logs/<runId> fixture, corpus-' +
+      'grounded on the SAME real gitpulse-sourced WI-1 numbers flows-' +
+      'run.mjs already seeds for the mdtoc --write cycle, since no real ' +
+      "standalone _agent-* run exists anywhere on this machine — same " +
+      'corpus-provenance discipline as this file\'s pre-existing ' +
+      'R6_06_STANDALONE_RUN_ID fixture). Net: 2 of 10 mockup steps carry ' +
+      'the literal string BeatRef (steps 1, 7); the other 8 are explicit, ' +
+      'decision-cited exclusions — 4 ONE_REF_PER_STORY (steps 2, 5, 8, 10, ' +
+      'already demonstrated by a beat cited elsewhere in this port), 2 a ' +
+      'genuine no-live-dispatch substitution (steps 3, 6 — a real click ' +
+      'through this harness\'s no-spawn seam would only reproduce the ' +
+      'already-proven shallow skeleton, never this rich content), 1 a real ' +
+      'materials-declaration gap (step 4), and 1 a real typed-outputs gap ' +
+      '(step 9). Filed as bd forge-11w.',
   },
   {
     story: 'run-agent-adversarial-review',
-    batch: 'C',
-    port: null,
+    batch: 'D',
+    port: {
+      journey: 'agents',
+      beats: [
+        'agents-run-adversarial-review-entry',
+        { excluded: 'hover [data-j=run-trigger] ("The trigger is on the run header: auto, on Developer completion.") — [data-section="run-trigger"] attaches structurally now (forge-pet, PR #106) but ONLY when the server body carries a `trigger` field, and no standalone-dispatch path writes one yet (client-side plumbing only, per that PR\'s own commit message) — genuinely absent on this real run, proven by the SAME beat cited at step 1', decision: DECISION_RUN_TRIGGER_NO_SERVER_PRODUCER },
+        'agents-run-adversarial-review-findings',
+        { excluded: 'patch agentRun:3 ("Year-boundary fixture against the ISO-week claim. Cold/warm timing against memoization.") — fictional specific business content tied to a scenario no roster agent\'s real, shipped work touches; adversarial-review\'s real subject in this harness is mdtoc\'s --write TOC-injection story', decision: DECISION_RUN_AGENT_ADV_FICTIONAL_SCENARIO },
+        { excluded: 'already demonstrated by the SAME beat cited at step 3 (agents-run-adversarial-review-findings), which asserts the real zero-findings outcome (total 0, every severity bucket 0)', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'closing narrative line summarising the refute-first arc — not a distinct UI action', decision: DECISION_ONE_REF_PER_STORY },
+      ],
+    },
     excluded: null,
     note:
       'Agent itself verified aligned by R4-B13 (refute-first findings ' +
-      "feeding the verdict gate). MEASURED at batch-C exit (2026-08-08): " +
-      'batch C did NOT port this story — 0 of 6 beats. Blocked on the ' +
-      'standalone run view attaching no trigger provenance. Filed as a ' +
-      'batch-D WI (bd forge-928).',
+      'feeding the verdict gate). The blocker this story was filed against ' +
+      '(the standalone run view attaching no trigger provenance) is ' +
+      'RESOLVED by debt-T forge-pet (PR #106) — but checked against the ' +
+      'real code, not assumed: forge-pet attached the RENDERING capability ' +
+      '([data-section="run-trigger"] structurally exists) client-side only ' +
+      '(T1 ruling, that commit\'s own message) — no server-side path writes ' +
+      "a standalone run's trigger field yet, so the section is genuinely " +
+      'absent on every real (or seeded) run today, not populated as the ' +
+      "mockup depicts. This initiative (T3, journey-sync) ports the story " +
+      'with TWO new beats, agents-run-adversarial-review-entry (real ' +
+      'navigation to a hand-seeded standalone run + a live proof the ' +
+      'trigger section is honestly absent) and agents-run-adversarial-' +
+      'review-findings (the real review.input.assembled / review.findings.' +
+      'authored message vocabulary flows-run.mjs\'s own adversarialReviewEvent' +
+      '()/writeReviewFindings() already use, seeded to a genuine zero-' +
+      'findings clean-pass outcome — since no real _agent-* run exists on ' +
+      'this machine, same corpus-provenance discipline as this file\'s pre-' +
+      'existing R6_06_STANDALONE_RUN_ID fixture). Net: 2 of 6 mockup steps ' +
+      'carry the literal string BeatRef (steps 1, 3); the other 4 are ' +
+      'explicit, decision-cited exclusions — the trigger-provenance gap ' +
+      '(step 2, the resolved-but-still-honestly-absent fact above), a ' +
+      'fictional-scenario exclusion (step 4, ISO-week/memoization content no ' +
+      'roster agent\'s real work touches), and 2 ONE_REF_PER_STORY (steps 5, ' +
+      '6). Cheapest of the four agent ports, mirroring run-agent-reflector\'s ' +
+      'own 2-of-6 precedent. Filed as bd forge-928.',
   },
   {
     story: 'run-agent-demo-runner',

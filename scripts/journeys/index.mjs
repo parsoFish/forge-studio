@@ -128,6 +128,17 @@
  * same reason those are called there rather than trusted to their own
  * journeys' happy path alone (see community's own paragraph below).
  *
+ * agents' batch-D standalone run-view fixtures (agents-run-developer-fixture,
+ * agents-run-adversarial-review-entry/-findings) each create-and-destroy
+ * their own hand-seeded `_logs/_agent-<slug>-*` directory (DEV_RUN_ID /
+ * ADV_RUN_ID, module-local, disjoint from R6_06_STANDALONE_RUN_ID's own
+ * fixture above) inside that ONE beat's own try/finally — mirroring hooks-
+ * security's create-and-destroy-its-own-throwaway-fixture precedent, never
+ * the flow-cycle CYCLE_LOG any flows-run/roadmap beat owns.
+ * agents-run-adversarial-review-entry and -findings each seed the SAME
+ * ADV_RUN_ID fixture independently (cheap, deterministic, disjoint from
+ * every other seeded id) rather than threading state across beats.
+ *
  * connections (R3-04) is READ-MOSTLY: connections-library / connections-
  * detail-tool / connections-detail-mcp create and destroy nothing on disk —
  * every count/state they assert is cross-checked against a fresh disk
@@ -251,6 +262,10 @@ export const RUN_ORDER = [
   ['agents', 'agents-kickoff-run-view'],
   ['agents', 'agents-kickoff-standing-triggers'],
   ['agents', 'agents-run-reflector-detail'],
+  ['agents', 'agents-run-developer-entry'],
+  ['agents', 'agents-run-developer-fixture'],
+  ['agents', 'agents-run-adversarial-review-entry'],
+  ['agents', 'agents-run-adversarial-review-findings'],
 
   ['flows-author', 'flows-author-new-flow'],
   ['flows-author', 'flows-author-scratch-build'],
