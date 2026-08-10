@@ -98,9 +98,11 @@
  */
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
+import type { Dirent } from 'node:fs';
 import { join, sep } from 'node:path';
 
 import { parseManifest } from '../manifest.ts';
+import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
 import type { PackageFile } from './skill-library.ts';
 import { sessionArtifactKindState, type SessionKindDescriptor, type SessionStage } from './session-kinds.ts';
 
@@ -578,21 +580,114 @@ export type FilePackageArtifact = {
   readonly files: PackageFile[];
 };
 
-/** `package/` — lists every real file (no extension filter; a package may
- *  legitimately carry SKILL.md, reference.md, scripts/run.sh, ...) via
- *  `listDirEntries(sessionDir, dir, '')`, mirroring `deriveGenerationGallery`'s
- *  own use of an empty-extension universal match. An escaping symlinked entry
- *  (file or the `package/` subdirectory itself) contributes NO file — never
- *  surfaced — while a real, non-symlinked sibling still reads normally (the
- *  guard discriminates, it does not just refuse to read anything). */
-function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifact {
-  const names = listDirEntries(sessionDir, PACKAGE_DIRNAME, '');
-  const files: PackageFile[] = [];
-  for (const name of names) {
-    const body = safeReadFileInSession(sessionDir, join(PACKAGE_DIRNAME, name));
-    if (body === null) continue; // missing/escaped entry — never surfaced
-    files.push({ path: name, body });
+/** Same realpath-containment guard as `listDirEntries`, but returns typed
+ *  `Dirent[]` (not just filtered names) so `walkPackageFiles` can tell a
+ *  real subdirectory from a file/symlink/other WITHOUT a second stat call.
+ *  A directory that escapes `sessionDir` via a symlink (or doesn't exist)
+ *  yields `[]` — exactly `listDirEntries`'s contract, just with entry TYPE
+ *  preserved. Sorted by name for deterministic output. Not a replacement
+ *  for `listDirEntries` (every other derivation in this module keeps using
+ *  that flat, extension-filtered scan unchanged) — this is `package/`'s own
+ *  recursive-walk primitive (R4-21 BLOCKER-1 fix, see `walkPackageFiles`). */
+function listDirEntriesTyped(sessionDir: string, dirRel: string): Dirent[] {
+  const abs = join(sessionDir, dirRel);
+  let realSessionDir: string;
+  try {
+    realSessionDir = realpathSync(sessionDir);
+  } catch {
+    return []; // sessionDir itself doesn't exist / unreadable
   }
+  let realAbs: string;
+  try {
+    realAbs = realpathSync(abs);
+  } catch {
+    return []; // missing subdirectory, broken symlink, or unreadable path segment
+  }
+  if (realAbs !== realSessionDir && !realAbs.startsWith(realSessionDir + sep)) {
+    return []; // this directory (or a symlink to it) escapes sessionDir — treated as absent, never followed
+  }
+  try {
+    return readdirSync(abs, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
+  }
+}
+
+/** Recursively walks `package/` (and every REAL subdirectory beneath it),
+ *  appending each file found into `out` with a path RELATIVE TO `package/`,
+ *  POSIX-separated (`PackageFile.path` convention — e.g. `scripts/run.sh`,
+ *  matching `installSkillPackage`/`readSkillPackage`'s own recursive-walk
+ *  path shape in skill-library.ts).
+ *
+ *  R4-21 BLOCKER-1 fix: the previous flat, single-level scan
+ *  (`listDirEntries(sessionDir, 'package', '')` + per-name
+ *  `safeReadFileInSession`) called `readFileSync` on every top-level
+ *  `package/` entry NAME unconditionally — including a DIRECTORY entry
+ *  (e.g. `scripts/`, written by a hook draft alongside `hook.yaml` per
+ *  skills/creation-agent/SKILL.md). `readFileSync` on a directory throws
+ *  EISDIR, caught by the existing try/catch, and the entry was dropped
+ *  SILENTLY — indistinguishable from a blocked symlink escape
+ *  (declared-data-fails-open: a real, non-malicious nested file vanished
+ *  with no signal). This walk instead uses `listDirEntriesTyped` to check
+ *  each entry's TYPE before deciding what to do with it:
+ *
+ *    - A real directory entry (`entry.isDirectory()`) is DESCENDED, never
+ *      read-as-file.
+ *    - Every other entry kind — a plain file, a symlink of ANY kind
+ *      (`fs.Dirent`'s type check is on the raw dirent, so a symlink is
+ *      never `isDirectory()`/`isFile()` — it is its own third category),
+ *      or any exotic dirent type — is attempted ONLY through
+ *      `safeReadFileInSession`, this module's one realpath-guarded read
+ *      choke point. A symlink escaping `sessionDir` (to a file OR a
+ *      directory) resolves outside, is treated as absent by that guard,
+ *      and contributes no file — it is never descended into either,
+ *      preserving the module's existing "escaping entry ⇒ never surfaced"
+ *      contract at every depth, not just the top level. A symlink pointing
+ *      at an IN-BOUNDS directory also contributes nothing (`readFileSync`
+ *      on it still throws EISDIR, caught, dropped) — a deliberately
+ *      conservative choice: this walk never follows a symlink to descend
+ *      into a directory, only a real one.
+ *
+ *  Bounded by the SAME `MAX_PACKAGE_FILES`/`MAX_PACKAGE_BYTES` caps
+ *  `installSkillPackage` validates against at INSTALL time
+ *  (skill-library.ts) — reused here as a soft READ-side bound, not a
+ *  validation gate: once either limit is reached the walk simply stops
+ *  collecting further files (never throws, never fabricates a truncation
+ *  marker) rather than rendering an unbounded tree from a runaway/
+ *  malicious session dir. `totalBytes` is a boxed counter (not a return
+ *  value) purely so every recursive call shares the same running total. */
+function walkPackageFiles(sessionDir: string, dirRelToSession: string, dirRelToPackage: string, out: PackageFile[], totalBytes: { value: number }): void {
+  if (out.length >= MAX_PACKAGE_FILES || totalBytes.value >= MAX_PACKAGE_BYTES) return;
+  const entries = listDirEntriesTyped(sessionDir, dirRelToSession);
+  for (const entry of entries) {
+    if (out.length >= MAX_PACKAGE_FILES || totalBytes.value >= MAX_PACKAGE_BYTES) return;
+    const childRelToSession = join(dirRelToSession, entry.name);
+    const childRelToPackage = dirRelToPackage ? `${dirRelToPackage}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) {
+      walkPackageFiles(sessionDir, childRelToSession, childRelToPackage, out, totalBytes);
+      continue;
+    }
+    const body = safeReadFileInSession(sessionDir, childRelToSession);
+    if (body === null) continue; // missing/escaped/unreadable (incl. EISDIR on a symlinked dir) — never surfaced
+    const bytes = Buffer.byteLength(body, 'utf8');
+    if (totalBytes.value + bytes > MAX_PACKAGE_BYTES) return; // would exceed the cap — stop walking
+    totalBytes.value += bytes;
+    out.push({ path: childRelToPackage, body });
+  }
+}
+
+/** `package/` — recursively walks every real file under the session dir's
+ *  `package/` subdirectory (a package may legitimately carry SKILL.md,
+ *  reference.md, scripts/run.sh, ...) via `walkPackageFiles` (R4-21
+ *  BLOCKER-1 fix — see that function's header for the nested-file defect
+ *  this replaces and the containment/DoS-bound contract it preserves). An
+ *  escaping symlinked entry (file, OR a subdirectory at any depth)
+ *  contributes NO file — never surfaced — while a real, non-symlinked
+ *  sibling still reads normally, at every depth (the guard discriminates,
+ *  it does not just refuse to read anything). */
+function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifact {
+  const files: PackageFile[] = [];
+  walkPackageFiles(sessionDir, PACKAGE_DIRNAME, '', files, { value: 0 });
   return { kind: 'file-package', label, files };
 }
 

@@ -766,6 +766,59 @@ describe('deriveSessionArtifact — file-package (R4-21, creation-agent authorin
     const artifact = deriveSessionArtifact({ descriptor, sessionDir }) as { label: string };
     assert.equal(artifact.label, 'Totally Custom Draft Label 8827', 'label must come from descriptor.artifact.label — never a hardcoded/re-derived string');
   });
+
+  // -------------------------------------------------------------------------
+  // T3 fix round (adversarial-review BLOCKER-1, R4-21): deriveFilePackage
+  // previously scanned only the TOP LEVEL of `package/` via a flat
+  // `listDirEntries` + per-name `safeReadFileInSession` read. A nested file
+  // (e.g. `package/scripts/run.sh` — exactly the shape skills/creation-agent/
+  // SKILL.md instructs a hook draft to write: `package/hook.yaml` +
+  // `package/scripts/run.sh`) has a DIRECTORY as its top-level `package/`
+  // entry name (`scripts`); `readFileSync` on a directory throws EISDIR,
+  // caught by the existing try/catch, and the entry was dropped SILENTLY —
+  // indistinguishable from a blocked symlink escape (declared-data-fails-open:
+  // a real, non-malicious nested file vanishes with no signal). RED-2d pins
+  // the fix: the walk must DESCEND a real directory entry, never attempt to
+  // read it as a file.
+  // -------------------------------------------------------------------------
+  it('RED-2d (BLOCKER-1): a package/ entry that is a real directory (e.g. package/scripts/) is DESCENDED, not read-as-file — a nested file surfaces with its path relative to package/, alongside a top-level sibling', () => {
+    const sessionDir = makeTmpDir('filepackage-nested-');
+    writePackageFile(sessionDir, 'hook.yaml', 'name: test-hook\ndescription: a draft hook\n');
+    writePackageFile(sessionDir, 'scripts/run.sh', '#!/bin/sh\necho hi\n');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+      kind: string;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(artifact.kind, 'file-package');
+    const byPath = new Map(artifact.files.map((f) => [f.path, f.body]));
+    assert.equal(byPath.get('hook.yaml'), 'name: test-hook\ndescription: a draft hook\n', 'the top-level sibling must still surface');
+    assert.equal(
+      byPath.get('scripts/run.sh'),
+      '#!/bin/sh\necho hi\n',
+      'the nested file must surface with a path RELATIVE TO package/ (PackageFile.path convention) — this is RED before the BLOCKER-1 fix (readFileSync EISDIR on the "scripts" directory entry silently drops it)',
+    );
+    assert.equal(artifact.files.length, 2, `expected exactly the 2 real files (1 top-level + 1 nested), got: ${JSON.stringify(artifact.files)}`);
+  });
+
+  it('RED-2e (BLOCKER-1 containment): a symlink NESTED inside a package/ subdirectory that points OUTSIDE sessionDir contributes NO file, while a real sibling file in the SAME subdirectory still surfaces (positive control) — proves the new recursive walk preserves the module\'s existing symlink-escape guard at every depth, not just the top level (mirrors RED-2b\'s idiom one level deeper)', () => {
+    const outsideDir = makeTmpDir('filepackage-nested-escape-outside-');
+    const SECRET_MARKER = 'TOP-SECRET-NESTED-PACKAGE-MARKER-7731';
+    const secretPath = join(outsideDir, 'secret.md');
+    writeFileSync(secretPath, SECRET_MARKER, 'utf8');
+
+    const sessionDir = makeTmpDir('filepackage-nested-escape-session-');
+    const scriptsDir = join(sessionDir, 'package', 'scripts');
+    mkdirSync(scriptsDir, { recursive: true });
+    symlinkSync(secretPath, join(scriptsDir, 'evil.sh'));
+    const REAL_MARKER = 'REAL-NESTED-NON-ESCAPED-SCRIPT-9013';
+    writeFileSync(join(scriptsDir, 'run.sh'), REAL_MARKER, 'utf8');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir });
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(SECRET_MARKER), 'the nested escaped file\'s content must never appear in the derived file-package artifact');
+    assert.ok(serialized.includes(REAL_MARKER), 'a plain, non-symlinked sibling file in the same nested subdirectory MUST still surface');
+  });
 });
 
 // ===========================================================================
