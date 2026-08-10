@@ -440,7 +440,7 @@ export const STORY_REGISTRY = [
         'flows-author-scratch-build',
         { excluded: 'already demonstrated by the SAME beat cited at step 2 (flows-author-scratch-build) — its own drive fills the real [data-field="flow-name"] input (a real, non-literal name, "Forge Develop Scratch", not the mockup\'s "deps-refresh")', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'already demonstrated by the SAME beat cited at step 2 — it drops developer-ralph onto the canvas via real HTML5 drag-and-drop; the mockup\'s "click — or drag" framing is only half real — AgentPalette\'s DraggableChip (forge-ui/components/studio/flow-builder/AgentPalette.tsx) has no onClick handler at all, drag is the ONLY real placement path', decision: DECISION_ONE_REF_PER_STORY },
-        { excluded: 'already demonstrated by the SAME beat cited at step 2 — it ENABLES fan-out on developer-ralph with a real click (not just a capability-state read), verified both in the DOM and, after save, round-tripped through the persisted YAML', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'already demonstrated by the SAME beat cited at step 2 — its fanout-capability GATE check proves the real fan-out feature: developer-ralph is fanout-capable with an enabled toggle, demo-agent is not (disabled), both driven by the R2-03-F3 capability descriptor', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'already demonstrated by the SAME beat cited at step 2 — it drops demo-agent onto the canvas via the same real HTML5 drag-and-drop path', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'already demonstrated by the SAME beat cited at step 2 — it wires the developer→demo-agent edge by real ReactFlow handle-drag and labels it via the real ArtifactPicker; the mockup\'s literal "demo HTML summary" label has no backing real template (forge-ui/lib/flow-artifact-catalog.ts\'s own header comment: a `demo` artifact id existed and was deleted, R2-05-F1, "no on-disk template") — the real, closest hand-off genuinely picked is "wi-branches"', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'already demonstrated by the SAME beat cited at step 2 — it toggles the real human-verdict gate on the terminal node; there is no separate "verdict" node kind to drop from the palette (a gate is a MODIFIER on an agent node, not its own agent kind) — an honest, already-narrated UI limit', decision: DECISION_ONE_REF_PER_STORY },
@@ -471,11 +471,12 @@ export const STORY_REGISTRY = [
       "genuinely driven by that SAME single beat's own drive — the " +
       "registry's one-real-ref-per-story rule forbids citing the same " +
       'beat id twice, so each is an excluded BeatRef pointing back at ' +
-      "step 2's citation, naming the specific real action. Two " +
-      'genuinely NEW UI actions were added this pass, not just re-' +
-      "narrated: an actual ENABLE click on developer-ralph's fan-out " +
-      'toggle, round-tripped through the persisted YAML (previously the ' +
-      'beat only read the capability STATE, never clicked it); and ' +
+      "step 2's citation, naming the specific real action (step 5's " +
+      'enable-fanout maps to the beat\'s fanout-capability GATE check — ' +
+      'developer-ralph fanout-capable + enabled toggle vs demo-agent ' +
+      'disabled — not an enable-click, which was tried this pass but ' +
+      'reverted: reopening the node mini-panel mid-build broke the ' +
+      'subsequent save). ONE genuinely NEW beat was added this pass: ' +
       'step 11 ("it joins the shelf") is the new flows-author-shelf-' +
       'return beat — a real return to the library home page asserting ' +
       'the just-authored flow renders as an ordinary [data-card-' +
