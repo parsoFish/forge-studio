@@ -553,12 +553,56 @@ export type ContractBuildoutArtifact = {
   readonly sourcesScanned: string[];
 };
 
+// ---------------------------------------------------------------------------
+// file-package (R4-21) — the creation-agent authoring session's accumulating
+// draft skill/hook package. Reads the session dir's own `package/`
+// subdirectory (a DEDICATED subdirectory, never the bare session root — see
+// this module's shared `manifests/`/`themes/` per-kind-subdirectory
+// convention, mirrored exactly here, so a creation-agent session's
+// accumulating draft package can never collide with the fixed
+// CANDIDATE_SOURCE_FILES transcript scan every session dir is unconditionally
+// scanned against regardless of kind). Reuses the SAME realpath-guarded
+// choke points (`safeReadFileInSession`/`listDirEntries`) every other
+// derivation in this module already goes through — no new fs call path.
+// ---------------------------------------------------------------------------
+
+const PACKAGE_DIRNAME = 'package';
+
+export type FilePackageArtifact = {
+  readonly kind: 'file-package';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
+  // Mutable element array — see RoadmapDraftArtifact.rows for the identical
+  // rationale (the pinned AT idiom casts to a plain mutable-array shape).
+  readonly files: PackageFile[];
+};
+
+/** `package/` — lists every real file (no extension filter; a package may
+ *  legitimately carry SKILL.md, reference.md, scripts/run.sh, ...) via
+ *  `listDirEntries(sessionDir, dir, '')`, mirroring `deriveGenerationGallery`'s
+ *  own use of an empty-extension universal match. An escaping symlinked entry
+ *  (file or the `package/` subdirectory itself) contributes NO file — never
+ *  surfaced — while a real, non-symlinked sibling still reads normally (the
+ *  guard discriminates, it does not just refuse to read anything). */
+function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifact {
+  const names = listDirEntries(sessionDir, PACKAGE_DIRNAME, '');
+  const files: PackageFile[] = [];
+  for (const name of names) {
+    const body = safeReadFileInSession(sessionDir, join(PACKAGE_DIRNAME, name));
+    if (body === null) continue; // missing/escaped entry — never surfaced
+    files.push({ path: name, body });
+  }
+  return { kind: 'file-package', label, files };
+}
+
 export type SessionArtifactPayload =
   | RoadmapDraftArtifact
   | MarkdownDraftArtifact
   | BrainStructureArtifact
   | GenerationGalleryArtifact
-  | ContractBuildoutArtifact;
+  | ContractBuildoutArtifact
+  | FilePackageArtifact;
 
 function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
@@ -743,6 +787,8 @@ export function deriveSessionArtifact(input: {
       return deriveBrainStructure(sessionDir, label);
     case 'generation-gallery':
       return deriveGenerationGallery(sessionDir, label);
+    case 'file-package':
+      return deriveFilePackage(sessionDir, label);
     case 'contract-buildout': {
       // D4: zero filesystem work here — `sessionDir` is not even touched
       // (AT-3 pins a non-existent sessionDir has no effect on the result).

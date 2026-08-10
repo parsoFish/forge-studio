@@ -16,13 +16,16 @@
  * A1 — `EXPECTED_GUARDS_BY_SLUG` below is a HARDCODED literal table, GENERATED
  * by reading the on-disk `composition.hooks` data (`grep`/manual transcription)
  * BEFORE any sweep happens — frozen ground truth, deliberately independent of
- * whatever the sweep commit does to disk. It covers all 17 SKILL.mds that
+ * whatever the sweep commit does to disk. It covers all 18 SKILL.mds that
  * declare a `composition:` block (`architect`, `architect-completeness-critic`,
  * `brain-fix`, `demo-builder`, `instructions-creator`, `preflight-fix`,
  * `project-brain-builder` included — NOT just the 11 in the composable
  * roster; the rename sweeps every SKILL.md regardless of `library: false`).
- * R4-18 added `contract-check` — a 17th composition-bearing SKILL.md that is
- * also the 11th member of the composable roster (it declares `library: true`).
+ * 16 at generation time (2026-08-04); R4-18 added `contract-check` — a 17th
+ * composition-bearing SKILL.md that is also the 11th member of the composable
+ * roster (it declares `library: true`) — and R4-21 added `creation-agent`
+ * (18th, `library: false`, with its own real `event-log` guard); both were
+ * appended rather than backdated into the "generated" set.
  * The test asserts `composition.guards` (once it exists) deep-equals this
  * table for every one of them, sorted for stable comparison.
  *
@@ -85,6 +88,13 @@ const EXPECTED_GUARDS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
   // R4-18: contract-check declares the onboard-preflight band guard (its
   // display identity + composition.guards entry — see skills/contract-check).
   'contract-check': ['event-log', 'onboard-preflight'],
+  // R4-21: creation-agent — a new `library: false` interactive helper
+  // (mirrors demo-builder/instructions-creator/onboarding-agent's own
+  // single `event-log` guard) — added to this frozen table so the sweep-
+  // completeness assertion below stays meaningful for the newly-added
+  // composition-bearing SKILL.md, not just the 16 that existed when this
+  // table was generated.
+  'creation-agent': ['event-log'],
   'demo-agent': ['demo-band', 'event-log'],
   'demo-builder': ['event-log'],
   'developer-ralph': ['cost-guard', 'event-log', 'scratch-strip', 'stall-watchdog'],

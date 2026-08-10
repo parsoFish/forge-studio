@@ -1,11 +1,12 @@
 /**
  * Pure, per-renderer view-state for the session shell's artifact pane
- * (R2-10, PR2) — one module covering all four LIVE artifact kinds
- * (roadmap-draft, markdown-draft, brain-structure, generation-gallery),
- * rather than one file per kind: they are tightly-related renderers for the
- * SAME pane of the SAME page, and the combined module stays well under this
- * repo's file-size discipline. No DOM, no React, no network — mirrors
- * file-package.ts's / skill-library-view.ts's testability convention.
+ * (R2-10, PR2) — one module covering all six LIVE artifact kinds
+ * (roadmap-draft, markdown-draft, brain-structure, generation-gallery,
+ * contract-buildout, file-package), rather than one file per kind: they are
+ * tightly-related renderers for the SAME pane of the SAME page, and the
+ * combined module stays well under this repo's file-size discipline. No
+ * DOM, no React, no network — mirrors file-package.ts's / skill-library-
+ * view.ts's testability convention.
  *
  * REUSE, not fork (T2 ruling, binding on this module): `brainStructureView`'s
  * file tabs go through the SHARED `forge-ui/lib/file-package.ts`
@@ -32,6 +33,7 @@ import type {
   BrainStructureArtifact,
   ContractBuildoutArtifact,
   ContractStageRow,
+  FilePackageArtifact,
   GenerationGalleryArtifact,
   GenerationGalleryEntry,
   MarkdownDraftArtifact,
@@ -207,6 +209,29 @@ export function preferredGenerationFor(
 }
 
 // ---------------------------------------------------------------------------
+// filePackageArtifactView / selectFilePackageFile — R4-21, REUSE pin (mirrors
+// brainStructureView/selectBrainStructureFile's own reuse of the SHARED
+// FilePackage machinery exactly — no bespoke tab-strip state machine here
+// either).
+// ---------------------------------------------------------------------------
+
+export type FilePackageArtifactView = {
+  kind: 'file-package';
+  filePackage: FilePackageState;
+};
+
+export function filePackageArtifactView(artifact: FilePackageArtifact): FilePackageArtifactView {
+  return { kind: 'file-package', filePackage: filePackageTabs(artifact.files) };
+}
+
+/** Delegates to the REAL, shared `selectFile` — never a bespoke
+ *  reimplementation of its clamping behaviour. Returns a NEW view object
+ *  (immutability), mirroring `selectBrainStructureFile` exactly. */
+export function selectFilePackageFile(view: FilePackageArtifactView, index: number): FilePackageArtifactView {
+  return { ...view, filePackage: selectFile(view.filePackage, index) };
+}
+
+// ---------------------------------------------------------------------------
 // contractBuildoutView — R4-17
 // ---------------------------------------------------------------------------
 
@@ -252,17 +277,26 @@ export function contractBuildoutView(
 // sessionArtifactView — dispatcher + reserved/unknown kind guards
 // ---------------------------------------------------------------------------
 
-export type SessionArtifactView = RoadmapDraftView | MarkdownDraftView | BrainStructureView | GenerationGalleryView | ContractBuildoutView;
+export type SessionArtifactView =
+  | RoadmapDraftView
+  | MarkdownDraftView
+  | BrainStructureView
+  | GenerationGalleryView
+  | ContractBuildoutView
+  | FilePackageArtifactView;
 
 /** Vocabulary-reserved artifact kinds (mirrors orchestrator/studio/session-
  *  kinds.ts's SESSION_ARTIFACT_KINDS `reserved` rows) — a session carrying
  *  one of these reaches this dispatcher only if a future descriptor is
  *  wired before its renderer ships. Zero stub renderers exist for this one;
  *  the error names the reserved kind explicitly. R4-16: shrank from 3 to 2
- *  ("generation-gallery" flipped live). R4-17: shrinks again, to 1 —
- *  "contract-buildout" now has a real renderer (contractBuildoutView above)
- *  and is dispatched, not reserved. */
-const RESERVED_ARTIFACT_KINDS = ['file-package'] as const;
+ *  ("generation-gallery" flipped live). R4-17: shrank again, to 1 —
+ *  "contract-buildout" flipped live. R4-21: EMPTY — "file-package" (the last
+ *  reserved row) now has a real renderer (filePackageArtifactView above) and
+ *  is dispatched, not reserved. Kept as a (currently empty) named constant
+ *  rather than deleted, so a future extension that re-opens the reserved
+ *  pattern has an obvious place to add a row. */
+const RESERVED_ARTIFACT_KINDS: readonly string[] = [];
 
 /** A trailing " (requested stage: "X")" clause when `stage` was passed —
  *  proof the argument genuinely reached the dispatch boundary (AT-92/93),
@@ -290,6 +324,8 @@ export function sessionArtifactView(artifact: SessionArtifactPayload | { kind: s
       return generationGalleryView(artifact as GenerationGalleryArtifact);
     case 'contract-buildout':
       return contractBuildoutView(artifact as ContractBuildoutArtifact, stage);
+    case 'file-package':
+      return filePackageArtifactView(artifact as FilePackageArtifact);
     default: {
       const kind = artifact.kind;
       if ((RESERVED_ARTIFACT_KINDS as readonly string[]).includes(kind)) {
