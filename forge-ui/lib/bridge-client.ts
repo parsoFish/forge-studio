@@ -884,6 +884,93 @@ export async function fetchStagedThemes(project: string, sessionId: string): Pro
   return body.themes ?? [];
 }
 
+// ---- Authoring (R4-21 T3, BLOCKER-2 fix — the creation-agent session) ----
+
+/**
+ * Start an authoring session (kind: 'authoring', agent: creation-agent) —
+ * mirrors {@link startProjectBrain}/{@link startInstructions}'s shape
+ * exactly: POSTs the operator's own words (never a fabricated form-field
+ * label) and returns the real, server-minted `sessionId`. The session is a
+ * scratch working directory only — `project` picks WHERE the session's
+ * bookkeeping lives (the generic session-shell's `<project>/_<kind>/<id>`
+ * convention every kind uses), not what the drafted skill/hook belongs to;
+ * skills and hooks are forge-wide, project-agnostic library artifacts.
+ */
+export async function startAuthoring(input: { project: string; prompt: string }): Promise<{ ok: boolean; sessionId?: string; error?: string }> {
+  const r = await bridgePost('/api/studio/authoring/start', { project: input.project, prompt: input.prompt });
+  if (!r.ok) return { ok: false, error: r.error };
+  return { ok: true, sessionId: typeof r.data?.sessionId === 'string' ? r.data.sessionId : undefined };
+}
+
+/** One file of an authoring session's drafted skill/hook package — mirrors
+ *  `lib/session-client.ts`'s `FilePackageFile` (this module does not import
+ *  that one; see this file's own hand-mirrored-type convention, same
+ *  rationale as `session-client.ts`'s own header note on `FilePackageArtifact`). */
+export type AuthoringFinalizeFile = { path: string; body: string };
+
+/**
+ * Save an authoring session's CURRENT drafted package into the real skill or
+ * hook library — `POST /api/studio/authoring/finalize`
+ * (`cli/bridge-studio-authoring.ts`). The caller reads the package files from
+ * the session's own `file-package` artifact (already fetched via
+ * `fetchSessionShell`) and passes them here verbatim; this route does not
+ * read the session dir itself (D-2/D-3, cli/bridge-studio-authoring.ts's own
+ * header) — the operator's explicit Save action is what moves bytes into the
+ * real library, never an implicit auto-save. Lands as a DRAFT
+ * (`paletteVisible:false` for a skill; unbound for a hook) — approval /
+ * binding stay the operator's own SEPARATE, later act (D2 — never
+ * auto-approved here).
+ */
+export async function finalizeAuthoring(
+  input:
+    | { kind: 'skill'; id: string; files: AuthoringFinalizeFile[]; upstream: { source: string; ref?: string } }
+    | {
+        kind: 'hook';
+        id: string;
+        name: string;
+        description: string;
+        on: string;
+        scriptBody: string;
+        matcher?: string;
+        permissions?: { env?: string[]; read?: string[]; network?: boolean };
+      },
+): Promise<{ ok: boolean; kind?: 'skill' | 'hook'; id?: string; error?: string }> {
+  const body =
+    input.kind === 'skill'
+      ? {
+          kind: 'skill',
+          id: input.id,
+          entries: input.files.map((f) => ({ path: f.path, contentBase64: toBase64(f.body) })),
+          upstream: input.upstream,
+        }
+      : {
+          kind: 'hook',
+          id: input.id,
+          name: input.name,
+          description: input.description,
+          on: input.on,
+          scriptBody: input.scriptBody,
+          ...(input.matcher ? { matcher: input.matcher } : {}),
+          ...(input.permissions ? { permissions: input.permissions } : {}),
+        };
+  const r = await bridgePost('/api/studio/authoring/finalize', body);
+  if (!r.ok) return { ok: false, error: r.error };
+  return {
+    ok: true,
+    kind: r.data?.kind === 'skill' || r.data?.kind === 'hook' ? r.data.kind : undefined,
+    id: typeof r.data?.id === 'string' ? r.data.id : undefined,
+  };
+}
+
+/** UTF-8 string -> base64, browser-safe (no Buffer). */
+function toBase64(s: string): string {
+  if (typeof Buffer !== 'undefined') return Buffer.from(s, 'utf8').toString('base64');
+  const bytes = new TextEncoder().encode(s);
+  let binary = '';
+  for (const b of bytes) binary += String.fromCharCode(b);
+  return btoa(binary);
+}
+
 /** One demo-element kind from the forge library (the demoProcess composition palette). */
 export type DemoElementSummary = {
   id: string;

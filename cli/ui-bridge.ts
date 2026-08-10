@@ -2243,6 +2243,13 @@ const GENERATION_FILENAME_RE = /^(?!\.{1,2}$)[A-Za-z0-9._-]+$/;
 const MAX_GENERATION_PROJECT_LENGTH = MAX_SKILL_ID_LENGTH;
 const MAX_GENERATION_SESSION_ID_LENGTH = MAX_SKILL_ID_LENGTH;
 
+/** R4-21 (T3) — the authoring session's initial free-text description
+ *  (`POST /api/studio/authoring/start`'s `prompt`, written verbatim to
+ *  `prompt.md`). A generous bound on an operator-typed field, no different
+ *  in spirit from every other length-capped text input in this file — just
+ *  named for its own route rather than reusing an unrelated cap. */
+const MAX_AUTHORING_PROMPT_LENGTH = 4000;
+
 function invalidGenerationProjectReason(id: string): string | null {
   if (id.length > MAX_GENERATION_PROJECT_LENGTH) {
     return `invalid project "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_GENERATION_PROJECT_LENGTH}-character length limit`;
@@ -3418,6 +3425,40 @@ export function writeOnboardingSession(
   return { sessionDir };
 }
 
+/**
+ * R4-21 (T3, BLOCKER-2 fix) — create the authoring session's own directory
+ * and write its two files (`status.json`, `prompt.md`). Byte-for-byte the
+ * SAME three independent closes as `writeOnboardingSession`, directly above
+ * (exclusive dir create, exclusive leaf writes, a server-generated
+ * `sessionId`) — see that function's own docstring for the full rationale;
+ * not restated here. The only difference is the seed content: one free-text
+ * `prompt` (the operator's initial description of the skill/hook to build)
+ * instead of a multi-field `inputs` record, written verbatim — no fabricated
+ * interview question, same D8 rationale `renderOnboardingPrompt` documents.
+ */
+export function writeAuthoringSession(
+  authoringParent: string,
+  sessionId: string,
+  project: string,
+  runId: string,
+  prompt: string,
+): { sessionDir: string } {
+  if (!SAFE_ID_RE.test(sessionId)) {
+    throw new Error(`invalid authoring sessionId: ${JSON.stringify(sessionId)}`);
+  }
+  const sessionDir = join(authoringParent, sessionId);
+  // Close 1: exclusive directory CREATE. No `recursive` — a pre-existing
+  // entry at this exact path is a hard EEXIST error, never silently reused.
+  mkdirSync(sessionDir);
+  writeFileSync(
+    join(sessionDir, 'status.json'),
+    JSON.stringify({ phase: 'running', project, runId, startedAt: new Date().toISOString() }, null, 2),
+    { encoding: 'utf8', flag: 'wx' }, // close 2: exclusive create — never follows an existing symlink
+  );
+  writeFileSync(join(sessionDir, 'prompt.md'), `${prompt}\n`, { encoding: 'utf8', flag: 'wx' });
+  return { sessionDir };
+}
+
 /** Returns true if the request was a demo-builder route (and was handled). */
 async function handleDemoBuilder(
   req: IncomingMessage,
@@ -3999,6 +4040,101 @@ async function handleDemoBuilder(
       sendJson(
         res, 200,
         { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/onboarding/start', sessionId) },
+        origin,
+      );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/studio/authoring/start {project, prompt} — R4-21 (T3
+  // BLOCKER-2 fix), the authoring session's kickoff route. Mirrors
+  // `POST /api/studio/onboarding/start` EXACTLY: SLUG_RE + length-cap
+  // project validation via `invalidGenerationProjectReason`, resolved
+  // through the SAME `resolveContainedProjectDir`, a server-generated
+  // `sessionId` (never request-derived), and the identical
+  // mkdir-then-realpath-verify-the-parent-BEFORE-creating-the-session-dir
+  // shape (see the onboarding route's own D5/D6 comments, directly above,
+  // for the full security rationale — not restated here). `inputs` becomes
+  // a single free-text `prompt` (creation-agent's session is seeded by one
+  // operator description, not a multi-field form) written verbatim to
+  // `prompt.md` — no fabricated interview question, same D8 rationale as
+  // `renderOnboardingPrompt`.
+  //
+  // KNOWN GAP (disclosed, not silently shipped — see the T3 report this
+  // fix's own commit references): `creation-agent` declares
+  // `surface: interactive` (skills/creation-agent/SKILL.md), so
+  // `resolveDispatchableAgent` (orchestrator/agent-dispatch.ts) REFUSES it —
+  // the same refusal architect/instructions/demo-builder/project-brain
+  // already get from the generic dispatch host, because all five are meant
+  // to run through a BOUNDED-TURN runner (architect-runner.ts /
+  // instructions-runner.ts / demo-builder-runner.ts /
+  // project-brain-builder-runner.ts), never the generic
+  // `forge agent dispatch` `spawnAgentDispatch` below invokes. No
+  // `creation-agent-runner.ts` + `cli/agent-run.ts` `AGENT_RUNNERS`
+  // registration exists yet, so a REAL (non-dry-bridge) invocation's
+  // detached child process exits non-zero and `writeSessionTerminalPhase`
+  // (cli/agent-run.ts) flips `status.json` to `phase:'failed'` shortly after
+  // this route returns 200 — visibly, via stderr.log, never silently. Under
+  // `FORGE_ARCHITECT_NO_SPAWN=1` / dry-bridge (tests, journeys)
+  // `spawnAgentDispatch` no-ops before ever reaching that refusal, so this
+  // route's OWN contract — real session bookkeeping: dir/status.json/
+  // prompt.md, exactly like onboarding's — is fully exercisable and tested
+  // today. Building the bounded-turn runner is new `orchestrator/` surface
+  // (ask-first per this repo's own CLAUDE.md) and a separately-sized WI —
+  // out of scope for this fix.
+  if (method === 'POST' && url === '/api/studio/authoring/start') {
+    try {
+      const body = (await readJson(req)) as { project?: unknown; prompt?: unknown };
+      if (typeof body.project !== 'string') {
+        sendJson(res, 400, { error: 'project is required' }, origin);
+        return true;
+      }
+      const projectReason = invalidGenerationProjectReason(body.project);
+      if (projectReason) {
+        sendJson(res, 400, { error: projectReason }, origin);
+        return true;
+      }
+      const project = body.project;
+
+      if (typeof body.prompt !== 'string' || body.prompt.trim() === '') {
+        sendJson(res, 400, { error: 'prompt is required and must be a non-empty string' }, origin);
+        return true;
+      }
+      if (body.prompt.length > MAX_AUTHORING_PROMPT_LENGTH) {
+        sendJson(res, 400, { error: `prompt exceeds the ${MAX_AUTHORING_PROMPT_LENGTH}-character cap` }, origin);
+        return true;
+      }
+      const prompt = body.prompt;
+
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const realProjectDir = resolveContainedProjectDir(projectsRoot, project);
+      if (realProjectDir === null) {
+        sendJson(res, 404, { error: `project not found: ${project}` }, origin);
+        return true;
+      }
+
+      const sessionId = newArchitectSessionId();
+      const runId = `_agent-creation-agent-${newRunStamp()}`;
+      // Same two-level containment shape as onboarding's start route: the
+      // `_authoring` parent is created + realpath-verified BEFORE the
+      // session dir is created beneath it (a project repo could carry a
+      // committed symlink named `_authoring`, redirecting every write here —
+      // "validating a root does not validate what you write beneath it").
+      const authoringParent = join(realProjectDir, '_authoring');
+      mkdirSync(authoringParent, { recursive: true });
+      const realAuthoringParent = realpathSync(authoringParent);
+      if (!realAuthoringParent.startsWith(realProjectDir + sep)) {
+        sendJson(res, 400, { error: `authoring session directory for project "${project}" resolves outside the project` }, origin);
+        return true;
+      }
+      const { sessionDir } = writeAuthoringSession(realAuthoringParent, sessionId, project, runId, prompt);
+
+      spawnAgentDispatch(ctx.forgeRoot, 'creation-agent', runId, project, { prompt }, sessionDir);
+      sendJson(
+        res, 200,
+        { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/authoring/start', sessionId) },
         origin,
       );
     } catch (err) {

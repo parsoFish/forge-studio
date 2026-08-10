@@ -167,7 +167,18 @@ inventory rather than one shared page-level contract:
   `[data-action="new-hook"]` links to
   `main[data-page="hook-builder"][data-page-ready][data-section="hook-new"]`
   (fields `[data-field="hook-name"|"hook-description"|"hook-on"|"hook-matcher"|"hook-script-body"|"hook-permissions-env"|"hook-permissions-read"|"hook-permissions-network"]`,
-  `[data-action="create-hook"]`).
+  `[data-action="create-hook"]`). **R4-21 T3 addition (BLOCKER-2 fix):**
+  `/hooks/new` also renders the `AuthoringLauncher` (`components/AuthoringLauncher.tsx`)
+  as an alternative to the manual form — "describe it to the creation agent
+  instead of filling in every field by hand". Section
+  `[data-section="authoring-launcher"][data-authoring-launcher-ready="true"|"false"]`,
+  fields `[data-field="authoring-launcher-project"|"authoring-launcher-prompt"]`,
+  action `[data-action="start-authoring"]`, error `[data-authoring-launcher-error]`
+  when present. On start it POSTs `POST /api/studio/authoring/start`
+  (`startAuthoring`, `lib/bridge-client.ts`) and navigates to
+  `/sessions/authoring/<sessionId>?project=<p>` — see that route below. The
+  SAME launcher renders on `/skills/new` (below) — one component, two
+  mount points.
   `/hooks/[id]` is
   `main[data-page="hook-detail"][data-hook-id][data-page-ready][data-hook-event][data-hook-verdict][data-hook-trust][data-hook-runnable]`
   — the last four are ABSENT while loading, on a fetch error and for an unknown
@@ -792,7 +803,27 @@ inventory rather than one shared page-level contract:
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
   `[data-component="brain-brief-input"]`, and
-  `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"bind-and-return"]`.
+  `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"bind-and-return"]`;
+  and — **R4-21 T3 addition (BLOCKER-2 fix)** — the authoring kind's
+  `SessionAuthoringPanel` (`components/studio/session/SessionAuthoringPanel.tsx`),
+  the creation-agent session's live affordance. Unlike the other four kinds it
+  fetches NO per-kind summary (`authoring` has no bounded-turn runner yet —
+  see `cli/ui-bridge.ts`'s `POST /api/studio/authoring/start` "KNOWN GAP"
+  comment); it works entirely off the shell's own `file-package` artifact.
+  `[data-component="authoring-panel"][data-section="authoring-status"][data-authoring-shape="unknown"|"skill"|"hook"]`
+  — the shape is detected purely by file PRESENCE in the artifact (`SKILL.md`
+  at the package root ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒ still drafting).
+  Once a shape is known, `[data-section="authoring-finalize"]` renders the
+  Save form: `[data-field="authoring-id"]` always, plus
+  `[data-field="authoring-hook-name"|"authoring-hook-description"|"authoring-hook-on"|"authoring-hook-matcher"]`
+  for a hook draft only. `[data-action="finalize-authoring"]` POSTs
+  `POST /api/studio/authoring/finalize` (D5 — the ONE explicit save act,
+  never auto-saved) and, on success, navigates to `/skills/<id>` or
+  `/hooks/<id>` — palette-visibility / binding stay the operator's own
+  SEPARATE, later act at that destination page. The launcher that starts
+  this session lives on `/skills/new` and `/hooks/new` (see those pages'
+  entries, above) — `AuthoringLauncher`, POSTing
+  `POST /api/studio/authoring/start`.
   The two question forms are now ONE component parameterised on its submit fn
   and section name — both `data-section` values are unchanged.
   **`/architect/new` stays** as the native "start a run" entry that replaced
@@ -1176,7 +1207,12 @@ inventory rather than one shared page-level contract:
   it links to the unchanged builder at `/skills/new`
   (`[data-page="skill-builder"][data-page-ready="true"][data-section="skill-new"]`,
   fields `[data-field="skill-name"|"skill-description"|"skill-body"]`,
-  `[data-action="create-skill"]`).
+  `[data-action="create-skill"]`). **R4-21 T3 addition (BLOCKER-2 fix):**
+  `/skills/new` also renders the SAME `AuthoringLauncher` `/hooks/new` does
+  (see that page's entry, above, for its full `data-*` contract) —
+  `[data-section="authoring-launcher"]` alongside the manual form, POSTing to
+  `POST /api/studio/authoring/start` and navigating to
+  `/sessions/authoring/<sessionId>?project=<p>`.
   **R3-07 update (2026-08-05): the per-card manual install affordance was
   REMOVED.** `[data-action="install-skill"]`, `[data-install-skill-id]`, and
   the card-local `[data-install-state]` no longer exist — that box (a
