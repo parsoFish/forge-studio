@@ -34,13 +34,25 @@
  * single `step: noop` phase (the one step `runInteractiveTurn` runs with zero
  * external calls — confirmed by `orchestrator/interactive-runner.test.ts`'s
  * own AT-2). The "call record" required by AT-1 below is then read back from
- * `runInteractiveTurn`'s OWN real event-log artifact
- * (`<forgeRoot>/_logs/_interactive-<descriptor.id>-<sessionId>/events.jsonl`,
- * `orchestrator/logging.ts`'s `createLogger` — its path and its `start`
- * event's `metadata.{session_id,session_kind,phase,step}` are read straight
- * from `runInteractiveTurn`'s own source, not guessed) — a MECHANISM-GROUNDED
- * proof of invocation-with-these-exact-args, not a bare "it did not throw"
- * proxy (the same evidentiary bar `cli/ui-bridge-agent-run-ceiling.test.ts`'s
+ * `runInteractiveTurn`'s OWN real event-log artifact, LOCATED BY CONTENT, not
+ * by a hardcoded directory-name literal (R4-22 F4 amendment — see
+ * `findInteractiveRunnerStartEvent` below): every event `runInteractiveTurn`
+ * emits carries `skill: 'interactive-runner'` (`orchestrator/
+ * interactive-runner.ts`'s `RUNNER_SKILL`), a value no legacy runner ever
+ * emits, so scanning every events.jsonl under `<forgeRoot>/_logs/` for that
+ * skill plus a matching `metadata.{session_id,session_kind}` finds the right event
+ * regardless of which directory it landed in — deliberately decoupled from
+ * `orchestrator/interactive-runner.ts:213`'s own directory-naming convention
+ * (`_<descriptor.id>-<sessionId>`, pinned separately by this file's AT-a/AT-b
+ * and by `cli/agent-run-log-dir-colocation.test.ts`'s co-location ratchet),
+ * because a dir-NAME discriminator alone cannot tell "the spine ran" apart
+ * from "a legacy runner sharing the same kind id ran" once both write into
+ * an identically-named directory. `orchestrator/logging.ts`'s `createLogger`
+ * writes the artifact; the `start` event's own
+ * `metadata.{session_id,session_kind,phase,step}` is read straight from
+ * `runInteractiveTurn`'s own source, not guessed — a MECHANISM-GROUNDED proof
+ * of invocation-with-these-exact-args, not a bare "it did not throw" proxy
+ * (the same evidentiary bar `cli/ui-bridge-agent-run-ceiling.test.ts`'s
  * header sets for its own no-spawn proof).
  *
  * The fixture forgeRoot is used BOTH as `cmdAgentRun`'s explicit `forgeRoot`
@@ -198,17 +210,81 @@ function setupTurnspecFixture(): TurnspecFixture {
   return { forgeRoot, projectArg, projectRoot, sessionId, sessionDir };
 }
 
-/** No `_interactive-<agentId>-*` event-log dir exists under `<forgeRoot>/
- *  _logs/` — the artifact `runInteractiveTurn` (and ONLY runInteractiveTurn)
- *  creates. Absence proves the new spine was never invoked. */
-function assertNoInteractiveLogDir(forgeRoot: string, agentIdPrefix: string, msg: string): void {
+/** R4-22 F4 amendment (replaces the former `assertNoInteractiveLogDir`,
+ *  which discriminated "did the spine run" by a `_interactive-<id>-*`
+ *  directory-NAME prefix). LOCATES the ONE `runInteractiveTurn`-emitted
+ *  "start" event, ANYWHERE under `<forgeRoot>/_logs/`, matching `sessionId`
+ *  + `sessionKind` by CONTENT — `skill: 'interactive-runner'`
+ *  (`orchestrator/interactive-runner.ts`'s `RUNNER_SKILL`, stamped on every
+ *  event the spine emits and on NO event any of the 4 legacy runners emit:
+ *  they stamp 'architect-runner' / 'instructions-runner' /
+ *  'demo-builder-runner' / 'project-brain-builder' — see each runner's own
+ *  `skill:` literal, `orchestrator/{architect,instructions,demo-builder,
+ *  project-brain-builder}-runner.ts`).
+ *
+ *  Deliberately does NOT assume any particular directory NAME: once
+ *  `orchestrator/interactive-runner.ts:213`'s cycleId becomes
+ *  `_<descriptor.id>-<sessionId>` (this WI's own fixed convention, pinned by
+ *  AT-a/AT-b/the co-location ratchet), that directory name is
+ *  INDISTINGUISHABLE from a legacy runner's own directory for any id the two
+ *  share (architect/instructions/project-brain) — a dir-name discriminator
+ *  can no longer tell "the spine ran" apart from "the legacy runner with the
+ *  same kind id ran"; only the event's own `skill` field still can. Returns
+ *  `undefined` if no matching event exists anywhere. */
+function findInteractiveRunnerStartEvent(
+  forgeRoot: string,
+  sessionId: string,
+  sessionKind: string,
+): Record<string, unknown> | undefined {
+  const logsRoot = join(forgeRoot, '_logs');
+  if (!existsSync(logsRoot)) return undefined;
+  for (const entry of readdirSync(logsRoot)) {
+    const eventsPath = join(logsRoot, entry, 'events.jsonl');
+    if (!existsSync(eventsPath)) continue;
+    const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean);
+    for (const line of lines) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      if (parsed.event_type !== 'start' || parsed.skill !== 'interactive-runner') continue;
+      const metadata = parsed.metadata as Record<string, unknown> | undefined;
+      if (metadata?.session_id === sessionId && metadata?.session_kind === sessionKind) return parsed;
+    }
+  }
+  return undefined;
+}
+
+/** No event ANYWHERE under `<forgeRoot>/_logs/` carries `skill:
+ *  'interactive-runner'` — proves `runInteractiveTurn` was never invoked at
+ *  all (any session/kind). STRICTLY STRONGER than the directory-name-prefix
+ *  check it replaces (`_interactive-<id>-*`) — see
+ *  `findInteractiveRunnerStartEvent`'s doc above for why a dir-name
+ *  discriminator alone stops working once the spine's directory name
+ *  collides with a legacy runner's own. */
+function assertNoInteractiveRunnerSkillEvent(forgeRoot: string, msg: string): void {
   const logsRoot = join(forgeRoot, '_logs');
   if (!existsSync(logsRoot)) return;
-  const entries = readdirSync(logsRoot);
-  assert.ok(
-    !entries.some((e) => e.startsWith(`_interactive-${agentIdPrefix}-`)),
-    `${msg} — got _logs/ entries: ${entries.join(', ')}`,
-  );
+  for (const entry of readdirSync(logsRoot)) {
+    const eventsPath = join(logsRoot, entry, 'events.jsonl');
+    if (!existsSync(eventsPath)) continue;
+    const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean);
+    for (const line of lines) {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        continue;
+      }
+      assert.notEqual(
+        parsed.skill,
+        'interactive-runner',
+        `${msg} — found a skill:'interactive-runner' event in ${eventsPath}: ${line}`,
+      );
+    }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -235,15 +311,16 @@ test('R4-22 WI-5, AT-1: a turnSpec-only agent-id (no AGENT_RUNNERS entry) drives
     const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', fx.projectArg], fx.forgeRoot));
     assert.equal(r.exitCode, null, `a successful turn must not call process.exit — got exit(${r.exitCode}), stderr: ${r.err}`);
 
-    const cycleId = `_interactive-${TURNSPEC_ONLY_ID}-${fx.sessionId}`;
-    const logPath = join(fx.forgeRoot, '_logs', cycleId, 'events.jsonl');
+    // R4-22 F4 amendment: located by CONTENT (skill: 'interactive-runner' +
+    // matching session_id/session_kind), not by a hardcoded directory-name
+    // literal — see findInteractiveRunnerStartEvent's doc + this file's header.
+    const startEv = findInteractiveRunnerStartEvent(fx.forgeRoot, fx.sessionId, TURNSPEC_ONLY_ID);
     assert.ok(
-      existsSync(logPath),
-      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means runInteractiveTurn was never actually invoked (stdout: ${r.out}, stderr: ${r.err})`,
+      startEv,
+      `expected a skill:'interactive-runner' start event for session ${fx.sessionId} kind ${TURNSPEC_ONLY_ID} ` +
+        `anywhere under ${join(fx.forgeRoot, '_logs')} — its absence means runInteractiveTurn was never actually ` +
+        `invoked (stdout: ${r.out}, stderr: ${r.err})`,
     );
-    const lines = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
-    const startEv = lines.find((l) => l.event_type === 'start');
-    assert.ok(startEv, `expected a "start" event in ${logPath}, got: ${JSON.stringify(lines)}`);
     const metadata = (startEv as Record<string, unknown>).metadata as Record<string, unknown>;
     assert.equal(metadata.session_id, fx.sessionId, 'CALL RECORD: ctx.sessionId must reach runInteractiveTurn unmodified');
     assert.equal(metadata.session_kind, TURNSPEC_ONLY_ID, 'CALL RECORD: the correct descriptor.id must have been passed');
@@ -262,9 +339,12 @@ test('R4-22 WI-5, AT-1: a turnSpec-only agent-id (no AGENT_RUNNERS entry) drives
 // AGENT_RUNNERS id today) through runInteractiveTurn anyway — proven two
 // ways: (a) the printed error is the exact `entry.verb`-flavored legacy text
 // (runInteractiveTurn's own errors are never phrased this way — see its
-// source, "runInteractiveTurn: ..." throughout), and (b) no
-// `_interactive-<id>-*` log dir — the artifact ONLY runInteractiveTurn
-// creates — ever appears.
+// source, "runInteractiveTurn: ..." throughout), and (b) no event anywhere
+// under `_logs/` carries `skill: 'interactive-runner'` — the marker ONLY
+// runInteractiveTurn stamps (R4-22 F4 amendment: content-based, not a
+// `_interactive-<id>-*` directory-name check, which stops discriminating the
+// moment the spine's directory name collides with the legacy runner's own —
+// see this file's header).
 const LEGACY_FAST_FAIL_CASES: { agentId: string; args: string[]; expected: RegExp }[] = [
   { agentId: 'instructions', args: ['instructions', 'some-session-id'], expected: /^forge instructions run: --project <name> is required$/m },
   { agentId: 'demo-builder', args: ['demo-builder', 'some-session-id'], expected: /^forge demo-builder run: --project <name> is required$/m },
@@ -279,7 +359,7 @@ for (const { agentId, args, expected } of LEGACY_FAST_FAIL_CASES) {
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
     assert.match(r.err, expected, `expected the legacy entry.verb-flavored text, got: ${r.err}`);
     assert.doesNotMatch(r.err, /runInteractiveTurn/, 'the legacy fast-fail path must never mention runInteractiveTurn');
-    assertNoInteractiveLogDir(ROOT, agentId, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
+    assertNoInteractiveRunnerSkillEvent(ROOT, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
   });
 }
 
@@ -353,7 +433,7 @@ test('R4-22 WI-5, AT-5: a descriptor WITHOUT turnSpec ("architect" — a real AG
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
     assert.match(r.err, /^forge architect run: missing <session-id>$/m, `expected the legacy entry.verb-flavored error, got: ${r.err}`);
     assert.doesNotMatch(r.err, /runInteractiveTurn/);
-    assertNoInteractiveLogDir(fx.forgeRoot, 'architect', 'a turnSpec-less "architect" descriptor must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a turnSpec-less "architect" descriptor must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -380,7 +460,7 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
     assert.match(r.err, /--project/i, `expected the error to mention --project, got: ${r.err}`);
     assert.match(r.err, /required/i, `expected the error to say --project is required, got: ${r.err}`);
     assert.match(r.err, /Usage:.*--project <name>/s, `expected a Usage: line naming --project <name>, got: ${r.err}`);
-    assertNoInteractiveLogDir(fx.forgeRoot, TURNSPEC_ONLY_ID, 'a rejected (missing --project) call must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a rejected (missing --project) call must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -504,15 +584,15 @@ test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reach
       `"authoring" must not be rejected as unknown-agent-id once the real yaml carries its turnSpec — got stderr: ${r.err}`,
     );
 
-    const logPath = join(forgeRoot, '_logs', `_interactive-authoring-${sessionId}`, 'events.jsonl');
+    // R4-22 F4 amendment: located by CONTENT, not a hardcoded directory-name
+    // literal — see findInteractiveRunnerStartEvent's doc + this file's header.
+    const startEv = findInteractiveRunnerStartEvent(forgeRoot, sessionId, 'authoring');
     assert.ok(
-      existsSync(logPath),
-      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means "authoring" fell through to ` +
-        `AGENT_RUNNERS (undefined -> unknown-agent-id) instead of reaching runInteractiveTurn (stdout: ${r.out}, stderr: ${r.err})`,
+      startEv,
+      `expected a skill:'interactive-runner' start event for session ${sessionId} kind "authoring" anywhere under ` +
+        `${join(forgeRoot, '_logs')} — its absence means "authoring" fell through to AGENT_RUNNERS (undefined -> ` +
+        `unknown-agent-id) instead of reaching runInteractiveTurn (stdout: ${r.out}, stderr: ${r.err})`,
     );
-    const lines = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
-    const startEv = lines.find((l) => l.event_type === 'start');
-    assert.ok(startEv, `expected a "start" event in ${logPath}, got: ${JSON.stringify(lines)}`);
     const metadata = (startEv as Record<string, unknown>).metadata as Record<string, unknown>;
     assert.equal(metadata.session_id, sessionId, 'CALL RECORD: ctx.sessionId must reach runInteractiveTurn unmodified');
     assert.equal(metadata.session_kind, 'authoring', 'CALL RECORD: the real "authoring" descriptor.id must have been passed — NOT AGENT_RUNNERS');
@@ -600,11 +680,13 @@ test('R4-21 phase 2, correction B, AT-B1: cmdAgentRun resolves the projects root
       `expected the turn to resolve the session under the CONFIGURED projectsDir and run it — got exit(${r.exitCode}), stdout: ${r.out}, stderr: ${r.err}`,
     );
 
-    const logPath = join(fx.forgeRoot, '_logs', `_interactive-${TURNSPEC_ONLY_ID}-${fx.sessionId}`, 'events.jsonl');
+    // R4-22 F4 amendment: located by CONTENT, not a hardcoded directory-name
+    // literal — see findInteractiveRunnerStartEvent's doc + this file's header.
+    const startEv = findInteractiveRunnerStartEvent(fx.forgeRoot, fx.sessionId, TURNSPEC_ONLY_ID);
     assert.ok(
-      existsSync(logPath),
-      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means the session under the ` +
-        `CONFIGURED projectsDir was never found (stdout: ${r.out}, stderr: ${r.err})`,
+      startEv,
+      `expected a skill:'interactive-runner' start event for session ${fx.sessionId} kind ${TURNSPEC_ONLY_ID} — its ` +
+        `absence means the session under the CONFIGURED projectsDir was never found (stdout: ${r.out}, stderr: ${r.err})`,
     );
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
@@ -630,10 +712,13 @@ test('R4-21 phase 2, correction B, AT-B2: cmdAgentRun resolves the projects root
       `expected the turn to resolve the session via FORGE_PROJECTS_DIR and run it — got exit(${r.exitCode}), stdout: ${r.out}, stderr: ${r.err}`,
     );
 
-    const logPath = join(fx.forgeRoot, '_logs', `_interactive-${TURNSPEC_ONLY_ID}-${fx.sessionId}`, 'events.jsonl');
+    // R4-22 F4 amendment: located by CONTENT, not a hardcoded directory-name
+    // literal — see findInteractiveRunnerStartEvent's doc + this file's header.
+    const startEv = findInteractiveRunnerStartEvent(fx.forgeRoot, fx.sessionId, TURNSPEC_ONLY_ID);
     assert.ok(
-      existsSync(logPath),
-      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means FORGE_PROJECTS_DIR was not honoured (stdout: ${r.out}, stderr: ${r.err})`,
+      startEv,
+      `expected a skill:'interactive-runner' start event for session ${fx.sessionId} kind ${TURNSPEC_ONLY_ID} — its ` +
+        `absence means FORGE_PROJECTS_DIR was not honoured (stdout: ${r.out}, stderr: ${r.err})`,
     );
   } finally {
     if (prevEnv === undefined) delete process.env.FORGE_PROJECTS_DIR;
@@ -661,7 +746,136 @@ test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides
       assert.equal(r.exitCode, 2, `--project ${JSON.stringify(bad)} must be refused, got exit(${r.exitCode}), stdout: ${r.out}`);
       assert.match(r.err, /not a valid project name/, `expected the guarded-segment refusal text for ${JSON.stringify(bad)}, got: ${r.err}`);
     }
-    assertNoInteractiveLogDir(fx.forgeRoot, TURNSPEC_ONLY_ID, 'a refused --project value must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a refused --project value must never reach runInteractiveTurn');
+  } finally {
+    rmSync(fx.forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ===========================================================================
+// R4-22 F4 (T3, acceptance tests) — pins the CORRECT event-log DIRECTORY
+// LOCATION `runInteractiveTurn` must write into: `_<descriptor.id>-
+// <sessionId>` under `<forgeRoot>/_logs/` — the SAME convention every real
+// consumer of an interactive session's live log already derives
+// independently:
+//   - forge-ui/app/sessions/[kind]/[sessionId]/page.tsx:158,
+//     `cycleId = \`_${kind}-${sessionId}\``, handed to useCycleEvents;
+//   - cli/ui-bridge.ts's spawnAgentTurn (~L2044-2062) writes a turn's
+//     stderr.log into `_logs/_${logPrefix}-${sessionId}/`
+//     (SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring');
+//   - the 4 legacy runners' own createLogger cycleId's
+//     (`_architect-<sid>`, `_instructions-<sid>`, `_demo-<sid>`,
+//     `_project-brain-<sid>` — orchestrator/{architect,instructions,
+//     demo-builder,project-brain-builder}-runner.ts).
+//
+// THE DEFECT (already reproduced — see the T3 brief, not re-litigated here):
+// `orchestrator/interactive-runner.ts:213` today builds
+// `cycleId = \`_interactive-${descriptor.id}-${ctx.sessionId}\`` — an EXTRA
+// `_interactive-` prefix none of the three consumers above share. One real
+// authoring turn therefore splits its stderr (written to `_authoring-<sid>`)
+// and its own events (written to `_interactive-authoring-<sid>`) across TWO
+// directories, and the live UI panel (subscribed to `_authoring-<sid>` per
+// page.tsx) sees neither.
+//
+// AT-1..AT-7/WI-1/AT-B1..AT-B3 above (amended, R4-22 F4) prove the FORK
+// routes to runInteractiveTurn at all, by CONTENT (skill:
+// 'interactive-runner'), deliberately independent of directory naming. The
+// two tests below are the ones that pin the LOCATION contract itself — they
+// are expected to be RED at HEAD (no production change on this branch yet)
+// and GREEN only once interactive-runner.ts:213 is fixed.
+// ===========================================================================
+
+// Kills: an implementation that leaves orchestrator/interactive-runner.ts:213
+// unchanged (cycleId = `_interactive-${descriptor.id}-${ctx.sessionId}`) —
+// the correct-directory assertion fails outright; and an implementation that
+// "fixes" it by writing into BOTH the old and new directories (e.g. a
+// half-migration that keeps the old write for back-compat, so the bug's
+// symptom — the UI subscribing to a directory nothing/only-half writes to —
+// persists) — the explicit must-NOT-exist assertion on the old directory
+// catches that, which a must-exist-only assertion on the new directory alone
+// would miss entirely.
+test('R4-22 F4, AT-a: cmdAgentRun(["authoring", sid, "--project", p]) writes its event log to _logs/_authoring-<sid>/, NOT _logs/_interactive-authoring-<sid>/ — driven by the REAL checked-in session-kinds.yaml through the REAL CLI entry point', async () => {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  const realYaml = readFileSync(join(repoRoot, 'studio', 'session-kinds.yaml'), 'utf8');
+  // Fixture preconditions, asserted BEFORE reading any verdict.
+  assert.ok(realYaml.includes('id: authoring'), 'arrange: the real, checked-in studio/session-kinds.yaml must declare an "authoring" row');
+  assert.match(realYaml, /id:\s*authoring[\s\S]*?turnSpec:/, 'arrange: the real "authoring" row must carry a turnSpec');
+
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'r422f4-ata-agentrun-'));
+  try {
+    mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+    writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), realYaml);
+
+    const projectArg = 'fixtureproj';
+    const projectRoot = join(forgeRoot, 'projects', projectArg);
+    // The real authoring turnSpec's kindDir is "_authoring" (ADR-043 §1) —
+    // hardcoded here (not re-derived from the descriptor we're about to
+    // load), matching the established precedent set by the WI-1 test above.
+    const sessionId = '2026-08-11T00-00-01-r422f4ata';
+    const sessionDir = join(projectRoot, '_authoring', sessionId);
+    mkdirSync(sessionDir, { recursive: true });
+    // awaiting-review is the real authoring turnSpec's ONE noop-step phase
+    // (ADR-043 §1) — SDK-free, mirroring the WI-1 test's own established
+    // no-mock-seam design.
+    writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'awaiting-review', updated_at: new Date(0).toISOString() });
+    assert.equal(
+      readSessionStatus<{ phase: string }>(sessionDir)?.phase,
+      'awaiting-review',
+      'arrange: seeded status must start in awaiting-review',
+    );
+
+    const r = await withCwd(forgeRoot, () => run(['authoring', sessionId, '--project', projectArg], forgeRoot));
+    assert.equal(r.exitCode, null, `a successful turn must not call process.exit — got exit(${r.exitCode}), stderr: ${r.err}`);
+
+    const correctLogPath = join(forgeRoot, '_logs', `_authoring-${sessionId}`, 'events.jsonl');
+    assert.ok(
+      existsSync(correctLogPath),
+      `expected the spine's event log at ${correctLogPath} (the "_<descriptor.id>-<sessionId>" convention every ` +
+        'real consumer — forge-ui\'s session page, ui-bridge\'s spawnAgentTurn stderr sink, the 4 legacy runners — ' +
+        `already uses) — its absence means interactive-runner.ts's cycleId still carries the "_interactive-" prefix ` +
+        `(stdout: ${r.out}, stderr: ${r.err})`,
+    );
+    const contents = readFileSync(correctLogPath, 'utf8').trim();
+    assert.ok(contents.length > 0, `${correctLogPath} exists but is empty`);
+
+    const oldBuggyLogDir = join(forgeRoot, '_logs', `_interactive-authoring-${sessionId}`);
+    assert.equal(
+      existsSync(oldBuggyLogDir),
+      false,
+      `the OLD, buggy directory ${oldBuggyLogDir} must NOT exist — this is not just "the new directory is right", ` +
+        'it also rules out a half-migration that writes into both the old and new locations',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// Kills the same wrong-implementation shapes as AT-a above, PLUS: a fix that
+// special-cases the literal string "authoring" (e.g. `descriptor.id ===
+// 'authoring' ? \`_${id}-${sid}\` : \`_interactive-${id}-${sid}\``) instead
+// of fixing the general cycleId construction — this test uses a completely
+// unrelated synthetic id (TURNSPEC_ONLY_ID) that shares no code path or
+// string literal with "authoring", so a hardcoded special case would pass
+// AT-a but fail this test outright.
+test('R4-22 F4, AT-b: a SYNTHETIC turnSpec-only kind also writes its event log to _logs/_<id>-<sid>/, NOT _logs/_interactive-<id>-<sid>/ — proves the rule is generic, not hardcoded to "authoring"', async () => {
+  const fx = setupTurnspecFixture();
+  try {
+    const descriptor = loadSessionKinds(fx.forgeRoot).find((d) => d.id === TURNSPEC_ONLY_ID);
+    assert.ok(descriptor?.turnSpec, 'fixture precondition: descriptor must carry a turnSpec');
+
+    const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', fx.projectArg], fx.forgeRoot));
+    assert.equal(r.exitCode, null, `a successful turn must not call process.exit — got exit(${r.exitCode}), stderr: ${r.err}`);
+
+    const correctLogPath = join(fx.forgeRoot, '_logs', `_${TURNSPEC_ONLY_ID}-${fx.sessionId}`, 'events.jsonl');
+    assert.ok(
+      existsSync(correctLogPath),
+      `expected the spine's event log at ${correctLogPath} — its absence means the "_<descriptor.id>-<sessionId>" ` +
+        `convention does not hold generically (stdout: ${r.out}, stderr: ${r.err})`,
+    );
+    assert.ok(readFileSync(correctLogPath, 'utf8').trim().length > 0, `${correctLogPath} exists but is empty`);
+
+    const oldBuggyLogDir = join(fx.forgeRoot, '_logs', `_interactive-${TURNSPEC_ONLY_ID}-${fx.sessionId}`);
+    assert.equal(existsSync(oldBuggyLogDir), false, `the OLD, buggy directory ${oldBuggyLogDir} must NOT exist`);
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
