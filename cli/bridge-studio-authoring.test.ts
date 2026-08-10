@@ -318,6 +318,54 @@ test('RED-4d (containment): a symlinked skills/<id> DIRECTORY escaping the forge
 });
 
 // ---------------------------------------------------------------------------
+// MINOR (T3 fix round) — RED-4d's mirror for the HOOK path. RED-4d above only
+// covers the skill path's containment; the hook path's finalize write goes
+// through the SAME `resolveGuardedPath(hooksDir(forgeRoot), [slug, ...])`
+// choke point (see RED-4c's own comment above `finalizeHook`), but had no
+// direct-execution proof of its own — the security audit doc
+// (docs/security-request-path-audit.md, "Guarded in R4-21") conceded this
+// gap explicitly ("the hook path's containment is the SAME resolveGuardedPath
+// call already covered by this table's existing rows for that function — not
+// re-executed against this specific route in this round"). This test closes
+// that gap: a hook draft whose destination directory
+// (`studio/hooks/<slug>`) is ITSELF a symlink escaping the forge root must be
+// refused via the same guard, never a naive lexical startsWith pass.
+// ---------------------------------------------------------------------------
+
+test('MINOR (containment, hook path): a symlinked studio/hooks/<slug> DIRECTORY escaping the forge root is refused via the SAME guarded choke point POST /api/studio/hooks already uses — nothing is created outside the escape target', async () => {
+  const outsideDir = mkdtempSync(join(tmpdir(), 'bridge-authoring-hook-outside-'));
+  const outsideEntriesBefore = readdirSync(outsideDir).sort();
+  const linkPath = join(forgeRoot, 'studio', 'hooks', 'escape-authoring-hook');
+  try {
+    symlinkSync(outsideDir, linkPath, 'dir');
+  } catch {
+    // Symlinks unsupported on this filesystem/platform — skip, matching the
+    // sibling RED-4d test's own tolerance.
+    rmSync(outsideDir, { recursive: true, force: true });
+    return;
+  }
+  try {
+    const res = await postJson(FINALIZE_URL(), {
+      kind: 'hook',
+      id: 'escape-authoring-hook',
+      name: 'escape-authoring-hook',
+      description: 'd',
+      on: 'PreToolUse',
+      scriptBody: '#!/usr/bin/env bash\necho ATTACKER\n',
+    });
+    assert.notEqual(
+      res.status,
+      200,
+      'a finalize that would write through a symlinked studio/hooks/<slug> directory escaping the forge root must be REJECTED, never a naive lexical startsWith pass',
+    );
+    const outsideEntriesAfter = readdirSync(outsideDir).sort();
+    assert.deepEqual(outsideEntriesAfter, outsideEntriesBefore, 'nothing may be created inside the out-of-tree directory the symlink points at');
+  } finally {
+    rmSync(outsideDir, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Handler contract — direct invocation (mirrors bridge-studio-skills.test.ts's
 // / bridge-studio.test.ts's non-matching-URL passthrough pattern)
 // ---------------------------------------------------------------------------
