@@ -1068,14 +1068,56 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
     assert.deepEqual(findings, [], `expected zero turnspec-* findings for the well-formed ADR example, got: ${JSON.stringify(findings)}`);
   });
 
-  it('AT-R422-5: ADDITIVE-OPTIONAL, proven against the REAL repo — every shipped studio/session-kinds.yaml row today has no turnSpec at all; loadSessionKinds/validateSessionKinds(REPO_ROOT) must behave EXACTLY as before (already true today at branch base — this is a must-STAY-green regression pin, not a fresh RED, honestly reported per this file\'s own AT-64..66 precedent; kills an implementation that makes turnSpec required, or that emits a finding merely for its absence)', () => {
+  // UPDATED (R4-21 phase 2, WI-1, D1 — _wave5/unit-specs/R4-21-phase2.md):
+  // this AT was written during R4-22 WI-1, when the real repo shipped 5
+  // session kinds and NONE carried a turnSpec. R4-21 phase 1 (this branch,
+  // rebased post-R4-22) already added a 6th real descriptor, "authoring" —
+  // so the OLD assertion ("exactly 5, none with turnSpec") is stale on its
+  // own terms (verified: it fails at branch base today, `6 !== 5`, BEFORE
+  // this edit — a pre-existing broken pin from the rebase, not something WI-1
+  // introduces). D1 makes "authoring" WI-1's own turnSpec consumer (ADR-043
+  // §1's worked example IS this descriptor) — the additive-optionality
+  // guarantee this AT exists to pin now has ONE declared exception, not zero.
+  //
+  // OLD assertion: descs.length === 5; every descriptor's turnSpec is
+  // undefined.
+  // NEW assertion: descs.length === 6; every descriptor OTHER than
+  // "authoring" still has turnSpec === undefined (the additive-optionality
+  // guarantee stays intact for the other 5 — NOT weakened by this edit);
+  // "authoring" carries a turnSpec that deep-equals ADR-043 §1's exact table
+  // (the same `wellFormedTurnSpec()` fixture this file's own AT-R422-9
+  // positive control already uses), and validateSessionKinds emits zero
+  // turnspec-* findings scoped to session-kind:authoring specifically (a
+  // narrower, more targeted version of "zero findings for it" than AT-17's
+  // repo-wide zero-error-findings check, which also covers this once
+  // turnSpec is well-formed).
+  // Why this is a CONTRACT CHANGE, not a weakening: the property "a
+  // turnSpec-less descriptor is untouched by turnSpec validation" is
+  // PRESERVED for every one of the 5 pre-existing kinds — this only adds the
+  // POSITIVE half (a turnSpec-bearing real descriptor validates clean and
+  // matches the ratified table) for the ONE kind D1 explicitly wires it onto.
+  it('AT-R422-5 (updated for R4-21 phase 2, WI-1, D1): ADDITIVE-OPTIONAL, proven against the REAL repo — 5 of the 6 real session kinds still carry no turnSpec at all (loadSessionKinds/validateSessionKinds(REPO_ROOT) behaves EXACTLY as before for them); "authoring" is the ONE declared exception and its turnSpec deep-equals ADR-043 §1\'s table exactly (kills an implementation that makes turnSpec required on every kind, that emits a finding merely for its absence on the OTHER 5, or that ships "authoring" with a turnSpec that drifts from the ratified table)', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 5, 'the 5 real shipped session kinds must still load — turnSpec must never become a required field');
+    assert.equal(descs.length, 6, `expected exactly 6 real session kinds (R4-16 "demo", R4-17 "onboarding", R4-21 "authoring"), got ids: ${descs.map((d) => d.id).join(', ')}`);
     for (const d of descs) {
-      assert.equal((d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec, undefined, `descriptor "${d.id}" has no turnSpec in the real yaml — must remain undefined, never defaulted to some non-optional shape`);
+      if (d.id === 'authoring') continue;
+      assert.equal(
+        (d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec,
+        undefined,
+        `descriptor "${d.id}" has no turnSpec in the real yaml — must remain undefined, never defaulted to some non-optional shape`,
+      );
     }
-    const findings = turnspecFindings(validateSessionKinds(REPO_ROOT));
-    assert.deepEqual(findings, [], `a turnSpec-less descriptor must never trip a turnspec-* finding, got: ${JSON.stringify(findings)}`);
+
+    const authoring = byId(descs, 'authoring');
+    assert.ok(authoring.turnSpec, 'expected the real "authoring" descriptor to carry a turnSpec (D1 — ADR-043 §1 verbatim)');
+    assert.deepEqual(
+      authoring.turnSpec,
+      wellFormedTurnSpec(),
+      `authoring's real turnSpec must deep-equal ADR-043 §1's exact 4-phase table (kindDir:_authoring, style:agent, analyzing→awaiting-review→committing→committed), got: ${JSON.stringify(authoring.turnSpec)}`,
+    );
+
+    const findings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:authoring');
+    assert.deepEqual(findings, [], `expected zero turnspec-* findings for the real "authoring" descriptor, got: ${JSON.stringify(findings)}`);
   });
 });
 

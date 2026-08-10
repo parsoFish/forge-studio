@@ -442,3 +442,82 @@ test('R4-22 WI-5, AT-7 (standing invariant): no legacy AGENT_RUNNERS id in the R
       `exercises the fork.`,
   );
 });
+
+// ===========================================================================
+// R4-21 phase 2, WI-1 (_wave5/unit-specs/R4-21-phase2.md) — the REAL
+// checked-in `studio/session-kinds.yaml` "authoring" row drives the fork
+// through cmdAgentRun, the REAL CLI entry point. Every AT-1..AT-7 test above
+// proves the GENERIC fork mechanism against a synthetic fixture id
+// (`turnspec-only-fixture-kind`); this test proves the mechanism actually
+// FIRES for the specific id "authoring" once the real production yaml file
+// carries its turnSpec — the defect this WI-1 closes (defect 1 in the
+// unit-spec: "No descriptor carries turnSpec ⇒ the R4-22 spine is
+// unreachable from production"). RED today: the real "authoring" row has no
+// turnSpec, so this falls through to `AGENT_RUNNERS['authoring']`
+// (undefined) and hits the unknown-agent-id bail-out.
+//
+// The REAL, checked-in studio/session-kinds.yaml is copied byte-for-byte
+// into an isolated tmp forgeRoot (never written into, never read from the
+// real worktree at test time) — this is deliberately NOT a hand-rolled
+// duplicate of the authoring row (which would only prove the generic
+// mechanism again, redundant with AT-1 above): reading the actual file
+// means a typo/drift the WI-1 implementer introduces in the real file is
+// caught here, not just in session-kinds.test.ts's structural pins.
+// ===========================================================================
+
+test('R4-21 phase 2, WI-1: cmdAgentRun(["authoring", sid, "--project", p]) reaches runInteractiveTurn and NOT AGENT_RUNNERS — driven by the REAL checked-in session-kinds.yaml through the REAL CLI entry point', async () => {
+  const repoRoot = fileURLToPath(new URL('..', import.meta.url));
+  const realYaml = readFileSync(join(repoRoot, 'studio', 'session-kinds.yaml'), 'utf8');
+  // Fixture precondition, asserted before reading any verdict.
+  assert.ok(realYaml.includes('id: authoring'), 'arrange: the real, checked-in studio/session-kinds.yaml must declare an "authoring" row');
+  assert.equal(AGENT_RUNNERS['authoring'], undefined, 'fixture precondition: "authoring" must NOT be an AGENT_RUNNERS key (there is no bespoke authoring-runner.ts)');
+
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'r421-phase2-agentrun-'));
+  try {
+    mkdirSync(join(forgeRoot, 'studio'), { recursive: true });
+    writeFileSync(join(forgeRoot, 'studio', 'session-kinds.yaml'), realYaml);
+
+    const projectArg = 'fixtureproj';
+    const projectRoot = join(forgeRoot, 'projects', projectArg);
+    // D1 (ADR-043 §1): the real authoring turnSpec's kindDir is "_authoring"
+    // — hardcoded here (not re-derived from the descriptor we're about to
+    // load) so a kindDir drift in the real file surfaces as a containment
+    // failure below rather than a silently-matching fixture path.
+    const sessionId = '2026-08-11T00-00-00-r421p2';
+    const sessionDir = join(projectRoot, '_authoring', sessionId);
+    mkdirSync(sessionDir, { recursive: true });
+    // awaiting-review is the real authoring turnSpec's ONE noop-step phase
+    // (ADR-043 §1) — SDK-free, mirroring this file's own established
+    // no-mock-seam design (see file header "WHY NO DEPENDENCY-INJECTION SEAM").
+    writeSessionStatus(sessionDir, { session_id: sessionId, phase: 'awaiting-review', updated_at: new Date(0).toISOString() });
+    assert.equal(
+      readSessionStatus<{ phase: string }>(sessionDir)?.phase,
+      'awaiting-review',
+      'arrange: seeded status must start in awaiting-review',
+    );
+
+    const r = await withCwd(forgeRoot, () => run(['authoring', sessionId, '--project', projectArg], forgeRoot));
+    assert.equal(r.exitCode, null, `a successful turn must not call process.exit — got exit(${r.exitCode}), stderr: ${r.err}`);
+    assert.doesNotMatch(
+      r.err,
+      /unknown agent-id/i,
+      `"authoring" must not be rejected as unknown-agent-id once the real yaml carries its turnSpec — got stderr: ${r.err}`,
+    );
+
+    const logPath = join(forgeRoot, '_logs', `_interactive-authoring-${sessionId}`, 'events.jsonl');
+    assert.ok(
+      existsSync(logPath),
+      `runInteractiveTurn's own event log must exist at ${logPath} — its absence means "authoring" fell through to ` +
+        `AGENT_RUNNERS (undefined -> unknown-agent-id) instead of reaching runInteractiveTurn (stdout: ${r.out}, stderr: ${r.err})`,
+    );
+    const lines = readFileSync(logPath, 'utf8').trim().split('\n').map((l) => JSON.parse(l) as Record<string, unknown>);
+    const startEv = lines.find((l) => l.event_type === 'start');
+    assert.ok(startEv, `expected a "start" event in ${logPath}, got: ${JSON.stringify(lines)}`);
+    const metadata = (startEv as Record<string, unknown>).metadata as Record<string, unknown>;
+    assert.equal(metadata.session_id, sessionId, 'CALL RECORD: ctx.sessionId must reach runInteractiveTurn unmodified');
+    assert.equal(metadata.session_kind, 'authoring', 'CALL RECORD: the real "authoring" descriptor.id must have been passed — NOT AGENT_RUNNERS');
+    assert.equal(metadata.step, 'noop', 'sanity: the real authoring turnSpec\'s awaiting-review row declares step:noop');
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
