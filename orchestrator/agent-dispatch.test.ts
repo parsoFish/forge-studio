@@ -6,6 +6,11 @@
  *  - `buildStandaloneRunPrompt` — pure prompt assembly; inputs render as DATA.
  *  - `resolveDispatchableAgent` — the two boundary rejections the generic run
  *    host must refuse (unknown slug + interactive agent) plus the happy path.
+ *  - `resolveInteractiveAgent` (R4-22 WI-4, ADR-043 §4 "Two hosts,
+ *    code-enforced twins") — the MIRROR boundary: accepts only interactive
+ *    defs, refuses everything else (unknown slug + non-interactive agent)
+ *    with the symmetric error. Plus TWIN-REFUSAL / NON-DISTURBANCE / roster
+ *    COMPLEMENT pins proving `resolveDispatchableAgent` stays untouched.
  *  - `dispatchAgentRun` — wiring proof under the dry-bridge / no-spawn seam:
  *    resolves the def, assembles the prompt, calls `runAgent`, and returns the
  *    suppressed result with start + spawn-suppressed events on disk — no real
@@ -21,6 +26,7 @@ import { join } from 'node:path';
 import {
   dispatchAgentRun,
   resolveDispatchableAgent,
+  resolveInteractiveAgent,
   buildStandaloneRunPrompt,
 } from './agent-dispatch.ts';
 import { listAgentDefinitions } from './studio/registry.ts';
@@ -176,6 +182,199 @@ test('resolveDispatchableAgent: the R4-02 onboarding-agent is dispatchable (both
   const def = resolveDispatchableAgent('onboarding-agent', listAgentDefinitions(SKILLS));
   assert.equal(def.slug, 'onboarding-agent');
   assert.notEqual(def.surface, 'interactive', 'onboarding agent must be non-interactive to dispatch');
+});
+
+// ---------------------------------------------------------------------------
+// resolveInteractiveAgent (R4-22 WI-4) — the MIRROR of resolveDispatchableAgent
+// (ADR-043 §4 "Two hosts, code-enforced twins"): accepts ONLY an interactive
+// def, refuses every non-interactive/unknown slug with the symmetric
+// boundary error.
+//
+// EVIDENCE for "no real roster def is interactive today" (why the happy-path
+// test below synthesizes rather than picks a real slug — the SAME situation
+// `resolveDispatchableAgent`'s own interactive-refusal test above already
+// documented at its authoring time): walking `skills/*/SKILL.md` for
+// `surface:`/`library:` and how `listAgentDefinitions` + `isStudioAgent` +
+// `agentCapabilityDescriptor` combine —
+//   - `cruft-sweep` declares `surface: interactive` but carries NO `runtime`
+//     block, so `isStudioAgent` (`'runtime' in d`) excludes it before
+//     `surface` is ever read by `agentCapabilityDescriptor`.
+//   - `instructions-creator` and `demo-builder` both declare
+//     `surface: interactive` but also `library: false`, so `isStudioAgent`
+//     (`d.library !== false`) excludes them from `listAgentDefinitions`
+//     entirely — the four bespoke interactive-session runners ADR-043 names
+//     (architect / instructions / demo-builder / project-brain) are largely
+//     `library: false` "dispatched by the bridge, never composed into a
+//     flow" defs, by design.
+//   - `architect` — the flagship interactive session kind — declares NO
+//     `surface` field at all (`executionPathForSurface(undefined)` →
+//     `'unattended'` per `orchestrator/studio/derive.ts`), so it reads as
+//     non-interactive to `agentCapabilityDescriptor` today.
+//   - `project-brain-builder` sets `surface: unattended` outright (also
+//     `library: false`, so it never reaches the roster anyway).
+// Confirmed live by loading the real roster: every one of the 10 defs
+// `listAgentDefinitions(SKILLS)` returns has `agentCapabilityDescriptor(def)
+// .interactive === false`. This is exactly why the roster-driven COMPLEMENT
+// pin below (which DOES run over the real, live-loaded roster) only ever
+// exercises the non-interactive side of the complement today — there is
+// currently no real def to exercise the interactive side against. That is a
+// true fact about the current roster content, not a gap in this suite.
+// ---------------------------------------------------------------------------
+
+test('resolveInteractiveAgent: an interactive agent resolves', () => {
+  // Kills: an implementation that never checks
+  // `agentCapabilityDescriptor(def).interactive` at all (e.g. one that always
+  // throws regardless of interactivity, making this test the only one able
+  // to prove the happy path exists), or one that resolves the WRONG def
+  // (e.g. hardcodes `defs[0]` instead of matching by `slug`).
+  const interactive = {
+    ...getDef('project-scoped-review'),
+    slug: 'fake-interactive-accept',
+    surface: 'interactive',
+  } as AgentDefinition;
+  const def = resolveInteractiveAgent('fake-interactive-accept', [interactive]);
+  assert.equal(def.slug, 'fake-interactive-accept');
+});
+
+test('resolveInteractiveAgent: a non-interactive roster agent throws the SYMMETRIC boundary error (names the slug, states the mirrored boundary)', () => {
+  // Kills: an implementation that accepts everything (never actually checks
+  // interactivity, so a non-interactive agent slips through as if it were
+  // interactive), or one that throws but with generic/unrelated text that
+  // doesn't name the slug or state the mirror-image boundary (the dispatch
+  // host's refusal names "bespoke session page" / "generic run host" — this
+  // mirror must reference the same two nouns, direction reversed: an
+  // interactive-only host refusing a NON-interactive agent).
+  const defs = listAgentDefinitions(SKILLS);
+  let threw: unknown;
+  try {
+    resolveInteractiveAgent('project-scoped-review', defs);
+  } catch (err) {
+    threw = err;
+  }
+  assert.ok(threw instanceof Error, 'expected resolveInteractiveAgent to throw for a non-interactive slug');
+  const message = (threw as Error).message;
+  assert.match(message, /"project-scoped-review"/, 'must name the slug');
+  assert.match(message, /not interactive/i, 'must state the boundary — mirror image of resolveDispatchableAgent\'s "is interactive"');
+  assert.match(
+    message,
+    /generic run host/i,
+    'must reference the generic run host (the other side of the boundary), mirroring the dispatch-host refusal',
+  );
+  assert.match(
+    message,
+    /bespoke session page|interactive session/i,
+    'must reference the interactive-session surface this host serves',
+  );
+});
+
+test('resolveInteractiveAgent: an unknown slug throws with the roster listed, mirroring resolveDispatchableAgent\'s not-found branch', () => {
+  // Kills: a missing/collapsed not-found branch — e.g. `.find()` returning
+  // `undefined` and then `agentCapabilityDescriptor(undefined)` crashing
+  // with an unrelated TypeError instead of a clear, slug-naming,
+  // roster-listing error; or a not-found error that fails to actually list
+  // the known slugs.
+  const defs = listAgentDefinitions(SKILLS);
+  let threw: unknown;
+  try {
+    resolveInteractiveAgent('no-such-agent', defs);
+  } catch (err) {
+    threw = err;
+  }
+  assert.ok(threw instanceof Error, 'expected resolveInteractiveAgent to throw for an unknown slug');
+  const message = (threw as Error).message;
+  assert.match(message, /"no-such-agent"/, 'must name the unknown slug');
+  for (const d of defs) {
+    assert.ok(message.includes(d.slug), `expected the known-roster listing to include "${d.slug}"`);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// TWIN-REFUSAL PIN — resolveDispatchableAgent's existing interactive refusal
+// must stay BYTE-FOR-BYTE unchanged. ADR-043 §4: "resolveDispatchableAgent
+// (orchestrator/agent-dispatch.ts:81) is UNCHANGED... Softening that refusal
+// is the single change that would break the boundary this whole design rests
+// on." This is a regression lock, not a characterization test: it exists
+// specifically so that if a later implementer reworks the refusal wording
+// "to make the mirror easier," THIS test goes red — see the worker report
+// for the mutation proof (perturbed text, confirmed-applied, red, reverted,
+// confirmed-green).
+// ---------------------------------------------------------------------------
+
+test('TWIN-REFUSAL PIN: resolveDispatchableAgent refuses an interactive agent with the EXACT existing message, byte-for-byte', () => {
+  // Kills: ANY edit to resolveDispatchableAgent's refusal wording, phrasing,
+  // punctuation, or structure — including one made in the name of "cleaning
+  // up" for the resolveInteractiveAgent mirror. The exact literal below is
+  // NOT derived from the source file; it is hand-transcribed from
+  // `orchestrator/agent-dispatch.ts:88-91` at pin-authoring time, so a
+  // future edit to that literal breaks this test rather than silently
+  // agreeing with it.
+  const interactive = {
+    ...getDef('project-scoped-review'),
+    slug: 'fake-interactive-twin',
+    surface: 'interactive',
+  } as AgentDefinition;
+  const expected =
+    'dispatchAgentRun: agent "fake-interactive-twin" is interactive (surface: interactive) — ' +
+    'interactive agents run through their bespoke session page, not the generic run host';
+  let threw: unknown;
+  try {
+    resolveDispatchableAgent('fake-interactive-twin', [interactive]);
+  } catch (err) {
+    threw = err;
+  }
+  assert.ok(threw instanceof Error, 'expected resolveDispatchableAgent to throw for an interactive agent');
+  assert.equal((threw as Error).message, expected);
+});
+
+test('NON-DISTURBANCE PIN: resolveDispatchableAgent still ACCEPTS a normal non-interactive agent unchanged (positive control for the twin-refusal pin above)', () => {
+  // Kills: an implementation that makes resolveDispatchableAgent refuse
+  // EVERYTHING (interactive and non-interactive alike) while "fixing" the
+  // refusal message — that mutation would still pass the TWIN-REFUSAL PIN's
+  // sibling test above for the interactive case, but this positive control
+  // catches it on the non-interactive case. Without this test, the
+  // TWIN-REFUSAL PIN alone could not distinguish "still discriminating
+  // correctly" from "refuses everything now."
+  const defs = listAgentDefinitions(SKILLS);
+  const def = resolveDispatchableAgent('project-scoped-review', defs);
+  assert.equal(def.slug, 'project-scoped-review');
+  assert.notEqual(def.surface, 'interactive');
+});
+
+test('COMPLEMENT PIN: over the REAL, live-loaded roster, resolveDispatchableAgent and resolveInteractiveAgent accept exactly complementary sets', () => {
+  // Kills: any implementation where a roster def satisfies BOTH guards (e.g.
+  // resolveInteractiveAgent forgets to negate the interactivity check and
+  // ends up accepting the same defs resolveDispatchableAgent does) or
+  // NEITHER (e.g. a shared helper both delegate to has an off-by-one that
+  // breaks the non-interactive path too). Driven over the REAL roster
+  // (`listAgentDefinitions(SKILLS)`, currently 10 defs including `reflector`
+  // and `release-finalizer` with the less-common `surface: both`) rather
+  // than a hand-built two-element fixture, because a hand-built fixture
+  // cannot surface a defect that only shows up on a specific real def's
+  // actual shape (e.g. an absent `surface` field, or `surface: both`).
+  const defs = listAgentDefinitions(SKILLS);
+  assert.ok(defs.length > 0, 'precondition: the real roster must be non-empty for this test to mean anything');
+  for (const def of defs) {
+    let dispatchableAccepted = false;
+    try {
+      resolveDispatchableAgent(def.slug, defs);
+      dispatchableAccepted = true;
+    } catch {
+      dispatchableAccepted = false;
+    }
+    let interactiveAccepted = false;
+    try {
+      resolveInteractiveAgent(def.slug, defs);
+      interactiveAccepted = true;
+    } catch {
+      interactiveAccepted = false;
+    }
+    assert.notEqual(
+      dispatchableAccepted,
+      interactiveAccepted,
+      `${def.slug}: exactly one of resolveDispatchableAgent/resolveInteractiveAgent must accept it ` +
+        `(dispatchable=${dispatchableAccepted}, interactive=${interactiveAccepted})`,
+    );
+  }
 });
 
 // ---------------------------------------------------------------------------
