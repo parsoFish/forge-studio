@@ -175,6 +175,18 @@ const FIXTURE_SESSION_KINDS_YAML = `
     style: agent
     phases:
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: ghost-next-phase }
+- id: test-kind-no-writes-declared
+  agent: project-brain-builder
+  title: Interactive Runner Test Kind (P1 - no writes declared, true carve-out)
+  stages: [analyzing]
+  defaultStage: analyzing
+  artifact: { kind: file-package, label: "Test artifact" }
+  turnSpec:
+    kindDir: _interactivetest-nowrites
+    style: agent
+    phases:
+      - { phase: analyzing, step: agent, next: awaiting-review }
+      - { phase: awaiting-review, step: noop }
 `;
 // NOTE (Finding 1 fixtures): both "-ghost-next-*" rows above declare a
 // `next` naming a phase absent from their OWN `phases` list. This is
@@ -753,14 +765,36 @@ test('Finding 2/3: a writes: dir that is ITSELF a symlink to an outside dir thro
   );
 });
 
-// The deliberate carve-out that must SURVIVE the Finding 2/3 fix: a
-// `writes:` dir that genuinely does not exist yet (this phase's agent
-// simply hasn't populated it this turn) is NOT an error and must still
-// yield `wrote: []`. Unlike the two ESCAPE tests above, this is NOT
-// expected to be red against the current (unfixed) implementation — it
-// pins behavior that is ALREADY correct today, so a future fix for the
-// silent-drop defect cannot overcorrect into throwing on mere absence.
-test('Finding 2/3 (deliberate carve-out, must survive the fix): a writes: dir that simply does not exist yet does NOT throw and yields wrote: []', async () => {
+// SUPERSEDED (R4-21 phase 2, pin round 3, T3 — P1, _wave5/unit-specs/
+// R4-21-phase2.md): this test used to pin "a writes: dir that simply does
+// not exist yet does NOT throw and yields wrote: []" as the deliberate
+// carve-out surviving the Finding 2/3 fix (WI-3). A LATER adversarial-review
+// round REPRODUCED a bigger problem sitting on top of that exact behavior:
+// with the real checked-in `authoring` descriptor, an agent turn that
+// yields zero files still advances analyzing -> awaiting-review and returns
+// `{phase:'awaiting-review', wrote:[]}` with `staging/` not even existing —
+// the operator is then shown an empty package with no error anywhere.
+// Finding 2/3's own distinction (a GUARD-REJECTED entry vs. a
+// genuinely-missing dir) is real and stays fixed; the distinction THIS test
+// used to encode ON TOP of it (missing-dir-is-always-fine) does not survive:
+// a phase row that DECLARES writes: and produces NOTHING must now refuse the
+// advance loudly, whether the dir is missing or present-but-empty (see the
+// P1 block near the end of this file for the full contract, including the
+// TRUE surviving carve-out: a phase row that declares NO writes: at all).
+//
+// OLD assertion: `result.wrote` deep-equals `[]`, `result.phase` advances to
+// 'awaiting-review', no throw.
+// NEW assertion: `runInteractiveTurn` REJECTS, naming the session kind, the
+// phase, and the empty `writes:` entry; status.json is byte-unchanged.
+// Why this is a CONTRACT CORRECTION, not a weakening: the old behavior let a
+// turn that produced literally nothing advance silently — a declared
+// `writes:` contract enforced nowhere, exactly the declared-data-fails-open
+// antipattern this campaign guards against everywhere else in this same
+// file (Finding 1's ghost-`next`, Finding 2/3's guard-rejected entries). The
+// new behavior makes the SAME class of turn fail LOUD instead of silently
+// shipping an operator-facing empty package — strictly more protective, not
+// less; nothing that was correctly rejected before is now accepted.
+test('P1: a declared writes: dir that does not exist yet — the turn produced NOTHING — refuses the phase advance loudly, naming the session kind/phase/entry, and does NOT persist the ghost advance to status.json', async () => {
   const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
   mkdirSync(sessionDir, { recursive: true });
   writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
@@ -768,21 +802,35 @@ test('Finding 2/3 (deliberate carve-out, must survive the fix): a writes: dir th
   // absent (not merely un-checked).
   assert.ok(!existsSync(join(sessionDir, 'staging')), 'arrange: staging/ must genuinely not exist yet');
   assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+  const statusPath = join(sessionDir, 'status.json');
+  const statusBefore = readFileSync(statusPath, 'utf8');
 
   const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
   // This queryFn deliberately does NOT create staging/ — the agent simply
-  // hasn't written anything yet this turn.
-  const result = await runInteractiveTurn(descriptor, {
-    sessionId,
-    projectRoot,
-    forgeRoot,
-    logsRoot,
-    queryFn: noopAgentQueryFn(),
-    logger: logger(logsRoot, sessionId),
-  });
+  // produced nothing this turn.
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: noopAgentQueryFn(),
+        logger: logger(logsRoot, sessionId),
+      }),
+    (err: Error) => {
+      assert.match(err.message, /test-kind/, 'error must name the session kind');
+      assert.match(err.message, /analyzing/, 'error must name the phase');
+      assert.match(err.message, /staging/, 'error must name the empty writes: entry');
+      return true;
+    },
+  );
 
-  assert.deepEqual(result.wrote, [], 'an absent writes: dir must yield wrote: [] — not a throw');
-  assert.equal(result.phase, 'awaiting-review', 'the phase must still advance normally; an unpopulated writes: dir is not itself an error');
+  assert.equal(
+    readFileSync(statusPath, 'utf8'),
+    statusBefore,
+    'status.json must be BYTE-UNCHANGED after the refusal — asserting the artifact, not just the thrown error',
+  );
 });
 
 // ---------------------------------------------------------------------------
@@ -1150,4 +1198,204 @@ function setupRealAuthoring(): RealAuthoringFixture {
     assert.ok(existsSync(landedPath), `expected the staged file to land at ${landedPath} — got wrote=${JSON.stringify(result.wrote)}`);
     assert.equal(readFileSync(landedPath, 'utf8'), STAGED_CONTENT, 'the landed file must carry the staged content verbatim');
     assert.equal(readSessionStatus<TestStatus>(fx.sessionDir)?.phase, 'committed', 'status.json on disk must reflect the advanced phase');
+});
+
+// ===========================================================================
+// R4-21 phase 2, pin round 3 (T3, adversarial-review round 3) —
+// _wave5/unit-specs/R4-21-phase2.md P1 (remaining contracts) + P4.
+// REPRODUCED/ruled by a LIVE adversarial-review round against the real
+// checked-in `authoring` descriptor. TEST-WRITER ONLY — no implementation
+// code lives in this file. The P1 missing-dir refusal is pinned IN PLACE
+// above (superseding the old "Finding 2/3 carve-out" test — see that test's
+// own updated header for the full old/new rationale); the three remaining
+// P1 contracts (present-but-empty is the SAME refusal, no writes: declared
+// is the TRUE surviving carve-out, and the happy path is unaffected) plus
+// P4 are pinned here.
+// ===========================================================================
+
+// Kills: an implementation of the P1 refusal that only checks
+// `!existsSync(writesDir)` (missing) and misses the equally-empty
+// present-but-empty case — "the turn produced nothing" must cover BOTH
+// shapes identically, per the unit spec's own wording ("is the same refusal
+// as a missing one").
+test('P1: a declared writes: dir that EXISTS but is EMPTY is the SAME refusal as a missing one — both mean "the turn produced nothing"', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  const statusPath = join(sessionDir, 'status.json');
+  const statusBefore = readFileSync(statusPath, 'utf8');
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  // This queryFn creates staging/ but writes NOTHING into it — present, but
+  // empty; the second shape of "the turn produced nothing".
+  const emptyDirQueryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  await assert.rejects(
+    () =>
+      runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot,
+        logsRoot,
+        queryFn: emptyDirQueryFn,
+        logger: logger(logsRoot, sessionId),
+      }),
+    (err: Error) => {
+      assert.match(err.message, /test-kind/, 'error must name the session kind');
+      assert.match(err.message, /analyzing/, 'error must name the phase');
+      assert.match(err.message, /staging/, 'error must name the empty writes: entry');
+      return true;
+    },
+  );
+
+  // Sanity, asserted AFTER the run (this precondition is what the stub agent
+  // did DURING the call, not something seedable beforehand): staging/ must
+  // genuinely exist-but-be-empty, or this test is vacuous.
+  assert.ok(existsSync(join(sessionDir, 'staging')), 'sanity: staging/ must have been created by the stub agent');
+  assert.deepEqual(readdirSync(join(sessionDir, 'staging')), [], 'sanity: staging/ must genuinely be empty, or this test is vacuous');
+  assert.equal(readFileSync(statusPath, 'utf8'), statusBefore, 'status.json must be BYTE-UNCHANGED after the refusal');
+});
+
+// Kills: an over-fix that refuses ANY phase row producing zero files,
+// regardless of whether writes: was declared at all — P1's refusal is
+// specifically about a DECLARED contract going unfulfilled, not "the agent
+// didn't write anything this turn" in general. A phase row that never
+// claims to write anything must stay a true no-op carve-out. Proven by
+// mutation (see this WI's report): a temporary unconditional
+// "wrote.length===0 -> throw" added right after listWrittenFiles turns this
+// test red; reverted afterward.
+test('P1 (true carve-out, must survive the fix): a phase row that declares NO writes: at all, and produces no files, still advances normally', async () => {
+  const { forgeRoot } = setup();
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind-no-writes-declared');
+  assert.equal(
+    descriptor.turnSpec?.phases[0]?.writes,
+    undefined,
+    'arrange: fixture phase row must genuinely declare no writes: or this test is vacuous',
+  );
+  const sessionId = 'no-writes-declared-001';
+  const projectRoot = mkdtempSync(join(tmpdir(), 'interactive-runner-nowrites-proj-'));
+  const logsRoot = join(mkdtempSync(join(tmpdir(), 'interactive-runner-nowrites-logs-')), '_logs');
+  const sessionDir = join(projectRoot, descriptor.turnSpec!.kindDir, sessionId);
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'analyzing', 'arrange: seeded status must start in analyzing');
+
+  const result = await runInteractiveTurn(descriptor, {
+    sessionId,
+    projectRoot,
+    forgeRoot,
+    logsRoot,
+    queryFn: noopAgentQueryFn(),
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.deepEqual(result.wrote, [], 'a phase declaring no writes: at all must yield wrote: []');
+  assert.equal(result.phase, 'awaiting-review', 'the phase must still advance normally — declaring no writes: is not itself an error');
+  assert.equal(readSessionStatus<TestStatus>(sessionDir)?.phase, 'awaiting-review', 'status.json on disk must reflect the advanced phase');
+});
+
+// Positive control for P1 (the happy path must be unaffected by the new
+// refusal): a declared writes: dir that DOES contain a real file advances
+// normally, exactly like AT-1 above — colocated here for narrative locality
+// with the two refusal tests; AT-1 (top of this file) already carries this
+// exact mechanism's own mutation-proof ("Kills:" comment there), so it is
+// not re-derived from scratch here.
+test('P1 (positive control): a declared writes: dir that DOES contain a file still advances normally', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  writeSessionStatus<TestStatus>(sessionDir, { session_id: sessionId, phase: 'analyzing', updated_at: new Date().toISOString() });
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged output\n');
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  const result = await runInteractiveTurn(descriptor, {
+    sessionId,
+    projectRoot,
+    forgeRoot,
+    logsRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(result.phase, 'awaiting-review', 'a populated declared writes: dir must still advance normally');
+  assert.ok(result.wrote.length > 0, 'wrote must report the real file');
+});
+
+// ---------------------------------------------------------------------------
+// P4 — the operator's description must reach the agent's turn prompt.
+//
+// `POST /api/studio/authoring/start` (cli/ui-bridge.ts) writes the
+// operator's free-text prompt to prompt.md, but `buildTurnPrompt` (this
+// module) composes the turn prompt from SKILL.md + the phase row + a JSON
+// dump of status.json — it never reads prompt.md. The intended production
+// fix is that `writeAuthoringSession` (cli/ui-bridge.ts, pinned separately
+// in cli/ui-bridge-authoring-start.test.ts) also persists the prompt into
+// status.json. This is the OTHER half of that pin: WITH a status carrying a
+// `prompt` field, proves the actual prompt string handed to queryFn contains
+// the operator's text — the end-to-end proof the words actually reach the
+// model, not just that they get written to a file nothing reads.
+// ---------------------------------------------------------------------------
+
+// Kills: a buildTurnPrompt that narrows its status dump to a fixed field set
+// (e.g. `{phase: status.phase}`) instead of serializing the whole status
+// object — which would silently drop a `prompt` field even once
+// writeAuthoringSession starts writing one. Proven by mutation (see this
+// WI's report): temporarily narrowing buildTurnPrompt's JSON.stringify to
+// `{phase: status.phase}` turns this test red; reverted afterward.
+test('P4: with status.prompt present, the actual prompt string handed to queryFn CONTAINS the operator\'s text — the end-to-end proof the words reach the model', async () => {
+  const { forgeRoot, projectRoot, logsRoot, sessionDir, sessionId } = setup();
+  mkdirSync(sessionDir, { recursive: true });
+  const OPERATOR_TEXT = 'Build a hook that blocks commits containing TODO markers, marker-f4c2ab';
+  writeSessionStatus<TestStatus & { prompt?: string }>(sessionDir, {
+    session_id: sessionId,
+    phase: 'analyzing',
+    updated_at: new Date().toISOString(),
+    prompt: OPERATOR_TEXT,
+  });
+  // Precondition, asserted before reading any verdict.
+  assert.equal(
+    readSessionStatus<TestStatus & { prompt?: string }>(sessionDir)?.prompt,
+    OPERATOR_TEXT,
+    'arrange: seeded status must carry the operator prompt',
+  );
+
+  const descriptor = loadFixtureDescriptor(forgeRoot, 'test-kind');
+  let captured: { prompt: string } | undefined;
+  const queryFn: QueryFn = (params) => {
+    captured = params;
+    async function* gen(): AsyncGenerator<unknown> {
+      mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+      writeFileSync(join(sessionDir, 'staging', 'output.md'), '# staged output\n');
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  await runInteractiveTurn(descriptor, {
+    sessionId,
+    projectRoot,
+    forgeRoot,
+    logsRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.ok(captured, 'queryFn must have been invoked with a captured call record');
+  assert.ok(
+    captured!.prompt.includes(OPERATOR_TEXT),
+    `the actual prompt string handed to queryFn must CONTAIN the operator's text verbatim — got prompt=${JSON.stringify(captured!.prompt)}`,
+  );
 });

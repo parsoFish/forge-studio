@@ -80,10 +80,20 @@ import {
   rmSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { createRequire, syncBuiltinESMExports } from 'node:module';
 
-import { FINALIZERS, resolveFinalizer, copyStagingToLibrary } from './interactive-finalizers.ts';
+import { FINALIZERS, resolveFinalizer, copyStagingToLibrary, STAGING_DIRNAME } from './interactive-finalizers.ts';
+import { deriveSessionArtifact } from './studio/session-transcript.ts';
+import type { SessionKindDescriptor } from './studio/session-kinds.ts';
+
+/** Repo root, computed the same way orchestrator/interactive-runner.test.ts's
+ *  own REPO_ROOT does (`resolve(import.meta.dirname, '..')`) — robust
+ *  regardless of the shell's cwd when the test runner is invoked, unlike a
+ *  `process.cwd()`-relative path. Only P3 (below) reads a real, checked-in
+ *  repo file (`skills/creation-agent/SKILL.md`); every other test in this
+ *  file stays a pure isolated-tmpdir fixture, unaffected. */
+const REPO_ROOT = resolve(import.meta.dirname, '..');
 
 // ---------------------------------------------------------------------------
 // Scratch fs helpers — every test builds its own isolated tree under a fresh
@@ -919,3 +929,145 @@ test(
     }
   },
 );
+
+// ===========================================================================
+// R4-21 phase 2, pin round 3 (T3, adversarial-review round 3) —
+// _wave5/unit-specs/R4-21-phase2.md P2 + P3. TEST-WRITER ONLY — no
+// implementation code lives in this file.
+//
+// RED today, entire-file-wide: `STAGING_DIRNAME` is not exported by
+// interactive-finalizers.ts yet, so the static `import { ..., STAGING_DIRNAME
+// } from './interactive-finalizers.ts'` at the top of this file fails at
+// MODULE LOAD — every test in this file (not just the two below) reports as
+// a failure until the export lands. This is deliberate, not collateral
+// damage to route around: P2's whole point is that BOTH consumers must move
+// together off one shared constant, so the pin has to actually import it.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// P2 — ONE source of truth for the staging dirname.
+//
+// REPRODUCED by the reviewer: this module hardcodes the literal 'staging' at
+// THREE sites (discoverStagingEntries's resolveGuardedPath call at ~207, its
+// stagingRoot join at ~247, plus this file's own header comments), while
+// `orchestrator/studio/session-transcript.ts` independently holds a
+// module-private `PACKAGE_DIRNAME = 'staging'`. They agree by coincidence,
+// not by construction — each module's OWN test suite stays green if only
+// ONE of the two literals is ever edited, because neither test suite reads
+// the OTHER module's constant. The intended production fix: this module
+// EXPORTS `STAGING_DIRNAME`, and BOTH this module's own three call sites AND
+// session-transcript.ts's `deriveFilePackage` read it — never a literal.
+//
+// This test proves drift is impossible by DERIVING its fixture path from the
+// import, never writing 'staging' out by hand: it plants ONE staged file at
+// `<sessionDir>/<STAGING_DIRNAME>/SKILL.md` and asserts BOTH real consumers
+// — `deriveSessionArtifact` (kind:'file-package', the public entry point
+// that runs `deriveFilePackage` internally) and THIS module's own
+// `copyStagingToLibrary` — read it from there. A test that hardcoded
+// 'staging' instead would stay green even if the constant's VALUE changed
+// and only one of the two consumers were updated to match it — exactly the
+// class of drift this pin closes.
+// ---------------------------------------------------------------------------
+
+test('P2: STAGING_DIRNAME is exported by interactive-finalizers.ts, and BOTH deriveSessionArtifact(file-package) and copyStagingToLibrary read <STAGING_DIRNAME>/... — a fixture path DERIVED from the import, never a "staging" literal', async () => {
+  assert.equal(typeof STAGING_DIRNAME, 'string', 'STAGING_DIRNAME must be exported as a string constant');
+  assert.ok(STAGING_DIRNAME.length > 0, 'STAGING_DIRNAME must be non-empty');
+
+  const scratch = mkScratch('interactive-finalizers-p2-');
+  try {
+    // Deliberately NOT scratch.stagingDir (mkScratch's own hand-written
+    // 'staging' literal, used by every OTHER test in this file) — the whole
+    // point is a path built from the import, so a future change to
+    // STAGING_DIRNAME's VALUE moves this test's fixture location right along
+    // with the two real consumers under test.
+    const derivedStagingDir = join(scratch.sessionDir, STAGING_DIRNAME);
+    mkdirSync(derivedStagingDir, { recursive: true });
+    const MARKER = '# P2 cross-module marker f7e21c\n';
+    writeFileSync(join(derivedStagingDir, 'SKILL.md'), MARKER, 'utf8');
+    // Precondition, asserted before reading any verdict.
+    assert.equal(readFileSync(join(derivedStagingDir, 'SKILL.md'), 'utf8'), MARKER, 'arrange: staged file present at the DERIVED path');
+
+    // Consumer 1: session-transcript.ts's deriveFilePackage, via the public
+    // deriveSessionArtifact entry point (deriveFilePackage itself is not
+    // exported — mirrors this repo's own session-transcript.test.ts idiom).
+    const descriptor = {
+      id: 'authoring',
+      agent: 'creation-agent',
+      title: 'Authoring session',
+      legacyRoutes: [],
+      stages: ['roadmap'],
+      defaultStage: 'roadmap',
+      artifact: { kind: 'file-package', label: 'Draft package' },
+    } as SessionKindDescriptor;
+    const artifact = deriveSessionArtifact({ descriptor, sessionDir: scratch.sessionDir }) as {
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.ok(
+      artifact.files.some((f) => f.path === 'SKILL.md' && f.body === MARKER),
+      `deriveSessionArtifact must read files under <STAGING_DIRNAME>/, not a hardcoded 'staging' — got files=${JSON.stringify(artifact.files)}`,
+    );
+
+    // Consumer 2: THIS module's own copyStagingToLibrary.
+    const { error, wrote } = await callAndCapture({
+      sessionDir: scratch.sessionDir,
+      forgeRoot: scratch.forgeRoot,
+      libraryRoot: scratch.libraryRoot,
+      packageId: 'p2-cross-module',
+    });
+    assert.equal(
+      error,
+      null,
+      `copyStagingToLibrary must not throw when staged content lives under <STAGING_DIRNAME>/: ${error ? `${(error as Error & { name: string }).name}: ${(error as Error).message}` : ''}`,
+    );
+    const landed = (wrote ?? []).find((p) => p.endsWith(join('p2-cross-module', 'SKILL.md')));
+    assert.ok(landed, `expected a landed SKILL.md under the packageId dir, got wrote=${JSON.stringify(wrote)}`);
+    assert.equal(readFileSync(landed!, 'utf8'), MARKER, 'the landed file must carry the staged content verbatim');
+  } finally {
+    cleanup(scratch.base);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// P3 — skills/creation-agent/SKILL.md's directory prose is unpinned.
+//
+// MUTATION-PROVEN by the reviewer: reverting skills/creation-agent/SKILL.md
+// to its pre-rename `package/` prose produced ZERO new test failures across
+// the WHOLE suite. The prose is what tells the LIVE agent where to write —
+// if it says `package/` while the code reads `staging/`, drafted content
+// never lands where `deriveFilePackage`/`copyStagingToLibrary` look, and the
+// feature is completely non-functional with a green suite. This pin closes
+// that gap: it reads the REAL, checked-in SKILL.md and asserts its CONTRACT
+// (where the agent is told to write), deriving the expected directory name
+// from the STAGING_DIRNAME import (P2) rather than a literal — so a future
+// rename of the constant moves this pin's expectation along with it instead
+// of it silently rotting into a stale literal comparison.
+//
+// Deliberately NOT a full-text/verbatim-prose diff (that would be brittle —
+// rewording the SKILL.md's prose without changing its CONTRACT should not
+// fail this test): it asserts the directory token appears in a
+// write-instruction context (a `<dirname>/` reference) and that the retired
+// `package/` token does not appear anywhere in the file.
+// ---------------------------------------------------------------------------
+
+test('P3: skills/creation-agent/SKILL.md instructs the agent to write into <STAGING_DIRNAME>/, not the retired package/ dir', () => {
+  const skillMdPath = join(REPO_ROOT, 'skills', 'creation-agent', 'SKILL.md');
+  assert.ok(existsSync(skillMdPath), 'arrange: skills/creation-agent/SKILL.md must exist on this branch');
+  const body = readFileSync(skillMdPath, 'utf8');
+
+  const stagingRef = new RegExp(`${STAGING_DIRNAME}/`);
+  assert.match(
+    body,
+    stagingRef,
+    `SKILL.md must instruct the agent to write under <STAGING_DIRNAME>/ ("${STAGING_DIRNAME}/") — the directory ` +
+      'deriveFilePackage/copyStagingToLibrary actually read. A prose-only revert to the pre-rename dirname would ' +
+      'silently break the live agent with zero test failures anywhere else in the whole suite (the reviewer\'s ' +
+      'mutation proof).',
+  );
+  assert.doesNotMatch(
+    body,
+    /\bpackage\//,
+    'SKILL.md must NOT still instruct the agent to write into the retired package/ dir — the rename (D2) is ' +
+      'complete, not additive; a leftover "package/" instruction would mean the live agent drafts into a directory ' +
+      'nothing on the read side scans anymore.',
+  );
+});

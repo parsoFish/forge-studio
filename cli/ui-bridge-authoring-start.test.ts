@@ -124,6 +124,42 @@ test('AT-7: a valid start writes a real session dir (status.json + prompt.md) un
   assert.equal(prompt, 'A skill that summarizes PR diffs.\n', 'prompt.md must render the operator\'s own words verbatim — no fabricated interview question');
 });
 
+// R4-21 phase 2, pin round 3 (T3, adversarial-review round 3) — P4
+// (_wave5/unit-specs/R4-21-phase2.md): `buildTurnPrompt`
+// (orchestrator/interactive-runner.ts) composes the turn prompt from
+// SKILL.md + the phase row + a JSON dump of status.json — it never reads
+// prompt.md. So the operator's free-text description of what to build,
+// written verbatim to prompt.md by this route, is silently dropped from
+// every real agent turn. The intended production fix: `writeAuthoringSession`
+// ALSO persists the prompt into status.json (as an ADDITION, not a
+// replacement of the existing prompt.md write) so `buildTurnPrompt`'s
+// existing whole-status JSON dump threads it through for free (see the
+// OTHER half of this pin, orchestrator/interactive-runner.test.ts's own
+// "P4" test, which proves that half of the contract against the real
+// runner). RED today: `writeAuthoringSession` (cli/ui-bridge.ts) seeds
+// status.json with only {phase, project, runId, startedAt} — no prompt key.
+test('AT-11 (P4): a valid start seeds status.json with the operator\'s prompt verbatim, alongside phase:"analyzing" — prompt.md is still written too (an addition, not a replacement)', async () => {
+  const promptText = 'A skill that reviews PR titles for conventional-commit compliance.';
+  const res = await start({ project: 'demoproj', prompt: promptText });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { sessionId: string };
+
+  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_authoring', body.sessionId);
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as { phase: string; prompt?: string };
+  assert.equal(status.phase, 'analyzing', 'positive control: phase must still be "analyzing" (D3) — unaffected by this fix');
+  assert.equal(
+    status.prompt,
+    promptText,
+    'status.json must carry the operator\'s prompt verbatim — buildTurnPrompt (orchestrator/interactive-runner.ts) ' +
+      'composes the turn prompt from a JSON dump of status.json, so a prompt absent here is silently dropped from ' +
+      'every future real agent turn',
+  );
+
+  const promptMd = readFileSync(join(sessionDir, 'prompt.md'), 'utf8');
+  assert.equal(promptMd, `${promptText}\n`, 'prompt.md must STILL be written verbatim — this fix is an addition, not a replacement of the existing contract');
+});
+
 test('AT-8: two starts against the same project mint two distinct session dirs', async () => {
   const r1 = await start({ project: 'demoproj', prompt: 'first draft' });
   const r2 = await start({ project: 'demoproj', prompt: 'second draft' });
