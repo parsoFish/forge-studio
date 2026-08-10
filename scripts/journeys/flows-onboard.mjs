@@ -175,11 +175,11 @@ export const journey = defineJourney({
     {
       id: 'flows-onboard-monitor',
       title: 'The onboard-project flow: a peer of forge-develop, its own two-node topology',
-      narration: 'onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library shelf beside forge-develop and opens its own monitor — two real nodes, onboard → contract-check, visible before a single run exists.',
+      narration: 'onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library — now its own pillar at /library, since Home took the first nav slot (R6-03-F3; the Home dashboard itself lands in R6-07) — beside forge-develop, and both OOTB seed flows carry a provenance badge derived from flow.origin. It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[FOB.1] The onboard-project flow monitor renders');
-        await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+        await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(
           () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
           null, { timeout: 15000 },
@@ -192,6 +192,16 @@ export const journey = defineJourney({
         const develCount = await page.locator('[data-card-type="flow"][data-card-id="forge-develop"]').count();
         check(develCount === 1,
           'FOB.1: the OOTB forge-develop card is present in the SAME flows section — onboard-project is a peer, not a separate surface');
+
+        // R6-03-F3: the six-pillar nav (Home added, Library moved off /) + OOTB provenance badges.
+        const navCount = await page.locator('[data-component="studio-nav"] [data-nav]').count();
+        check(navCount === 6, `FOB.nav: the six-pillar nav renders (Home/Flows/Agents/Projects/Library/Knowledge) — got ${navCount}`);
+        check(await page.locator('[data-component="studio-nav"] [data-nav="home"][href="/"]').count() > 0, 'FOB.nav: Home pillar points at /');
+        check(await page.locator('[data-component="studio-nav"] [data-nav="library"][href="/library"]').count() > 0, 'FOB.nav: Library pillar moved onto /library');
+        // The OOTB seed flow forge-develop carries a real provenance badge derived from flow.origin.
+        check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"][data-provenance="ootb"]').count() > 0, 'FOB.prov: the OOTB seed flow forge-develop card is marked data-provenance="ootb"');
+        check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"] .badge-ootb').count() > 0, 'FOB.prov: forge-develop renders the visible ootb badge');
+
         await frame(page, 'fob-0-library-card', 'FOB — onboard-project on the library shelf, beside forge-develop');
 
         await page.goto(watch.uiUrl + '/flows/onboard-project', { waitUntil: 'domcontentloaded' });

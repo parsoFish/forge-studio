@@ -734,7 +734,7 @@ export const journey = defineJourney({
               // guidance rm) — the one place this journey emulates an ingest pass. Ingest
               // is an LLM fold in the real product; here it's a scripted write against a
               // throwaway scratch KB (never brain/cycles, brain/forge-dev, or brain/projects).
-              await recordClip(browser, watch, 'kb-ingest', '/', async (p) => {
+              await recordClip(browser, watch, 'kb-ingest', '/library', async (p) => {
                 // Entry point: the library's KB card for the scratch KB just created — a
                 // real click into /knowledge?id=<scratch>, not a direct goto.
                 await p.waitForFunction(

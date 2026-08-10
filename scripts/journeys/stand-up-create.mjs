@@ -181,7 +181,7 @@ export const journey = defineJourney({
               // browser context on its own throwaway slug — proves the create-new path
               // is real and repeatable, not a one-off fixture. Starts at the LIBRARY,
               // the real user-facing entry point, not the /projects/new URL directly.
-              await recordClip(browser, watch, 'project-create', '/', async (p) => {
+              await recordClip(browser, watch, 'project-create', '/library', async (p) => {
                 await p.waitForFunction(() => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
                 await sleep(1400); // dwell — the library's "+ New Project" CTA
                 await p.locator('[data-action="new-project"]').click().catch(() => {});
@@ -281,7 +281,7 @@ export const journey = defineJourney({
 
               // ── A1.0: the library reports ready before anything else loads ────────────
               console.log('\n[A1.0] Library ready');
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               try {
                 await page.waitForFunction(
                   () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',

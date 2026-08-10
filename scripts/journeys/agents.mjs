@@ -853,7 +853,7 @@ export const journey = defineJourney({
                 await sleep(READ);
                 // Clip: composing an agent — open Advanced, edit the purpose field
                 // (dirty), and SAVE. Fresh context, own navigation.
-                await recordClip(browser, watch, 'agent-build', '/', async (p) => {
+                await recordClip(browser, watch, 'agent-build', '/library', async (p) => {
                   // Entry point: the library's agents section — a real click into
                   // /agents/project-manager, not a direct goto.
                   await p.waitForFunction(
@@ -1422,7 +1422,7 @@ export const journey = defineJourney({
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
               console.log('\n[R6-04] Kickoff — reopen the fixture agent via its library card');
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 20000 },

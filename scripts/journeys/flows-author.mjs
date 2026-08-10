@@ -182,7 +182,7 @@ export const journey = defineJourney({
               console.log('\n[J3] String plan/dev/review into a flow (new-flow builder)');
               cleanFirstFlow();
               // discoverable creation: the library "+ New Flow" CTA is a real enabled link
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
@@ -602,7 +602,7 @@ export const journey = defineJourney({
               // the complete from-nothing arc rather than a partial replay. Entry
               // point is the library's real "+ New Flow" CTA (not a direct goto) —
               // the same trigger surface an operator actually clicks.
-              await recordClip(browser, watch, 'flow-scratch-build', '/', async (p) => {
+              await recordClip(browser, watch, 'flow-scratch-build', '/library', async (p) => {
                 await p.waitForFunction(
                   () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 8000 },
@@ -793,7 +793,7 @@ export const journey = defineJourney({
               // (scripts/e2e-journey.mjs), never at the end of that beat's own
               // drive — see index.mjs's RUN_ORDER header comment.
               console.log('\n[A2] The from-scratch flow joins the shelf (return to library)');
-              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
