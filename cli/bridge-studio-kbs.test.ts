@@ -382,6 +382,17 @@ async function postAt(
   return { status: res.status, json: (await res.json()) as Record<string, unknown> };
 }
 
+/** GET against an isolated bridge (mirrors `postAt`'s style/pairing). Used by
+ *  the R6-08 WI-1 health-itemization RED pins below, which each need their
+ *  OWN forge-root (a fresh 'cycles' with exactly one seeded defect, or the
+ *  isolated alpha/alpha-two/throwkb fixtures) rather than the shared file-level
+ *  fixture — mutating the SHARED 'cycles'/HEALTH_KB_ID KBs would risk
+ *  interfering with the ~30 other tests in this file that read them. */
+async function getAt(base: string, path: string): Promise<{ status: number; json: Record<string, unknown> }> {
+  const res = await fetch(`${base}${path}`);
+  return { status: res.status, json: (await res.json()) as Record<string, unknown> };
+}
+
 /** Poll an isolated bridge's fix-agent state until terminal (or budget spent —
  *  returned as-is so the caller's assertion, not a silent timeout, reports). */
 async function pollTerminalAt(
@@ -823,5 +834,186 @@ test('AT-4on-9: a `.staging-*` brain leftover is never surfaced as a phantom KB 
     assert.ok(!ids.includes('.staging-decoy-abc123'), `a .staging-* brain leftover surfaced verbatim — got ${JSON.stringify(ids)}`);
   } finally {
     rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// =============================================================================
+// R6-08 WI-1 (F2 Health itemization) — RED pins (T3).
+//
+// buildKbHealth (this file, lines ~577-634) today returns only an AGGREGATE
+// `{ lintFlags, lintErrors }` — no per-check breakdown. This block pins the
+// itemized `checks: Array<{check,status,errorCount,flagCount}>` field the F2
+// Health tab renders, for ALL 10 full-scope checks (cli/brain-lint.ts:1123-1136;
+// checkCleanupCandidates excluded — cleanup-dry-run only), always present (a
+// clean check reports status:'pass', never omitted).
+//
+//   RULING 2 — the aggregate `lintFlags`/`lintErrors` fields stay, derived as a
+//   roll-up OVER checks[] (never dropped, never allowed to diverge).
+//   RULING 3 — if the lint run throws, EVERY check reports status:'unknown'
+//   plus a top-level `healthError` string — never a silent 0/0 "clean" pass
+//   (buildKbHealth's current `catch { lintFlags = 0; lintErrors = 0; }` at
+//   lines ~629-631 is exactly this declared-data-fails-open bug).
+//
+// FULL_SCOPE_CHECK_NAMES is hard-listed here rather than importing a
+// not-yet-exported name from cli/brain-lint.ts — the WI-1 implementation is
+// expected to promote this exact list to a real exported `CHECK_NAMES`
+// constant there (the single source of truth); this test's set-equality
+// assertion is what then forbids the two lists from drifting apart.
+// =============================================================================
+
+const FULL_SCOPE_CHECK_NAMES = [
+  'checkFrontmatter',
+  'checkIndexSync',
+  'checkSourceLinks',
+  'checkStaleness',
+  'checkOrphans',
+  'checkProjectBrainIndexes',
+  'checkLengthSoftCap',
+  'checkContradictions',
+  'checkCategoryScope',
+  'checkReflectorLoss',
+] as const;
+
+type CheckHealthEntry = { check: string; status: string; errorCount: number; flagCount: number };
+
+test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the 10 full-scope checks (set-equality) — RED today (checks absent)', async () => {
+  // Mirrors the existing R1-06 health test's harness (~:534-559): the shared
+  // `get()` helper against the never-mutated HEALTH_KB_ID fixture.
+  const detail = await get(`/api/studio/kbs/${HEALTH_KB_ID}`);
+  assert.equal(detail.status, 200, JSON.stringify(detail.json));
+  const health = detail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
+  assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
+  assert.ok(Array.isArray(health!.checks), `health.checks must be an array — got ${JSON.stringify(health)}`);
+  const names = health!.checks!.map((c) => c.check).sort();
+  const expected = [...FULL_SCOPE_CHECK_NAMES].sort();
+  assert.deepEqual(
+    names,
+    expected,
+    `health.checks must itemize exactly the 10 full-scope checks (checkCleanupCandidates excluded — cleanup-dry-run only). Expected ${JSON.stringify(expected)}, got ${JSON.stringify(names)}`,
+  );
+});
+
+test('R6-08 WI-1 RED-B: a lone checkFrontmatter defect (missing description) yields checks[checkFrontmatter]={fail,errorCount:1}, every other check pass; aggregate lintErrors rolls up (RULING 2) — RED today (checks absent)', async () => {
+  const iso = await makeIsolatedForge();
+  try {
+    // Fresh, ISOLATED 'cycles' KB (checkFrontmatter/checkIndexSync/checkOrphans
+    // are hardcoded to THEME_SUBDIRS=['cycles','forge-dev'] — cli/brain-lint.ts:124
+    // — so a project-brain fixture can never exercise checkFrontmatter at all;
+    // this must be a top-level brain). Isolated rather than the shared 'cycles'
+    // fixture, which ~15 other tests in this file read and must stay pristine.
+    mkdirSync(join(iso.root, 'brain', 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(iso.root, 'brain', 'cycles', 'kb.yaml'), CYCLES_KB_YAML);
+    // Linked once in patterns.md (satisfies checkIndexSync + checkOrphans —
+    // both scan brain/cycles/*.md for theme links) so checkFrontmatter's
+    // missing-description error is the FIXTURE's ONLY defect.
+    writeFileSync(
+      join(iso.root, 'brain', 'cycles', 'patterns.md'),
+      '# cycles — Patterns\n\n> Category index.\n\n## Theme pages\n- [`rb-frontmatter`](./themes/rb-frontmatter.md) — fixture theme.\n',
+    );
+    writeFileSync(
+      join(iso.root, 'brain', 'cycles', 'themes', 'rb-frontmatter.md'),
+      '---\ntitle: "RB Frontmatter Fixture"\ncategory: pattern\ncreated_at: "2026-08-01T00:00:00Z"\nupdated_at: "2026-08-01T00:00:00Z"\n---\n\n' +
+      '# RB Frontmatter Fixture\n\nMinimal fixture body with no links (deliberately missing `description` — the ONE defect this fixture carries).\n',
+    );
+
+    const detail = await getAt(iso.url, '/api/studio/kbs/cycles');
+    assert.equal(detail.status, 200, JSON.stringify(detail.json));
+    const health = detail.json['health'] as
+      | { checks?: CheckHealthEntry[]; lintErrors?: number; lintFlags?: number }
+      | undefined;
+    assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
+    assert.ok(Array.isArray(health!.checks), `health.checks must be an array — got ${JSON.stringify(health)}`);
+
+    const byName = new Map(health!.checks!.map((c) => [c.check, c]));
+    const fm = byName.get('checkFrontmatter');
+    assert.ok(fm, `checks[] must include a checkFrontmatter entry, got ${JSON.stringify(health!.checks)}`);
+    assert.equal(fm!.status, 'fail', `checkFrontmatter must be status:'fail' for the seeded missing-description defect, got ${JSON.stringify(fm)}`);
+    assert.equal(fm!.errorCount, 1, `checkFrontmatter errorCount must be 1, got ${JSON.stringify(fm)}`);
+
+    for (const name of FULL_SCOPE_CHECK_NAMES) {
+      if (name === 'checkFrontmatter') continue;
+      const entry = byName.get(name);
+      assert.ok(entry, `checks[] must ALWAYS include a ${name} entry, even when clean (never absent) — got ${JSON.stringify(health!.checks)}`);
+      assert.equal(entry!.status, 'pass', `${name} must be status:'pass' on this single-defect fixture, got ${JSON.stringify(entry)}`);
+    }
+
+    // RULING 2: the aggregate lintErrors/lintFlags fields are KEPT — derived
+    // as a roll-up over checks[], never dropped and never allowed to diverge.
+    assert.equal(health!.lintErrors, 1, `aggregate lintErrors must roll up to 1, got ${health!.lintErrors}`);
+    const rollupErrors = health!.checks!.reduce((sum, c) => sum + c.errorCount, 0);
+    assert.equal(health!.lintErrors, rollupErrors, `aggregate lintErrors (${health!.lintErrors}) must equal the sum of checks[].errorCount (${rollupErrors})`);
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+test('R6-08 WI-1 RED-C (risk #5, sibling-leak guard): checks[checkProjectBrainIndexes].flagCount for "alpha" excludes sibling "alpha-two"s findings — RED today (checks absent)', async () => {
+  const iso = await makeIsolatedForge();
+  try {
+    // The SAME alpha/alpha-two sibling fixture shape as the existing MAJOR 2
+    // red-pin above (~:572): alpha has 2 unlisted theme findings, alpha-two
+    // has 1 — a naive substring scope (`file.includes('alpha')`) would fold
+    // alpha-two's finding into alpha's count (3, not 2).
+    seedProjectBrain(iso.root, 'alpha', ['a-one', 'a-two']);
+    seedProjectBrain(iso.root, 'alpha-two', ['b-one']);
+
+    // Fixture precondition (before any verdict): the pre-existing, already
+    // correctly-scoped op=lint read really does see 2 findings for alpha,
+    // independent of alpha-two.
+    const lintAlpha = await postAt(iso.url, '/api/studio/kbs/alpha/maintenance', { op: 'lint' });
+    const alphaFindings = (lintAlpha.json['findings'] as Array<{ check?: string }>).filter(
+      (f) => f.check === 'checkProjectBrainIndexes',
+    );
+    assert.equal(alphaFindings.length, 2, `precondition: alpha must have 2 checkProjectBrainIndexes findings via op=lint, got ${alphaFindings.length}`);
+
+    const detail = await getAt(iso.url, '/api/studio/kbs/alpha');
+    assert.equal(detail.status, 200, JSON.stringify(detail.json));
+    const health = detail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
+    assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
+    assert.ok(Array.isArray(health!.checks), `health.checks must be an array — got ${JSON.stringify(health)}`);
+
+    const entry = health!.checks!.find((c) => c.check === 'checkProjectBrainIndexes');
+    assert.ok(entry, `checks[] must include a checkProjectBrainIndexes entry, got ${JSON.stringify(health!.checks)}`);
+    assert.equal(
+      entry!.flagCount,
+      2,
+      `checkProjectBrainIndexes.flagCount for "alpha" must be exactly 2 (its own findings only) — a naive substring scope would fold in sibling "alpha-two"'s 1 finding and report 3. Got ${JSON.stringify(entry)}`,
+    );
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
+  }
+});
+
+test('R6-08 WI-1 addendum (RULING 3, unlettered in the WI spec): a lint-run throw marks every check status:"unknown" plus a top-level healthError — never a silent 0/0 pass — RED today', async () => {
+  const iso = await makeIsolatedForge();
+  try {
+    // The SAME 'throwkb' fixture as the existing MINOR 1 red-pin above
+    // (patterns.md is a DIRECTORY → readIndexEntries' readFileSync throws
+    // EISDIR, uncaught inside checkProjectBrainIndexes → runBrainLint throws).
+    // Confirmed empirically before writing this assertion: GET .../throwkb's
+    // graph build does NOT throw (buildKbGraph tolerates the directory), only
+    // buildKbHealth's runBrainLint call does — so this reaches a 200 today,
+    // just with the current silent-catch bug (lintFlags/lintErrors both 0).
+    seedProjectBrain(iso.root, 'throwkb', ['t-one'], { patternsAsDir: true });
+
+    const detail = await getAt(iso.url, '/api/studio/kbs/throwkb');
+    assert.equal(detail.status, 200, JSON.stringify(detail.json));
+    const health = detail.json['health'] as { checks?: CheckHealthEntry[]; healthError?: string } | undefined;
+    assert.ok(health, `health object must be present, got ${JSON.stringify(detail.json)}`);
+    assert.ok(Array.isArray(health!.checks), `health.checks must be an array even on a lint-run throw — got ${JSON.stringify(health)}`);
+    assert.ok(
+      health!.checks!.length > 0 && health!.checks!.every((c) => c.status === 'unknown'),
+      `every check must be status:'unknown' when the lint run throws — got ${JSON.stringify(health!.checks)}`,
+    );
+    assert.equal(
+      typeof health!.healthError,
+      'string',
+      `a top-level healthError (string) must be present on a lint-run throw — got ${JSON.stringify(health)}`,
+    );
+  } finally {
+    await iso.close();
+    rmSync(iso.root, { recursive: true, force: true });
   }
 });
