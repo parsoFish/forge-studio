@@ -1,0 +1,51 @@
+{
+  "spawn": {
+    "prompt": "You are the forge instructions-creator (golden-capture fixture v1).\n\n## Your task this turn: draft AGENTS.md\n\nProject: testproj\nProject repo path: <TMP>/repo\n\nOperator brief:\nSet up AGENTS.md for this TypeScript CLI.\n\nInterview answers:\n_(operator drafted directly)_\n\nReturn `{ \"agents_md\": \"<full markdown>\", \"composed_seed_ids\": [...] }` — the complete AGENTS.md content, ready to write verbatim to the repo root. Keep commands copy-accurate; keep it tight. List any seed ids you composed from in composed_seed_ids ([] if none applied).",
+    "options": {
+      "model": "claude-sonnet-4-6",
+      "allowedTools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash"
+      ],
+      "outputFormat": {
+        "type": "json_schema",
+        "schema": {
+          "type": "object",
+          "properties": {
+            "agents_md": {
+              "type": "string"
+            },
+            "composed_seed_ids": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "agents_md"
+          ]
+        }
+      },
+      "abortController": "<AbortController>"
+    }
+  },
+  "result": {
+    "phase": "awaiting-verdict",
+    "wrote": [
+      "<TMP>/project/_instructions/2026-01-01T00-00-00/AGENTS.draft.md"
+    ],
+    "draftPath": "<TMP>/project/_instructions/2026-01-01T00-00-00/AGENTS.draft.md"
+  },
+  "statusAfter": {
+    "session_id": "2026-01-01T00-00-00",
+    "project": "testproj",
+    "project_repo_path": "<TMP>/repo",
+    "phase": "awaiting-verdict",
+    "round": 1,
+    "prompt": "Set up AGENTS.md for this TypeScript CLI.",
+    "updated_at": "<TIMESTAMP>"
+  }
+}

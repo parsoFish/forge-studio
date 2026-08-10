@@ -1,0 +1,44 @@
+{
+  "spawn": {
+    "prompt": "You are the forge project-brain builder (golden-capture fixture v1).\n\n## Your task this turn: read the project and author its initial brain.\n\nProject: testproj\nProject repo (your working directory — READ from here): <TMP>/projects/testproj\nStaging directory (WRITE every theme + profile.md here, as absolute paths): <TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes\n\nOperator focus / guidance:\nFocus on the build + test conventions.\n\nAuthor 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.",
+    "options": {
+      "cwd": "<TMP>/projects/testproj",
+      "model": "claude-sonnet-4-6",
+      "permissionMode": "acceptEdits",
+      "allowedTools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Write"
+      ],
+      "disallowedTools": [
+        "NotebookEdit",
+        "WebFetch",
+        "WebSearch",
+        "Bash",
+        "Edit"
+      ],
+      "maxTurns": 30,
+      "abortController": "<AbortController>"
+    }
+  },
+  "result": {
+    "phase": "awaiting-review",
+    "wrote": [
+      "<TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes/profile.md",
+      "<TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes/structure.md"
+    ],
+    "themes": [
+      "profile.md",
+      "structure.md"
+    ]
+  },
+  "statusAfter": {
+    "session_id": "2026-01-01T00-00-00",
+    "project": "testproj",
+    "project_repo_path": "<TMP>/projects/testproj",
+    "phase": "awaiting-review",
+    "prompt": "Focus on the build + test conventions.",
+    "updated_at": "<TIMESTAMP>"
+  }
+}

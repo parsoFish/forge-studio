@@ -1,0 +1,42 @@
+{
+  "spawn": {
+    "prompt": "You are the forge demo-builder (golden-capture fixture v1).\n\n## Your task this turn: build the demo + render a sample\n\nProject: testproj\nProject repo (your working directory): <TMP>/repo\n\nOperator look-and-feel guidance:\nShow the before/after of the headline command, dark and minimal.\n\nConfigured demo process (capture / verify / present steps to bake into the skill):\n1. [capture] Run the CLI on a fixture input.\n2. [verify] Output matches the golden fixture.\n\nDeliver BOTH:\n1. .forge/skills/demo-design/SKILL.md — the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES.\n2. .forge/demo/DEMO.html — a real sample produced by running that generator against a representative recent change (use git log/diff; real before/after, never fabricated).\n\nScope the demo to what a change introduced, not the whole project. Stop when both .forge/skills/demo-design/SKILL.md and .forge/demo/DEMO.html exist.\n\n## Forge demo base stylesheet — the demo skill(s) must inline this verbatim into the HTML they emit\n```css\n/* forge demo base stylesheet unavailable — use the dark forge palette: bg #0a0e14, fg #e6edf3 */\n```",
+    "options": {
+      "cwd": "<TMP>/repo",
+      "model": "claude-sonnet-4-6",
+      "permissionMode": "acceptEdits",
+      "allowedTools": [
+        "Read",
+        "Grep",
+        "Glob",
+        "Bash",
+        "Write",
+        "Edit"
+      ],
+      "disallowedTools": [
+        "NotebookEdit",
+        "WebFetch",
+        "WebSearch"
+      ],
+      "maxTurns": 24,
+      "abortController": "<AbortController>"
+    }
+  },
+  "result": {
+    "phase": "awaiting-review",
+    "wrote": [
+      "<TMP>/repo/.forge/skills/demo-design/SKILL.md",
+      "<TMP>/repo/.forge/demo/DEMO.html"
+    ],
+    "demoPath": "<TMP>/repo/.forge/demo/DEMO.html"
+  },
+  "statusAfter": {
+    "session_id": "2026-01-01T00-00-00",
+    "project": "testproj",
+    "project_repo_path": "<TMP>/repo",
+    "phase": "awaiting-review",
+    "iteration": 1,
+    "prompt": "Show the before/after of the headline command, dark and minimal.",
+    "updated_at": "<TIMESTAMP>"
+  }
+}

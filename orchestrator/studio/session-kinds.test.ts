@@ -53,6 +53,43 @@
  * or pins an already-safe shape (GREEN today, coverage only — reported
  * honestly per T2's brief, not disguised as a fresh catch).
  *
+ * AT-R422-1 .. AT-R422-10 (this file) — R4-22 WI-1, ADR-043
+ * (docs/decisions/043-generic-interactive-surface.md §1): the additive-optional
+ * `turnSpec` field on SessionKindDescriptor. The module under test does NOT
+ * carry `turnSpec`, `TURN_STYLES`, `TURN_STEPS`, `FINALIZER_IDS`, `SCHEMA_IDS`,
+ * `turnStyleState`, `turnStepState`, `finalizerIdState`, or `schemaIdState` yet
+ * — every AT-R422-* test is RED at branch base. Unlike the file's original
+ * bring-up (where a missing STATIC import crashes the whole file), these use
+ * a DYNAMIC `await import('./session-kinds.ts')` inside each test body so a
+ * missing named export fails only that one test (the namespace object simply
+ * has `undefined` for the missing key) — the pre-existing AT-1..AT-67 tests
+ * keep running and passing throughout this file's RED phase.
+ *
+ * Design pinned here (proposed by T3; flagged as ambiguous in the report —
+ * the ADR's worked example never exercises `schema` at all):
+ *   - `turnSpec` shape: `{ kindDir, style, schema?, phases: [{ phase, step,
+ *     writes?, next?, finalizer? }] }`. `schema` is a TOP-LEVEL optional
+ *     field (a sibling of kindDir/style/phases), not per-phase — chosen
+ *     because the ADR's only worked example (style: agent) never uses it,
+ *     consistent with "structured-style sessions carry one schema" and
+ *     avoiding inventing an un-cited 5th TURN_STEPS value.
+ *   - Four frozen row-object registries (mirrors SESSION_ARTIFACT_KINDS's
+ *     shape, not a bare string array, precisely so the deep-freeze-vs-shallow-
+ *     freeze distinction is meaningful): `TURN_STYLES`, `TURN_STEPS`,
+ *     `FINALIZER_IDS`, `SCHEMA_IDS`, each `readonly { id: string }[]`.
+ *   - Four total lookup fns, one per registry, mirroring
+ *     `sessionArtifactKindState`'s exact shape (`.find(...)?.id`, never
+ *     throws, `undefined` for unknown): `turnStyleState`, `turnStepState`,
+ *     `finalizerIdState`, `schemaIdState`.
+ *   - New Finding check ids, mirroring the `session-kinds/unknown-*` family:
+ *     `session-kinds/turnspec-unknown-style`, `-unknown-step`,
+ *     `-unknown-finalizer`, `-unknown-schema`.
+ *   - Validated set membership per AT-6/AT-9's shape: every error message
+ *     names BOTH the offending value AND enumerates every id in the relevant
+ *     imported registry (loop-based, self-adapting to however many ids the
+ *     implementer seeds — including the degenerate case of an empty
+ *     SCHEMA_IDS, which would make that one loop vacuous; see the T3 report).
+ *
  * Design decisions this file pins (see the T3 report for the full rationale):
  *   - `studio/session-kinds.yaml` is a bare top-level YAML sequence of
  *     descriptor objects (mirrors nothing else in the repo exactly, but is
@@ -73,6 +110,38 @@
  *     SKILL.md frontmatter). Using `listAgentDefinitions()` for resolution
  *     would wrongly flag 2 of the 3 real session-kind descriptors. AT-17
  *     pins this against the real repo.
+ *
+ * AT-R422-11 .. AT-R422-19 (this file) — R4-22 WI-1 adversarial-review
+ * findings (T3 gap-pin round): AT-R422-1..10 above proved WI-1 validates
+ * turnSpec VOCABULARY MEMBERSHIP only (style/step/finalizer/schema each
+ * resolve against a closed set) — but `turnSpec.phases` is a STATE MACHINE,
+ * and its GRAPH COHERENCE is validated nowhere. Every gap below was
+ * CONFIRMED BY EXECUTION against the real (unfixed) module before being
+ * written — each loads clean, zero findings, today. New Finding check ids
+ * (invented here, mirroring the `session-kinds/turnspec-unknown-*` naming
+ * convention — the implementer must match these exact strings):
+ *   `session-kinds/turnspec-unsafe-kind-dir`   (AT-R422-11, 12)
+ *   `session-kinds/turnspec-dangling-next`     (AT-R422-13)
+ *   `session-kinds/turnspec-finalize-missing-finalizer` (AT-R422-14)
+ *   `session-kinds/turnspec-no-terminal-phase` (AT-R422-15)
+ *   `session-kinds/turnspec-duplicate-phase`   (AT-R422-16)
+ *   `session-kinds/turnspec-empty-phases`      (AT-R422-17)
+ *   `session-kinds/turnspec-structured-unsupported` (AT-R422-18)
+ * AT-R422-19 extends the AT-16/AT-R422-6 load/validate split to all six
+ * graph-coherence checks in one combined fixture.
+ *
+ * CRITICAL for the implementer (AT-R422-12): `kindDir`'s sibling field
+ * `d.id` is checked against `SLUG_RE` (`/^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/`,
+ * orchestrator/skill-path.ts) one screen up in the same function — but every
+ * REAL `kindDir` value in this design is underscore-prefixed (`_authoring`,
+ * `_architect`, `_demo`, ADR-043 §1's own worked example). SLUG_RE requires
+ * a leading `a-z` letter, so it REJECTS every one of them. Reusing
+ * SLUG_RE/CHECK_SLUG for kindDir would make every real shipped kindDir value
+ * a lint error. The kindDir check must be a NEW, distinct "safe single path
+ * segment" shape check (no separators, no `.`/`..`, no control characters —
+ * mirrors `isSafeSegment` in cli/studio-path-guard.ts, which the generic
+ * runner's own `resolveGuardedPath(projectRoot, [kindDir, sessionId])` relies
+ * on one layer further down, but which nothing calls at LINT time today).
  */
 
 import { describe, it, after } from 'node:test';
@@ -91,6 +160,27 @@ import {
   validateSessionKinds,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
+// The real Finding type (level/object/check/message) `validateSessionKinds`
+// actually returns — imported directly rather than hand-narrowed/cast so the
+// AT-R422-* assertions below typecheck against the SAME shape production
+// code returns (TS2352 fix: a hand-narrowed `{ check: string }` local was
+// too structurally distant from `{ level: string }` / `{ message: string }`
+// for `as` to convert between them; the fix is a correct type, not a
+// broader cast).
+import type { Finding } from './validate.ts';
+// Real production call path (Ruling 36): `runStudioLint` is what `forge
+// studio lint` actually calls (cli/studio-lint.ts -> cmdStudioLint,
+// orchestrator/cli.ts), and CI invokes exactly that command
+// (.github/workflows/ci.yml: `node --experimental-strip-types
+// orchestrator/cli.ts studio lint`). This import is STATIC (not dynamic)
+// because runStudioLint already exists and works today — no RED risk here.
+import { runStudioLint } from '../../cli/studio-lint.ts';
+// SLUG_RE is the SAME regex CHECK_SLUG already applies one screen up in
+// validateSessionKinds (`d.id` — the sibling field to `turnSpec.kindDir`).
+// Imported directly (not re-derived) so AT-R422-12's sanity precondition
+// tests the REAL regex the implementer might be tempted to reuse for
+// kindDir, not a hand-copied guess of it.
+import { SLUG_RE } from '../skill-path.ts';
 
 const REPO_ROOT = resolve(import.meta.dirname, '..', '..');
 
@@ -724,5 +814,447 @@ describe('validateSessionKinds — legacyRouteResolves has NO containment check 
     const routeFindings = findings.filter((f) => f.check === 'session-kinds/legacy-route-not-found');
     assert.equal(routeFindings.length, 1, `expected exactly 1 finding — a route string containing ".." must be rejected even when it numerically resolves back to a legitimate target, got: ${JSON.stringify(routeFindings)}`);
     assert.ok(routeFindings[0].message.includes(roundTripRoute));
+  });
+});
+
+// ===========================================================================
+// AT-R422-1 .. AT-R422-10 — R4-22 WI-1, ADR-043: the additive-optional
+// `turnSpec` field. See the file header for the pinned shape, the frozen
+// registries, and why these tests use a DYNAMIC import.
+// ===========================================================================
+
+/** The exact ADR-043 §1 worked example (kindDir: _authoring, style: agent,
+ *  4-phase table) — the POSITIVE control every negative probe below is a
+ *  one-field mutation of. */
+function wellFormedTurnSpec(): Record<string, unknown> {
+  return {
+    kindDir: '_authoring',
+    style: 'agent',
+    phases: [
+      { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
+      { phase: 'awaiting-review', step: 'noop' },
+      { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
+      { phase: 'committed', step: 'terminal' },
+    ],
+  };
+}
+
+/** A descriptor fixture carrying `turnSpec`, otherwise identical to
+ *  baseDescriptor() — legacyRoutes forced to [] so the unrelated
+ *  legacy-route-not-found check never pollutes the turnspec-specific
+ *  assertions below (a fresh tmp root has no forge-ui/app/ dir at all). */
+function turnSpecDescriptor(turnSpec: Record<string, unknown>): FixtureDescriptor & { turnSpec: Record<string, unknown> } {
+  return { ...baseDescriptor({ legacyRoutes: [] }), turnSpec };
+}
+
+/** Findings this initiative's checks produce, isolated from every
+ *  pre-existing session-kinds/* check so a probe that flips ONE field can
+ *  assert in isolation even though the fixture also carries the other,
+ *  still-valid turnSpec fields. */
+function turnspecFindings(findings: Finding[]): Finding[] {
+  return findings.filter((f) => f.check.startsWith('session-kinds/turnspec-'));
+}
+
+describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a closed sub-vocabulary → error naming value + allowed set', () => {
+  it('AT-R422-1: turnSpec.style outside TURN_STYLES → error naming the offending value AND every id in TURN_STYLES (kills an implementation that never validates style at all, or that validates it but hardcodes a stale/incomplete allowed-set string instead of deriving it from TURN_STYLES)', async () => {
+    const mod = await import('./session-kinds.ts');
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-turn-style-at-all';
+    writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), style: bogus })]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-style');
+    assert.ok(f, `expected a session-kinds/turnspec-unknown-style finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const styles: readonly { id: string }[] = mod.TURN_STYLES ?? [];
+    assert.ok(styles.length > 0, 'TURN_STYLES must be seeded (the ADR names style: agent | structured) for this allowed-set assertion to be meaningful');
+    for (const row of styles) {
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+    }
+  });
+
+  it('AT-R422-2: a phase.step outside TURN_STEPS → error naming the offending value AND every id in TURN_STEPS (kills an implementation that validates style but forgets per-phase step validation — a distinct field, distinct check)', async () => {
+    const mod = await import('./session-kinds.ts');
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-step-at-all';
+    const turnSpec = wellFormedTurnSpec();
+    (turnSpec.phases as Record<string, unknown>[])[0] = { ...(turnSpec.phases as Record<string, unknown>[])[0], step: bogus };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-step');
+    assert.ok(f, `expected a session-kinds/turnspec-unknown-step finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const steps: readonly { id: string }[] = mod.TURN_STEPS ?? [];
+    assert.ok(steps.length > 0, 'TURN_STEPS must be seeded (the ADR example uses agent/noop/finalize/terminal) for this allowed-set assertion to be meaningful');
+    for (const row of steps) {
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+    }
+  });
+
+  it('AT-R422-3: a phase.finalizer outside FINALIZER_IDS (on an otherwise-valid step:finalize phase) → error naming the offending value AND every id in FINALIZER_IDS (kills an implementation that validates step but never resolves the finalizer id it names — a dangling reference would otherwise only fail at RUNTIME, mid-cycle, not at lint time)', async () => {
+    const mod = await import('./session-kinds.ts');
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'notARealFinalizerAtAll';
+    const turnSpec = wellFormedTurnSpec();
+    const phases = turnSpec.phases as Record<string, unknown>[];
+    const committingIdx = phases.findIndex((p) => p.phase === 'committing');
+    phases[committingIdx] = { ...phases[committingIdx], finalizer: bogus };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-finalizer');
+    assert.ok(f, `expected a session-kinds/turnspec-unknown-finalizer finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const finalizers: readonly { id: string }[] = mod.FINALIZER_IDS ?? [];
+    assert.ok(finalizers.length > 0, 'FINALIZER_IDS must be seeded with at least copyStagingToLibrary (the ADR\'s own worked example) for this allowed-set assertion to be meaningful');
+    for (const row of finalizers) {
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+    }
+  });
+
+  it('AT-R422-4: turnSpec.schema outside SCHEMA_IDS → error naming the offending value AND every id in SCHEMA_IDS (kills an implementation that resolves style/step/finalizer but skips schema — the 4th vocabulary the ADR names explicitly; if SCHEMA_IDS is seeded EMPTY for WI-1 this allowed-set loop is vacuously true — see the T3 report\'s flagged ambiguity, this assertion alone cannot distinguish "seeded empty" from "seeded correctly" and the offending-value assertion above it is what actually carries the pin)', async () => {
+    const mod = await import('./session-kinds.ts');
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-schema-id-at-all';
+    writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), schema: bogus })]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-schema');
+    assert.ok(f, `expected a session-kinds/turnspec-unknown-schema finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const schemas: readonly { id: string }[] = mod.SCHEMA_IDS ?? [];
+    for (const row of schemas) {
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+    }
+  });
+});
+
+describe('validateSessionKinds — turnSpec positive control + additive-optionality (AT-R422-5, AT-R422-9)', () => {
+  it('AT-R422-9: the well-formed ADR-043 §1 authoring turnSpec validates CLEAN — zero turnspec-* findings (POSITIVE CONTROL: without this, AT-R422-1..4 could all pass for the wrong reason — an implementation that rejects every turnSpec unconditionally)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [turnSpecDescriptor(wellFormedTurnSpec())]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    assert.deepEqual(findings, [], `expected zero turnspec-* findings for the well-formed ADR example, got: ${JSON.stringify(findings)}`);
+  });
+
+  it('AT-R422-5: ADDITIVE-OPTIONAL, proven against the REAL repo — every shipped studio/session-kinds.yaml row today has no turnSpec at all; loadSessionKinds/validateSessionKinds(REPO_ROOT) must behave EXACTLY as before (already true today at branch base — this is a must-STAY-green regression pin, not a fresh RED, honestly reported per this file\'s own AT-64..66 precedent; kills an implementation that makes turnSpec required, or that emits a finding merely for its absence)', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    assert.equal(descs.length, 5, 'the 5 real shipped session kinds must still load — turnSpec must never become a required field');
+    for (const d of descs) {
+      assert.equal((d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec, undefined, `descriptor "${d.id}" has no turnSpec in the real yaml — must remain undefined, never defaulted to some non-optional shape`);
+    }
+    const findings = turnspecFindings(validateSessionKinds(REPO_ROOT));
+    assert.deepEqual(findings, [], `a turnSpec-less descriptor must never trip a turnspec-* finding, got: ${JSON.stringify(findings)}`);
+  });
+});
+
+describe('loadSessionKinds — turnSpec is STRUCTURAL ONLY (AT-R422-6, mirrors AT-16\'s split for the pre-existing fields)', () => {
+  it('AT-R422-6: a semantically-invalid turnSpec (bogus style) does NOT throw at load time and the parsed descriptor carries the turnSpec data INTACT, unmodified — semantic rejection is validateSessionKinds\'s job alone (kills an implementation that validates style inside parseSessionKindDescriptor/loadSessionKinds, breaking the AT-16 load/validate split every other field in this module already honors)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogusTurnSpec = { ...wellFormedTurnSpec(), style: 'not-a-real-style-at-all' };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(bogusTurnSpec)]);
+
+    let descs: SessionKindDescriptor[] = [];
+    assert.doesNotThrow(() => { descs = loadSessionKinds(root); }, 'loadSessionKinds must not throw on a semantically-bogus turnSpec — only a structurally malformed one');
+    assert.equal(descs.length, 1);
+    assert.deepEqual((descs[0] as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec, bogusTurnSpec, 'the loader must carry the turnSpec object through unmodified, including the offending style value — the same evidence validateSessionKinds then flags');
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    assert.ok(findings.some((f) => f.check === 'session-kinds/turnspec-unknown-style'), 'validateSessionKinds must independently flag the exact value the loader silently accepted');
+  });
+});
+
+describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (AT-R422-7, AT-R422-8)', () => {
+  it('AT-R422-7: TURN_STYLES, TURN_STEPS, FINALIZER_IDS are each seeded (length > 0) and DEEP-frozen — the outer array AND every row are frozen, and an in-place mutation on a row never takes effect (kills an implementation that does `Object.freeze(array)` alone without freezing each row first — the exact shallow-freeze regression SESSION_ARTIFACT_KINDS\'s own header comment warns against, reproduced here). SCHEMA_IDS is DELIBERATELY EMPTY for R4-22 WI-1 (no `structured`-style turnSpec consumer exists anywhere in the repo yet — seeding a placeholder id would make a schema id lint-valid with no implementation behind it, which this codebase explicitly refuses to pretend) but is still frozen — an empty array can and must still be frozen. The `length === 0` assertion below IS this gap-pin\'s own expiry condition (immutable-gates discipline): it goes RED the moment anyone seeds the first real schema id, forcing whoever does that to consciously widen it to `length > 0` plus the allowed-set coverage AT-R422-1..3 already give the other three registries — a stronger pin than a blanket `length > 0` could ever be, because a blanket check cannot hold for a genuinely, deliberately empty vocabulary.', async () => {
+    const mod = await import('./session-kinds.ts');
+
+    // The three genuinely seeded turnSpec vocabularies — length > 0 is a real
+    // invariant for these three (unlike SCHEMA_IDS, see below).
+    const seededRegistries: Record<string, readonly { readonly id: string }[]> = {
+      TURN_STYLES: mod.TURN_STYLES,
+      TURN_STEPS: mod.TURN_STEPS,
+      FINALIZER_IDS: mod.FINALIZER_IDS,
+    };
+    for (const [name, registry] of Object.entries(seededRegistries)) {
+      assert.ok(Array.isArray(registry) && registry.length > 0, `${name} must exist and be seeded with at least one row`);
+      // `Array.isArray`'s TS type predicate is `arg is any[]` — narrowing
+      // through the check directly above silently erases `registry`'s
+      // `readonly { readonly id: string }[]` typing for everything below it
+      // (a known TS limitation, empirically confirmed while wiring this
+      // amendment: left as `registry`, the `@ts-expect-error` two blocks down
+      // has nothing to catch, i.e. exactly TS2578). Re-bind through a freshly,
+      // explicitly typed local so the readonly typing this whole amendment
+      // exists to enforce survives past the runtime array check — the runtime
+      // check itself is unchanged, still real, still first.
+      const rows: readonly { readonly id: string }[] = registry;
+      assert.ok(Object.isFrozen(rows), `${name}'s outer array must be frozen`);
+      for (const row of rows) {
+        assert.ok(Object.isFrozen(row), `${name}'s row ${JSON.stringify(row)} must ALSO be frozen — shallow freeze alone leaves it mutable`);
+      }
+      const before = rows[0].id;
+      try {
+        // @ts-expect-error deliberate mutation attempt on a frozen, readonly-id row
+        rows[0].id = 'HACKED';
+      } catch {
+        // Strict-mode ESM throws TypeError on a frozen-object write — that is
+        // an ACCEPTABLE way for "does not take effect" to manifest; either
+        // outcome is fine as long as the value below is unchanged.
+      }
+      assert.equal(rows[0].id, before, `${name}[0].id must be unchanged after a direct mutation attempt, whether it silently no-op'd or threw`);
+    }
+
+    // SCHEMA_IDS: deliberately empty — still frozen (there is no row to
+    // freeze-check, but the OUTER array itself must be, same as the three
+    // above), and `length === 0` is the assertion that expires this gap-pin
+    // the instant it stops being true.
+    const schemaIds: readonly { readonly id: string }[] = mod.SCHEMA_IDS;
+    assert.ok(Array.isArray(schemaIds), 'SCHEMA_IDS must exist and be an array');
+    assert.ok(Object.isFrozen(schemaIds), "SCHEMA_IDS's outer array must be frozen even though it is empty");
+    assert.equal(
+      schemaIds.length,
+      0,
+      'SCHEMA_IDS must be deliberately EMPTY for R4-22 WI-1 (no structured-style turnSpec consumer exists yet) — this assertion is a self-expiring gap-pin: the moment the first real schema id is seeded, THIS line must be consciously updated to length > 0 plus the allowed-set coverage AT-R422-1..3 already give TURN_STYLES/TURN_STEPS/FINALIZER_IDS',
+    );
+  });
+
+  it('AT-R422-8: turnStyleState/turnStepState/finalizerIdState/schemaIdState are TOTAL — undefined for an unrecognised id, NEVER throw (kills an implementation using a non-total lookup like array indexing or a bang-asserted .find()! that throws or returns null instead of undefined for an unknown id)', async () => {
+    const mod = await import('./session-kinds.ts');
+    const lookups: [string, (id: string) => unknown][] = [
+      ['turnStyleState', mod.turnStyleState],
+      ['turnStepState', mod.turnStepState],
+      ['finalizerIdState', mod.finalizerIdState],
+      ['schemaIdState', mod.schemaIdState],
+    ];
+    for (const [name, fn] of lookups) {
+      assert.equal(typeof fn, 'function', `${name} must be an exported function`);
+      let result: unknown;
+      assert.doesNotThrow(() => { result = fn('totally-unrecognised-id-xyz'); }, `${name} must never throw on an unrecognised id`);
+      assert.equal(result, undefined, `${name} must return undefined (not null, not throw) for an unrecognised id`);
+    }
+  });
+});
+
+describe('the real production call path — forge studio lint (AT-R422-10, Ruling 36)', () => {
+  it('AT-R422-10: runStudioLint(root) — the exact function cmdStudioLint (orchestrator/cli.ts) calls, which `forge studio lint` runs and which CI invokes via `node --experimental-strip-types orchestrator/cli.ts studio lint` (.github/workflows/ci.yml) — surfaces the turnspec-unknown-style finding produced by validateSessionKinds (kills an implementation where the new check exists and is directly callable but is not actually wired into (or is swallowed by) the studio-lint aggregation path an operator/CI actually runs; validateSessionKinds alone being correct is NOT sufficient — this is the "guard exists, no call site calls it" defect class named in the brief)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-turn-style-at-all';
+    writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), style: bogus })]);
+
+    const result = runStudioLint(root);
+    const findings = turnspecFindings(result.findings);
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-style');
+    assert.ok(f, `expected runStudioLint to surface a session-kinds/turnspec-unknown-style finding, got turnspec-* findings: ${JSON.stringify(findings)}`);
+    assert.ok(f.message.includes(bogus), 'the finding reaching the real CLI aggregation path must still name the offending value');
+    assert.ok(result.errorCount >= 1, 'runStudioLint.errorCount must reflect the new error-level finding — this is the number the CI gate actually checks non-zero on');
+  });
+});
+
+// ===========================================================================
+// AT-R422-11 .. AT-R422-19 — adversarial-review T3 gap-pin round: WI-1
+// validates turnSpec VOCABULARY MEMBERSHIP only; `turnSpec.phases` is a STATE
+// MACHINE and its GRAPH COHERENCE is validated nowhere. Every gap below was
+// CONFIRMED BY EXECUTION against the real module (loads clean, zero
+// findings) before being written. See the file header for the full check-id
+// list and the SLUG_RE-vs-underscore-prefix determination (AT-R422-12).
+// ===========================================================================
+
+describe('validateSessionKinds — turnSpec.kindDir must be a safe single path segment (AT-R422-11, AT-R422-12)', () => {
+  it('AT-R422-11: turnSpec.kindDir that is NOT a safe single path segment → error naming the offending value, for every shape a reviewer confirmed slips through today (kills an implementation that never validates kindDir\'s shape at all — reviewer-confirmed by EXECUTION: kindDir: ".." and kindDir: "a/b" both loaded clean with ZERO findings against the real module. ADR-043 §1 names kindDir verbatim as "the ONE containment segment" — it becomes `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic runner (docs/decisions/043-generic-interactive-surface.md:47), the SEC-04 guard root. This is the single most important gap in the whole review: an unvalidated kindDir is a path-traversal primitive one lint pass away from being wired to a real filesystem write.)', () => {
+    const badKindDirs = [
+      '..',
+      'a/b',
+      '.',
+      '/leading-slash-value',
+      'bad' + String.fromCharCode(0) + 'dir', // C0 control character (NUL) — mirrors this file's own AT-65 null-byte precedent; built at RUNTIME, never a raw byte in the source file
+    ];
+    for (const bad of badKindDirs) {
+      const root = makeForgeRoot();
+      writeAgentSkill(root, 'fixture-agent');
+      writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), kindDir: bad })]);
+
+      const findings = turnspecFindings(validateSessionKinds(root));
+      const f = findings.find((x) => x.check === 'session-kinds/turnspec-unsafe-kind-dir');
+      assert.ok(f, `expected a session-kinds/turnspec-unsafe-kind-dir finding for kindDir ${JSON.stringify(bad)}, got: ${JSON.stringify(findings)}`);
+      assert.equal(f.level, 'error');
+      assert.ok(f.message.includes(bad), `message must name the offending kindDir value ${JSON.stringify(bad)}, got: ${f.message}`);
+    }
+  });
+
+  it('AT-R422-12: turnSpec.kindDir POSITIVE CONTROL — legitimate underscore-prefixed dir names (`_authoring` per the ADR §1 worked example, plus `_architect`/`_demo`, the real values this design actually uses) validate CLEAN (without this, a blanket-reject kindDir implementation would pass every negative probe in AT-R422-11 for the WRONG reason). Also asserts the determination the implementer needs: SLUG_RE (imported straight from orchestrator/skill-path.ts — the SAME regex CHECK_SLUG already applies to the sibling `d.id` field one screen up in validateSessionKinds) does NOT accept these values, because it requires a leading a-z letter — reusing SLUG_RE/CHECK_SLUG for kindDir would make every REAL shipped kindDir value a permanent lint error, so a distinct check is required.', () => {
+    for (const good of ['_authoring', '_architect', '_demo']) {
+      assert.ok(
+        !SLUG_RE.test(good),
+        `sanity precondition: SLUG_RE (${SLUG_RE}) must reject "${good}" (leading underscore) — this is WHY a dedicated kindDir-shape check, distinct from SLUG_RE/CHECK_SLUG, is required`,
+      );
+      const root = makeForgeRoot();
+      writeAgentSkill(root, 'fixture-agent');
+      writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), kindDir: good })]);
+
+      const findings = turnspecFindings(validateSessionKinds(root));
+      assert.deepEqual(findings, [], `expected zero turnspec-* findings for legitimate kindDir "${good}", got: ${JSON.stringify(findings)}`);
+    }
+  });
+});
+
+describe('validateSessionKinds — turnSpec.phases graph coherence (AT-R422-13..18)', () => {
+  it('AT-R422-13: a phase whose `next` names a phase absent from the table ("dangling next") → error naming the offending value AND the real phase names that DO exist (mirrors the existing `defaultStage ∈ stages` precedent one screen up in validateSessionKinds — this is `next ∈ phase-names`; kills an implementation that resolves style/step/finalizer/schema in isolation but never checks a phase\'s `next` actually points somewhere reachable, silently producing a dead-end the generic runner\'s dispatch loop can walk into at RUNTIME)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const phases = turnSpec.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'analyzing');
+    phases[idx] = { ...phases[idx], next: 'phase-that-does-not-exist' };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-dangling-next');
+    assert.ok(f, `expected a session-kinds/turnspec-dangling-next finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('phase-that-does-not-exist'), 'message must name the offending next value');
+    for (const p of phases) {
+      assert.ok(f.message.includes(p.phase as string), `message must name the real phase-name set (missing "${p.phase}")`);
+    }
+  });
+
+  it('AT-R422-14: a `step: finalize` phase that OMITS `finalizer` ENTIRELY (the key itself is absent, not merely undefined-valued) → error (kills the existing check\'s literal blind spot: `if (phase.finalizer !== undefined && finalizerIdState(phase.finalizer) === undefined)` only ever fires when `finalizer` IS present — a finalize phase with the key left out entirely never enters that branch and passes clean, silently reaching the generic runner\'s step:finalize dispatch with nothing to call)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const phases = turnSpec.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'committing');
+    phases[idx] = { phase: 'committing', step: 'finalize', next: 'committed' }; // no `finalizer` key at all
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-finalize-missing-finalizer');
+    assert.ok(f, `expected a session-kinds/turnspec-finalize-missing-finalizer finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('committing'), 'message must name the offending phase');
+  });
+
+  it('AT-R422-15: a turnSpec.phases table containing NO `step: terminal` row anywhere ("no terminal phase", an unterminated state machine) → error naming the offending descriptor (kills an implementation that validates every individual step/finalizer/next value in isolation but never checks the table as a WHOLE has a terminal state — the generic runner\'s dispatch loop then has no phase it can legally stop advancing from)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const phases = turnSpec.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.step === 'terminal');
+    // Flip the terminal row to `noop` (not remove it) so no `next` becomes
+    // dangling — this isolates "no terminal phase" from AT-R422-13's gap.
+    phases[idx] = { ...phases[idx], step: 'noop' };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-no-terminal-phase');
+    assert.ok(f, `expected a session-kinds/turnspec-no-terminal-phase finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('fixture-kind'), 'message must name the offending descriptor id');
+  });
+
+  it('AT-R422-16: duplicate `phase` names within one turnSpec.phases table → error naming the duplicated name (mirrors the existing CHECK_DUPLICATE_ID precedent for descriptor ids — a state machine with two rows claiming the same phase name is ambiguous: which "analyzing" does a `next: "analyzing"` elsewhere in the table actually mean?)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const phases = turnSpec.phases as Record<string, unknown>[];
+    // Append a duplicate — every EXISTING `next:` reference stays resolvable,
+    // isolating "duplicate phase" from AT-R422-13's dangling-next gap.
+    phases.push({ phase: 'analyzing', step: 'noop' });
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-duplicate-phase');
+    assert.ok(f, `expected a session-kinds/turnspec-duplicate-phase finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('analyzing'), 'message must name the duplicated phase name');
+  });
+
+  it('AT-R422-17: an EMPTY turnSpec.phases list → error naming the offending descriptor (kills an implementation that only does `for (const phase of ts.phases)` — a zero-length array makes that loop vacuously pass with no findings at all, silently accepting a turnSpec that can never run a single turn)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), phases: [] })]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-empty-phases');
+    assert.ok(f, `expected a session-kinds/turnspec-empty-phases finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('fixture-kind'), 'message must name the offending descriptor id');
+  });
+
+  it('AT-R422-18: turnSpec.style "structured" → an HONEST error stating it is not usable until a schema is registered, NOT a silent pass (SCHEMA_IDS ships deliberately empty for R4-22 WI-1 — reviewer-confirmed by EXECUTION: today ANY `schema` value errors via turnspec-unknown-schema, which means a `structured` turnSpec can NEVER be made valid, yet nothing says so — a `structured` style with no `schema` field never even enters the schema-check branch, so it validates clean today); must NOT fire for style: "agent" (negative control — the ADR\'s only real worked example)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [turnSpecDescriptor({ ...wellFormedTurnSpec(), style: 'structured' })]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-structured-unsupported');
+    assert.ok(f, `expected a session-kinds/turnspec-structured-unsupported finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(/structured/i.test(f.message), `message must name the offending style value, got: ${f.message}`);
+    assert.ok(/schema/i.test(f.message), `message must explain WHY — no schema is registered yet (SCHEMA_IDS is empty) — not just reject blindly, got: ${f.message}`);
+
+    const agentRoot = makeForgeRoot();
+    writeAgentSkill(agentRoot, 'fixture-agent');
+    writeSessionKindsYaml(agentRoot, [turnSpecDescriptor(wellFormedTurnSpec())]);
+    const agentFindings = turnspecFindings(validateSessionKinds(agentRoot));
+    assert.ok(
+      !agentFindings.some((x) => x.check === 'session-kinds/turnspec-structured-unsupported'),
+      `style: "agent" must never trip the structured-unsupported check, got: ${JSON.stringify(agentFindings)}`,
+    );
+  });
+});
+
+describe('loadSessionKinds — the six new graph-coherence checks are STRUCTURAL ONLY too (AT-R422-19, extends AT-16/AT-R422-6\'s split to every check added in AT-R422-11..18)', () => {
+  it('AT-R422-19: a SINGLE turnSpec combining all six new graph-coherence defects at once (unsafe kindDir, dangling next, a finalize phase missing its finalizer key, no terminal phase, a duplicate phase name, and style: structured) does NOT throw at load time, and the parsed descriptor carries every offending value through UNMODIFIED — semantic rejection is validateSessionKinds\'s job alone, exactly like every pre-existing field in this module (AT-16); validateSessionKinds then independently flags EACH of the six on that SAME carried-through evidence', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const kitchenSinkTurnSpec: Record<string, unknown> = {
+      kindDir: '..',
+      style: 'structured',
+      phases: [
+        { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'phase-that-does-not-exist' },
+        { phase: 'awaiting-review', step: 'noop' },
+        { phase: 'committing', step: 'finalize', next: 'committed' }, // finalizer key genuinely absent
+        { phase: 'committed', step: 'noop' }, // was terminal — table now has none
+        { phase: 'analyzing', step: 'noop' }, // duplicate of phases[0]'s name
+      ],
+    };
+    writeSessionKindsYaml(root, [turnSpecDescriptor(kitchenSinkTurnSpec)]);
+
+    let descs: SessionKindDescriptor[] = [];
+    assert.doesNotThrow(() => { descs = loadSessionKinds(root); }, 'loadSessionKinds must not throw on a semantically-incoherent-but-structurally-valid turnSpec');
+    assert.equal(descs.length, 1);
+    assert.deepEqual(
+      (descs[0] as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec,
+      kitchenSinkTurnSpec,
+      'the loader must carry every offending value through unmodified — the same evidence validateSessionKinds then independently flags',
+    );
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const checks = new Set(findings.map((f) => f.check));
+    for (const expected of [
+      'session-kinds/turnspec-unsafe-kind-dir',
+      'session-kinds/turnspec-dangling-next',
+      'session-kinds/turnspec-finalize-missing-finalizer',
+      'session-kinds/turnspec-no-terminal-phase',
+      'session-kinds/turnspec-duplicate-phase',
+      'session-kinds/turnspec-structured-unsupported',
+    ]) {
+      assert.ok(
+        checks.has(expected),
+        `expected validateSessionKinds to independently flag "${expected}" on the SAME evidence the loader carried through unmodified, got checks: ${[...checks].join(', ')}`,
+      );
+    }
   });
 });

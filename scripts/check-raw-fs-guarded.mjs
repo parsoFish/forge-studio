@@ -217,6 +217,20 @@ export function targetModules(root = FORGE_ROOT) {
     'cli/agent-run.ts',
     'cli/architect-plan.ts',
     'orchestrator/interactive-session.ts',
+    // R4-22 WI-2: the FINALIZERS registry's sole row today,
+    // copyStagingToLibrary — session-derived staging paths + a
+    // request-derived packageId both reach fs writes; same class as the
+    // legacy interactive runners above.
+    'orchestrator/interactive-finalizers.ts',
+    // R4-22 WI-3 (ADR-043 §2): the generic interactive-turn spine. It cannot
+    // be reached by check-request-path-sinks.mjs's reachability walker (that
+    // script follows relative imports from the bridge entry points; the
+    // cli/agent-run.ts -> runInteractiveTurn dispatch crosses a process-spawn
+    // boundary, so this module is structurally outside that walk) — this
+    // manual list is therefore the ONLY mechanism that lints it. Same class
+    // as the four legacy runners above: session-derived (kindDir, sessionId)
+    // and finalizer-bound (packageId) paths reach fs sinks.
+    'orchestrator/interactive-runner.ts',
     'orchestrator/architect-runner.ts',
     'orchestrator/instructions-runner.ts',
     'orchestrator/project-brain-builder-runner.ts',
@@ -574,8 +588,8 @@ export function analyzeModule(text, relFile) {
 // openConcerns (a migrate-to-guardedFile follow-up for T1), never hidden.
 export const ALLOWLIST = [
   // ---- cli/agent-run.ts — CLI subcommand handler (non-HTTP) ----
-  { file: 'cli/agent-run.ts', line: 551, sink: 'existsSync',
-    reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path.' },
+  { file: 'cli/agent-run.ts', line: 674, sink: 'existsSync',
+    reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path. (Line-drift remap from 551 — R4-22 WI-5 inserted the ADR-043 dispatch fork + its two helpers earlier in the file, then its post-review --project segment-guard added 20 more lines; all purely additive. Same function, same guard, byte-for-byte unchanged — verified by diffing main:cli/agent-run.ts@549-553 against the current @672-676.)' },
 
   // ---- cli/bridge-studio-kbs.ts ----
   { file: 'cli/bridge-studio-kbs.ts', line: 224, sink: 'existsSync',

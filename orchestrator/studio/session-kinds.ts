@@ -42,7 +42,7 @@ import { basename, join, sep } from 'node:path';
 import yaml from 'js-yaml';
 import matter from 'gray-matter';
 
-import { reqString, reqObject, stringArray } from './yaml-fields.ts';
+import { reqString, reqObject, stringArray, optString } from './yaml-fields.ts';
 import { listSkillMdDirs, skillsDir, SLUG_RE } from '../skill-path.ts';
 import type { Finding } from './validate.ts';
 
@@ -102,12 +102,134 @@ export function sessionArtifactKindState(id: string): 'live' | 'reserved' | unde
 }
 
 // ---------------------------------------------------------------------------
+// turnSpec vocabularies (R4-22 WI-1, ADR-043 §1 — docs/decisions/043-generic-
+// interactive-surface.md): the additive-optional producer/state-machine half
+// of a session-kind descriptor. Each is `readonly { id: string }[]`, rows-as-
+// data, mirroring SESSION_ARTIFACT_KINDS's shape exactly — including the same
+// deep-freeze discipline (each row frozen individually BEFORE the outer array
+// is frozen; a shallow `Object.freeze(array)` alone leaves rows mutable).
+// ---------------------------------------------------------------------------
+
+export type TurnStyleRow = { readonly id: string };
+export type TurnStepRow = { readonly id: string };
+export type FinalizerIdRow = { readonly id: string };
+export type SchemaIdRow = { readonly id: string };
+
+/** `structured` drives runStructuredTurn, `agent` drives runAgentTurn
+ *  (ADR-043 §1/§2) — exactly the two styles the ADR names, nothing
+ *  speculative added.
+ *
+ *  Typed `readonly TurnStyleRow[]`, exactly as SESSION_ARTIFACT_KINDS above:
+ *  the compile-time annotation matches the runtime deep-freeze instead of
+ *  being widened to suit a caller's local. Do NOT re-add an `as
+ *  TurnStyleRow[]` cast to make a mutable-typed local compile — that strips
+ *  the readonly Object.freeze hands back and loosens production typing to
+ *  fit a test fixture; type the local `readonly` instead. */
+export const TURN_STYLES: readonly TurnStyleRow[] = Object.freeze([
+  Object.freeze({ id: 'structured' }),
+  Object.freeze({ id: 'agent' }),
+]);
+export type TurnStyle = (typeof TURN_STYLES)[number]['id'];
+
+/** Exactly the four step kinds the ADR's own worked example exercises
+ *  (agent/noop/finalize/terminal) — nothing speculative added beyond it.
+ *  Typed `readonly`, as TURN_STYLES. */
+export const TURN_STEPS: readonly TurnStepRow[] = Object.freeze([
+  Object.freeze({ id: 'agent' }),
+  Object.freeze({ id: 'noop' }),
+  Object.freeze({ id: 'finalize' }),
+  Object.freeze({ id: 'terminal' }),
+]);
+export type TurnStep = (typeof TURN_STEPS)[number]['id'];
+
+/** Finalizer ids a `step: finalize` phase may name (ADR-043 §5, "the real
+ *  bespoke residue") — seeded with the ADR's own worked example only. Typed `readonly`, as TURN_STYLES. */
+export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
+  Object.freeze({ id: 'copyStagingToLibrary' }),
+]);
+export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
+
+/** EXPIRY CONDITION (deliberately empty for R4-22 WI-1): the ADR's only
+ *  worked example (style: agent) never exercises `schema` at all, and no
+ *  `structured`-style turnSpec consumer exists anywhere in the repo yet.
+ *  Seed this the moment the first one lands. Until then, this is a
+ *  deliberately-green gap-pin, not an oversight: `turnSpec.schema` has no
+ *  valid value today, and validateSessionKinds says so honestly (naming the
+ *  empty allowed set) rather than skipping the check or pretending
+ *  membership that doesn't exist. Typed `readonly`, as TURN_STYLES. */
+export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([] as SchemaIdRow[]);
+export type SchemaId = (typeof SCHEMA_IDS)[number]['id'];
+
+/** Total lookups over the four turnSpec vocabularies: the matching id, or
+ *  `undefined` for anything unrecognised. Never throw, never guess — mirror
+ *  sessionArtifactKindState's exact shape. */
+export function turnStyleState(id: string): string | undefined {
+  return TURN_STYLES.find((s) => s.id === id)?.id;
+}
+export function turnStepState(id: string): string | undefined {
+  return TURN_STEPS.find((s) => s.id === id)?.id;
+}
+export function finalizerIdState(id: string): string | undefined {
+  return FINALIZER_IDS.find((s) => s.id === id)?.id;
+}
+export function schemaIdState(id: string): string | undefined {
+  return SCHEMA_IDS.find((s) => s.id === id)?.id;
+}
+
+/** Renders a closed-vocabulary's allowed set for an error message — honest
+ *  even when the set is empty (SCHEMA_IDS today), never silently omitted. */
+function allowedIdsSummary(rows: readonly { readonly id: string }[]): string {
+  return rows.length > 0 ? rows.map((r) => r.id).join('|') : '(none registered yet)';
+}
+
+// ---------------------------------------------------------------------------
 // SessionKindDescriptor
 // ---------------------------------------------------------------------------
 
 export type SessionKindArtifactRef = {
   readonly kind: string;
   readonly label: string;
+};
+
+/** One row of a turnSpec's phase table (ADR-043 §1's worked example).
+ *  `writes`/`next`/`finalizer` are genuinely optional — a `terminal` or
+ *  `noop` phase carries neither. Structural only: `step` and `finalizer`
+ *  are NOT validated against TURN_STEPS/FINALIZER_IDS here — see
+ *  validateSessionKinds.
+ *
+ *  EXPIRY CONDITION (deliberately unvalidated for R4-22 WI-1, matching the
+ *  discipline SCHEMA_IDS sets above): `writes` names the staging area(s) an
+ *  `agent`-step phase is expected to populate, but no ADR-ratified vocabulary
+ *  for its values exists yet, and no consumer reads it back to enforce
+ *  anything — inventing a closed set here would be speculative surface, not
+ *  a real check. validateSessionKinds does NOT touch `writes` at all. Seed a
+ *  vocabulary and a check the moment a real `writes` consumer lands (the
+ *  generic runner actually reading/enforcing it); until then this is a
+ *  known, deliberate gap, not an oversight. */
+export type TurnSpecPhase = {
+  readonly phase: string;
+  readonly step: string;
+  readonly writes?: readonly string[];
+  readonly next?: string;
+  readonly finalizer?: string;
+};
+
+/** The additive-optional producer/state-machine half of a session-kind
+ *  descriptor (ADR-043 §1) — the "missing half" that turns a read-only
+ *  session shell into one that can actually run a turn. Structural only at
+ *  load time (AT-R422-6 mirrors AT-16's split for the pre-existing fields):
+ *  `style`, each phase's `step`/`finalizer`, and `schema` are validated ONLY
+ *  by validateSessionKinds, against TURN_STYLES/TURN_STEPS/FINALIZER_IDS/
+ *  SCHEMA_IDS respectively — loadSessionKinds carries the values through
+ *  unmodified, however bogus. */
+export type TurnSpec = {
+  /** The one containment segment (SEC-04 guard root) — e.g. `_authoring`. */
+  readonly kindDir: string;
+  readonly style: string;
+  /** Top-level, not per-phase (a structured-style session carries one
+   *  schema) — SCHEMA_IDS ships empty for R4-22 WI-1, see its own doc. */
+  readonly schema?: string;
+  readonly phases: readonly TurnSpecPhase[];
 };
 
 export type SessionKindDescriptor = {
@@ -123,6 +245,10 @@ export type SessionKindDescriptor = {
   readonly stages: readonly string[];
   readonly defaultStage: string;
   readonly artifact: SessionKindArtifactRef;
+  /** Additive-optional (ADR-043 §1) — absent on every real session kind
+   *  shipped before R4-22 (AT-R422-5); a descriptor with none loads and
+   *  validates exactly as before. */
+  readonly turnSpec?: TurnSpec;
 };
 
 // ---------------------------------------------------------------------------
@@ -155,6 +281,54 @@ function loadSessionKindsSequence(file: string): unknown[] {
   return parsed;
 }
 
+/** Structural-only parse of one turnSpec.phases[] row (AT-R422-6): only
+ *  `phase`/`step` are required scalars; `writes`/`next`/`finalizer` are
+ *  carried through when present and OMITTED (not set to `undefined`) when
+ *  absent, so a round-tripped descriptor stays deep-equal to the authored
+ *  object — no semantic check on `step`/`finalizer` happens here. */
+function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phaseIndex: number): TurnSpecPhase {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    throw new Error(
+      `${file}: descriptor[${descIndex}].turnSpec.phases[${phaseIndex}] must be a mapping, got ${Array.isArray(raw) ? 'array' : typeof raw}`,
+    );
+  }
+  const p = raw as Record<string, unknown>;
+  const phase = reqString(p, 'phase', file);
+  const step = reqString(p, 'step', file);
+  const writes = p.writes !== undefined ? stringArray(p, 'writes', file) : undefined;
+  const next = optString(p, 'next');
+  const finalizer = optString(p, 'finalizer');
+  return {
+    phase,
+    step,
+    ...(writes !== undefined ? { writes } : {}),
+    ...(next !== undefined ? { next } : {}),
+    ...(finalizer !== undefined ? { finalizer } : {}),
+  };
+}
+
+/** Structural-only parse of a descriptor's `turnSpec` (AT-R422-6, mirrors
+ *  the AT-16 split): throws only on missing-file-shape problems (not a
+ *  mapping, `phases` not an array, missing required scalars) — `style`,
+ *  each phase's `step`/`finalizer`, and `schema` are NOT checked against
+ *  their closed vocabularies here; that is validateSessionKinds's job. */
+function parseTurnSpec(raw: Record<string, unknown>, file: string, descIndex: number): TurnSpec {
+  const kindDir = reqString(raw, 'kindDir', file);
+  const style = reqString(raw, 'style', file);
+  const schema = optString(raw, 'schema');
+  const phasesRaw = raw.phases;
+  if (!Array.isArray(phasesRaw)) {
+    throw new Error(`${file}: descriptor[${descIndex}].turnSpec.phases must be an array`);
+  }
+  const phases = phasesRaw.map((p, i) => parseTurnSpecPhase(p, file, descIndex, i));
+  return {
+    kindDir,
+    style,
+    ...(schema !== undefined ? { schema } : {}),
+    phases,
+  };
+}
+
 function parseSessionKindDescriptor(raw: unknown, index: number, file: string): SessionKindDescriptor {
   if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
     throw new Error(`${file}: descriptor[${index}] must be a mapping, got ${Array.isArray(raw) ? 'array' : typeof raw}`);
@@ -171,7 +345,12 @@ function parseSessionKindDescriptor(raw: unknown, index: number, file: string): 
     kind: reqString(artifactRaw, 'kind', file),
     label: reqString(artifactRaw, 'label', file),
   };
-  return { id, agent, title, legacyRoutes, stages, defaultStage, artifact };
+  // Additive-optional (ADR-043 §1): absent on every real session kind
+  // shipped before R4-22 — only parse it when the yaml row actually carries
+  // one, so descriptors without it are byte-for-byte the same shape as
+  // before this initiative (AT-R422-5).
+  const turnSpec = d.turnSpec !== undefined ? parseTurnSpec(reqObject(d, 'turnSpec', file), file, index) : undefined;
+  return { id, agent, title, legacyRoutes, stages, defaultStage, artifact, ...(turnSpec !== undefined ? { turnSpec } : {}) };
 }
 
 /**
@@ -230,6 +409,62 @@ const CHECK_DEFAULT_STAGE_NOT_IN_STAGES = 'session-kinds/default-stage-not-in-st
 const CHECK_UNKNOWN_ARTIFACT_KIND = 'session-kinds/unknown-artifact-kind';
 const CHECK_RESERVED_ARTIFACT_KIND = 'session-kinds/reserved-artifact-kind';
 const CHECK_LEGACY_ROUTE_NOT_FOUND = 'session-kinds/legacy-route-not-found';
+const CHECK_TURNSPEC_UNKNOWN_STYLE = 'session-kinds/turnspec-unknown-style';
+const CHECK_TURNSPEC_UNKNOWN_STEP = 'session-kinds/turnspec-unknown-step';
+const CHECK_TURNSPEC_UNKNOWN_FINALIZER = 'session-kinds/turnspec-unknown-finalizer';
+const CHECK_TURNSPEC_UNKNOWN_SCHEMA = 'session-kinds/turnspec-unknown-schema';
+// R4-22 WI-1 adversarial-review round (AT-R422-11..18): turnSpec.phases is a
+// STATE MACHINE, and its graph coherence was validated nowhere — every check
+// below was confirmed by execution to load clean, zero findings, before this
+// round. See the file header CRITICAL note for kindDir/SLUG_RE.
+const CHECK_TURNSPEC_UNSAFE_KIND_DIR = 'session-kinds/turnspec-unsafe-kind-dir';
+const CHECK_TURNSPEC_DANGLING_NEXT = 'session-kinds/turnspec-dangling-next';
+const CHECK_TURNSPEC_FINALIZE_MISSING_FINALIZER = 'session-kinds/turnspec-finalize-missing-finalizer';
+const CHECK_TURNSPEC_NO_TERMINAL_PHASE = 'session-kinds/turnspec-no-terminal-phase';
+const CHECK_TURNSPEC_DUPLICATE_PHASE = 'session-kinds/turnspec-duplicate-phase';
+const CHECK_TURNSPEC_EMPTY_PHASES = 'session-kinds/turnspec-empty-phases';
+const CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED = 'session-kinds/turnspec-structured-unsupported';
+
+/** True if `seg` contains any C0 control character (codepoint 0-31
+ *  inclusive), mirroring cli/studio-path-guard.ts's own CONTROL_CHAR_RE
+ *  scan for the same range — written here as an explicit codepoint scan,
+ *  not a `/[\u0000-\u001f]/`-style character-class literal, so this source
+ *  file itself never has to carry a raw control byte inside a regex
+ *  literal. */
+function hasControlChar(seg: string): boolean {
+  for (let i = 0; i < seg.length; i++) {
+    if (seg.charCodeAt(i) <= 0x1f) return true;
+  }
+  return false;
+}
+
+/**
+ * turnSpec.kindDir must be a safe single path segment — it becomes
+ * `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic
+ * runner (docs/decisions/043-generic-interactive-surface.md §1), the SEC-04
+ * containment guard root. `d.id` one screen down is validated against
+ * SLUG_RE (CHECK_SLUG) but SLUG_RE requires a leading `a-z` letter, and
+ * every REAL kindDir value in this design is underscore-prefixed
+ * (`_authoring`, `_architect`, `_demo`) — reusing SLUG_RE for kindDir would
+ * reject every legitimate shipped value. This mirrors `isSafeSegment` in
+ * cli/studio-path-guard.ts EXACTLY (no separators, no "." or "..", no C0
+ * control characters) — the same predicate `resolveGuardedPath` itself
+ * relies on one layer further down. NOT imported from that module because
+ * `isSafeSegment` is not exported there (an internal helper of a file this
+ * initiative's file-boundary does not touch); kept in exact lockstep by
+ * design — any future edit to isSafeSegment must be mirrored here too.
+ */
+function isSafeKindDirSegment(seg: string): boolean {
+  return (
+    seg.length > 0 &&
+    seg !== '.' &&
+    seg !== '..' &&
+    !seg.includes('/') &&
+    !seg.includes('\\') &&
+    !seg.includes(sep) &&
+    !hasControlChar(seg)
+  );
+}
 
 const FORGE_UI_APP_DIRNAME = join('forge-ui', 'app');
 
@@ -369,6 +604,164 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           `Session kind "${d.id}" declares reserved artifact kind "${d.artifact.kind}" — it parses fine but has no renderer implementation anywhere; wire the renderer (and flip it live in SESSION_ARTIFACT_KINDS) before using it`,
         ),
       );
+    }
+
+    // turnSpec (R4-22 WI-1, ADR-043 §1): additive-optional, so a descriptor
+    // with none skips this block entirely (AT-R422-5) — no finding, no
+    // default. Every closed-vocabulary rejection below names BOTH the
+    // offending value AND the allowed set (the file's binding rule, header
+    // comment), even when that set is empty (SCHEMA_IDS today).
+    if (d.turnSpec !== undefined) {
+      const ts = d.turnSpec;
+
+      // kindDir (AT-R422-11, 12): the ONE containment segment (ADR-043 §1) —
+      // checked BEFORE anything else in this block, matching the review's
+      // finding that this is the single most important gap. See
+      // isSafeKindDirSegment's own doc comment for why SLUG_RE/CHECK_SLUG
+      // (the sibling check on `d.id` above) cannot be reused here.
+      if (!isSafeKindDirSegment(ts.kindDir)) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_UNSAFE_KIND_DIR,
+            `Session kind "${d.id}" declares turnSpec.kindDir "${ts.kindDir}" — not a safe single path segment (no "/", "\\", ".", "..", or control characters)`,
+          ),
+        );
+      }
+
+      if (turnStyleState(ts.style) === undefined) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_UNKNOWN_STYLE,
+            `Session kind "${d.id}" declares turnSpec.style "${ts.style}" — must be one of ${allowedIdsSummary(TURN_STYLES)}`,
+          ),
+        );
+      }
+
+      // structured-unsupported (AT-R422-18): "structured" IS a member of
+      // TURN_STYLES (the unknown-style check above stays silent for it), but
+      // SCHEMA_IDS ships deliberately EMPTY for R4-22 WI-1 — no schema id can
+      // ever validate, so a structured turnSpec can NEVER be made valid.
+      // Saying nothing would be a silent pass on a value that is honestly
+      // unusable; this fires unconditionally on style: "structured" while
+      // SCHEMA_IDS.length === 0, and self-expires (mirrors the SCHEMA_IDS
+      // EXPIRY CONDITION comment above) the moment a first schema id is
+      // seeded — at that point this becomes a real membership check instead
+      // of a blanket one.
+      if (ts.style === 'structured' && SCHEMA_IDS.length === 0) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED,
+            `Session kind "${d.id}" declares turnSpec.style "structured" but no schema is registered yet (SCHEMA_IDS is empty) — a structured turnSpec cannot be made valid until a schema id is seeded`,
+          ),
+        );
+      }
+
+      if (ts.schema !== undefined && schemaIdState(ts.schema) === undefined) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_UNKNOWN_SCHEMA,
+            `Session kind "${d.id}" declares turnSpec.schema "${ts.schema}" — must be one of ${allowedIdsSummary(SCHEMA_IDS)}`,
+          ),
+        );
+      }
+
+      // empty-phases (AT-R422-17): a state machine with zero rows can never
+      // run a single turn — the direct analog of CHECK_EMPTY_STAGES above.
+      if (ts.phases.length === 0) {
+        findings.push(
+          err(obj, CHECK_TURNSPEC_EMPTY_PHASES, `Session kind "${d.id}" declares an empty turnSpec.phases list — at least one phase is required`),
+        );
+      }
+
+      // Real phase-name set for the dangling-next check below (the direct
+      // analog of `defaultStage ∈ stages`, this is `next ∈ phase-names`) —
+      // built once, ahead of the loop, over every declared phase (including
+      // any duplicate, so a `next` that only a duplicate row satisfies still
+      // resolves).
+      const phaseNames = [...new Set(ts.phases.map((p) => p.phase))];
+      const phaseNameSet = new Set(phaseNames);
+      const seenPhaseNames = new Set<string>();
+
+      for (const phase of ts.phases) {
+        if (turnStepState(phase.step) === undefined) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_UNKNOWN_STEP,
+              `Session kind "${d.id}" turnSpec phase "${phase.phase}" declares step "${phase.step}" — must be one of ${allowedIdsSummary(TURN_STEPS)}`,
+            ),
+          );
+        }
+        if (phase.finalizer !== undefined && finalizerIdState(phase.finalizer) === undefined) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_UNKNOWN_FINALIZER,
+              `Session kind "${d.id}" turnSpec phase "${phase.phase}" declares finalizer "${phase.finalizer}" — must be one of ${allowedIdsSummary(FINALIZER_IDS)}`,
+            ),
+          );
+        }
+
+        // finalize-missing-finalizer (AT-R422-14): the check above only ever
+        // fires when `finalizer` IS present (`phase.finalizer !== undefined`)
+        // — a `step: finalize` phase that omits the KEY entirely never enters
+        // that branch. `'finalizer' in phase` distinguishes "key absent" from
+        // "key present, value undefined" (parseTurnSpecPhase only ever sets
+        // the key when the source YAML carries one — AT-R422-6/19).
+        if (phase.step === 'finalize' && !('finalizer' in phase)) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_FINALIZE_MISSING_FINALIZER,
+              `Session kind "${d.id}" turnSpec phase "${phase.phase}" has step "finalize" but is missing the required "finalizer" field`,
+            ),
+          );
+        }
+
+        // dangling-next (AT-R422-13): mirrors CHECK_DEFAULT_STAGE_NOT_IN_STAGES's
+        // shape/message style one screen up — `next ∈ phase-names` is the
+        // direct structural analog of `defaultStage ∈ stages`.
+        if (phase.next !== undefined && !phaseNameSet.has(phase.next)) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_DANGLING_NEXT,
+              `Session kind "${d.id}" turnSpec phase "${phase.phase}" next "${phase.next}" is not a member of its own declared phases [${phaseNames.join(', ')}]`,
+            ),
+          );
+        }
+
+        // duplicate-phase (AT-R422-16): mirrors CHECK_DUPLICATE_ID's
+        // shape/message style one screen up.
+        if (seenPhaseNames.has(phase.phase)) {
+          findings.push(
+            err(obj, CHECK_TURNSPEC_DUPLICATE_PHASE, `Session kind "${d.id}" turnSpec.phases declares duplicate phase name "${phase.phase}"`),
+          );
+        } else {
+          seenPhaseNames.add(phase.phase);
+        }
+      }
+
+      // no-terminal-phase (AT-R422-15): the table as a WHOLE, not any single
+      // row — the generic runner's dispatch loop needs a legal phase to stop
+      // advancing from.
+      if (!ts.phases.some((p) => p.step === 'terminal')) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_NO_TERMINAL_PHASE,
+            `Session kind "${d.id}" turnSpec.phases has no phase with step "terminal" — the state machine has no legal stopping point`,
+          ),
+        );
+      }
+
+      // `writes` (each phase's optional staging-area list) is deliberately
+      // NOT validated anywhere in this block — see TurnSpecPhase's own
+      // EXPIRY CONDITION doc comment above for why and when.
     }
   }
 

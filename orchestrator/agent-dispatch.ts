@@ -94,6 +94,36 @@ export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]):
 }
 
 /**
+ * Resolve an interactive (in-roster) agent by slug — the MIRROR of
+ * `resolveDispatchableAgent` above (ADR-043 §4 "Two hosts, code-enforced
+ * twins"). `resolveDispatchableAgent` itself is left byte-for-byte untouched
+ * by this addition — softening its refusal is the one change that would
+ * break the boundary the whole two-host design rests on, so this mirror is
+ * added ALONGSIDE it, not folded into a shared helper that could drift its
+ * wording. This function accepts ONLY an interactive def, refusing every
+ * non-interactive or unknown slug with the symmetric boundary error.
+ * Interactivity is decided by the exact SAME predicate
+ * `resolveDispatchableAgent` uses — `agentCapabilityDescriptor(def)
+ * .interactive` — never a re-implemented or parallel notion of
+ * "interactive": one shared definition of the boundary, each host refusing
+ * exactly what the other accepts.
+ */
+export function resolveInteractiveAgent(slug: string, defs: AgentDefinition[]): AgentDefinition {
+  const def = defs.find((d) => d.slug === slug);
+  if (!def) {
+    const known = defs.map((d) => d.slug).sort().join(', ');
+    throw new Error(`resolveInteractiveAgent: no interactive agent "${slug}" in the roster (known: ${known})`);
+  }
+  if (!agentCapabilityDescriptor(def).interactive) {
+    throw new Error(
+      `resolveInteractiveAgent: agent "${slug}" is not interactive (surface: ${def.surface ?? 'unattended'}) — ` +
+        `non-interactive agents run through the generic run host, not a bespoke interactive session page`,
+    );
+  }
+  return def;
+}
+
+/**
  * Assemble a standalone run prompt: the agent's own SKILL.md process intent
  * (`def.body`) followed by a small "## Run context" block naming the project
  * and any operator-supplied inputs. Inputs render under an explicit DATA label

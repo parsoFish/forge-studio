@@ -1868,7 +1868,7 @@ lint-passed and never run the check.
 
 ### R4-22 Generic interactive-surface primitive
 
-- **Status:** planned · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../decisions/043-generic-interactive-surface.md) (Accepted 2026-08-10)
+- **Status:** partial — **F1 + F2 implemented** (2026-08-10, PR #117: `turnSpec` + `orchestrator/interactive-runner.ts` + the `cmdAgentRun` fork, 4 legacy runners byte-for-byte green behind it); **F3 ships with R4-21** (the `authoring` descriptor's `turnSpec` row lives only on `feat/r4-21-authoring-agent`, so WI-6 was out of this lane's scope); **F4 staged** (batch-E-proper or later) · **Wave:** 5 (batch E — interactive-runtime bridge) · **ADR:** [043](../decisions/043-generic-interactive-surface.md) (Accepted 2026-08-10)
 - **Depends on:** R2-10 (session shell — the read half is already generic), R4-21 (its infra is consumer #1, built + green on `feat/r4-21-authoring-agent`).
 - **Depended on by:** R4-21 (live drafting), R4-18 (onboard-flow — a consumer once generalised), R4-19-F2 (brain-maintenance — a consumer, deferred-large).
 - **Context:** The interactive-session **read** half is already generic over data (the `SessionKindDescriptor` yaml row drives route + transcript + artifact pane with no per-kind code). The **producer/state-machine** half is still four hand-written `orchestrator/*-runner.ts` behind `AGENT_RUNNERS` — and a fifth (creation-agent) parking against the ADR-042 surface cap is the third time the same shape parked in batch D (R4-18, R4-19-F2 [mislabelled], R4-21). Same shape three times ⇒ a missing generalisation, not three exceptions. Operator directive (2026-08-10): make the interactive surface a **generic, operator-authorable, artifact-like, multi-instance** primitive.
@@ -2103,3 +2103,17 @@ gitignored campaign dir):
   exclusions). Corrects the parked design on the record: the park file proposed
   `{gate: <band-guard-id>}`, which cannot dispatch — `resolveNodeKind` consults
   `GATE_KIND` for a `gate:` field and never `BAND_GUARD_IDS`.
+
+- 2026-08-10 — **R4-22-F1 + F2 implemented** (PR #117, batch E lane 1). Landed the producer half as data:
+  additive-optional `turnSpec` on `SessionKindDescriptor` with four deep-frozen vocabularies + eleven
+  `validateSessionKinds` checks (vocabulary membership AND phase-graph coherence — dangling `next`,
+  finalize-without-finalizer, no-terminal, duplicate phases, empty phases, unsafe `kindDir`);
+  `orchestrator/interactive-finalizers.ts` (frozen `FINALIZERS`, seeded `copyStagingToLibrary` only);
+  `orchestrator/interactive-runner.ts` (the spine — SEC-04 preamble, ADR-024 derivation, phase dispatch);
+  `resolveInteractiveAgent` as the code-enforced twin of an untouched `resolveDispatchableAgent`; and the
+  `cmdAgentRun` dispatch fork, evaluated before the unknown-agent bail. Purely additive — no runner migrated,
+  no deletion; the promised orchestrator-surface *decrease* is still owed by F4, exactly as ADR-043 discloses.
+  Two reproduced escapes closed (a staged-file TOCTOU and its symmetric destination-side twin; root-folding via
+  `--project` on the new road only). Two tripwires stand: the WI-0 golden byte-capture, and a new standing
+  invariant failing if any legacy-colliding session-kind id gains a `turnSpec` — added because the golden suite
+  provably cannot see that (verified by mutation).
