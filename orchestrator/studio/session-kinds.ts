@@ -195,7 +195,17 @@ export type SessionKindArtifactRef = {
  *  `writes`/`next`/`finalizer` are genuinely optional — a `terminal` or
  *  `noop` phase carries neither. Structural only: `step` and `finalizer`
  *  are NOT validated against TURN_STEPS/FINALIZER_IDS here — see
- *  validateSessionKinds. */
+ *  validateSessionKinds.
+ *
+ *  EXPIRY CONDITION (deliberately unvalidated for R4-22 WI-1, matching the
+ *  discipline SCHEMA_IDS sets above): `writes` names the staging area(s) an
+ *  `agent`-step phase is expected to populate, but no ADR-ratified vocabulary
+ *  for its values exists yet, and no consumer reads it back to enforce
+ *  anything — inventing a closed set here would be speculative surface, not
+ *  a real check. validateSessionKinds does NOT touch `writes` at all. Seed a
+ *  vocabulary and a check the moment a real `writes` consumer lands (the
+ *  generic runner actually reading/enforcing it); until then this is a
+ *  known, deliberate gap, not an oversight. */
 export type TurnSpecPhase = {
   readonly phase: string;
   readonly step: string;
@@ -403,6 +413,58 @@ const CHECK_TURNSPEC_UNKNOWN_STYLE = 'session-kinds/turnspec-unknown-style';
 const CHECK_TURNSPEC_UNKNOWN_STEP = 'session-kinds/turnspec-unknown-step';
 const CHECK_TURNSPEC_UNKNOWN_FINALIZER = 'session-kinds/turnspec-unknown-finalizer';
 const CHECK_TURNSPEC_UNKNOWN_SCHEMA = 'session-kinds/turnspec-unknown-schema';
+// R4-22 WI-1 adversarial-review round (AT-R422-11..18): turnSpec.phases is a
+// STATE MACHINE, and its graph coherence was validated nowhere — every check
+// below was confirmed by execution to load clean, zero findings, before this
+// round. See the file header CRITICAL note for kindDir/SLUG_RE.
+const CHECK_TURNSPEC_UNSAFE_KIND_DIR = 'session-kinds/turnspec-unsafe-kind-dir';
+const CHECK_TURNSPEC_DANGLING_NEXT = 'session-kinds/turnspec-dangling-next';
+const CHECK_TURNSPEC_FINALIZE_MISSING_FINALIZER = 'session-kinds/turnspec-finalize-missing-finalizer';
+const CHECK_TURNSPEC_NO_TERMINAL_PHASE = 'session-kinds/turnspec-no-terminal-phase';
+const CHECK_TURNSPEC_DUPLICATE_PHASE = 'session-kinds/turnspec-duplicate-phase';
+const CHECK_TURNSPEC_EMPTY_PHASES = 'session-kinds/turnspec-empty-phases';
+const CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED = 'session-kinds/turnspec-structured-unsupported';
+
+/** True if `seg` contains any C0 control character (codepoint 0-31
+ *  inclusive), mirroring cli/studio-path-guard.ts's own CONTROL_CHAR_RE
+ *  scan for the same range — written here as an explicit codepoint scan,
+ *  not a `/[\u0000-\u001f]/`-style character-class literal, so this source
+ *  file itself never has to carry a raw control byte inside a regex
+ *  literal. */
+function hasControlChar(seg: string): boolean {
+  for (let i = 0; i < seg.length; i++) {
+    if (seg.charCodeAt(i) <= 0x1f) return true;
+  }
+  return false;
+}
+
+/**
+ * turnSpec.kindDir must be a safe single path segment — it becomes
+ * `resolveGuardedPath(projectRoot, [kindDir, sessionId])` in the generic
+ * runner (docs/decisions/043-generic-interactive-surface.md §1), the SEC-04
+ * containment guard root. `d.id` one screen down is validated against
+ * SLUG_RE (CHECK_SLUG) but SLUG_RE requires a leading `a-z` letter, and
+ * every REAL kindDir value in this design is underscore-prefixed
+ * (`_authoring`, `_architect`, `_demo`) — reusing SLUG_RE for kindDir would
+ * reject every legitimate shipped value. This mirrors `isSafeSegment` in
+ * cli/studio-path-guard.ts EXACTLY (no separators, no "." or "..", no C0
+ * control characters) — the same predicate `resolveGuardedPath` itself
+ * relies on one layer further down. NOT imported from that module because
+ * `isSafeSegment` is not exported there (an internal helper of a file this
+ * initiative's file-boundary does not touch); kept in exact lockstep by
+ * design — any future edit to isSafeSegment must be mirrored here too.
+ */
+function isSafeKindDirSegment(seg: string): boolean {
+  return (
+    seg.length > 0 &&
+    seg !== '.' &&
+    seg !== '..' &&
+    !seg.includes('/') &&
+    !seg.includes('\\') &&
+    !seg.includes(sep) &&
+    !hasControlChar(seg)
+  );
+}
 
 const FORGE_UI_APP_DIRNAME = join('forge-ui', 'app');
 
@@ -552,12 +614,47 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
     if (d.turnSpec !== undefined) {
       const ts = d.turnSpec;
 
+      // kindDir (AT-R422-11, 12): the ONE containment segment (ADR-043 §1) —
+      // checked BEFORE anything else in this block, matching the review's
+      // finding that this is the single most important gap. See
+      // isSafeKindDirSegment's own doc comment for why SLUG_RE/CHECK_SLUG
+      // (the sibling check on `d.id` above) cannot be reused here.
+      if (!isSafeKindDirSegment(ts.kindDir)) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_UNSAFE_KIND_DIR,
+            `Session kind "${d.id}" declares turnSpec.kindDir "${ts.kindDir}" — not a safe single path segment (no "/", "\\", ".", "..", or control characters)`,
+          ),
+        );
+      }
+
       if (turnStyleState(ts.style) === undefined) {
         findings.push(
           err(
             obj,
             CHECK_TURNSPEC_UNKNOWN_STYLE,
             `Session kind "${d.id}" declares turnSpec.style "${ts.style}" — must be one of ${allowedIdsSummary(TURN_STYLES)}`,
+          ),
+        );
+      }
+
+      // structured-unsupported (AT-R422-18): "structured" IS a member of
+      // TURN_STYLES (the unknown-style check above stays silent for it), but
+      // SCHEMA_IDS ships deliberately EMPTY for R4-22 WI-1 — no schema id can
+      // ever validate, so a structured turnSpec can NEVER be made valid.
+      // Saying nothing would be a silent pass on a value that is honestly
+      // unusable; this fires unconditionally on style: "structured" while
+      // SCHEMA_IDS.length === 0, and self-expires (mirrors the SCHEMA_IDS
+      // EXPIRY CONDITION comment above) the moment a first schema id is
+      // seeded — at that point this becomes a real membership check instead
+      // of a blanket one.
+      if (ts.style === 'structured' && SCHEMA_IDS.length === 0) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED,
+            `Session kind "${d.id}" declares turnSpec.style "structured" but no schema is registered yet (SCHEMA_IDS is empty) — a structured turnSpec cannot be made valid until a schema id is seeded`,
           ),
         );
       }
@@ -571,6 +668,23 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           ),
         );
       }
+
+      // empty-phases (AT-R422-17): a state machine with zero rows can never
+      // run a single turn — the direct analog of CHECK_EMPTY_STAGES above.
+      if (ts.phases.length === 0) {
+        findings.push(
+          err(obj, CHECK_TURNSPEC_EMPTY_PHASES, `Session kind "${d.id}" declares an empty turnSpec.phases list — at least one phase is required`),
+        );
+      }
+
+      // Real phase-name set for the dangling-next check below (the direct
+      // analog of `defaultStage ∈ stages`, this is `next ∈ phase-names`) —
+      // built once, ahead of the loop, over every declared phase (including
+      // any duplicate, so a `next` that only a duplicate row satisfies still
+      // resolves).
+      const phaseNames = [...new Set(ts.phases.map((p) => p.phase))];
+      const phaseNameSet = new Set(phaseNames);
+      const seenPhaseNames = new Set<string>();
 
       for (const phase of ts.phases) {
         if (turnStepState(phase.step) === undefined) {
@@ -591,7 +705,63 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
             ),
           );
         }
+
+        // finalize-missing-finalizer (AT-R422-14): the check above only ever
+        // fires when `finalizer` IS present (`phase.finalizer !== undefined`)
+        // — a `step: finalize` phase that omits the KEY entirely never enters
+        // that branch. `'finalizer' in phase` distinguishes "key absent" from
+        // "key present, value undefined" (parseTurnSpecPhase only ever sets
+        // the key when the source YAML carries one — AT-R422-6/19).
+        if (phase.step === 'finalize' && !('finalizer' in phase)) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_FINALIZE_MISSING_FINALIZER,
+              `Session kind "${d.id}" turnSpec phase "${phase.phase}" has step "finalize" but is missing the required "finalizer" field`,
+            ),
+          );
+        }
+
+        // dangling-next (AT-R422-13): mirrors CHECK_DEFAULT_STAGE_NOT_IN_STAGES's
+        // shape/message style one screen up — `next ∈ phase-names` is the
+        // direct structural analog of `defaultStage ∈ stages`.
+        if (phase.next !== undefined && !phaseNameSet.has(phase.next)) {
+          findings.push(
+            err(
+              obj,
+              CHECK_TURNSPEC_DANGLING_NEXT,
+              `Session kind "${d.id}" turnSpec phase "${phase.phase}" next "${phase.next}" is not a member of its own declared phases [${phaseNames.join(', ')}]`,
+            ),
+          );
+        }
+
+        // duplicate-phase (AT-R422-16): mirrors CHECK_DUPLICATE_ID's
+        // shape/message style one screen up.
+        if (seenPhaseNames.has(phase.phase)) {
+          findings.push(
+            err(obj, CHECK_TURNSPEC_DUPLICATE_PHASE, `Session kind "${d.id}" turnSpec.phases declares duplicate phase name "${phase.phase}"`),
+          );
+        } else {
+          seenPhaseNames.add(phase.phase);
+        }
       }
+
+      // no-terminal-phase (AT-R422-15): the table as a WHOLE, not any single
+      // row — the generic runner's dispatch loop needs a legal phase to stop
+      // advancing from.
+      if (!ts.phases.some((p) => p.step === 'terminal')) {
+        findings.push(
+          err(
+            obj,
+            CHECK_TURNSPEC_NO_TERMINAL_PHASE,
+            `Session kind "${d.id}" turnSpec.phases has no phase with step "terminal" — the state machine has no legal stopping point`,
+          ),
+        );
+      }
+
+      // `writes` (each phase's optional staging-area list) is deliberately
+      // NOT validated anywhere in this block — see TurnSpecPhase's own
+      // EXPIRY CONDITION doc comment above for why and when.
     }
   }
 
