@@ -588,8 +588,8 @@ export function analyzeModule(text, relFile) {
 // openConcerns (a migrate-to-guardedFile follow-up for T1), never hidden.
 export const ALLOWLIST = [
   // ---- cli/agent-run.ts — CLI subcommand handler (non-HTTP) ----
-  { file: 'cli/agent-run.ts', line: 685, sink: 'existsSync',
-    reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path. (Line-drift remap from 674 — R4-21 phase 2, WI-2 correction B added the resolveProjectsDir/loadConfig/defaultConfigPath projects-root resolution + its doc comment inside runTurnSpecAgent earlier in the file, +11 lines; same function, same guard, byte-for-byte unchanged — verified by sed -n "685p" cli/agent-run.ts.)' },
+  { file: 'cli/agent-run.ts', line: 695, sink: 'existsSync',
+    reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path. (Line-drift remap from 685 — the legacy-dispatch --project guard added the resolveProjectsDir/loadConfig/defaultConfigPath segment-guard inside the cmdAgentRun `if (projectArg)` branch earlier in the file, +10 lines; same function, same probe, byte-for-byte unchanged — verified by sed -n "695p" cli/agent-run.ts.)' },
 
   // ---- cli/bridge-studio-kbs.ts ----
   { file: 'cli/bridge-studio-kbs.ts', line: 224, sink: 'existsSync',
