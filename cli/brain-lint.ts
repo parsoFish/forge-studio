@@ -939,10 +939,18 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
  * see that KB's brain dir (project/band KBs) — the fix for the declared-data-
  * fails-open defect where those checks silently reported `pass`.
  */
+// The per-KB checks lintThemeFiles gives a REAL verdict on for a KB's OWN
+// themes, regardless of KB type. checkCategoryScope is deliberately EXCLUDED:
+// the category→sub-wiki routing rule (pattern→cycles, decision→forge-dev) is a
+// three-brain (ADR 018) convention that governs ONLY the forge brains, so it is
+// meaningful per-KB solely for the forge KBs (cycles/forge-dev) via the
+// forge-themes scoped path. Running it over a band/flow KB's own themes would
+// false-FAIL every category-bearing theme (lintThemeFiles exempts only
+// `projects` themes from the routing check); the Health tab reports it 'n/a'
+// for every non-forge KB instead.
 export const LINT_THEME_FILE_CHECKS: ReadonlySet<string> = new Set([
   'checkFrontmatter',
   'checkSourceLinks',
-  'checkCategoryScope',
   'checkIndexSync',
 ]);
 

@@ -1168,6 +1168,17 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 8 forge-theme 
     const idx = defectHealth!.checks!.find((c) => c.check === 'checkIndexSync');
     assert.ok(idx, `checks[] must include a checkIndexSync entry, got ${JSON.stringify(defectHealth!.checks)}`);
     assert.equal(idx!.status, 'pass', `checkIndexSync must be a real 'pass' (theme correctly linked), got ${JSON.stringify(idx)}`);
+
+    // checkCategoryScope is 'n/a' even though this KB has an own theme carrying
+    // `category: pattern`: the category→sub-wiki routing rule is a three-brain
+    // (ADR 018) convention that governs ONLY the forge KBs (cycles/forge-dev),
+    // so it is NOT in LINT_THEME_FILE_CHECKS. Reporting 'pass' here would be a
+    // vacuous exempt-pass (lintThemeFiles skips the routing check for non-cycles
+    // /forge-dev themes anyway) and reporting 'fail' would be the false-FAIL a
+    // band/flow KB's own theme would otherwise hit — 'n/a' is the honest state.
+    const cat = defectHealth!.checks!.find((c) => c.check === 'checkCategoryScope');
+    assert.ok(cat, `checks[] must include a checkCategoryScope entry, got ${JSON.stringify(defectHealth!.checks)}`);
+    assert.equal(cat!.status, 'n/a', `checkCategoryScope is a forge-brain-only routing convention — must be 'n/a' for a non-forge KB, never a vacuous 'pass' or a false 'fail'. Got ${JSON.stringify(cat)}`);
   } finally {
     await iso.close();
     rmSync(iso.root, { recursive: true, force: true });
