@@ -12,7 +12,7 @@
  *
  * `composition.guards` (renamed from `composition.hooks` by the immediately
  * preceding PR) stays the PLATFORM dispatch-key vocabulary — the 5 toggle ids
- * plus the 4 band ids (`orchestrator/agent-bands.ts`'s `PLATFORM_GUARD_IDS`).
+ * plus the 5 band ids (`orchestrator/agent-bands.ts`'s `PLATFORM_GUARD_IDS`).
  * `composition.hooks` is reintroduced HERE meaning ONLY library hook ids.
  * Enforcement is SYMMETRIC (`lintHookComposition`): a guard id under
  * `composition.hooks` is an error, and a hook id under `composition.guards`

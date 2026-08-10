@@ -117,10 +117,10 @@ function byId(entries: readonly TemplateLibraryEntry[], id: string): TemplateLib
 // ===========================================================================
 
 describe('listTemplateLibrary — real repo union + categories', () => {
-  it('AT-1: the real repo surfaces exactly 16 templates: 7 planning + 6 demo-output + 3 project-scaffold', () => {
+  it('AT-1: the real repo surfaces exactly 17 templates: 8 planning + 6 demo-output + 3 project-scaffold', () => {
     const entries = listTemplateLibrary(REPO_ROOT);
-    assert.equal(entries.length, 16, `got ids: ${entries.map((e) => e.id).join(', ')}`);
-    assert.equal(entries.filter((e) => e.category === 'planning').length, 7);
+    assert.equal(entries.length, 17, `got ids: ${entries.map((e) => e.id).join(', ')}`);
+    assert.equal(entries.filter((e) => e.category === 'planning').length, 8);
     assert.equal(entries.filter((e) => e.category === 'demo-output').length, 6);
     assert.equal(entries.filter((e) => e.category === 'project-scaffold').length, 3);
   });
@@ -146,7 +146,7 @@ describe('listTemplateLibrary — real repo union + categories', () => {
     const planning = entries.filter((e) => e.category === 'planning').map((e) => e.id).sort();
     const demoOutput = entries.filter((e) => e.category === 'demo-output').map((e) => e.id).sort();
     const scaffold = entries.filter((e) => e.category === 'project-scaffold').map((e) => e.id).sort();
-    assert.deepEqual(planning, ['demo-fix-spec', 'plan', 'pr', 'review-findings', 'verdict', 'wi-branches', 'work-items']);
+    assert.deepEqual(planning, ['contract', 'demo-fix-spec', 'plan', 'pr', 'review-findings', 'verdict', 'wi-branches', 'work-items']);
     assert.deepEqual(demoOutput, ['api-verify', 'cli-capture', 'code-diff', 'narrative', 'screenshot', 'test-evidence']);
     assert.deepEqual(scaffold, ['typescript-api', 'typescript-cli', 'typescript-web']);
   });
@@ -257,12 +257,12 @@ describe('D3 — planning usedBy derivation (real repo flow graph)', () => {
     }
   });
 
-  it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (3)', () => {
+  it('AT-17: usedByDerivation for every planning entry names the flow-graph source and the real flow-file count (4)', () => {
     const entries = listTemplateLibrary(REPO_ROOT).filter((e) => e.category === 'planning');
     assert.ok(entries.length > 0);
     for (const e of entries) {
       assert.equal(e.usedByDerivation.source, 'studio/flows/*/flow.yaml');
-      assert.equal(e.usedByDerivation.scanned, 3, `expected 3 scanned flow files (forge-architect/forge-develop/forge-reflect) for "${e.id}"`);
+      assert.equal(e.usedByDerivation.scanned, 4, `expected 4 scanned flow files (forge-architect/forge-develop/forge-reflect/onboard-project) for "${e.id}"`);
     }
   });
 

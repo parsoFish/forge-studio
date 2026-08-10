@@ -60,7 +60,9 @@ test('listFlowBandIds(forgeRoot, "forge-develop") returns the real band vocabula
 // band at all. An unauthored flow genuinely has no bands, so any band scope on
 // it is correctly rejected: [] is the safe answer.
 //
-// RED at base: the fallback returns the 4-element BAND_GUARD_IDS.
+// RED at base: the fallback returns the full BAND_GUARD_IDS array (4
+// elements when this test was authored; 5 today after R4-18 added
+// 'onboard-preflight' — the bug this guards against scales with the count).
 // ---------------------------------------------------------------------------
 test('F2: listFlowBandIds on a registered-but-empty flow dir (no flow.yaml) fails CLOSED with []', () => {
   const root = mkdtempSync(join(tmpdir(), 'flow-band-vocab-failclosed-'));

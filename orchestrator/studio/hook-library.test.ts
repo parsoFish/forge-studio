@@ -18,10 +18,12 @@
  *
  *   composition.guards (renamed from composition.hooks by the immediately
  *   preceding PR, #76 / commit 7984a548) stays the platform dispatch-key
- *   vocabulary — 5 toggle ids (event-log, cost-guard, stall-watchdog,
- *   merge-gate, scratch-strip) + 4 band ids (wi-contract, reflection-close,
- *   demo-band, review-band), all listed in studio/catalog.yaml's `guards:`
- *   section. composition.hooks is REINTRODUCED by this round meaning ONLY
+ *   vocabulary — at that PR's landing, 5 toggle ids (event-log, cost-guard,
+ *   stall-watchdog, merge-gate, scratch-strip) + 4 band ids (wi-contract,
+ *   reflection-close, demo-band, review-band), all listed in
+ *   studio/catalog.yaml's `guards:` section (R4-18 later added a 5th band,
+ *   onboard-preflight — see PLATFORM_GUARD_IDS in agent-bands.ts for the
+ *   current 10-id set). composition.hooks is REINTRODUCED by this round meaning ONLY
  *   library hook ids. Enforcement must be SYMMETRIC: a guard id under
  *   composition.hooks is an error, and a hook id under composition.guards is
  *   an error — both directions, because a one-directional check is the
@@ -626,10 +628,13 @@ describe('PLATFORM_GUARD_IDS / studio/catalog.yaml guards: id-set parity (bidire
     );
   });
 
-  it('sanity: both sides are exactly the known nine ids (catches a silent count-only false pass)', () => {
-    assert.strictEqual(PLATFORM_GUARD_IDS.length, 9);
+  // R4-18 mechanical amendment (2026-08-10): a 5th band, 'onboard-preflight',
+  // joins the vocabulary — both sides now count 10, not 9. RED until R4-18's
+  // production change lands (see orchestrator/onboard-flow-gate.test.ts AT-2).
+  it('sanity: both sides are exactly the known ten ids (catches a silent count-only false pass)', () => {
+    assert.strictEqual(PLATFORM_GUARD_IDS.length, 10);
     const catalog = loadCatalog(join(REPO_ROOT, 'studio', 'catalog.yaml'));
-    assert.strictEqual(catalog.guards.length, 9);
+    assert.strictEqual(catalog.guards.length, 10);
   });
 });
 
@@ -666,7 +671,10 @@ describe('composition.hooks reintroduced (registry.ts loadAgentDefinition)', () 
 // ---------------------------------------------------------------------------
 
 describe('lintHookComposition: guard id under composition.hooks is an ERROR', () => {
-  for (const guardId of ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'demo-band', 'review-band']) {
+  // R4-18 mechanical amendment (2026-08-10): 'onboard-preflight' joins the
+  // sweep — RED until PLATFORM_GUARD_IDS (which lintHookComposition reads
+  // from) picks it up, since this loop must cover every legacy value.
+  for (const guardId of ['event-log', 'cost-guard', 'stall-watchdog', 'merge-gate', 'scratch-strip', 'wi-contract', 'reflection-close', 'demo-band', 'review-band', 'onboard-preflight']) {
     it(`"${guardId}" under composition.hooks is flagged`, () => {
       const root = makeForgeRoot();
       writeAgentSkillMd(root, `agent-with-${guardId}-as-hook`, { hooks: [guardId] });

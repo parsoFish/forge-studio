@@ -1461,9 +1461,10 @@ describe('isStudioAgent / listAgentDefinitions — an installed package is never
     assert.ok(listAgentDefinitions(skillsDir(root)).some((d) => d.slug === 'normal-agent'));
 
     // Pinned against the REAL repo (captured 2026-08-04 against commit
-    // 23f414fe: `listAgentDefinitions(skillsDir())` → 10 agents) so the fix
-    // cannot quietly delete agents from the roster while closing the hole.
-    const REAL_AGENT_COUNT = 10;
+    // 23f414fe: `listAgentDefinitions(skillsDir())` → 10 agents; bumped to 11
+    // for R4-18's `contract-check` def) so the fix cannot quietly delete
+    // agents from the roster while closing the hole.
+    const REAL_AGENT_COUNT = 11;
     assert.equal(
       listAgentDefinitions(skillsDir(REPO_ROOT)).length,
       REAL_AGENT_COUNT,

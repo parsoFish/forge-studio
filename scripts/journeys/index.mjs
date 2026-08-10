@@ -7,7 +7,8 @@
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
  * interleaving): skills → hooks → templates → connections → stand-up-onboard
  * → stand-up-create → knowledge → agents → flows-author → flows-run →
- * roadmap → demo-showcase → demo-builder → community (R3-07 — deliberately
+ * flows-onboard → roadmap → demo-showcase → demo-builder → community
+ * (R3-07 — deliberately
  * LAST, see its own RUN_ORDER comment below: it installs a real skill + a
  * real hook, mutating /skills, /hooks and the agent-builder palette counts
  * every earlier journey's own beats pin).
@@ -25,7 +26,7 @@
  *     monitor-deep-dive / detail-reachable / start-run-cta / gate-control,
  *     which stay inside the flows-run journey itself) has completed.
  * Every other journey (skills, hooks, templates, connections, agents,
- * knowledge, demo-showcase, demo-builder) is self-contained: templates is pure read-only browsing (no seed, no
+ * knowledge, demo-showcase, demo-builder, flows-onboard) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
  * skills-detail-package's own read-only precedent (R3-01-F3/F4)); knowledge
  * (R1-06 WI-4) drives THREE disjoint, create-and-destroy-itself scratch KBs
@@ -161,6 +162,18 @@
  * runs strictly after hooks completes in RUN_ORDER, so never stashing it
  * here avoids a second write path onto a file another journey already owns
  * stashing.
+ *
+ * flows-onboard (R4-18, batch E) drives its own `onboard-project` OOTB flow.
+ * flows-onboard-monitor / flows-onboard-kickoff are read-only browse beats
+ * (no seed/cleanup of their own). flows-onboard-gate is the one beat with a
+ * seed — its own scratch preflight-RED fixture (`os.tmpdir()`, never inside
+ * this repo), its own `_queue/ready-for-review/<id>.md` manifest and its own
+ * `_logs/<cycleId>/`, all local ids disjoint from every other journey's
+ * (never J4, J5, SK_ or HK_ ids, etc.) — created via a REAL `runFlow()` call (the
+ * production `orchestrator/flow-runner.ts`, not a hand-authored event log)
+ * and swept inside that one beat's own try/finally, plus a crash-safe
+ * leading sweep mirroring hooks-security/connections-readiness-block's own
+ * create-and-destroy-its-own-throwaway-fixture precedent.
  */
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
@@ -172,6 +185,7 @@ import { journey as knowledge } from './knowledge.mjs';
 import { journey as agents } from './agents.mjs';
 import { journey as flowsAuthor } from './flows-author.mjs';
 import { journey as flowsRun } from './flows-run.mjs';
+import { journey as flowsOnboard } from './flows-onboard.mjs';
 import { journey as roadmap } from './roadmap.mjs';
 import { journey as demoShowcase } from './demo-showcase.mjs';
 import { journey as demoBuilder } from './demo-builder.mjs';
@@ -188,6 +202,7 @@ export const JOURNEYS = [
   agents,
   flowsAuthor,
   flowsRun,
+  flowsOnboard,
   roadmap,
   demoShowcase,
   demoBuilder,
@@ -302,6 +317,10 @@ export const RUN_ORDER = [
   ['flows-run', 'flows-run-drawer-live-tail'],
   ['flows-run', 'flows-run-start-run-cta'],
   ['flows-run', 'flows-run-gate-control'],
+
+  ['flows-onboard', 'flows-onboard-monitor'],
+  ['flows-onboard', 'flows-onboard-kickoff'],
+  ['flows-onboard', 'flows-onboard-gate'],
 
   ['roadmap', 'roadmap-tab'],
   ['roadmap', 'roadmap-plan-trigger'],

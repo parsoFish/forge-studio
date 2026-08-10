@@ -122,6 +122,11 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       'adversarial-review',
       'architect',
       'brain-ingest',
+      // R4-18: contract-check is the declaration carrier + display identity
+      // for the onboard-project flow's contract gate (the onboard-preflight
+      // band guard) — a composition.guards entry and studio/catalog.yaml row,
+      // never spawned on the flow path (execOnboardPreflight intercepts it).
+      'contract-check',
       // R4-07: the demo agent is a library roster agent — composes it takes
       // develop output + the demo skill to author demo.json and judge ACs.
       'demo-agent',

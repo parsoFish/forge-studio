@@ -10,8 +10,8 @@ export type AgentComposition = {
   /**
    * Platform dispatch-key vocabulary (ADR-027 R3-03 amendment): the 5 toggle
    * ids (event-log, cost-guard, stall-watchdog, merge-gate, scratch-strip)
-   * and the 4 band ids (wi-contract, reflection-close, demo-band,
-   * review-band). Guard ids are DISPATCH KEYS — `resolveBandGuard` scans them
+   * and the 5 band ids (wi-contract, reflection-close, demo-band,
+   * review-band, onboard-preflight). Guard ids are DISPATCH KEYS — `resolveBandGuard` scans them
    * to route a flow node to another agent's canonical pipeline — so this
    * field is platform-owned, never user-authorable. Split from the
    * user-authorable library `hooks` vocabulary specifically to make an

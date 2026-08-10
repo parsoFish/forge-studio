@@ -84,6 +84,7 @@ import {
 import { enqueueGateFixWorkItems } from './gate-fix-loop.ts';
 import { listArtifactTemplates, listAgentDefinitions, PHASE_EXECUTOR_KINDS, normalizeProjectId } from './studio/registry.ts';
 import { resolveBandGuard, BAND_CANONICAL_SLUG, type BandGuardId } from './agent-bands.ts';
+import { runPreflight } from '../cli/preflight.ts';
 import { skillsDir } from './skill-path.ts';
 import { findFanOutViolations } from './studio/validate.ts';
 import { assertInboundArtifacts, type ArtifactContract } from './flow-artifacts.ts';
@@ -295,10 +296,22 @@ export type NodeKind =
  * Gate id → node kind. A gate ALWAYS wins over the agent field (the architect
  * node carries both agent:'architect' and gate:'plan' and must classify as
  * 'architect'). Extend by adding a row — no control-flow edit.
+ *
+ * `contract: 'agent'` (R4-18): the onboard-project flow's `contract-check`
+ * node carries BOTH `gate:'contract'` and `agent:'contract-check'` (ADR-039
+ * declared dispatch — no privileged executor enum). Mapping the gate id to
+ * the ordinary `'agent'` kind does two things at once: it declares `contract`
+ * as known gate vocabulary (so `resolveNodeKind` never falls through to
+ * `'unknown'` for it), AND it routes the node through the SAME `execAgent` →
+ * band-guard dispatch every other declared-dispatch node uses — so a
+ * `{gate:'contract'}` node that lost its `agent:` field fails LOUD via
+ * execAgent's "no agent definition" throw, instead of silently no-opping
+ * through `execUnknown` the way an unmapped gate id would.
  */
 const GATE_KIND: Readonly<Record<string, NodeKind>> = {
   plan: 'architect',
   verdict: 'review',
+  contract: 'agent',
 };
 
 type PhaseExecutorKind = (typeof PHASE_EXECUTOR_KINDS)[number];
@@ -1012,6 +1025,85 @@ const execReflect: NodeExecutor = async (ctx) => {
 };
 
 /**
+ * onboard-preflight (the `onboard-preflight` band, R4-18/ADR-039): the
+ * gate node of the `onboard-project` flow. Runs the REAL forge↔project
+ * contract preflight (`runPreflight`, `cli/preflight.ts`) DIRECTLY,
+ * orchestrator-side — mirrors `execDemo`'s shape (start event, do the real
+ * work, end event carrying `status`) but spawns NO agent at all.
+ *
+ * ADR-036: the orchestrator runs gates, the agent never self-certifies —
+ * so unlike every other band executor above, there is no `deps.run*` call
+ * here and DELIBERATELY no `FlowRunnerDeps` injection seam for
+ * `runPreflight`. The absence of a seam is the point: it is what makes this
+ * gate unfakeable from a test or a misbehaving dependency override. The
+ * canonical agent def (`skills/contract-check/SKILL.md`) exists only as the
+ * declaration carrier + display identity the band-guard machinery needs
+ * (composition.guards, runtime/budgets for lint); it is never spawned.
+ * `formatPreflightReport` (cli/preflight.ts) is available for a future
+ * human-readable render — today the report is carried structurally via
+ * `failing_clause_ids`, in `runPreflight`'s own clause order.
+ *
+ * On a red report (`report.ok === false`) this sets `state.terminateEarly`
+ * — runFlow's own terminateEarly branch then routes the manifest to
+ * `ready-for-review` via `runClosure`, exactly as `execDemo`'s merge-boundary
+ * gate does. On green, the walk proceeds normally (no further nodes in this
+ * 2-node flow, but the shape generalises).
+ */
+const execOnboardPreflight: NodeExecutor = async (ctx) => {
+  const { input, nodeLogger, nodeId, state } = ctx;
+  const start = nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    phase: 'orchestrator',
+    skill: 'contract-check',
+    event_type: 'start',
+    input_refs: [input.projectRepoPath],
+    output_refs: [],
+    metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId },
+  });
+
+  const report = runPreflight(input.projectRepoPath, { forgeRoot: FLOW_RUNNER_ROOT });
+  const failingClauseIds = report.clauses.filter((c) => c.hard && !c.pass).map((c) => c.clause);
+
+  nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'orchestrator',
+    skill: 'contract-check',
+    event_type: 'log',
+    input_refs: [],
+    output_refs: [],
+    message: 'onboard-preflight.report',
+    metadata: { ok: report.ok, clause_count: report.clauses.length, failing_clause_ids: failingClauseIds },
+  });
+
+  if (!report.ok) {
+    state.terminateEarly = true;
+    nodeLogger.emit({
+      initiative_id: input.initiativeId,
+      parent_event_id: start.event_id,
+      phase: 'orchestrator',
+      skill: 'contract-check',
+      event_type: 'end',
+      input_refs: [],
+      output_refs: [],
+      metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId, status: 'failed' },
+    });
+    return;
+  }
+
+  nodeLogger.emit({
+    initiative_id: input.initiativeId,
+    parent_event_id: start.event_id,
+    phase: 'orchestrator',
+    skill: 'contract-check',
+    event_type: 'end',
+    input_refs: [],
+    output_refs: [],
+    metadata: { agent_phase: 'contract-check', agent_slug: 'contract-check', node_id: nodeId, status: 'complete' },
+  });
+};
+
+/**
  * unknown: a genuinely unresolvable node — no agent def for `node.agent`, or
  * an invalid declared `executor` (R2-01-F2). This is now an ERROR, not a
  * quiet skip (AC #4): the flow proceeds (the DAG walk itself is not aborted
@@ -1183,6 +1275,7 @@ const AGENT_BAND_EXECUTORS: Readonly<Record<BandGuardId, NodeExecutor>> = {
   'reflection-close': execReflect,
   'demo-band': execDemo,
   'review-band': execAdversarialReview,
+  'onboard-preflight': execOnboardPreflight,
 };
 
 // ---------------------------------------------------------------------------

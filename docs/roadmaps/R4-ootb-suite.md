@@ -363,6 +363,51 @@ contract produced which artifact.
   [`docs/forge-ui-dom-and-harness.md`](../forge-ui-dom-and-harness.md); beat
   `stand-up-onboard/su-onboard-session`.
 
+### R4-B17 The onboard-project flow and its orchestrator-owned preflight gate (implemented)
+
+R4-18-F1 landed 2026-08-11 (wave 5, batch E). Before it, onboarding was a
+standalone agent path with **no flow packaging** (3 seed flows), and there was
+no way to express "run the real contract preflight as a gate node" at all: the
+flow-gate dispatch is a closed table, and a `gate:` id in neither `GATE_KIND`
+nor an agent def resolves to `NodeKind:'unknown'` → `execUnknown`, which emits
+an error event and **silently no-ops**. A naive `gate: preflight` would have
+lint-passed and never run the check.
+
+- **The gate runs the REAL preflight, orchestrator-side, with no injection
+  seam.** `execOnboardPreflight` (`orchestrator/flow-runner.ts`) calls
+  `runPreflight` (`cli/preflight.ts`) directly, exactly as
+  `orchestrator/project-create.ts` already does, against
+  `CycleInput.projectRepoPath`. It deliberately adds **no `FlowRunnerDeps`
+  field** — the absence of a seam is the design: no stub can occupy it, so
+  every test of the node exercises real preflight. On a red report it sets
+  `state.terminateEarly`, which routes the manifest to `ready-for-review` via
+  `runClosure` (the `execDemo` merge-boundary-gate precedent).
+- **Dispatch is declared data, on the band-guard path (ADR-039).** The node
+  carries BOTH `agent: contract-check` and `gate: contract`. The `agent:` field
+  drives dispatch through `composition.guards: [onboard-preflight]` → a new
+  `BAND_GUARD_IDS` / `BAND_CANONICAL_SLUG` / `AGENT_BAND_EXECUTORS` row family;
+  the `gate:` field satisfies the `zero-gate` lint, and its new
+  `GATE_KIND['contract'] = 'agent'` row means a node that LOST its `agent:`
+  field fails loud through `execAgent`'s "no agent definition" throw instead of
+  no-opping through `execUnknown`. Both fields are load-bearing; neither alone
+  gives both guarantees.
+- **`skills/contract-check/SKILL.md` is a declaration carrier, not a running
+  agent** — it is never spawned on the flow path (the band executor intercepts
+  the node before `runAgent`). Its frontmatter states plainly that a
+  *standalone* dispatch would spawn it, that this is a pre-existing property
+  shared with `project-manager`/`reflector`, and that `maxBudgetUsd: 0` caps
+  such a run to at most one turn's spend rather than making it free.
+- **Stated limit — the `contract` artifact template ships schema-empty**, so
+  the `onboard → contract-check` edge's artifact contract asserts nothing at
+  runtime. Harmless today (the gate re-derives everything structurally from the
+  real project directory and never depends on it), but the honest fix needs
+  `resolveRequiredFile` to learn a `projectRepoPath`-relative convention —
+  `ArtifactGuardInput` does not currently carry that field.
+- **Contract + journey:** journey `flows-onboard` (3 beats), story
+  `run-flow-onboard` 3/8 ported + 5 decision-cited exclusions; the gate beat
+  seeds a genuinely real `_logs/<cycleId>/events.jsonl` from a real `runFlow`
+  run, never a hand-authored log.
+
 ## Planned initiatives
 
 ### R4-01 Platform→artifact migration
@@ -1633,8 +1678,8 @@ contract produced which artifact.
 
 ### R4-18 Onboard-project OOTB flow
 
-- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-flow —
-  onboard-project)
+- **Status:** implemented  ·  **Wave:** 5 (module: per-OOTB-flow —
+  onboard-project)  ·  As-built: [R4-B17](#r4-b17-the-onboard-project-flow-and-its-orchestrator-owned-preflight-gate-implemented)
 - **Depends on:** R4-17 (the session it wraps), R4-02 (agent, done).
 - **Context:** Wave-5 cut. The mockup ships `onboard-project` as an OOTB
   FLOW (interview → contract author → **contract-check gate** on preflight
@@ -1653,6 +1698,23 @@ contract produced which artifact.
     today). ACs: `forge studio lint` green; flow visible with ledger on the
     flows surface; a real onboarding run reaches the gate with real
     preflight output; `run-flow-onboard` journey shape reproduced.
+    **F1 as-built (2026-08-11, batch E) —
+    [R4-B17](#r4-b17-the-onboard-project-flow-and-its-orchestrator-owned-preflight-gate-implemented).**
+    Landed on the band-guard path, not a bare `GATE_KIND` executor: the
+    park file's literal design (`{gate: <band-guard-id>}`) does not work,
+    because `resolveNodeKind` consults `GATE_KIND` for a `gate:` field and
+    never consults `BAND_GUARD_IDS`. **Honest limits, stated not implied:**
+    (1) the flow does NOT wrap R4-17's independently-dispatched onboarding
+    session — it is a separate, flow-shaped way to run a fresh onboarding
+    pass, and beat parity with `stand-up-onboard` is not claimed; (2) the
+    R2-01-F2 interactive-node lint was never in tension here —
+    `onboarding-agent` declares `surface: operator-triggered`, so it is not
+    `interactive` and the lint does not forbid it as a flow node (measured,
+    not assumed); (3) the closure journey's gate beat drives a REAL `runFlow`
+    against a REAL preflight-RED project with only the `onboard` node's agent
+    spawn suppressed — so "a real onboarding run reaches the gate" is proven
+    for the GATE half against real `runPreflight` output, while the agent
+    half stays covered by R4-02/R4-17's own paths.
 - **Session sizing:** ~1-2 sessions.
 - **Acceptance references:** mockup journey `run-flow-onboard`; surfaces
   `views-flows.jsx`, `FLOWS` in `data.jsx`.
@@ -2031,3 +2093,13 @@ gitignored campaign dir):
   authors), so the `file-package` artifact row stays RESERVED until a
   producer exists. Deps R2-10 + R3-01-F3/F4 (both implemented) — the
   initiative is unblocked on arrival.
+- 2026-08-11 — **R4-18 implemented** (wave 5, batch E): the `onboard-project`
+  OOTB flow whose `contract-check` gate node executes the REAL `runPreflight`
+  orchestrator-side, on a new `onboard-preflight` band-guard row family plus a
+  `GATE_KIND['contract'] = 'agent'` row (the ADR-042 surface increase signed
+  off at batch-E open). Status `planned → implemented`; as-built absorbed into
+  new baseline entry **R4-B17**. Closure journey `flows-onboard` flips the
+  `run-flow-onboard` story from pending to ported (3/8 steps, 5 decision-cited
+  exclusions). Corrects the parked design on the record: the park file proposed
+  `{gate: <band-guard-id>}`, which cannot dispatch — `resolveNodeKind` consults
+  `GATE_KIND` for a `gate:` field and never `BAND_GUARD_IDS`.

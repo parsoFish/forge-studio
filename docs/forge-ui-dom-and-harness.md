@@ -1227,12 +1227,12 @@ inventory rather than one shared page-level contract:
 - **`/templates` + `/templates/[id]` — the templates library (R3-06).** One
   registry unifying three previously-siloed on-disk sources into a single
   browsable library: `studio/artifact-templates/*.md` (category `planning`,
-  7 templates — `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
+  8 templates — `contract`, `plan`, `work-items`, `wi-branches`, `pr`, `verdict`,
   `demo-fix-spec`, `review-findings`), `studio/demo-elements/*.md` (category
   `demo-output`, 6 templates — `screenshot`, `cli-capture`, `code-diff`,
   `api-verify`, `test-evidence`, `narrative`), and
   `studio/starters/projects/<id>/` (category `project-scaffold`, 3 scaffolds
-  — `typescript-api`, `typescript-cli`, `typescript-web`); 16 entries total
+  — `typescript-api`, `typescript-cli`, `typescript-web`); 17 entries total
   (`orchestrator/studio/template-library.ts`). `usedBy` is DERIVED, never a
   declared field: planning usage scans the real flow graph
   (`studio/flows/*/flow.yaml` edges); demo-output usage scans every project's
@@ -1357,10 +1357,11 @@ breaks the gate or silently rots the demo.
 
 The harness surface is **journeys-as-data**:
 [`scripts/e2e-journey.mjs`](./scripts/e2e-journey.mjs) (`npm run ui:journey`)
-is a thin runner over 13 user-story journeys in
+is a thin runner over 15 user-story journeys in
 [`scripts/journeys/`](./scripts/journeys/) — `skills`, `hooks`, `templates`,
 `connections`, `stand-up-onboard`, `stand-up-create`, `knowledge`, `agents`,
-`flows-author`, `flows-run`, `roadmap`, `demo-builder`, `community`
+`flows-author`, `flows-run`, `flows-onboard`, `roadmap`, `demo-showcase`,
+`demo-builder`, `community`
 (RUN_ORDER's own sequence, `index.mjs`) — one file per journey (plus
 `index.mjs`, the registry/run-order module — not itself a journey), each
 mapping to a capability-diagram user story rather than a step of one
