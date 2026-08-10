@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { fetchTemplateLibrary, type TemplateLibraryEntry } from '@/lib/template-client';
 import { groupTemplateLibrary, filterTemplates, templateBadges, previewClassFor } from '@/lib/template-library-view';
 
@@ -56,27 +56,24 @@ export default function TemplateLibraryPage() {
   const grouped = groupTemplateLibrary(filtered);
 
   return (
-    <main
-      data-page="template-library"
-      data-page-ready={status !== 'loading' ? 'true' : 'false'}
-      data-template-count={grouped.total}
-      data-planning-count={grouped.planningCount}
-      data-demo-output-count={grouped.demoOutputCount}
-      data-project-scaffold-count={grouped.projectScaffoldCount}
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    <StudioPage
+      dataPage="template-library"
+      ready={status !== 'loading'}
+      data={{
+        'data-template-count': grouped.total,
+        'data-planning-count': grouped.planningCount,
+        'data-demo-output-count': grouped.demoOutputCount,
+        'data-project-scaffold-count': grouped.projectScaffoldCount,
+      }}
+      title="Templates"
+      lede={
+        <>
+          Artifact templates a flow can declare — demo-output narratives, planning
+          documents, and project scaffolds. Usage is scanned from the real flow
+          graph, not guessed.
+        </>
+      }
     >
-      <StudioNav />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <div style={{ marginBottom: 22 }}>
-          <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-            Templates
-          </h1>
-          <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 560, lineHeight: 1.6 }}>
-            Artifact templates a flow can declare — demo-output narratives, planning
-            documents, and project scaffolds. Usage is scanned from the real flow
-            graph, not guessed.
-          </p>
-        </div>
 
         <input
           type="text"
@@ -122,8 +119,7 @@ export default function TemplateLibraryPage() {
         {status === 'ready' && grouped.projectScaffold.length > 0 && (
           <TemplateSection title="Project scaffold" entries={grouped.projectScaffold} />
         )}
-      </div>
-    </main>
+    </StudioPage>
   );
 }
 

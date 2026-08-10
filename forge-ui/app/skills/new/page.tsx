@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createSkill, fetchStudioProjects } from '@/lib/studio-client';
 
@@ -49,16 +49,20 @@ export default function SkillBuilderPage() {
   const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' };
 
   return (
-    <main data-page="skill-builder" data-page-ready="true" style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      <StudioNav />
-      <div data-section="skill-new" style={{ maxWidth: 620, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-          New skill
-        </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 24px' }}>
+    <StudioPage
+      dataPage="skill-builder"
+      ready
+      section="skill-new"
+      maxWidth={620}
+      padding="40px 28px 64px"
+      title="New skill"
+      lede={
+        <>
           A skill is a reusable instruction packet you can compose into agents. Give it a name, a
           one-line description, and the instructions it carries.
-        </p>
+        </>
+      }
+    >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <label style={labelStyle} htmlFor="sk-name">Name</label>
@@ -91,7 +95,6 @@ export default function SkillBuilderPage() {
             }
           />
         </div>
-      </div>
-    </main>
+    </StudioPage>
   );
 }

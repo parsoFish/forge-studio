@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { AuthoringLauncher } from '@/components/AuthoringLauncher';
 import { createHook, HOOK_LIFECYCLE_EVENTS, type HookLifecycleEvent } from '@/lib/hook-client';
 import { fetchStudioProjects } from '@/lib/studio-client';
@@ -67,17 +67,21 @@ export default function HookBuilderPage() {
   const inputStyle: React.CSSProperties = { width: '100%', background: 'var(--bg-2)', border: '1px solid var(--line)', borderRadius: 'var(--radius-sm)', color: 'var(--text)', fontSize: 13, padding: '8px 11px', outline: 'none', boxSizing: 'border-box' };
 
   return (
-    <main data-page="hook-builder" data-page-ready="true" style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}>
-      <StudioNav />
-      <div data-section="hook-new" style={{ maxWidth: 620, margin: '0 auto', padding: '40px 28px 64px', width: '100%' }}>
-        <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-          New hook
-        </h1>
-        <p style={{ fontSize: 13.5, color: 'var(--dim)', lineHeight: 1.6, margin: '0 0 24px' }}>
+    <StudioPage
+      dataPage="hook-builder"
+      ready
+      section="hook-new"
+      maxWidth={620}
+      padding="40px 28px 64px"
+      title="New hook"
+      lede={
+        <>
           A hook is a script an agent runs on a lifecycle event. Every hook is scanned before it
           can run — declare exactly what it needs (env vars, paths, network) so the scan can tell
           declared access from undeclared access.
-        </p>
+        </>
+      }
+    >
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           <div>
             <label style={labelStyle} htmlFor="hk-name">Name</label>
@@ -143,7 +147,6 @@ export default function HookBuilderPage() {
             }
           />
         </div>
-      </div>
-    </main>
+    </StudioPage>
   );
 }

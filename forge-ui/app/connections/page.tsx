@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { StudioNav } from '@/components/StudioNav';
+import { StudioPage } from '@/components/StudioPage';
 import { fetchConnections, type ConnectionWire, type ConnectionKind } from '@/lib/connection-client';
 import { filterConnections, readinessCounts, connectionBadges, type ConnectionBadge } from '@/lib/connection-library-view';
 
@@ -65,33 +65,30 @@ export default function ConnectionLibraryPage() {
   const counts = readinessCounts(entries);
 
   return (
-    <main
-      data-page="connection-library"
-      data-page-ready={status !== 'loading' ? 'true' : 'false'}
-      data-connection-count={filtered.length}
-      data-available-count={counts.available}
-      data-not-installed-count={counts.notInstalled}
-      data-misconfigured-count={counts.misconfigured}
-      style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+    <StudioPage
+      dataPage="connection-library"
+      ready={status !== 'loading'}
+      data={{
+        'data-connection-count': filtered.length,
+        'data-available-count': counts.available,
+        'data-not-installed-count': counts.notInstalled,
+        'data-misconfigured-count': counts.misconfigured,
+      }}
+      title="Connections"
+      lede={
+        <>
+          Curated tools and MCP servers an agent can be given — read from
+          <code style={{ margin: '0 4px' }}>studio/catalog.yaml</code>. Readiness below is the REAL result of
+          probing each entry&apos;s own install + config, never a declared status. Curation happens by PR to
+          the catalog — there is no create/edit surface here.
+        </>
+      }
+      actions={
+        <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
+          Browse community
+        </Link>
+      }
     >
-      <StudioNav />
-      <div style={{ maxWidth: 1080, margin: '0 auto', padding: '32px 28px 64px', width: '100%' }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, marginBottom: 22, flexWrap: 'wrap' }}>
-          <div>
-            <h1 style={{ fontFamily: 'var(--font-display)', fontSize: 24, fontWeight: 700, color: 'var(--text)', margin: '0 0 6px' }}>
-              Connections
-            </h1>
-            <p style={{ fontSize: 13.5, color: 'var(--dim)', margin: 0, maxWidth: 620, lineHeight: 1.6 }}>
-              Curated tools and MCP servers an agent can be given — read from
-              <code style={{ margin: '0 4px' }}>studio/catalog.yaml</code>. Readiness below is the REAL result of
-              probing each entry&apos;s own install + config, never a declared status. Curation happens by PR to
-              the catalog — there is no create/edit surface here.
-            </p>
-          </div>
-          <Link href="/community" data-action="browse-community" className="btn" style={{ whiteSpace: 'nowrap' }}>
-            Browse community
-          </Link>
-        </div>
 
         {status === 'ready' && (
           <div
@@ -159,8 +156,7 @@ export default function ConnectionLibraryPage() {
             ))}
           </div>
         )}
-      </div>
-    </main>
+    </StudioPage>
   );
 }
 
