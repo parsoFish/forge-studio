@@ -210,7 +210,47 @@ export async function runInteractiveTurn(
 
   const forgeRoot = ctx.forgeRoot ?? resolve('.');
   const logsRoot = ctx.logsRoot ?? resolve(forgeRoot, '_logs');
-  const cycleId = `_interactive-${descriptor.id}-${ctx.sessionId}`;
+  // The event-log DIRECTORY is `_<descriptor.id>-<sessionId>` — the convention
+  // every consumer of an interactive session's live log already derives
+  // independently, and which the spine must therefore match rather than invent:
+  //   - `forge-ui/app/sessions/[kind]/[sessionId]/page.tsx` builds
+  //     `` `_${kind}-${sessionId}` `` and hands it to `useCycleEvents`;
+  //   - `cli/ui-bridge.ts`'s `spawnAgentTurn` writes THIS SAME TURN's
+  //     `stderr.log` into `` `_logs/_${logPrefix}-${sessionId}` ``, where
+  //     `SPAWN_AGENT_SPECS.authoring.logPrefix === 'authoring'`;
+  //   - the four legacy `ensure*Tail` helpers use `_architect-` /
+  //     `_instructions-` / `_demo-` / `_project-brain-`.
+  // This previously read `_interactive-<id>-<sid>`, which agreed with NOTHING:
+  // an `authoring` turn's events landed in `_interactive-authoring-<sid>` while
+  // its own stderr landed in `_authoring-<sid>`, and both the UI and
+  // `readSessionLogFacts` (`cli/ui-bridge.ts`, the session list's `when`/`costUsd`)
+  // looked in the latter and found no events file at all — so a failed turn's two
+  // halves sat in different directories and every authoring row reported an
+  // honest-absent timestamp.
+  //
+  // PRECISION, because "the live panel is fixed" would overclaim (measured by the
+  // WI's adversarial review): `use-cycle-events.ts` takes a one-shot REST snapshot
+  // (`GET /api/events/<cycleId>`) that is independent of the tail machinery, so
+  // after this change the panel DOES render real accumulated events on page load.
+  // Live incremental push still never fires for `authoring`, because no
+  // `ensureAuthoringTail` call site exists anywhere (only the four legacy kinds
+  // have one) — tracked separately, deliberately not fixed here. `costUsd` also
+  // stays `null`: this spine emits no `cost_usd` on any event, tracked separately.
+  // Pinned by AT-a/AT-b
+  // (`cli/agent-run.test.ts`) and by the co-location ratchet
+  // (`cli/agent-run-log-dir-colocation.test.ts`), which fails if this template
+  // and the bridge's `logDir` template ever resolve differently again.
+  //
+  // Consequence, deliberate: for a kind id that also names a legacy runner, this
+  // directory is now INDISTINGUISHABLE from that runner's own — which is exactly
+  // what a future R4-22-F4 migration needs (the log dir survives the migration),
+  // and is why the tests' "which road did the fork take" discriminator moved off
+  // the directory name and onto `RUNNER_SKILL` below, which no legacy runner emits.
+  //
+  // `initiativeId` is an event FIELD, not a directory, and no consumer derives it
+  // — it keeps its `interactive-` marker so the spine's events stay identifiable
+  // once the directory name no longer distinguishes them.
+  const cycleId = `_${descriptor.id}-${ctx.sessionId}`;
   const initiativeId = `interactive-${descriptor.id}-${ctx.sessionId}`;
   const logger = ctx.logger ?? createLogger(cycleId, logsRoot);
   const queryFn: QueryFn = ctx.queryFn ?? (sdkQuery as unknown as QueryFn);
