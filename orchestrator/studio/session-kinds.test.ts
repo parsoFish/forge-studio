@@ -128,6 +128,14 @@ import {
   validateSessionKinds,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
+// The real Finding type (level/object/check/message) `validateSessionKinds`
+// actually returns — imported directly rather than hand-narrowed/cast so the
+// AT-R422-* assertions below typecheck against the SAME shape production
+// code returns (TS2352 fix: a hand-narrowed `{ check: string }` local was
+// too structurally distant from `{ level: string }` / `{ message: string }`
+// for `as` to convert between them; the fix is a correct type, not a
+// broader cast).
+import type { Finding } from './validate.ts';
 // Real production call path (Ruling 36): `runStudioLint` is what `forge
 // studio lint` actually calls (cli/studio-lint.ts -> cmdStudioLint,
 // orchestrator/cli.ts), and CI invokes exactly that command
@@ -805,7 +813,7 @@ function turnSpecDescriptor(turnSpec: Record<string, unknown>): FixtureDescripto
  *  pre-existing session-kinds/* check so a probe that flips ONE field can
  *  assert in isolation even though the fixture also carries the other,
  *  still-valid turnSpec fields. */
-function turnspecFindings(findings: { check: string }[]): { check: string }[] {
+function turnspecFindings(findings: Finding[]): Finding[] {
   return findings.filter((f) => f.check.startsWith('session-kinds/turnspec-'));
 }
 
@@ -820,12 +828,12 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     const findings = turnspecFindings(validateSessionKinds(root));
     const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-style');
     assert.ok(f, `expected a session-kinds/turnspec-unknown-style finding, got: ${JSON.stringify(findings)}`);
-    assert.equal((f as { level: string }).level, 'error');
-    assert.ok((f as { message: string }).message.includes(bogus), 'message must name the offending value');
-    const styles: { id: string }[] = mod.TURN_STYLES ?? [];
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const styles: readonly { id: string }[] = mod.TURN_STYLES ?? [];
     assert.ok(styles.length > 0, 'TURN_STYLES must be seeded (the ADR names style: agent | structured) for this allowed-set assertion to be meaningful');
     for (const row of styles) {
-      assert.ok((f as { message: string }).message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
     }
   });
 
@@ -841,12 +849,12 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     const findings = turnspecFindings(validateSessionKinds(root));
     const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-step');
     assert.ok(f, `expected a session-kinds/turnspec-unknown-step finding, got: ${JSON.stringify(findings)}`);
-    assert.equal((f as { level: string }).level, 'error');
-    assert.ok((f as { message: string }).message.includes(bogus), 'message must name the offending value');
-    const steps: { id: string }[] = mod.TURN_STEPS ?? [];
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const steps: readonly { id: string }[] = mod.TURN_STEPS ?? [];
     assert.ok(steps.length > 0, 'TURN_STEPS must be seeded (the ADR example uses agent/noop/finalize/terminal) for this allowed-set assertion to be meaningful');
     for (const row of steps) {
-      assert.ok((f as { message: string }).message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
     }
   });
 
@@ -864,12 +872,12 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     const findings = turnspecFindings(validateSessionKinds(root));
     const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-finalizer');
     assert.ok(f, `expected a session-kinds/turnspec-unknown-finalizer finding, got: ${JSON.stringify(findings)}`);
-    assert.equal((f as { level: string }).level, 'error');
-    assert.ok((f as { message: string }).message.includes(bogus), 'message must name the offending value');
-    const finalizers: { id: string }[] = mod.FINALIZER_IDS ?? [];
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const finalizers: readonly { id: string }[] = mod.FINALIZER_IDS ?? [];
     assert.ok(finalizers.length > 0, 'FINALIZER_IDS must be seeded with at least copyStagingToLibrary (the ADR\'s own worked example) for this allowed-set assertion to be meaningful');
     for (const row of finalizers) {
-      assert.ok((f as { message: string }).message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
     }
   });
 
@@ -883,11 +891,11 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     const findings = turnspecFindings(validateSessionKinds(root));
     const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-schema');
     assert.ok(f, `expected a session-kinds/turnspec-unknown-schema finding, got: ${JSON.stringify(findings)}`);
-    assert.equal((f as { level: string }).level, 'error');
-    assert.ok((f as { message: string }).message.includes(bogus), 'message must name the offending value');
-    const schemas: { id: string }[] = mod.SCHEMA_IDS ?? [];
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    const schemas: readonly { id: string }[] = mod.SCHEMA_IDS ?? [];
     for (const row of schemas) {
-      assert.ok((f as { message: string }).message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
     }
   });
 });
@@ -931,31 +939,56 @@ describe('loadSessionKinds — turnSpec is STRUCTURAL ONLY (AT-R422-6, mirrors A
 });
 
 describe('turnSpec vocabularies — deep-frozen registries + total lookup fns (AT-R422-7, AT-R422-8)', () => {
-  it('AT-R422-7: TURN_STYLES, TURN_STEPS, FINALIZER_IDS, SCHEMA_IDS are each DEEP-frozen — the outer array AND every row are frozen, and an in-place mutation on a row never takes effect (kills an implementation that does `Object.freeze(array)` alone without freezing each row first — the exact shallow-freeze regression SESSION_ARTIFACT_KINDS\'s own header comment warns against, reproduced here for the 4 new registries)', async () => {
+  it('AT-R422-7: TURN_STYLES, TURN_STEPS, FINALIZER_IDS are each seeded (length > 0) and DEEP-frozen — the outer array AND every row are frozen, and an in-place mutation on a row never takes effect (kills an implementation that does `Object.freeze(array)` alone without freezing each row first — the exact shallow-freeze regression SESSION_ARTIFACT_KINDS\'s own header comment warns against, reproduced here). SCHEMA_IDS is DELIBERATELY EMPTY for R4-22 WI-1 (no `structured`-style turnSpec consumer exists anywhere in the repo yet — seeding a placeholder id would make a schema id lint-valid with no implementation behind it, which this codebase explicitly refuses to pretend) but is still frozen — an empty array can and must still be frozen. The `length === 0` assertion below IS this gap-pin\'s own expiry condition (immutable-gates discipline): it goes RED the moment anyone seeds the first real schema id, forcing whoever does that to consciously widen it to `length > 0` plus the allowed-set coverage AT-R422-1..3 already give the other three registries — a stronger pin than a blanket `length > 0` could ever be, because a blanket check cannot hold for a genuinely, deliberately empty vocabulary.', async () => {
     const mod = await import('./session-kinds.ts');
-    const registries: Record<string, { id: string }[]> = {
+
+    // The three genuinely seeded turnSpec vocabularies — length > 0 is a real
+    // invariant for these three (unlike SCHEMA_IDS, see below).
+    const seededRegistries: Record<string, readonly { readonly id: string }[]> = {
       TURN_STYLES: mod.TURN_STYLES,
       TURN_STEPS: mod.TURN_STEPS,
       FINALIZER_IDS: mod.FINALIZER_IDS,
-      SCHEMA_IDS: mod.SCHEMA_IDS,
     };
-    for (const [name, registry] of Object.entries(registries)) {
+    for (const [name, registry] of Object.entries(seededRegistries)) {
       assert.ok(Array.isArray(registry) && registry.length > 0, `${name} must exist and be seeded with at least one row`);
-      assert.ok(Object.isFrozen(registry), `${name}'s outer array must be frozen`);
-      for (const row of registry) {
+      // `Array.isArray`'s TS type predicate is `arg is any[]` — narrowing
+      // through the check directly above silently erases `registry`'s
+      // `readonly { readonly id: string }[]` typing for everything below it
+      // (a known TS limitation, empirically confirmed while wiring this
+      // amendment: left as `registry`, the `@ts-expect-error` two blocks down
+      // has nothing to catch, i.e. exactly TS2578). Re-bind through a freshly,
+      // explicitly typed local so the readonly typing this whole amendment
+      // exists to enforce survives past the runtime array check — the runtime
+      // check itself is unchanged, still real, still first.
+      const rows: readonly { readonly id: string }[] = registry;
+      assert.ok(Object.isFrozen(rows), `${name}'s outer array must be frozen`);
+      for (const row of rows) {
         assert.ok(Object.isFrozen(row), `${name}'s row ${JSON.stringify(row)} must ALSO be frozen — shallow freeze alone leaves it mutable`);
       }
-      const before = registry[0].id;
+      const before = rows[0].id;
       try {
-        // @ts-expect-error deliberate mutation attempt on a frozen row
-        registry[0].id = 'HACKED';
+        // @ts-expect-error deliberate mutation attempt on a frozen, readonly-id row
+        rows[0].id = 'HACKED';
       } catch {
         // Strict-mode ESM throws TypeError on a frozen-object write — that is
         // an ACCEPTABLE way for "does not take effect" to manifest; either
         // outcome is fine as long as the value below is unchanged.
       }
-      assert.equal(registry[0].id, before, `${name}[0].id must be unchanged after a direct mutation attempt, whether it silently no-op'd or threw`);
+      assert.equal(rows[0].id, before, `${name}[0].id must be unchanged after a direct mutation attempt, whether it silently no-op'd or threw`);
     }
+
+    // SCHEMA_IDS: deliberately empty — still frozen (there is no row to
+    // freeze-check, but the OUTER array itself must be, same as the three
+    // above), and `length === 0` is the assertion that expires this gap-pin
+    // the instant it stops being true.
+    const schemaIds: readonly { readonly id: string }[] = mod.SCHEMA_IDS;
+    assert.ok(Array.isArray(schemaIds), 'SCHEMA_IDS must exist and be an array');
+    assert.ok(Object.isFrozen(schemaIds), "SCHEMA_IDS's outer array must be frozen even though it is empty");
+    assert.equal(
+      schemaIds.length,
+      0,
+      'SCHEMA_IDS must be deliberately EMPTY for R4-22 WI-1 (no structured-style turnSpec consumer exists yet) — this assertion is a self-expiring gap-pin: the moment the first real schema id is seeded, THIS line must be consciously updated to length > 0 plus the allowed-set coverage AT-R422-1..3 already give TURN_STYLES/TURN_STEPS/FINALIZER_IDS',
+    );
   });
 
   it('AT-R422-8: turnStyleState/turnStepState/finalizerIdState/schemaIdState are TOTAL — undefined for an unrecognised id, NEVER throw (kills an implementation using a non-total lookup like array indexing or a bang-asserted .find()! that throws or returns null instead of undefined for an unknown id)', async () => {
@@ -986,7 +1019,7 @@ describe('the real production call path — forge studio lint (AT-R422-10, Rulin
     const findings = turnspecFindings(result.findings);
     const f = findings.find((x) => x.check === 'session-kinds/turnspec-unknown-style');
     assert.ok(f, `expected runStudioLint to surface a session-kinds/turnspec-unknown-style finding, got turnspec-* findings: ${JSON.stringify(findings)}`);
-    assert.ok((f as { message: string }).message.includes(bogus), 'the finding reaching the real CLI aggregation path must still name the offending value');
+    assert.ok(f.message.includes(bogus), 'the finding reaching the real CLI aggregation path must still name the offending value');
     assert.ok(result.errorCount >= 1, 'runStudioLint.errorCount must reflect the new error-level finding — this is the number the CI gate actually checks non-zero on');
   });
 });
