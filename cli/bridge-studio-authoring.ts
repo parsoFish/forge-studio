@@ -415,6 +415,45 @@ async function runFinalize(
     const projectRoot = dirname(dirname(sessionGuard.realPath));
 
     try {
+      // Step 4.5 — third collision surface (P8, adversarial-review correction
+      // D): `copyStagingToLibrary` (run by step 5 below) writes into
+      // `_interactive-library/<id>/` with O_EXCL, and that directory is NEVER
+      // cleaned up on any outcome — a SUCCESSFUL finalize deliberately leaves
+      // it in place (P5-3's own control: it is the committed record of what
+      // landed) and a FAILED one leaves it too (nothing downstream of step 5
+      // owns cleaning it up). So a landed `_interactive-library/<id>/` left
+      // behind by ANY prior attempt under this id — successful, or one that
+      // failed at a LATER step and correctly reverted its own session —
+      // collides with THIS attempt's own step 5. Left undetected, that
+      // collision surfaces as a raw `EEXIST` thrown out of
+      // `copyStagingToLibrary`, caught by this function's own outer catch,
+      // and reported as an undifferentiated 500 carrying an internal
+      // implementation detail — never actionable, unlike the two structurally
+      // identical id collisions (skill/hook) this route already turns into a
+      // clean 409 below.
+      //
+      // Detected HERE, before step 5 runs, through the SAME guarded choke
+      // point step 6 already uses to read the landed package
+      // (`resolveGuardedPath(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id])`)
+      // — never a bare `existsSync` on a request-derived join (attack-the-fix
+      // #2). `.exists` is false both when `_interactive-library/` itself does
+      // not exist yet (the ordinary first-ever-finalize case — ENOENT) and
+      // when this specific id has never landed before, so a fresh id is
+      // never refused by this check (attack-the-fix #3, proven by P5/P6/P7
+      // all still passing on a clean forge root); it is true only on a
+      // genuine prior landing for THIS id (EEXIST). An id-shaped traversal
+      // (`.ok === false`) is deliberately NOT handled here — it falls through
+      // unchanged to step 5, which already refuses it the same way it does
+      // today (P7).
+      const preflightLibraryGuard = resolveGuardedPath(ctx.forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id]);
+      if (preflightLibraryGuard.ok && preflightLibraryGuard.exists) {
+        revert();
+        sendJson(res, 409, {
+          error: `package "${id}" already exists — choose a different id`,
+        }, origin);
+        return;
+      }
+
       // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
       // Dynamically imported so a static import never pulls the Claude Agent
       // SDK into bridge start-up (cli/ui-bridge.ts does not import
