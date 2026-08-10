@@ -183,6 +183,30 @@ function onboardingDescriptor(overrides: Partial<SessionKindDescriptor> = {}): S
   } as SessionKindDescriptor;
 }
 
+/** R4-21: the new "authoring" session kind (studio/session-kinds.yaml — not
+ *  shipped yet at branch base; see session-kinds.test.ts's RED-1a..1d). One
+ *  OOTB interactive agent (`creation-agent`, skills/creation-agent/SKILL.md —
+ *  does not exist yet either) that authors a skill/hook file-package through
+ *  an R2-10 session; artifact kind 'file-package' (this file's RED-2a/b/c,
+ *  below). `stages`/`defaultStage` deliberately use the CURRENT,
+ *  already-shipped 'roadmap' token rather than the not-yet-shipped
+ *  'authoring' SESSION_STAGES token — deriveSessionArtifact (unlike
+ *  deriveSessionTranscript) never reads `stages` at all, so this keeps the
+ *  file-package fixtures below fully decoupled from the SEPARATE
+ *  SESSION_STAGES extension pinned in session-kinds.test.ts. */
+function authoringDescriptor(overrides: Partial<SessionKindDescriptor> = {}): SessionKindDescriptor {
+  return {
+    id: 'authoring',
+    agent: 'creation-agent',
+    title: 'Authoring session',
+    legacyRoutes: [],
+    stages: ['roadmap'],
+    defaultStage: 'roadmap',
+    artifact: { kind: 'file-package', label: 'Draft package' },
+    ...overrides,
+  } as SessionKindDescriptor;
+}
+
 /** A minimal, hand-fixtured `ContractStageRow[]` — deliberately NOT imported
  *  from cli/contract-stages.ts (this module stays a pure, fs-only
  *  derivation with no business importing the derivation module that
@@ -244,6 +268,26 @@ function writeGeneration(
     ...(opts.extraMetaFields ?? {}),
   };
   writeFileSync(join(dir, 'meta.json'), JSON.stringify(meta, null, 2), 'utf8');
+}
+
+/** Writes one file into a file-package session's `package/` subdirectory
+ *  (R4-21) — mirrors this file's own `manifests/`/`themes/`/`generations/`
+ *  fixture idiom (see writeGeneration's own header note): a DEDICATED
+ *  subdirectory, never the bare session root, so a creation-agent session's
+ *  accumulating draft package can never collide with the fixed
+ *  CANDIDATE_SOURCE_FILES transcript scan (idea.md/prompt.md/answers.json/
+ *  questions.json/feedback.md) that deriveSessionTranscript unconditionally
+ *  scans on every session dir regardless of kind. T3 DESIGN DECISION,
+ *  flagged for T1/T2 to ratify or redirect (see the T3 final report): the
+ *  spec does not name a directory for the authoring session's accumulating
+ *  draft, so `package/` was chosen to mirror the existing per-kind
+ *  subdirectory convention exactly (`manifests/` for roadmap-draft,
+ *  `themes/` for brain-structure, `generations/<n>/` for
+ *  generation-gallery) rather than reading the bare session root. */
+function writePackageFile(sessionDir: string, relPath: string, body: string): void {
+  const abs = join(sessionDir, 'package', relPath);
+  mkdirSync(join(abs, '..'), { recursive: true });
+  writeFileSync(abs, body, 'utf8');
 }
 
 function okTurns(result: ReturnType<typeof deriveSessionTranscript>): Array<{ index: number; role: string; stage: string; text: string; source: string }> {
@@ -637,14 +681,90 @@ describe('deriveSessionArtifact — brain-structure (shared PackageFile shape)',
 // deriveSessionArtifact — reserved kind (AT-34)
 // ===========================================================================
 
-describe('deriveSessionArtifact — a reserved artifact kind is never a stub', () => {
-  it('AT-34: a descriptor whose artifact.kind is a RESERVED row (e.g. "file-package") → throws, naming the reserved kind', () => {
+// AT-34 RETARGETED (R4-21, documented edit — T3): this AT used 'file-package'
+// as its RESERVED-row example — but file-package is THE row R4-21 flips
+// reserved→live (see this file's RED-2a/b/c, below), and per
+// session-kinds.test.ts's AT-2 it was already the LAST reserved row in the
+// whole vocabulary, so after this round SESSION_ARTIFACT_KINDS carries ZERO
+// reserved rows — there is no other genuinely-reserved kind left anywhere to
+// build a fresh fixture from. Retargeted (per the task brief's own
+// instruction) rather than deleted: the underlying claim this AT protects —
+// "an unrecognised artifact kind is never a stub, it throws naming itself" —
+// still has a live code path to pin (deriveSessionArtifact's `state ===
+// undefined` branch), so this AT now exercises THAT branch via a kind that
+// is not, and never was, a member of SESSION_ARTIFACT_KINDS at all — proving
+// the same "never a stub" contract without depending on a reserved row that
+// no longer exists. GREEN both before and after the R4-21 flip lands (an
+// entirely-unknown kind's behaviour is untouched by this round) — kept as
+// coverage, not a fresh RED pin; RED-2a/b/c (below) are this round's actual
+// RED pins for file-package itself.
+describe('deriveSessionArtifact — an unrecognised artifact kind is never a stub', () => {
+  it('AT-34 (retargeted): a descriptor whose artifact.kind is not a member of SESSION_ARTIFACT_KINDS at all → throws, naming the unrecognised kind', () => {
     const sessionDir = makeTmpDir('artifact-reserved-');
-    const descriptor = architectDescriptor({ artifact: { kind: 'file-package' as SessionKindDescriptor['artifact']['kind'], label: 'Reserved' } });
+    const descriptor = architectDescriptor({ artifact: { kind: 'no-such-artifact-kind-at-all-9911' as SessionKindDescriptor['artifact']['kind'], label: 'Unrecognised' } });
     assert.throws(
       () => deriveSessionArtifact({ descriptor, sessionDir }),
-      (err: unknown) => { assert.ok(err instanceof Error); assert.match(err.message, /file-package/); return true; },
+      (err: unknown) => { assert.ok(err instanceof Error); assert.match(err.message, /no-such-artifact-kind-at-all-9911/); return true; },
     );
+  });
+});
+
+// ===========================================================================
+// R4-21 — deriveSessionArtifact — file-package (creation-agent authoring
+// session). RED-2a/b/c (T3 pins for the OOTB authoring agent / skill-hook
+// package producer): file-package flips reserved→live, backed by a real
+// derivation reading the session's own `package/` subdirectory (T3 design
+// decision — see writePackageFile's own header note, flagged for T1/T2 to
+// ratify). Mirrors AT-33 (brain-structure)'s file-derivation shape and
+// AT-36/37's symlink-escape positive-control idiom exactly.
+// ===========================================================================
+
+describe('deriveSessionArtifact — file-package (R4-21, creation-agent authoring session)', () => {
+  it('RED-2a: kind:"file-package" does NOT throw — returns {kind, label, files} reading the session dir\'s real package/ files (RED today: file-package is reserved — the switch\'s reserved/default guard throws)', () => {
+    const sessionDir = makeTmpDir('artifact-filepackage-');
+    writePackageFile(sessionDir, 'SKILL.md', '# Authored Skill\n\nBody.\n');
+    writePackageFile(sessionDir, 'reference.md', 'Supporting reference content.\n');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir }) as {
+      kind: string;
+      label: string;
+      files: Array<{ path: string; body: string }>;
+    };
+    assert.equal(artifact.kind, 'file-package');
+    assert.equal(artifact.files.length, 2, `expected 2 package files, got: ${JSON.stringify(artifact.files)}`);
+    const byPath = new Map(artifact.files.map((f) => [f.path, f.body]));
+    assert.equal(byPath.get('SKILL.md'), '# Authored Skill\n\nBody.\n');
+    assert.equal(byPath.get('reference.md'), 'Supporting reference content.\n');
+  });
+
+  it('RED-2b (containment): a package/ entry that is a symlink pointing OUTSIDE sessionDir contributes NO file, but a real sibling package file IS surfaced (positive control) — mirrors safeReadFileInSession\'s existing containment contract exactly (AT-36/37\'s idiom)', () => {
+    const outsideDir = makeTmpDir('filepackage-escape-outside-');
+    const SECRET_MARKER = 'TOP-SECRET-PACKAGE-MARKER-6614';
+    const secretPath = join(outsideDir, 'secret.md');
+    writeFileSync(secretPath, SECRET_MARKER, 'utf8');
+
+    const sessionDir = makeTmpDir('filepackage-escape-session-');
+    const packageDir = join(sessionDir, 'package');
+    mkdirSync(packageDir, { recursive: true });
+    symlinkSync(secretPath, join(packageDir, 'evil.md'));
+    // Positive control: a plain, non-symlinked sibling package file — MUST
+    // surface as a real file.
+    const REAL_MARKER = 'REAL-NON-ESCAPED-PACKAGE-CONTENT-2207';
+    writeFileSync(join(packageDir, 'SKILL.md'), REAL_MARKER, 'utf8');
+
+    const artifact = deriveSessionArtifact({ descriptor: authoringDescriptor(), sessionDir });
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(SECRET_MARKER), 'the escaped file\'s content must never appear in the derived file-package artifact');
+    assert.ok(serialized.includes(REAL_MARKER), 'a plain, non-symlinked sibling package file MUST still surface — the guard must discriminate, not just refuse to read anything');
+  });
+
+  it('RED-2c: the file-package artifact\'s label is threaded verbatim from descriptor.artifact.label, never re-derived', () => {
+    const sessionDir = makeTmpDir('filepackage-label-');
+    writePackageFile(sessionDir, 'SKILL.md', '# x\n');
+    const descriptor = authoringDescriptor({ artifact: { kind: 'file-package', label: 'Totally Custom Draft Label 8827' } });
+
+    const artifact = deriveSessionArtifact({ descriptor, sessionDir }) as { label: string };
+    assert.equal(artifact.label, 'Totally Custom Draft Label 8827', 'label must come from descriptor.artifact.label — never a hardcoded/re-derived string');
   });
 });
 

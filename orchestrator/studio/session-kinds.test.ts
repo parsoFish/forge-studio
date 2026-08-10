@@ -275,12 +275,26 @@ function writeForgeUiRoute(root: string, routePath: string): void {
 // ===========================================================================
 
 describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () => {
-  it('AT-1: SESSION_STAGES is exactly the 6-token ordered vocabulary, frozen', () => {
-    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain']);
+  // AT-1 UPDATED (R4-21, documented edit — T3, fulfils the RED-1a pin): the
+  // frozen 6-token SESSION_STAGES vocabulary gains its FIRST-EVER extension —
+  // a 7th token, 'authoring', backing the new single-stage `authoring`
+  // session kind (creation-agent). Appended at the end (it is a standalone
+  // single-stage session, unrelated to the ordered onboarding sequence
+  // contract→instructions→secrets→demo→roadmap→brain the other 6 tokens
+  // encode). RED at branch base: today's real, unmodified session-kinds.ts
+  // still exports exactly the 6-token array with no 'authoring' member —
+  // this deepEqual (which subsumes plain membership, RED-1a's ask) fails
+  // until the extension lands.
+  it('AT-1: SESSION_STAGES is exactly the 7-token ordered vocabulary (R4-21 adds "authoring"), frozen', () => {
+    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain', 'authoring']);
+    assert.ok(
+      (SESSION_STAGES as readonly string[]).includes('authoring'),
+      'RED-1a: SESSION_STAGES must include the new "authoring" token',
+    );
     assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
   });
 
-  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 5 live + 1 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer)', () => {
+  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 6 live + 0 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer; R4-21: file-package flips reserved→live, the creation-agent authoring session\'s renderer)', () => {
     const ids = SESSION_ARTIFACT_KINDS.map((k) => k.id);
     assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
     const live = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'live').map((k) => k.id);
@@ -291,21 +305,30 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     // unchanged (contract-buildout still sits between file-package and
     // generation-gallery); only its status flips, so the LIVE set gains it
     // at its DECLARED position (before generation-gallery), not appended at
-    // the end. This assertion is RED at branch base — today's real
-    // session-kinds.ts still lists it reserved — and is the pin for that
-    // flip (kills an implementation that ships deriveContractBuildout but
-    // forgets to promote the row, leaving the onboarding descriptor a
-    // permanent lint error per validateSessionKinds's
+    // the end.
+    // R4-21 (this round): file-package — the LAST remaining reserved row —
+    // also flips to live, backing the creation-agent authoring session's
+    // deriveSessionArtifact case. This makes the whole vocabulary 6-live /
+    // 0-reserved. This assertion is RED at branch base — today's real
+    // session-kinds.ts still lists file-package reserved — and is the pin
+    // for that flip (kills an implementation that ships the authoring
+    // session's renderer but forgets to promote the row, leaving the
+    // authoring descriptor a permanent lint error per validateSessionKinds's
     // reserved-artifact-kind check).
-    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'contract-buildout', 'generation-gallery']);
-    assert.deepEqual(reserved, ['file-package']);
+    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
+    assert.deepEqual(reserved, [], 'R4-21 empties the reserved set entirely — file-package was the last row');
     assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS));
   });
 
   it('AT-3: sessionArtifactKindState is a total function — live/reserved/unknown, never throws', () => {
     assert.equal(sessionArtifactKindState('roadmap-draft'), 'live');
     assert.equal(sessionArtifactKindState('brain-structure'), 'live');
-    assert.equal(sessionArtifactKindState('file-package'), 'reserved');
+    // R4-21 (this round): file-package is now LIVE, not reserved — kills a
+    // vocabulary edit that flips SESSION_ARTIFACT_KINDS's declaration
+    // without also flipping this total function's answer (same evidence as
+    // AT-2, checked through the OTHER accessor). RED at branch base — the
+    // real, unmodified session-kinds.ts still answers 'reserved' here.
+    assert.equal(sessionArtifactKindState('file-package'), 'live');
     // R4-16 AT-21: generation-gallery is now LIVE, not reserved — kills a
     // vocabulary edit that flips SESSION_ARTIFACT_KINDS's declaration
     // without also flipping this total function's answer (they read the
@@ -410,16 +433,37 @@ describe('validateSessionKinds — semantic errors', () => {
     for (const k of SESSION_ARTIFACT_KINDS.map((x) => x.id)) assert.ok(f!.message.includes(k), `message must name the allowed set (missing "${k}")`);
   });
 
-  it('AT-10: an artifact kind that IS a reserved row → error, DISTINCT check id from "unknown kind" (parses ok, lint error)', () => {
+  // AT-10 RETARGETED (R4-21, documented edit — T3): this AT used
+  // 'file-package' as its "IS a reserved row" fixture — but file-package is
+  // THE row R4-21 flips reserved→live, and (per AT-2) it was already the
+  // LAST reserved row in the whole vocabulary, so after this round
+  // SESSION_ARTIFACT_KINDS carries ZERO reserved rows — there is no other
+  // real kind left to build a fresh "still-reserved" fixture from. Deleting
+  // this AT outright would silently drop the "reserved vs unknown are
+  // DISTINCT findings" coverage it also carried; instead it is retargeted
+  // (mirrors the ruling on session-transcript.test.ts's AT-34, same file
+  // pair, same reason) to pin the INVERSE now that the flip has landed: a
+  // descriptor declaring file-package produces ZERO reserved-artifact-kind
+  // findings AND zero unknown-artifact-kind findings — proving the flip
+  // reaches THIS validator (not just the raw SESSION_ARTIFACT_KINDS/
+  // sessionArtifactKindState accessors AT-2/AT-3 already cover). RED at
+  // branch base: today's real, unmodified session-kinds.ts still lists
+  // file-package reserved, so this descriptor DOES trip
+  // reserved-artifact-kind today — the assertion below fails until the flip
+  // lands.
+  it('AT-10 (retargeted, R4-21): file-package, now live, trips NEITHER reserved-artifact-kind NOR unknown-artifact-kind', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     writeSessionKindsYaml(root, [baseDescriptor({ artifact: { kind: 'file-package', label: 'x' } })]);
     const findings = validateSessionKinds(root);
-    const f = findings.find((x) => x.check === 'session-kinds/reserved-artifact-kind');
-    assert.ok(f, `expected a session-kinds/reserved-artifact-kind finding, got: ${JSON.stringify(findings)}`);
-    assert.equal(f!.level, 'error');
-    assert.ok(f!.message.includes('file-package'));
-    assert.ok(!findings.some((x) => x.check === 'session-kinds/unknown-artifact-kind'), 'a reserved kind must NOT also trip the unknown-kind check — they are distinct findings');
+    assert.ok(
+      !findings.some((x) => x.check === 'session-kinds/reserved-artifact-kind'),
+      `file-package must no longer trip reserved-artifact-kind once it is live, got: ${JSON.stringify(findings)}`,
+    );
+    assert.ok(
+      !findings.some((x) => x.check === 'session-kinds/unknown-artifact-kind'),
+      `file-package must resolve as a KNOWN (live) kind, never fall through to unknown-artifact-kind, got: ${JSON.stringify(findings)}`,
+    );
   });
 
   it('AT-11: duplicate descriptor ids → error naming the id', () => {
@@ -582,6 +626,67 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
       { kind: 'contract-buildout', label: 'Contract build-out' },
       'the label is verbatim from the mockup (mockups/studio-endstate-v2/data.jsx SESSIONS[\'project-onboarding\'].artifactLabel) — pinned exactly, not paraphrased',
     );
+  });
+});
+
+// ===========================================================================
+// R4-21 — the new `authoring` session kind (creation-agent, file-package)
+// (RED-1c, RED-1d — T3 pins for the OOTB authoring agent / skill-hook
+// package producer). Mirrors AT-6 (unknown-stage) and AT-12 (unknown-agent)'s
+// existing shapes exactly — see those tests above for the sibling idiom this
+// section follows.
+// ===========================================================================
+
+describe('R4-21 — the "authoring" session kind (creation-agent, file-package)', () => {
+  // RED-1c: isolates the unknown-agent CHECK specifically — the descriptor's
+  // stage/artifact fields are deliberately kept on TODAY's already-valid
+  // vocabulary (stages:['roadmap'], artifact.kind:'roadmap-draft') so this
+  // assertion is not entangled with RED-1a/RED-1d's SEPARATE "authoring" is
+  // not yet a member of SESSION_STAGES concern. `creation-agent` is
+  // deliberately NOT seeded via writeAgentSkill here — skills/creation-agent/
+  // SKILL.md genuinely does not exist anywhere yet (this initiative's own
+  // agent), so discoverRuntimeAgentIds (session-kinds.ts) cannot resolve it,
+  // and validateSessionKinds must emit a session-kinds/unknown-agent finding
+  // naming it — which is exactly why this assertion (expecting ZERO such
+  // findings) is RED today.
+  it('RED-1c: a descriptor whose agent is "creation-agent" resolves via discoverRuntimeAgentIds with zero unknown-agent findings (RED: skills/creation-agent/SKILL.md does not exist yet, anywhere)', () => {
+    const root = makeForgeRoot();
+    // No writeAgentSkill(root, 'creation-agent') call — its absence IS the
+    // RED reason, mirroring the real repo's current state exactly.
+    writeSessionKindsYaml(root, [
+      baseDescriptor({ id: 'authoring', agent: 'creation-agent', stages: ['roadmap'], defaultStage: 'roadmap', artifact: { kind: 'roadmap-draft', label: 'Authored package' } }),
+    ]);
+    const findings = validateSessionKinds(root);
+    const unknownAgentFindings = findings.filter((f) => f.check === 'session-kinds/unknown-agent');
+    assert.deepEqual(
+      unknownAgentFindings,
+      [],
+      `expected zero unknown-agent findings once creation-agent resolves as a real runtime-bearing skill, got: ${JSON.stringify(unknownAgentFindings)}`,
+    );
+  });
+
+  // RED-1d (fail-closed, mirrors AT-6 exactly): proves the vocabulary stays
+  // CLOSED even after this round's extension — an out-of-vocabulary stage
+  // token must still be rejected, and the rejection message must enumerate
+  // the FULL, now-7-token allowed set (not just the 6 tokens SESSION_STAGES
+  // carries today). The 7 expected tokens are hardcoded here (not read off
+  // the live SESSION_STAGES import) deliberately — reading them off the
+  // import would make this assertion trivially self-fulfilling regardless of
+  // whether "authoring" was ever actually added, which is exactly the
+  // declared-data-fails-open shape this module's own header warns against.
+  it('RED-1d: a stage token outside SESSION_STAGES still yields session-kinds/unknown-stage naming the value + the FULL 7-token allowed set (proves the vocab stays closed after the "authoring" extension)', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    writeSessionKindsYaml(root, [baseDescriptor({ stages: ['not-a-real-stage'], defaultStage: 'not-a-real-stage' })]);
+    const findings = validateSessionKinds(root);
+    const f = findings.find((x) => x.check === 'session-kinds/unknown-stage');
+    assert.ok(f, `expected a session-kinds/unknown-stage finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f!.level, 'error');
+    assert.ok(f!.message.includes('not-a-real-stage'), 'message must name the offending value');
+    const expectedSevenTokens = ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain', 'authoring'];
+    for (const s of expectedSevenTokens) {
+      assert.ok(f!.message.includes(s), `message must name the full 7-token allowed set (missing "${s}") — got: ${f!.message}`);
+    }
   });
 });
 

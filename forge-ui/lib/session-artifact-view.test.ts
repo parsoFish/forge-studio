@@ -97,6 +97,17 @@ import {
   // R4-17: does not exist yet — same esbuild-named-export note: an unresolved
   // import resolves to `undefined`, so only the tests that CALL it go red.
   contractBuildoutView,
+  // R4-21 (T3 pins, RED-3a/b — OOTB authoring agent / skill-hook package
+  // producer): does not exist yet — same esbuild-named-export note as
+  // preferredGenerationFor/contractBuildoutView above: an unresolved named
+  // import resolves to `undefined`, so only the tests that actually CALL
+  // these two go red. `selectFilePackageFile` is a T3 DESIGN DECISION
+  // (flagged for T1/T2 to ratify or redirect — see the T3 report): the task
+  // brief names `filePackageTabs`/`selectFile` reuse but not a companion
+  // selector's export name, so this mirrors `selectBrainStructureFile`'s
+  // exact precedent (AT-82/83, below) for the sibling `brain-structure` kind.
+  filePackageArtifactView,
+  selectFilePackageFile,
 } from './session-artifact-view.ts';
 import { filePackageTabs, selectFile } from './file-package.ts';
 import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact, ContractBuildoutArtifact } from './session-client.ts';
@@ -151,6 +162,24 @@ const BRAIN_ARTIFACT: BrainStructureArtifact = {
 };
 
 const EMPTY_BRAIN_ARTIFACT: BrainStructureArtifact = { kind: 'brain-structure', label: 'Seeded structure', themeCount: 0, files: [] };
+
+// R4-21 — file-package (creation-agent authoring session, T3 pins RED-3a/b).
+// `FilePackageArtifact` is NOT imported from ./session-client.ts — it does
+// not declare that shape yet (implementation target, out of scope for this
+// test-only file); hand-fixtured here exactly like this file's own
+// `fixtureContractStages`-equivalent precedent in session-transcript.test.ts
+// (never cross-importing a not-yet-shipped type from the module under test's
+// own dependency).
+type FilePackageArtifact = { kind: 'file-package'; label: string; files: Array<{ path: string; body: string }> };
+
+const FILE_PACKAGE_ARTIFACT: FilePackageArtifact = {
+  kind: 'file-package',
+  label: 'Draft package',
+  files: [
+    { path: 'SKILL.md', body: '# Authored Skill\n\nBody.\n' },
+    { path: 'reference.md', body: 'Supporting reference content.\n' },
+  ],
+};
 
 // ===========================================================================
 // roadmapDraftView — AT-70..AT-73
@@ -283,18 +312,26 @@ test('AT-84: sessionArtifactView: dispatches each of the 3 live kinds to its mat
 // throw "reserved" either. Same correction shape as R4-16's; see AT-117/118
 // below for the positive proof that contract-buildout dispatches instead of
 // throwing.
-test('AT-85: sessionArtifactView: the one remaining STILL-RESERVED artifact kind (file-package) reaching the view THROWS an explicit error naming it — zero stub renderer', () => {
-  expect(() => sessionArtifactView({ kind: 'file-package' }), 'reserved kind "file-package" must throw').toThrow(/file-package/);
-});
-
-test('AT-86: sessionArtifactView: the reserved-kind error message says "reserved" — distinguishable from a totally unknown kind\'s message', () => {
-  try {
-    sessionArtifactView({ kind: 'file-package' });
-    throw new Error('expected sessionArtifactView to throw');
-  } catch (err) {
-    expect(String(err)).toMatch(/reserved/i);
-  }
-});
+//
+// AT-85/AT-86/AT-88 DELETED here, not kept green (R4-21, documented edit —
+// T3; mirrors the R4-17 AT-89 deletion precedent immediately above, and the
+// R4-16 AT-103/104/105 deletion precedent for selectGeneration): all three
+// used 'file-package' as their "the STILL-RESERVED kind" fixture — but
+// file-package is THE row R4-21 flips reserved→live (this file's RED-3a/b,
+// below), and it was already the LAST reserved row in the whole vocabulary
+// (see AT-2 in session-kinds.test.ts), so after this round
+// RESERVED_ARTIFACT_KINDS is EMPTY — there is no reserved kind left anywhere
+// to build a "still throws reserved" fixture from. Their premise is not
+// weakened, it is now FALSE: keeping them green would require either (a)
+// leaving file-package reserved forever (defeats this whole initiative) or
+// (b) an implementation quietly leaving SOME other kind reserved just to
+// keep these tests passing, which is exactly the "tests keeping a stale
+// premise alive" shape the campaign already refused twice above. AT-87
+// (totally unknown kind, unrelated to file-package) is UNCHANGED below — the
+// "unknown kind throws, message does not claim reserved" contract still
+// holds and is still exercised. RED-3a/b (below) are this round's positive
+// replacement pins, proving file-package now dispatches to a real renderer
+// instead of throwing.
 
 test('AT-87: sessionArtifactView: a totally UNKNOWN artifact kind also throws, naming it — but its message does NOT claim "reserved" (the two failure modes are distinguishable)', () => {
   try {
@@ -307,32 +344,37 @@ test('AT-87: sessionArtifactView: a totally UNKNOWN artifact kind also throws, n
   }
 });
 
-test('AT-88: sessionArtifactView: the reserved-kind and unknown-kind error messages are themselves distinct strings', () => {
-  let reservedMessage = '';
-  let unknownMessage = '';
-  try {
-    sessionArtifactView({ kind: 'file-package' });
-  } catch (err) {
-    reservedMessage = String(err);
-  }
-  try {
-    sessionArtifactView({ kind: 'nonsense' });
-  } catch (err) {
-    unknownMessage = String(err);
-  }
-  expect(reservedMessage).not.toBe('');
-  expect(unknownMessage).not.toBe('');
-  expect(reservedMessage).not.toBe(unknownMessage);
+// R4-21 — RED-3a/b: file-package flips reserved→live, dispatching to a real
+// filePackageArtifactView renderer (reusing filePackageTabs/selectFile from
+// file-package.ts, mirroring brainStructureView's own reuse pin exactly).
+test('RED-3a (R4-21): sessionArtifactView dispatches "file-package" to filePackageArtifactView, never the reserved-kind throw — file-package is REMOVED from RESERVED_ARTIFACT_KINDS', () => {
+  expect(() => sessionArtifactView(FILE_PACKAGE_ARTIFACT), 'file-package must no longer throw "reserved" once it is live').not.toThrow();
+  const dispatched = sessionArtifactView(FILE_PACKAGE_ARTIFACT);
+  expect(dispatched).toEqual(filePackageArtifactView(FILE_PACKAGE_ARTIFACT));
+
+  // Stage-UNAWARE like every other live kind today (mirrors AT-91's
+  // invariance pin exactly) — a file-package draft has no notion of "which
+  // stage" any more than a roadmap draft or an AGENTS.md draft does; passing
+  // a stage must never make this renderer stage-sensitive.
+  const withStage = sessionArtifactView(FILE_PACKAGE_ARTIFACT, 'roadmap');
+  expect(withStage).toEqual(dispatched);
 });
 
-// R4-17: AT-89 ("both still-reserved kinds produce pairwise-distinct
-// messages") is DELETED here, not kept green — mirrors R4-16's own AT-103/
-// 104/105 deletion precedent (selectGeneration) for the identical reason: its
-// entire premise was "distinctness ACROSS MULTIPLE reserved kinds", and after
-// this flip there is only ONE reserved kind left (file-package). Keeping a
-// vacuous single-element "pairwise distinct" test green would be exactly the
-// "tests keeping a stale premise alive" shape this campaign refuses. Do not
-// re-add unless a second reserved kind is introduced.
+test('RED-3b (R4-21): filePackageArtifactView reuses filePackageTabs/selectFile from file-package.ts — no bespoke tab-strip state machine', () => {
+  const view = filePackageArtifactView(FILE_PACKAGE_ARTIFACT) as { kind: string; filePackage: unknown };
+  expect(view.kind).toBe('file-package');
+  // Reuse of filePackageTabs: the SAME output the shared helper itself
+  // produces for these files, not a parallel reimplementation.
+  expect(view.filePackage).toEqual(filePackageTabs(FILE_PACKAGE_ARTIFACT.files));
+
+  // Reuse of selectFile: selectFilePackageFile delegates to the REAL, shared
+  // selectFile — mirrors selectBrainStructureFile's AT-82/83 precedent
+  // exactly (immutability: a NEW object; delegated clamping behaviour, never
+  // a bespoke reimplementation).
+  const next = selectFilePackageFile(view as unknown as { kind: 'file-package'; filePackage: ReturnType<typeof filePackageTabs> }, 1);
+  expect(next).not.toBe(view);
+  expect(next.filePackage).toEqual(selectFile(view.filePackage as ReturnType<typeof filePackageTabs>, 1));
+});
 
 // ===========================================================================
 // AT-amendment (T2 Correction 2, 2026-08-05) — the selected-stage seam:
@@ -631,21 +673,17 @@ test('AT-107: sessionArtifactView: "generation-gallery" no longer throws "reserv
   expect(view.kind).toBe('generation-gallery');
 });
 
-// GREEN today, not a defect pin (mirrors session-transcript.test.ts's AT-78
-// precedent for this exact shape of pin): file-package is unaffected by this
-// round's flip, so this assertion is already true both before and after the
-// implementation lands. It earns its place as a regression guard against the
-// WRONG fix — an implementation that widens RESERVED_ARTIFACT_KINDS's shrink
-// to accidentally drop file-package too, or that breaks the reserved-check
-// generally while wiring generation-gallery's branch — would silently pass
-// AT-85/106/107 above while failing here, which is exactly the failure mode
-// this test exists to catch. R4-17 note: this test is UNCHANGED by THIS
-// round's own flip (contract-buildout) — file-package was already the only
-// kind asserted here that R4-17 also leaves reserved; see AT-117 below for
-// the R4-17-specific positive proof (contract-buildout no longer reserved).
-test('AT-108: sessionArtifactView: the surviving reserved kind (file-package) still throws "reserved" — the R4-16 flip only ever affected generation-gallery, nothing else', () => {
-  expect(() => sessionArtifactView({ kind: 'file-package' })).toThrow(/reserved/i);
-});
+// AT-108 DELETED here, not kept green (R4-21, documented edit — T3; same
+// deletion shape as AT-85/86/88 above). This test was a regression guard
+// proving the R4-16 generation-gallery flip did NOT also, accidentally,
+// touch file-package — it was GREEN both before and after that round's
+// implementation landed, by design. R4-21 is the round that intentionally
+// flips file-package itself (RED-3a/b, above), so "the surviving reserved
+// kind (file-package) still throws reserved" is no longer a true statement
+// to guard — keeping it green would mean file-package never actually
+// flipped. Its job (catching an implementation that widens a flip's blast
+// radius beyond its intended kind) is superseded here by RED-3a's own
+// positive assertion that file-package now dispatches cleanly.
 
 test('AT-109: sessionArtifactView: generation-gallery is stage-UNAWARE like every other live kind today — passing a stage argument produces byte-identical output (mirrors AT-91\'s invariance pin for the 3 pre-existing live kinds)', () => {
   const noStage = sessionArtifactView(GALLERY_TWO_GENERATIONS);
@@ -866,9 +904,16 @@ test('R4-17 AT-120: contractBuildoutView: EVERY non-contract stage (instructions
   }
 });
 
-test('R4-17 AT-121: sessionArtifactView: "file-package" (the one remaining reserved kind) is UNAFFECTED by this round\'s contract-buildout flip — still throws "reserved", pinning that the flip only ever touched contract-buildout', () => {
-  expect(() => sessionArtifactView({ kind: 'file-package' }, 'contract')).toThrow(/reserved/i);
-});
+// R4-17 AT-121 DELETED here, not kept green (R4-21, documented edit — T3;
+// same deletion shape as AT-85/86/88/108 above). Was a regression guard
+// proving the R4-17 contract-buildout flip did not also touch file-package —
+// superseded now that R4-21 is the round that intentionally flips
+// file-package itself. RED-3a's positive dispatch assertion (with a `stage`
+// argument passed through `sessionArtifactView`'s existing optional second
+// parameter — AT-91's stage-unaware invariance applies to file-package too,
+// since it is a live kind with no notion of "which stage" any more than
+// roadmap-draft/markdown-draft/brain-structure have) is this round's
+// replacement coverage.
 
 // ===========================================================================
 // R4-17, D10 — SessionArtifactPane.tsx's ternary chain's final `else`
