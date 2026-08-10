@@ -178,7 +178,6 @@ test('mutating a frozen FINALIZERS row never changes what resolveFinalizer resol
     () => {
       (FINALIZERS[0] as { id: string }).id = 'HACKED';
     },
-    undefined,
     'a frozen row must refuse mutation in strict-mode ESM (every .ts module here runs strict) — a shallow freeze on ' +
       'only the outer array would let this silently succeed instead of throwing',
   );
