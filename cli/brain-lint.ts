@@ -81,6 +81,30 @@ export type RunBrainLintResult = {
   exitCode: 0 | 1;
 };
 
+/**
+ * R6-08 WI-1 — the single source of truth for the 10 `check` names a
+ * `scope:'full'` run always contributes (mirrors the literal list
+ * `runBrainLint` assembles below). `checkCleanupCandidates` is deliberately
+ * EXCLUDED — it only ever contributes findings under `scope:'cleanup-dry-run'`
+ * (see `runBrainLint`'s conditional spread), so a full-scope KB-health
+ * itemization has nothing to report for it. Consumers that need to itemize
+ * per-check health (Studio's KB Health tab, `cli/bridge-studio-kbs.ts`'s
+ * `buildKbHealth`) import this rather than re-hardcoding the list, so the two
+ * can never drift apart.
+ */
+export const CHECK_NAMES = [
+  'checkFrontmatter',
+  'checkIndexSync',
+  'checkSourceLinks',
+  'checkStaleness',
+  'checkOrphans',
+  'checkProjectBrainIndexes',
+  'checkLengthSoftCap',
+  'checkContradictions',
+  'checkCategoryScope',
+  'checkReflectorLoss',
+] as const;
+
 const ALLOWED_CATEGORIES = new Set([
   'pattern',
   'antipattern',

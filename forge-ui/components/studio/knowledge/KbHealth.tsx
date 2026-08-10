@@ -31,7 +31,7 @@ function Dot({ ok }: { ok: boolean }) {
 }
 
 export function KbHealth({ health }: Props) {
-  const { layerBalance, orphans, linkDensity, staleness, lintFlags, lintErrors } = health;
+  const { layerBalance, orphans, linkDensity, staleness, lintFlags, lintErrors, checks, healthError } = health;
   const total = (layerBalance.index ?? 0) + (layerBalance.theme ?? 0) + (layerBalance.raw ?? 0);
   const staleRaw   = staleness?.staleRawCount   ?? 0;
   const staleTheme = staleness?.staleThemeCount  ?? 0;
@@ -95,6 +95,43 @@ export function KbHealth({ health }: Props) {
                 {lintFlags} lint flag{lintFlags !== 1 ? 's' : ''}
               </div>
             )}
+          </div>
+        )}
+
+        {/* R6-08 WI-1: per-check itemization. Always renders when `checks` is
+            present (a real bridge response always sets it) — including every
+            clean/'pass' check, so an operator can see what was actually run,
+            not just what failed. */}
+        {checks && checks.length > 0 && (
+          <div style={{ marginBottom: 12 }}>
+            <div style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-display)', fontWeight: 600,
+              textTransform: 'uppercase', letterSpacing: '.07em', marginBottom: 5 }}>
+              Checks
+            </div>
+            {healthError && (
+              <div style={{ fontSize: 11.5, color: 'var(--red)', marginBottom: 4 }}>
+                lint run failed: {healthError}
+              </div>
+            )}
+            {checks.map((c) => (
+              <div
+                key={c.check}
+                data-check={c.check}
+                data-check-status={c.status}
+                data-check-count={c.errorCount + c.flagCount}
+                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, fontSize: 12, color: 'var(--dim)' }}
+              >
+                <span style={{
+                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+                  background: c.status === 'pass' ? 'var(--c-kb)'
+                    : c.status === 'fail' ? 'var(--red)'
+                    : c.status === 'unknown' ? 'var(--faint)'
+                    : 'var(--amber)',
+                }} />
+                <span style={{ fontFamily: 'var(--font-mono)' }}>{c.check}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--faint)' }}>{c.status}</span>
+              </div>
+            ))}
           </div>
         )}
 

@@ -39,7 +39,7 @@ import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.t
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
-import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, type Finding } from './brain-lint.ts';
+import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
 import {
@@ -558,6 +558,11 @@ async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: st
 // KB health computation
 // ---------------------------------------------------------------------------
 
+/** R6-08 WI-1 — per-check itemization row. `status` is 'unknown' only when
+ *  the whole lint run threw (RULING 3) — never a per-check outcome otherwise. */
+type CheckHealthStatus = 'pass' | 'warn' | 'fail' | 'unknown';
+type CheckHealthEntry = { check: string; status: CheckHealthStatus; errorCount: number; flagCount: number };
+
 type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
   orphans: number;
@@ -565,6 +570,12 @@ type KbHealth = {
   staleness: { staleRawCount: number; staleThemeCount: number };
   lintFlags: number;
   lintErrors: number;
+  /** R6-08 WI-1 — one entry per CHECK_NAMES, always present (never omitted
+   *  for a clean check — status:'pass', count 0). */
+  checks: CheckHealthEntry[];
+  /** R6-08 WI-1 RULING 3 — set iff the lint run itself threw; every `checks[]`
+   *  entry is 'unknown' in that case, never a silent 0/0 pass. */
+  healthError?: string;
 };
 
 /**
@@ -573,6 +584,10 @@ type KbHealth = {
  *   2. Running runBrainLint(scope:'full') and filtering findings to this kb's dir.
  *   3. Deriving orphans (nodes with degree 0), link density (edges/nodes),
  *      and staleness (nodes with updated_at older than 30 days).
+ *   4. Itemizing findings per CHECK_NAMES (R6-08 WI-1) — the aggregate
+ *      lintFlags/lintErrors fields are KEPT (RULING 2), derived as a roll-up
+ *      over `checks[]` rather than computed independently, so the two can
+ *      never diverge.
  */
 function buildKbHealth(
   forgeRoot: string,
@@ -619,18 +634,54 @@ function buildKbHealth(
   // so a project brain at brain/projects/<id> is counted — the old hardcoded
   // `resolve(forgeRoot,'brain',kbId)` prefix matched nothing for a project KB
   // and reported a false 0, hiding the Lint section for exactly those KBs.
+  //
+  // R6-08 WI-1: itemize by CHECK_NAMES (the single source of truth,
+  // cli/brain-lint.ts) — every one of the 10 full-scope checks always gets an
+  // entry, a clean check reporting status:'pass' rather than being omitted.
+  // RULING 3: if the lint run itself throws (e.g. a category index that is a
+  // directory — readIndexEntries' readFileSync throws EISDIR inside
+  // checkProjectBrainIndexes, uncaught by runBrainLint), every check reports
+  // status:'unknown' plus a top-level healthError — NEVER a silent 0/0 "clean"
+  // pass, which is exactly the declared-data-fails-open bug this replaces.
   let lintFlags = 0;
   let lintErrors = 0;
+  let checks: CheckHealthEntry[];
+  let healthError: string | undefined;
   try {
     const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
     const kbFindings = scopeFindingsToKb(forgeRoot, kbId, findings);
-    lintFlags = kbFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
-    lintErrors = kbFindings.filter((f) => f.category === 'error').length;
-  } catch {
-    // Non-fatal: lint failure doesn't break the health response
+    const byCheck = new Map<string, Finding[]>();
+    for (const name of CHECK_NAMES) byCheck.set(name, []);
+    for (const f of kbFindings) {
+      if (!f.check) continue;
+      byCheck.get(f.check)?.push(f);
+    }
+    checks = CHECK_NAMES.map((name) => {
+      const list = byCheck.get(name) ?? [];
+      const errorCount = list.filter((f) => f.category === 'error').length;
+      const flagCount = list.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+      const status: CheckHealthStatus = errorCount > 0 ? 'fail' : flagCount > 0 ? 'warn' : 'pass';
+      return { check: name, status, errorCount, flagCount };
+    });
+    lintErrors = checks.reduce((sum, c) => sum + c.errorCount, 0);
+    lintFlags = checks.reduce((sum, c) => sum + c.flagCount, 0);
+  } catch (err) {
+    checks = CHECK_NAMES.map((name) => ({ check: name, status: 'unknown' as const, errorCount: 0, flagCount: 0 }));
+    healthError = err instanceof Error ? err.message : String(err);
+    lintFlags = 0;
+    lintErrors = 0;
   }
 
-  return { layerBalance, orphans, linkDensity, staleness: { staleRawCount, staleThemeCount }, lintFlags, lintErrors };
+  return {
+    layerBalance,
+    orphans,
+    linkDensity,
+    staleness: { staleRawCount, staleThemeCount },
+    lintFlags,
+    lintErrors,
+    checks,
+    ...(healthError !== undefined ? { healthError } : {}),
+  };
 }
 
 // ---------------------------------------------------------------------------

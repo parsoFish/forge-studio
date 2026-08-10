@@ -529,6 +529,16 @@ export type KbEdge = { from: string; to: string };
 
 export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
 
+/** R6-08 WI-1 — one per-check itemization row (see cli/bridge-studio-kbs.ts's
+ *  buildKbHealth). `status: 'unknown'` only ever appears when the whole lint
+ *  run threw (RULING 3), reflected via the sibling `KbHealth.healthError`. */
+export type KbHealthCheck = {
+  check: string;
+  status: 'pass' | 'warn' | 'fail' | 'unknown';
+  errorCount: number;
+  flagCount: number;
+};
+
 export type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
   orphans: number;
@@ -536,6 +546,11 @@ export type KbHealth = {
   staleness: { staleRawCount: number; staleThemeCount: number };
   lintFlags: number;
   lintErrors: number;
+  /** R6-08 WI-1 — optional for older fixtures/tests that don't set it; a
+   *  real bridge response always includes one entry per CHECK_NAMES. */
+  checks?: KbHealthCheck[];
+  /** R6-08 WI-1 RULING 3 — present iff the server's lint run threw. */
+  healthError?: string;
 };
 
 export type KbNodeArticle = {
