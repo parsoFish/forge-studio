@@ -104,7 +104,7 @@ export function SessionAuthoringPanel({
         style={{ border: '1px solid var(--line)', borderRadius: 10, padding: '14px 18px', background: 'var(--panel)', fontSize: 13, color: 'var(--dim)', marginBottom: 14 }}
       >
         {shape === 'unknown'
-          ? 'The creation agent is drafting — a package/SKILL.md or package/hook.yaml will appear here once it starts writing.'
+          ? 'The creation agent is drafting — a staging/SKILL.md or staging/hook.yaml will appear here once it starts writing.'
           : shape === 'skill'
           ? `Drafting a SKILL package — ${files.length} file(s) so far. Review them in the pane on the right.`
           : `Drafting a HOOK package — ${files.length} file(s) so far. Review them in the pane on the right.`}

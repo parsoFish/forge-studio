@@ -60,7 +60,7 @@
  *      tree (which slug-validates via `SLUG_RE`/`assertSkillSlug`), so a raw
  *      session id landed as a directory name verbatim. Ruling: `packageId`
  *      MUST now be `SLUG_RE`-valid or the turn refuses loudly. Derivation:
- *      prefer the session's OWN declared identity — `status.session_id` when
+ *      prefer the session's OWN declared identity — `status.package_id` when
  *      it is present as a string (the "declared package id" the session
  *      status itself carries) — falling back to `ctx.sessionId` (the
  *      already-SEC-04-checked request identity) only when `status` carries
@@ -353,6 +353,20 @@ async function runAgentStyleStep(args: {
   }
 
   const wrote = listWrittenFiles(sessionDir, phaseRow.writes ?? []);
+  // P1 fix (declared-data-fails-open, live adversarial-review finding): a
+  // phase row that DECLARES a non-empty `writes:` must have SOMETHING to
+  // show for it — a declared `writes:` dir that never appeared and one that
+  // exists but is empty are the SAME "the turn produced nothing" shape (see
+  // listWrittenFiles's own carve-out comment for why both collapse to
+  // `wrote: []` here). Refuse loudly, BEFORE assertNextPhaseKnown/persisting
+  // `next`, rather than silently advancing the session to an operator-facing
+  // empty package. A phase row that declares NO `writes:` at all is the true
+  // surviving carve-out — this only fires when `writes:` IS declared.
+  if ((phaseRow.writes?.length ?? 0) > 0 && wrote.length === 0) {
+    throw new InteractiveRunnerError(
+      `runInteractiveTurn: session kind "${descriptor.id}" phase "${phaseRow.phase}" declares writes: [${(phaseRow.writes ?? []).join(', ')}], but the turn produced no files there — refusing to advance the session with an empty package rather than persisting a ghost turn to status.json.`,
+    );
+  }
   // Finding 1 fix: validate `next` BEFORE persisting it — see
   // assertNextPhaseKnown's own doc comment.
   assertNextPhaseKnown(descriptor, turnSpec, phaseRow);
@@ -394,7 +408,7 @@ async function runFinalizeStep(args: {
   }
 
   // packageId — Finding 5(c): the "declared package id" the session status
-  // itself carries (`status.session_id`, when present as a string) is
+  // itself carries (`status.package_id`, when present as a string) is
   // preferred over the raw request identity `ctx.sessionId`; either way the
   // resolved value MUST be `SLUG_RE`-valid or this refuses loudly — never
   // silently sanitized/invented (see header note design call #2).
