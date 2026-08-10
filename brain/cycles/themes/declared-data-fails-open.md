@@ -13,7 +13,7 @@ keywords:
   - test-on-the-wrong-surface
   - derive-dont-declare
 created_at: 2026-08-08
-updated_at: 2026-08-08
+updated_at: 2026-08-11
 related_themes:
   - suppression-env-fakes-the-pass
   - quality-gate-cmd-must-assert-new-work
@@ -38,6 +38,7 @@ Named the campaign's recurring TOP finding and logged as a brain gap twelve time
 | Wire-contract mismatch | R6-06: server emits `{id,linkKind,href,status,costUsd}`; the client validator additionally required `when`, `what`, `narrativeKinds`, all non-optional, and discarded the whole response if any row failed — **every non-empty response rejected, deterministically**. *"THE FEATURE WAS COMPLETELY NON-FUNCTIONAL IN THE PRODUCT, with 4074 + 715 + 825 checks green."* An empty `rows: []` passes `.every()` vacuously, so one assertion in 826 stood between this and shipping; `deriveAgentLedgerRows`, the wire→row transform itself, had **zero callers on the fetch path**. | L13117–13146 |
 | A guard that exists and is never called | `cli/bridge-studio-sessions.ts` carries a resolver whose docstring says *"never `readSessionStatus`"* — `collectSessionRows` calls exactly that. `validateProjectId` sits in `cli/ui-bridge.ts` and a second route does not call it. *"The guard existed and was exactly as documented; the call sites simply never called it."* | L12750–12762, L13470–13472 |
 | A second copy of the declaration | A hardcoded `FALLBACK_SESSION_KINDS` mirroring the registry — *"a second copy of declared data that nothing enforces against the first"*. | L12535–12545 |
+| Batch E: declared step contract | `turnSpec.writes` — the phase table declares which dirs a drafting turn writes; the spine never checked that the declared write happened, so an empty drafting turn advanced `analyzing → awaiting-review` silently. Caught by R4-21's per-WI adversarial review, invisible to a 4400-test suite. Instance N of the class *inside the primitive built by the campaign that named the class*. | L16449–16970 (R4-21 phase 2) |
 | Batch A / batch B | `legacyRoutes` *"parsed, typed and asserted by tests but validated and consumed NOWHERE"*, whose **fix round shipped its own instance**. Generalised past code by batch B's N7: *"A rule declared in the goal pack, enforced nowhere"* — 12 instances shipped (`_wave5/batch-b-efficiency-report.md:281`). | L228–231, L249–252 |
 
 ## Detection — enforce end to end
