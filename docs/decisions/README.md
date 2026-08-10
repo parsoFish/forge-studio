@@ -3,7 +3,7 @@
 One ADR per load-bearing choice. If a change conflicts with an ADR, **update
 the ADR first** (with rationale) before changing the code. New definitions
 land through the canonical serializer rule (ADR 027); new ADRs take the next
-number (next free: **043**).
+number (next free: **044**).
 
 ## Active
 
@@ -47,6 +47,7 @@ number (next free: **043**).
 | [040](./040-review-send-back-develop-loop.md) | Review send-back re-dispatches the develop agent (initiative WI queue, config caps, merge-wins) | The ADR-026 successor — R4-08-F2 send-back loop |
 | [041](./041-trigger-kind-registry.md) | Trigger-kind registry + external-trigger trust (cron/webhook, queue-only dispatch, typed payloads) | The R2-04 trigger expansion |
 | [042](./042-surface-cap-scope-and-testability.md) | Scope of the `orchestrator/` surface cap: `cli/` not capped, additive-optional fields disclose-not-park, export-for-testability | The wave-5 batch-C ratification (13-item queue) |
+| [043](./043-generic-interactive-surface.md) | The generic interactive-surface primitive: one `turnSpec` descriptor field + one generic `interactive-runner.ts` behind a dispatch fork — the one-time ADR-042 generalization that dissolves the recurring per-agent-runner park (Proposed) | Batch-D D→E bridge; the ADR-042 per-runner park recurred 3× (R4-18/R4-19-F2/R4-21) |
 
 ## Retired / folded (numbers stay reserved)
 
