@@ -82,28 +82,71 @@ export type RunBrainLintResult = {
 };
 
 /**
- * R6-08 WI-1 — the single source of truth for the 10 `check` names a
- * `scope:'full'` run always contributes (mirrors the literal list
- * `runBrainLint` assembles below). `checkCleanupCandidates` is deliberately
- * EXCLUDED — it only ever contributes findings under `scope:'cleanup-dry-run'`
- * (see `runBrainLint`'s conditional spread), so a full-scope KB-health
- * itemization has nothing to report for it. Consumers that need to itemize
- * per-check health (Studio's KB Health tab, `cli/bridge-studio-kbs.ts`'s
- * `buildKbHealth`) import this rather than re-hardcoding the list, so the two
- * can never drift apart.
+ * R6-08 4on (F3 hardening) — the single source of truth for the 10 full-scope
+ * checks. Declared as `[name, fn]` pairs rather than a bare name list so
+ * `runBrainLint` (below) can ITERATE this array to run the checks instead of
+ * separately hand-typing the same 10 calls — the shape that let `CHECK_NAMES`
+ * (adversarial-review MAJOR F3) drift from the checks `runBrainLint` actually
+ * ran, with nothing forcing the two lists to match. `checkCleanupCandidates`
+ * is deliberately EXCLUDED from this registry — it only ever contributes
+ * findings under `scope:'cleanup-dry-run'` (see `runBrainLint`'s conditional
+ * spread below), so a full-scope KB-health itemization has nothing to report
+ * for it. Function declarations are hoisted, so referencing them here (above
+ * their textual definitions later in this file) is safe both at runtime and
+ * under `tsc`.
  */
-export const CHECK_NAMES = [
-  'checkFrontmatter',
-  'checkIndexSync',
-  'checkSourceLinks',
-  'checkStaleness',
-  'checkOrphans',
-  'checkProjectBrainIndexes',
-  'checkLengthSoftCap',
-  'checkContradictions',
-  'checkCategoryScope',
-  'checkReflectorLoss',
-] as const;
+const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string) => Finding[]]> = [
+  ['checkFrontmatter', checkFrontmatter],
+  ['checkIndexSync', checkIndexSync],
+  ['checkSourceLinks', checkSourceLinks],
+  ['checkStaleness', checkStaleness],
+  ['checkOrphans', checkOrphans],
+  ['checkProjectBrainIndexes', checkProjectBrainIndexes],
+  ['checkLengthSoftCap', checkLengthSoftCap],
+  ['checkContradictions', checkContradictions],
+  ['checkCategoryScope', checkCategoryScope],
+  ['checkReflectorLoss', checkReflectorLoss],
+];
+
+/**
+ * The 10 `check` names a `scope:'full'` run always contributes — DERIVED from
+ * `FULL_SCOPE_CHECKS` (never hand-duplicated) so the two can never drift
+ * apart. Consumers that need to itemize per-check health (Studio's KB Health
+ * tab, `cli/bridge-studio-kbs.ts`'s `buildKbHealth`) import this rather than
+ * re-hardcoding the list.
+ */
+export const CHECK_NAMES = FULL_SCOPE_CHECKS.map(([name]) => name) as readonly string[];
+
+/**
+ * R6-08 4on (F1/F2 hardening) — which scan domain each full-scope check
+ * actually inspects. A per-KB consumer (`buildKbHealth`) uses this to tell
+ * whether a check even LOOKS at a given KB before reporting a verdict —
+ * reporting `pass` for a check that never scanned the KB is exactly the
+ * declared-data-fails-open defect this hardens against.
+ *
+ *   - `forge-themes`    — `readThemeFiles`-based; scans ONLY
+ *                          `brain/cycles/themes/` and `brain/forge-dev/themes/`
+ *                          (see `readThemeFiles` below). Never sees a project
+ *                          or band KB's own themes.
+ *   - `project-indexes` — `checkProjectBrainIndexes`; scans `brain/projects/*`.
+ *   - `global`          — `checkReflectorLoss`; scans `_queue/done` —  an
+ *                          advisory over the WHOLE queue, not scoped to any
+ *                          single KB's brain dir. Never applicable per-KB.
+ */
+export type CheckScope = 'forge-themes' | 'project-indexes' | 'global';
+
+export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
+  checkFrontmatter: 'forge-themes',
+  checkIndexSync: 'forge-themes',
+  checkSourceLinks: 'forge-themes',
+  checkStaleness: 'forge-themes',
+  checkOrphans: 'forge-themes',
+  checkProjectBrainIndexes: 'project-indexes',
+  checkLengthSoftCap: 'forge-themes',
+  checkContradictions: 'forge-themes',
+  checkCategoryScope: 'forge-themes',
+  checkReflectorLoss: 'global',
+};
 
 const ALLOWED_CATEGORIES = new Set([
   'pattern',
@@ -884,6 +927,25 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
  * siblings the forge-side resolver can't see — checking it here would false-
  * positive), matching the shared `checkSourceLinks`' own project caveat.
  */
+/**
+ * R6-08 4on (F1 hardening) — the exact `check` names `lintThemeFiles` (below)
+ * emits findings under: `checkFrontmatter`, `checkSourceLinks`,
+ * `checkCategoryScope`, `checkIndexSync` (mirrors the `check:` literals in the
+ * function body — never `checkStaleness`/`checkOrphans`/`checkLengthSoftCap`/
+ * `checkContradictions`/`checkProjectBrainIndexes`/`checkReflectorLoss`, which
+ * `lintThemeFiles` does not implement). A per-KB consumer (`buildKbHealth`)
+ * uses this to know which checks get a REAL verdict from a KB's OWN theme
+ * files even when the shared `readThemeFiles`-based full-scope checks never
+ * see that KB's brain dir (project/band KBs) — the fix for the declared-data-
+ * fails-open defect where those checks silently reported `pass`.
+ */
+export const LINT_THEME_FILE_CHECKS: ReadonlySet<string> = new Set([
+  'checkFrontmatter',
+  'checkSourceLinks',
+  'checkCategoryScope',
+  'checkIndexSync',
+]);
+
 export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
   const brainRoot = join(forgeRoot, 'brain');
   const findings: Finding[] = [];
@@ -1143,18 +1205,12 @@ function filterFindingsByScope(
 }
 
 export function runBrainLint(opts: RunBrainLintOptions): RunBrainLintResult {
-  // Run all checks. The scope filter is applied afterwards.
+  // Run all checks via the FULL_SCOPE_CHECKS registry (F3 hardening) — same
+  // 10 checks, same order as before this refactor, now iterated from the ONE
+  // array CHECK_NAMES is also derived from, so the two can never drift. The
+  // scope filter is applied afterwards.
   const allFindings: Finding[] = [
-    ...checkFrontmatter(opts.cwd),
-    ...checkIndexSync(opts.cwd),
-    ...checkSourceLinks(opts.cwd),
-    ...checkStaleness(opts.cwd),
-    ...checkOrphans(opts.cwd),
-    ...checkProjectBrainIndexes(opts.cwd),
-    ...checkLengthSoftCap(opts.cwd),
-    ...checkContradictions(opts.cwd),
-    ...checkCategoryScope(opts.cwd),
-    ...checkReflectorLoss(opts.cwd),
+    ...FULL_SCOPE_CHECKS.flatMap(([, fn]) => fn(opts.cwd)),
     // S6A — cleanup-candidates only contributes when scope is
     // `cleanup-dry-run`; filterFindingsByScope drops everything else.
     ...(opts.scope === 'cleanup-dry-run' ? checkCleanupCandidates(opts.cwd) : []),

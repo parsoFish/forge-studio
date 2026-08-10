@@ -134,6 +134,61 @@ describe('KbHealth — per-check itemization rows (R6-08 WI-1 RED-D)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// R6-08 4on — 'n/a' check status must render honestly: distinct data-* value,
+// AND visually distinct from a real 'pass' (not a green dot) — otherwise the
+// UI itself would re-introduce the declared-data-fails-open defect the
+// backend fix (buildKbHealth) just closed, one layer up in the render.
+// ---------------------------------------------------------------------------
+describe('KbHealth — "n/a" check status renders honestly, distinct from "pass" (R6-08 4on)', () => {
+  // @ts-expect-error — `checks` widened locally, same rationale as the RED-D
+  // block above (studio-client.ts's KbHealthCheck.status now includes 'n/a').
+  const health = baseHealth({
+    lintErrors: 0,
+    lintFlags: 0,
+    checks: [
+      { check: 'checkOrphans', status: 'pass', errorCount: 0, flagCount: 0 },
+      { check: 'checkReflectorLoss', status: 'n/a', errorCount: 0, flagCount: 0 },
+    ],
+  });
+  const html = render(health);
+
+  it('renders data-check-status="n/a" for an n/a check', () => {
+    expect(html).toContain('data-check-status="n/a"');
+  });
+
+  it('renders the n/a row with an honest, non-"pass" label (never claims a clean scan)', () => {
+    // Extract the checkReflectorLoss row's own markup slice so this assertion
+    // can't accidentally match text belonging to the sibling checkOrphans row.
+    const rowStart = html.indexOf('data-check="checkReflectorLoss"');
+    const rowEnd = html.indexOf('data-check="', rowStart + 1);
+    const row = html.slice(rowStart, rowEnd === -1 ? undefined : rowEnd);
+    expect(row).not.toContain('>pass<');
+    expect(row.toLowerCase()).toContain('n/a');
+  });
+
+  it('gives the n/a row a visually distinct marker from a real "pass" (not the same green dot)', () => {
+    const passRowStart = html.indexOf('data-check="checkOrphans"');
+    const passRowEnd = html.indexOf('data-check="', passRowStart + 1);
+    const passRow = html.slice(passRowStart, passRowEnd === -1 ? undefined : passRowEnd);
+
+    const naRowStart = html.indexOf('data-check="checkReflectorLoss"');
+    // Bound to the row's OWN closing tag (each check row is a single flat
+    // <div>...</div> — no nested divs), not `.slice(naRowStart)` to end of
+    // document, which would spuriously pick up unrelated later markup (e.g.
+    // the Staleness section, which legitimately uses the same green token).
+    const naRowEnd = html.indexOf('</div>', naRowStart);
+    const naRow = html.slice(naRowStart, naRowEnd === -1 ? undefined : naRowEnd);
+
+    // The pass row's marker uses the KB-green token; the n/a row's marker
+    // must NOT use that same color — asserted on the actual per-row markup
+    // slices, not a whole-page substring check (which could false-pass on
+    // markup emitted by an unrelated part of the panel).
+    expect(passRow).toContain('var(--c-kb)');
+    expect(naRow).not.toContain('var(--c-kb)');
+  });
+});
+
+// ---------------------------------------------------------------------------
 // (4) REGRESSION companion — the EXISTING prose rendering (lint error/warning
 // counts) this WI must not break while adding the data-* hooks above.
 // ---------------------------------------------------------------------------

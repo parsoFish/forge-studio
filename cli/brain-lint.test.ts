@@ -32,6 +32,7 @@ import {
   runBrainLint,
   classifyFinding,
   resolutionCounts,
+  CHECK_NAMES,
   type Finding,
 } from './brain-lint.ts';
 
@@ -833,4 +834,89 @@ test('classifyFinding: checkProjectBrainIndexes → agent tier with fixHint', ()
   assert.equal(f.resolution, 'agent');
   assert.equal(f.kind, 'index.project');
   assert.ok(f.fixHint && f.fixHint.length > 0);
+});
+
+// ---------- CHECK_NAMES drift guard (R6-08 4on, F3) ----------
+
+/**
+ * F3 hardening: `runBrainLint` now iterates a single `FULL_SCOPE_CHECKS`
+ * registry that `CHECK_NAMES` is ALSO derived from (kept private/unexported —
+ * `CHECK_NAMES` and `CHECK_SCOPE` are the intended public surface), so the two
+ * can no longer drift apart BY CONSTRUCTION. This test is the independent,
+ * fixture-based verification the WI calls for: a maximal fixture engineered
+ * to trip every one of the 10 full-scope checks simultaneously, asserting the
+ * set of `check` names `runBrainLint(scope:'full')` actually EMITS findings
+ * under is EXACTLY `CHECK_NAMES` — no more, no fewer. A future edit that
+ * re-introduces two separate hand-typed lists (the exact shape that caused
+ * the original MAJOR — `CHECK_NAMES` hand-duplicated in
+ * cli/bridge-studio-kbs.test.ts instead of imported) and lets them drift
+ * would fail this test, because it exercises REAL runtime behavior, not the
+ * internal wiring.
+ */
+test('CHECK_NAMES drift guard: a maximal fixture tripping every check emits findings under EXACTLY the CHECK_NAMES set', () => {
+  const root = buildBrainFixture({
+    themes: [
+      // checkFrontmatter (missing description) + checkIndexSync + checkOrphans
+      // (never linked from any category index / INDEX.md — the default stub
+      // indexes carry no entries).
+      { path: 'cycles/themes/max-a.md', fm: { category: 'pattern', description: '' }, body: '# Max A\n\nFixture body.\n' },
+
+      // checkSourceLinks (broken relative link + broken wikilink) + checkStaleness
+      // (a cited forge-internal path that does not exist).
+      {
+        path: 'cycles/themes/max-b.md',
+        fm: { category: 'pattern' },
+        body:
+          '# Max B\n\nBroken link: [bad](./does-not-exist.md)\n\nBroken wikilink: [[no-such-theme-xyz]]\n\n' +
+          'Stale citation: `orchestrator/does-not-exist-xyz.ts`\n',
+      },
+
+      // checkLengthSoftCap (hard cap, > 100 body lines).
+      {
+        path: 'cycles/themes/max-c.md',
+        fm: { category: 'pattern' },
+        body: '# Max C\n\n' + Array.from({ length: 110 }, (_, i) => `line ${i}`).join('\n') + '\n',
+      },
+
+      // checkContradictions — a pattern/antipattern pair sharing >=3 keywords.
+      {
+        path: 'cycles/themes/max-d-pattern.md',
+        fm: { category: 'pattern', keywords: ['alpha', 'beta', 'gamma', 'delta'] },
+        body: '# Max D Pattern\n',
+      },
+      {
+        path: 'cycles/themes/max-e-antipattern.md',
+        fm: { category: 'antipattern', keywords: ['alpha', 'beta', 'gamma', 'epsilon'] },
+        body: '# Max E Antipattern\n',
+      },
+
+      // checkCategoryScope — a `decision` theme mis-routed into cycles/themes/
+      // (decisions belong in forge-dev/themes/).
+      { path: 'cycles/themes/max-f.md', fm: { category: 'decision' }, body: '# Max F\n' },
+    ],
+  });
+  try {
+    // checkProjectBrainIndexes — a project theme with no category index files.
+    writeProjectTheme(root, 'max-project', 'max-proj-theme', 'pattern');
+
+    // checkReflectorLoss — a `_queue/done/` manifest with no matching archive
+    // (brain/cycles/_raw/ is never created by buildBrainFixture, so ANY
+    // manifest here is automatically unmatched).
+    const doneDir = join(root, '_queue', 'done');
+    mkdirSync(doneDir, { recursive: true });
+    writeFileSync(join(doneDir, 'MAX-LOST-INIT.md'), '---\ninitiative_id: MAX-LOST-INIT\n---\n\nbody\n');
+
+    const { findings } = runBrainLint({ cwd: root, scope: 'full' });
+    const tripped = new Set(findings.map((f) => f.check).filter((c): c is string => Boolean(c)));
+
+    const expected = [...CHECK_NAMES].sort();
+    const actual = [...tripped].sort();
+    assert.deepEqual(
+      actual,
+      expected,
+      `maximal fixture must trip findings under EXACTLY the CHECK_NAMES set. Expected ${JSON.stringify(expected)}, got ${JSON.stringify(actual)} (missing: ${JSON.stringify(expected.filter((n) => !actual.includes(n)))}, extra: ${JSON.stringify(actual.filter((n) => !expected.includes(n)))})`,
+    );
+  } finally {
+    cleanup(root);
+  }
 });

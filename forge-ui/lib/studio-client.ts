@@ -531,10 +531,13 @@ export type KbGraph = { nodes: KbNode[]; edges: KbEdge[] };
 
 /** R6-08 WI-1 — one per-check itemization row (see cli/bridge-studio-kbs.ts's
  *  buildKbHealth). `status: 'unknown'` only ever appears when the whole lint
- *  run threw (RULING 3), reflected via the sibling `KbHealth.healthError`. */
+ *  run threw (RULING 3), reflected via the sibling `KbHealth.healthError`.
+ *  R6-08 4on — `status: 'n/a'` means this check never actually inspected
+ *  THIS kb (neither the shared full-scope scan nor this kb's own theme files
+ *  cover it) — the honest alternative to a declared-data-fails-open 'pass'. */
 export type KbHealthCheck = {
   check: string;
-  status: 'pass' | 'warn' | 'fail' | 'unknown';
+  status: 'pass' | 'warn' | 'fail' | 'unknown' | 'n/a';
   errorCount: number;
   flagCount: number;
 };

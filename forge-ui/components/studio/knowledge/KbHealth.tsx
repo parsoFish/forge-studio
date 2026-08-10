@@ -119,17 +119,22 @@ export function KbHealth({ health }: Props) {
                 data-check={c.check}
                 data-check-status={c.status}
                 data-check-count={c.errorCount + c.flagCount}
-                style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, fontSize: 12, color: 'var(--dim)' }}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, fontSize: 12,
+                  color: c.status === 'n/a' ? 'var(--faint)' : 'var(--dim)',
+                }}
               >
                 <span style={{
-                  width: 7, height: 7, borderRadius: '50%', flexShrink: 0, display: 'inline-block',
+                  width: 7, height: 7, borderRadius: c.status === 'n/a' ? 0 : '50%', flexShrink: 0, display: 'inline-block',
                   background: c.status === 'pass' ? 'var(--c-kb)'
                     : c.status === 'fail' ? 'var(--red)'
-                    : c.status === 'unknown' ? 'var(--faint)'
+                    : c.status === 'unknown' || c.status === 'n/a' ? 'var(--faint)'
                     : 'var(--amber)',
                 }} />
                 <span style={{ fontFamily: 'var(--font-mono)' }}>{c.check}</span>
-                <span style={{ marginLeft: 'auto', color: 'var(--faint)' }}>{c.status}</span>
+                <span style={{ marginLeft: 'auto', color: 'var(--faint)' }}>
+                  {c.status === 'n/a' ? 'n/a — not scanned for this kb' : c.status}
+                </span>
               </div>
             ))}
           </div>
