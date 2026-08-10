@@ -313,6 +313,42 @@ textarea.input { resize: vertical; min-height: 64px; line-height: 1.55; }
 .hex-frame[data-status="retrying"] { background: var(--amber); }
 .hex-frame[data-status="failed"] { background: var(--red); }
 
+/* ---------- Home constellation (R6-07) ----------
+   The hex-per-object live-fleet grid. Each cell is a real <a href> (not a
+   div+onClick) so it stays keyboard/screen-reader/cmd-click reachable. Reuses
+   .hex-frame's glow (mapped from HomeStatus -> the 5-state CSS vocab it
+   understands) rather than inventing a second palette. */
+.home-constellation {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 14px;
+  padding: 20px;
+}
+.home-hex {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  text-decoration: none;
+  color: inherit;
+  padding: 8px 4px;
+  border-radius: var(--radius-sm);
+  transition: background 0.15s;
+}
+.home-hex:hover { background: var(--panel-2); }
+.home-hex .hex-frame { width: 46px; height: 52px; }
+.home-hex .hex { width: 100%; height: 100%; gap: 2px; }
+.home-hex-glyph { font-size: 17px; line-height: 1; color: var(--text); }
+.home-hex-label {
+  font-size: 10.5px;
+  color: var(--dim);
+  text-align: center;
+  max-width: 90px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------- badges / status ---------- */
 .badge {
   display: inline-flex;
