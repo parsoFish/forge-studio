@@ -941,12 +941,22 @@ inventory rather than one shared page-level contract:
   it as a no-op (stage-UNAWARE by nature).
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser and the
   band-scoped, agent-seeded create + maintain surface (R1-01's binding
-  contract, extended by R1-06 WI-2/WI-3 and R4-19 WI-1/WI-2; journeys:
+  contract, extended by R1-06 WI-2/WI-3, R4-19 WI-1/WI-2 and R6-08 WI-1/WI-2/
+  WI-3; journeys:
   `knowledge-graph`, `knowledge-pin-guidance`, `knowledge-create-kb`,
   `knowledge-ingest`, `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
   `knowledge-create-kb-band-scope-seed`, `knowledge-create-kb-band-scope-commit`,
-  `knowledge-kb-maintain-session`).
-  - **Graph browser:** `[data-page="knowledge"][data-page-ready]`, force-graph
+  `knowledge-kb-maintain-session`, `knowledge-explore-tabs`).
+  - **Tabs (R6-08 WI-3, RULING 5 — URL-synced via `?tab=`):**
+    `[data-tab="explore"|"health"|"ingest-activity"][data-tab-active="true"|"false"]`,
+    one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
+    like `?id=`/`?node=`/`?theme=`. **Explore** (default — `?tab=` absent) is
+    the pre-existing graph + reader body, re-anchored under this branch
+    unchanged; **Health** hosts `LintResolutionPanel` + `GuidancePanel` +
+    `KbHealth` (moved under this branch, F1 — no longer rendered
+    unconditionally); **Ingest Activity** is the new read-only
+    `IngestActivityPanel` (see below). Journey: `knowledge-explore-tabs`.
+  - **Graph browser (Explore tab):** `[data-page="knowledge"][data-page-ready]`, force-graph
     root `#kb-svg[data-kb-id][data-node-count][data-edge-count][data-selected-node]`,
     per-node `[data-node-id][data-layer="theme"|"index"|"guidance"]` with a
     `[data-hit]` inner hit-circle (click target — the outer `<g>`'s bbox
@@ -954,7 +964,15 @@ inventory rather than one shared page-level contract:
     pane (`[data-node-article-body]`); the KB selector is `#kb-select`, one
     `<option value="<kbId>">` per KB `loadKbDescriptors` finds walking
     `brain/*` AND `brain/projects/*` (ADR 035 central per-project brains, e.g.
-    `mdtoc`, `gitpulse`, alongside the OOTB `cycles`/`forge-dev`).
+    `mdtoc`, `gitpulse`, alongside the OOTB `cycles`/`forge-dev`). The right
+    rail also lists every theme-layer node as text (R6-08 WI-3 F1) —
+    `[data-component="theme-list"]` with per-row
+    `[data-theme-node=<id>][data-theme-active="true"|"false"]` buttons calling
+    the SAME `onSelectNode` the graph's node-click already uses — a non-graph
+    way to reach a theme. **`?theme=<slug>` deep-link (RULING 1):** a thin
+    alias onto the existing `?node=` selection machinery, restricted to
+    theme-layer nodes only (never an index/raw/guidance node) — `?node=` still
+    takes priority when both are given.
   - **New-KB form (`/knowledge/new`):**
     `[data-page="knowledge-new"][data-page-ready="true"][data-section="kb-new"]`.
     Fields: `[data-field="kb-name"]`, `[data-field="kb-binding-kind"]`
@@ -1064,7 +1082,7 @@ inventory rather than one shared page-level contract:
     NEITHER `FORGE_ARCHITECT_NO_SPAWN=1` nor the dry-bridge seam is active
     (mirrors `spawnAgentTurn`'s own guard). A KB re-lint after the run
     computes the real `cleared`/`total` count the terminal event carries.
-  - **KB health panel:** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
+  - **KB health panel (Health tab):** `[data-component="kb-health"][data-lint-errors][data-lint-warnings]`
     (numeric strings — `lintErrors`/`lintFlags`, findings scoped to this
     KB's own dir by the same identity-matched `resolveKbBrainDir` walk
     consolidate uses, so a sibling KB's findings never leak in and a
@@ -1077,11 +1095,51 @@ inventory rather than one shared page-level contract:
     "manual ingest"** (R1-06 WI-3, operator decision 3): ingest stays
     reflection-only, and no route or action anywhere on this page (or
     `/knowledge/new`) triggers one.
-  - **No ingest affordance (decision 3, cross-referenced R1-06-F3 +
-    R6-08-F2):** neither creation nor maintenance renders an "ingest" button,
-    tab, or action. The mockup's "Ingest activity" tab has no real analog —
-    ingest is a reflection-only pass (the reflector phase), never a
-    KB-page-triggerable operation.
+    - **Per-check itemization (R6-08 WI-1, honesty invariant "4on"):**
+      `checks: KbHealthCheck[]` renders one row per named check —
+      `[data-check=<name>][data-check-status="pass"|"warn"|"fail"|"unknown"|"n/a"][data-check-count]`
+      (`errorCount+flagCount`) — for the 10 checks in `CHECK_NAMES`
+      (`cli/brain-lint.ts`, in order): `checkFrontmatter`, `checkIndexSync`,
+      `checkSourceLinks`, `checkStaleness`, `checkOrphans`,
+      `checkProjectBrainIndexes`, `checkLengthSoftCap`, `checkContradictions`,
+      `checkCategoryScope`, `checkReflectorLoss`. **`status:'pass'` means the
+      check genuinely ran over THIS KB's own content and found nothing** —
+      never a silent pass for a check that never looked (the
+      declared-data-fails-open bug class 4on fixed). A check is real
+      (`pass`/`warn`/`fail`) only when either (a) `CHECK_SCOPE[name]` covers
+      this KB's exact dir (`forge-themes` ⇒ `brain/cycles`/`brain/forge-dev`
+      only; `project-indexes` ⇒ a direct `brain/projects/<id>` child) or
+      (b) it's one of `LINT_THEME_FILE_CHECKS` (`checkFrontmatter`/
+      `checkSourceLinks`/`checkIndexSync`) and this KB's own theme files are
+      scanned directly (`lintThemeFiles`, covers ANY kb kind — including
+      project/band KBs the shared full-scope scan never walks). Everything
+      else reports the honest `'n/a'` — `checkReflectorLoss` (a `global`
+      `_queue/done` advisory) is `'n/a'` for every KB, always, since it is
+      never scoped to any one KB. `status:'unknown'` fires only when the
+      whole lint run threw, paired with a top-level `healthError` string
+      (RULING 3) — never a silent 0/0 clean. Journey: `knowledge-explore-tabs`
+      asserts both a real check (`checkFrontmatter` on the `cycles` KB) and
+      the always-`n/a` `checkReflectorLoss`, side by side, in the same panel.
+  - **Ingest Activity panel (R6-08 WI-2) + no ingest affordance (decision 3,
+    cross-referenced R1-06-F3 + R6-08-F2):** the Ingest Activity tab hosts a
+    real, **read-only** `IngestActivityPanel` —
+    `[data-component="ingest-activity"][data-ingest-event-count]`, one row per
+    real `reflect.kb-ingest` event (`orchestrator/kb-health.ts`'s post-reflect
+    `runPostReflectionKbHealth`) found in this KB's own
+    `_logs/<cycleId>/events.jsonl` history
+    (`GET /api/studio/kbs/:id/ingest-activity`, `cli/bridge-studio-kbs.ts` — a
+    plain filesystem scan over `listCycles`, never a synthetic in-memory
+    list): `[data-ingest-kb=<kb>]`, `[data-ingest-fresh-themes=<n>]`,
+    `[data-ingest-impl="builtin"|"cmd"]`. **The invariant survives
+    unchanged:** the panel is GET-only — it has no button and no
+    `data-action` anywhere in its markup, so nothing on this page (or
+    `/knowledge/new`) can trigger an ingest; ingest itself stays a
+    reflection-only pass (the reflector phase), never a KB-page-triggerable
+    operation. `scripts/check-kb-ingest-affordance.test.ts` is the standing
+    ratchet — it fails the build the moment any UI `data-action` or bridge
+    route dispatch arm names `ingest`. Journey: `knowledge-explore-tabs`
+    asserts both the rendered seeded event AND the negative affordance count
+    (`button`/`[data-action]` inside the panel) is zero.
 - **`/recovery`** — retired as a standalone page (R4-11-T3): the
   stuck-initiative inspect/requeue/abandon affordances folded onto the
   per-project roadmap's `InitiativeCard` (see `/projects/[id]` above). The
