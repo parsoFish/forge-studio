@@ -19,7 +19,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -162,6 +162,48 @@ async function withDryBridge<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+/**
+ * Build a directory that PASSES the real preflight (all 3 unconditionally-hard
+ * clauses green). Factored out (P2-2 review) so both AT-4 RED (as a decoy
+ * `worktreePath` — P2-1, below) and AT-4 companion (as the actual GREEN
+ * `projectRepoPath` fixture) share one fixture builder instead of duplicating
+ * it.
+ *
+ * Basename MUST be "mdtoc" — this reuses the REAL, already-committed
+ * brain/projects/mdtoc/profile.md for preflight's C4 brain-sub-wiki check,
+ * instead of writing into the real repo's tracked brain/ tree (execOnboardPreflight
+ * hardcodes forgeRoot to the real worktree root with no injection seam).
+ *
+ * P2-2: that coupling is unguarded in the source it currently reviews — a
+ * future brain cleanup would silently break every caller of this helper with
+ * an opaque red (a fixture that mysteriously stops passing preflight, far
+ * from the file it depends on). Assert the dependency as an explicit
+ * precondition here, before any caller can read a verdict off it.
+ */
+function makePassingPreflightFixture(): { fixtureDir: string; cleanup: () => void } {
+  const mdtocProfilePath = join(REPO_ROOT, 'brain', 'projects', 'mdtoc', 'profile.md');
+  assert.ok(
+    existsSync(mdtocProfilePath),
+    `fixture precondition: this preflight-PASSING fixture's basename is "mdtoc" specifically ` +
+      `to reuse the REAL, already-committed ${mdtocProfilePath} for preflight's C4 ` +
+      `brain-sub-wiki check. That file is gone, so every test using this fixture will now fail ` +
+      `preflight for an unrelated reason (a missing brain profile, not the thing under test). ` +
+      `Fix: restore brain/projects/mdtoc/profile.md, or repoint this helper's basename at a ` +
+      `different still-committed brain/projects/<name>/profile.md.`,
+  );
+
+  const parent = mkdtempSync(join(tmpdir(), 'onboard-flow-gate-pass-'));
+  const fixtureDir = join(parent, 'mdtoc');
+  mkdirSync(join(fixtureDir, '.forge'), { recursive: true });
+  writeFileSync(join(fixtureDir, 'roadmap.md'), '# Roadmap\n');
+  writeFileSync(join(fixtureDir, '.forge', 'quality_gate_cmd'), 'true\n');
+  writeFileSync(
+    join(fixtureDir, '.gitignore'),
+    ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n') + '\n',
+  );
+  return { fixtureDir, cleanup: () => rmSync(parent, { recursive: true, force: true }) };
+}
+
 // ---------------------------------------------------------------------------
 // AT-1 — flow definition, real on-disk
 // ---------------------------------------------------------------------------
@@ -177,6 +219,7 @@ async function withDryBridge<T>(fn: () => Promise<T>): Promise<T> {
 test('AT-1 onboard-project flow.yaml: real on-disk shape, and zero validateFlow error findings against the real roster', () => {
   const flowPath = flowPathForId('onboard-project');
   const flow = loadFlowDefinition(flowPath);
+  const agents = new Map(listAgentDefinitions(skillsDir(REPO_ROOT)).map((a) => [a.slug, a]));
 
   assert.equal(flow.id, 'onboard-project');
   assert.equal(flow.origin, 'seed');
@@ -184,6 +227,26 @@ test('AT-1 onboard-project flow.yaml: real on-disk shape, and zero validateFlow 
   assert.deepEqual(
     flow.nodes.map((n) => n.id).sort(),
     ['contract-check', 'onboard'],
+  );
+
+  // P1-1: the `onboard` node's execution was entirely unpinned — AT-1 checked
+  // node count/ids but never `onboard`'s own `agent:` field. Kills: `onboard`
+  // carrying no agent field, a misspelled slug, or a slug that isn't a real
+  // roster member. Any of those make resolveNodeKind (flow-runner.ts) fall
+  // through to 'unknown' — execUnknown then emits an ERROR event and
+  // silently no-ops (the walk still proceeds to contract-check), shipping a
+  // flow whose onboarding step never actually runs, green.
+  const onboardNode = flow.nodes.find((n) => n.id === 'onboard');
+  assert.ok(onboardNode, 'expected an "onboard" node');
+  assert.equal(
+    onboardNode!.agent,
+    'onboarding-agent',
+    'the onboard node must declare agent:"onboarding-agent"',
+  );
+  assert.ok(
+    agents.has('onboarding-agent'),
+    `the onboard node's agent ref must resolve in the REAL roster (skills/onboarding-agent/SKILL.md) — ` +
+      `a dangling ref makes resolveNodeKind fall through to 'unknown' — got roster slugs: ${JSON.stringify([...agents.keys()])}`,
   );
 
   const contractCheckNode = flow.nodes.find((n) => n.id === 'contract-check');
@@ -202,7 +265,6 @@ test('AT-1 onboard-project flow.yaml: real on-disk shape, and zero validateFlow 
 
   // What `forge studio lint` gates on: zero error-level findings against the
   // real agent roster.
-  const agents = new Map(listAgentDefinitions(skillsDir(REPO_ROOT)).map((a) => [a.slug, a]));
   const findings = validateFlow(flow, agents);
   const errors = findings.filter((f) => f.level === 'error');
   assert.deepEqual(
@@ -305,8 +367,20 @@ test("AT-3 node-kind dispatch: gate:'contract' resolves 'agent' via the new GATE
 // never fire); one that emits status:'complete' regardless of report.ok;
 // and — via assertion (b) — one that fabricates/echoes a fixed clause list
 // instead of the REAL clauses runPreflight computed for THIS fixture.
+// P1-1 (below): one that leaves `onboard`'s agent ref dangling, silently
+// no-op'd by execUnknown. P2-1 (below): one that reads `input.worktreePath`
+// instead of `input.projectRepoPath` — discriminated by pointing
+// worktreePath at a DECOY fixture that would preflight-PASS.
 test('AT-4 (RED) contract-check gate: a real preflight-FAILING fixture, driven end-to-end through runFlow, terminates the walk with a failed contract-check node', async () => {
   const fixtureDir = mkdtempSync(join(tmpdir(), 'onboard-flow-gate-red-'));
+  // P2-1: makeInput's default worktreePath is a fixed, never-created path —
+  // an empty fixtureDir and that nonexistent path produce the SAME hard-
+  // clause signature (C1/C2/C4), so a wrong execOnboardPreflight that reads
+  // `input.worktreePath` instead of `input.projectRepoPath` would pass this
+  // RED test by coincidence. Point worktreePath at a fixture that WOULD
+  // preflight-PASS instead, so reading the wrong field flips the verdict to
+  // ok:true and trips this test's own assertions.
+  const decoy = makePassingPreflightFixture();
   try {
     // Boilerplate rule 4: assert the fixture precondition BEFORE reading any
     // verdict. An entirely empty temp dir trips the 3 UNCONDITIONALLY hard
@@ -323,12 +397,42 @@ test('AT-4 (RED) contract-check gate: a real preflight-FAILING fixture, driven e
     const flow = loadFlowDefinition(flowPathForId('onboard-project'));
     const tracker = { calls: [] as string[] };
     const deps = makeInertDeps(tracker);
-    const input = makeInput({ projectRepoPath: fixtureDir });
+    const input = makeInput({ projectRepoPath: fixtureDir, worktreePath: decoy.fixtureDir });
     const logger = makeLogger();
 
     const result = await withDryBridge(() => runFlow({ flow, input, logger, deps }));
 
     const events = logger.events;
+
+    // P1-1: `onboard`'s agent ref must actually resolve and dispatch — not
+    // fall through to the generic unknown-node path. Kills: a dangling/
+    // misspelled/off-roster `onboard.agent` (resolveNodeKind → 'unknown' →
+    // execUnknown emits this error event and silently no-ops, the walk still
+    // reaching contract-check with every existing assertion below still
+    // green).
+    assert.ok(
+      !events.some((e) => e.message === 'flow-runner.unknown-node-skipped'),
+      `expected NO 'flow-runner.unknown-node-skipped' event — the onboard node's agent ref must resolve, not fall through to execUnknown — got events: ${JSON.stringify(events)}`,
+    );
+    // Measured (not assumed) shape of the onboard node's suppressed spawn:
+    // under FORGE_DRY_BRIDGE, runAgent (run-agent.ts) emits a 'start' event
+    // keyed by the def's own slug, then returns via the dry-bridge branch
+    // BEFORE reaching its 'end'-event lines — so there is no 'end' event to
+    // pair it with here (verified by running the flow and inspecting
+    // logger.events directly). Mirrors flow-runner.test.ts:1266-1278's
+    // "runFlow dispatches the node via execAgent" pattern.
+    assert.ok(
+      events.some((e) => e.event_type === 'start' && e.skill === 'onboarding-agent'),
+      `expected a 'start' event for skill "onboarding-agent" — proves the onboard node actually dispatched through execAgent's real runAgent call, not a stub — got events: ${JSON.stringify(events)}`,
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.message === 'run-agent.spawn-suppressed' &&
+          (e.metadata as Record<string, unknown> | undefined)?.agent_slug === 'onboarding-agent',
+      ),
+      `expected a 'run-agent.spawn-suppressed' log event for agent_slug "onboarding-agent" — got events: ${JSON.stringify(events)}`,
+    );
 
     // (a) contract-check's terminal end event is status:'failed'.
     const endEvents = events.filter(
@@ -371,6 +475,7 @@ test('AT-4 (RED) contract-check gate: a real preflight-FAILING fixture, driven e
     assert.equal(result.cycleOutcome, 'ready-for-review');
   } finally {
     rmSync(fixtureDir, { recursive: true, force: true });
+    decoy.cleanup();
   }
 });
 
@@ -384,21 +489,11 @@ test('AT-4 (RED) contract-check gate: a real preflight-FAILING fixture, driven e
 // regardless of report.ok; one that never emits status:'complete' on green;
 // one whose report event's failing_clause_ids is non-empty on a real pass.
 test("AT-4 companion (GREEN) contract-check gate: a real preflight-PASSING fixture reaches 'complete', not 'failed', and the walk does not terminate early", async () => {
-  const parent = mkdtempSync(join(tmpdir(), 'onboard-flow-gate-green-'));
-  // basename MUST be "mdtoc" — this reuses the REAL, already-committed
-  // brain/projects/mdtoc/profile.md for preflight's C4 brain-sub-wiki check.
-  // See the file-level report for why a hand-written NEW brain profile is
-  // deliberately avoided here.
-  const fixtureDir = join(parent, 'mdtoc');
+  // Fixture precondition (P2-2, including the "basename MUST be mdtoc"
+  // dependency on the real committed brain/projects/mdtoc/profile.md) is
+  // asserted INSIDE makePassingPreflightFixture, before any verdict is read.
+  const { fixtureDir, cleanup } = makePassingPreflightFixture();
   try {
-    mkdirSync(join(fixtureDir, '.forge'), { recursive: true });
-    writeFileSync(join(fixtureDir, 'roadmap.md'), '# Roadmap\n');
-    writeFileSync(join(fixtureDir, '.forge', 'quality_gate_cmd'), 'true\n');
-    writeFileSync(
-      join(fixtureDir, '.gitignore'),
-      ['.forge/work-items/', 'AGENT.md', 'PROMPT.md', 'fix_plan.md'].join('\n') + '\n',
-    );
-
     // Boilerplate rule 4: assert the fixture precondition BEFORE the verdict.
     const preflightCheck = runPreflight(fixtureDir, { forgeRoot: REPO_ROOT });
     assert.equal(
@@ -416,6 +511,27 @@ test("AT-4 companion (GREEN) contract-check gate: a real preflight-PASSING fixtu
     await withDryBridge(() => runFlow({ flow, input, logger, deps }));
 
     const events = logger.events;
+
+    // P1-1: same dangling-ref kill as AT-4 RED (see its comments for the
+    // full rationale) — checked here too since this is the OTHER real
+    // runFlow path through the onboard node.
+    assert.ok(
+      !events.some((e) => e.message === 'flow-runner.unknown-node-skipped'),
+      `expected NO 'flow-runner.unknown-node-skipped' event — got events: ${JSON.stringify(events)}`,
+    );
+    assert.ok(
+      events.some((e) => e.event_type === 'start' && e.skill === 'onboarding-agent'),
+      `expected a 'start' event for skill "onboarding-agent" — got events: ${JSON.stringify(events)}`,
+    );
+    assert.ok(
+      events.some(
+        (e) =>
+          e.message === 'run-agent.spawn-suppressed' &&
+          (e.metadata as Record<string, unknown> | undefined)?.agent_slug === 'onboarding-agent',
+      ),
+      `expected a 'run-agent.spawn-suppressed' log event for agent_slug "onboarding-agent" — got events: ${JSON.stringify(events)}`,
+    );
+
     const endEvents = events.filter(
       (e) => e.event_type === 'end' && (e.metadata as Record<string, unknown> | undefined)?.node_id === 'contract-check',
     );
@@ -443,7 +559,7 @@ test("AT-4 companion (GREEN) contract-check gate: a real preflight-PASSING fixtu
       'a green gate must NOT terminate the walk early — runClosure is only reachable via the terminateEarly branch in this 2-node flow',
     );
   } finally {
-    rmSync(parent, { recursive: true, force: true });
+    cleanup();
   }
 });
 
