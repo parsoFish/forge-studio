@@ -627,7 +627,17 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
 
   let projectRoot: string;
   if (projectArg) {
-    projectRoot = resolve('projects', projectArg);
+    // Parity with the interactive road (runTurnSpecAgent): guard the untrusted
+    // --project value as a SEGMENT under the config-derived projects root,
+    // never folded into the root. See cli/studio-path-guard.ts's CONTRACT.
+    const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
+    const projectGuard = resolveGuardedPath(projectsRoot, [projectArg]);
+    if (!projectGuard.ok) {
+      console.error(`forge ${entry.verb}: --project "${projectArg}" is not a valid project name — ${projectGuard.reason}`);
+      process.exit(2);
+      return;
+    }
+    projectRoot = projectGuard.realPath;
   } else {
     // Only reachable when !requiresProject (architect today) — required-project
     // entries already returned above when --project was absent.
