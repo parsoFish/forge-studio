@@ -72,6 +72,22 @@
  *  Every refusal leaves the filesystem untouched at the layer it owns — the
  *  pinned tests assert the ARTIFACT (file/dir absence), not just the status
  *  code.
+ *
+ *  RECOVERABILITY (T3 fix round, `_wave5/unit-specs/R4-21-phase2.md` P5/P6):
+ *  step 4 advances `status.json` to `phase:'committing'` BEFORE step 5 runs,
+ *  and nothing downstream can leave that write stranded — ANY failure from
+ *  step 5 onward (the turn throwing, the turn not reaching `committed`, the
+ *  landed package missing, or the install step at step 6 refusing —
+ *  including an `installSkillPackage` `alreadyInstalled` collision, which
+ *  this route now surfaces as a 409 instead of discarding the operator's
+ *  draft and reporting success) reverts `status.json` back to
+ *  `phase:'awaiting-review'` through the SAME guarded choke point
+ *  (`guardedWriteSessionStatus`) BEFORE the error response is sent — never a
+ *  new write path, never a raw `fs` call. A successful finalize (step 7)
+ *  never reverts: it ends at `committed`, and a later re-finalize attempt
+ *  correctly 409s again (never a silent bounce back to `awaiting-review`).
+ *  See `revertToAwaitingReview` below for the single call site this fans out
+ *  from.
  * ---------------------------------------------------------------------------
  */
 
@@ -149,6 +165,17 @@ function parseFinalizeHookPermissions(raw: unknown): HookPermissionManifest | { 
 }
 
 // ---------------------------------------------------------------------------
+// Finding 1/2 fix — the two install-step functions below return an OUTCOME
+// instead of writing the HTTP response themselves. `runFinalize` is the ONE
+// place that decides what a failed outcome means (revert phase:'committing'
+// back to "awaiting-review", THEN respond) so every failure path — a bad
+// package, a hook validation refusal, or an id collision — reverts
+// identically, never a bespoke per-branch call.
+// ---------------------------------------------------------------------------
+
+type InstallOutcome = { ok: true } | { ok: false; status: number; error: string };
+
+// ---------------------------------------------------------------------------
 // kind:"skill" — installs the LANDED package (_interactive-library/<id>/) via
 // the SAME installSkillPackage every other skill-install path uses.
 // ---------------------------------------------------------------------------
@@ -158,25 +185,32 @@ async function finalizeSkillFromLanded(
   packageDir: string,
   id: string,
   sessionId: string,
-  res: ServerResponse,
-  origin: string,
-): Promise<void> {
+): Promise<InstallOutcome> {
   try {
     // D-5/D6: always lands a DRAFT (status:'draft', library:false) —
     // approveSkillDraft is never called from this route. Upstream is
     // SERVER-MINTED, never read from the request body.
-    installSkillPackage({
+    const result = installSkillPackage({
       forgeRoot,
       id,
       packageDir,
       upstream: { source: AUTHORING_UPSTREAM_SOURCE, ref: sessionId },
     });
-    sendJson(res, 200, { ok: true, kind: 'skill', id }, origin);
+    // Finding 2 fix: installSkillPackage is idempotent BY DESIGN — an
+    // existing skills/<id>/SKILL.md means it wrote NOTHING and the
+    // operator's authored draft was just silently discarded. The two
+    // sibling callers of this same function (cli/bridge-studio-skills.ts,
+    // cli/bridge-studio-community.ts) both surface `alreadyInstalled`; this
+    // route must too, rather than reporting the discard as a 200 success.
+    if (result.alreadyInstalled) {
+      return { ok: false, status: 409, error: `skill "${id}" already exists — choose a different id` };
+    }
+    return { ok: true };
   } catch (err) {
     // Every installSkillPackage throw (bad slug, no SKILL.md at the package
     // root, cap exceeded, binary file, escaping destination, ...) is a
     // caller-input problem by contract — 400, never a 500 here.
-    sendJson(res, 400, { error: sanitizeError(err) }, origin);
+    return { ok: false, status: 400, error: sanitizeError(err) };
   }
 }
 
@@ -185,23 +219,20 @@ async function finalizeSkillFromLanded(
 // parsed server-side, never from parallel request-body fields.
 // ---------------------------------------------------------------------------
 
-function finalizeHookFromLanded(forgeRoot: string, id: string, res: ServerResponse, origin: string): void {
+function finalizeHookFromLanded(forgeRoot: string, id: string): InstallOutcome {
   const yamlRaw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, 'hook.yaml']);
   if (yamlRaw === null) {
-    sendJson(res, 400, { error: `drafted hook.yaml is missing from the landed package "${id}"` }, origin);
-    return;
+    return { ok: false, status: 400, error: `drafted hook.yaml is missing from the landed package "${id}"` };
   }
 
   let parsed: unknown;
   try {
     parsed = yaml.load(yamlRaw);
   } catch (err) {
-    sendJson(res, 400, { error: `drafted hook.yaml is not valid YAML: ${sanitizeError(err)}` }, origin);
-    return;
+    return { ok: false, status: 400, error: `drafted hook.yaml is not valid YAML: ${sanitizeError(err)}` };
   }
   if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) {
-    sendJson(res, 400, { error: 'drafted hook.yaml must be a YAML mapping (object), not a scalar/array/null' }, origin);
-    return;
+    return { ok: false, status: 400, error: 'drafted hook.yaml must be a YAML mapping (object), not a scalar/array/null' };
   }
   const doc = parsed as Record<string, unknown>;
 
@@ -210,10 +241,11 @@ function finalizeHookFromLanded(forgeRoot: string, id: string, res: ServerRespon
   // hook.yaml's own fields.
   for (const key of FORBIDDEN_HOOK_BINDING_KEYS) {
     if (key in doc) {
-      sendJson(res, 400, {
+      return {
+        ok: false,
+        status: 400,
         error: `drafted hook.yaml must not declare a binding field "${key}" — a library hook definition is generic and host-agnostic; binding happens only in the Agent Builder`,
-      }, origin);
-      return;
+      };
     }
   }
 
@@ -225,46 +257,39 @@ function finalizeHookFromLanded(forgeRoot: string, id: string, res: ServerRespon
     description = reqString(doc, 'description', 'hook.yaml');
     on = oneOf(reqString(doc, 'on', 'hook.yaml'), HOOK_LIFECYCLE_EVENTS, 'hook.yaml', 'on');
   } catch (err) {
-    sendJson(res, 400, { error: sanitizeError(err) }, origin);
-    return;
+    return { ok: false, status: 400, error: sanitizeError(err) };
   }
   const matcher = optString(doc, 'matcher');
 
   const permissions = parseFinalizeHookPermissions(doc['permissions']);
   if ('error' in permissions) {
-    sendJson(res, 400, { error: permissions.error }, origin);
-    return;
+    return { ok: false, status: 400, error: permissions.error };
   }
 
   const scriptRaw = guardedReadFile(forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id, 'scripts', 'run.sh']);
   if (scriptRaw === null) {
-    sendJson(res, 400, { error: `drafted scripts/run.sh is missing from the landed package "${id}"` }, origin);
-    return;
+    return { ok: false, status: 400, error: `drafted scripts/run.sh is missing from the landed package "${id}"` };
   }
 
   // Layer 1 — SHAPE: `hookDir` runs `assertSkillSlug` (charset only).
   try {
     hookDir(id, forgeRoot);
   } catch (err) {
-    sendJson(res, 400, { error: sanitizeError(err) }, origin);
-    return;
+    return { ok: false, status: 400, error: sanitizeError(err) };
   }
 
   // Layer 2 — CONTAINMENT: the SAME guarded choke point
   // POST /api/studio/hooks uses — never a fresh lexical startsWith.
   const yamlGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'hook.yaml']);
   if (!yamlGuard.ok) {
-    sendJson(res, 400, { error: 'path traversal detected' }, origin);
-    return;
+    return { ok: false, status: 400, error: 'path traversal detected' };
   }
   if (yamlGuard.exists) {
-    sendJson(res, 409, { error: `hook "${id}" already exists` }, origin);
-    return;
+    return { ok: false, status: 409, error: `hook "${id}" already exists` };
   }
   const scriptGuard = resolveGuardedPath(hooksDir(forgeRoot), [id, 'scripts', 'run.sh']);
   if (!scriptGuard.ok) {
-    sendJson(res, 400, { error: 'path traversal detected' }, origin);
-    return;
+    return { ok: false, status: 400, error: 'path traversal detected' };
   }
 
   const outDoc: Record<string, unknown> = {
@@ -282,7 +307,39 @@ function finalizeHookFromLanded(forgeRoot: string, id: string, res: ServerRespon
   writeFileSync(scriptGuard.realPath, scriptRaw, 'utf8');
   writeFileSync(yamlGuard.realPath, yaml.dump(outDoc), 'utf8');
 
-  sendJson(res, 200, { ok: true, kind: 'hook', id }, origin);
+  return { ok: true };
+}
+
+// ---------------------------------------------------------------------------
+// Finding 1 fix — revert status.json's phase back to "awaiting-review"
+// through the SAME guarded choke point (guardedWriteSessionStatus) step 4 of
+// runFinalize used to advance it, on ANY failure after that advance. Built
+// from `preCommitStatus` — the status object read in step 3, BEFORE
+// `package_id`/`phase:'committing'` were attached — so a reverted session
+// carries no trace of the failed attempt's id; a later retry starts clean.
+// NEVER called on the success path (P5-3's control: a committed session
+// stays committed).
+//
+// Attack-the-fix check #3 (T3 brief): best-effort. If the revert write
+// ITSELF fails (a second guard rejection, or a raw fs error), this swallows
+// that secondary failure rather than throwing a DIFFERENT error over the one
+// already being reported to the operator. The session then stays at
+// "committing" — the SAME pre-existing bricked state this fix targets, in
+// the (doubly unlikely) case the revert cannot be helped — never a
+// fabricated THIRD phase value: guardedWriteSessionStatus only ever writes
+// `{...preCommitStatus, phase: REQUIRED_PHASE}` or nothing at all.
+// ---------------------------------------------------------------------------
+
+function revertToAwaitingReview(
+  projectsRoot: string,
+  dirSegments: readonly string[],
+  preCommitStatus: InteractiveTurnStatus,
+): void {
+  try {
+    guardedWriteSessionStatus(projectsRoot, dirSegments, { ...preCommitStatus, phase: REQUIRED_PHASE });
+  } catch {
+    /* best-effort — see doc comment above */
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -336,6 +393,20 @@ async function runFinalize(
       return;
     }
 
+    // -------------------------------------------------------------------
+    // Finding 1 fix: from this point on, phase HAS been advanced to
+    // "committing" on disk. Everything below runs inside its OWN
+    // try/catch so ANY failure past this point — an explicit refusal (a
+    // packageId that fails SLUG_RE downstream, a session with no
+    // staging/, an id collision in either library, a malformed drafted
+    // hook.yaml) OR an unexpected throw — reverts status.json back to
+    // "awaiting-review" via `revert()` BEFORE the error response is sent.
+    // `revert` is the ONE call site every failure branch below shares, so
+    // there is exactly one place that decides how to recover — never a
+    // bespoke per-branch write.
+    // -------------------------------------------------------------------
+    const revert = (): void => revertToAwaitingReview(projectsRoot, dirSegments, status);
+
     // sessionGuard.realPath === <projectsRoot realpath>/<project>/_authoring/
     // <sessionId> (resolveGuardedPath's own per-segment join order) — the
     // project root is the same value with the trailing two segments
@@ -343,42 +414,58 @@ async function runFinalize(
     // already fully verified by the walk above.
     const projectRoot = dirname(dirname(sessionGuard.realPath));
 
-    // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
-    // Dynamically imported so a static import never pulls the Claude Agent
-    // SDK into bridge start-up (cli/ui-bridge.ts does not import
-    // cli/agent-run.ts today) — mirrors cli/agent-run.ts's own
-    // project-brain-builder-runner dynamic-import precedent.
-    const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'authoring');
-    if (!descriptor) {
-      sendJson(res, 500, { error: 'authoring session-kind descriptor not found' }, origin);
-      return;
-    }
-    const { runInteractiveTurn } = await import('../orchestrator/interactive-runner.ts');
-    let turnResult: RunInteractiveTurnResult;
     try {
-      turnResult = await runInteractiveTurn(descriptor, { sessionId, projectRoot, forgeRoot: ctx.forgeRoot });
+      // Step 5 — run ONE turn on the SAME spine the CLI dispatches to.
+      // Dynamically imported so a static import never pulls the Claude Agent
+      // SDK into bridge start-up (cli/ui-bridge.ts does not import
+      // cli/agent-run.ts today) — mirrors cli/agent-run.ts's own
+      // project-brain-builder-runner dynamic-import precedent.
+      const descriptor = loadSessionKinds(ctx.forgeRoot).find((d) => d.id === 'authoring');
+      if (!descriptor) {
+        revert();
+        sendJson(res, 500, { error: 'authoring session-kind descriptor not found' }, origin);
+        return;
+      }
+      const { runInteractiveTurn } = await import('../orchestrator/interactive-runner.ts');
+      const turnResult: RunInteractiveTurnResult = await runInteractiveTurn(descriptor, {
+        sessionId,
+        projectRoot,
+        forgeRoot: ctx.forgeRoot,
+      });
+      if (turnResult.phase !== 'committed') {
+        // Never report success on an unfinished turn.
+        revert();
+        sendJson(res, 500, { error: `finalize turn did not reach phase "committed" (got "${turnResult.phase}")` }, origin);
+        return;
+      }
+
+      // Step 6 — read the LANDED package through the guard and install. The
+      // bytes come from here, NEVER from the request body.
+      const landedGuard = resolveGuardedPath(ctx.forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id]);
+      if (!landedGuard.ok || !landedGuard.exists) {
+        revert();
+        sendJson(res, 500, { error: 'landed package not found after commit' }, origin);
+        return;
+      }
+
+      const outcome: InstallOutcome =
+        kind === 'skill'
+          ? await finalizeSkillFromLanded(ctx.forgeRoot, landedGuard.realPath, id, sessionId)
+          : finalizeHookFromLanded(ctx.forgeRoot, id);
+
+      if (!outcome.ok) {
+        // Finding 1 x Finding 2 composition: an id collision (or any other
+        // install-step refusal) must ALSO leave the session recoverable.
+        revert();
+        sendJson(res, outcome.status, { error: outcome.error }, origin);
+        return;
+      }
+
+      // Step 7 — success. `revert` above must NEVER fire on this path.
+      sendJson(res, 200, { ok: true, kind, id }, origin);
     } catch (err) {
+      revert();
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
-      return;
-    }
-    if (turnResult.phase !== 'committed') {
-      // Never report success on an unfinished turn.
-      sendJson(res, 500, { error: `finalize turn did not reach phase "committed" (got "${turnResult.phase}")` }, origin);
-      return;
-    }
-
-    // Step 6 — read the LANDED package through the guard and install. The
-    // bytes come from here, NEVER from the request body.
-    const landedGuard = resolveGuardedPath(ctx.forgeRoot, [INTERACTIVE_LIBRARY_DIRNAME, id]);
-    if (!landedGuard.ok || !landedGuard.exists) {
-      sendJson(res, 500, { error: 'landed package not found after commit' }, origin);
-      return;
-    }
-
-    if (kind === 'skill') {
-      await finalizeSkillFromLanded(ctx.forgeRoot, landedGuard.realPath, id, sessionId, res, origin);
-    } else {
-      finalizeHookFromLanded(ctx.forgeRoot, id, res, origin);
     }
   } catch (err) {
     sendJson(res, 500, { error: sanitizeError(err) }, origin);
