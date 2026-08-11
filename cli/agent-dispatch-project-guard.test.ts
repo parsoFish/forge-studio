@@ -33,7 +33,6 @@ import {
   readFileSync,
   existsSync,
   rmSync,
-  readdirSync,
   realpathSync,
   symlinkSync,
 } from 'node:fs';
