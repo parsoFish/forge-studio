@@ -25,10 +25,11 @@ import { runContractComplianceLoop, formatComplianceReport } from '../cli/contra
 import { composeAgentsMd } from './agents-md-compose.ts';
 import { authorConstraintBlocks } from './constraint-author.ts';
 import { scaffoldGreenfieldProject, listProjectStarters } from './project-create.ts';
-import { assertEnv } from './config.ts';
+import { assertEnv, defaultConfigPath, loadConfig, resolveProjectsDir } from './config.ts';
 import { runInit, ensureLayout, type InitReport } from './init.ts';
 import { worktreeDemoDir } from './demo-paths.ts';
 import { cmdAgent, cmdAgentRun } from '../cli/agent-run.ts';
+import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
 
 const args = process.argv.slice(2);
 const cmd = args[0];
@@ -709,7 +710,24 @@ async function cmdDemo(rest: string[]): Promise<void> {
       process.exit(2);
     }
     const projectArg = flagValue(rest, '--project');
-    const projectRepoPath = projectArg ? resolve('projects', projectArg) : INVOCATION_CWD;
+    // CONTAINMENT (SEC-07): an escaping `--project` must be refused BEFORE it is
+    // resolved into a repo path (a folded `resolve('projects', projectArg)` gives
+    // the guard nothing to vet — see cli/studio-path-guard.ts's CONTRACT). The
+    // untrusted value rides as a guarded SEGMENT under the config-derived
+    // projects root; an unsafe value is a usage error → exit 2 (consistent with
+    // the missing-initiativeId exit 2 above).
+    let projectRepoPath: string;
+    if (projectArg) {
+      const projectsRoot = resolveProjectsDir(resolve(FORGE_ROOT), loadConfig(defaultConfigPath(FORGE_ROOT)));
+      const g = resolveGuardedPath(projectsRoot, [projectArg]);
+      if (!g.ok) {
+        console.error(`forge demo capture: --project "${projectArg}" is not a valid project name — ${g.reason}`);
+        process.exit(2);
+      }
+      projectRepoPath = g.realPath;
+    } else {
+      projectRepoPath = INVOCATION_CWD;
+    }
     const dirFlag = flagValue(rest, '--dir');
     const demoDir = dirFlag ?? worktreeDemoDir(projectRepoPath, initiativeId);
     const jsonPath = join(demoDir, 'demo.json');

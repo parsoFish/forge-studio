@@ -30,6 +30,7 @@ import { runInstructionsTurn } from '../orchestrator/instructions-runner.ts';
 import { runDemoBuilderTurn } from '../orchestrator/demo-builder-runner.ts';
 import type { runProjectBrainTurn } from '../orchestrator/project-brain-builder-runner.ts';
 import { dispatchAgentRun } from '../orchestrator/agent-dispatch.ts';
+import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { isStandaloneBandAgent, runBandAgentStandalone } from '../orchestrator/band-agent-run.ts';
 import { skillsDir } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
@@ -375,14 +376,29 @@ export async function cmdAgentDispatch(
   }
   const { slug, runId, project: projectArg, inputs, sessionDir, costCeilingUsd } = parsed;
 
-  const project = projectArg
-    ? { name: projectArg, repoPath: resolve('projects', projectArg) }
-    : undefined;
-
-  if (project && !existsSync(project.repoPath)) {
-    console.error(`forge agent dispatch: project root not found: ${project.repoPath}`);
-    process.exit(2);
-    return;
+  // CONTAINMENT (SEC-07): the untrusted `--project` value must ride as a guarded
+  // SEGMENT under the config-derived projects root, never folded into the root
+  // (`resolve('projects', projectArg)` gives `resolveGuardedPath` nothing to
+  // vet — see cli/studio-path-guard.ts's CONTRACT). Mirrors the already-guarded
+  // `cmdAgentRun` road in this same file. `project.repoPath` becomes the spawned
+  // agent's working directory (`orchestrator/agent-dispatch.ts`), so an escaping
+  // value here is an out-of-root spawn cwd.
+  let project: { name: string; repoPath: string } | undefined;
+  if (projectArg) {
+    const projectsRoot = resolveProjectsDir(resolve(forgeRoot), loadConfig(defaultConfigPath(forgeRoot)));
+    const projectGuard = resolveGuardedPath(projectsRoot, [projectArg]);
+    if (!projectGuard.ok) {
+      console.error(`forge agent dispatch: --project "${projectArg}" is not a valid project name — ${projectGuard.reason}`);
+      process.exit(2);
+      return;
+    }
+    const repoPath = projectGuard.realPath;
+    if (!existsSync(repoPath)) {
+      console.error(`forge agent dispatch: project root not found: ${repoPath}`);
+      process.exit(2);
+      return;
+    }
+    project = { name: projectArg, repoPath };
   }
 
   const dispatch = deps?.dispatch ?? dispatchAgentRun;
@@ -672,7 +688,14 @@ export async function cmdAgentRun(rest: string[], forgeRoot: string): Promise<vo
  * Scan `projects/*` for `_architect/<sessionId>/PLAN.md` and return the
  * first match's project root. Used when the operator omits `--project`.
  */
-function findSessionProject(sessionId: string): string | null {
+export function findSessionProject(sessionId: string): string | null {
+  // Defense-in-depth (SEC-07 r35): the function is statically proven never to
+  // return an out-of-root path (it only ever returns a real readdir-enumerated
+  // `projects/*` entry), but a malformed session id (separator/`..`/empty) can
+  // never name a legitimate architect session — refuse it early. `isSafeRunId`
+  // (SAFE_RUN_ID_RE + explicit `..` check) still admits a legit
+  // `<iso-with-dashes>-<name>` architect id.
+  if (!isSafeRunId(sessionId)) return null;
   const projectsDir = resolve('projects');
   if (!existsSync(projectsDir)) return null;
   let entries: string[];

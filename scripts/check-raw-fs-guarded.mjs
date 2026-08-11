@@ -588,8 +588,8 @@ export function analyzeModule(text, relFile) {
 // openConcerns (a migrate-to-guardedFile follow-up for T1), never hidden.
 export const ALLOWLIST = [
   // ---- cli/agent-run.ts — CLI subcommand handler (non-HTTP) ----
-  { file: 'cli/agent-run.ts', line: 695, sink: 'existsSync',
-    reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path. (Line-drift remap from 685 — the legacy-dispatch --project guard added the resolveProjectsDir/loadConfig/defaultConfigPath segment-guard inside the cmdAgentRun `if (projectArg)` branch earlier in the file, +10 lines; same function, same probe, byte-for-byte unchanged — verified by sed -n "695p" cli/agent-run.ts.)' },
+  { file: 'cli/agent-run.ts', line: 718, sink: 'existsSync',
+    reason: 'CLI-ARG + BOOL-PROBE: findSessionProject(sessionId) — sessionId is a `forge <verb>` CLI argument (operator trust boundary), NOT an HTTP request; both existsSync calls are boolean status.json/PLAN.md probes under readdir-enumerated projects/*, no bytes read/written through the path. (Line-drift remap from 695 — SEC-07 added the cmdAgentDispatch --project resolveGuardedPath segment-guard, the isSafeRunId import, and the findSessionProject defensive bound earlier in the file, +23 lines; same function, same probe, byte-for-byte unchanged — verified by sed -n "718p" cli/agent-run.ts.)' },
 
   // ---- cli/bridge-studio-kbs.ts ----
   { file: 'cli/bridge-studio-kbs.ts', line: 224, sink: 'existsSync',
@@ -650,8 +650,10 @@ export const ALLOWLIST = [
     reason: 'FILTER-PREDICATE-FP + READDIR-ENUM: kindDir = join(ctx.projectsRoot, <readdir-enumerated project>, `_${descriptor.id}`); `slug` (the taint) appears ONLY in the `.filter(d => d.agent === slug)` predicate that SELECTS descriptors — it is never part of the path VALUE (a server-side session-kind registry id is). Boolean. (Line-drift remap from 1095 — R4-21 WI-2, same cause as the row above.)' },
   { file: 'cli/ui-bridge.ts', line: 1099, sink: 'readdirSync',
     reason: 'FILTER-PREDICATE-FP + READDIR-ENUM: as line 1096 — enumerates sessionIds under the registry-derived kindDir. (Line-drift remap from 1098 — R4-21 WI-2, same cause as the row above.)' },
-  { file: 'cli/ui-bridge.ts', line: 1703, sink: 'existsSync',
-    reason: 'BOOL-PROBE: existsSync(join(ctx.projectsRoot, body.project)) — body.project is SAFE_PROJECT_NAME_RE-validated immediately above (line 1653); boolean 404-gate, no bytes flow. (Line-drift remap from 1701 — R4-21 WI-2 added the import (+1) AND the handleStudioAuthoringRoutes route registration (+1) earlier in the file, +2 lines total; same function, same guard, unchanged.)' },
+  // (SEC-07: the former existsSync(join(ctx.projectsRoot, body.project)) BOOL-PROBE
+  // at line 1703 was REPLACED by guardedFile(ctx.projectsRoot, [body.project],
+  // 'readdir') — a realpath-identity+existence guard, not a raw sink — so this
+  // allowlist row is no longer needed; the sink it audited no longer exists.)
   { file: 'cli/ui-bridge.ts', line: 2053, sink: 'mkdirSync',
     reason: 'LOGDIR-CREATE: spawnAgentTurn — sessionId isSafeRunId-gated at line 1986+ (SAFE_RUN_ID_RE + explicit .. check); `_<logPrefix>-<sessionId>` under trusted forgeRoot/_logs. (Line-drift remap from 2038 — R4-21 phase 2, WI-2 reshaped SPAWN_AGENT_SPECS from `{verb}` to an explicit `argvPrefix` array (the `authoring` row, ADR-043 §3) and expanded its header comment, +15 lines; same function, same guard, unchanged — verified by sed -n "2053p" cli/ui-bridge.ts.)' },
   { file: 'cli/ui-bridge.ts', line: 2461, sink: 'mkdirSync',
@@ -779,6 +781,84 @@ export function applyAllowlist(findings, allowlist = ALLOWLIST) {
   return { kept, suppressed, stale, mistargeted };
 }
 
+// ===========================================================================
+// PROJECTS-ROOT-FOLD RULE (SEC-07) — the dimension the def-use scan above is
+// structurally blind to. The def-use lint proves a request-derived raw fs path
+// came out of the guard; it CANNOT see a value folded into the guard's ROOT
+// (`resolve('projects', projectArg)` / `join(projectsRoot, id)`), because
+// folding an untrusted id into `root` makes every downstream
+// `resolveGuardedPath(root, segs)` tautological — `realpathSync(root)` resolves
+// the untrusted value with NO identity check (see cli/studio-path-guard.ts's
+// CONTRACT). This rule flags a re-introduced fold and fails the build; the
+// untrusted value must ride as a guarded SEGMENT: resolveGuardedPath(projectsRoot,[value]).
+//
+// TOKEN-keyed allowlist (file + folded), NOT line-keyed — an audited residual
+// survives line drift.
+// ===========================================================================
+
+/** Modules where an untrusted `--project`/`body.project`-shaped value could be
+ *  folded into a projects root. Scanned by scanProjectsRootFold below. */
+export const PROJECTS_ROOT_FOLD_MODULES = [
+  'cli/agent-run.ts',
+  'orchestrator/cli.ts',
+  'orchestrator/agent-dispatch.ts',
+  'orchestrator/scheduler.ts',
+];
+
+/**
+ * Scan `text` for `join(...)`/`resolve(...)` calls whose FIRST argument is a
+ * projects root (the string literal 'projects', or the identifiers
+ * `projectsRoot`/`projectsDir`) and whose SECOND argument is an IDENTIFIER (or
+ * member-expression) — i.e. a value folded into the root instead of passed as a
+ * guarded segment. A string-literal 2nd arg (a fixed name) and a single-arg
+ * `resolve('projects')` (no comma) produce NO finding. Comment/import lines are
+ * skipped (crude leading-token filter, same discipline as the sibling ratchet).
+ * Returns [{ file, line, folded, why }] over the ORIGINAL lines.
+ */
+export function scanProjectsRootFold(text, relFile) {
+  const out = [];
+  const lines = text.split('\n');
+  const re = /(?:\b(?:join|resolve))\(\s*(?:['"]projects['"]|projectsRoot|projectsDir)\s*,\s*([A-Za-z_$][\w$.]*)\s*[),]/g;
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trimStart();
+    if (t.startsWith('//') || t.startsWith('*') || t.startsWith('/*') || t.startsWith('import')) continue;
+    re.lastIndex = 0;
+    let m;
+    while ((m = re.exec(lines[i]))) {
+      out.push({
+        file: relFile,
+        line: i + 1,
+        folded: m[1],
+        why: 'untrusted value folded into a projects root — pass it as a guarded segment (resolveGuardedPath(projectsRoot,[value])) or add an audited allowlist row',
+      });
+    }
+  }
+  return out;
+}
+
+/** TOKEN-keyed (file + folded) audited residuals — public-repo-safe, defensive
+ *  facts only. A row survives line drift (it is not line-keyed). */
+export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
+  {
+    file: 'orchestrator/cli.ts',
+    folded: 'target',
+    reason:
+      'resolvePreflightProjectDir dual-mode name-or-path resolver — target is a project NAME or an explicit path, both existsSync-checked; out of the folded-untrusted-name class.',
+  },
+  {
+    file: 'orchestrator/scheduler.ts',
+    folded: 'm.project',
+    reason:
+      'scheduler manifest fallback (m.project_repo_path || resolve(projects,m.project)); the resulting repo path is contained at the write choke point by isContainedProjectRepoPath (cli/manifest-path-guard.ts).',
+  },
+  {
+    file: 'cli/agent-run.ts',
+    folded: 'name',
+    reason:
+      'findSessionProject readdir loop — name is a readdirSync(projectsDir)-enumerated real in-tree directory name, not caller-supplied; join builds a candidate to probe.',
+  },
+];
+
 export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLIST } = {}) {
   const mods = modules ?? targetModules(root);
   const all = [];
@@ -788,7 +868,39 @@ export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLI
     all.push(...analyzeModule(readFileSync(abs, 'utf8'), rel));
   }
   const { kept, suppressed, stale, mistargeted } = applyAllowlist(all, allowlist);
-  return { findings: kept, suppressed, stale, mistargeted, scanned: mods.length, total: all.length };
+
+  // --- projects-root-fold dimension (token-keyed, survives line drift) ---
+  const foldFindings = [];
+  for (const rel of PROJECTS_ROOT_FOLD_MODULES) {
+    const abs = join(root, rel);
+    if (!existsSync(abs)) continue;
+    foldFindings.push(...scanProjectsRootFold(readFileSync(abs, 'utf8'), rel));
+  }
+  const usedFoldKeys = new Set();
+  const keptFold = [];
+  for (const f of foldFindings) {
+    const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((a) => a.file === f.file && a.folded === f.folded);
+    if (row) {
+      usedFoldKeys.add(`${row.file} ${row.folded}`);
+      continue;
+    }
+    keptFold.push(f);
+  }
+  // Fold-allowlist rows matching no finding are STALE — reported non-fatally,
+  // mirroring the line-keyed allowlist's stale handling. (`line` carries a
+  // token marker so main()'s `${s.file}:${s.line}` print stays readable.)
+  const foldStale = PROJECTS_ROOT_FOLD_ALLOWLIST
+    .filter((a) => !usedFoldKeys.has(`${a.file} ${a.folded}`))
+    .map((a) => ({ file: a.file, line: `fold:${a.folded}` }));
+
+  return {
+    findings: [...kept, ...keptFold],
+    suppressed,
+    stale: [...stale, ...foldStale],
+    mistargeted,
+    scanned: mods.length,
+    total: all.length + foldFindings.length,
+  };
 }
 
 function main() {
@@ -807,7 +919,8 @@ function main() {
   if (r.findings.length) {
     console.error(`check-raw-fs-guarded: FAIL — ${r.findings.length} unguarded request-derived raw fs sink(s) in ${r.scanned} request-handling module(s):`);
     for (const f of r.findings) {
-      console.error(`  ✗ ${f.file}:${f.line} ${f.sink}(${f.path}) — ${f.why}`);
+      const label = f.folded !== undefined ? `projects-root-fold [${f.folded}]` : `${f.sink}(${f.path})`;
+      console.error(`  ✗ ${f.file}:${f.line} ${label} — ${f.why}`);
     }
     console.error('');
     console.error('Each must be either:');
