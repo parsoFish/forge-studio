@@ -19,12 +19,45 @@ every route below owns its own `data-page="<name>"` root (+
 `data-page-ready` once its first fetch settles), so this is a per-route
 inventory rather than one shared page-level contract:
 
+- **Home `/`** — the operator's landing dashboard (R6-07), a PURE composition
+  of six existing surfaces (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` +
+  `fetchRuns` + `fetchProjectAttention` — the same fetches Library already
+  makes) through `lib/home-view.ts`'s pure derivation (`buildConstellation`/
+  `buildHomeAttention`); no new endpoint, no bespoke poll loop. Root:
+  `main[data-page="home"][data-page-ready][data-live-count][data-attention-
+  count][data-hex-count]`. Three sections:
+  - `section[data-section="attention-strip"]` — present ONLY when
+    `buildHomeAttention()` returns ≥1 row (a real gated/flagged condition,
+    never rendered on the mere existence of a project). Each row is a real
+    `a[data-attention-item][data-attention-project][data-attention-status]`
+    whose `href` is `/projects/<id>` (the owning project's own page). Home
+    mirrors R4-11-F4's FULL count vocabulary: the row also carries the same five
+    raw `data-attention-<planned|in-flight|gated|merged|flagged>` counts
+    Library's row carries (below), read straight off the same
+    `fetchProjectAttention()` row — so both attention surfaces speak ONE shared
+    DOM vocabulary. Home ADDS `data-attention-status` (the derived
+    `gated|flagged` condition) on top; Library's per-project roster does not
+    carry that derived field (Library shows every project, Home shows only the
+    rows that fired).
+  - `section[data-section="constellation"][data-hex-count]` — one
+    `a.home-hex[data-hex-kind][data-hex-id][data-hex-status]` per flow/agent/
+    project/KB (`data-hex-kind` is `flow|agent|project|kb`), href routing to
+    the owning surface (`/flows/<id>`, `/agents/<id>`, `/projects/<id>`,
+    `/knowledge?id=<id>`). Status (`active|gated|idle`) is ALWAYS derived —
+    never a `.status` field the wire types don't carry (`home-view.ts`'s own
+    declared-data-fails-open discipline); a KB has no live-status source at
+    all and is always `idle`. Empty state:
+    `[data-component="constellation-empty"]`.
+  - `section[data-section="activity"]` wraps a shared `HistoryLedger`
+    (`components/studio/HistoryLedger.tsx`, below) over EVERY run, not
+    filtered to one flow.
+  Journey coverage: `scripts/journeys/home.mjs`.
 - **Library `/library`** — the landing/browse surface: `[data-page="library"][data-page-ready]`,
   one `data-section` per pillar (`orientation`, `projects`, `agents`,
-  `flows`, `kbs`). Moved off `/` by R6-03-F3: `/` is now the **Home** pillar
-  slot and 307-redirects to `/library` until R6-07 fills it with a real Home
-  dashboard (harness entry points navigate straight to `/library` so a recorded
-  clip never flashes the redirect hop). `StudioNav`
+  `flows`, `kbs`). Moved off `/` by R6-03-F3 to make room for Home (above);
+  the interim `/` → `/library` redirect that covered the gap is retired now
+  that R6-07 has landed the real Home dashboard (`scripts/redirect-
+  preservation.test.ts` pins its absence). `StudioNav`
   (`[data-component="studio-nav"]`) now carries SIX `[data-nav]` pillars —
   `home` (`href="/"`), `flows`, `agents`, `projects`, `library`
   (`href="/library"`), `knowledge`. Right after the hero's Operator Pulse panel
@@ -34,7 +67,10 @@ inventory rather than one shared page-level contract:
   `<a href="/projects/<id>">`, every item links through to its project's
   roadmap) carrying `data-attention-planned`, `data-attention-in-flight`,
   `data-attention-gated`, `data-attention-merged`, `data-attention-flagged`
-  counts. Each flow card (`LibraryCard.tsx` `FlowCard`) carries
+  counts — Home (above) now mirrors this same strip on its own landing
+  surface, off the identical `fetchProjectAttention()` aggregate, though with
+  a narrower attribute set (see the Home entry's own note). Each flow card
+  (`LibraryCard.tsx` `FlowCard`) carries
   `data-provenance="ootb"|"operator"` (derived from `flow.origin`) — an OOTB
   seed flow additionally renders a visible `.badge-ootb` span — plus one badge
   per declared trigger — `[data-trigger-badge]` (value is the trigger's `on`

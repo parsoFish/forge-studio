@@ -141,13 +141,28 @@ export default function HomePage() {
           aria-label="Projects needing attention"
           style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 6 }}
         >
-          {homeAttention.map((item) => (
+          {homeAttention.map((item) => {
+            // The raw ProjectAttentionItem behind this fired row — Home mirrors
+            // R4-11-F4's full DOM contract (the same data-attention-* count
+            // vocabulary the Library strip carries) so both attention surfaces
+            // speak ONE shared vocabulary, plus data-attention-status for the
+            // derived condition. Counts come straight from the same
+            // fetchProjectAttention() row, never re-derived.
+            const raw = attention.find((a) => a.projectId === item.projectId);
+            return (
             <a
               key={item.id}
               href={item.href}
               data-attention-item
               data-attention-project={item.projectId}
               data-attention-status={item.status}
+              {...(raw ? {
+                'data-attention-planned': raw.planned,
+                'data-attention-in-flight': raw.inFlight,
+                'data-attention-gated': raw.gated,
+                'data-attention-merged': raw.merged,
+                'data-attention-flagged': raw.flagged,
+              } : {})}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -167,7 +182,8 @@ export default function HomePage() {
               </span>
               <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>open →</span>
             </a>
-          ))}
+            );
+          })}
         </section>
       )}
 
