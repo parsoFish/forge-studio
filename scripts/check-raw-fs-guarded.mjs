@@ -814,6 +814,18 @@ export const PROJECTS_ROOT_FOLD_MODULES = [
  * `resolve('projects')` (no comma) produce NO finding. Comment/import lines are
  * skipped (crude leading-token filter, same discipline as the sibling ratchet).
  * Returns [{ file, line, folded, why }] over the ORIGINAL lines.
+ *
+ * PROVABLE LIMITS (a lexical tripwire, not dataflow — an over-claimed ratchet is
+ * worse than none). It CANNOT see a fold whose root is a differently-named
+ * variable (`resolve(projBase, x)`), a template literal (`` `projects/${x}` ``),
+ * or an aliased `resolve` (`const r = resolve; r('projects', x)`) — those three
+ * evade the regex entirely; the per-site guard contract + the sibling
+ * caller-count ratchet are the backstop. And the allowlist is TOKEN-keyed
+ * (file + folded) for line-drift resilience, which trades precision: a FUTURE
+ * un-audited fold that happens to reuse an allowlisted token in the same file
+ * (e.g. another `resolve('projects', name)` in cli/agent-run.ts) is suppressed
+ * without re-audit. The three current rows are individually audited-honest; a
+ * tighter (count- or context-aware) allowlist key is tracked as a follow-up.
  */
 export function scanProjectsRootFold(text, relFile) {
   const out = [];
