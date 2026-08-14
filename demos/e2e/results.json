@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-14T10:54:54.017Z",
+  "generatedAt": "2026-08-14T11:38:23.043Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -317,7 +317,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 5M (got 2171876)",
+              "msg": "clip skill-edit.webm under 5M (got 2119029)",
               "pass": true
             },
             {
@@ -336,7 +336,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 2171876
+              "sizeBytes": 2119029
             }
           ],
           "pass": true
@@ -362,7 +362,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 5M (got 878021)",
+              "msg": "clip sk-create.webm under 5M (got 887402)",
               "pass": true
             },
             {
@@ -385,7 +385,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 878021
+              "sizeBytes": 887402
             },
             {
               "kind": "frame",
@@ -520,7 +520,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-14T10-39-17-4598a1e7)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-14T11-23-05-f25f64db)",
               "pass": true
             },
             {
@@ -536,7 +536,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 5M (got 2030459)",
+              "msg": "clip skill-agentic.webm under 5M (got 1832879)",
               "pass": true
             },
             {
@@ -566,7 +566,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 2030459
+              "sizeBytes": 1832879
             }
           ],
           "pass": true
@@ -580,7 +580,7 @@
               "pass": true
             },
             {
-              "msg": "SK-6: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T10-39-37-dcca0329?project=mdtoc)",
+              "msg": "SK-6: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T11-23-22-2c147fa3?project=mdtoc)",
               "pass": true
             },
             {
@@ -588,7 +588,7 @@
               "pass": true
             },
             {
-              "msg": "SK-6: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T10-39-37-dcca0329/status.json",
+              "msg": "SK-6: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T11-23-22-2c147fa3/status.json",
               "pass": true
             },
             {
@@ -925,7 +925,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-blocked.webm under 5M (got 767396)",
+              "msg": "clip hook-blocked.webm under 5M (got 715760)",
               "pass": true
             },
             {
@@ -966,7 +966,7 @@
               "kind": "clip",
               "file": "clips/hook-blocked.webm",
               "caption": "Declaring the exfiltration doesn't excuse it: still blocked, approval refused, then an explicit, recorded override — the verdict never clears",
-              "sizeBytes": 767396
+              "sizeBytes": 715760
             }
           ],
           "pass": true
@@ -1032,7 +1032,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-bind.webm under 5M (got 798323)",
+              "msg": "clip hook-bind.webm under 5M (got 781045)",
               "pass": true
             },
             {
@@ -1067,7 +1067,7 @@
               "kind": "clip",
               "file": "clips/hook-bind.webm",
               "caption": "Binding a hook lives only in the Agent Builder — drag it into the dedicated hook zone and save",
-              "sizeBytes": 798323
+              "sizeBytes": 781045
             }
           ],
           "pass": true
@@ -1081,7 +1081,7 @@
               "pass": true
             },
             {
-              "msg": "HK-5: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T10-40-09-99cd96db?project=mdtoc)",
+              "msg": "HK-5: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T11-23-53-033fe64a?project=mdtoc)",
               "pass": true
             },
             {
@@ -1089,7 +1089,7 @@
               "pass": true
             },
             {
-              "msg": "HK-5: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T10-40-09-99cd96db/status.json",
+              "msg": "HK-5: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T11-23-53-033fe64a/status.json",
               "pass": true
             },
             {
@@ -1699,15 +1699,15 @@
               "pass": true
             },
             {
-              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-14T10-40-19-565-9cah\") — same runner as the agent page",
+              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-14T11-24-04-905-31if\") — same runner as the agent page",
               "pass": true
             },
             {
-              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-14T10-40-19-644b7730\")",
+              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-14T11-24-04-47feb7b5\")",
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 5M (got 1505943)",
+              "msg": "clip onboard-form.webm under 5M (got 1527424)",
               "pass": true
             },
             {
@@ -1739,7 +1739,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1505943
+              "sizeBytes": 1527424
             }
           ],
           "pass": true
@@ -1749,7 +1749,7 @@
           "narration": "The dispatch the previous beat fired is not fire-and-forget any more: it opened a real staged session on the shared R2-10 shell. Opening it shows the contract building out stage by stage — contract, instructions, secrets, demo, roadmap — each row derived from the project's own artifacts on disk, with secrets shown by NAME only. The same five rows are served by the project-page data contract R4-12-F1 renders in batch D.",
           "checks": [
             {
-              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-14T10-40-19-644b7730\")",
+              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-14T11-24-04-47feb7b5\")",
               "pass": true
             },
             {
@@ -1819,7 +1819,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 5M (got 1193524)",
+              "msg": "clip onboard-resolve.webm under 5M (got 1261164)",
               "pass": true
             },
             {
@@ -1863,7 +1863,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1193524
+              "sizeBytes": 1261164
             },
             {
               "kind": "frame",
@@ -1916,7 +1916,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 5M (got 852856)",
+              "msg": "clip project-create.webm under 5M (got 849032)",
               "pass": true
             },
             {
@@ -1939,7 +1939,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 852856
+              "sizeBytes": 849032
             },
             {
               "kind": "frame",
@@ -2139,7 +2139,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 5M (got 1562603)",
+              "msg": "clip instr-generate.webm under 5M (got 1478436)",
               "pass": true
             },
             {
@@ -2162,7 +2162,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1562603
+              "sizeBytes": 1478436
             },
             {
               "kind": "frame",
@@ -2201,7 +2201,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 5M (got 936312)",
+              "msg": "clip pbrain-generate.webm under 5M (got 1075152)",
               "pass": true
             },
             {
@@ -2224,7 +2224,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 936312
+              "sizeBytes": 1075152
             },
             {
               "kind": "frame",
@@ -2323,7 +2323,7 @@
               "pass": true
             },
             {
-              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-14T10-38-14Z_INIT-2026-08-14-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-14T10-38-14Z_INIT-2026-08-14-r4-12-ledger-nav\"})",
+              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-14T11-22-04Z_INIT-2026-08-14-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-14T11-22-04Z_INIT-2026-08-14-r4-12-ledger-nav\"})",
               "pass": true
             }
           ],
@@ -2486,7 +2486,7 @@
               "pass": true
             },
             {
-              "msg": "kb-create: the project-brain seeding session is viewable at /sessions/project-brain/2026-08-14T10-43-12-a28547b4?project=mdtoc",
+              "msg": "kb-create: the project-brain seeding session is viewable at /sessions/project-brain/2026-08-14T11-26-53-04cd3c3c?project=mdtoc",
               "pass": true
             },
             {
@@ -2494,7 +2494,7 @@
               "pass": true
             },
             {
-              "msg": "kb-create: data-session-id=\"2026-08-14T10-43-12-a28547b4\" (got \"2026-08-14T10-43-12-a28547b4\")",
+              "msg": "kb-create: data-session-id=\"2026-08-14T11-26-53-04cd3c3c\" (got \"2026-08-14T11-26-53-04cd3c3c\")",
               "pass": true
             },
             {
@@ -2517,7 +2517,7 @@
             {
               "kind": "frame",
               "file": "76-kb-2b-create-session-viewable.png",
-              "caption": "Knowledge — the create hand-off's seeding session, viewable at /sessions/project-brain/2026-08-14T10-43-12-a28547b4 (real project anchor, mdtoc)",
+              "caption": "Knowledge — the create hand-off's seeding session, viewable at /sessions/project-brain/2026-08-14T11-26-53-04cd3c3c (real project anchor, mdtoc)",
               "key": true
             }
           ],
@@ -2540,7 +2540,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 5M (got 810061)",
+              "msg": "clip kb-ingest.webm under 5M (got 788898)",
               "pass": true
             },
             {
@@ -2574,7 +2574,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 810061
+              "sizeBytes": 788898
             },
             {
               "kind": "frame",
@@ -2607,7 +2607,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 5M (got 1468975)",
+              "msg": "clip kb-lint.webm under 5M (got 1535075)",
               "pass": true
             }
           ],
@@ -2626,7 +2626,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1468975
+              "sizeBytes": 1535075
             }
           ],
           "pass": true
@@ -2696,7 +2696,7 @@
               "pass": true
             },
             {
-              "msg": "kb-band-seed: data-session-id=\"2026-08-14T10-43-50-278163f0\" (got \"2026-08-14T10-43-50-278163f0\")",
+              "msg": "kb-band-seed: data-session-id=\"2026-08-14T11-27-31-f30a6d33\" (got \"2026-08-14T11-27-31-f30a6d33\")",
               "pass": true
             },
             {
@@ -2857,7 +2857,7 @@
               "pass": true
             },
             {
-              "msg": "kb-cleanup-launch: POST /api/studio/kbs/:id/cleanup/start hands off a real {sessionId, project} (got sessionId=\"2026-08-14T10-44-21-4d655522\", project=\".kb-journey-scratch-kb-cleanup\")",
+              "msg": "kb-cleanup-launch: POST /api/studio/kbs/:id/cleanup/start hands off a real {sessionId, project} (got sessionId=\"2026-08-14T11-28-02-23e97dd1\", project=\".kb-journey-scratch-kb-cleanup\")",
               "pass": true
             },
             {
@@ -2865,7 +2865,7 @@
               "pass": true
             },
             {
-              "msg": "kb-cleanup-launch: the kb-cleanup session is genuinely reachable at /sessions/kb-cleanup/2026-08-14T10-44-21-4d655522",
+              "msg": "kb-cleanup-launch: the kb-cleanup session is genuinely reachable at /sessions/kb-cleanup/2026-08-14T11-28-02-23e97dd1",
               "pass": true
             },
             {
@@ -3201,7 +3201,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 5M (got 1202389)",
+              "msg": "clip agent-scratch-build.webm under 5M (got 963164)",
               "pass": true
             }
           ],
@@ -3240,7 +3240,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 1202389
+              "sizeBytes": 963164
             }
           ],
           "pass": true
@@ -3306,7 +3306,7 @@
               "pass": true
             },
             {
-              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-14T10-44-56-170-6tme\")",
+              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-14T11-28-36-346-6mkd\")",
               "pass": true
             },
             {
@@ -3354,7 +3354,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 5M (got 983604)",
+              "msg": "clip agent-build.webm under 5M (got 922183)",
               "pass": true
             }
           ],
@@ -3378,7 +3378,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 983604
+              "sizeBytes": 922183
             }
           ],
           "pass": true
@@ -3861,7 +3861,7 @@
           "narration": "The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx's own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client's own claim. No terminal state is reachable under this harness's no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route's `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.",
           "checks": [
             {
-              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-14T10-45-57-916-ff7b\")",
+              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-14T11-29-36-406-oesx\")",
               "pass": true
             },
             {
@@ -3939,7 +3939,7 @@
               "pass": true
             },
             {
-              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-14T10-45-57-916-ff7b) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-14T10-45-57-916-ff7b\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
+              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-14T11-29-36-406-oesx) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-14T11-29-36-406-oesx\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
               "pass": true
             }
           ],
@@ -4224,7 +4224,7 @@
               "pass": true
             },
             {
-              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→243)",
+              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→244)",
               "pass": true
             },
             {
@@ -4232,7 +4232,7 @@
               "pass": true
             },
             {
-              "msg": "J3: node position PERSISTS across reload (x 243 → 243)",
+              "msg": "J3: node position PERSISTS across reload (x 244 → 244)",
               "pass": true
             }
           ],
@@ -4292,7 +4292,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msstnndv, fn-msstnne7, fn-msstnnej, fn-msstnner)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-mssv7r9z, fn-mssv7rac, fn-mssv7ram, fn-mssv7rav)",
               "pass": true
             },
             {
@@ -4384,7 +4384,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 5M (got 3918808)",
+              "msg": "clip flow-scratch-build.webm under 5M (got 3860387)",
               "pass": true
             }
           ],
@@ -4438,7 +4438,7 @@
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate",
-              "sizeBytes": 3918808
+              "sizeBytes": 3860387
             }
           ],
           "pass": true
@@ -4628,7 +4628,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 5M (got 1428510)",
+              "msg": "clip run-idea-interview.webm under 5M (got 1368383)",
               "pass": true
             },
             {
@@ -4647,7 +4647,7 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1428510
+              "sizeBytes": 1368383
             },
             {
               "kind": "frame",
@@ -4798,7 +4798,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 5M (got 1431883)",
+              "msg": "clip run-plan-gate.webm under 5M (got 1316188)",
               "pass": true
             }
           ],
@@ -4813,7 +4813,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1431883
+              "sizeBytes": 1316188
             }
           ],
           "pass": true
@@ -4997,7 +4997,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 5M (got 1696668)",
+              "msg": "clip run-build-monitor.webm under 5M (got 1557136)",
               "pass": true
             }
           ],
@@ -5012,7 +5012,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing",
-              "sizeBytes": 1696668
+              "sizeBytes": 1557136
             }
           ],
           "pass": true
@@ -5178,7 +5178,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 5M (got 1227195)",
+              "msg": "clip run-verdict-gate.webm under 5M (got 1326766)",
               "pass": true
             }
           ],
@@ -5193,7 +5193,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1227195
+              "sizeBytes": 1326766
             }
           ],
           "pass": true
@@ -5289,11 +5289,11 @@
               "pass": true
             },
             {
-              "msg": "R6-05: the just-archived run (2026-08-14T10-38-14Z_INIT-2026-08-14-e2e-toc-write-mode) has its own ledger row",
+              "msg": "R6-05: the just-archived run (2026-08-14T11-22-04Z_INIT-2026-08-14-e2e-toc-write-mode) has its own ledger row",
               "pass": true
             },
             {
-              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-14T10-38-14Z_INIT-2026-08-14-e2e-toc-write-mode\")",
+              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-14T11-22-04Z_INIT-2026-08-14-e2e-toc-write-mode\")",
               "pass": true
             },
             {
@@ -5309,7 +5309,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 5M (got 1516529)",
+              "msg": "clip run-reflect-complete.webm under 5M (got 1520901)",
               "pass": true
             }
           ],
@@ -5341,7 +5341,7 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1516529
+              "sizeBytes": 1520901
             }
           ],
           "pass": true
@@ -5441,7 +5441,7 @@
           "narration": "The same gated run's own standalone detail page — every node on the flow with its own real cost and status, not just the ones a live monitor happens to be showing — reached from the SAME run-rail row every earlier beat in this run has already been clicking.",
           "checks": [
             {
-              "msg": "monitor: run rail row [data-run-id=\"2026-08-14T10-53-01Z_INIT-2026-08-14-e2e-studio-demo\"] present (the reachability starting point)",
+              "msg": "monitor: run rail row [data-run-id=\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\"] present (the reachability starting point)",
               "pass": true
             },
             {
@@ -5457,15 +5457,15 @@
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-14T10-53-01Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-14T10-53-01Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-14T10-53-01Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
@@ -5570,7 +5570,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786704798978\")",
+              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786707415204\")",
               "pass": true
             },
             {
@@ -5578,7 +5578,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786704799205\")",
+              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786707415416\")",
               "pass": true
             }
           ],
@@ -5759,7 +5759,7 @@
               "pass": true
             },
             {
-              "msg": "FOB.3 (fixture precondition): at least one HARD clause fails (got [{\"clause\":\"C1\",\"title\":\"Fast, trustworthy quality gate\",\"hard\":true,\"pass\":false,\"detail\":\"no deterministic test command — need testProcess.local.cmd in .forge/project.json, the .forge/quality_gate_cmd sidecar, or a package.json \\\"test\\\" script (none found)\"},{\"clause\":\"C1b\",\"title\":\"CI merge-boundary net (testProcess.ci)\",\"hard\":false,\"pass\":false,\"detail\":\"no testProcess.ci declared — the merge decision rests on the per-WI gate alone; declare the full CI mirror (cmd/fixCmd/unsetEnv) so a red whole-module baseline can never ship (advisory)\"},{\"clause\":\"C2\",\"title\":\"Scratch hygiene (forge scratch untracked + ignored)\",\"hard\":true,\"pass\":false,\"detail\":\"not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR\"},{\"clause\":\"C4\",\"title\":\"Machine-readable architecture context\",\"hard\":true,\"pass\":false,\"detail\":\"missing roadmap.md (in project root) and brain/projects/journey-onboard-gate-red-4seMZj/profile.md (forge-owned central project brain — Brain 3, ADR 035) — the architect/PM have no queryable structure and will hallucinate paths\"},{\"clause\":\"C5\",\"title\":\"Locked-core constraints declared\",\"hard\":false,\"pass\":false,\"detail\":\"no constraints doc (CLAUDE.md / AGENTS.md / .forge/constraints.md / CONSTRAINTS.md). Advisory: forge cannot honour locked-core mandates it was never told about — strongly recommend a CLAUDE.md.\"},{\"clause\":\"C6\",\"title\":\"Satisfiable merge model\",\"hard\":false,\"pass\":false,\"detail\":\"forge-side-satisfied for the merge model, BUT no GitHub remote found — there is no PR surface for the operator to merge. Add a GitHub `origin` remote. (Advisory.)\"},{\"clause\":\"C7\",\"title\":\"Live-acceptance tier (testProcess.acceptance)\",\"hard\":false,\"pass\":true,\"detail\":\"no acceptance tier declared (n/a — external-resource projects declare testProcess.acceptance; hard enforcement lives in the PM phase + dev-loop requires-env guard)\"},{\"clause\":\"C8\",\"title\":\"Agent-instruction file (AGENTS.md or CLAUDE.md)\",\"hard\":false,\"pass\":false,\"detail\":\"no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint commands at the top and any locked-core mandates (e.g. \\\"never edit tests to pass\\\").\"},{\"clause\":\"C10\",\"title\":\"Documentation parity & release substrate\",\"hard\":false,\"pass\":true,\"detail\":\"no releaseProcess declared — release clause inert (opt-in)\"},{\"clause\":\"DEMO\",\"title\":\"Demo process declared (.forge/project.json demoProcess)\",\"hard\":false,\"pass\":false,\"detail\":\"no .forge/project.json — demoProcess undeclared. Advisory.\"},{\"clause\":\"DEMO-SKILL\",\"title\":\"Generated demo-design skill present (.forge/skills/demo-design/SKILL.md)\",\"hard\":false,\"pass\":true,\"detail\":\"no demoProcess declared yet — demo-design generator not applicable\"},{\"clause\":\"DEMO-ALIGN\",\"title\":\"Demo builds off the test process (alignment recommended)\",\"hard\":false,\"pass\":true,\"detail\":\"no capture steps declared — alignment not applicable\"},{\"clause\":\"BUILD\",\"title\":\"Build process declared (local + remote/CI, distinct from test)\",\"hard\":false,\"pass\":true,\"detail\":\"no buildProcess declared and none inferable (pure-script project) — build clause inert\"},{\"clause\":\"ARTIFACTS\",\"title\":\"Build artifacts gitignored (no stray outputs in the PR)\",\"hard\":false,\"pass\":true,\"detail\":\"no language-specific build-output check (unknown project shape)\"},{\"clause\":\"BRAIN\",\"title\":\"Brain freshness (themes cite live source paths)\",\"hard\":false,\"pass\":true,\"detail\":\"no project brain themes to check\"}])",
+              "msg": "FOB.3 (fixture precondition): at least one HARD clause fails (got [{\"clause\":\"C1\",\"title\":\"Fast, trustworthy quality gate\",\"hard\":true,\"pass\":false,\"detail\":\"no deterministic test command — need testProcess.local.cmd in .forge/project.json, the .forge/quality_gate_cmd sidecar, or a package.json \\\"test\\\" script (none found)\"},{\"clause\":\"C1b\",\"title\":\"CI merge-boundary net (testProcess.ci)\",\"hard\":false,\"pass\":false,\"detail\":\"no testProcess.ci declared — the merge decision rests on the per-WI gate alone; declare the full CI mirror (cmd/fixCmd/unsetEnv) so a red whole-module baseline can never ship (advisory)\"},{\"clause\":\"C2\",\"title\":\"Scratch hygiene (forge scratch untracked + ignored)\",\"hard\":true,\"pass\":false,\"detail\":\"not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR\"},{\"clause\":\"C4\",\"title\":\"Machine-readable architecture context\",\"hard\":true,\"pass\":false,\"detail\":\"missing roadmap.md (in project root) and brain/projects/journey-onboard-gate-red-t0SkSQ/profile.md (forge-owned central project brain — Brain 3, ADR 035) — the architect/PM have no queryable structure and will hallucinate paths\"},{\"clause\":\"C5\",\"title\":\"Locked-core constraints declared\",\"hard\":false,\"pass\":false,\"detail\":\"no constraints doc (CLAUDE.md / AGENTS.md / .forge/constraints.md / CONSTRAINTS.md). Advisory: forge cannot honour locked-core mandates it was never told about — strongly recommend a CLAUDE.md.\"},{\"clause\":\"C6\",\"title\":\"Satisfiable merge model\",\"hard\":false,\"pass\":false,\"detail\":\"forge-side-satisfied for the merge model, BUT no GitHub remote found — there is no PR surface for the operator to merge. Add a GitHub `origin` remote. (Advisory.)\"},{\"clause\":\"C7\",\"title\":\"Live-acceptance tier (testProcess.acceptance)\",\"hard\":false,\"pass\":true,\"detail\":\"no acceptance tier declared (n/a — external-resource projects declare testProcess.acceptance; hard enforcement lives in the PM phase + dev-loop requires-env guard)\"},{\"clause\":\"C8\",\"title\":\"Agent-instruction file (AGENTS.md or CLAUDE.md)\",\"hard\":false,\"pass\":false,\"detail\":\"no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint commands at the top and any locked-core mandates (e.g. \\\"never edit tests to pass\\\").\"},{\"clause\":\"C10\",\"title\":\"Documentation parity & release substrate\",\"hard\":false,\"pass\":true,\"detail\":\"no releaseProcess declared — release clause inert (opt-in)\"},{\"clause\":\"DEMO\",\"title\":\"Demo process declared (.forge/project.json demoProcess)\",\"hard\":false,\"pass\":false,\"detail\":\"no .forge/project.json — demoProcess undeclared. Advisory.\"},{\"clause\":\"DEMO-SKILL\",\"title\":\"Generated demo-design skill present (.forge/skills/demo-design/SKILL.md)\",\"hard\":false,\"pass\":true,\"detail\":\"no demoProcess declared yet — demo-design generator not applicable\"},{\"clause\":\"DEMO-ALIGN\",\"title\":\"Demo builds off the test process (alignment recommended)\",\"hard\":false,\"pass\":true,\"detail\":\"no capture steps declared — alignment not applicable\"},{\"clause\":\"BUILD\",\"title\":\"Build process declared (local + remote/CI, distinct from test)\",\"hard\":false,\"pass\":true,\"detail\":\"no buildProcess declared and none inferable (pure-script project) — build clause inert\"},{\"clause\":\"ARTIFACTS\",\"title\":\"Build artifacts gitignored (no stray outputs in the PR)\",\"hard\":false,\"pass\":true,\"detail\":\"no language-specific build-output check (unknown project shape)\"},{\"clause\":\"BRAIN\",\"title\":\"Brain freshness (themes cite live source paths)\",\"hard\":false,\"pass\":true,\"detail\":\"no project brain themes to check\"}])",
               "pass": true
             },
             {
@@ -5771,7 +5771,7 @@
               "pass": true
             },
             {
-              "msg": "FOB.3: a REAL event log landed on disk at _logs/2026-08-14T10-38-14Z_INIT-2026-08-14-onboard-preflight-red/events.jsonl — never hand-authored",
+              "msg": "FOB.3: a REAL event log landed on disk at _logs/2026-08-14T11-22-04Z_INIT-2026-08-14-onboard-preflight-red/events.jsonl — never hand-authored",
               "pass": true
             },
             {
@@ -5779,7 +5779,7 @@
               "pass": true
             },
             {
-              "msg": "FOB.3: the seeded run is selected as active (data-active-run=\"2026-08-14T10-38-14Z_INIT-2026-08-14-onboard-preflight-red\")",
+              "msg": "FOB.3: the seeded run is selected as active (data-active-run=\"2026-08-14T11-22-04Z_INIT-2026-08-14-onboard-preflight-red\")",
               "pass": true
             },
             {
@@ -5937,7 +5937,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its DAG node; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the roadmap node itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 5M (got 1219712)",
+              "msg": "clip roadmap-drive.webm under 5M (got 1209760)",
               "pass": true
             },
             {
@@ -5962,7 +5962,7 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the dependency DAG, toggles a finished initiative’s card, then eyes the \"Start development\" trigger on the initiative queued up next",
-              "sizeBytes": 1219712
+              "sizeBytes": 1209760
             },
             {
               "kind": "frame",
@@ -6057,7 +6057,7 @@
               "pass": true
             },
             {
-              "msg": "clip showcase-entry.webm under 5M (got 767548)",
+              "msg": "clip showcase-entry.webm under 5M (got 810288)",
               "pass": true
             }
           ],
@@ -6077,7 +6077,7 @@
               "kind": "clip",
               "file": "clips/showcase-entry.webm",
               "caption": "From the project page — \"Open showcase\" leads straight into the project's standing demo evidence.",
-              "sizeBytes": 767548
+              "sizeBytes": 810288
             }
           ],
           "pass": true
@@ -6267,7 +6267,7 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 5M (got 1723927)",
+              "msg": "clip demo-generate.webm under 5M (got 1751006)",
               "pass": true
             }
           ],
@@ -6287,7 +6287,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1723927
+              "sizeBytes": 1751006
             }
           ],
           "pass": true
