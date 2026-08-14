@@ -730,8 +730,12 @@ export async function handleStudioRoutes(
         return true;
       }
 
+      // forge-3oq review: this is a SECOND construction site for the same
+      // flow descriptor `loadAllFlows` builds for the list route above —
+      // map it through the identical shared `provenanceOfOrigin` mapping so
+      // list and detail can never disagree.
       const flow = loadFlowDefinition(guarded.realPath);
-      sendJson(res, 200, { flow }, origin);
+      sendJson(res, 200, { flow: { ...flow, provenance: provenanceOfOrigin(flow.origin) } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

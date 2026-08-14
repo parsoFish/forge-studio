@@ -580,9 +580,10 @@ export type Flow = {
    * `app/library/page.tsx`), but provenance itself now comes from the wire,
    * never re-derived from `origin` client-side. Optional on the TYPE (not
    * the wire payload) so pre-existing empty/fallback Flow literals elsewhere
-   * in forge-ui (e.g. `EMPTY_FLOW`) keep compiling; `fetchStudioFlows`
-   * always attaches a real value (`'unknown'` at worst) for every flow that
-   * actually came off the wire.
+   * in forge-ui (e.g. `EMPTY_FLOW`) keep compiling; both `fetchStudioFlows`
+   * (list) and `fetchFlow` (detail — forge-3oq review) always attach a real
+   * value (`'unknown'` at worst) for every flow that actually came off the
+   * wire.
    */
   provenance?: Provenance;
 };
@@ -648,11 +649,14 @@ export type Kb = {
   lint: KbLintSummary | null;
   /**
    * forge-3oq: server-sourced provenance (see `Provenance`'s header above).
-   * REQUIRED (not optional) — every KB that reaches the client came through
-   * `fetchStudioKbs`'s parser, which always attaches a real value
-   * (`'unknown'` at worst); there is no legitimate "KB with no provenance
-   * opinion" state the way there is for a bare fallback Flow/Agent/Project
-   * literal elsewhere in forge-ui.
+   * REQUIRED (not optional) — every KB that reaches the client passes
+   * through `parseProvenance` at its wire boundary, always attaching a real
+   * value (`'unknown'` at worst), whether it arrived via `fetchStudioKbs`
+   * (list) or `fetchKb` (detail — forge-3oq review closed the gap where the
+   * detail route cast the wire value straight through instead of parsing
+   * it); there is no legitimate "KB with no provenance opinion" state the
+   * way there is for a bare fallback Flow/Agent/Project literal elsewhere in
+   * forge-ui.
    */
   provenance: Provenance;
 };
@@ -1089,14 +1093,29 @@ export async function fetchStudioKbs(): Promise<Kb[]> {
   }));
 }
 
-/** Fetch a single KB with its graph and health. Returns null if not found. */
+/**
+ * Fetch a single KB with its graph and health. Returns null if not found.
+ *
+ * `body.kb` arrives via `studioGet`'s unchecked `as T` cast (same as every
+ * other wire boundary in this module) — `provenance` and `lint` are
+ * REAL-parsed here through the same `parseProvenance`/`parseKbLintSummary`
+ * helpers `fetchStudioKbs` uses (forge-3oq review), so a detail-fetched KB
+ * can never carry a garbage or absent wire value straight through despite
+ * `Kb.provenance`/`Kb.lint` being declared REQUIRED.
+ */
 export async function fetchKb(id: string): Promise<KbDetail | null> {
   const body = await studioGet<{ kb?: Kb; graph?: KbGraph; health?: KbHealth } | null>(
     `/api/studio/kbs/${encodeURIComponent(id)}`,
     null,
   );
   if (!body?.kb || !body.graph || !body.health) return null;
-  return { kb: body.kb, graph: body.graph, health: body.health };
+  const rawKb = body.kb as unknown as Record<string, unknown>;
+  const kb: Kb = {
+    ...body.kb,
+    provenance: parseProvenance(rawKb['provenance']),
+    lint: parseKbLintSummary(rawKb['lint']),
+  };
+  return { kb, graph: body.graph, health: body.health };
 }
 
 /** Fetch a single KB node article. Returns null if not found. */
@@ -1426,13 +1445,21 @@ export async function createGreenfieldProject(input: {
   };
 }
 
-/** Fetch a single flow definition by id. */
+/**
+ * Fetch a single flow definition by id. `provenance` is REAL-parsed through
+ * the same `parseProvenance` helper `fetchStudioFlows` uses (forge-3oq
+ * review) rather than cast straight through — matches the fix at `fetchKb`.
+ */
 export async function fetchFlow(id: string): Promise<Flow | null> {
   const body = await studioGet<{ flow?: Flow } | null>(
     `/api/studio/flows/${encodeURIComponent(id)}`,
     null,
   );
-  return body?.flow ?? null;
+  if (!body?.flow) return null;
+  return {
+    ...body.flow,
+    provenance: parseProvenance((body.flow as unknown as Record<string, unknown>)['provenance']),
+  };
 }
 
 /** Save (PUT) a flow definition by id. Bumps version server-side. */

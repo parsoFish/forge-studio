@@ -29,7 +29,7 @@ import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from './stu
 import matter from 'gray-matter';
 
 import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
-import { provenanceOfOrigin } from './studio-provenance.ts';
+import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
@@ -75,6 +75,12 @@ type KbWithCounts = {
    *  every pre-existing brain that predates the stamp, an honest gap. */
   origin?: string;
   counts: { index: number; themes: number; raw: number };
+  /** Derived from `origin` via the ONE shared `provenanceOfOrigin` mapping,
+   *  attached HERE inside `loadKbDescriptors` (forge-3oq review) so every
+   *  caller of the loader — list, detail, resolve-node, delete, guidance —
+   *  inherits it and none can independently forget it. Never persisted;
+   *  recomputed on every call. */
+  provenance: Provenance;
 };
 
 function countLayerFiles(dir: string): number {
@@ -99,65 +105,6 @@ function subDirs(dir: string): string[] {
   } catch {
     return [];
   }
-}
-
-/**
- * Walk brain/ for kb.yaml files and enrich each with layer counts.
- *
- * Scans every direct sub-directory of brain/ (the top-level brains — cycles,
- * forge-dev) AND every sub-directory of brain/projects/ (the central per-project
- * brains, ADR 035 — gitpulse, mdtoc, …). Without the second pass, project brains
- * are invisible in Studio's KB graph even though the reflector writes to them.
- */
-export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
-  const brainRoot = join(resolve(forgeRoot), 'brain');
-  if (!existsSync(brainRoot)) return [];
-
-  const result: KbWithCounts[] = [];
-
-  // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
-  // so a symlinked `brain/<id>` DIRECTORY never reaches here — but that
-  // accident says nothing about the LEAF. A genuinely real `brain/<id>/` whose
-  // `kb.yaml` is a symlink was confirmed live disclosing the outside file's
-  // contents verbatim in this route's 200 response, because this function read
-  // `kb.yaml` with no guard at all and every other KB route's fix went in
-  // around it. `base` is the fixed containment root and `name` is its own
-  // segment (never folded into the root — ./studio-path-guard.ts, CONTRACT).
-  const pushFrom = (base: string, name: string): void => {
-    const yamlGuard = resolveGuardedPath(base, [name, 'kb.yaml']);
-    if (!yamlGuard.ok || !yamlGuard.exists) return;
-    try {
-      const kb = loadKbDescriptor(yamlGuard.realPath);
-      // Each layer path is independently guarded — a real kb.yaml is no
-      // warrant for a symlinked `themes/` or `_raw/` beside it.
-      const layer = (tail: string): string | null => {
-        const g = resolveGuardedPath(base, [name, tail]);
-        return g.ok && g.exists ? g.realPath : null;
-      };
-      const indexPath = layer('INDEX.md');
-      const themesPath = layer('themes');
-      const rawPath = layer('_raw');
-      const counts = {
-        index: indexPath ? 1 : 0,
-        themes: themesPath ? countLayerFiles(themesPath) : 0,
-        raw: rawPath ? countLayerFiles(rawPath) : 0,
-      };
-      result.push({ ...kb, counts });
-    } catch {
-      // Skip unreadable kb.yaml
-    }
-  };
-
-  // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
-  // own, so it is naturally skipped here).
-  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
-  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
-  // a SECOND containment root and gets the identical treatment — a fix that
-  // hardens only the primary root leaves the fallback wide open.
-  const projectsRoot = join(brainRoot, 'projects');
-  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
-
-  return result;
 }
 
 // ---------------------------------------------------------------------------
@@ -704,6 +651,75 @@ function newProjectBrainSessionId(): string {
 }
 
 /**
+ * Walk brain/ for kb.yaml files and enrich each with layer counts.
+ *
+ * Scans every direct sub-directory of brain/ (the top-level brains — cycles,
+ * forge-dev) AND every sub-directory of brain/projects/ (the central per-project
+ * brains, ADR 035 — gitpulse, mdtoc, …). Without the second pass, project brains
+ * are invisible in Studio's KB graph even though the reflector writes to them.
+ *
+ * Sited here (rather than beside the other list-building helpers above) so
+ * this declaration is immediately followed by a top-level `export` — the
+ * exact structural shape `cli/studio-provenance.test.ts`'s AT-10 walks to
+ * prove `provenanceOfOrigin(` is called INSIDE this function and nowhere
+ * else (a `function` declaration hoists, so this relocation changes nothing
+ * about when or how it runs).
+ */
+export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
+  const brainRoot = join(resolve(forgeRoot), 'brain');
+  if (!existsSync(brainRoot)) return [];
+
+  const result: KbWithCounts[] = [];
+
+  // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
+  // so a symlinked `brain/<id>` DIRECTORY never reaches here — but that
+  // accident says nothing about the LEAF. A genuinely real `brain/<id>/` whose
+  // `kb.yaml` is a symlink was confirmed live disclosing the outside file's
+  // contents verbatim in this route's 200 response, because this function read
+  // `kb.yaml` with no guard at all and every other KB route's fix went in
+  // around it. `base` is the fixed containment root and `name` is its own
+  // segment (never folded into the root — ./studio-path-guard.ts, CONTRACT).
+  const pushFrom = (base: string, name: string): void => {
+    const yamlGuard = resolveGuardedPath(base, [name, 'kb.yaml']);
+    if (!yamlGuard.ok || !yamlGuard.exists) return;
+    try {
+      const kb = loadKbDescriptor(yamlGuard.realPath);
+      // Each layer path is independently guarded — a real kb.yaml is no
+      // warrant for a symlinked `themes/` or `_raw/` beside it.
+      const layer = (tail: string): string | null => {
+        const g = resolveGuardedPath(base, [name, tail]);
+        return g.ok && g.exists ? g.realPath : null;
+      };
+      const indexPath = layer('INDEX.md');
+      const themesPath = layer('themes');
+      const rawPath = layer('_raw');
+      const counts = {
+        index: indexPath ? 1 : 0,
+        themes: themesPath ? countLayerFiles(themesPath) : 0,
+        raw: rawPath ? countLayerFiles(rawPath) : 0,
+      };
+      // forge-3oq review: attach provenance HERE, the single construction
+      // site — never at an individual route (see the `provenance` field's
+      // doc comment on KbWithCounts above).
+      result.push({ ...kb, counts, provenance: provenanceOfOrigin(kb.origin) });
+    } catch {
+      // Skip unreadable kb.yaml
+    }
+  };
+
+  // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
+  // own, so it is naturally skipped here).
+  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
+  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
+  // a SECOND containment root and gets the identical treatment — a fix that
+  // hardens only the primary root leaves the fallback wide open.
+  const projectsRoot = join(brainRoot, 'projects');
+  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
+
+  return result;
+}
+
+/**
  * R1-06 WI-2 review (MAJOR 2): dot-prefixed anchor for a NON-project KB
  * seeding session's `projects/<anchor>/_project-brain/<sid>/` directory. A
  * flow/unique-bound KB has no natural project home, so anchoring it under the
@@ -753,11 +769,9 @@ export async function handleStudioKbRoutes(
     try {
       // forge-3oq: honest per-kb provenance, derived per request from the
       // real (optional) origin: stamp on kb.yaml via the ONE shared mapping
-      // — never a second, driftable inline comparison.
-      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot)).map((kb) => ({
-        ...kb,
-        provenance: provenanceOfOrigin(kb.origin),
-      }));
+      // — attached inside loadKbDescriptors itself (forge-3oq review), so
+      // this route no longer needs its own copy.
+      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot));
       sendJson(res, 200, { kbs }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
