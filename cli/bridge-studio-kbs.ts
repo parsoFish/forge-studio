@@ -411,10 +411,27 @@ function deferToNextTick(): Promise<void> {
   return new Promise((resolveTick) => setTimeout(resolveTick, CONSOLIDATE_DISPATCH_DEFER_MS));
 }
 
-function enqueueConsolidate(kbId: string, run: () => Promise<void>): void {
+/**
+ * Exported (cli-side, uncapped — ADR 042) for the R4-19-F2 DEFECT-A fix:
+ * the kb-cleanup `apply` route (cli/ui-bridge.ts) must route its own
+ * `runBrainConsolidateNow` dispatch through this SAME per-kbId queue the
+ * `maintenance` op=consolidate route already uses — see `runBrainConsolidateNow`'s
+ * own doc comment above ("Always invoked via enqueueConsolidate, never
+ * directly"). Returns the queued run's own `Promise<void>` (always
+ * RESOLVES, never rejects — `run()`'s own errors are caught internally, per
+ * the comment on the swallowed `.catch` below) so a caller that must know
+ * when its OWN dispatch has actually finished (apply writes `phase:applied`
+ * only after the drain completes) can `await` it; the pre-existing
+ * `maintenance` route stays fire-and-forget by simply not awaiting the
+ * returned promise — this change is additive, not a behavior change for
+ * that caller.
+ */
+export function enqueueConsolidate(kbId: string, run: () => Promise<void>): Promise<void> {
   const prior = consolidateQueues.get(kbId) ?? Promise.resolve();
   const next = prior.then(() => deferToNextTick().then(run), () => deferToNextTick().then(run));
-  consolidateQueues.set(kbId, next.catch(() => { /* queue continuation only; each run's own errors are already handled inside it */ }));
+  const queued = next.catch(() => { /* queue continuation only; each run's own errors are already handled inside it */ });
+  consolidateQueues.set(kbId, queued);
+  return queued;
 }
 
 /**

@@ -69,13 +69,14 @@ import {
   loadKbDescriptors,
   computeAgentCleanupFindings,
   runBrainConsolidateNow,
+  enqueueConsolidate,
   KB_SEEDING_ANCHOR_PREFIX,
 } from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
@@ -4279,17 +4280,51 @@ async function handleDemoBuilder(
   // otherwise — belt-and-suspenders on top of the turn spine's own refusal,
   // never trusting a single enforcement point for an approval boundary).
   //
-  // The KB to drain is read from the session's OWN recorded `kb_id`
-  // (status.json), never the URL's `:id` segment — the session is the
-  // authoritative record of which KB its approved plan is for; trusting the
-  // URL instead would let a caller with a legitimate {project, sessionId}
-  // point the drain at an unrelated KB by varying the path alone.
+  // SECURITY INVARIANT (do not regress — AT-13): the KB to drain is read
+  // from the session's OWN recorded `kb_id` (status.json), never the URL's
+  // `:id` segment — the session is the authoritative record of which KB its
+  // approved plan is for; trusting the URL instead would let a caller with
+  // a legitimate {project, sessionId} point the drain at an unrelated KB by
+  // varying the path alone. The `:id` == `status.kb_id` equality check
+  // below (DEFECT B) makes the two identical by construction from this
+  // point on — that does NOT make it safe to swap the drain's source to
+  // `:id`; see the comment at the actual drain call site.
   const kbCleanupApplyMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/apply$/);
   if (method === 'POST' && kbCleanupApplyMatch) {
     try {
+      // DEFECT B (adversarial-review fix): the URL's ":id" was parsed and
+      // never referenced anywhere in this handler — ANY value, including a
+      // bogus or traversal-shaped one, reached the session lookup below and
+      // silently 200'd. Validated FIRST — a cheap format check (SLUG_RE, no
+      // I/O), before the request body is even read — mirroring the sibling
+      // /cleanup/start route's own first check, ~40 lines above.
+      const urlKbId = decodeURIComponent(kbCleanupApplyMatch[1]);
+      if (!SLUG_RE.test(urlKbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+
       const body = (await readJson(req)) as { project?: unknown; sessionId?: unknown };
-      if (typeof body.project !== 'string' || body.project.length === 0 || typeof body.sessionId !== 'string' || body.sessionId.length === 0) {
+      if (typeof body.project !== 'string' || typeof body.sessionId !== 'string') {
         sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      // DEFECT B: `project`/`sessionId` gain the SAME charset+length
+      // validation cli/bridge-studio-sessions.ts's stated convention
+      // applies to its own session-shell route — BOTH checked before any fs
+      // call. Reused verbatim (not re-implemented) via that file's own
+      // exported helpers, so the KB-seeding dot-anchor carve-out
+      // (`.kb-<id>` project values — every non-project-bound kb-cleanup
+      // session in this file anchors under one) stays defined in exactly
+      // one place.
+      const projectReason = invalidProjectReason(body.project);
+      if (projectReason !== null) {
+        sendJson(res, 400, { error: projectReason }, origin);
+        return true;
+      }
+      const sessionIdReason = invalidSessionIdReason(body.sessionId);
+      if (sessionIdReason !== null) {
+        sendJson(res, 400, { error: sessionIdReason }, origin);
         return true;
       }
       const { project, sessionId } = body;
@@ -4301,14 +4336,30 @@ async function handleDemoBuilder(
         sendJson(res, 404, { error: 'session not found', sessionId, project }, origin);
         return true;
       }
-      if (status.phase !== 'awaiting-approval') {
-        sendJson(res, 409, { error: `session "${sessionId}" is not awaiting-approval (current phase: "${status.phase}")` }, origin);
-        return true;
-      }
       if (typeof status.kb_id !== 'string') {
         sendJson(res, 500, { error: `kb-cleanup apply: session "${sessionId}" status.json has no string "kb_id"` }, origin);
         return true;
       }
+      // DEFECT B: the URL's ":id" must name the SAME kb this session
+      // actually belongs to. A well-formed but MISMATCHED id is a 404 — no
+      // (kbId, project, sessionId) triple names this pairing — never a
+      // silent drain of whichever kb the session happens to carry. Checked
+      // BEFORE the phase gate below: 409 is reserved for a
+      // CORRECTLY-identified resource in the wrong state, which this
+      // request is not yet proven to be.
+      if (urlKbId !== status.kb_id) {
+        sendJson(res, 404, { error: `session "${sessionId}" does not belong to kb "${urlKbId}"`, sessionId, project }, origin);
+        return true;
+      }
+      if (status.phase !== 'awaiting-approval') {
+        sendJson(res, 409, { error: `session "${sessionId}" is not awaiting-approval (current phase: "${status.phase}")` }, origin);
+        return true;
+      }
+      // The drain's SOLE source of truth is `status.kb_id`, never `urlKbId`
+      // — see the SECURITY INVARIANT comment at this route's own header.
+      // The equality check just above makes the two values identical by
+      // construction from here on, which is exactly why a reviewer cannot
+      // observe a swap to `urlKbId` from outside (AT-13) — do not make one.
       const kbId = status.kb_id;
 
       // Runs the KB's existing local consolidate drain — the SAME
@@ -4320,8 +4371,19 @@ async function handleDemoBuilder(
       // cli/bridge-studio-kbs.ts:502) — running deterministic fixes only —
       // so this route needs no dry-bridge guard of its own (see
       // cli/dry-bridge.ts's `exempt-local` row for this route).
+      //
+      // DEFECT A fix: routed through `enqueueConsolidate` — the SAME
+      // per-kbId serialization queue the sibling maintenance op=consolidate
+      // route uses — instead of calling `runBrainConsolidateNow` directly.
+      // That function's own doc comment requires this: "Always invoked via
+      // enqueueConsolidate (never directly)". Without it, two applies (or
+      // an apply racing the Consolidate button) against the same kbId could
+      // race-edit the same on-disk category-index file. Awaited (unlike the
+      // maintenance route's fire-and-forget dispatch) so this route can
+      // still write `phase: 'applied'` and respond only once the QUEUED run
+      // has actually finished, not merely been enqueued.
       const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
-      await runBrainConsolidateNow(ctx.forgeRoot, kbId, runId);
+      await enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId));
 
       const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
       if (written === null) {

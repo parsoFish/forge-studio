@@ -99,7 +99,7 @@
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
-import { join, sep } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { parseManifest } from '../manifest.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
@@ -726,13 +726,39 @@ const CLEANUP_PLAN_FILENAME = 'cleanup-plan.md';
  *  the caller may (and in production does) supply richer Finding objects. */
 export type CleanupFinding = { readonly kind: string; readonly file: string };
 
+/** R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — the scanned-domain signal.
+ *  Additive-optional on `deriveSessionArtifact`'s input (ADR-042
+ *  disclose-not-park), threaded through to `deriveCleanupPlan`, mirroring
+ *  how `contractStages` is already threaded. `forgeRoot` is the absolute
+ *  root a repo-relative plan `target` resolves against; `brainDir` is the
+ *  absolute directory the caller's `cleanupFindings` were ACTUALLY scanned
+ *  from (cli/bridge-studio-sessions.ts resolves this via `resolveKbBrainDir`
+ *  at the same call site that already computes `cleanupFindings`). Presence
+ *  of this field is what makes `'cleared'` derivable at all — see
+ *  `CleanupPlanAction.state`'s own doc for the full three-way contract. */
+export type CleanupScan = { readonly forgeRoot: string; readonly brainDir: string };
+
 export type CleanupPlanAction = {
   readonly kind: string;
   readonly target: string;
   readonly proposal: string;
-  /** DERIVED per call, never stored — 'open' iff a matching (kind, target)
-   *  entry is present in the caller-supplied `cleanupFindings` THIS call. */
-  readonly state: 'open' | 'cleared';
+  /** DERIVED per call, never stored (R4-19-F2 P1 fix — declared-data-fails-
+   *  open: a REAL live run showed a plan where every action already looked
+   *  'cleared' while both findings were provably still live, because an
+   *  absolute `Finding.file` was joined against a repo-relative plan
+   *  `target` with NO normalization, so nothing ever matched and "no match"
+   *  was silently read as 'cleared'). Computed fresh on EVERY call, by
+   *  precedence:
+   *    'open'    — a live finding matches the action (kind + normalized
+   *                target — see `findingMatchesAction`).
+   *    'cleared' — no match, AND the caller supplied `cleanupScan`, AND the
+   *                action's normalized target resolves INSIDE
+   *                `cleanupScan.brainDir` — absence is then real evidence:
+   *                the region was scanned and came back clean.
+   *    'unknown' — no match and coverage cannot be established: `cleanupScan`
+   *                was omitted, or the target resolves OUTSIDE `brainDir`.
+   *                The FAIL-SAFE default — never silently 'cleared'. */
+  readonly state: 'open' | 'cleared' | 'unknown';
 };
 
 export type CleanupPlanArtifact = {
@@ -792,13 +818,98 @@ function parseCleanupPlanActions(raw: string): ParsedCleanupAction[] {
   return actions;
 }
 
-/** Stable join key for matching a parsed action against a caller-supplied
- *  finding — (kind, target/file) pairs, mirroring `findingIdentity`'s own
- *  join-key idiom in cli/bridge-studio-kbs.ts (a different file, same
- *  shape: never collide two DIFFERENT (kind, file)/(kind, target) pairs on
- *  a naive string concat). */
-function cleanupJoinKey(kind: string, target: string): string {
-  return `${kind} ${target}`;
+// ---------------------------------------------------------------------------
+// R4-19-F2 P1 fix -- path normalization + the cleared/unknown fail-safe
+// split. The live defect: a caller-supplied Finding.file is ABSOLUTE by
+// contract (cli/brain-lint.ts:54), but the agent's plan writes a
+// REPO-RELATIVE target (skills/brain-maintenance/SKILL.md's mandated
+// shape) -- comparing the two literally never matched anything, and "no
+// match" silently read as 'cleared'. These helpers normalize BOTH shapes
+// before comparing, and keep the brainDir containment check a REAL
+// resolved-path check (never prefix string math -- see isPathInside's own
+// doc for why).
+// ---------------------------------------------------------------------------
+
+/** Strips a single leading "./" -- the only prefix form SKILL.md's real
+ *  agent output (and this repo's own live-captured fixture) is known to
+ *  produce. Nothing fancier is normalized here (no repeated "./", no
+ *  embedded "./" mid-path) -- matching the three normalization directions
+ *  the task brief names by name: repo-relative, "./"-prefixed, and
+ *  already-absolute. */
+function stripLeadingDotSlash(target: string): string {
+  return target.startsWith('./') ? target.slice(2) : target;
+}
+
+/** Whether a caller-supplied finding is evidence FOR one parsed plan
+ *  action. Matches on kind AND normalized target (the P1 fix -- see this
+ *  section's header). Two join shapes cover every real Finding.file shape
+ *  this repo produces (absolute) AND every plan-target shape the agent can
+ *  write (repo-relative, "./"-prefixed, or already-absolute), with no
+ *  forgeRoot required to establish a MATCH (only the cleared/unknown split
+ *  below needs one):
+ *    - exact string equality -- handles an already-absolute target against
+ *      an absolute finding.file 1:1 (NORM-2), and also a hand-fixtured
+ *      test finding whose .file happens to be repo-relative itself
+ *      (AT-1/AT-3).
+ *    - a path-separator-BOUNDED suffix match -- handles a repo-relative
+ *      target naming the tail of an absolute finding.file (the
+ *      real-capture shape, NORM-1/NORM-3/REGRESSION-LOCK). Bounded by sep
+ *      so a target of "themes/foo.md" can never falsely match a finding
+ *      whose path merely ends in "...other-themes/foo.md". */
+function findingMatchesAction(finding: CleanupFinding, kind: string, target: string): boolean {
+  if (finding.kind !== kind) return false;
+  const normalized = stripLeadingDotSlash(target);
+  return finding.file === normalized || finding.file.endsWith(sep + normalized);
+}
+
+/** Resolves a plan target to an absolute path against forgeRoot,
+ *  collapsing any "." / ".." segments via `resolve` -- this is what lets
+ *  the brainDir containment check (isPathInside, below) defeat a LEXICAL
+ *  ".."-escape (SCAN-6 shape 1): the escape is collapsed away here, before
+ *  containment is ever checked. An already-absolute target is resolved
+ *  AS-IS, never re-rooted under forgeRoot -- the explicit isAbsolute
+ *  branch keeps the intent legible rather than relying on `resolve`'s own
+ *  "rightmost absolute argument wins" semantics (mirrors NORM-2's own
+ *  regression note against a naive unconditional join). */
+function resolveTargetAbsolute(target: string, forgeRoot: string): string {
+  const normalized = stripLeadingDotSlash(target);
+  return isAbsolute(normalized) ? resolve(normalized) : resolve(forgeRoot, normalized);
+}
+
+/** Real containment, not string math (SCAN-6 -- this repo's recurring
+ *  escape shape per the adversarial-containment-review skill). A
+ *  trailing-separator-aware identity/prefix check performed AFTER lexical
+ *  resolution (resolveTargetAbsolute already collapsed any ".." above) --
+ *  that combination is what defeats BOTH of SCAN-6's escape shapes:
+ *    - a ".."-escaping target (<brainDir>/../elsewhere/x.md): resolves to
+ *      a path OUTSIDE brainDir before this function ever runs, so the raw
+ *      escaping string is never even compared.
+ *    - a "<brainDir>-sibling/" prefix collision: a bare
+ *      childAbs.startsWith(parentAbs) would wrongly match -- "...forge-dev-
+ *      sibling" textually starts with "...forge-dev" -- so the parent's
+ *      OWN trailing separator is required before comparing, mirroring this
+ *      module's own safeReadFileInSession containment idiom exactly. */
+function isPathInside(childAbs: string, parentAbs: string): boolean {
+  const resolvedParent = resolve(parentAbs);
+  const boundary = resolvedParent.endsWith(sep) ? resolvedParent : resolvedParent + sep;
+  return childAbs === resolvedParent || childAbs.startsWith(boundary);
+}
+
+/** Derives one action's `state` -- see CleanupPlanAction.state's own doc
+ *  for the full three-way contract. Precedence is load-bearing: a genuine
+ *  match ALWAYS wins over the cleared/unknown derivation (SCAN-5 --
+ *  checking brainDir containment before checking for a match would invert
+ *  this). */
+function deriveActionState(
+  kind: string,
+  target: string,
+  cleanupFindings: readonly CleanupFinding[],
+  cleanupScan: CleanupScan | undefined,
+): CleanupPlanAction['state'] {
+  if (cleanupFindings.some((f) => findingMatchesAction(f, kind, target))) return 'open';
+  if (cleanupScan === undefined) return 'unknown'; // no scanned-domain evidence at all -- fail safe
+  const absoluteTarget = resolveTargetAbsolute(target, cleanupScan.forgeRoot);
+  return isPathInside(absoluteTarget, cleanupScan.brainDir) ? 'cleared' : 'unknown';
 }
 
 /** `plan/cleanup-plan.md` — read through the SAME realpath-containment
@@ -808,15 +919,19 @@ function cleanupJoinKey(kind: string, target: string): string {
  *  "no plan file at all" outcome `safeReadFileInSession` already gives every
  *  other escaping read — AT-6). `cleanupFindings` supplies CURRENT truth;
  *  `state` is derived fresh on every call (see this section's own header). */
-function deriveCleanupPlan(sessionDir: string, label: string, cleanupFindings: readonly CleanupFinding[]): CleanupPlanArtifact {
+function deriveCleanupPlan(
+  sessionDir: string,
+  label: string,
+  cleanupFindings: readonly CleanupFinding[],
+  cleanupScan: CleanupScan | undefined,
+): CleanupPlanArtifact {
   const raw = safeReadFileInSession(sessionDir, join(CLEANUP_PLAN_DIRNAME, CLEANUP_PLAN_FILENAME));
   if (raw === null) {
     return { kind: 'cleanup-plan', label, plan: null, actions: [], openFindingCount: 0 };
   }
-  const openKeys = new Set(cleanupFindings.map((f) => cleanupJoinKey(f.kind, f.file)));
   const actions: CleanupPlanAction[] = parseCleanupPlanActions(raw).map((a) => ({
     ...a,
-    state: openKeys.has(cleanupJoinKey(a.kind, a.target)) ? 'open' : 'cleared',
+    state: deriveActionState(a.kind, a.target, cleanupFindings, cleanupScan),
   }));
   const openFindingCount = actions.filter((a) => a.state === 'open').length;
   return { kind: 'cleanup-plan', label, plan: raw, actions, openFindingCount };
@@ -996,8 +1111,14 @@ export function deriveSessionArtifact(input: {
    *  below and the cleanup-plan section's own header note (derive-don't-
    *  store). Ignored for every other kind. */
   cleanupFindings?: readonly CleanupFinding[];
+  /** R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — additive-optional
+   *  (ADR-042 disclose-not-park), only consumed by the 'cleanup-plan' kind.
+   *  See CleanupScan's own doc for the full contract this unlocks. Omitted
+   *  entirely ⇒ every unmatched action derives 'unknown', never 'cleared' —
+   *  the fail-safe default. Ignored for every other kind. */
+  cleanupScan?: CleanupScan;
 }): SessionArtifactPayload {
-  const { descriptor, sessionDir, contractStages, cleanupFindings } = input;
+  const { descriptor, sessionDir, contractStages, cleanupFindings, cleanupScan } = input;
   const kind = descriptor.artifact.kind;
   const label = descriptor.artifact.label;
   const state = sessionArtifactKindState(kind);
@@ -1047,7 +1168,7 @@ export function deriveSessionArtifact(input: {
             'computeAgentCleanupFindings) — never defaults to an empty/silent artifact',
         );
       }
-      return deriveCleanupPlan(sessionDir, label, cleanupFindings);
+      return deriveCleanupPlan(sessionDir, label, cleanupFindings, cleanupScan);
     }
     default: {
       // Exhaustiveness guard: state === 'live' but the kind matched none of

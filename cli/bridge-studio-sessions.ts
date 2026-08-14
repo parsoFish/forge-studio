@@ -84,6 +84,7 @@ import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { deriveSessionTranscript, deriveSessionArtifact, safeReadFileInSession } from '../orchestrator/studio/session-transcript.ts';
+import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { deriveContractStages } from './contract-stages.ts';
 import { resolveGuardedPath } from './studio-path-guard.ts';
 
@@ -119,7 +120,14 @@ function decodeSegment(raw: string): string {
   return decodeURIComponent(raw);
 }
 
-function invalidSessionIdReason(id: string): string | null {
+// Exported (cli-side, uncapped — ADR 042) so cli/ui-bridge.ts's kb-cleanup
+// apply route (R4-19-F2 adversarial-review fix) can validate its own
+// `project`/`sessionId` body fields against this file's own stated
+// convention (length cap + charset, before any fs call) WITHOUT
+// re-implementing it — including the KB-seeding dot-anchor carve-out
+// (`.kb-<id>`), which every non-project-bound kb-cleanup session anchors
+// under and must stay accepted here in exactly one place.
+export function invalidSessionIdReason(id: string): string | null {
   if (id.length > MAX_SESSION_ID_LENGTH) {
     return `invalid sessionId "${id.slice(0, 40)}…" — ${id.length} characters exceeds the ${MAX_SESSION_ID_LENGTH}-character length limit`;
   }
@@ -129,7 +137,7 @@ function invalidSessionIdReason(id: string): string | null {
   return null;
 }
 
-function invalidProjectReason(id: string): string | null {
+export function invalidProjectReason(id: string): string | null {
   if (id.length === 0) {
     return 'project query parameter must not be empty';
   }
@@ -341,7 +349,20 @@ export async function handleStudioSessionsRoutes(
           sendJson(res, 409, { ok: false, error: sanitizeError(findingsErr) }, origin);
           return true;
         }
-        artifact = deriveSessionArtifact({ descriptor, sessionDir, cleanupFindings });
+        // R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — the scanned-domain
+        // signal that makes 'cleared' derivable at all (see session-
+        // transcript.ts's CleanupScan doc). Resolved via the SAME
+        // `resolveKbBrainDir` choke point `computeAgentCleanupFindings`
+        // itself already used, immediately above, to scope the live lint
+        // pass — so `brainDir` names exactly the region that was actually
+        // scanned. A TOCTOU miss (the KB vanishes between the two calls,
+        // vanishingly unlikely) degrades to `cleanupScan` omitted, i.e.
+        // every unmatched action stays 'unknown' — fail SAFE, never a hard
+        // 500 for a signal that is advisory, not load-bearing for the
+        // read's own success.
+        const brainDir = resolveKbBrainDir(ctx.forgeRoot, kbId);
+        const cleanupScan = brainDir !== null ? { forgeRoot: ctx.forgeRoot, brainDir } : undefined;
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, cleanupFindings, cleanupScan });
       } else {
         artifact = deriveSessionArtifact({ descriptor, sessionDir });
       }
