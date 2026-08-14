@@ -864,9 +864,10 @@ test('AT-4on-9: a `.staging-*` brain leftover is never surfaced as a phantom KB 
 // buildKbHealth (this file, lines ~577-634) today returns only an AGGREGATE
 // `{ lintFlags, lintErrors }` — no per-check breakdown. This block pins the
 // itemized `checks: Array<{check,status,errorCount,flagCount}>` field the F2
-// Health tab renders, for ALL 10 full-scope checks (cli/brain-lint.ts:1123-1136;
+// Health tab renders, for ALL full-scope checks (cli/brain-lint.ts:1123-1136;
 // checkCleanupCandidates excluded — cleanup-dry-run only), always present (a
-// clean check reports status:'pass', never omitted).
+// clean check reports status:'pass', never omitted). 12 as of R4-19-F2
+// (checkDanglingEdges + checkDuplicateThemes joined the original 10).
 //
 //   RULING 2 — the aggregate `lintFlags`/`lintErrors` fields stay, derived as a
 //   roll-up OVER checks[] (never dropped, never allowed to diverge).
@@ -885,7 +886,7 @@ const FULL_SCOPE_CHECK_NAMES = CHECK_NAMES;
 
 type CheckHealthEntry = { check: string; status: string; errorCount: number; flagCount: number };
 
-test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the 10 full-scope checks (set-equality) — RED today (checks absent)', async () => {
+test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the 12 full-scope checks (set-equality) — RED today (checks absent)', async () => {
   // Mirrors the existing R1-06 health test's harness (~:534-559): the shared
   // `get()` helper against the never-mutated HEALTH_KB_ID fixture.
   const detail = await get(`/api/studio/kbs/${HEALTH_KB_ID}`);
@@ -898,7 +899,7 @@ test('R6-08 WI-1 RED-A: GET health.checks itemizes EXACTLY the 10 full-scope che
   assert.deepEqual(
     names,
     expected,
-    `health.checks must itemize exactly the 10 full-scope checks (checkCleanupCandidates excluded — cleanup-dry-run only). Expected ${JSON.stringify(expected)}, got ${JSON.stringify(names)}`,
+    `health.checks must itemize exactly the 12 full-scope checks (checkCleanupCandidates excluded — cleanup-dry-run only). Expected ${JSON.stringify(expected)}, got ${JSON.stringify(names)}`,
   );
 });
 
@@ -944,9 +945,10 @@ test('R6-08 4on: a lone checkFrontmatter defect (missing description) on the top
     // checkProjectBrainIndexes (scans brain/projects/*) and checkReflectorLoss
     // (a GLOBAL advisory over _queue/done) never actually inspect a top-level
     // 'cycles' KB at all, so reporting 'pass' for them was a declared-data-
-    // fails-open lie (ten green dots, only eight of which ever ran). Under the
-    // honest design those two report 'n/a'; the remaining 7 forge-themes
-    // checks genuinely DID scan this KB (readThemeFiles walks brain/cycles/
+    // fails-open lie (twelve green dots, only ten of which ever ran, as of
+    // R4-19-F2's checkDanglingEdges + checkDuplicateThemes). Under the honest
+    // design those two report 'n/a'; the remaining 9 forge-themes checks
+    // genuinely DID scan this KB (readThemeFiles walks brain/cycles/
     // themes) and correctly report 'pass' on this single-defect fixture.
     const NEVER_APPLICABLE_TO_CYCLES = new Set(['checkProjectBrainIndexes', 'checkReflectorLoss']);
     for (const name of FULL_SCOPE_CHECK_NAMES) {
@@ -1091,7 +1093,7 @@ test('R6-08 4on (F2): checkReflectorLoss is a GLOBAL advisory (_queue/done) — 
   }
 });
 
-test('R6-08 4on (F1): a project kb with NO own themes reports the 8 forge-theme checks "n/a" (never "pass"); with an own theme carrying a real defect, the lintThemeFiles-covered check is real (fail)', async () => {
+test('R6-08 4on (F1): a project kb with NO own themes reports the 10 forge-theme checks "n/a" (never "pass"); with an own theme carrying a real defect, the lintThemeFiles-covered check is real (fail)', async () => {
   const iso = await makeIsolatedForge();
   try {
     // Part 1 — a project kb scaffolded with an empty themes/ dir: the shared
@@ -1113,9 +1115,14 @@ test('R6-08 4on (F1): a project kb with NO own themes reports the 8 forge-theme 
     const emptyHealth = emptyDetail.json['health'] as { checks?: CheckHealthEntry[] } | undefined;
     assert.ok(emptyHealth, `health object must be present, got ${JSON.stringify(emptyDetail.json)}`);
     const emptyByName = new Map(emptyHealth!.checks!.map((c) => [c.check, c]));
+    // R4-19-F2: brain-lint's two new forge-themes-scoped checks
+    // (checkDanglingEdges, checkDuplicateThemes) join the other 8 here — a
+    // project kb with 0 own theme files has nothing for either to inspect,
+    // so both must report 'n/a' too, same as the pre-existing 8.
     const FORGE_THEME_CHECKS = [
       'checkFrontmatter', 'checkIndexSync', 'checkSourceLinks', 'checkStaleness',
       'checkOrphans', 'checkLengthSoftCap', 'checkContradictions', 'checkCategoryScope',
+      'checkDanglingEdges', 'checkDuplicateThemes',
     ] as const;
     for (const name of FORGE_THEME_CHECKS) {
       const entry = emptyByName.get(name);
