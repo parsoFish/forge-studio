@@ -53,7 +53,7 @@ The reflector does NOT move the manifest to `_queue/done/`. The reviewer already
 - **Reflection bypass** — cycle marked done without retro. Detected via `reflection_status` in `CycleResult` telemetry; not gated (log-and-continue).
 - **Brain growth without curation** — `forge brain lint` enforces a subset of `brain/LINT.md` rules (frontmatter present, valid `category`, at least one resolvable evidence link).
 - **Themes labelled `pattern` despite send-backs** — the skill contract requires ≥ 1 `category: antipattern` theme when the events.jsonl contains any wedge or send-back signal.
-- **Missing user questions** — the Studio `/artifact` viewer (formerly `/reflect`) shows nothing if `user-questions.json` is absent. The orchestrator now derives it post-exit from `user-questions.md`.
+- **Missing user questions** — the Studio `/artifact` viewer shows nothing if `user-questions.json` is absent. The orchestrator derives it post-exit from `user-questions.md`.
 
 ## Order relative to the release final-loop (C10)
 

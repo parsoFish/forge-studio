@@ -463,9 +463,9 @@ export function writeWorkItemStatus(specPath: string, status: WorkItemStatus): v
  * Find pairs of work items that share a file in `files_in_scope` but are not
  * connected by any directed dependency edge in either direction (transitively).
  *
- * Hidden coupling = merge-time conflict risk. PM's last-step self-check from
- * docs/phases/project-manager.md:59. Drives the `no_hidden_file_coupling`
- * benchmark criterion.
+ * Hidden coupling = merge-time conflict risk. PM's last-step self-check — see
+ * the "Hidden dependencies" failure mode in docs/phases/project-manager.md.
+ * Drives the `no_hidden_file_coupling` benchmark criterion.
  *
  * Reachability is checked in both directions because a `depends_on` edge
  * serialises the two items (the dependent runs after the prerequisite), which

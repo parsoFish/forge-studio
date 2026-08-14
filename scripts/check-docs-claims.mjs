@@ -26,8 +26,8 @@
  *     narrower than "the substring D/ appears anywhere": a link to
  *     ./operations/serve-supervision.md must NOT be read as covering all of
  *     operations/ — only that one file — so a second file added later under
- *     operations/ (e.g. headroom-token-efficiency-trial.md) still needs its
- *     own mention. Linking to decisions/README.md (its own index), by
+ *     operations/ still needs its own mention. Linking to decisions/README.md
+ *     (its own index), by
  *     contrast, legitimately covers every docs/decisions/*.md file.
  *
  * Usage: node scripts/check-docs-claims.mjs

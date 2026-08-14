@@ -1,4 +1,4 @@
-# Harness-overlay seam (parked) — 2026-06-07
+# Harness-overlay seam (parked)
 
 > The harness-overlay (running forge phases against an operator's **interactive
 > `claude` session** instead of spawning the Claude Agent SDK) is **PARKED** — its

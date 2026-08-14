@@ -1,10 +1,6 @@
 # The forge operator journey (vision + intent)
 
-> **Status:** operator's canonical vision for the end-to-end journey. Rewritten
-> 2026-06-14 for the post-M8 Studio (ADR-031 "Studio is the one product" +
-> M8 seams); reconciled 2026-07-16 (S5) to the journeys-as-data harness;
-> reconciled again 2026-07-17 (R5-07-F3) after the standalone `swap-runtime`
-> journey retired (folded into `agents`), bringing the count to 10. It
+> **Status:** the operator's canonical vision for the end-to-end journey. It
 > defines the intent and the **target behaviour forge moves towards** — not
 > only the as-built. The video-recorded
 > [`scripts/e2e-journey.mjs`](../scripts/e2e-journey.mjs) (`npm run ui:journey`)
@@ -13,8 +9,8 @@
 > the platform actually has (not a step of one linear cycle). It walks every
 > journey's beats at a watchable pace, entirely through Forge Studio, and
 > doubles as the DOM-as-metrics regression harness. The ACT 1/2/3 structure
-> below is this vision's own organisation, unchanged since M8 — see "How the
-> journeys prove this" under each ACT for which of the 10 journeys exercises it.
+> below organises the vision — see "How the journeys prove this" under each ACT
+> for which of the 10 journeys exercises it.
 
 The journey is centralised on Forge Studio. The operator never leaves it.
 
