@@ -93,35 +93,23 @@ export function resolveDispatchableAgent(slug: string, defs: AgentDefinition[]):
   return def;
 }
 
-/**
- * Resolve an interactive (in-roster) agent by slug — the MIRROR of
- * `resolveDispatchableAgent` above (ADR-043 §4 "Two hosts, code-enforced
- * twins"). `resolveDispatchableAgent` itself is left byte-for-byte untouched
- * by this addition — softening its refusal is the one change that would
- * break the boundary the whole two-host design rests on, so this mirror is
- * added ALONGSIDE it, not folded into a shared helper that could drift its
- * wording. This function accepts ONLY an interactive def, refusing every
- * non-interactive or unknown slug with the symmetric boundary error.
- * Interactivity is decided by the exact SAME predicate
- * `resolveDispatchableAgent` uses — `agentCapabilityDescriptor(def)
- * .interactive` — never a re-implemented or parallel notion of
- * "interactive": one shared definition of the boundary, each host refusing
- * exactly what the other accepts.
+/*
+ * ADR-043 §4's mirror `resolveInteractiveAgent` used to live here. R4-23 (bead
+ * forge-4y7) DELETED it: from the day it landed it had zero production callers
+ * — only its own throw strings and its tests referenced it — and ADR-042's cap
+ * forbids dead exported orchestrator surface. The two preconditions R4-22 named
+ * for wiring it are still undischarged AND are not dischargeable here:
+ * `skills/architect/SKILL.md` declares no `surface:` at all and
+ * `skills/project-brain-builder/SKILL.md` declares `surface: unattended`, so an
+ * interactive-only host would refuse two of the four session kinds it was meant
+ * to admit; and `AGENT_RUNNERS`' keys (`architect`, `instructions`,
+ * `demo-builder`, `project-brain`) are session-kind ids, not agent slugs, so
+ * there is no 1:1 roster lookup to perform in the first place. See the ADR-043
+ * amendment. `resolveDispatchableAgent` above — which HAS production callers and
+ * enforces the boundary that actually matters — is left byte-for-byte untouched,
+ * exactly as §4 requires, and its complement pin now asserts the same property
+ * against the shared `agentCapabilityDescriptor` predicate instead of a mirror.
  */
-export function resolveInteractiveAgent(slug: string, defs: AgentDefinition[]): AgentDefinition {
-  const def = defs.find((d) => d.slug === slug);
-  if (!def) {
-    const known = defs.map((d) => d.slug).sort().join(', ');
-    throw new Error(`resolveInteractiveAgent: no interactive agent "${slug}" in the roster (known: ${known})`);
-  }
-  if (!agentCapabilityDescriptor(def).interactive) {
-    throw new Error(
-      `resolveInteractiveAgent: agent "${slug}" is not interactive (surface: ${def.surface ?? 'unattended'}) — ` +
-        `non-interactive agents run through the generic run host, not a bespoke interactive session page`,
-    );
-  }
-  return def;
-}
 
 /**
  * Assemble a standalone run prompt: the agent's own SKILL.md process intent
