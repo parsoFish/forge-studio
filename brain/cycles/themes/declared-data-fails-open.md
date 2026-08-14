@@ -13,7 +13,7 @@ keywords:
   - test-on-the-wrong-surface
   - derive-dont-declare
 created_at: 2026-08-08
-updated_at: 2026-08-11
+updated_at: 2026-08-15
 related_themes:
   - suppression-env-fakes-the-pass
   - quality-gate-cmd-must-assert-new-work
@@ -40,6 +40,7 @@ Named the campaign's recurring TOP finding and logged as a brain gap twelve time
 | A second copy of the declaration | A hardcoded `FALLBACK_SESSION_KINDS` mirroring the registry — *"a second copy of declared data that nothing enforces against the first"*. | L12535–12545 |
 | Batch E: declared step contract | `turnSpec.writes` — the phase table declares which dirs a drafting turn writes; the spine never checked that the declared write happened, so an empty drafting turn advanced `analyzing → awaiting-review` silently. Caught by R4-21's per-WI adversarial review, invisible to a 4400-test suite. Instance N of the class *inside the primitive built by the campaign that named the class*. | L16449–16970 (R4-21 phase 2) |
 | Batch A / batch B | `legacyRoutes` *"parsed, typed and asserted by tests but validated and consumed NOWHERE"*, whose **fix round shipped its own instance**. Generalised past code by batch B's N7: *"A rule declared in the goal pack, enforced nowhere"* — 12 instances shipped (`_wave5/batch-b-efficiency-report.md:281`). | L228–231, L249–252 |
+| Batch H: fail-open at the seam, cured constructively | R4-19-F2's kb-cleanup **join failed open** — a `cleared` status was claimable without the scanned-domain evidence backing it; cure = the claim carries its evidence (`open\|cleared\|unknown`, gated on a scanned-domain signal — a variant of [[derive-status-dont-store-it]]). And R4-23 found all four runner-private `loadSkillPrompt` helpers **failing open** (`catch { return 'You are the forge <x> agent.' }`) — survivable while the skill was a preamble, fatal once SKILL.md became the single source of intent; cure = one shared fail-loud loader that throws naming skill, turn id and available ids. Both green at every unit layer; both caught only by a real spawn / adversarial review. | batch-H ledger §R4-19-F2, §R4-23; ADR-043 amendment §4 |
 
 ## Detection — enforce end to end
 

@@ -49,7 +49,7 @@ R5-05 and R5-07 exist specifically to keep the two documents reconciled.
 | **R1** | [R1-contract-componentry.md](./R1-contract-componentry.md) | Make every forge boundary a typed, machine-checkable contract — KB contract type, KB seam completion, the project-contract process clauses (demo/test/instructions/release/build), automated contract checks, and (wave 5) KB create/maintain. | 6 + 1 deferred | 2 implemented, 1 in-progress (R1-03 ⚑F4 verdict), 3 planned, 1 deferred (R1-D1) |
 | **R2** | [R2-runnable-componentry.md](./R2-runnable-componentry.md) | Make "a runnable" a first-class primitive — agent-as-runnable, def-driven builder, fanout (research spike first), trigger expansion, dynamic artifact surfaces, runtime-adapter realization; wave 5 adds triggers-runtime, builder parity, the sessions surface; R2-11 (minted mid-batch-C) owns legacy-path budget enforcement. | 11 + 2 deferred | 4 implemented, 7 planned, 2 deferred (R2-D1 closed-rejected, R2-D2 parked) |
 | **R3** | [R3-library-componentry.md](./R3-library-componentry.md) | First-class managed libraries of reusable capability: skills, skill-generator flow, hooks (lifecycle customisations), connections, instructions, templates + the community browser. | 7 | 5 implemented (R3-01, R3-03, R3-04, R3-06, R3-07), 1 implemented-with-deferred-feature (R3-05 F1-F3; F4 deferred), 1 planned (R3-02) — corrected 2026-08-05 from a stale "2 implemented / 5 planned" filed by R3-06 (README §5.4); read from each initiative's own status line, not estimated |
-| **R4** | [R4-ootb-suite.md](./R4-ootb-suite.md) | The shipped out-of-the-box agent/flow suite: migrate platform surfaces to artifacts, the agent roster (onboarding, creation, architect, plan, develop, demo, adversarial review, reflect), the develop-cycle OOTB flow, the roadmap & attention surface; wave 5 adds the project surfaces + per-OOTB session/flow alignment; R4-21 (minted at batch-C planning) owns the authoring-agent producer gap. | 23 + 1 deferred | 17 implemented, 5 planned, 1 resolved (R4-20, reasoned keep-as-is), 1 deferred (R4-D1) — recounted 2026-08-11 at batch-E close (R4-22 partial→implemented, its F4 re-homed; **R4-23 minted** planned, total 22→23), reading each initiative's own status line rather than estimating. The prior "21 / 13 implemented / 8 planned" was stale on four axes accumulated since the 2026-08-07 recount: R4-22's mint (total 21→22), R4-17 + R4-18 landing, and R4-20 resolving to a state the row's vocabulary did not carry at all. Nothing in CI checks these counts — they go stale silently. |
+| **R4** | [R4-ootb-suite.md](./R4-ootb-suite.md) | The shipped out-of-the-box agent/flow suite: migrate platform surfaces to artifacts, the agent roster (onboarding, creation, architect, plan, develop, demo, adversarial review, reflect), the develop-cycle OOTB flow, the roadmap & attention surface; wave 5 adds the project surfaces + per-OOTB session/flow alignment; R4-21 (minted at batch-C planning) owns the authoring-agent producer gap. | 23 + 1 deferred | 19 implemented, 3 planned, 1 resolved (R4-20, reasoned keep-as-is), 1 deferred (R4-D1) — recounted 2026-08-15 at the wave-5 final pass close (R4-19 planned→implemented on PR #132, R4-23 planned→implemented on PR #134), reading each initiative's own status line rather than estimating. Prior recount 2026-08-11 at batch-E close (R4-22 partial→implemented, its F4 re-homed; **R4-23 minted** planned, total 22→23). The prior "21 / 13 implemented / 8 planned" was stale on four axes accumulated since the 2026-08-07 recount: R4-22's mint (total 21→22), R4-17 + R4-18 landing, and R4-20 resolving to a state the row's vocabulary did not carry at all. Nothing in CI checks these counts — they go stale silently. |
 | **R5** | [R5-hardening-operability.md](./R5-hardening-operability.md) | Safety, integrity and doc hygiene: dry-bridge seam, G8 env-pin at the spawn seam, cost integrity, edit-lock fix, known-gaps residue cross-references, demo/harness backlog, SSOT reconciliation; wave 5 adds the dead-code sweep + the three-scope docs ground-truth restructure. | 9 | 4 implemented (R5-01/02/04/07), 5 planned |
 | **R6** | [R6-operator-experience.md](./R6-operator-experience.md) | The Studio operator surface as a platform: run observability depth, human-readable operations, IA & DOM-convention stewardship — the biggest wave-5 home (kickoff/monitors/home/KB-explore). | 8 + 1 deferred | 8 planned, 1 deferred (R6-D1) |
 | **R7** | [R7-verification-infrastructure.md](./R7-verification-infrastructure.md) | The standing verification platform: corpus-anchored bench rebuild, journey-platform evolution (incl. the LLM-driven UI-test tier), verify-ground stewardship, CI/drift-guard growth. *(Minted 2026-07-17; unwaved.)* | 4 | 4 planned |
@@ -909,3 +909,27 @@ genuinely "planned but not yet built".
   R4-23 runner prompt re-authoring (the ADR-043 migrations that measurement showed
   aren't expressible on the primitive), and the architect-runner migration (kept
   as a named step-handler variant). Campaign retro: `_wave5/wave-5-capstone-retro.md`.
+- 2026-08-15 — **Wave-5 FINAL PASS (batch H) CLOSED** (opened 2026-08-14; PRs
+  #130–#134). The slipped work and the closeout-flagged backlog are done: **R4-19-F2**
+  brain-maintenance shipped (PR #132 — brain-lint duplicate-theme/dangling-edge
+  checks, kb-cleanup as turnSpec data, zero new orchestrator runner, LIVE-proven;
+  found 2 real dangling edges in forge's own brain); **R4-23** runner prompt
+  re-authoring shipped (PR #134 — all four runners' prompts single-sourced into
+  SKILL.md behind one shared fail-loud loader, LIVE-proven per kind incl.
+  architect, whose park was not needed; `resolveInteractiveAgent` deleted;
+  ADR-043 amended: architect is never migrated onto the primitive and the
+  implied net orchestrator decrease is **not collectable** — measured +110, the
+  honest payment is intent single-sourcing per ADR-024); the **SEC hardening
+  trio** landed as one terse PR (#131 — the raw-fs ratchet allowlist re-keyed
+  from line pins to **audited-expression pins** after a same-count-swap escape,
+  mutation-proven; non-string request segments structurally rejected;
+  demo-builder/start guard-before-read); the **UI honesty trio** landed as one
+  PR (#133 — list-level KB lint summary + Home KB-skew attention with no new
+  polling path, FlowCard status derived through the monitors' own derivation,
+  server-side per-type provenance with honest `unknown`, journey-scratch test
+  isolation). Register recounts: R4 = 19 implemented / 3 planned. Exit gate
+  T1-executed on merged main `fdce7724`: 4732/4732 dual-env, test:ui 956, both
+  tscs 0, both ratchets, all lints/docs checks, parity 27/18/6/3; ui:journey +
+  deadpaths waived on identical-tree proof against PR #134's fully-gated
+  candidate (1061 checks / 142 beats / 29 routes). Remaining open backlog is
+  general residue in beads (nothing wave-5-flagged remains open).

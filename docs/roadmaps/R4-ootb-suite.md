@@ -1780,8 +1780,12 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
 
 ### R4-19 Brain creation & maintenance agents
 
-- **Status:** planned  ·  **Wave:** 5 (module: per-OOTB-agent —
-  brain-creation/maintenance)
+- **Status:** **implemented** (F1 brain-creation 2026-08-10, PR #109, batch D;
+  F2 brain-maintenance 2026-08-14, PR #132, batch H — brain-lint gains
+  duplicate-theme + dangling-edge checks, kb-cleanup ships as turnSpec data on
+  the ADR-043 primitive with zero new orchestrator runner, LIVE-proven;
+  `_wave5/deferred/R4-19-F2-brain-maintenance.md` design honoured)
+  ·  **Wave:** 5 (module: per-OOTB-agent — brain-creation/maintenance)
 - **Depends on:** R2-10 (session shell), R1's wave-5 KB entry (band-scoped
   binding — the cycle-scope creation needs the binding kind to exist).
 - **Context:** Wave-5 cut. Mockup: **brain-creation** seeds a KB for a
@@ -1942,7 +1946,7 @@ all, so the `file-package` artifact row was reserved and the `build-skill` /
 
 - **Status:** **implemented** (2026-08-14, wave 5 batch H — all four runners re-authored, LIVE-proven per kind; architect SHIPPED, the H-3 park not taken) · **Wave:** 5 (batch H) · **Bead:** `forge-lt4` (folds `forge-4y7`) · **Origin:** the R4-22-F4 slip (operator ruling 2026-08-11).
 - **Depends on:** R4-22 (the spine, done); the two F4 park files (`_wave5/parks/R4-22-F4-runner-migrations.md`, `R4-22-F4-architect-migration.md`) are its seed evidence.
-- **Context:** F4's measurement pass established the four legacy runners are mostly per-kind **prompt/state composition**, not plumbing — golden byte-match migration is unreachable without a step-handler registry the operator refused. The remaining honest path is ADR-024's own thesis: re-author each runner's composed prompt into its agent's `SKILL.md` (single source of intent), migrate the runner onto the spine, and accept **live** per kind — the prompt changes by design, so a golden byte-match cannot be the gate. This is where ADR-043's promised net orchestrator-surface decrease is actually realized (batch E's net production deletion from the migration path was zero).
+- **Context:** F4's measurement pass established the four legacy runners are mostly per-kind **prompt/state composition**, not plumbing — golden byte-match migration is unreachable without a step-handler registry the operator refused. The remaining honest path is ADR-024's own thesis: re-author each runner's composed prompt into its agent's `SKILL.md` (single source of intent), migrate the runner onto the spine, and accept **live** per kind — the prompt changes by design, so a golden byte-match cannot be the gate. The delivered outcome (2026-08-14, ADR-043 amendment §3): ADR-043's implied net orchestrator LOC decrease is **not collectable** on this axis — measured **+110** (runners −86, dead mirror −12, shared fail-loud turn loader +208); what R4-23 actually bought is ADR-024's goal, the agents' intent single-sourced in SKILL.md (the duplicated hand-written TypeScript prompt halves are gone).
 - **Features (sketch, sized per park files):** instructions first (needs a two-schema answer for `turnSpec.schema`); demo-builder (needs a `cwd`/writes model decision — its agent writes into the project repo by design); project-brain (closest fit); architect **decision, not migration** — the park recommends keeping its `AGENT_RUNNERS` entry permanently and amending ADR-043 §3 to say so.
 - **Acceptance references:** per-runner live acceptance runs (the R4-21 live-proof pattern); `AGENT_RUNNERS` shrink per migration; net orchestrator line-delta reported per PR.
 - **As built (2026-08-14).** Each runner's task prose moved into its agent's `SKILL.md` as `<!-- turn: <id> -->` sections behind one shared loader (`loadSkillTurnPrompt` / `splitSkillTurnSections`, `orchestrator/skill-path.ts`), fail-LOUD where the four runner-private `loadSkillPrompt` helpers failed open. Turn ids: instructions `interview` / `interview-edit` / `draft` / `draft-edit`; demo-builder `generate-element` / `generate-composed` / `generate-legacy`; project-brain `analyze-project-repo` / `analyze-cycle-archives`; architect `interview` / `explore` / `draft` / `draft-force-emit`. **LIVE acceptance, one real spawn per kind** (`_wave5/gate-logs/R4-23-live-*.log`): a grounded `AGENTS.draft.md` for mdtoc; 6 real theme pages honouring the operator's focus; a real before/after `DEMO.html` of gitpulse's most recent feature initiative with captured CLI output; and an architect PLAN with 5 cited brain themes, 7 `source:`-attributed constraints, 12 edge cases and 10 GWT ACs.
