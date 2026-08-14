@@ -420,7 +420,7 @@ export const journey = defineJourney({
         narration: 'Before composing anything, the operator lands on /agents (T2 lane W6-IA-3) — a browsable roster of every agent, mirroring the Library page\'s own agents pillar, plus a cross-agent "recent agent runs" view built by fanning the existing per-agent history route out across the whole roster (there is no aggregate bridge route yet — see lib/agents-index.ts\'s header). This is the entry point StudioNav\'s own /agents/new shortcut skips past entirely: proof the roster itself is reachable and real, and that a card actually navigates into the builder, before any beat below drills into one specific agent.',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
-              console.log('\n[agents-index] Browse the agents index — roster + recent runs');
+              console.log('\n[W6-IA3] Browse the agents index — roster + recent runs');
 
               await page.goto(watch.uiUrl + '/agents', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
@@ -429,15 +429,15 @@ export const journey = defineJourney({
               ).catch(() => {});
               const pageReady = await page.evaluate(() =>
                 document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready'));
-              check(pageReady === 'true', `agents-index: [data-page="agents-index"][data-page-ready="true"] (got "${pageReady}")`);
+              check(pageReady === 'true', `W6-IA3: [data-page="agents-index"][data-page-ready="true"] (got "${pageReady}")`);
 
               const cardCount = await page.evaluate(() =>
                 document.querySelectorAll('[data-section="agent-roster"] [data-card-type="agent"]').length);
-              check(cardCount > 0, `agents-index: the roster renders ≥1 real AgentCard from the seeded OOTB library (got ${cardCount})`);
+              check(cardCount > 0, `W6-IA3: the roster renders ≥1 real AgentCard from the seeded OOTB library (got ${cardCount})`);
 
               const ctaHref = await page.evaluate(() =>
                 document.querySelector('[data-action="new-agent"]')?.getAttribute('href'));
-              check(ctaHref === '/agents/new', `agents-index: "+ New agent" CTA links to /agents/new (got "${ctaHref}")`);
+              check(ctaHref === '/agents/new', `W6-IA3: "+ New agent" CTA links to /agents/new (got "${ctaHref}")`);
 
               // Recent-agent-runs: wait for the loading placeholder to clear, then
               // confirm the REAL shared HistoryLedger mounted. Its own honest
@@ -449,21 +449,21 @@ export const journey = defineJourney({
                 null, { timeout: 15000 },
               ).catch(() => {});
               const ledgerMounted = await page.evaluate(() => document.querySelector('[data-section="history-ledger"]') !== null);
-              check(ledgerMounted, 'agents-index: the recent-agent-runs section mounts the REAL shared HistoryLedger ([data-section="history-ledger"])');
+              check(ledgerMounted, 'W6-IA3: the recent-agent-runs section mounts the REAL shared HistoryLedger ([data-section="history-ledger"])');
               await frame(page, 'agents-index-0-roster', 'Agents index — the roster + recent-agent-runs sections, before drilling into any one agent');
 
               // The roster's own cards are real navigation, not decoration: click
               // through to the first agent and land on its builder.
               const firstCardHref = await page.evaluate(() =>
                 document.querySelector('[data-section="agent-roster"] [data-card-type="agent"]')?.getAttribute('href'));
-              check(!!firstCardHref && firstCardHref.startsWith('/agents/'), `agents-index: the first roster card links into the builder (got "${firstCardHref}")`);
+              check(!!firstCardHref && firstCardHref.startsWith('/agents/'), `W6-IA3: the first roster card links into the builder (got "${firstCardHref}")`);
               await page.locator('[data-section="agent-roster"] [data-card-type="agent"]').first().click();
               await page.waitForFunction(
                 () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
               const landedOnBuilder = await page.evaluate(() => document.querySelector('[data-page="agents"]') !== null);
-              check(landedOnBuilder, 'agents-index: clicking a roster card actually navigates into the agent builder ([data-page="agents"])');
+              check(landedOnBuilder, 'W6-IA3: clicking a roster card actually navigates into the agent builder ([data-page="agents"])');
         },
       },
       {

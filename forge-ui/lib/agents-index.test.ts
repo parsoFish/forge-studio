@@ -9,7 +9,7 @@
  * here exactly like `./agent-ledger.test.ts` mocks `./bridge-client.ts`,
  * so this suite never touches a real network / bridge process.
  */
-import { test, expect, vi } from 'vitest';
+import { test, expect, vi, beforeEach } from 'vitest';
 import type { LedgerRow } from './history-ledger';
 import type { Agent } from './studio-client';
 import type { AgentHistoryResolution } from './agent-ledger';
@@ -21,7 +21,7 @@ vi.mock('./agent-ledger.ts', () => ({
   fetchAgentHistory: vi.fn(),
 }));
 
-import { mergeRecentAgentRuns, fetchRecentAgentRuns, RECENT_AGENT_RUNS_LIMIT } from './agents-index';
+import { mergeRecentAgentRuns, fetchRecentAgentRuns, RECENT_AGENT_RUNS_LIMIT, AGENT_HISTORY_FAN_OUT_BATCH_SIZE } from './agents-index';
 import { fetchAgentHistory } from './agent-ledger';
 
 // ---------------------------------------------------------------------------
@@ -45,6 +45,14 @@ function row(over: Partial<LedgerRow> = {}): LedgerRow {
 function agent(id: string): Agent {
   return { id, name: id, purpose: '', skills: [], tools: [], mcps: [], guards: [], hooks: [] };
 }
+
+// `fetchAgentHistory`'s call history (not its implementation) is reset
+// before every test — several tests below assert exact call counts
+// (`toHaveBeenCalledTimes`), which would otherwise accumulate across tests
+// sharing this one module-level mock.
+beforeEach(() => {
+  vi.mocked(fetchAgentHistory).mockClear();
+});
 
 // ---------------------------------------------------------------------------
 // mergeRecentAgentRuns — pure
@@ -87,6 +95,60 @@ test('mergeRecentAgentRuns: defaults the limit to RECENT_AGENT_RUNS_LIMIT when n
 test('mergeRecentAgentRuns: no agents / no rows at all -> an honest empty array, never a fabricated placeholder row', () => {
   expect(mergeRecentAgentRuns([])).toEqual([]);
   expect(mergeRecentAgentRuns([[], []])).toEqual([]);
+});
+
+// ---------------------------------------------------------------------------
+// DEDUPE — HistoryLedger.tsx keys rendered rows on row.id (key={row.id});
+// two agents whose per-agent histories both carry a row for the SAME run
+// (a flow run with two nodes owned by two different agents) must merge to
+// ONE row, not a React key collision.
+// ---------------------------------------------------------------------------
+
+test('mergeRecentAgentRuns: two agents whose histories share a run id (a flow run with two nodes owned by two different agents) merge to EXACTLY ONE row', () => {
+  // KILLS a naive flatten+sort with no dedupe step — HistoryLedger.tsx
+  // renders `key={row.id}` per row, so two surviving rows sharing an id is
+  // a duplicate React key, not merely a cosmetic double-listing.
+  const sharedId = 'RUN-shared-flow';
+  const merged = mergeRecentAgentRuns([
+    [row({ id: sharedId, when: '2026-01-01T00:00:00Z', href: '/flows/develop/run/RUN-shared-flow', what: 'owned by dev node' })],
+    [row({ id: sharedId, when: '2026-01-01T00:00:00Z', href: '/flows/develop/run/RUN-shared-flow', what: 'owned by review node' })],
+  ]);
+  expect(merged).toHaveLength(1);
+  expect(merged[0].id).toBe(sharedId);
+});
+
+test('mergeRecentAgentRuns: a colliding id keeps the NEWEST occurrence (ties broken by stable-sort first-seen order), never silently dropping the whole run', () => {
+  const sharedId = 'RUN-shared';
+  const merged = mergeRecentAgentRuns([
+    [row({ id: 'other', when: '2026-01-01T00:00:00Z' }), row({ id: sharedId, when: '2026-06-01T00:00:00Z', what: 'first-seen' })],
+    [row({ id: sharedId, when: '2026-01-15T00:00:00Z', what: 'older-duplicate' })],
+  ]);
+  const survivor = merged.find((r) => r.id === sharedId);
+  expect(survivor).toBeDefined();
+  expect(survivor?.what).toBe('first-seen');
+  expect(merged.filter((r) => r.id === sharedId)).toHaveLength(1);
+});
+
+test('mergeRecentAgentRuns: deduping never drops an UNRELATED id that happens to collide only by coincidence of test data — every other row still survives', () => {
+  const merged = mergeRecentAgentRuns([
+    [row({ id: 'shared', when: '2026-01-01T00:00:00Z' }), row({ id: 'unique-a', when: '2026-01-02T00:00:00Z' })],
+    [row({ id: 'shared', when: '2026-01-01T00:00:00Z' }), row({ id: 'unique-b', when: '2026-01-03T00:00:00Z' })],
+  ]);
+  expect(merged.map((r) => r.id).sort()).toEqual(['shared', 'unique-a', 'unique-b']);
+});
+
+test("fetchRecentAgentRuns: two agents' histories sharing a run id merge to EXACTLY ONE row end to end", async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  const sharedId = 'RUN-cross-agent';
+  mocked.mockImplementation(async (slug: string) => {
+    if (slug === 'dev-node-owner') {
+      return { kind: 'found', rows: [row({ id: sharedId, href: '/flows/develop/run/RUN-cross-agent#dev' })] };
+    }
+    return { kind: 'found', rows: [row({ id: sharedId, href: '/flows/develop/run/RUN-cross-agent#review' })] };
+  });
+
+  const rows = await fetchRecentAgentRuns([agent('dev-node-owner'), agent('review-node-owner')]);
+  expect(rows.filter((r) => r.id === sharedId)).toHaveLength(1);
 });
 
 // ---------------------------------------------------------------------------
@@ -147,4 +209,55 @@ test('fetchRecentAgentRuns: honours a custom limit, passed straight through to t
 
   const rows = await fetchRecentAgentRuns([agent('solo')], 2);
   expect(rows).toHaveLength(2);
+});
+
+// ---------------------------------------------------------------------------
+// BOUNDED CONCURRENCY — a large roster must not fan out one simultaneous
+// bridge request per agent.
+// ---------------------------------------------------------------------------
+
+test('fetchRecentAgentRuns: never has more than AGENT_HISTORY_FAN_OUT_BATCH_SIZE fetchAgentHistory calls in flight at once', async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  let inFlight = 0;
+  let maxInFlight = 0;
+  mocked.mockImplementation(async () => {
+    inFlight++;
+    maxInFlight = Math.max(maxInFlight, inFlight);
+    // Yield a couple of microtask turns so overlapping calls actually overlap
+    // (a synchronous resolve would never let concurrent calls coexist, which
+    // would make this assertion vacuously true regardless of batching).
+    await Promise.resolve();
+    await Promise.resolve();
+    inFlight--;
+    return { kind: 'not-found' } as AgentHistoryResolution;
+  });
+
+  const roster = Array.from({ length: AGENT_HISTORY_FAN_OUT_BATCH_SIZE * 3 + 2 }, (_, i) => agent(`agent-${i}`));
+  await fetchRecentAgentRuns(roster);
+
+  expect(maxInFlight).toBeLessThanOrEqual(AGENT_HISTORY_FAN_OUT_BATCH_SIZE);
+  // KILLS a fully-serial (batch size 1) implementation masquerading as
+  // "bounded concurrency" — a real batch actually overlaps calls.
+  expect(maxInFlight).toBeGreaterThan(1);
+});
+
+test('fetchRecentAgentRuns: a roster smaller than one batch still resolves correctly (no off-by-one on the chunk boundary)', async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  mocked.mockResolvedValue({ kind: 'found', rows: [row({ id: 'x' })] } as AgentHistoryResolution);
+
+  const roster = Array.from({ length: AGENT_HISTORY_FAN_OUT_BATCH_SIZE - 1 }, (_, i) => agent(`agent-${i}`));
+  const rows = await fetchRecentAgentRuns(roster);
+
+  expect(mocked).toHaveBeenCalledTimes(AGENT_HISTORY_FAN_OUT_BATCH_SIZE - 1);
+  expect(rows).toHaveLength(1); // every agent reports the same run id 'x' — deduped to one
+});
+
+test('fetchRecentAgentRuns: a roster that is an exact multiple of the batch size still calls every agent exactly once', async () => {
+  const mocked = vi.mocked(fetchAgentHistory);
+  mocked.mockResolvedValue({ kind: 'not-found' } as AgentHistoryResolution);
+
+  const roster = Array.from({ length: AGENT_HISTORY_FAN_OUT_BATCH_SIZE * 2 }, (_, i) => agent(`agent-${i}`));
+  await fetchRecentAgentRuns(roster);
+
+  expect(mocked).toHaveBeenCalledTimes(AGENT_HISTORY_FAN_OUT_BATCH_SIZE * 2);
 });

@@ -436,14 +436,26 @@ inventory rather than one shared page-level contract:
     fetch resolves. **There is no aggregate "all agents" bridge route** —
     `lib/agents-index.ts`'s `fetchRecentAgentRuns` fans the existing
     per-agent `GET /api/agents/:slug/history` out across the whole roster
-    in parallel, merges the "found" rows, and re-sorts the WHOLE merged set
+    in bounded-concurrency batches of `AGENT_HISTORY_FAN_OUT_BATCH_SIZE` (6,
+    plain chunking, no new dependency — a roster of dozens of agents must
+    not fire one simultaneous bridge request per agent), merges the "found"
+    rows, **dedupes by `row.id`**, and re-sorts the WHOLE merged set
     newest-first (`sortLedgerRowsNewestFirst`, reused unchanged) before
-    bounding to `RECENT_AGENT_RUNS_LIMIT` (20). KNOWN LIMITATION (documented
-    in that module's header, not closed here): a single flow run with two
-    nodes owned by two different agents appears once per owning agent in
-    this merge (same `row.id`, different `row.href`) — a server-side
-    aggregate route could dedupe this by (run, node) instead of by agent;
-    this client-side join cannot. Journey coverage:
+    bounding to `RECENT_AGENT_RUNS_LIMIT` (20). The dedupe step is
+    **required, not cosmetic**: `HistoryLedger.tsx` keys each rendered row
+    on `row.id` (`key={row.id}`) — an implicit contract every consumer of
+    that shared component must uphold. A single flow run with two nodes
+    owned by two different agents resolves to two rows sharing the SAME
+    `row.id` (different `row.href`/node) once both agents' histories are
+    merged here; without the dedupe step in `mergeRecentAgentRuns` (BEFORE
+    the merged rows ever reach `HistoryLedger`), that is a duplicate React
+    key, not merely a double-listing. KNOWN LIMITATION (documented in that
+    module's header, not closed here): which specific node's `href`
+    survives for a deduped id is whichever agent's fetch happened to
+    flatten first — arbitrary from the caller's perspective. A server-side
+    aggregate route could dedupe by (run, node) with real knowledge of the
+    flow topology instead of this incidental ordering; this client-side
+    join cannot. Journey coverage:
     `scripts/journeys/agents.mjs`'s `agents-index-roster` beat (roster +
     CTA + ledger-mount + roster-card-navigates-to-builder only — the ledger
     row contract itself is pinned elsewhere, this beat only proves the
