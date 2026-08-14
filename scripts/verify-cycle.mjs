@@ -506,15 +506,25 @@ async function startWatch() {
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
     proc.on('error', rej);
-    // 120s: a cold `next dev` recompile after UI changes can far exceed 30s.
-    // On timeout, kill what we spawned — the half-booted studio HOLDS the
-    // port, and rejecting without killing it strands a zombie that blocks
-    // every subsequent run (2026-07-11 R3).
+    // 150s (W6-P3 review finding #4 — was 120s, stated for a `next dev`
+    // recompile that no longer happens here): `forge studio` now serves a
+    // PRODUCTION build by default (no --dev — this harness deliberately
+    // exercises the real operator path), so readiness now includes a
+    // one-time `next build` before `next start` can bind. Budget = the
+    // pre-existing 120s (bridge start + port takeover + `next start` bind +
+    // first-request probe) PLUS a build-specific allowance measured
+    // directly: a cold `npm run build --workspace forge-ui` on the machine
+    // this was authored on took 18.06s wall-clock (`/usr/bin/time -v`, 200%
+    // CPU); +50% margin rounds to 30s. First run (or any run after forge-ui
+    // source changes) pays this; a warm/fresh `.next/` skips the build
+    // entirely and is fast. On timeout, kill what we spawned — the
+    // half-booted studio HOLDS the port, and rejecting without killing it
+    // strands a zombie that blocks every subsequent run (2026-07-11 R3).
     setTimeout(() => {
       if (settled) return;
       try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* */ } }
-      rej(new Error(`forge studio not ready within 120s; spawned watch killed. Last output:\n${buf.slice(-2000)}`));
-    }, 120000);
+      rej(new Error(`forge studio not ready within 150s; spawned watch killed. Last output:\n${buf.slice(-2000)}`));
+    }, 150000);
   });
 }
 

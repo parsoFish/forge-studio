@@ -988,7 +988,7 @@ sink counts the ratchet tracks for `cli/forge-watch.ts` — `readdirSync` 0 → 
   walk only follows entries the filesystem itself enumerates beneath that fixed
   root — the identical shape already audited for `collectAllThemeSlugs` in the
   R4-19-F2 section above.
-- **`readBuildStampMs`** (`statSync` ×1) reads the mtime of
+- **`readBuildStampMs`** (`statSync` ×1 as of the initial cut) reads the mtime of
   `resolve(uiDir, '.next', 'BUILD_ID')` — the same fixed `uiDir` root plus two
   literal path segments. No request-derived input reaches it.
 - **The two new `spawn` calls** (`next build`'s child on a stale/missing build,
@@ -1009,3 +1009,29 @@ cannot do" above), so it treats the type-only edge as a reachability edge.
 There is no runtime call path from any bridge route into `cli/forge-watch.ts`
 — it is the foreground `forge studio` launcher itself, never spawned by nor
 reachable from the bridge process.
+
+**Extended, same day (round 2 review fix) — `readFileSync` 0 → 1, `rmSync`
+0 → 1, `writeFileSync` 1 → 2, `statSync` 2 → 1 (a tighten — never fails —
+`--write`-accepted alongside this entry).** Round 1's `readBuildStampMs`
+trusted `.next/BUILD_ID`'s own mtime as the freshness stamp; review found
+that unsound — `next build` writes `BUILD_ID` roughly two-thirds through its
+pipeline, before static generation/export finishes, so a build that fails
+LATE still leaves a fresh-looking stamp over broken/incomplete output. The
+fix replaces it with forge's OWN stamp file, changing which sinks the three
+stamp functions use — same fixed-root shape, same "no request-derived input"
+conclusion, restated per-function:
+
+- **`readBuildStampMs`** (now `readFileSync` ×1, `statSync` no longer used
+  here) reads `resolve(uiDir, '.next', 'FORGE_BUILD_OK')` — the same fixed
+  `uiDir` root plus two literal path segments as the row above; only the sink
+  changed (mtime read → content read), not the path shape.
+- **`clearBuildStamp`** (`rmSync` ×1, new) deletes that same fixed path,
+  called before every build attempt starts.
+- **`writeBuildStamp`** (`writeFileSync` ×1, new — the file's second
+  `writeFileSync` call site alongside the pre-existing `writeReadyFile`) writes
+  to that same fixed path, called only after the build child has exited 0.
+
+All three resolve the identical fixed `<uiDir>/.next/FORGE_BUILD_OK` path —
+`uiDir` is `resolve(forgeRoot, 'forge-ui')` as above, never request-derived;
+the leaf segments `.next` and `FORGE_BUILD_OK` are literals. No caller-
+supplied value reaches any of the three.

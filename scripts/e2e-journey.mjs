@@ -162,7 +162,18 @@ async function startWatch() {
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
     proc.on('error', rej);
-    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready in 90s')); }, 90000);
+    // W6-P3 review finding #4: `forge studio` now serves a PRODUCTION build
+    // by default (no --dev — this harness deliberately exercises what the
+    // operator actually runs), so readiness now includes a one-time `next
+    // build` before `next start` can bind. Budget = the pre-existing 90s
+    // (bridge start + port takeover + `next start` bind + first-request
+    // probe — unchanged from the old next-dev budget) PLUS a build-specific
+    // allowance measured directly: a cold `npm run build --workspace
+    // forge-ui` on the machine this was authored on took 18.06s wall-clock
+    // (`/usr/bin/time -v`, 200% CPU); +50% margin rounds to 30s. First run
+    // (or any run after forge-ui source changes) pays this; a warm/fresh
+    // `.next/` skips the build entirely and is fast.
+    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready in 120s')); }, 120000);
   });
 }
 
@@ -345,7 +356,11 @@ async function main() {
   cleanFirstProject();
   cleanFirstFlowRun();
 
-  console.log('[e2e] booting forge studio (cold compile ~20-40s)…');
+  // W6-P3: forge studio serves a production build by default now — the FIRST
+  // cold run (or any run after forge-ui source changed) pays a one-time
+  // `next build` (measured ~18s on the authoring machine) before `next
+  // start` binds; a fresh `.next/` skips straight to `next start`.
+  console.log('[e2e] booting forge studio (cold run pays a one-time production build, ~20-40s; warm re-runs skip it)…');
   watch = await startWatch();
   console.log(`[e2e] ready: ${watch.uiUrl}`);
   try { execSync(`curl -s -m 60 ${watch.uiUrl}/ -o /dev/null`); } catch { /* warm */ }
