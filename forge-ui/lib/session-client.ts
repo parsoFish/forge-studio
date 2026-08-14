@@ -512,6 +512,52 @@ function parseContractBuildoutArtifact(r: Record<string, unknown>): ContractBuil
   };
 }
 
+function parseCleanupActionState(raw: unknown): CleanupActionState {
+  if (raw === 'open' || raw === 'cleared' || raw === 'unknown') return raw;
+  // Mirrors parseContractStageStatus exactly (AT-118): an unrecognised state
+  // is refused BY NAME, never silently coerced to the most permissive
+  // reading — 'unknown' looks like a safe default here but is a REAL state
+  // with its own semantics (coverage not established), not a catch-all for
+  // parse failures.
+  throw new Error(`unrecognised cleanup-plan action state ${JSON.stringify(raw)} — must be one of: ${CLEANUP_ACTION_STATES.join(', ')}`);
+}
+
+function parseCleanupPlanAction(raw: unknown, index: number): CleanupPlanAction {
+  if (!isPlainObject(raw)) {
+    throw new Error(`malformed cleanup-plan action[${index}]: expected an object, got ${JSON.stringify(raw)}`);
+  }
+  return {
+    kind: requireString(raw, 'kind'),
+    target: requireString(raw, 'target'),
+    proposal: requireString(raw, 'proposal'),
+    state: parseCleanupActionState(raw['state']),
+  };
+}
+
+function parseCleanupPlanArtifact(r: Record<string, unknown>): CleanupPlanArtifact {
+  const label = requireString(r, 'label');
+  const actionsRaw = r['actions'];
+  if (!Array.isArray(actionsRaw)) {
+    // AT-117: "actions" missing or non-array THROWS — never coerced to [].
+    throw new Error(`missing or invalid "actions": expected an array, got ${JSON.stringify(actionsRaw)}`);
+  }
+  const planRaw = r['plan'];
+  if (planRaw !== null && typeof planRaw !== 'string') {
+    // AT-121: mirrors markdown-draft's "body" — string or literal null (no
+    // drafted plan yet) only; any other type throws.
+    throw new Error(`missing or invalid "plan": expected a string or null, got ${JSON.stringify(planRaw)}`);
+  }
+  return {
+    kind: 'cleanup-plan',
+    label,
+    plan: planRaw,
+    actions: actionsRaw.map((a, i) => parseCleanupPlanAction(a, i)),
+    // AT-120: the server's own count, threaded through VERBATIM — never
+    // recomputed from `actions` here (mirrors brain-structure's themeCount).
+    openFindingCount: requireNumber(r, 'openFindingCount'),
+  };
+}
+
 /** An unrecognised OR still-reserved artifact kind throws, naming it — a
  *  reserved kind has no shape here to parse (that would fabricate a shape
  *  the server never sends for it today); distinguishing "reserved" from
@@ -553,6 +599,15 @@ export function parseSessionArtifact(raw: unknown): SessionArtifactPayload {
       } catch (err) {
         throw new Error(`malformed contract-buildout artifact: ${err instanceof Error ? err.message : String(err)}`);
       }
+    case 'cleanup-plan':
+      // Deliberately UNWRAPPED, unlike file-package/contract-buildout above
+      // — this file's own test header (R4-19-F2 block) rules the "wrap so
+      // the thrown message names the kind" behaviour is NOT a universal
+      // contract (generation-gallery is live proof: AT-21 removed that
+      // requirement from it when it went live). Inventing the stricter
+      // wrap here — for a kind no AT requires it for — would be scope this
+      // parser doesn't need.
+      return parseCleanupPlanArtifact(raw);
     default:
       throw new Error(`unrecognised session artifact kind: ${JSON.stringify(kind)}`);
   }

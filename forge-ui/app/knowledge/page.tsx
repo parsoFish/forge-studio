@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import {
   fetchStudioKbs, fetchKb, fetchKbNode, resolveKbNode, runKbMaintenance, deleteKb,
-  fetchKbIngestActivity,
+  fetchKbIngestActivity, startKbCleanup,
 } from '@/lib/studio-client';
 import type { Kb, KbDetail, KbNodeArticle, KbIngestEvent } from '@/lib/studio-client';
 import { runConsolidateToTerminal, consolidateResultLabel } from '@/lib/kb-consolidate';
@@ -449,7 +449,8 @@ function IngestActivityPanel({ kbId }: { kbId: string }) {
 // deterministic, operator-triggerable ops.)
 // ---------------------------------------------------------------------------
 function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMaintained?: () => void; onDeleted?: () => void }) {
-  const [busy, setBusy] = useState<'lint' | 'index' | 'consolidate' | 'delete' | null>(null);
+  const router = useRouter();
+  const [busy, setBusy] = useState<'lint' | 'index' | 'consolidate' | 'delete' | 'start-cleanup' | null>(null);
   const [result, setResult] = useState<string | null>(null);
   // R1-06 WI-3 MINOR 2: the observed terminal state of the LAST consolidate run
   // ('' until one completes) — the kb-maintain journey drives off this rather
@@ -482,6 +483,24 @@ function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMain
       setResult('index refreshed ✓');
     }
     setTimeout(() => setResult(null), 6000);
+  }
+
+  // R4-19-F2: the kb-cleanup LAUNCHER — closes the reachability gap the
+  // brain theme new-session-kind-needs-ui-wiring.md documents (R4-21's prior
+  // instance). Navigates using the `project` this route itself returns,
+  // NEVER `kbId` — a non-project-bound KB anchors its session under a
+  // server-minted `.kb-<id>` scratch project (`startKbCleanup`'s own header
+  // in lib/studio-client.ts), so re-deriving the anchor from `kbId` here
+  // would 404 for every such KB. No shared href-builder exists in this
+  // codebase (AuthoringLauncher.tsx/KbBind.tsx/skills/new all hand-build
+  // their own template string at the call site) — this follows suit.
+  async function handleStartCleanup() {
+    setBusy('start-cleanup');
+    setResult(null);
+    const r = await startKbCleanup(kbId);
+    setBusy(null);
+    if (!r.ok) { setResult(r.error); return; }
+    router.push(`/sessions/kb-cleanup/${encodeURIComponent(r.sessionId)}?project=${encodeURIComponent(r.project)}`);
   }
 
   async function handleDelete() {
@@ -518,6 +537,15 @@ function KbMaintenance({ kbId, onMaintained, onDeleted }: { kbId: string; onMain
         title="Start a consolidate maintenance session"
       >
         {busy === 'consolidate' ? 'Consolidating…' : 'Consolidate'}
+      </button>
+      <button
+        data-action="start-kb-cleanup"
+        style={btn}
+        disabled={busy !== null}
+        onClick={() => void handleStartCleanup()}
+        title="Start a kb-cleanup session (draft plan + operator-approved apply)"
+      >
+        {busy === 'start-cleanup' ? 'Starting…' : 'Cleanup plan'}
       </button>
       <button
         data-action="kb-delete"

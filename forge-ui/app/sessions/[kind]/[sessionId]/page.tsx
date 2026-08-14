@@ -25,6 +25,7 @@ import { SessionArchitectPanel } from '@/components/studio/session/SessionArchit
 import { SessionInstructionsPanel } from '@/components/studio/session/SessionInstructionsPanel';
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionAuthoringPanel } from '@/components/studio/session/SessionAuthoringPanel';
+import { SessionCleanupPanel } from '@/components/studio/session/SessionCleanupPanel';
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -198,6 +199,13 @@ export default function SessionShellPage({
                 project={project}
                 artifact={viewState.artifact}
                 onFinalized={(savedKind, id) => router.push(savedKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
+              />
+            ) : kind === 'kb-cleanup' ? (
+              <SessionCleanupPanel
+                sessionId={sessionId}
+                project={project}
+                phase={viewState.phase}
+                artifact={viewState.artifact}
               />
             ) : null}
           </SessionTranscript>

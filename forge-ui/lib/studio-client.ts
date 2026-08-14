@@ -1450,6 +1450,52 @@ export async function createKb(body: {
   return { ok: true, id: typeof r.data?.id === 'string' ? (r.data.id as string) : body.id };
 }
 
+/** R4-19-F2: start a kb-cleanup session for KB `id` (`POST .../kbs/:id/
+ *  cleanup/start`, cli/ui-bridge.ts). Returns BOTH `sessionId` AND `project`
+ *  on success — a non-project-bound KB anchors its session under a
+ *  server-minted `.kb-<id>` scratch project (the route's
+ *  KB_SEEDING_ANCHOR_PREFIX carve-out), never the KB's own `id`. A caller
+ *  that builds the session-page URL from `id` instead of the `project` this
+ *  route hands back would navigate every non-project-bound KB's cleanup
+ *  session straight to a 404. */
+export async function startKbCleanup(
+  id: string,
+): Promise<{ ok: true; sessionId: string; project: string } | { ok: false; error: string }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/cleanup/start`, {});
+  if (!r.ok) return { ok: false, error: r.error ?? 'failed to start kb-cleanup session' };
+  const sessionId = r.data?.sessionId;
+  const project = r.data?.project;
+  if (typeof sessionId !== 'string' || typeof project !== 'string') {
+    return { ok: false, error: 'malformed kb-cleanup start response: missing sessionId/project' };
+  }
+  return { ok: true, sessionId, project };
+}
+
+/** R4-19-F2: approve + apply a drafted cleanup plan (`POST .../kbs/:id/
+ *  cleanup/apply`, cli/ui-bridge.ts). The route's SECURITY INVARIANT reads
+ *  the KB to drain from the SESSION's own recorded `kb_id`, never the URL's
+ *  `:id` — so the body must carry the real session identity `{project,
+ *  sessionId}` verbatim; the object is rebuilt field-by-field here (never
+ *  spread) so no extra caller-supplied key can ever ride along on the wire.
+ *  409s (phase !== 'awaiting-approval') pass their message through
+ *  unmodified — the approval-gate refusal must reach the operator as the
+ *  server worded it, never replaced by a generic "failed" string. */
+export async function applyKbCleanup(
+  id: string,
+  body: { project: string; sessionId: string },
+): Promise<{ ok: true; runId: string } | { ok: false; error: string }> {
+  const r = await studioPost(`/api/studio/kbs/${encodeURIComponent(id)}/cleanup/apply`, {
+    project: body.project,
+    sessionId: body.sessionId,
+  });
+  if (!r.ok) return { ok: false, error: r.error ?? 'failed to apply kb-cleanup plan' };
+  const runId = r.data?.runId;
+  if (typeof runId !== 'string') {
+    return { ok: false, error: 'malformed kb-cleanup apply response: missing runId' };
+  }
+  return { ok: true, runId };
+}
+
 /** Delete a knowledge base (removes its brain/<id>/ dir). The forge-owned core
  *  brains (cycles, forge-dev) are server-guarded against deletion. */
 export async function deleteKb(id: string): Promise<{ ok: boolean; error?: string }> {
