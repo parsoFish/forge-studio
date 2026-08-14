@@ -1099,7 +1099,8 @@ inventory rather than one shared page-level contract:
   `knowledge-graph`, `knowledge-pin-guidance`, `knowledge-create-kb`,
   `knowledge-ingest`, `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
   `knowledge-create-kb-band-scope-seed`, `knowledge-create-kb-band-scope-commit`,
-  `knowledge-kb-maintain-session`, `knowledge-explore-tabs`).
+  `knowledge-kb-maintain-session`, `knowledge-kb-cleanup-launch`,
+  `knowledge-kb-cleanup-approve`, `knowledge-explore-tabs`).
   - **Tabs (R6-08 WI-3, RULING 5 — URL-synced via `?tab=`):**
     `[data-tab="explore"|"health"|"ingest-activity"][data-tab-active="true"|"false"]`,
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
@@ -1205,9 +1206,10 @@ inventory rather than one shared page-level contract:
       as a real agent run. Docs/roadmap pointer:
       `docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
       `docs/roadmaps/R4-ootb-suite.md` R4-19. `kb-maintain`'s SEPARATE
-      multi-turn "maintenance agent" narration gap (R4-19-F2) is untouched by
-      this — Consolidate's real shipped shape stays a direct dispatch-and-
-      poll, not a chat session.
+      multi-turn "maintenance agent" narration has since shipped for real, as
+      its own session kind — `kb-cleanup` (see "KB maintenance panel" below
+      and "Cleanup plan" above) — never folded into Consolidate itself, which
+      stays a direct dispatch-and-poll, not a chat session.
   - **KB maintenance panel:**
     `[data-component="kb-maintenance"]`, with `[data-consolidate-state]` on
     that same root once a consolidate run reaches a terminal (`'cleared'` |

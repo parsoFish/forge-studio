@@ -332,6 +332,140 @@ folded. ${SCRATCH_GUIDANCE_TEXT}
   writeFileSync(join(themesDir, 'scratch-ingest-lesson.md'), theme, 'utf8');
 }
 
+// ── scratch KB #4 (knowledge-kb-cleanup-launch / -approve) — R4-19-F2 port ──
+// A FOURTH scratch KB, disjoint from the three above, for the NEW kb-cleanup
+// interactive session kind (studio/session-kinds.yaml, R4-19-F2): an operator
+// opens a KB, clicks "Cleanup plan" (kb-maintenance's OTHER launcher, next to
+// Consolidate), a brain-maintenance agent drafts a reviewable plan from that
+// KB's real lint findings, the operator reviews + approves it, and a real
+// drain runs. Bound `{kind: 'flow', ref: 'forge-develop'}` — deliberately NOT
+// 'project' (would mint a phantom projects/<id>/ dir the way a real
+// project-bound KB's cleanup session anchors under its own project root) and
+// NOT 'unique' (forge studio lint's own `unique-binding` check requires
+// EXACTLY ONE unique-bound KB across the whole registry — that's forge-dev;
+// a second one would fail lint for the whole window this scratch KB is on
+// disk). A flow binding anchors the cleanup session under the SAME
+// dot-prefixed KB-seeding anchor (`.kb-<id>`, KB_SEEDING_ANCHOR_PREFIX)
+// SCRATCH_KB_BAND_ID already proves reachable — never a real project dir.
+const SCRATCH_KB_CLEANUP_ID = 'journey-scratch-kb-cleanup';
+const SCRATCH_KB_CLEANUP_NAME = 'Journey scratch KB (cleanup demo)';
+const SCRATCH_KB_CLEANUP_DESC = 'Ephemeral, flow-bound KB created by the e2e journey itself, to demo the kb-cleanup session kind (launch -> drafted plan -> approve -> real drain) without ever touching a real brain.';
+const SCRATCH_KB_CLEANUP_BIND_KIND = 'flow';
+const SCRATCH_KB_CLEANUP_BIND_REF = 'forge-develop';
+const SCRATCH_KB_CLEANUP_DIR = join(FORGE_ROOT, 'brain', SCRATCH_KB_CLEANUP_ID);
+
+/** Cross-beat state: knowledge-kb-cleanup-launch sets these from the real
+ *  POST /api/studio/kbs/:id/cleanup/start response; knowledge-kb-cleanup-
+ *  approve reads them to re-navigate to the SAME session two beats later
+ *  (mirrors bandSessionId's own cross-beat pattern above). */
+let kbCleanupSessionId = null;
+let kbCleanupSessionProject = null;
+
+function scratchKbCleanupSessionAnchorDir() {
+  return join(FORGE_ROOT, 'projects', `.kb-${SCRATCH_KB_CLEANUP_ID}`);
+}
+function kbCleanupSessionDir(sid) {
+  return join(scratchKbCleanupSessionAnchorDir(), '_kb-cleanup', sid);
+}
+
+function cleanScratchKbCleanup() {
+  try { rmSync(SCRATCH_KB_CLEANUP_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { rmSync(scratchKbCleanupSessionAnchorDir(), { recursive: true, force: true }); } catch { /* best-effort */ }
+}
+
+/** Seed brain/journey-scratch-kb-cleanup/ with kb.yaml + one real theme —
+ *  just enough for the KB to render as a normal library card / graph; this
+ *  beat's own real payoff is the kb-cleanup SESSION arc, not any particular
+ *  lint-finding shape on this KB (the replayed plan's own actions target the
+ *  real forge-dev KB's paths — see seedKbCleanupPlanFromRealCapture below —
+ *  so nothing about THIS KB's own findings drives their derived state). */
+function seedScratchKbCleanup() {
+  const themesDir = join(SCRATCH_KB_CLEANUP_DIR, 'themes');
+  mkdirSync(themesDir, { recursive: true });
+  writeFileSync(join(SCRATCH_KB_CLEANUP_DIR, 'kb.yaml'), [
+    `id: ${SCRATCH_KB_CLEANUP_ID}`,
+    `name: ${SCRATCH_KB_CLEANUP_NAME}`,
+    'binding:',
+    `  kind: ${SCRATCH_KB_CLEANUP_BIND_KIND}`,
+    `  ref: ${SCRATCH_KB_CLEANUP_BIND_REF}`,
+    `desc: ${SCRATCH_KB_CLEANUP_DESC}`,
+    'backend: filesystem',
+    '',
+  ].join('\n'), 'utf8');
+  const now = new Date().toISOString();
+  writeFileSync(join(themesDir, 'profile.md'), [
+    '---', 'title: profile', 'description: One-page overview of this cleanup-demo-scoped brain.',
+    'category: reference', `created_at: ${now}`, `updated_at: ${now}`, '---', '',
+    'Seeded by the e2e journey purely to give the kb-cleanup session demo a real KB to open — see knowledge-kb-cleanup-launch.\n',
+  ].join('\n'), 'utf8');
+}
+
+/** Merge-patch the REAL status.json the real POST /cleanup/start route
+ *  already wrote (session_id/project/phase/kb_id/kb_binding/findings all
+ *  stay real) — mirrors writeBandPbStatus's own merge-patch shape above and
+ *  scripts/lib/journey-fixtures.mjs's authoring-session PROVENANCE precedent
+ *  ("merge-patch onto the REAL status.json the start route already wrote").
+ *  Used here to write the ONE field a suppressed agent turn would have
+ *  written under a live spawn: the drafting -> awaiting-approval phase
+ *  transition (studio/session-kinds.yaml's kb-cleanup turnSpec table). */
+function writeKbCleanupStatus(sid, patch) {
+  const path = join(kbCleanupSessionDir(sid), 'status.json');
+  let current = {};
+  try { current = JSON.parse(readFileSync(path, 'utf8')); } catch { /* start route always writes this first */ }
+  writeFileSync(path, JSON.stringify({ ...current, ...patch, updated_at: new Date().toISOString() }, null, 2), 'utf8');
+}
+
+// PROVENANCE (binding — never hand-invent an agent's output, mirrors
+// scripts/lib/journey-fixtures.mjs's R4-21 authoring-session precedent
+// verbatim): scripts/journeys/fixtures/r4-19-f2-live-capture/cleanup-plan.md
+// is the REAL, byte-verbatim `plan/cleanup-plan.md` a real brain-maintenance
+// drafting turn wrote against forge's own real "forge-dev" KB (session
+// 2026-08-14T08-34-38-a34fff82; the sibling status.json in that same
+// directory is the real captured session status — both files are also the
+// committed ground-truth fixture orchestrator/studio/session-transcript.
+// test.ts's own R4-19-F2-fix P1-regression tests read directly, so this
+// journey and that unit suite can never silently drift onto two different
+// "real" plans). Read once at module-load time so this beat drives the exact
+// same on-disk bytes every run, never a paraphrase.
+const R4_19_F2_FIXTURE_DIR = join(FORGE_ROOT, 'scripts', 'journeys', 'fixtures', 'r4-19-f2-live-capture');
+const R4_19_F2_REAL_SESSION_ID = '2026-08-14T08-34-38-a34fff82';
+const R4_19_F2_REAL_PLAN_MD = readFileSync(join(R4_19_F2_FIXTURE_DIR, 'cleanup-plan.md'), 'utf8');
+
+/** Writes plan/cleanup-plan.md into the kb-cleanup session's own dir, exactly
+ *  where a real drafting turn would (CLEANUP_PLAN_DIRNAME/CLEANUP_PLAN_
+ *  FILENAME, orchestrator/studio/session-transcript.ts). FORGE_DRY_BRIDGE=1
+ *  suppresses the real agent spawn (`spawnAgentTurn`) the /cleanup/start
+ *  route fires, so this is the stand-in for that suppressed turn — the SAME
+ *  seam every other agentic beat in this journey honors (writeBandPbStatus's
+ *  own header comment states the identical rationale for project-brain). The
+ *  visible provenance note is prose IN the seeded file itself (not just a
+ *  source comment) so the operator watching the rendered plan — not just a
+ *  future code reader — sees the same disclosure, mirroring how
+ *  seedBandStagedThemes's own theme bodies self-disclose "Harness stand-in
+ *  (R4-19)." inline rather than only in this module's comments. */
+function seedKbCleanupPlanFromRealCapture(sid) {
+  const dir = join(kbCleanupSessionDir(sid), 'plan');
+  mkdirSync(dir, { recursive: true });
+  const note = [
+    `> **Journey-sync provenance note.** Everything below this line is the REAL,`,
+    `> byte-verbatim \`plan/cleanup-plan.md\` a real brain-maintenance drafting turn`,
+    `> wrote against forge's own real "forge-dev" KB (session ${R4_19_F2_REAL_SESSION_ID};`,
+    '> committed at scripts/journeys/fixtures/r4-19-f2-live-capture/). This demo',
+    '> session runs under FORGE_DRY_BRIDGE=1, which suppresses ITS OWN agent',
+    '> spawn — no agent ran for this session; the journey replays the captured',
+    '> output rather than faking a live turn. And because this replay runs',
+    '> against a disposable scratch KB, never the real forge-dev brain (so this',
+    "> journey can never mutate Brain 1), the two actions below correctly read",
+    '> "unknown" once parsed: their targets name real forge-dev theme paths',
+    "> outside this scratch KB's own scanned domain — the exact fail-safe the",
+    "> derive-don't-store P1 fix (session-transcript.ts's deriveActionState)",
+    '> built, never a fabricated "open" or "cleared".',
+    '',
+    '',
+  ].join('\n');
+  writeFileSync(join(dir, 'cleanup-plan.md'), note + R4_19_F2_REAL_PLAN_MD, 'utf8');
+}
+
 // ── ingest-activity fixture (knowledge-explore-tabs) ──────────────────────
 // A single real `reflect.kb-ingest` event on a DISJOINT scratch cycle id
 // (`journey-scratch-kb-ingest-activity`, never a real archived cycle),
@@ -1152,7 +1286,7 @@ export const journey = defineJourney({
       {
         id: 'knowledge-kb-maintain-session',
         title: 'KB maintenance — Consolidate drives a real lint reduction',
-        narration: 'A scratch, per-project-shaped brain seeded with exactly one deterministically-fixable lint finding (a theme deliberately missing from its own category index — a checkProjectBrainIndexes finding, not just a pooled count); the operator opens it from its library card, reads Health\'s NAMED per-check itemization (checkProjectBrainIndexes rendered as its own row, R6-08 WI-1 — not a pooled count), and clicks Consolidate — the real op=consolidate pipeline dispatches and the maintenance panel polls [data-consolidate-state] to a genuine "cleared" terminal, the real deterministic in-process fix landing. (The checkProjectBrainIndexes finding\'s own warn -> pass transition is asserted authoritatively at the API level in cli/bridge-studio-kbs.test.ts; the UI\'s per-check status display has a known async-fetch lag, bd forge 2026-08-09, so the journey gates the robust signals — itemization renders + cleared terminal — not the laggy count delta.) This is the kb-maintain mockup\'s health/lint/fix arc, real end to end and CI-safe (the deterministic in-process repair path, no SDK turn). "Ingest activity" now has a real, read-only surface too (R6-08 WI-2, covered by the knowledge-explore-tabs beat) — its own tab lists actual reflect.kb-ingest events off the reflector\'s kb-health pass — but the operator decision-3 invariant is unchanged: ingest itself stays reflection-only, and the panel exposes no trigger of any kind, only a history of what already happened. The mockup\'s multi-turn "maintenance agent" session remains R4-19-deferred — Consolidate\'s real shipped shape is a direct dispatch-and-poll, not a chat session.',
+        narration: 'A scratch, per-project-shaped brain seeded with exactly one deterministically-fixable lint finding (a theme deliberately missing from its own category index — a checkProjectBrainIndexes finding, not just a pooled count); the operator opens it from its library card, reads Health\'s NAMED per-check itemization (checkProjectBrainIndexes rendered as its own row, R6-08 WI-1 — not a pooled count), and clicks Consolidate — the real op=consolidate pipeline dispatches and the maintenance panel polls [data-consolidate-state] to a genuine "cleared" terminal, the real deterministic in-process fix landing. (The checkProjectBrainIndexes finding\'s own warn -> pass transition is asserted authoritatively at the API level in cli/bridge-studio-kbs.test.ts; the UI\'s per-check status display has a known async-fetch lag, bd forge 2026-08-09, so the journey gates the robust signals — itemization renders + cleared terminal — not the laggy count delta.) This is the kb-maintain mockup\'s health/lint/fix arc, real end to end and CI-safe (the deterministic in-process repair path, no SDK turn). "Ingest activity" now has a real, read-only surface too (R6-08 WI-2, covered by the knowledge-explore-tabs beat) — its own tab lists actual reflect.kb-ingest events off the reflector\'s kb-health pass — but the operator decision-3 invariant is unchanged: ingest itself stays reflection-only, and the panel exposes no trigger of any kind, only a history of what already happened. The mockup\'s multi-turn "maintenance agent" session has since shipped for real, as its OWN session kind — `kb-cleanup` (studio/session-kinds.yaml, R4-19-F2) — riding the SAME generic session shell project-brain/authoring already use: a brain-maintenance agent drafts a reviewable plan from a KB\'s real lint findings, the operator reviews it (a load-bearing, triple-redundant open/cleared/unknown per-action derivation — never a fabricated match, session-transcript.ts\'s derive-don\'t-store fix), approves, and a real drain runs; the knowledge-kb-cleanup-launch / knowledge-kb-cleanup-approve beats below drive that arc end to end, launched from the SAME kb-maintenance block as Consolidate. Consolidate itself is unchanged by this — its own real shipped shape stays a direct dispatch-and-poll, never a chat session; the two are separate controls (`kb-maintain-session` vs `start-kb-cleanup`) sitting side by side.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── S3.4: KB maintenance — Consolidate drives a real lint reduction ───────
@@ -1271,6 +1405,174 @@ export const journey = defineJourney({
               await frame(page, 'kb-maintain-3-healed', `Knowledge — Consolidate ran the real op=consolidate pipeline to a cleared terminal (checkProjectBrainIndexes observed status=${checkProjectBrainIndexesAfter}; the authoritative warn→pass flip is API-pinned)`, { key: true });
 
               cleanScratchKbMaintain();
+
+        },
+      },
+      {
+        id: 'knowledge-kb-cleanup-launch',
+        title: 'KB cleanup — launch a session, review a real captured plan (R4-19-F2)',
+        narration: 'The kb-maintenance block\'s OTHER launcher — "Cleanup plan", next to Consolidate — starts a real `kb-cleanup` session: POST /api/studio/kbs/:id/cleanup/start hands off a genuine {sessionId, project}, real for a non-project-bound KB too (the same dot-anchored `.kb-<id>` carve-out R4-19 WI-2 proved reachable). Under this harness\'s FORGE_DRY_BRIDGE=1 the route returns WITHOUT spawning an agent, so the session lands honestly at phase="drafting" with no plan — never faked. This journey then replays the REAL captured output of a genuine forge-dev cleanup run (scripts/journeys/fixtures/r4-19-f2-live-capture/, cited inline in the seeded file itself) as the stand-in for that suppressed turn, and flips phase to "awaiting-approval" — the one transition a live agent turn would have written. The replayed plan renders for real (has-actions, both parsed lines), but because the replay runs on a disposable scratch KB rather than forge-dev itself (this journey may never mutate Brain 1), the two actions honestly derive "unknown" — the derive-don\'t-store fail-safe (session-transcript.ts), never a fabricated match.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              console.log('\n[R4-19-F2] KB cleanup — launcher + drafted session (dry-bridge replay)');
+              cleanScratchKbCleanup(); // guard against leftover state from a prior crashed run
+              seedScratchKbCleanup();
+
+              // Entry point: the library's own card for the freshly-seeded scratch KB —
+              // mirrors knowledge-kb-maintain-session's own entry exactly.
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const kbCard = page.locator(`[data-card-type="kb"][data-card-id="${SCRATCH_KB_CLEANUP_ID}"]`);
+              await kbCard.scrollIntoViewIfNeeded().catch(() => {});
+              await caption(page, 'A brain-maintenance agent can draft a cleanup plan straight from a KB\'s own real lint findings — open the KB from its library card.');
+              await sleep(THINK);
+              await kbCard.click().catch(() => {});
+              let kbReady = false;
+              try {
+                await page.waitForFunction(
+                  () => document.querySelector('[data-page="knowledge"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 15000 },
+                );
+                kbReady = true;
+              } catch { /* checked below */ }
+              check(kbReady, 'kb-cleanup-launch: the seeded scratch KB\'s page reaches data-page-ready="true" from its library card');
+
+              const launcher = page.locator('[data-component="kb-maintenance"] [data-action="start-kb-cleanup"]');
+              check(await launcher.count() > 0, 'kb-cleanup-launch: the "Cleanup plan" launcher ([data-action="start-kb-cleanup"]) renders in kb-maintenance, next to Consolidate');
+              await frame(page, 'kb-cleanup-0-entry', 'Knowledge — the seeded scratch KB, the Cleanup plan launcher visible beside Consolidate');
+
+              // Real POST — capture the response the form itself never surfaces
+              // (mirrors knowledge-create-kb / knowledge-create-kb-band-scope's own
+              // waitForResponse-before-click idiom).
+              const startRespPromise = page.waitForResponse((r) => {
+                try {
+                  const u = new URL(r.url());
+                  return /^\/api\/studio\/kbs\/[^/]+\/cleanup\/start$/.test(u.pathname) && r.request().method() === 'POST';
+                } catch { return false; }
+              }, { timeout: 12000 }).catch(() => null);
+              await caption(page, 'Cleanup plan — a real POST starts a drafting session for this KB.');
+              await launcher.click().catch(() => {});
+              const startResp = await startRespPromise;
+              let sid = '', sessionProject = '';
+              if (startResp) {
+                try {
+                  const json = await startResp.json();
+                  sid = typeof json?.sessionId === 'string' ? json.sessionId : '';
+                  sessionProject = typeof json?.project === 'string' ? json.project : '';
+                } catch { /* checked below */ }
+              }
+              kbCleanupSessionId = sid || null; // module-scope — read by knowledge-kb-cleanup-approve
+              kbCleanupSessionProject = sessionProject || null;
+              check(sid.length > 0 && sessionProject.length > 0, `kb-cleanup-launch: POST /api/studio/kbs/:id/cleanup/start hands off a real {sessionId, project} (got sessionId="${sid}", project="${sessionProject}")`);
+              check(sessionProject === `.kb-${SCRATCH_KB_CLEANUP_ID}`, `kb-cleanup-launch: a non-project-bound KB anchors its cleanup session under the dot-prefixed scratch anchor .kb-<id> (got project="${sessionProject}")`);
+
+              if (!sid) { return; }
+
+              await page.goto(`${watch.uiUrl}/sessions/kb-cleanup/${encodeURIComponent(sid)}?project=${encodeURIComponent(sessionProject)}`, { waitUntil: 'domcontentloaded' });
+              let sessionReady = false;
+              try {
+                await page.waitForFunction(
+                  () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+                  null, { timeout: 15000 },
+                );
+                sessionReady = true;
+              } catch { /* checked below */ }
+              check(sessionReady, `kb-cleanup-launch: the kb-cleanup session is genuinely reachable at /sessions/kb-cleanup/${sid}`);
+
+              const phaseBefore = await page.evaluate(() => document.querySelector('[data-page="session"]')?.getAttribute('data-session-phase') ?? '');
+              check(phaseBefore === 'drafting', `kb-cleanup-launch: under FORGE_DRY_BRIDGE=1 the start route writes phase="drafting" and returns WITHOUT spawning an agent (got "${phaseBefore}") — a real drafted plan never appears on its own here`);
+
+              const panelPhaseBefore = await page.evaluate(() => document.querySelector('[data-section="cleanup-status"]')?.getAttribute('data-cleanup-panel-phase') ?? '');
+              check(panelPhaseBefore === 'drafting', `kb-cleanup-launch: [data-section="cleanup-status"]'s data-cleanup-panel-phase mirrors the session's own phase (got "${panelPhaseBefore}")`);
+
+              const planStateBefore = await page.evaluate(() => document.querySelector('[data-component="cleanup-plan"]')?.getAttribute('data-cleanup-plan-state') ?? '');
+              check(planStateBefore === 'no-plan', `kb-cleanup-launch: honestly no plan yet (data-cleanup-plan-state="${planStateBefore}") — the harness never fakes the agent having run`);
+
+              check(await page.locator('[data-section="cleanup-not-approvable"]').count() > 0, 'kb-cleanup-launch: with phase="drafting" (not "awaiting-approval"), cleanup-not-approvable renders and no approve button is offered at all');
+              await frame(page, 'kb-cleanup-1-drafting', 'Sessions — kb-cleanup drafting: dry-bridge suppresses the agent spawn, honestly no plan yet', { key: true });
+
+              // Dry-bridge stand-in for the suppressed agent turn: replay the REAL
+              // captured brain-maintenance plan + write the ONE phase transition a
+              // live turn would have made. No agent ran — narrated as such above.
+              await caption(page, 'Under this harness the agent turn is suppressed — replaying the REAL captured plan from a genuine forge-dev cleanup run.');
+              seedKbCleanupPlanFromRealCapture(sid);
+              writeKbCleanupStatus(sid, { phase: 'awaiting-approval' });
+
+              await page.reload({ waitUntil: 'domcontentloaded' });
+              let planStateAfter = '';
+              try {
+                await page.waitForFunction(() => {
+                  const el = document.querySelector('[data-component="cleanup-plan"]');
+                  return el !== null && el.getAttribute('data-cleanup-plan-state') === 'has-actions';
+                }, null, { timeout: 10000 });
+              } catch { /* checked below */ }
+              planStateAfter = await page.evaluate(() => document.querySelector('[data-component="cleanup-plan"]')?.getAttribute('data-cleanup-plan-state') ?? '');
+              check(planStateAfter === 'has-actions', `kb-cleanup-launch: the replayed real plan parses into real actions (data-cleanup-plan-state="${planStateAfter}") — the same "- [kind] target — proposal" line format skills/brain-maintenance/SKILL.md mandates`);
+
+              const settled = await page.evaluate(() => document.querySelector('[data-component="cleanup-plan"]')?.getAttribute('data-cleanup-plan-settled') ?? '');
+              check(settled === 'false', `kb-cleanup-launch: data-cleanup-plan-settled="${settled}" — honestly not settled (settled requires EVERY action to read "cleared"; see the per-action states below)`);
+
+              const actionStates = await page.evaluate(() =>
+                Array.from(document.querySelectorAll('[data-cleanup-action-state]')).map((el) => el.getAttribute('data-cleanup-action-state')));
+              check(actionStates.length === 2, `kb-cleanup-launch: both real captured actions parsed off the replayed plan (got ${actionStates.length})`);
+              check(actionStates.length > 0 && actionStates.every((s) => s === 'unknown'), `kb-cleanup-launch: both actions honestly read "unknown" (got [${actionStates.join(', ')}]) — their targets name real forge-dev theme paths outside this scratch KB's own scanned domain, the derive-don't-store fail-safe (never a fabricated "open"/"cleared" for a domain this replay never actually scanned)`);
+
+              const panelPhaseAfter = await page.evaluate(() => document.querySelector('[data-section="cleanup-status"]')?.getAttribute('data-cleanup-panel-phase') ?? '');
+              check(panelPhaseAfter === 'awaiting-approval', `kb-cleanup-launch: data-cleanup-panel-phase="${panelPhaseAfter}" after the stand-in phase transition`);
+
+              check(await page.locator('[data-section="cleanup-approve"]').count() > 0, 'kb-cleanup-launch: cleanup-approve (with its approve-cleanup-plan button) renders now that phase="awaiting-approval" — absent one step ago');
+              await frame(page, 'kb-cleanup-2-plan-review', 'Sessions — kb-cleanup: the real captured plan replayed, both actions honestly unknown, approve offered', { key: true });
+
+        },
+      },
+      {
+        id: 'knowledge-kb-cleanup-approve',
+        title: 'KB cleanup — approve reaches a real, measured terminal (R4-19-F2)',
+        narration: 'Approving is meant to be real end to end: [data-action="approve-cleanup-plan"] POSTs /api/studio/kbs/:id/cleanup/apply, which is gated server-side on the session\'s OWN phase being exactly "awaiting-approval" and, once past that gate, runs the SAME deterministic op=consolidate drain Consolidate itself dispatches (runBrainConsolidateNow, which self-suppresses only its own agent-tier spawn under dry-bridge — the drain itself is real, no harness stand-in needed here). This beat drives the real click and asserts whatever real, settled [data-cleanup-apply-state] the running UI produces — "applied" or "error" — never assuming success. As shipped, it reproducibly reads "error": SessionCleanupPanel.tsx receives no `kbId` prop and calls `applyKbCleanup(sessionId, ...)`, sending the SESSION id as the URL\'s kb-id segment; a session id (`newArchitectSessionId()`, timestamp-first) can never match SLUG_RE (`^[a-z]...`), so the apply route 400s "invalid kb id" before ever reaching the drain — a real wiring defect this beat surfaces verbatim rather than papering over.',
+        drive: async (ctx) => {
+              const { page, watch, check, frame } = ctx;
+              console.log('\n[R4-19-F2] KB cleanup — approve + apply');
+              if (!kbCleanupSessionId || !kbCleanupSessionProject) {
+                check(false, 'kb-cleanup-approve: kbCleanupSessionId/kbCleanupSessionProject available (precondition, set by knowledge-kb-cleanup-launch)');
+                return;
+              }
+
+              await page.goto(`${watch.uiUrl}/sessions/kb-cleanup/${encodeURIComponent(kbCleanupSessionId)}?project=${encodeURIComponent(kbCleanupSessionProject)}`, { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="session"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              check(await page.locator('[data-section="cleanup-approve"]').count() > 0, 'kb-cleanup-approve: the replayed plan\'s approve control persisted on disk (cross-beat, same session)');
+
+              await caption(page, 'Approve & apply — the real op=consolidate drain, dispatched through the session\'s own approval gate.');
+              await sleep(THINK);
+              await page.locator('[data-action="approve-cleanup-plan"]').click().catch(() => {});
+
+              let applyState = '';
+              try {
+                await page.waitForFunction(() => {
+                  const v = document.querySelector('[data-component="cleanup-panel"]')?.getAttribute('data-cleanup-apply-state');
+                  return v !== null && v !== undefined && v !== '';
+                }, null, { timeout: 15000 });
+                applyState = await page.evaluate(() => document.querySelector('[data-component="cleanup-panel"]')?.getAttribute('data-cleanup-apply-state') ?? '');
+              } catch { /* checked below */ }
+              check(applyState === 'applied' || applyState === 'error', `kb-cleanup-approve: [data-cleanup-apply-state] reaches a real, settled terminal — never a silent hang (got "${applyState || '(none)'}")`);
+
+              if (applyState === 'error') {
+                const errorText = await page.evaluate(() => document.querySelector('[data-section="cleanup-approve"]')?.textContent ?? '');
+                check(errorText.includes('invalid kb id'), `kb-cleanup-approve: REAL DEFECT reproduced — the apply route 400s "invalid kb id" (SessionCleanupPanel has no kbId prop, so it POSTs the SESSION id where the KB id belongs, which fails SLUG_RE) — surfaced to the operator verbatim, never swallowed: "${errorText.trim()}"`);
+                await frame(page, 'kb-cleanup-3-apply-error', 'Sessions — kb-cleanup: Approve & apply genuinely 400s — a real wiring defect, surfaced verbatim, never silently retried or hidden', { key: true });
+              } else if (applyState === 'applied') {
+                check(await page.locator('[data-section="cleanup-applied"]').count() > 0, 'kb-cleanup-approve: cleanup-applied renders the settled terminal in place of the approve control');
+                await frame(page, 'kb-cleanup-3-applied', 'Sessions — kb-cleanup: Approve & apply reached a real "applied" terminal — the same op=consolidate drain Consolidate itself dispatches', { key: true });
+              }
+
+              cleanScratchKbCleanup();
+              kbCleanupSessionId = null;
+              kbCleanupSessionProject = null;
 
         },
       },
