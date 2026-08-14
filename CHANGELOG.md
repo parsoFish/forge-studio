@@ -7,6 +7,22 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+### Added
+
+- **Brain-maintenance agent (R4-19-F2).** `forge brain lint` gains two
+  judgment-tier checks — `duplicate-theme` and `dangling-edge` (which found 2
+  real dangling edges in forge's own brain) — and a `kb-cleanup` interactive
+  session kind ships as pure turnSpec data on the ADR-043 primitive (no new
+  orchestrator runner), with `skills/brain-maintenance/SKILL.md` structurally
+  excluded from brain-ingest and a cleanup-plan approval flow driven by the
+  kb-maintain journey.
+- **List-level KB health (UI honesty pass).** The `GET /api/studio/kbs`
+  descriptor carries a per-KB lint summary (computed per call, derived not
+  stored), Home's attention strip gains a real KB-skew row through the existing
+  `fetchStudioKbs()` — no new polling path — and every OOTB badge reads a
+  server-side per-type `provenance` field (honest `unknown` where the server
+  cannot attest, instead of client-side inference).
+
 ### Changed
 
 - **Runner prompts re-authored onto `SKILL.md` (R4-23, ADR-024).** The four
@@ -35,6 +51,17 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ### Fixed
 
+- **Request-path containment hardening (SEC).** The projects-root-fold ratchet
+  rule now detects aliased/renamed/receiver-qualified callees, roots discovered
+  by binding, template literals and wrapped calls, and its allowlist is keyed by
+  the **audited expression** rather than a file line — a same-count substitution
+  is now a finding, and unrelated edits no longer desync the pins. Shared path
+  guards reject non-string request segments structurally (400, never a 500),
+  and `POST /api/demo-builder/start` derives its repo path from the guard's own
+  output before any read.
+- **Flow status honesty.** Library FlowCards derive their status through the
+  same `flowLineage`-aware derivation the flow monitor and Home use, ending the
+  three-surface disagreement; no stored status field anywhere.
 - **ADR-043 corrected on three counts** (2026-08-14 amendment): architect is
   never migrated onto the interactive primitive and `AGENT_RUNNERS` is not
   deleted; §4's mirror is deleted rather than kept; and the ADR's implied net
