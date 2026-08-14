@@ -242,20 +242,30 @@ export async function runDemoBuilderTurn(
     try { ensureStudioBranch(status.project_repo_path); } catch { /* non-git project */ }
   }
 
-  if (status.phase === 'generating') {
-    result = await runGenerateStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onText });
-  } else if (status.phase === 'locking') {
-    result = runLockStep({ input, sessionDir, status, logger, initiativeId });
-  } else if (status.phase === 'abandoned') {
-    writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'abandoned' });
-    result = { phase: 'abandoned', wrote: [] };
-  } else {
-    // awaiting-review / locked — no actionable work this turn.
-    result = { phase: status.phase, wrote: [] };
-  }
-
-  if (writesProjectRepo) {
-    try { commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`); } catch { /* best-effort */ }
+  // R4-23 WI-2 round-2 fix (AT-10): the phase dispatch is wrapped in try/finally
+  // so the post-dispatch commitStudioChange step below ALWAYS runs, even when the
+  // dispatch throws (e.g. runGenerateStep's required-file check, which can throw
+  // AFTER the agent has already written partial machinery into the repo). Without
+  // this, a mid-turn throw unwound straight past the commit step, leaving the
+  // project repo checked out on forge-studio with the agent's writes uncommitted.
+  // No catch here — only finally — so the thrown error still propagates unchanged
+  // to the caller once the (still best-effort) commit has landed.
+  try {
+    if (status.phase === 'generating') {
+      result = await runGenerateStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onText });
+    } else if (status.phase === 'locking') {
+      result = runLockStep({ input, sessionDir, status, logger, initiativeId });
+    } else if (status.phase === 'abandoned') {
+      writeDemoStatus(input.projectRoot, input.sessionId, { ...status, phase: 'abandoned' });
+      result = { phase: 'abandoned', wrote: [] };
+    } else {
+      // awaiting-review / locked — no actionable work this turn.
+      result = { phase: status.phase, wrote: [] };
+    }
+  } finally {
+    if (writesProjectRepo) {
+      try { commitStudioChange(status.project_repo_path, `forge-studio: demo machinery (${status.phase})`); } catch { /* best-effort */ }
+    }
   }
 
   sink.flushIteration(1);

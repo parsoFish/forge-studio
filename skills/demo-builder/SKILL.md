@@ -47,16 +47,30 @@ make the sample a genuine before/after of a real change.
 ## Ground it in REAL output
 
 Use Bash to actually check out / build / run the relevant states and capture real
-output into the sample. Never fabricate results, fake metrics, or invent a passing
-run. If a before/after can't be produced for the chosen change, pick a different
-recent change or say so in the page — don't fake it.
+output into the sample. Ground the sample in a representative recent change. Use
+Bash + git to find one (`git log --oneline -20`; pick the most recent substantive
+feature commit or commit range) and render an actual before/after of it — real
+output on both sides, not a mock. Never fabricate results, fake metrics, or invent
+a passing run. If a before/after can't be produced for the chosen change, pick a
+different recent change or say so in the page — don't fake it.
+
+## The demo skill's quality bar
+
+Whichever demo skill you author this turn — the composer at
+`.forge/skills/demo-design/SKILL.md`, or a per-element skill — it must instruct a
+future agent how to, given an initiative's before/after (a base SHA / worktree vs
+the merged result), render a self-contained Forge-styled HTML demo that showcases
+the changes that initiative introduced — the new behaviour, the diff that matters,
+real captured output before vs after, the verification that makes it non-trivial.
+This is also the file `forge preflight` DEMO-SKILL checks.
 
 ## Honor the inputs
 
 Each turn's data block below gives you the operator's **look-and-feel guidance**
 (or, on an update turn, their **change-notes**), the project's configured **demo
 process** where relevant, and — on revision turns — the operator's **feedback** on
-the previous sample. Apply all of them.
+the previous sample. Apply all of them. On a revision, EDIT the existing skill +
+sample toward the feedback; don't rebuild from scratch unless asked.
 
 ## Contract
 
@@ -111,15 +125,11 @@ change-notes in the data block below; do NOT rebuild from scratch.
 
 Deliver BOTH:
 1. `.forge/skills/demo-design/SKILL.md` — the reusable generator that renders a
-   before/after HTML demo of an INITIATIVE'S CHANGES. It must instruct a future
-   agent how to, given an initiative's before/after (a base SHA / worktree vs the
-   merged result), render a self-contained Forge-styled HTML demo that showcases
-   the changes that initiative introduced — the new behaviour, the diff that
-   matters, real captured output before vs after, the verification that makes it
-   non-trivial. It bakes in the concrete commands for THIS project drawn from the
+   before/after HTML demo of an INITIATIVE'S CHANGES, meeting the demo skill's
+   quality bar. It bakes in the concrete commands for THIS project drawn from the
    configured demo process in the data block below, and inlines the Forge demo
    base stylesheet from the data block below so every generated demo reads as
-   Forge. This is also the file `forge preflight` DEMO-SKILL checks.
+   Forge.
 2. `.forge/demo/DEMO.html` — a real sample produced by running that generator
    against a representative recent change (use git log/diff; real before/after,
    never fabricated). This sample is what the operator reviews to judge the

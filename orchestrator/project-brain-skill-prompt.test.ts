@@ -176,9 +176,26 @@ const MOVED_SENTENCES: { label: string; text: string }[] = [
     text: 'this KB has no project repo — read the',
   },
   {
+    // T2 RULING (R4-23 round 2): this entry originally pinned
+    // "...under the cycle archives dir ABOVE, and synthesize...". That made
+    // AT-1 and AT-8 mutually unsatisfiable — AT-8 forbids the stale positional
+    // word from reaching a live prompt (the `Cycle archives (...)` data line it
+    // pointed at is emitted AFTER the turn section, proven by index comparison
+    // in AT-8 itself), while this AT demanded the sentence containing it be
+    // present in SKILL.md. The same conflict arose in WI-1 and was resolved the
+    // same way there (commit 35f7e2a7): the AT is the defective half, so it is
+    // split around the positional word. Both halves of the instruction stay
+    // pinned; only the word that has to change is released. The alternative —
+    // parking the stale sentence somewhere no runner reads it — is the
+    // dead-prose-to-satisfy-a-grep antipattern this lane has already rejected
+    // once. Recorded in the PR body.
     label:
-      "evidence-source frame, middle half (.ts line 225 at base — between \\`${binding.ref}\\` and \\`${binding.band}\\`)",
-    text: "flow's archived cycles under the cycle archives dir above, and synthesize the durable patterns from each cycle's logged",
+      "evidence-source frame, middle half (.ts line 225 at base — between \\`${binding.ref}\\` and \\`${binding.band}\\`), split around the re-anchored positional word",
+    text: "flow's archived cycles under",
+  },
+  {
+    label: 'evidence-source frame, tail half (.ts line 225 at base — after the re-anchored positional reference)',
+    text: "and synthesize the durable patterns from each cycle's logged",
   },
 ];
 

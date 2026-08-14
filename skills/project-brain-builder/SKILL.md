@@ -85,9 +85,18 @@ archives (your working directory — READ from here):` line in the data block
 below.
 
 Evidence source: this KB has no project repo — read the flow named by the
-`Evidence flow:` line below — that flow's archived cycles under the cycle
-archives dir above, and synthesize the durable patterns from each cycle's
-logged review band (named by the `Evidence band:` line below) / adversarial-review
+`Evidence flow:` line below — that flow's archived cycles under this turn's
+working directory, and synthesize the durable patterns from each cycle's logged
+review band (named by the `Evidence band:` line below) / adversarial-review
 findings.
+
+Good themes for a review-insights brain: **structure** (how review findings are
+organized — severity/gate bands, and which phase of the cycle they surfaced in),
+**conventions** (the review process's own severity taxonomy — blocker vs major vs
+minor, and what triggers a send-back), **build & test** (the test/verification
+evidence reviewers demanded before approving, and the evidence gaps that
+recurred), **key patterns** (the durable defect patterns that showed up across
+multiple cycles), and any **antipatterns / sharp edges** the review findings
+repeatedly flag.
 
 Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.
