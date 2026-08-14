@@ -994,6 +994,18 @@ function danglingEdgeFindings(files: string[], knownSlugs: ReadonlySet<string>):
  * `CHECK_SCOPE: 'forge-themes'` classification — the per-KB path for
  * project/band brains is `lintThemeFiles` (below), which reuses the same
  * `danglingEdgeFindings` core over its own explicit file list.
+ *
+ * SCOPE HONESTY (adversarial review, 2026-08-14 — measured, do not "fix" by
+ * widening this check). The slug universe here is deliberately EVERY brain
+ * theme basename, so a `cycles` theme referencing a `forge-dev` theme is
+ * legitimate CONTENT and is NOT reported. `buildKbGraph`, by contrast, scopes
+ * `nodeIds` to the ONE KB it is graphing, so it drops those cross-sub-wiki
+ * edges too — 25 of them exist in the live brain today. This check does NOT
+ * surface that second, separate case, and must not: flagging 25 correct links
+ * as broken would steer the maintenance agent into "repairing" them. The
+ * silent cross-KB drop is a defect on the GRAPH side (a per-KB graph
+ * discarding declared, resolvable links with no signal) and is filed as its
+ * own bead. What this check closes is exactly the UNRESOLVABLE-slug case.
  */
 export function checkDanglingEdges(forgeRoot: string): Finding[] {
   const brainRoot = join(forgeRoot, 'brain');

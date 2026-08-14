@@ -1182,11 +1182,12 @@ inventory rather than one shared page-level contract:
     - **Per-check itemization (R6-08 WI-1, honesty invariant "4on"):**
       `checks: KbHealthCheck[]` renders one row per named check —
       `[data-check=<name>][data-check-status="pass"|"warn"|"fail"|"unknown"|"n/a"][data-check-count]`
-      (`errorCount+flagCount`) — for the 10 checks in `CHECK_NAMES`
+      (`errorCount+flagCount`) — for the 12 checks in `CHECK_NAMES`
       (`cli/brain-lint.ts`, in order): `checkFrontmatter`, `checkIndexSync`,
       `checkSourceLinks`, `checkStaleness`, `checkOrphans`,
       `checkProjectBrainIndexes`, `checkLengthSoftCap`, `checkContradictions`,
-      `checkCategoryScope`, `checkReflectorLoss`. **`status:'pass'` means the
+      `checkCategoryScope`, `checkReflectorLoss`, `checkDanglingEdges`,
+      `checkDuplicateThemes` (the last two added by R4-19-F2). **`status:'pass'` means the
       check genuinely ran over THIS KB's own content and found nothing** —
       never a silent pass for a check that never looked (the
       declared-data-fails-open bug class 4on fixed). A check is real
@@ -1194,7 +1195,8 @@ inventory rather than one shared page-level contract:
       this KB's exact dir (`forge-themes` ⇒ `brain/cycles`/`brain/forge-dev`
       only; `project-indexes` ⇒ a direct `brain/projects/<id>` child) or
       (b) it's one of `LINT_THEME_FILE_CHECKS` (`checkFrontmatter`/
-      `checkSourceLinks`/`checkIndexSync`) and this KB's own theme files are
+      `checkSourceLinks`/`checkIndexSync`/`checkDanglingEdges`/
+      `checkDuplicateThemes`) and this KB's own theme files are
       scanned directly (`lintThemeFiles`, covers ANY kb kind — including
       project/band KBs the shared full-scope scan never walks). Everything
       else reports the honest `'n/a'` — `checkReflectorLoss` (a `global`
