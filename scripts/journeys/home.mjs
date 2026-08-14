@@ -282,6 +282,22 @@ export const journey = defineJourney({
         const ready = await page.evaluate(() =>
           document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') ?? '(absent)');
         check(ready === 'true', `HOME.1: [data-page="home"][data-page-ready="true"] (got "${ready}")`);
+
+        // W6-IA-1: the header "Onboard a project" CTA is the operator's ONE
+        // onboarding entry point from Home — it must land on the real
+        // onboarding form (/projects/new), never the bare /projects index
+        // (the retired shim used to redirect there to an arbitrary
+        // already-onboarded project). `data-action="onboard-project-cta"`
+        // (not "onboard-project") — that id is reserved for
+        // ProjectOnboardForm's own submit button on /projects/new, so a
+        // page-scoped selector can never match both at once.
+        const onboardCta = await page.evaluate(() => {
+          const el = document.querySelector('[data-action="onboard-project-cta"]');
+          return el ? { href: el.getAttribute('href') } : null;
+        });
+        check(onboardCta?.href === '/projects/new',
+          `HOME.1: the "Onboard a project" CTA targets the real onboarding form, /projects/new (got "${onboardCta?.href}")`);
+
         await caption(page, 'Home — everything running, at a glance: live flows/agents, the portfolio, and what needs the operator now.');
         await sleep(READ);
 
