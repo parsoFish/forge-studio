@@ -465,7 +465,11 @@ was needed.
 
 ### R5-09 Docs ground-truth restructure (three scopes)
 
-- **Status:** planned  ·  **Wave:** 5, batch F
+- **Status:** implemented (2026-08-14, PR #128 — `docs/README.md` is the
+  three-scope index [operate/develop/plan], the one tracked pure-history file
+  git-history-deleted, ground-truth pages present-tense; ADRs/known-gaps/
+  CHANGELOG/brain untouched; check-docs-claims + check-adr-index green)  ·
+  **Wave:** 5, batch G
 - **Depends on:** R5-08 (soft — sweep first so docs describe the minimised
   state); the wave-5 surface batches (docs describe what ships).
 - **Context:** Operator directive (2026-08-03, wave-5 restructure): refine

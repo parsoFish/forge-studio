@@ -297,7 +297,7 @@ execution detail; THIS table is the driving view.
 | **D — Projects & knowledge** | projects-list/detail · project-roadmap-tab · demo-showcase · kb-create/maintain · kb-explore · per-OOTB flows · per-OOTB authoring | R4-12 · R4-13 · R4-14 · R1-06 · R6-08 · R4-19 · R4-18 · R4-20 · R4-21 | create-kb-project · create-kb-cycle · kb-maintain · run-agent-brain-creation · run-flow-onboard · run-flow-brain-tune · build-skill · build-hook |
 | **E — Interactive runtime bridge** ✅ closed 2026-08-11 | interactive-runtime-primitive · authoring-agent · onboard-flow · ~~brain-maintenance~~ (slipped at open) | R4-22 · R4-21 · R4-18 · ~~R4-19-F2~~ | build-skill ✓ · build-hook ✓ (real, live — PR #118) · run-flow-onboard ✓ (PR #116) — the 4 legacy runners green + byte-identical behind the dispatch fork; migrations re-homed to R4-23 (operator ruling; `_wave5/batch-e-exit-disposition.md`) |
 | **F — IA & Home** ✅ closed 2026-08-14 | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav ✓ (PR #121) · Home dashboard live ✓ (PR #124) · +SEC-06/07 root-fold class closed mid-batch (PR #122/#123); `_wave5/batch-f-exit-disposition.md` |
-| **G — Refinement & ground truth** | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep clean; three-scope docs (operate / develop / plan) |
+| **G — Refinement & ground truth** ✅ closed 2026-08-14 | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep −201 LOC, no behaviour change ✓ (PR #126) · root-fold read-before-guard closed ✓ (PR #127) · three-scope ground-truth docs ✓ (PR #128); `_wave5/batch-g-exit-disposition.md` — **WAVE 5 COMPLETE** |
 
 Batch rules: order **A→G** (batch E — interactive-runtime bridge — inserted
 2026-08-10, shifting the former E/F to F/G; see the change log), dependencies
@@ -886,3 +886,19 @@ genuinely "planned but not yet built".
   **`free -h` before any `ui:journey`/`ui:deadpaths` run** — a foreign OOM produced
   `Target crashed` failures that read exactly like journey-beat defects. Retro:
   `_wave5/batch-f-retro.md`. Remaining: batch G (R5-08 · R5-09) — the last.
+
+- 2026-08-14 — **Batch G CLOSED — WAVE 5 COMPLETE** (opened + closed 2026-08-14;
+  PRs #126–#128). Exit record: `_wave5/batch-g-exit-disposition.md`. The terminal
+  batch: R5-08 ran knip/ts-prune/depcheck across the tree and removed ~201 LOC
+  (an orphaned CLI module, the retired unifier type cluster, an unused dep) with a
+  zero-reference proof per deletion and **no behaviour change** — every gate and
+  journey count unchanged (PR #126); a separate terse PR closed the last
+  read-before-guard security finding (`forge-osz`, PR #127); and R5-09 restructured
+  `docs/` into a three-scope ground truth — `docs/README.md` is the operate/develop/
+  plan index, the one tracked pure-history file git-history-deleted, ADRs/known-gaps/
+  CHANGELOG/brain left as the history/decision/defect records (PR #128, operator-
+  approved disposition map). **Wave 5 is complete: seven batches A–G, PRs #73–#128.**
+  What slipped (deliberately, with successors filed): R4-19-F2 brain-maintenance,
+  R4-23 runner prompt re-authoring (the ADR-043 migrations that measurement showed
+  aren't expressible on the primitive), and the architect-runner migration (kept
+  as a named step-handler variant). Campaign retro: `_wave5/wave-5-capstone-retro.md`.
