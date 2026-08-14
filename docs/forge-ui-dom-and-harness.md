@@ -722,9 +722,47 @@ inventory rather than one shared page-level contract:
   `0`** with `[data-component="node-outputs-empty"]`: no per-node artifact
   source exists (`artifactsReady` is run-level and keyed by artifact TYPE),
   and attributing it to a node would be run-level data worn as per-node fact.
-- **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
-  just redirects to the first registered project
-  (`[data-page="projects-index"]` while empty/loading). The project page is
+- **`/projects` — the real projects index (W6-IA-1, 2026-08-15).** Was a
+  23-line shim that fetched the roster only to redirect straight to the FIRST
+  registered project (an operator-initiated onboard from Home landed on an
+  arbitrary already-onboarded project's editor) and rendered dead-end "No
+  projects registered." text with no CTA once empty. Now a real index:
+  `[data-page="projects-index"][data-page-ready][data-project-count]` with a
+  persistent header `[data-action="onboard-project-cta"]` CTA (→
+  `/projects/new`) and a card grid — `[data-section="projects-grid"]
+  [data-count]` — reusing the SAME `ProjectCard` (`components/studio/
+  LibraryCard.tsx`) the Library page's projects section renders (one card,
+  two shelves), each linking to its own `/projects/<id>`. Zero-state
+  (`[data-section="projects-empty"]`, honestly gated on `ready &&
+  projects.length === 0` — never flashed mid-fetch) offers BOTH an onboard
+  CTA and a greenfield-create CTA (`[data-action="create-project-cta"]`),
+  both routing to `/projects/new` (the one form hosts both paths); never
+  terminal text. The presentational piece
+  (`components/studio/ProjectsIndex.tsx`'s `ProjectsIndexBody`) is
+  pure/props-driven — no fetch, no `useEffect` — so it is unit-render-tested
+  directly (`lib/projects-index-render.test.ts`, the no-jsdom
+  `renderToStaticMarkup` pattern `lib/library-card-render.test.ts`
+  established); `app/projects/page.tsx` is only the fetch-and-`useState`
+  shell (mirrors Library's own `loadAll` shape). Home's (`/`) own "Onboard a
+  project" header CTA now targets `/projects/new` directly rather than this
+  index (previously `/projects`, which the redirect made a random-project
+  trap) and was renamed `[data-action="onboard-project-cta"]` — distinct
+  from `ProjectOnboardForm`'s own submit button on `/projects/new`, which
+  keeps `[data-action="onboard-project"]` (the two ids never collided on the
+  same page, but shared one name for two different operations — link-navigate
+  vs. form-submit — which this index's own CTAs also now follow). Journey
+  coverage: `scripts/journeys/home.mjs`'s `home-landing` beat asserts the
+  Home CTA's own href; its `home-projects-index` beat (the very next beat,
+  while `home-landing`'s two seeded scratch projects are still live) is the
+  one that actually NAVIGATES to `/projects` and asserts the index's own
+  contract — `data-page="projects-index"`, `data-page-ready`, both seeded
+  projects' own cards present, `data-project-count`/the grid's `data-count`
+  matching a REAL `GET /api/studio/projects` read (never a re-derived client
+  guess), and the persistent onboard CTA surviving onto the index page
+  itself. An upstream link's href is not the same claim as the destination's
+  own DOM contract — this beat exists to cover the latter, not duplicate the
+  former.
+- **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
   Roadmap renders `RoadmapDag.tsx` (R4-13, replacing the retired

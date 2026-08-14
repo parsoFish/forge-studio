@@ -146,7 +146,13 @@ export default function HomePage() {
       lede="One surface for the whole fleet: live flows and agents, the portfolio behind them, and every run that shaped it."
       actions={
         <>
-          <a className="btn" href="/projects" data-action="onboard-project" style={{ textDecoration: 'none' }}>
+          {/* W6-IA-1: points at the real onboarding form, not the projects
+              index — `data-action="onboard-project-cta"` (not
+              "onboard-project") to keep this navigation-only link distinct
+              from ProjectOnboardForm's own submit button on /projects/new,
+              which owns the "onboard-project" action id (see
+              docs/forge-ui-dom-and-harness.md's /projects section). */}
+          <a className="btn" href="/projects/new" data-action="onboard-project-cta" style={{ textDecoration: 'none' }}>
             Onboard a project
           </a>
           <a className="btn btn-primary" href="/flows/forge-develop" data-action="watch-live-run" style={{ textDecoration: 'none' }}>
