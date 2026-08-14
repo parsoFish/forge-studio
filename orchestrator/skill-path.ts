@@ -147,12 +147,41 @@ export function listSkillDirs(root: string = FORGE_ROOT): string[] {
  *  padded with whitespace inside the comment or trailing the line. */
 const TURN_MARKER_RE = /^<!--\s*turn:\s*([a-z0-9][a-z0-9-]*)\s*-->\s*$/;
 
+/** A line that LOOKS like a turn marker (has `<!--` ... `turn:` ... `-->` on
+ *  one line) but does not match `TURN_MARKER_RE` — e.g. an uppercase or
+ *  underscore id. Used only to make a "no turn sections" / "no turn X"
+ *  fail-loud message diagnosable: without this, an operator staring at "no
+ *  turn markers" has no clue a malformed one sits two lines away. */
+const NEAR_MISS_MARKER_RE = /<!--\s*turn:[^>]*-->/;
+
+/** A fenced-code-block delimiter line (```` ``` ```` or `~~~`, optionally
+ *  indented and/or followed by a language tag). Markdown-authors sometimes
+ *  document the turn-marker SYNTAX inside a fence (e.g. to show an example in
+ *  prose) — a marker written there is example text, not a real section
+ *  boundary, so marker parsing is suspended while inside a fence. */
+const FENCE_TOGGLE_RE = /^\s*(`{3,}|~{3,})/;
+
 /** Drop trailing blank (whitespace-only) lines so composing `base + '\n\n' +
  *  section` never accumulates run-away blank lines between them. */
 function joinTrimmingTrailingBlankLines(lines: string[]): string {
   let end = lines.length;
   while (end > 0 && lines[end - 1].trim() === '') end--;
   return lines.slice(0, end).join('\n');
+}
+
+/** Lines in `text` that look like a turn marker but don't match the strict
+ *  marker shape — named verbatim in a fail-loud message so a malformed
+ *  marker is diagnosable rather than silently invisible. */
+function findNearMissMarkers(text: string): string[] {
+  const lines = text.split(/\r\n|\r|\n/);
+  const found: string[] = [];
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (NEAR_MISS_MARKER_RE.test(trimmed) && !TURN_MARKER_RE.test(trimmed)) {
+      found.push(trimmed);
+    }
+  }
+  return found;
 }
 
 /**
@@ -166,21 +195,42 @@ function joinTrimmingTrailingBlankLines(lines: string[]): string {
  * than silently treating the whole doc as one anonymous section.
  */
 export function splitSkillTurnSections(text: string): { base: string; turns: Map<string, string> } {
-  const lines = text.split('\n');
+  // CRLF-safe line split: `\r\n` (and a lone `\r`) are consumed as the line
+  // separator here, so no line — base or section — ever carries a trailing
+  // `\r` into the composed prompt (R2-AT-7).
+  const lines = text.split(/\r\n|\r|\n/);
   const turns = new Map<string, string>();
   const baseLines: string[] = [];
   let currentId: string | null = null;
   let currentLines: string[] = [];
   let sawMarker = false;
+  let inFence = false;
 
   const flushCurrentSection = () => {
     if (currentId !== null) {
+      // R2-AT-4: a repeated `<!-- turn: x -->` must be refused, never
+      // silently last-write-wins over the first section's content.
+      if (turns.has(currentId)) {
+        throw new Error(
+          `splitSkillTurnSections: duplicate turn id "${currentId}" — this SKILL.md declares ` +
+            `<!-- turn: ${currentId} --> more than once. Each turn id must be unique.`,
+        );
+      }
       turns.set(currentId, joinTrimmingTrailingBlankLines(currentLines));
     }
   };
 
   for (const line of lines) {
-    const marker = TURN_MARKER_RE.exec(line);
+    // A fence delimiter is ordinary content either way — push it to whichever
+    // bucket is currently open — but it toggles fence state FIRST so a marker
+    // documented inside the fence (R2-AT-5) is never parsed as a boundary.
+    if (FENCE_TOGGLE_RE.test(line)) {
+      inFence = !inFence;
+      if (currentId === null) baseLines.push(line);
+      else currentLines.push(line);
+      continue;
+    }
+    const marker = inFence ? null : TURN_MARKER_RE.exec(line);
     if (marker) {
       sawMarker = true;
       flushCurrentSection();
@@ -257,16 +307,28 @@ export function loadSkillTurnPrompt(args: {
 
   const { base, turns } = splitSkillTurnSections(text);
   if (turns.size === 0) {
+    // R2-AT-6: a marker-LIKE line (wrong id shape — uppercase, underscore, …)
+    // is not silently indistinguishable from "no marker at all" — name it, so
+    // the operator isn't told "no turns available" while one sits two lines
+    // away, malformed.
+    const nearMiss = findNearMissMarkers(text);
+    const nearMissNote = nearMiss.length
+      ? ` Found a marker-like line that does not match the required <!-- turn: <id> --> shape: ${nearMiss.join('; ')}.`
+      : '';
     throw new Error(
       `loadSkillTurnPrompt: skill "${name}" (${resolvedPath}) carries no <!-- turn: ... --> sections — ` +
-        `requested turn "${turnId}". Add turn markers to the skill before driving it per-turn.`,
+        `requested turn "${turnId}".${nearMissNote} Add turn markers to the skill before driving it per-turn.`,
     );
   }
   const section = turns.get(turnId);
   if (section === undefined) {
     const available = [...turns.keys()].sort().join(', ');
+    const nearMiss = findNearMissMarkers(text);
+    const nearMissNote = nearMiss.length
+      ? ` Found a marker-like line that does not match the required <!-- turn: <id> --> shape: ${nearMiss.join('; ')}.`
+      : '';
     throw new Error(
-      `loadSkillTurnPrompt: skill "${name}" (${resolvedPath}) has no turn "${turnId}" — available turns: ${available}.`,
+      `loadSkillTurnPrompt: skill "${name}" (${resolvedPath}) has no turn "${turnId}" — available turns: ${available}.${nearMissNote}`,
     );
   }
   return `${base}\n\n${section}`;

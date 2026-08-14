@@ -66,6 +66,7 @@ revising it per change-notes).
 <!-- turn: interview -->
 ## Your task this turn: the interview step
 
+First inspect the repo (read manifests, CI config, existing CLAUDE.md/AGENTS.md, a few source files).
 Decide whether you have enough to write a coherent, accurate AGENTS.md WITHOUT
 unresolved ambiguity about commands, conventions, or constraints. Ask only
 what unblocks an accurate draft — things the code cannot tell you (intended
@@ -73,16 +74,27 @@ audience, what's off-limits, release conventions). Stop as soon as more
 questions would only refine. When you do ask, follow the AskUserQuestion
 shape: question, header ≤12 chars, 2–4 options each with label + description.
 
-If the `Mode:` line in the data block below reads `edit`: You are UPDATING the
-existing AGENTS.md above per the change-notes. You can usually proceed without
+Inspect the repo with your read tools, then decide whether you can write an
+accurate AGENTS.md without unresolved ambiguity. If yes, return `{ "done":
+true }`. Otherwise return `{ "done": false, "questions": [...] }` with 1-4
+high-leverage questions in the AskUserQuestion shape.
+
+<!-- turn: interview-edit -->
+## Your task this turn: the interview step
+
+First inspect the repo (read manifests, CI config, existing CLAUDE.md/AGENTS.md, a few source files).
+Decide whether you have enough to write a coherent, accurate AGENTS.md WITHOUT
+unresolved ambiguity about commands, conventions, or constraints. Ask only
+what unblocks an accurate draft — things the code cannot tell you (intended
+audience, what's off-limits, release conventions). Stop as soon as more
+questions would only refine. When you do ask, follow the AskUserQuestion
+shape: question, header ≤12 chars, 2–4 options each with label + description.
+
+You are UPDATING the existing AGENTS.md (the `## Existing AGENTS.md` block in
+the data below) per the change-notes. You can usually proceed without
 questions — return `{ "done": true }`. Only return `{ "done": false,
 "questions": [...] }` (1-4 AskUserQuestion-shaped) if a note is genuinely
 ambiguous.
-
-Otherwise (`Mode: init`): Inspect the repo with your read tools, then decide
-whether you can write an accurate AGENTS.md without unresolved ambiguity. If
-yes, return `{ "done": true }`. Otherwise return `{ "done": false, "questions":
-[...] }` with 1-4 high-leverage questions in the AskUserQuestion shape.
 
 <!-- turn: draft -->
 ## Your task this turn: draft AGENTS.md
@@ -91,13 +103,20 @@ Fold in the operator's interview answers and any resolved revision feedback.
 Lead with the project's purpose; keep every command copied-accurate; keep it
 tight.
 
-If the `Mode:` line in the data block below reads `edit`: Return `{
-"agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the existing
-AGENTS.md above, REVISED to incorporate the operator's change-notes. Preserve
+Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` —
+the complete AGENTS.md content, ready to write verbatim to the repo root.
+Keep commands copy-accurate; keep it tight. List any seed ids you composed
+from in composed_seed_ids ([] if none applied).
+
+<!-- turn: draft-edit -->
+## Your task this turn: draft AGENTS.md
+
+Fold in the operator's interview answers and any resolved revision feedback.
+Lead with the project's purpose; keep every command copied-accurate; keep it
+tight.
+
+Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` —
+the existing AGENTS.md (the `## Existing AGENTS.md` block in the data
+below), REVISED to incorporate the operator's change-notes. Preserve
 everything they did not ask to change; keep commands copy-accurate; keep it
 tight. List any seed ids you composed from in composed_seed_ids.
-
-Otherwise (`Mode: init`): Return `{ "agents_md": "<full markdown>",
-"composed_seed_ids": [...] }` — the complete AGENTS.md content, ready to write
-verbatim to the repo root. Keep commands copy-accurate; keep it tight. List
-any seed ids you composed from in composed_seed_ids ([] if none applied).

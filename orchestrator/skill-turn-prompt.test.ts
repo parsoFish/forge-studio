@@ -473,7 +473,18 @@ test('AT-8: a drafting prompt (real production SKILL.md, no override) still carr
 const MOVED_SENTENCES = [
   'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the complete AGENTS.md content,',
   'Inspect the repo with your read tools, then decide whether you can write an',
-  'You are UPDATING the existing AGENTS.md above per the change-notes. You can usually',
+  // T2 RULING (R4-23 round 2): this entry originally pinned
+  // '...existing AGENTS.md ABOVE per the change-notes...'. That made AT-9 and
+  // R2-AT-1a/b mutually unsatisfiable — R2-AT-1 forbids the stale positional
+  // word "above" from reaching a live prompt, while this AT demanded the
+  // sentence containing it be present in SKILL.md. The first implementer
+  // "resolved" the contradiction by parking the superseded wording in a dead
+  // `legacy-wording-archive` turn section no runner ever loads: prose added to
+  // a shipped artifact purely to satisfy a grep. The AT was the defective
+  // half, so it is corrected here — pin the clause that is INVARIANT under
+  // re-anchoring (everything up to the positional word), not the positional
+  // word itself. Recorded in the PR body.
+  'You are UPDATING the existing AGENTS.md',
 ];
 
 function collapseWhitespace(text: string): string {
@@ -716,8 +727,19 @@ const FROZEN_SENTENCES_BASE_C45E3892: FrozenSentence[] = [
   },
   {
     source: 'orchestrator/instructions-runner.ts (runInterviewStep, edit-mode branch, base)',
+    // T2 RULING (R4-23 round 2): split around the positional word "above",
+    // which R2-AT-1a/b legitimately forbids from reaching a live prompt (the
+    // `## Existing AGENTS.md` data block it referred to is now BELOW the skill
+    // text, not above it). Pinning the whole original sentence would have made
+    // the two ATs mutually unsatisfiable and forced dead prose into the shipped
+    // SKILL.md. Both halves of the instruction are still pinned — only the
+    // stale positional word is released. Recorded in the PR body.
+    sentence: 'You are UPDATING the existing AGENTS.md',
+  },
+  {
+    source: 'orchestrator/instructions-runner.ts (runInterviewStep, edit-mode branch, base) — second half',
     sentence:
-      'You are UPDATING the existing AGENTS.md above per the change-notes. You can usually ' +
+      'per the change-notes. You can usually ' +
       'proceed without questions — return `{ "done": true }`. Only return ' +
       '`{ "done": false, "questions": [...] }` (1-4 AskUserQuestion-shaped) if a note is genuinely ambiguous.',
   },
@@ -730,9 +752,16 @@ const FROZEN_SENTENCES_BASE_C45E3892: FrozenSentence[] = [
   },
   {
     source: 'orchestrator/instructions-runner.ts (runDraftStep, edit-mode branch, base)',
+    // T2 RULING (R4-23 round 2): split around the positional word "above" —
+    // same reasoning as the interview edit-mode entry above.
     sentence:
       'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the existing ' +
-      "AGENTS.md above, REVISED to incorporate the operator's change-notes. Preserve everything " +
+      'AGENTS.md',
+  },
+  {
+    source: 'orchestrator/instructions-runner.ts (runDraftStep, edit-mode branch, base) — second half',
+    sentence:
+      ", REVISED to incorporate the operator's change-notes. Preserve everything " +
       'they did not ask to change; keep commands copy-accurate; keep it tight. List any seed ids ' +
       'you composed from in composed_seed_ids.',
   },

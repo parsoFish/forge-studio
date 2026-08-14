@@ -318,7 +318,12 @@ async function runInterviewStep(args: {
   onText?: (text: string) => void;
 }): Promise<InterviewDecision> {
   const { status, interview, queryFn, skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
-  const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId: 'interview', skillPromptPath });
+  // R4-23 round 2 (R2-AT-3): the mode branches are two SEPARATE, self-contained
+  // turn sections — the runner selects exactly one, mirroring the pre-refactor
+  // TypeScript ternary this replaces, instead of showing the agent both
+  // branches' instructions in a single concatenated section.
+  const turnId = status.mode === 'edit' ? 'interview-edit' : 'interview';
+  const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId, skillPromptPath });
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(no answers yet — this is the first round)_';
@@ -380,7 +385,9 @@ async function runDraftStep(args: {
   // SEC-04 leaf: answers.json READ routed through the guard (leaf included).
   const interview = readAnswerRounds(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
   const feedback = readFeedback(input.projectRoot, input.sessionId);
-  const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId: 'draft', skillPromptPath: input.skillPromptPath });
+  // R4-23 round 2 (R2-AT-3): same mode-branch selection as the interview step.
+  const turnId = status.mode === 'edit' ? 'draft-edit' : 'draft';
+  const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId, skillPromptPath: input.skillPromptPath });
 
   const editContext = editContextLines(status);
   const seedSection = renderSeedPromptSection(matchedSeeds ?? []);
