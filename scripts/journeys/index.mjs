@@ -5,9 +5,10 @@
  * user story under scripts/journeys/), in the building-blocks throughline order
  * below. RUN_ORDER is the flat `[journeyId, beatId]` execution sequence the
  * runner drives beat-by-beat — each journey's beats now run CONTIGUOUS (no
- * interleaving): skills → hooks → templates → connections → stand-up-onboard
- * → stand-up-create → knowledge → agents → flows-author → flows-run →
- * flows-onboard → roadmap → demo-showcase → demo-builder → community
+ * interleaving): home → skills → hooks → templates → connections →
+ * stand-up-onboard → stand-up-create → knowledge → agents → flows-author →
+ * flows-run → flows-onboard → roadmap → demo-showcase → demo-builder →
+ * community
  * (R3-07 — deliberately
  * LAST, see its own RUN_ORDER comment below: it installs a real skill + a
  * real hook, mutating /skills, /hooks and the agent-builder palette counts
@@ -25,6 +26,14 @@
  *     must not run until every flows-run beat (including the ACT-3 SWAP beats
  *     monitor-deep-dive / detail-reachable / start-run-cta / gate-control,
  *     which stay inside the flows-run journey itself) has completed.
+ * home (R6-07) runs FIRST in both JOURNEYS and RUN_ORDER — the operator lands
+ * on Home (`/`) before anything else, and it is entirely self-contained so
+ * placing it first preserves both hard orderings above untouched. Its own
+ * two throwaway scratch projects (HOME_GATED_PROJECT / HOME_ACTIVE_PROJECT,
+ * home.mjs — never J4_PROJECT, never mdtoc) are seeded by home-landing
+ * (behind its own crash-safe leading sweep) and swept by home-clickthrough's
+ * own finally (the last beat that needs them), mirroring demo-showcase's own
+ * cross-beat seed/sweep shape.
  * Every other journey (skills, hooks, templates, connections, agents,
  * knowledge, demo-showcase, demo-builder, flows-onboard) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
@@ -178,6 +187,7 @@
  * leading sweep mirroring hooks-security/connections-readiness-block's own
  * create-and-destroy-its-own-throwaway-fixture precedent.
  */
+import { journey as home } from './home.mjs';
 import { journey as skills } from './skills.mjs';
 import { journey as hooks } from './hooks.mjs';
 import { journey as templates } from './templates.mjs';
@@ -195,6 +205,7 @@ import { journey as demoBuilder } from './demo-builder.mjs';
 import { journey as community } from './community.mjs';
 
 export const JOURNEYS = [
+  home,
   skills,
   hooks,
   templates,
@@ -213,6 +224,10 @@ export const JOURNEYS = [
 ];
 
 export const RUN_ORDER = [
+  ['home', 'home-landing'],
+  ['home', 'home-attention'],
+  ['home', 'home-clickthrough'],
+
   ['skills', 'skills-library'],
   ['skills', 'skills-detail-package'],
   ['skills', 'skills-ootb-library'],

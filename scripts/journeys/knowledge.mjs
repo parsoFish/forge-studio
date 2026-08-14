@@ -903,7 +903,7 @@ export const journey = defineJourney({
               cleanScratchKbBand(); // guard against leftover state from a prior crashed run
 
               // Entry point: the library's own "+ New KB" CTA — never a direct goto.
-              await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
@@ -1163,7 +1163,7 @@ export const journey = defineJourney({
               // Entry point: the library's own card for the freshly-seeded scratch KB — the
               // real discovery point for maintaining an EXISTING brain (mirrors
               // knowledge-ingest's own library-card entry; there is nothing to create here).
-              await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
                 () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
@@ -1289,7 +1289,7 @@ export const journey = defineJourney({
 
                 // Entry point: the library's own card for the real cycles brain — never
                 // a direct goto (journey-sync entry-point rule).
-                await page.goto(watch.uiUrl, { waitUntil: 'domcontentloaded' });
+                await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
                 await page.waitForFunction(
                   () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 15000 },

@@ -23,12 +23,11 @@ const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 // Every Studio route a user can reach. Each must render a [data-page].
 const ROUTES = [
-  // `/` is the Home slot (R6-03-F3): it 307-redirects to /library until R6-07
-  // fills it with the Home surface. The crawler follows the redirect, so it
-  // must still land on a real [data-page] (proves the moved-Library bookmark
-  // resolves — the served half of batch-F ruling 47; the wire declaration is
-  // pinned by scripts/redirect-preservation.test.ts).
-  { path: '/', name: 'home slot (redirects to /library until R6-07)' },
+  // `/` served the interim `/library` redirect from R6-03-F3 until R6-07
+  // landed the real Home dashboard (forge-ui/app/page.tsx) — the redirect is
+  // now deliberately retired (scripts/redirect-preservation.test.ts pins its
+  // absence). The crawler still just asserts a real [data-page] renders here.
+  { path: '/', name: 'home dashboard (R6-07)' },
   { path: '/library', name: 'library (moved off /)' },
   { path: '/agents/new', name: 'agent-builder (new)' },
   { path: '/agents/developer-ralph', name: 'agent detail (real shipped agent)' },

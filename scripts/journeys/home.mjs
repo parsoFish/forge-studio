@@ -1,0 +1,344 @@
+/**
+ * home — R6-07 (wave-5, journey-sync T3): the Home dashboard at `/`.
+ *
+ * "What needs me at a glance" — the operator's landing surface. Entry-point
+ * rule: the clip STARTS at `/` (Home is where the operator lands, not a
+ * mid-flow screen). Reads the shipped `forge-ui/app/page.tsx` — Home is a
+ * PURE composition of six existing surfaces (fetchStudioAgents/Flows/
+ * Projects/Kbs + fetchRuns + fetchProjectAttention) through the pure
+ * `lib/home-view.ts` derivation (buildConstellation/buildHomeAttention) —
+ * no new endpoint, no bespoke poll loop. This journey proves the composition
+ * renders real, non-fabricated state:
+ *   - the hex constellation ([data-hex-kind][data-hex-id][data-hex-status])
+ *     derives its status from the SAME run-model / attention aggregate every
+ *     other journey already proves independently (never a `.status` field
+ *     the wire types don't carry — home-view.ts's own declared-data-fails-
+ *     open discipline);
+ *   - the attention strip fires only on a REAL gated condition and links
+ *     through to the owning project;
+ *   - every hex/attention-row navigates to its real owning surface.
+ *
+ * FIXTURE (self-contained, disjoint from every other journey's ids — never
+ * J4_PROJECT, never SHOWCASE_*, never CONN_SCRATCH_SLUG, etc., never mdtoc's
+ * own canonical queue): two throwaway projects with real `_queue/` manifests, mirroring the
+ * shapes flows-onboard.mjs's FOB_* fixture and journey-fixtures.mjs's
+ * writePlan/showcaseManifest already use elsewhere in this harness —
+ *   - HOME_GATED_PROJECT carries a REAL `_queue/ready-for-review/<id>.md`
+ *     manifest (mirrors a real send-back-pending PR awaiting an operator
+ *     verdict, the same `ready-for-review` shape flows-run.mjs's own INIT
+ *     reaches) so `fetchProjectAttention()` derives `gated>0` for it — a REAL
+ *     aggregate read, not a hand-poked count.
+ *   - HOME_ACTIVE_PROJECT carries a REAL `_queue/in-flight/<id>.md` manifest
+ *     naming the real, always-shipped `forge-develop` flow
+ *     (studio/flows/forge-develop/flow.yaml) plus a hand-seeded
+ *     `_logs/<cycleId>/events.jsonl` with one open `developer-loop` phase
+ *     event (started, never ended — mirrors a real in-flight dev-loop pass,
+ *     the same active shape flows-run.mjs's own CYCLE_ID reaches mid-run) —
+ *     `orchestrator/run-model.ts`'s FALLBACK_PHASE_TO_NODE maps
+ *     `developer-loop` -> the `dev` node, so this ONE seeded run drives
+ *     THREE independently-derived 'active' hexes: the `forge-develop` FLOW
+ *     hex (deriveFlowStatus), the `developer-ralph` AGENT hex
+ *     (deriveAgentStatus — owns the `dev` node), and the
+ *     HOME_ACTIVE_PROJECT PROJECT hex (deriveProjectStatus, via
+ *     `row.inFlight>0`).
+ *
+ * Both project directories are brand-new, disposable scratch dirs under
+ * `projects/` (never mdtoc's) — `discoverProjects()` (orchestrator/studio/
+ * registry.ts) only needs the directory to exist to surface a project row;
+ * a minimal `.forge/project.json` is added purely so the constellation label
+ * reads like a real project, not a bare slug (the "half-onboarded project
+ * still surfaces" contract orchestrator/studio/registry.ts documents).
+ *
+ * Seed/cleanup discipline (mirrors demo-showcase's own cross-beat shape,
+ * scripts/journeys/index.mjs's own header comment): `home-landing` seeds
+ * the fixture (behind its own crash-safe leading sweep, mirroring hooks-
+ * security/connections-readiness-block/flows-onboard-gate's precedent) and
+ * home-attention only READS it; `home-clickthrough` — the LAST beat that
+ * needs it — sweeps it in its own try/finally. A stray leftover from an
+ * interrupted run is swept by the SAME `cleanHomeFixture()` the next
+ * `home-landing` run calls first, so no top-level e2e-journey.mjs wiring is
+ * needed (unlike the multi-beat arcs that mutate a REAL shipped file and so
+ * need a process-level backstop — this fixture only ever touches its own
+ * disposable scratch paths).
+ */
+import { mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { defineJourney } from '../lib/journey-runtime.mjs';
+import { FORGE_ROOT, caption, ACT, READ } from '../lib/journey-fixtures.mjs';
+import { sleep } from '../lib/journey-assertions.mjs';
+
+// ── HOME fixture identity — local to this journey, disjoint from every other
+// journey's seeded ids (J4/J5/SK_*/HK_*/SHOWCASE_*/CONN_SCRATCH_SLUG/etc.) ──
+const HOME_DATE = new Date().toISOString().slice(0, 10);
+
+export const HOME_GATED_PROJECT = 'home-fixture-gated-project';
+const HOME_GATED_PROJECT_DIR = join(FORGE_ROOT, 'projects', HOME_GATED_PROJECT);
+const HOME_GATED_INIT = `INIT-${HOME_DATE}-home-fixture-gated`;
+const HOME_GATED_MANIFEST_PATH = join(FORGE_ROOT, '_queue', 'ready-for-review', `${HOME_GATED_INIT}.md`);
+
+export const HOME_ACTIVE_PROJECT = 'home-fixture-active-project';
+const HOME_ACTIVE_PROJECT_DIR = join(FORGE_ROOT, 'projects', HOME_ACTIVE_PROJECT);
+const HOME_ACTIVE_INIT = `INIT-${HOME_DATE}-home-fixture-active`;
+const HOME_ACTIVE_STAMP = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + 'Z';
+const HOME_ACTIVE_CYCLE_ID = `${HOME_ACTIVE_STAMP}_${HOME_ACTIVE_INIT}`;
+const HOME_ACTIVE_MANIFEST_PATH = join(FORGE_ROOT, '_queue', 'in-flight', `${HOME_ACTIVE_INIT}.md`);
+const HOME_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', HOME_ACTIVE_CYCLE_ID);
+
+/** Crash-safe sweep of BOTH of this journey's own fixtures — never a tracked
+ *  path (`projects/`, `_queue/`, `_logs/` entries created here are all
+ *  gitignored scratch), called both as a leading stale-state guard
+ *  (home-landing) and in home-clickthrough's own finally (the last beat that
+ *  needs the fixture), mirroring flows-onboard-gate's own
+ *  cleanOnboardGateRun() precedent. */
+function cleanHomeFixture() {
+  try { rmSync(HOME_GATED_PROJECT_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { rmSync(HOME_GATED_MANIFEST_PATH, { force: true }); } catch { /* best-effort */ }
+  try { rmSync(HOME_ACTIVE_PROJECT_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { rmSync(HOME_ACTIVE_MANIFEST_PATH, { force: true }); } catch { /* best-effort */ }
+  try { rmSync(HOME_ACTIVE_LOG_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+}
+
+/** Minimal `.forge/project.json` — just enough for the constellation label
+ *  to read like a real project (name/northStar); no testProcess/quality-gate
+ *  declared since this fixture is never dispatched or preflighted. */
+function writeHomeProjectConfig(dir, name, northStar) {
+  mkdirSync(join(dir, '.forge'), { recursive: true });
+  writeFileSync(join(dir, '.forge', 'project.json'), JSON.stringify({
+    $comment: 'journey-seeded scratch project (scripts/journeys/home.mjs) — never dispatched, swept every run.',
+    name, northStar,
+  }, null, 2));
+}
+
+/** The gated project's manifest — a real `ready-for-review` placement so
+ *  `fetchProjectAttention()` (cli/bridge-studio.ts's buildProjectAttention)
+ *  derives `gated>0` for it from an ACTUAL queue scan, not a poked count.
+ *  Carries its own `cycle_id` (no log dir needed — `orchestrator/run-
+ *  model.ts`'s `aggregateRunWithMapping` only needs a truthy `manifest.
+ *  cycle_id` to skip the `makePlannedRun` no-log fallback; an absent log dir
+ *  just yields zero phase events, which is fine — nothing here asserts on
+ *  this run's phase map). */
+function writeHomeGatedManifest() {
+  mkdirSync(join(FORGE_ROOT, '_queue', 'ready-for-review'), { recursive: true });
+  writeHomeProjectConfig(HOME_GATED_PROJECT_DIR, 'Fixture: Needs Review',
+    'A journey-seeded scratch project proving the Home attention strip fires on a real gated condition.');
+  writeFileSync(HOME_GATED_MANIFEST_PATH, [
+    '---',
+    `initiative_id: ${HOME_GATED_INIT}`,
+    `project: ${HOME_GATED_PROJECT}`,
+    `project_repo_path: ${HOME_GATED_PROJECT_DIR}`,
+    `created_at: '${new Date().toISOString()}'`,
+    'iteration_budget: 6',
+    'cost_budget_usd: 8',
+    'phase: ready-for-review',
+    'origin: architect',
+    `cycle_id: ${HOME_DATE}T00-00-00-000_${HOME_GATED_INIT}`,
+    '---',
+    '',
+    '# Home fixture — gated review (journey-seeded)',
+    '',
+    'Mirrors a real send-back-pending PR awaiting an operator verdict — the same ' +
+      '`ready-for-review` shape flows-run.mjs\'s own INIT reaches once its dev-loop ' +
+      'closes. Never mdtoc\'s own real queue; a throwaway scratch project this ' +
+      'journey creates and destroys itself.',
+    '',
+  ].join('\n'));
+}
+
+/** The active project's manifest + a real, hand-seeded event log — an
+ *  `in-flight` placement naming the real, always-shipped `forge-develop`
+ *  flow with ONE open `developer-loop` phase event (started, never ended).
+ *  `orchestrator/run-model.ts`'s FALLBACK_PHASE_TO_NODE maps `developer-loop`
+ *  -> the `dev` node (agent `developer-ralph`), so this one seeded run
+ *  independently derives 'active' on the forge-develop FLOW hex, the
+ *  developer-ralph AGENT hex, and this project's own PROJECT hex. */
+function writeHomeActiveManifest() {
+  mkdirSync(join(FORGE_ROOT, '_queue', 'in-flight'), { recursive: true });
+  writeHomeProjectConfig(HOME_ACTIVE_PROJECT_DIR, 'Fixture: Active Build',
+    'A journey-seeded scratch project proving the Home constellation renders a real active flow/agent hex.');
+  writeFileSync(HOME_ACTIVE_MANIFEST_PATH, [
+    '---',
+    `initiative_id: ${HOME_ACTIVE_INIT}`,
+    `project: ${HOME_ACTIVE_PROJECT}`,
+    `project_repo_path: ${HOME_ACTIVE_PROJECT_DIR}`,
+    `created_at: '${new Date().toISOString()}'`,
+    'iteration_budget: 10',
+    'cost_budget_usd: 6',
+    'phase: in-flight',
+    'origin: architect',
+    `cycle_id: ${HOME_ACTIVE_CYCLE_ID}`,
+    'flow_id: forge-develop',
+    '---',
+    '',
+    '# Home fixture — active build (journey-seeded)',
+    '',
+    'Mirrors a real in-flight developer-loop pass — the same active shape ' +
+      'flows-run.mjs\'s own CYCLE_ID reaches mid-run, against the real, always-' +
+      'shipped forge-develop flow. Never mdtoc\'s own real queue; a throwaway ' +
+      'scratch project this journey creates and destroys itself.',
+    '',
+  ].join('\n'));
+  mkdirSync(HOME_ACTIVE_LOG_DIR, { recursive: true });
+  writeFileSync(join(HOME_ACTIVE_LOG_DIR, 'events.jsonl'), JSON.stringify({
+    event_id: 'EV_home_1', cycle_id: HOME_ACTIVE_CYCLE_ID, initiative_id: HOME_ACTIVE_INIT,
+    started_at: new Date().toISOString(), phase: 'developer-loop', skill: 'developer-ralph',
+    event_type: 'start', input_refs: [], output_refs: [],
+    message: 'developer-loop.start', metadata: {},
+  }) + '\n');
+}
+
+function writeHomeFixture() {
+  writeHomeGatedManifest();
+  writeHomeActiveManifest();
+}
+
+/** goto `/` and wait for the real readiness signal — never a fixed sleep. */
+async function gotoHomeReady(page, watch) {
+  await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () => document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') === 'true',
+    null, { timeout: 20000 },
+  ).catch(() => {});
+}
+
+export const journey = defineJourney({
+  id: 'home',
+  title: 'Home — everything running, at a glance',
+  story: 'As the operator, I land on Home and see, in one glance, what needs me right now (a real gated review), the live status of every flow/agent/project/KB derived from the real run-model, and the recent-activity ledger behind it — every row a real link to its owning surface.',
+  beats: [
+    {
+      id: 'home-landing',
+      title: 'Landing on Home — the live constellation',
+      narration: 'The operator\'s FIRST stop, not a mid-flow screen: `/` now serves the Home dashboard directly (R6-07 retired the interim redirect to /library). The hex constellation renders one hex per flow/agent/project/KB, its status DERIVED from the same run-model and attention aggregate every other Studio surface reads — never a fabricated `.status` field.',
+      drive: async (ctx) => {
+        const { page, watch, check, countAtLeast, frame } = ctx;
+        console.log('\n[HOME.1] Home dashboard — landing');
+        cleanHomeFixture(); // crash-safe leading sweep — a prior interrupted run's leftovers
+        writeHomeFixture();
+
+        await gotoHomeReady(page, watch);
+        const ready = await page.evaluate(() =>
+          document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') ?? '(absent)');
+        check(ready === 'true', `HOME.1: [data-page="home"][data-page-ready="true"] (got "${ready}")`);
+        await caption(page, 'Home — everything running, at a glance: live flows/agents, the portfolio, and what needs the operator now.');
+        await sleep(READ);
+
+        const hexCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-page="home"]')?.getAttribute('data-hex-count') ?? '0', 10));
+        check(hexCount >= 2, `HOME.1: constellation data-hex-count reflects the seeded live objects (got ${hexCount})`);
+        await countAtLeast(page, 'section[data-section="constellation"] a.home-hex', 1, 'HOME.1: the constellation renders ≥1 clickable hex');
+
+        // Ruling-49: hex status == the REAL run-model status just seeded — never
+        // a fabricated color. Two independently-derived hexes off the ONE
+        // active-build run, plus the gated project hex off the attention aggregate.
+        const flowHexStatus = await page.evaluate(() =>
+          document.querySelector('a.home-hex[data-hex-kind="flow"][data-hex-id="forge-develop"]')?.getAttribute('data-hex-status') ?? null);
+        check(flowHexStatus === 'active',
+          `HOME.1: the forge-develop flow hex reads the REAL seeded run-model status (data-hex-status="active", got "${flowHexStatus}")`);
+
+        const agentHexStatus = await page.evaluate(() =>
+          document.querySelector('a.home-hex[data-hex-kind="agent"][data-hex-id="developer-ralph"]')?.getAttribute('data-hex-status') ?? null);
+        check(agentHexStatus === 'active',
+          `HOME.1: the developer-ralph agent hex ALSO reads active — same seeded run, independently derived (data-hex-status="active", got "${agentHexStatus}")`);
+
+        const gatedProjectHexStatus = await page.evaluate((pid) =>
+          document.querySelector(`a.home-hex[data-hex-kind="project"][data-hex-id="${pid}"]`)?.getAttribute('data-hex-status') ?? null,
+        HOME_GATED_PROJECT);
+        check(gatedProjectHexStatus === 'gated',
+          `HOME.1: the seeded gated project's own hex reads "gated" too, off the same attention aggregate (got "${gatedProjectHexStatus}")`);
+
+        // The activity section (HistoryLedger) — structural presence only; the
+        // ledger's own DOM contract is pinned elsewhere (flows-run.mjs).
+        await countAtLeast(page, 'section[data-section="activity"] section[data-section="history-ledger"]', 1,
+          'HOME.1: the activity section wraps a real HistoryLedger');
+        const ledgerCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-section="history-ledger"]')?.getAttribute('data-ledger-count') ?? '0', 10));
+        check(ledgerCount >= 2, `HOME.1: the ledger carries ≥2 rows — both seeded runs (got ${ledgerCount})`);
+
+        await frame(page, 'home-0-landing', 'Home — the constellation: live flow + agent + project hexes, all derived from the real run-model', { key: true });
+      },
+    },
+    {
+      id: 'home-attention',
+      title: 'The attention strip — what needs the operator right now',
+      narration: 'The attention strip fires ONLY on a real gated/flagged condition (home-view.ts\'s buildHomeAttention — an empty result honestly means nothing needs attention). Here it fires for the seeded gated project, and the row links straight through to that project\'s own surface.',
+      drive: async (ctx) => {
+        const { page, watch, check, frame } = ctx;
+        console.log('\n[HOME.2] Home — attention strip');
+        await gotoHomeReady(page, watch);
+        await caption(page, 'What needs the operator right now — the attention strip fires only on a REAL gated condition.');
+        await sleep(ACT);
+
+        const stripCount = await page.locator('section[data-section="attention-strip"]').count();
+        check(stripCount === 1, `HOME.2: [data-section="attention-strip"] renders — the seeded gated project fired it (got ${stripCount})`);
+
+        const attentionCountAttr = await page.evaluate(() =>
+          document.querySelector('[data-page="home"]')?.getAttribute('data-attention-count') ?? '0');
+        check(parseInt(attentionCountAttr, 10) >= 1, `HOME.2: data-attention-count ≥1 (got "${attentionCountAttr}")`);
+
+        const item = await page.evaluate((projectId) => {
+          const el = document.querySelector(`a[data-attention-item][data-attention-project="${projectId}"]`);
+          return el ? {
+            status: el.getAttribute('data-attention-status'),
+            href: el.getAttribute('href'),
+            gated: el.getAttribute('data-attention-gated'),
+          } : null;
+        }, HOME_GATED_PROJECT);
+        check(item !== null, `HOME.2: a[data-attention-item][data-attention-project="${HOME_GATED_PROJECT}"] is present`);
+        check(item?.status === 'gated', `HOME.2: the seeded project's attention status is the REAL derived "gated" (got "${item?.status}")`);
+        check(item?.href === `/projects/${HOME_GATED_PROJECT}`,
+          `HOME.2: the attention item links to its owning project's own surface (got "${item?.href}")`);
+        // Home mirrors R4-11-F4's full count vocabulary — the raw gated count
+        // is on the row too (the seeded manifest put exactly one in ready-for-review).
+        check(parseInt(item?.gated ?? '0', 10) >= 1,
+          `HOME.2: the row carries the REAL data-attention-gated count from the same fetchProjectAttention() read (got "${item?.gated}")`);
+
+        await frame(page, 'home-1-attention', 'Home — the attention strip: a real gated review surfaces without the operator hunting for it', { key: true });
+      },
+    },
+    {
+      id: 'home-clickthrough',
+      title: 'Every row links to its owning surface',
+      narration: 'The payoff: clicking the attention row lands on the gated project\'s own page; clicking the active flow hex lands on its real monitor, the seeded run visible there too. Nothing on Home is a dead end.',
+      drive: async (ctx) => {
+        const { page, watch, check, frame } = ctx;
+        console.log('\n[HOME.3] Home — clickthrough to the owning surface');
+        try {
+          await gotoHomeReady(page, watch);
+          await caption(page, 'Every hex and every attention row links straight through to its owning surface.');
+          await sleep(ACT);
+
+          // Click the seeded gated attention item — lands on the owning project page.
+          await page.locator(`a[data-attention-item][data-attention-project="${HOME_GATED_PROJECT}"]`).click();
+          await page.waitForFunction(
+            () => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 15000 },
+          ).catch(() => {});
+          const projectPage = await page.evaluate(() => {
+            const m = document.querySelector('[data-page="projects"]');
+            return m ? { id: m.getAttribute('data-project-id') } : null;
+          });
+          check(projectPage?.id === HOME_GATED_PROJECT,
+            `HOME.3: the attention row navigated to the owning project page (data-project-id="${projectPage?.id}")`);
+          await frame(page, 'home-2-attention-clickthrough', 'Home — clicking the attention row lands on the owning project, gated condition intact', { key: true });
+
+          // Back to Home, click the active flow hex — lands on its real monitor.
+          await gotoHomeReady(page, watch);
+          await page.locator('a.home-hex[data-hex-kind="flow"][data-hex-id="forge-develop"]').click();
+          await page.waitForFunction(
+            () => document.querySelector('[data-page="flow-monitor"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 20000 },
+          ).catch(() => {});
+          const monitor = await page.evaluate(() => {
+            const m = document.querySelector('[data-page="flow-monitor"]');
+            return m ? { flowId: m.getAttribute('data-flow-id') } : null;
+          });
+          check(monitor?.flowId === 'forge-develop',
+            `HOME.3: the active flow hex navigated to its own real monitor (data-flow-id="${monitor?.flowId}")`);
+          await frame(page, 'home-3-hex-clickthrough', 'Home — clicking the active flow hex lands on its real monitor, the seeded run visible there too', { key: true });
+        } finally {
+          cleanHomeFixture(); // the last beat that needs the fixture
+        }
+      },
+    },
+  ],
+});
