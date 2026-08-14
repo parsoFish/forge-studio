@@ -1870,3 +1870,260 @@ describe('deriveSessionArtifact — cleanup-plan state (R4-19-F2-fix: path norma
     assert.equal(artifact.openFindingCount, 0);
   });
 });
+
+// ===========================================================================
+// R4-19-F2, cleanupScan (ORCHESTRATOR RULING) — the positive control for
+// 'cleared'. The block immediately above (R4-19-F2-fix) correctly proved
+// 'cleared' is UNREACHABLE under `deriveCleanupPlan`'s old 3-argument shape
+// (sessionDir, label, cleanupFindings) and pinned every unmatched target to
+// 'unknown' — right, because absence from cleanupFindings is not evidence of
+// a genuine scan without also knowing what region the scan covered. That
+// correctly leaves a hole: 'cleared' must become reachable, or the product
+// can never show an operator that an approved repair actually landed.
+//
+// `deriveSessionArtifact` gains one ADDITIVE-OPTIONAL field (mirrors
+// `contractStages`'s own disclose-not-park threading, ADR 042):
+//
+//   cleanupScan?: { readonly forgeRoot: string; readonly brainDir: string }
+//
+// `forgeRoot` is the absolute path repo-relative action targets resolve
+// against; `brainDir` is the absolute directory the caller's
+// `cleanupFindings` were actually scanned from (cli/bridge-studio-
+// sessions.ts resolves this via `resolveKbBrainDir`). Derived semantics:
+//
+//   'open'    — a live finding matches the action (kind + target, both
+//               normalized to absolute).
+//   'cleared' — no live finding matches, cleanupScan IS supplied, AND the
+//               action's normalized target lies INSIDE brainDir. Absence is
+//               then real evidence: the region was scanned and came back
+//               clean.
+//   'unknown' — no live finding matches and coverage cannot be established:
+//               cleanupScan absent, OR the target resolves OUTSIDE
+//               brainDir.
+//
+// This block does not touch (weaken/delete/renumber) any test in the block
+// above — those 6 reds belong to the implementer landing `cleanupScan`
+// end-to-end; every test below is a NEW, separate red proving the positive
+// path once that lands.
+// ===========================================================================
+
+describe('deriveSessionArtifact — cleanup-plan cleared reachability (R4-19-F2, cleanupScan scanned-domain signal — ORCHESTRATOR RULING)', () => {
+  const CLEARED_TARGET_RELATIVE = 'brain/forge-dev/themes/foo.md';
+
+  /** Builds a real `forgeRoot`/`brainDir` on disk (`<forgeRoot>/brain/
+   *  forge-dev`, containing the real target file at
+   *  `themes/foo.md`) plus a session dir whose plan has ONE action targeting
+   *  it, repo-relative. Used by SCAN-1, SCAN-2, and SCAN-5 so their content
+   *  is identical — only the tmp-dir paths themselves (arbitrary
+   *  infrastructure `mkdtempSync` hands out) legitimately differ between
+   *  calls. */
+  function buildClearedFixture(): { sessionDir: string; forgeRoot: string; brainDir: string } {
+    const forgeRoot = makeTmpDir('cleanupplan-scan-root-');
+    const brainDir = join(forgeRoot, 'brain', 'forge-dev');
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    writeFileSync(join(brainDir, 'themes', 'foo.md'), '# foo\n', 'utf8');
+    const sessionDir = makeTmpDir('cleanupplan-scan-session-');
+    writeCleanupPlanFile(sessionDir, `- [edge.dangling] ${CLEARED_TARGET_RELATIVE} — repoint the related_themes entry.\n`);
+    return { sessionDir, forgeRoot, brainDir };
+  }
+
+  it('R4-19-F2 SCAN-1 (POSITIVE CONTROL — "cleared" IS reachable): a target inside brainDir, cleanupScan supplied, and NO matching finding reports "cleared"', () => {
+    const { sessionDir, forgeRoot, brainDir } = buildClearedFixture();
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+      cleanupScan: { forgeRoot, brainDir },
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupScan: { forgeRoot: string; brainDir: string } }) as {
+      actions: Array<{ target: string; state: string }>;
+      openFindingCount: number;
+    };
+
+    assert.equal(artifact.actions.length, 1);
+    assert.equal(
+      artifact.actions[0]!.state,
+      'cleared',
+      'a target inside the scanned brainDir with NO matching live finding must report "cleared" — this is the repair-landed story: an implementation that leaves "cleared" permanently unreachable (e.g. never widening the join past open|unknown even once cleanupScan is threaded through) fails here',
+    );
+    assert.equal(artifact.openFindingCount, 0, 'a "cleared" action must never be counted by openFindingCount');
+  });
+
+  it('R4-19-F2 SCAN-2 ("cleared" requires coverage): byte-identical inputs to SCAN-1 but with cleanupScan OMITTED report "unknown", never "cleared"', () => {
+    const { sessionDir } = buildClearedFixture();
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+      // cleanupScan deliberately OMITTED — everything else matches SCAN-1's fixture verbatim.
+    }) as { actions: Array<{ target: string; state: string }> };
+
+    assert.equal(artifact.actions.length, 1);
+    assert.equal(
+      artifact.actions[0]!.state,
+      'unknown',
+      'omitting cleanupScan must fall back to "unknown" — an implementation that treats an unmatched action as "repair landed" whenever cleanupScan simply happens to be missing (never actually gating on its presence) is exactly the fail-open shortcut this kills',
+    );
+  });
+
+  it('R4-19-F2 SCAN-3 (outside the scanned region): cleanupScan IS supplied, but the action targets a file OUTSIDE brainDir (another KB\'s brain dir) with no matching finding — reports "unknown", not "cleared"', () => {
+    const forgeRoot = makeTmpDir('cleanupplan-scan3-root-');
+    const brainDir = join(forgeRoot, 'brain', 'forge-dev');
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    const otherKbTarget = 'brain/cycles/themes/bar.md';
+    mkdirSync(join(forgeRoot, 'brain', 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(forgeRoot, 'brain', 'cycles', 'themes', 'bar.md'), '# bar\n', 'utf8');
+
+    const sessionDir = makeTmpDir('cleanupplan-scan3-session-');
+    writeCleanupPlanFile(sessionDir, `- [theme.duplicate] ${otherKbTarget} — merge into baz.md, the richer survivor.\n`);
+
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+      cleanupScan: { forgeRoot, brainDir }, // this call only scanned brain/forge-dev, NOT brain/cycles
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupScan: { forgeRoot: string; brainDir: string } }) as {
+      actions: Array<{ target: string; state: string }>;
+    };
+
+    assert.equal(artifact.actions.length, 1);
+    assert.equal(
+      artifact.actions[0]!.state,
+      'unknown',
+      'a target outside the scanned brainDir must stay "unknown" even though cleanupScan was supplied — an implementation that treats cleanupScan\'s mere PRESENCE as "the whole repo was scanned" (a "supplied means scanned" shortcut that ignores brainDir containment entirely) fails here, wrongly reporting "cleared" for a region the lint never walked',
+    );
+  });
+
+  it('R4-19-F2 SCAN-4 (mixed plan, all three states in one call): one action open (has a matching finding), one cleared (inside brainDir, no match), one unknown (outside brainDir, no match) — openFindingCount counts ONLY the open one', () => {
+    const forgeRoot = makeTmpDir('cleanupplan-scan4-root-');
+    const brainDir = join(forgeRoot, 'brain', 'forge-dev');
+    mkdirSync(join(brainDir, 'themes'), { recursive: true });
+    writeFileSync(join(brainDir, 'themes', 'open-target.md'), '# open\n', 'utf8');
+    writeFileSync(join(brainDir, 'themes', 'cleared-target.md'), '# cleared\n', 'utf8');
+    mkdirSync(join(forgeRoot, 'brain', 'cycles', 'themes'), { recursive: true });
+    writeFileSync(join(forgeRoot, 'brain', 'cycles', 'themes', 'unknown-target.md'), '# unknown\n', 'utf8');
+
+    const OPEN_TARGET = 'brain/forge-dev/themes/open-target.md';
+    const CLEARED_TARGET = 'brain/forge-dev/themes/cleared-target.md';
+    const UNKNOWN_TARGET = 'brain/cycles/themes/unknown-target.md';
+
+    const sessionDir = makeTmpDir('cleanupplan-scan4-session-');
+    writeCleanupPlanFile(
+      sessionDir,
+      [
+        `- [edge.dangling] ${OPEN_TARGET} — fix the dangling edge.`,
+        `- [edge.dangling] ${CLEARED_TARGET} — fix the dangling edge.`,
+        `- [theme.duplicate] ${UNKNOWN_TARGET} — merge into baz.md, the richer survivor.`,
+        '',
+      ].join('\n'),
+    );
+
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [fixtureFinding('edge.dangling', join(forgeRoot, OPEN_TARGET))],
+      cleanupScan: { forgeRoot, brainDir },
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupScan: { forgeRoot: string; brainDir: string } }) as {
+      actions: Array<{ target: string; state: string }>;
+      openFindingCount: number;
+    };
+
+    assert.equal(artifact.actions.length, 3);
+    const byTarget = new Map(artifact.actions.map((a) => [a.target, a.state]));
+    assert.equal(byTarget.get(OPEN_TARGET), 'open', 'the action WITH a matching live finding must be open');
+    assert.equal(byTarget.get(CLEARED_TARGET), 'cleared', 'the sibling action inside brainDir with NO matching finding must be cleared');
+    assert.equal(byTarget.get(UNKNOWN_TARGET), 'unknown', 'the sibling action outside brainDir with NO matching finding must be unknown');
+    assert.equal(
+      artifact.openFindingCount,
+      1,
+      'openFindingCount must count ONLY the state==="open" action — an implementation that collapses the three states, or computes the count as "not cleared" (which would wrongly include the unknown action too, giving 2), fails this',
+    );
+  });
+
+  it('R4-19-F2 SCAN-5 ("cleared" never overrides a real match): an action inside brainDir WITH a matching live finding stays "open" even though cleanupScan is supplied', () => {
+    const { sessionDir, forgeRoot, brainDir } = buildClearedFixture();
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [fixtureFinding('edge.dangling', join(forgeRoot, CLEARED_TARGET_RELATIVE))],
+      cleanupScan: { forgeRoot, brainDir },
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupScan: { forgeRoot: string; brainDir: string } }) as {
+      actions: Array<{ target: string; state: string }>;
+      openFindingCount: number;
+    };
+
+    assert.equal(artifact.actions.length, 1);
+    assert.equal(
+      artifact.actions[0]!.state,
+      'open',
+      'a genuine match must win over the "cleared" derivation — an implementation with a precedence inversion (e.g. checking cleanupScan/brainDir-containment BEFORE checking for a matching finding, so "inside the scanned region" short-circuits straight to "cleared") would wrongly report "cleared" here',
+    );
+    assert.equal(artifact.openFindingCount, 1);
+  });
+
+  it('R4-19-F2 SCAN-6 (containment sanity on brainDir — the repo\'s recurring escape shape): a target that textually starts with the brainDir STRING but does not actually resolve inside it must NOT be treated as inside — neither via a literal ".." escape nor a sibling-directory prefix collision', () => {
+    const forgeRoot = makeTmpDir('cleanupplan-scan6-root-');
+    const brainDir = join(forgeRoot, 'brain', 'forge-dev');
+    mkdirSync(brainDir, { recursive: true });
+
+    // Shape 1: `<brainDir>/../elsewhere/x.md` — an ALREADY-ABSOLUTE target
+    // (mirrors NORM-2's already-absolute branch, above) whose RAW string
+    // textually starts with brainDir, but whose ".." segment, once resolved,
+    // lands one level OUTSIDE brainDir (in a sibling "elsewhere" directory
+    // under the same parent, brainDir's own ".." — never itself a symlink;
+    // this is pure "..''-in-the-string" escape, distinct from AT-6's
+    // symlink-escape concern).
+    const elsewhereDir = join(forgeRoot, 'brain', 'elsewhere');
+    mkdirSync(elsewhereDir, { recursive: true });
+    writeFileSync(join(elsewhereDir, 'x.md'), '# elsewhere\n', 'utf8');
+    const dotDotEscapeTarget = `${brainDir}/../elsewhere/x.md`;
+    assert.ok(
+      dotDotEscapeTarget.startsWith(brainDir),
+      'arrange: the RAW target must textually start with brainDir — that raw prefix match is exactly what makes a naive (unresolved) containment check wrong',
+    );
+
+    // Shape 2: `<brainDir>-sibling/x.md` — a genuinely SIBLING directory
+    // (same parent as brainDir, name collision on the prefix only: "…
+    // forge-dev-sibling" textually starts with "…forge-dev") that is never
+    // nested inside brainDir.
+    const siblingDir = `${brainDir}-sibling`;
+    mkdirSync(siblingDir, { recursive: true });
+    writeFileSync(join(siblingDir, 'x.md'), '# sibling\n', 'utf8');
+    const siblingCollisionTarget = `${siblingDir}/x.md`;
+    assert.ok(
+      siblingCollisionTarget.startsWith(brainDir),
+      'arrange: the RAW target must textually start with brainDir — a bare `startsWith(brainDir)` with no trailing-separator guard would wrongly match this sibling-directory collision',
+    );
+
+    const sessionDir = makeTmpDir('cleanupplan-scan6-session-');
+    writeCleanupPlanFile(
+      sessionDir,
+      [
+        `- [edge.dangling] ${dotDotEscapeTarget} — fix the dangling edge.`,
+        `- [edge.dangling] ${siblingCollisionTarget} — fix the dangling edge.`,
+        '',
+      ].join('\n'),
+    );
+
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+      cleanupScan: { forgeRoot, brainDir },
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupScan: { forgeRoot: string; brainDir: string } }) as {
+      actions: Array<{ target: string; state: string }>;
+    };
+
+    assert.equal(artifact.actions.length, 2);
+    const byTarget = new Map(artifact.actions.map((a) => [a.target, a.state]));
+    assert.equal(
+      byTarget.get(dotDotEscapeTarget),
+      'unknown',
+      'the ".."-escaping target must be "unknown", not "cleared" — a `target.startsWith(brainDir)` check performed on the UNRESOLVED raw string (never normalizing/resolving the ".." segment first) would wrongly treat this as inside brainDir',
+    );
+    assert.equal(
+      byTarget.get(siblingCollisionTarget),
+      'unknown',
+      'the sibling-directory target must be "unknown", not "cleared" — a `startsWith(brainDir)` check with no trailing-separator guard (i.e. not `startsWith(brainDir + sep)`, mirroring this very module\'s own safeReadFileInSession containment idiom) would wrongly treat this string-prefix collision as inside brainDir',
+    );
+  });
+});
