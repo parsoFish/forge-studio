@@ -3079,7 +3079,24 @@ async function handleInstructions(
         sendJson(res, 400, { error: `projectRepoPath is not a valid project directory: ${badRepoPath}` }, origin);
         return true;
       }
-      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
+      // forge-osz — the `projectRepoPath || join(projectsRoot, project)` fallback
+      // reaches readAgentInstructionsFile with a repoPath folded from the untrusted
+      // `body.project`; guardedSessionDir below only guards the WRITE, and runs
+      // AFTER this read. Guard the `body.project` segment through the SAME
+      // resolveGuardedPath choke point the four sibling /start routes use, BEFORE
+      // the read, so an untrusted project cannot fold an out-of-root read into a
+      // trusted root.
+      let repoPath: string;
+      if (body.projectRepoPath) {
+        repoPath = body.projectRepoPath;
+      } else {
+        const guardedProject = resolveGuardedPath(ctx.projectsRoot, [body.project]);
+        if (!guardedProject.ok) {
+          sendJson(res, 400, { error: 'invalid project' }, origin);
+          return true;
+        }
+        repoPath = guardedProject.realPath;
+      }
       // Default the mode by whether an agent-instruction file already exists.
       const mode: 'init' | 'edit' =
         body.mode ?? (readAgentInstructionsFile(repoPath) ? 'edit' : 'init');
