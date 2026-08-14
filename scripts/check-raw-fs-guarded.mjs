@@ -1019,9 +1019,13 @@ function isRootExpr(expr, roots) {
  * tail) AND by BINDING (an identifier whose value traces to a projects-root
  * call or a literal `'projects'` segment, under any name); (c)
  * TEMPLATE-LITERAL folds, previously unhandled entirely; (d) MULTI-LINE call
- * forms, previously single-line only. The allowlist is also now COUNT-AWARE
- * (see PROJECTS_ROOT_FOLD_ALLOWLIST + runLint) rather than an unbounded token
- * key.
+ * forms, previously single-line only. A round-2 adversarial pass added (e) a
+ * folded SEGMENT wrapped in ONE level of call (`decodeURIComponent(seg)`,
+ * `basename(id)`, `String(body.project)` -- the ordinary request-path shape
+ * here, and previously invisible because the segment had to be a bare
+ * identifier chain). The allowlist is also now COUNT-AWARE and
+ * ANCHOR-ATTRIBUTED (see PROJECTS_ROOT_FOLD_ALLOWLIST + runLint) rather than an
+ * unbounded token key.
  *
  * What remains uncovered, honestly: a value laundered through a HELPER
  * FUNCTION'S RETURN (`function getRoot(){ return resolve('projects'); }` then
@@ -1032,15 +1036,40 @@ function isRootExpr(expr, roots) {
  * bracket expression; a root bound through a SHAPE the binding pass does not
  * model -- e.g. destructuring under a different name (`const { projectsRoot:
  * pr } = ctx;` then `resolve(pr, x)`) is invisible, since only a direct
- * `const X = <callee>(...)` assignment is traced; and modules OUTSIDE
- * PROJECTS_ROOT_FOLD_MODULES (unchanged by this pass -- see the list's own
- * comment for why bridge/route modules are covered by the def-use lint
- * instead). Finally, the cleaner (cleanForFold) is a STATE MACHINE OVER TEXT,
- * not a JS parser: a regex literal containing a quote character (e.g.
- * `` /'/ ``) can desync its quote-tracking for the remainder of the file. The
- * per-site guard contract + the sibling caller-count ratchet remain the
- * backstop for anything this lexical scan cannot see.
+ * `const X = <callee>(...)` assignment is traced; a segment wrapped in MORE
+ * than one level of call (`join(root, decode(normalize(x)))`) -- exactly one
+ * level is modelled; and modules OUTSIDE PROJECTS_ROOT_FOLD_MODULES (unchanged
+ * by this pass -- see the list's own comment for why bridge/route modules are
+ * covered by the def-use lint instead).
+ *
+ * Two properties that fail LOUD rather than blind, disclosed so nobody reads a
+ * finding as a proof: root-binding discovery (rootIdents) is FILE-WIDE, not
+ * per-function -- a name classified as a projects root by a binding in one
+ * function makes an unrelated same-named variable elsewhere in that file read as
+ * a root too, which can produce a false positive (an extra build failure
+ * demanding an audited row), never a missed fold. And the cleaner
+ * (cleanForFold) is a STATE MACHINE OVER TEXT, not a JS parser: a regex literal
+ * containing a quote character (e.g. `` /'/ ``) can desync its quote-tracking
+ * for the remainder of the file -- that one CAN hide a later fold, and no
+ * in-scope module contains such a literal today. The per-site guard contract +
+ * the sibling caller-count ratchet remain the backstop for anything this
+ * lexical scan cannot see.
  */
+/** Reduce a captured folded-SEGMENT expression to the untrusted value it
+ *  governs: a bare identifier chain is itself; one level of call wrapping
+ *  (`decodeURIComponent(seg)`) yields the first identifier chain INSIDE the
+ *  call, so the reported token names the value rather than the wrapper. Returns
+ *  null when the expression contains no identifier at all (a wrapped literal,
+ *  e.g. `basename('fixed')`) -- not a fold. */
+function foldedTokenOf(expr) {
+  const e = expr.trim();
+  if (/^[A-Za-z_$][\w$.]*$/.test(e)) return e;
+  const call = /^[A-Za-z_$][\w$.]*\s*\(\s*([^()]*)\s*\)$/.exec(e);
+  if (!call) return null;
+  const inner = /[A-Za-z_$][\w$]*(?:\.[A-Za-z_$][\w$]*)*/.exec(call[1]);
+  return inner ? inner[0] : null;
+}
+
 export function scanProjectsRootFold(text, relFile) {
   const cleaned = cleanForFold(text);
   const origLines = text.split('\n');
@@ -1050,16 +1079,26 @@ export function scanProjectsRootFold(text, relFile) {
   const lineOf = (idx) => cleaned.slice(0, idx).split('\n').length;
   const why = 'untrusted value folded into a projects root — pass it as a guarded segment (resolveGuardedPath(projectsRoot,[value])) or add an audited allowlist row';
 
-  // (1) call form -- multi-line tolerant (`\s` matches newlines).
+  // (1) call form -- multi-line tolerant (`\s` matches newlines). The folded
+  // SEGMENT is captured either as a bare identifier chain OR as one level of
+  // call wrapping around one (`decodeURIComponent(seg)`, `basename(id)`,
+  // `String(body.project)`) -- the ordinary request-path shape in this
+  // codebase, and a shape the first cut of this rule missed entirely because it
+  // required a bare chain. `foldedTokenOf` below reduces the captured
+  // expression to the untrusted value it governs, so the reported `folded`
+  // names that value and not the wrapper.
   const calleeAlt = [...callees].map((c) => c.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  const SEG = `(?:[A-Za-z_$][\\w$.]*\\s*\\(\\s*[^()]*\\s*\\)|[A-Za-z_$][\\w$.]*)`;
   const callRe = new RegExp(
-    `(?<![.\\w$])(?:[\\w$]+\\.)*(?:${calleeAlt})\\(\\s*((?:['"][^'"]*['"])|[A-Za-z_$][\\w$.]*)\\s*,\\s*([A-Za-z_$][\\w$.]*)\\s*[),]`,
+    `(?<![.\\w$])(?:[\\w$]+\\.)*(?:${calleeAlt})\\(\\s*((?:['"][^'"]*['"])|[A-Za-z_$][\\w$.]*)\\s*,\\s*(${SEG})\\s*[),]`,
     'g',
   );
   let m;
   while ((m = callRe.exec(cleaned))) {
     if (!isRootExpr(m[1], roots)) continue;
-    out.push({ file: relFile, line: lineOf(m.index), folded: m[2], why });
+    const folded = foldedTokenOf(m[2]);
+    if (folded === null) continue; // wrapper with no identifier inside (a literal) -- not a fold
+    out.push({ file: relFile, line: lineOf(m.index), folded, why });
   }
 
   // (2) template form: `` `projects/${x}` `` or `` `${projectsRoot}/${x}` ``.
@@ -1085,20 +1124,33 @@ export function scanProjectsRootFold(text, relFile) {
 /**
  * COUNT-AWARE, folded-token-keyed (file + folded) audited residuals --
  * public-repo-safe, defensive facts only. A row survives line drift (it is
- * not line-keyed) but suppresses only its AUDITED `count` of occurrences: the
- * first `count` findings for a (file, folded) key are suppressed, and any
+ * not line-keyed) but suppresses only its AUDITED `count` of occurrences: any
  * SURPLUS finding beyond that budget is kept as its own build-failing finding
  * (a fresh, un-audited fold reusing an audited token is no longer invisible --
  * see the runLint wiring below). `count` must equal the MEASURED number of
  * occurrences in the real tree, or the row goes stale (reported non-fatally,
  * same as the line-keyed allowlist's stale handling) -- the real tree must
  * report zero stale fold rows.
+ *
+ * `line` is an ATTRIBUTION ANCHOR, never a key: the line the audit actually
+ * looked at. When a file holds more occurrences of an audited token than the
+ * budget covers, the occurrences NEAREST the anchor are the ones the audit is
+ * taken to cover and every other occurrence is KEPT. Consuming the budget in
+ * plain scan order instead (the first cut of this rule) still failed the build,
+ * but REPORTED the wrong site whenever the new fold was inserted ABOVE the
+ * audited one: the author saw an already-reviewed line flagged, and the fastest
+ * way to clear it was to raise `count` -- silently permitting the un-reported
+ * new site. Anchoring keeps drift resilience (a moved-but-single occurrence is
+ * still nearest its anchor, so suppression survives) while attributing an
+ * INSERTED occurrence to the inserted site. A row with no anchor falls back to
+ * scan order.
  */
 export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
   {
     file: 'orchestrator/cli.ts',
     folded: 'target',
     count: 1,
+    line: 791,
     reason:
       "resolvePreflightProjectDir dual-mode name-or-path resolver — target is a project NAME or an explicit path, both existsSync-checked; out of the folded-untrusted-name class. Measured: exactly one occurrence in the real tree, orchestrator/cli.ts:791 (`const asManaged = resolve('projects', target);`), inside resolvePreflightProjectDir.",
   },
@@ -1106,6 +1158,7 @@ export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
     file: 'orchestrator/scheduler.ts',
     folded: 'm.project',
     count: 1,
+    line: 897,
     reason:
       "scheduler manifest fallback (m.project_repo_path || resolve(projects,m.project)); the resulting repo path is contained at the write choke point by isContainedProjectRepoPath (cli/manifest-path-guard.ts). Measured: exactly one occurrence in the real tree, orchestrator/scheduler.ts:897 (`projectRepoPath: m.project_repo_path || resolve('projects', m.project),`).",
   },
@@ -1113,6 +1166,7 @@ export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
     file: 'cli/agent-run.ts',
     folded: 'name',
     count: 1,
+    line: 708,
     reason:
       "findSessionProject readdir loop — name is a readdirSync(projectsDir)-enumerated real in-tree directory name, not caller-supplied; join builds a candidate to probe. Measured: exactly one occurrence in the real tree, cli/agent-run.ts:708 (`const candidate = join(projectsDir, name);`), inside findSessionProject's readdir loop.",
   },
@@ -1135,23 +1189,37 @@ export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLI
     if (!existsSync(abs)) continue;
     foldFindings.push(...scanProjectsRootFold(readFileSync(abs, 'utf8'), rel));
   }
-  // Each (file, folded) key gets an audited occurrence BUDGET (row.count): the
-  // first `count` findings for that key are suppressed; any finding beyond
-  // the budget is kept -- a surplus, un-audited reuse of an audited token must
-  // still fail the build and demand re-audit, not vanish into the same row.
+  // Each (file, folded) key gets an audited occurrence BUDGET (row.count),
+  // spent on the occurrences NEAREST the row's attribution anchor (row.line);
+  // every other occurrence is kept, so a surplus, un-audited reuse of an
+  // audited token both fails the build AND is reported at ITS OWN line rather
+  // than displacing the audited site. See the allowlist's docstring for why
+  // scan order was not good enough.
   const foldSeenByKey = new Map();
   const keptFold = [];
+  const foldGroups = new Map(); // key -> { row, findings[] }
   for (const f of foldFindings) {
     const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((a) => a.file === f.file && a.folded === f.folded);
     if (!row) { keptFold.push(f); continue; }
     const key = `${row.file} ${row.folded}`;
-    const seen = (foldSeenByKey.get(key) ?? 0) + 1;
-    foldSeenByKey.set(key, seen);
-    if (seen <= row.count) continue; // within the audited budget -- suppressed
-    keptFold.push({
-      ...f,
-      why: `audited occurrence budget exceeded for ${row.file} + "${row.folded}" (audited count: ${row.count}, this is occurrence #${seen}) — a fresh, un-audited fold; re-audit and raise the allowlist row's count only if this occurrence is verified trusted, otherwise route it through resolveGuardedPath`,
-    });
+    if (!foldGroups.has(key)) foldGroups.set(key, { row, findings: [] });
+    foldGroups.get(key).findings.push(f);
+  }
+  for (const [key, { row, findings }] of foldGroups) {
+    foldSeenByKey.set(key, findings.length);
+    // Rank by distance from the audited anchor (scan order when a row carries
+    // no anchor); the closest `count` are the audited residual.
+    const ranked = [...findings].sort((a, b) =>
+      typeof row.line === 'number' ? Math.abs(a.line - row.line) - Math.abs(b.line - row.line) : 0,
+    );
+    const audited = new Set(ranked.slice(0, row.count));
+    for (const f of findings) {
+      if (audited.has(f)) continue; // within the audited budget -- suppressed
+      keptFold.push({
+        ...f,
+        why: `audited occurrence budget exceeded for ${row.file} + "${row.folded}" (audited count: ${row.count} at line ${row.line ?? 'unanchored'}, this file now holds ${findings.length}) — this line is a fresh, un-audited fold: route it through resolveGuardedPath, or add its own audited allowlist row (raising the existing row's count is only correct if THIS line is the one you audited)`,
+      });
+    }
   }
   // A fold-allowlist row whose audited budget is NOT fully consumed (fewer
   // real occurrences than its `count`) is STALE -- reported non-fatally,

@@ -256,6 +256,17 @@ function isSafeSegment(seg: string): boolean {
  * the hardlink bypass realpath is structurally blind to.
  */
 export function resolveGuardedPath(root: string, segments: readonly string[]): PathGuardResult {
+  // Same runtime-boundary reasoning as the per-segment `typeof` gate below, for
+  // the one non-string root that does NOT fail safe on its own: `realpathSync`
+  // throws for a number, an object, `null`, `undefined` or a Symbol (the catch
+  // below turns that into an ordinary rejection), but an EMPTY ARRAY
+  // stringifies to `''`, which `realpathSync` resolves to the process working
+  // directory — the guard would then contain its segments beneath a root
+  // nobody chose and report `ok`. Not reachable from any current call site
+  // (every one passes a fixed or config-derived root, which is this module's
+  // CONTRACT), so this is the cheap way to make that contract's guarantee true
+  // rather than approximately true.
+  if (typeof root !== 'string') return { ok: false, reason: 'containment root is not a string' };
   if (segments.length === 0) return { ok: false, reason: 'no path segments given' };
 
   // Validate EVERY segment up front, before the walk — not lazily as the walk
@@ -295,13 +306,7 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     // See the module docstring's CONTRACT section: this deliberately
     // performs NO identity check on `root` itself (only on `segments`
     // below) — `root` must be trusted/config-derived, never built by
-    // folding a caller-supplied id into it. Note (forge-01u): `root` needs
-    // no `typeof` gate of its own for the non-string case this fix closes —
-    // a non-string `root` already fails safe today, structurally, for a
-    // different reason: `realpathSync` throws on it (it is not a valid
-    // path-like value), which this `catch` turns into the same ordinary
-    // `{ok:false}` rejection. That is incidental to `root` being trusted,
-    // not a gap; nothing here is request-influenced per the CONTRACT above.
+    // folding a caller-supplied id into it.
     realRoot = realpathSync(root);
   } catch {
     return { ok: false, reason: 'containment root does not exist' };

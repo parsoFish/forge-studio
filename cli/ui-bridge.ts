@@ -4247,7 +4247,10 @@ async function handleDemoBuilder(
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, sessionId, mode }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      // sanitizeError, not String(err) — the same helper 13 sibling routes in
+      // this file already use. A genuine fs error on the status write (EACCES,
+      // ENOSPC) otherwise echoes an absolute filesystem path into the response.
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
