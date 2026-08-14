@@ -38,14 +38,17 @@
  * knowledge, demo-showcase, demo-builder, flows-onboard) is self-contained: templates is pure read-only browsing (no seed, no
  * cleanup — it creates and destroys nothing, mirroring skills-library /
  * skills-detail-package's own read-only precedent (R3-01-F3/F4)); knowledge
- * (R1-06 WI-4) drives THREE disjoint, create-and-destroy-itself scratch KBs
- * (journey-scratch-kb, journey-scratch-kb-band, journey-scratch-kb-maintain —
- * the last nested one level deeper, under brain/projects/, since that's the
- * ONE containment root checkProjectBrainIndexes scans; none is ever a real
- * project brain like brain/projects/mdtoc), each swept inside its own beat's
- * drive(), never brain/cycles, brain/forge-dev, or a real project's central
- * brain — see knowledge.mjs's own header comment for the full discipline;
- * skills-edit
+ * (R1-06 WI-4 + R4-19-F2) drives FOUR disjoint, create-and-destroy-itself
+ * scratch KBs (journey-scratch-kb, journey-scratch-kb-band, journey-scratch-
+ * kb-maintain, journey-scratch-kb-cleanup — the maintain one nested one level
+ * deeper, under brain/projects/, since that's the ONE containment root
+ * checkProjectBrainIndexes scans; none is ever a real project brain like
+ * brain/projects/mdtoc), each swept inside its own beat's drive() (the
+ * cleanup one's sweep lands in knowledge-kb-cleanup-approve, the LAST beat
+ * that needs it — knowledge-kb-cleanup-launch leaves it live across the
+ * pair, mirroring the band-scope arc's own multi-beat shape), never
+ * brain/cycles, brain/forge-dev, or a real project's central brain — see
+ * knowledge.mjs's own header comment for the full discipline; skills-edit
  * restores the real shipped skill it edits,
  * skills-agentic-author removes its staged demo-design artifact + demo
  * sessions, skills-agentic-build/hooks-agentic-build (R4-21 phase 2, T3) each
@@ -275,6 +278,8 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-create-kb-band-scope-seed'],
   ['knowledge', 'knowledge-create-kb-band-scope-commit'],
   ['knowledge', 'knowledge-kb-maintain-session'],
+  ['knowledge', 'knowledge-kb-cleanup-launch'],
+  ['knowledge', 'knowledge-kb-cleanup-approve'],
   ['knowledge', 'knowledge-explore-tabs'],
 
   ['agents', 'agents-starters'],

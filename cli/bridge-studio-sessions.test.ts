@@ -120,6 +120,14 @@ const NON_STRING_PHASE_STATUS_SESSION = '2026-08-08T17-04-00';
 // R4-17 — onboarding / contract-buildout route-threading fixtures.
 const ONBOARDING_SESSION = '2026-08-10T09-00-00';
 const ONBOARDING_BAD_CONFIG_SESSION = '2026-08-10T09-01-00';
+// R4-19-F2 — kb-cleanup read-branch fixture (an unresolvable kb_id).
+const KB_CLEANUP_UNRESOLVABLE_SESSION = '2026-08-14T10-00-00';
+// R4-19-F2 WI-4c BLOCKER fix — a kb-cleanup session whose kb_id DOES resolve
+// (companion to KB_CLEANUP_UNRESOLVABLE_SESSION above), for pinning that the
+// 200 payload carries `kbId` on the wire (SessionCleanupPanel's
+// applyKbCleanup call-site defect — see AT-KBID-1 below).
+const KB_CLEANUP_RESOLVABLE_SESSION = '2026-08-14T10-02-00';
+const KB_CLEANUP_RESOLVABLE_KB_ID = 'kb-cleanup-wire-kb';
 
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
@@ -184,7 +192,98 @@ function writeSessionKindsYaml(root: string): void {
         defaultStage: 'contract',
         artifact: { kind: 'contract-buildout', label: 'Contract build-out' },
       },
+      // R4-19-F2: the new "kb-cleanup" session kind — the ADR-043-shaped
+      // turnSpec table verbatim (see orchestrator/studio/session-kinds.test.ts's
+      // own R4-19-F2 block for the pin against the REAL, checked-in yaml;
+      // this file's fixture yaml is this file's OWN pre-existing convention
+      // of hand-writing every shipped kind locally rather than reading the
+      // real repo file — see e.g. the "onboarding" row immediately above,
+      // added the same way by R4-17).
+      {
+        id: 'kb-cleanup',
+        agent: 'brain-maintenance',
+        title: 'KB cleanup session',
+        legacyRoutes: [],
+        stages: ['brain'],
+        defaultStage: 'brain',
+        artifact: { kind: 'cleanup-plan', label: 'Cleanup plan' },
+        turnSpec: {
+          kindDir: '_kb-cleanup',
+          style: 'agent',
+          phases: [
+            { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
+            { phase: 'awaiting-approval', step: 'noop' },
+            { phase: 'applied', step: 'terminal' },
+          ],
+        },
+      },
     ]),
+    'utf8',
+  );
+}
+
+/** Plants a kb-cleanup session directly on disk (never through a route) at
+ *  `<projectsRoot>/<project>/_kb-cleanup/<sessionId>/status.json`, carrying
+ *  a `kb_id` that resolves to NO real KB anywhere under `brain/` — the
+ *  fixture for the bridge read-branch's "kb_id no longer resolves" fail-loud
+ *  contract (task brief §4). Deliberately does NOT write a `brain/` dir at
+ *  all — the whole point is that this kb_id is unresolvable. */
+function writeCleanupSessionWithUnresolvableKb(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      session_id: sessionId,
+      project,
+      phase: 'awaiting-approval',
+      kb_id: 'no-such-kb-anywhere-on-disk',
+      kb_binding: { kind: 'unique' },
+      findings: [],
+      updated_at: new Date().toISOString(),
+    }),
+    'utf8',
+  );
+}
+
+/** Writes a minimal, real `brain/<id>/kb.yaml` (+ themes/ + _raw/) directly on
+ *  disk — mirrors `cli/ui-bridge-kb-cleanup.test.ts`'s own `writeKb` fixture
+ *  idiom verbatim (that file's own AT-3/AT-4/AT-5 prove this exact minimal
+ *  shape is sufficient for `computeAgentCleanupFindings`'s live
+ *  `runBrainLint` pass to complete without throwing — no INDEX.md or other
+ *  KBs required). This is what makes `KB_CLEANUP_RESOLVABLE_KB_ID` actually
+ *  resolve via `resolveKbBrainDir`, unlike `KB_CLEANUP_UNRESOLVABLE_SESSION`'s
+ *  fixture immediately above, which deliberately writes no `brain/` dir at
+ *  all. */
+function writeResolvableKb(forgeRoot: string, id: string): void {
+  const dir = join(forgeRoot, 'brain', id);
+  mkdirSync(join(dir, 'themes'), { recursive: true });
+  mkdirSync(join(dir, '_raw'), { recursive: true });
+  writeFileSync(join(dir, 'kb.yaml'), `id: ${id}\nname: Fixture KB ${id}\nbinding: { kind: unique }\ndesc: A fixture KB for the kbId-on-the-wire pin.\n`, 'utf8');
+}
+
+/** Plants a kb-cleanup session directly on disk whose `kb_id` DOES resolve to
+ *  a real `brain/<id>/kb.yaml` (via `writeResolvableKb`, which the caller
+ *  must invoke first) — the companion, happy-path counterpart to
+ *  `writeCleanupSessionWithUnresolvableKb` above. No `plan/cleanup-plan.md`
+ *  is written — `deriveCleanupPlan` (orchestrator/studio/session-
+ *  transcript.ts:929-930) tolerates an absent plan file, returning
+ *  `{plan: null, actions: [], openFindingCount: 0}`, so this fixture stays
+ *  minimal: only what the kbId-on-the-wire pin below actually needs. */
+function writeCleanupSessionWithResolvableKb(projectsRoot: string, project: string, sessionId: string, kbId: string): void {
+  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      session_id: sessionId,
+      project,
+      phase: 'awaiting-approval',
+      kb_id: kbId,
+      kb_binding: { kind: 'unique' },
+      findings: [],
+      updated_at: new Date().toISOString(),
+    }),
     'utf8',
   );
 }
@@ -376,6 +475,16 @@ before(async () => {
   writeOnboardedProjectFixture(projectsRoot, 'onboardedproj');
   writeOnboardingSession(projectsRoot, 'malformedcontractproj', ONBOARDING_BAD_CONFIG_SESSION);
   writeMalformedContractProjectFixture(projectsRoot, 'malformedcontractproj');
+
+  // R4-19-F2 — the kb-cleanup read-branch's "kb_id no longer resolves" fixture.
+  writeSkillAgent(forgeRoot, 'brain-maintenance');
+  writeCleanupSessionWithUnresolvableKb(projectsRoot, 'demoproj', KB_CLEANUP_UNRESOLVABLE_SESSION);
+
+  // R4-19-F2 WI-4c BLOCKER fix — the companion RESOLVABLE-kb_id fixture (the
+  // kbId-on-the-wire pin needs a 200, not the 409 the unresolvable fixture
+  // above deliberately produces).
+  writeResolvableKb(forgeRoot, KB_CLEANUP_RESOLVABLE_KB_ID);
+  writeCleanupSessionWithResolvableKb(projectsRoot, 'demoproj', KB_CLEANUP_RESOLVABLE_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
 
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
@@ -995,4 +1104,105 @@ test('R4-19 WI-2 AT-8 (companion — unaffected by the carve-out, both before an
   assert.equal(body.kind, 'project-brain');
   assert.equal(body.project, 'gitpulse');
   assert.equal(body.phase, 'analyzing', 'phase must be the real value read from the session\'s status.json — the non-dot path\'s behavior must be identical to AT-40');
+});
+
+// ===========================================================================
+// R4-19-F2 — the kb-cleanup read branch's fail-loud contract (task brief §4,
+// NOT among the 16 explicitly numbered acceptance tests — flagged separately
+// in this WI's report as a gap in the enumerated list, but load-bearing per
+// the brief's own wording: "A session whose kb_id no longer resolves must
+// fail loud, not render an empty artifact"). This is the single test in this
+// file exercising that branch; the renderer-level throw-on-missing-findings
+// contract is pinned exhaustively in session-transcript.test.ts's own
+// R4-19-F2 block instead.
+// ===========================================================================
+
+// Kills: a bridge read branch that catches deriveContractStages/lint-lookup
+// failures the wrong way and falls through to `deriveSessionArtifact({
+// descriptor, sessionDir })` with no cleanupFindings — which (once
+// 'cleanup-plan' ships live) throws a DIFFERENT error ("cleanupFindings
+// required") that gets smoothed into a generic 500 with no mention of the
+// actual root cause (the unresolvable kb_id); also kills a branch that
+// swallows the kb_id-resolution failure and renders a 200 with an empty
+// cleanup-plan artifact — the exact "declared-data-fails-open" shape this
+// whole campaign guards against.
+test('R4-19-F2: GET /api/studio/sessions/kb-cleanup/<id>?project=<p> whose stored kb_id resolves to NO real KB fails loud (a non-200 naming the cause), never a 200 with an empty/silent cleanup-plan artifact', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_UNRESOLVABLE_SESSION}?project=demoproj`);
+  assert.notEqual(
+    res.status,
+    200,
+    'a session whose kb_id no longer resolves to any real KB must never be smoothed into a 200 — the fixture\'s status.json genuinely has kb_id:"no-such-kb-anywhere-on-disk" with no matching brain/ dir anywhere',
+  );
+  const body = (await res.json()) as { error?: string; ok?: boolean };
+  assert.ok(
+    typeof body.error === 'string' && body.error.length > 0,
+    `the error response must name the cause, got: ${JSON.stringify(body)}`,
+  );
+  assert.notEqual(body.ok, true, 'the response must not claim ok:true alongside an error');
+  // Tightened beyond a bare non-200: the error must actually name the
+  // UNRESOLVABLE kb_id itself, not just some unrelated failure incidentally
+  // reached first (e.g. "cleanup-plan" not yet being a recognised artifact
+  // kind at all, today's status quo) — this is what makes this test a real
+  // RED pin for the branch-specific fail-loud behaviour rather than a
+  // vacuous pass from an earlier-stage failure.
+  assert.match(
+    body.error!,
+    /no-such-kb-anywhere-on-disk/,
+    `the error must name the specific unresolvable kb_id the fixture's status.json carries, not a generic/unrelated failure — got: ${body.error}`,
+  );
+});
+
+// ===========================================================================
+// R4-19-F2 WI-4c BLOCKER FIX — `kbId` on the session-shell read route's 200
+// wire payload (the SHIPPED defect: `SessionCleanupPanel.tsx` calls
+// `applyKbCleanup(sessionId, {project, sessionId})` — the session id, not the
+// KB id, as the URL's `:id` segment, because this route never put a `kbId`
+// anywhere on the wire for the panel to read; `applyKbCleanup`'s FIRST
+// argument builds `POST /api/studio/kbs/<id>/cleanup/apply`, and a
+// timestamp-shaped session id fails `SLUG_RE` server-side, cli/ui-bridge.ts's
+// `kbCleanupApplyMatch` handler — "Approve" always 400s "invalid kb id").
+//
+// ORCHESTRATOR RULING pinned here: the 200 payload gains `kbId`, sourced from
+// the already-read `status.kb_id` (this route reads `statusParsed` once,
+// well before the `descriptor.artifact.kind === 'cleanup-plan'` branch —
+// lines ~283-298 above), present when the status carries one and OMITTED
+// otherwise — never a fabricated `''`/`null` for a session whose status
+// genuinely has no `kb_id` (the exact "declared-data-fails-open" shape this
+// whole campaign guards against, just for a NEW field this time).
+// ===========================================================================
+
+test('R4-19-F2 WI-4c AT-KBID-1 (RED — the shipped-defect regression lock): GET /api/studio/sessions/kb-cleanup/<id>?project=<p> for a session whose kb_id DOES resolve carries "kbId" on the 200 payload, equal to the session\'s OWN status.json kb_id — kills a payload that omits it, which is the exact reason SessionCleanupPanel had nothing correct to pass to applyKbCleanup and instead fell back to (mis)using the session id', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_RESOLVABLE_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, `arrange: the fixture's kb_id ("${KB_CLEANUP_RESOLVABLE_KB_ID}") must genuinely resolve (a real brain/<id>/kb.yaml exists) — a non-200 here means the fixture itself is broken, not the kbId pin, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as SessionShellBody & { kbId?: unknown };
+  assert.equal(body.ok, true);
+  assert.equal(body.kind, 'kb-cleanup');
+  assert.equal(
+    body.kbId,
+    KB_CLEANUP_RESOLVABLE_KB_ID,
+    `the 200 payload must carry "kbId" equal to the session's own status.json "kb_id" (${JSON.stringify(KB_CLEANUP_RESOLVABLE_KB_ID)}) — got kbId: ${JSON.stringify(body.kbId)}. This is the field SessionCleanupPanel needs and today's route never puts on the wire at all.`,
+  );
+});
+
+// Companion guard (see this WI's task report for why this specific
+// assertion is NOT independently red at branch base — today's route emits
+// NO "kbId" key under ANY condition, for ANY kind, so "absent" is trivially
+// already true before AT-KBID-1's fix lands too). Its value is as a
+// permanent regression lock ALONGSIDE AT-KBID-1: a naive fix for AT-KBID-1
+// that broadcasts `kbId: typeof statusParsed.kb_id === 'string' ?
+// statusParsed.kb_id : ''` (or `?? null`) unconditionally, for every session
+// kind, would flip AT-KBID-1 green while making THIS test fail — proving the
+// two tests together, not either alone, pin the full "present when present,
+// OMITTED (not defaulted) otherwise" contract the ORCHESTRATOR RULING states.
+test('R4-19-F2 WI-4c AT-KBID-2 (companion guard, not independently red — see comment above): GET /api/studio/sessions/architect/<id>?project=<p>, a kind whose status.json genuinely has no "kb_id" field at all, must NOT gain a fabricated "kbId" on the wire — no own-property, not "" and not null', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/architect/${REAL_ARCHITECT_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as Record<string, unknown>;
+  assert.equal(
+    Object.prototype.hasOwnProperty.call(body, 'kbId'),
+    false,
+    `a session kind with no real "kb_id" in status.json must never gain an invented "kbId" key (not even "" or null) — got: ${JSON.stringify(body['kbId'])}`,
+  );
 });

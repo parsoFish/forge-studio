@@ -54,6 +54,19 @@ import {
   // of exporting small pure derivation helpers alongside the `Flow` type
   // they read (parseCapability/parseFanout/buildTriggerDeclaration/etc.).
   deriveKbBandOptions,
+  // R4-19-F2 T3: does not exist yet — same "not yet exported" RED convention
+  // as AT-F1-1/fetchContractStages above: a missing named export resolves to
+  // `undefined` under this repo's vitest module runner (not a collection-time
+  // throw), so only the tests that actually CALL these two go red. These are
+  // the typed client callers for the kb-cleanup session's two bridge routes
+  // (`POST /api/studio/kbs/:id/cleanup/start` / `.../cleanup/apply`,
+  // cli/ui-bridge.ts) — placed alongside runKbMaintenance/deleteKb/createKb
+  // (this module) rather than bridge-client.ts's startAuthoring/
+  // finalizeAuthoring, because every OTHER `/api/studio/kbs/:id/...` route
+  // caller already lives here, and these two nest under that same
+  // resource-id + action path shape.
+  startKbCleanup,
+  applyKbCleanup,
 } from './studio-client';
 import type { Run, TriggerBuilderFields, ShippedTriggerKind, FlowTrigger, Flow } from './studio-client';
 // AT-F1-1 REUSE (accepted-plan census): the row TYPE this route's rows parse
@@ -808,6 +821,119 @@ test('AT-F1-1: fetchContractStages(id) issues EXACTLY ONE GET to /api/studio/pro
   // verbatim (parseContractStageRow round-trips stage/status/source/detail/
   // bytes). A re-derived or renamed client mirror would diverge here.
   expect(rows).toEqual(CAPTURED_CONTRACT_STAGES.stages);
+});
+
+// ---------------------------------------------------------------------------
+// R4-19-F2 T3 — startKbCleanup / applyKbCleanup: the typed client callers for
+// the kb-cleanup session's two bridge routes (cli/ui-bridge.ts):
+//   POST /api/studio/kbs/:id/cleanup/start  -> {ok:true, sessionId, project}
+//   POST /api/studio/kbs/:id/cleanup/apply {project, sessionId} -> {ok:true, runId}
+// (route bodies verified by direct reading of cli/ui-bridge.ts's own
+// kbCleanupStartMatch/kbCleanupApplyMatch handlers — the sendJson shapes
+// pinned below are their REAL success/error bodies, not invented ones).
+//
+// THE GAP this block kills: without these two exported functions, NO client
+// code anywhere can reach either route — a kb-cleanup launcher wired up in
+// forge-ui/app/knowledge/page.tsx (next to the existing kb-lint/kb-index/
+// kb-maintain-session/kb-delete buttons) would have to hand-roll a fetch, or
+// worse, silently have no way to start/approve a cleanup session at all. This
+// is the "launcher wired to a URL that does not exist" failure mode the T3
+// task brief names explicitly.
+//
+// Uses the SAME fetch-mocking harness as AT-F1-1 immediately above
+// (`vi.mock('./bridge-client.ts', ...)` at this file's top resolves
+// resolveBridgeUrl() to BRIDGE_BASE; `vi.stubGlobal('fetch', fetchSpy)` +
+// this file's `afterEach(() => vi.unstubAllGlobals())` per-test).
+//
+// HOME: studio-client.ts, alongside runKbMaintenance/deleteKb/createKb —
+// every OTHER `/api/studio/kbs/:id/...` route caller already lives in this
+// module. bridge-client.ts's startAuthoring/finalizeAuthoring is the OTHER
+// viable per-session-kind precedent, but that module's callers are for
+// session kinds with no natural resource-id (authoring/architect/
+// instructions/demo-builder/project-brain all key off `project` + a
+// server-minted `sessionId` alone) — kb-cleanup nests under an existing KB
+// resource id exactly like maintenance/delete/create already do.
+// ---------------------------------------------------------------------------
+
+test('R4-19-F2 AT-F2-1: startKbCleanup is not exported from ./studio-client yet — the zero-caller gap that leaves a kb-cleanup launcher with no route to call', () => {
+  expect(
+    typeof startKbCleanup,
+    'startKbCleanup is not exported from ./studio-client yet',
+  ).toBe('function');
+});
+
+test('R4-19-F2 AT-F2-2: startKbCleanup(id) issues EXACTLY ONE POST to /api/studio/kbs/:id/cleanup/start with the x-forge-csrf header, and returns {ok:true, sessionId, project} from a real 200 body — BOTH fields matter: a launcher navigating to the session page needs "project" for its ?project=<anchor> query param, not just "sessionId" (kb-cleanup sessions for a non-project-bound KB anchor under a ".kb-<id>" scratch project, cli/ui-bridge.ts\'s KB_SEEDING_ANCHOR_PREFIX carve-out — a launcher that re-derives "project" from the kbId itself, rather than using what this route returns, would silently mis-anchor every non-project KB\'s session URL', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, sessionId: '2026-08-14T08-34-38-a34fff82', project: '.kb-forge-dev' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await startKbCleanup('forge-dev');
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/cleanup/start`);
+  const init = fetchSpy.mock.calls[0][1] as { method?: string; headers?: Record<string, string> } | undefined;
+  expect(init?.method).toBe('POST');
+  expect(init?.headers?.['x-forge-csrf']).toBe('1');
+
+  expect(result).toEqual({ ok: true, sessionId: '2026-08-14T08-34-38-a34fff82', project: '.kb-forge-dev' });
+});
+
+test('R4-19-F2 AT-F2-3: startKbCleanup(id): a real 404 "unknown kb" body round-trips the server\'s error message VERBATIM as {ok:false, error} — never a generic "failed" string — and carries no sessionId/project', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: false,
+    status: 404,
+    json: async () => ({ error: 'unknown kb: bogus' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await startKbCleanup('bogus');
+  expect(result.ok).toBe(false);
+  expect(result.error).toBe('unknown kb: bogus');
+  expect((result as { sessionId?: string }).sessionId).toBeUndefined();
+  expect((result as { project?: string }).project).toBeUndefined();
+});
+
+test('R4-19-F2 AT-F2-4: applyKbCleanup is not exported from ./studio-client yet — the zero-caller gap that leaves the approval step with no route to call', () => {
+  expect(
+    typeof applyKbCleanup,
+    'applyKbCleanup is not exported from ./studio-client yet',
+  ).toBe('function');
+});
+
+test('R4-19-F2 AT-F2-5: applyKbCleanup(id, {project, sessionId}) issues EXACTLY ONE POST to /api/studio/kbs/:id/cleanup/apply with a JSON body carrying EXACTLY {project, sessionId} (the route\'s SECURITY INVARIANT — cli/ui-bridge.ts — reads the KB to drain from the SESSION\'s own recorded kb_id, never the URL\'s :id, so the body must carry the real session identity, not be dropped/renamed) and the x-forge-csrf header, returning {ok:true, runId} from a real 200 body', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: true,
+    status: 200,
+    json: async () => ({ ok: true, runId: 'forge-dev-consolidate-abc123' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await applyKbCleanup('forge-dev', { project: '.kb-forge-dev', sessionId: '2026-08-14T08-34-38-a34fff82' });
+
+  expect(fetchSpy).toHaveBeenCalledTimes(1);
+  expect(fetchSpy.mock.calls[0][0]).toBe(`${BRIDGE_BASE}/api/studio/kbs/forge-dev/cleanup/apply`);
+  const init = fetchSpy.mock.calls[0][1] as { method?: string; headers?: Record<string, string>; body?: string } | undefined;
+  expect(init?.method).toBe('POST');
+  expect(init?.headers?.['x-forge-csrf']).toBe('1');
+  expect(init?.headers?.['content-type']).toBe('application/json');
+  expect(JSON.parse(init?.body ?? '{}')).toEqual({ project: '.kb-forge-dev', sessionId: '2026-08-14T08-34-38-a34fff82' });
+
+  expect(result).toEqual({ ok: true, runId: 'forge-dev-consolidate-abc123' });
+});
+
+test('R4-19-F2 AT-F2-6: applyKbCleanup: a real 409 "not awaiting-approval" body round-trips the server\'s error message VERBATIM as {ok:false, error} — this is the approval-gate refusal message and must reach the operator unmodified, never replaced by a generic "failed" string', async () => {
+  const fetchSpy = vi.fn(async () => ({
+    ok: false,
+    status: 409,
+    json: async () => ({ error: 'session "abc123" is not awaiting-approval (current phase: "applied")' }),
+  }));
+  vi.stubGlobal('fetch', fetchSpy);
+
+  const result = await applyKbCleanup('forge-dev', { project: '.kb-forge-dev', sessionId: 'abc123' });
+  expect(result).toEqual({ ok: false, error: 'session "abc123" is not awaiting-approval (current phase: "applied")' });
 });
 
 // ---------------------------------------------------------------------------

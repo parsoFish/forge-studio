@@ -1,0 +1,30 @@
+{
+  "session_id": "2026-08-14T08-34-38-a34fff82",
+  "project": ".kb-forge-dev",
+  "phase": "awaiting-approval",
+  "kb_id": "forge-dev",
+  "kb_binding": {
+    "kind": "unique"
+  },
+  "findings": [
+    {
+      "category": "flag",
+      "file": "/home/parso/forge/.claude/worktrees/lane-r4-19-f2/brain/forge-dev/themes/brain-read-policy.md",
+      "message": "theme over soft cap: 65 body lines (> 60)",
+      "check": "checkLengthSoftCap",
+      "kind": "length.soft-cap",
+      "resolution": "agent",
+      "fixHint": "Condense the theme toward 60 body lines without losing substance."
+    },
+    {
+      "category": "flag",
+      "file": "/home/parso/forge/.claude/worktrees/lane-r4-19-f2/brain/forge-dev/themes/exploration-vs-implementation-initiatives.md",
+      "message": "dangling related_themes entry: \"forge-current-architecture-as-built\" (no theme file found anywhere under brain/**/themes/)",
+      "check": "checkDanglingEdges",
+      "kind": "edge.dangling",
+      "resolution": "agent",
+      "fixHint": "Repoint the related_themes entry at the correct existing slug (very often the same title carrying a date prefix), or drop the entry entirely if the target theme is genuinely gone."
+    }
+  ],
+  "updated_at": "2026-08-14T08:36:02.253Z"
+}

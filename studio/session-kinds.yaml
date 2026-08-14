@@ -133,3 +133,51 @@
       - { phase: awaiting-review, step: noop }
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
       - { phase: committed, step: terminal }
+
+# R4-19-F2 — the kb-cleanup session (brain-maintenance, cleanup-plan). Drafts
+# a reviewable cleanup plan from one KB's agent-tier brain-lint findings
+# (skills/brain-maintenance/SKILL.md) and stops for operator approval; a
+# separate route (POST /api/studio/kbs/:id/cleanup/apply) drains the
+# approved plan. legacyRoutes is deliberately [] — there was no predecessor
+# kb-cleanup session ROUTE at all before this initiative.
+#
+# `id` MUST equal the `_<kindDir>` directory prefix without its leading
+# underscore (`kb-cleanup` <-> `_kb-cleanup`) — the bridge derives the
+# on-disk session dir as `<projectsRoot>/<project>/_<descriptor.id>/<sid>`
+# (cli/bridge-studio-sessions.ts) while the generic turn runner derives it
+# independently as `<projectRoot>/<turnSpec.kindDir>/<sid>`
+# (orchestrator/interactive-runner.ts's `resolveGuardedPath(projectRoot,
+# [turnSpec.kindDir, sessionId])`) — a mismatch here would silently split one
+# session across two different directories, one for reads and one for turns.
+#
+# `legacyRoutes: []` is legal per validateSessionKinds (an empty list is
+# never itself an error, AT-51) and, as above, honestly reflects that this
+# session replaces no prior Studio page.
+#
+# `awaiting-approval` deliberately declares NO `next` key at all — that
+# ABSENCE *is* the approval gate. The generic runner (runInteractiveTurn)
+# treats a `noop` phase as a true no-op: re-running the turn while a session
+# sits at `awaiting-approval` leaves `status.phase` (and the whole session
+# dir) byte-for-byte unchanged, so a duplicate/retried turn dispatch can
+# never auto-advance an unapproved plan into `applied`. `applied` is written
+# by exactly one caller — the dedicated apply route
+# (POST /api/studio/kbs/:id/cleanup/apply) — after it independently checks
+# `phase === 'awaiting-approval'` itself; the ordinary turn-dispatch path
+# (`forge agent run kb-cleanup ...`) never writes it. Adding a `next` here
+# would silently defeat the whole approval-gate feature.
+- id: kb-cleanup
+  agent: brain-maintenance
+  title: KB cleanup session
+  legacyRoutes: []
+  stages: [brain]
+  defaultStage: brain
+  artifact:
+    kind: cleanup-plan
+    label: Cleanup plan
+  turnSpec:
+    kindDir: _kb-cleanup
+    style: agent
+    phases:
+      - { phase: drafting, step: agent, writes: [plan], next: awaiting-approval }
+      - { phase: awaiting-approval, step: noop }
+      - { phase: applied, step: terminal }

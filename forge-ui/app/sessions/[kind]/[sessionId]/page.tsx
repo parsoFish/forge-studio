@@ -25,6 +25,7 @@ import { SessionArchitectPanel } from '@/components/studio/session/SessionArchit
 import { SessionInstructionsPanel } from '@/components/studio/session/SessionInstructionsPanel';
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
 import { SessionAuthoringPanel } from '@/components/studio/session/SessionAuthoringPanel';
+import { SessionCleanupPanel } from '@/components/studio/session/SessionCleanupPanel';
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -150,6 +151,14 @@ export default function SessionShellPage({
 
   const viewState = useMemo(() => deriveSessionShellViewState(shellResult), [shellResult]);
 
+  // R4-19-F2 WI-4c BLOCKER fix — sourced from the raw fetch result (not
+  // `viewState`, which has no `kbId` field of its own) because
+  // `SessionCleanupPanel` is the only consumer today; `shellResult.payload.
+  // kbId` is `undefined` for a malformed/unresolved wire payload OR a
+  // session kind with no real kb_id — both must degrade the panel to its
+  // honest not-approvable branch, never fabricate a value.
+  const kbId = shellResult?.ok === true ? shellResult.payload.kbId : undefined;
+
   // Fail-closed: no session found in the per-kind list AND no ?project= to
   // even attempt the shell route — never leave the page spinning forever.
   const noProjectKnown = project === null && summaryAttempted;
@@ -198,6 +207,14 @@ export default function SessionShellPage({
                 project={project}
                 artifact={viewState.artifact}
                 onFinalized={(savedKind, id) => router.push(savedKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
+              />
+            ) : kind === 'kb-cleanup' ? (
+              <SessionCleanupPanel
+                sessionId={sessionId}
+                project={project}
+                phase={viewState.phase}
+                kbId={kbId}
+                artifact={viewState.artifact}
               />
             ) : null}
           </SessionTranscript>

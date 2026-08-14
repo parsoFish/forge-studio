@@ -105,6 +105,13 @@ export const SESSION_ARTIFACT_KINDS: readonly SessionArtifactKindRow[] = Object.
   // renderer — flips reserved→live. Declaration order is unchanged (still
   // last); only status flips.
   Object.freeze({ id: 'generation-gallery', status: 'live' }),
+  // R4-19-F2: the kb-cleanup session's 'cleanup-plan' case in
+  // deriveSessionArtifact (session-transcript.ts) ships a real renderer —
+  // lands directly as 'live' (never 'reserved') because the renderer lands
+  // in the SAME change, mirroring the file-package/contract-buildout rows'
+  // own precedent above of landing live rather than staging a reserved row
+  // for a later flip.
+  Object.freeze({ id: 'cleanup-plan', status: 'live' }),
 ] as const);
 export type SessionArtifactKind = (typeof SESSION_ARTIFACT_KINDS)[number]['id'];
 

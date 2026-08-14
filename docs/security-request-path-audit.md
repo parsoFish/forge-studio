@@ -889,3 +889,37 @@ write.
 Any new route, or any change to an existing one, that turns request data into a filesystem path must add its row here and route through `resolveGuardedPath` with a fixed root and the untrusted id as its own segment. A charset regex is the first layer, never the containment. If a site cannot be expressed as `<fixed root>/<segments...>`, that is the signal it needs a design decision rather than a guard call — file it rather than force-fitting.
 
 Since SEC-03, `scripts/check-request-path-sinks.mjs` (above) gives this rule a mechanical backstop in CI and `npm test` — but the backstop only proves the reachable sink surface has not silently grown; the obligation to guard the site and add its row here remains entirely on the author, never the tool.
+
+### Extended in R4-19-F2 — the two new brain-lint checks (`[read]`)
+
+R4-19-F2 added `checkDanglingEdges` and `checkDuplicateThemes` to
+`cli/brain-lint.ts` (see `FULL_SCOPE_CHECKS`). Both grew the sink counts the
+ratchet tracks for that file — `existsSync` 19 → 21 and `readdirSync` 8 → 10,
+`--write`-accepted below — and **neither new site is request-derived**:
+
+- **`collectAllThemeSlugs(brainRoot)`** builds the slug universe a
+  `related_themes` entry is resolved against. Its root is the FIXED
+  `join(forgeRoot, 'brain')`; the segments beneath it are either literals
+  (`THEME_SUBDIRS` × `themes`, `projects`) or directory names enumerated by
+  `readdirSync` from the filesystem itself. No caller-supplied value reaches a
+  path here, and nothing is written — the function only reads directory entries
+  and keeps their basenames. This is the identical shape (fixed `brain/` root +
+  `readdirSync`-enumerated project dir names + literal leaves) already audited
+  for `checkProjectBrainIndexes` in the R1-06 section above.
+- **The `related_themes` entries themselves are never used as paths.** An entry
+  is normalised to a bare slug and tested for MEMBERSHIP in the pre-computed
+  slug `Set` — it is never joined onto a root, never `resolve`d, and never
+  opened. A theme file carrying `related_themes: ['../../etc/passwd']` therefore
+  produces an ordinary dangling-edge FLAG, not a filesystem access. That is the
+  containment property to preserve: if a future change ever resolves an entry to
+  a path in order to report a better fix hint, it becomes a genuine
+  theme-content-derived sink and needs `resolveGuardedPath` plus its own row here.
+- **`duplicateThemeFindings` performs no filesystem access of its own** — it is a
+  pure function over an already-read file list and its parsed frontmatter.
+
+The per-KB entry point, `lintThemeFiles(forgeRoot, files)`, now emits both checks
+over a caller-supplied file list. That list reaches it from
+`buildKbHealth`/the consolidate drain via `listOwnThemeFiles(brainDir)`, where
+`brainDir` is `resolveKbBrainDir(forgeRoot, kbId)`'s output — the per-segment
+realpath-identity walk, not a lexical prefix check — so the request-derived `kbId`
+is already confined at that choke point before any theme file is read.
