@@ -4,8 +4,6 @@ description: Per-WI quality_gate_cmd patterns like `go test ./pkg/...` or `npm t
 category: antipattern
 created_at: 2026-05-23T11:58:00Z
 updated_at: 2026-05-23T11:58:00Z
-related_themes:
-  - file-isolation-constraint-enables-single-iteration
 ---
 
 # Quality-gate-cmd must assert NEW work
