@@ -1700,7 +1700,7 @@ async function handleHttp(
           sendJson(res, 400, { error: `invalid project: ${JSON.stringify(body.project)}` }, origin);
           return;
         }
-        if (!existsSync(join(ctx.projectsRoot, body.project))) {
+        if (!guardedFile(ctx.projectsRoot, [body.project], 'readdir')) {
           sendJson(res, 404, { error: `project not found: ${body.project}` }, origin);
           return;
         }
