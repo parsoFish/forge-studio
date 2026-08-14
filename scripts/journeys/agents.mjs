@@ -415,6 +415,58 @@ export const journey = defineJourney({
     story: 'As an operator, I compose the three OOTB plan/dev/review agents from forge\'s curated starter library, build a brand-new agent entirely from scratch (blank slate, a dropped skill, a picked runtime), then reopen an existing agent to prove its composition — skills, tools, runtime, budgets — is editable, not fixed once built.',
     beats: [
       {
+        id: 'agents-index-roster',
+        title: 'Browse the agents index — roster + recent runs',
+        narration: 'Before composing anything, the operator lands on /agents (T2 lane W6-IA-3) — a browsable roster of every agent, mirroring the Library page\'s own agents pillar, plus a cross-agent "recent agent runs" view built by fanning the existing per-agent history route out across the whole roster (there is no aggregate bridge route yet — see lib/agents-index.ts\'s header). This is the entry point StudioNav\'s own /agents/new shortcut skips past entirely: proof the roster itself is reachable and real, and that a card actually navigates into the builder, before any beat below drills into one specific agent.',
+        drive: async (ctx) => {
+              const { page, watch, frame, check } = ctx;
+              console.log('\n[agents-index] Browse the agents index — roster + recent runs');
+
+              await page.goto(watch.uiUrl + '/agents', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const pageReady = await page.evaluate(() =>
+                document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready'));
+              check(pageReady === 'true', `agents-index: [data-page="agents-index"][data-page-ready="true"] (got "${pageReady}")`);
+
+              const cardCount = await page.evaluate(() =>
+                document.querySelectorAll('[data-section="agent-roster"] [data-card-type="agent"]').length);
+              check(cardCount > 0, `agents-index: the roster renders ≥1 real AgentCard from the seeded OOTB library (got ${cardCount})`);
+
+              const ctaHref = await page.evaluate(() =>
+                document.querySelector('[data-action="new-agent"]')?.getAttribute('href'));
+              check(ctaHref === '/agents/new', `agents-index: "+ New agent" CTA links to /agents/new (got "${ctaHref}")`);
+
+              // Recent-agent-runs: wait for the loading placeholder to clear, then
+              // confirm the REAL shared HistoryLedger mounted. Its own honest
+              // empty/populated states are already pinned by
+              // history-ledger-render.test.ts + the R6-06 beats below — this beat
+              // only proves THIS route actually reuses it.
+              await page.waitForFunction(
+                () => document.querySelector('[data-component="recent-agent-runs-loading"]') === null,
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const ledgerMounted = await page.evaluate(() => document.querySelector('[data-section="history-ledger"]') !== null);
+              check(ledgerMounted, 'agents-index: the recent-agent-runs section mounts the REAL shared HistoryLedger ([data-section="history-ledger"])');
+              await frame(page, 'agents-index-0-roster', 'Agents index — the roster + recent-agent-runs sections, before drilling into any one agent');
+
+              // The roster's own cards are real navigation, not decoration: click
+              // through to the first agent and land on its builder.
+              const firstCardHref = await page.evaluate(() =>
+                document.querySelector('[data-section="agent-roster"] [data-card-type="agent"]')?.getAttribute('href'));
+              check(!!firstCardHref && firstCardHref.startsWith('/agents/'), `agents-index: the first roster card links into the builder (got "${firstCardHref}")`);
+              await page.locator('[data-section="agent-roster"] [data-card-type="agent"]').first().click();
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 15000 },
+              ).catch(() => {});
+              const landedOnBuilder = await page.evaluate(() => document.querySelector('[data-page="agents"]') !== null);
+              check(landedOnBuilder, 'agents-index: clicking a roster card actually navigates into the agent builder ([data-page="agents"])');
+        },
+      },
+      {
         id: 'agents-starters',
         title: 'Author plan/dev/review agents from the starter library',
         narration: 'The operator picks each of the three curated starters in turn — required fields pre-filled, advanced config collapsed — and saves each straight to a SKILL.md that then passes forge\'s own `studio lint` gate: the agents pillar\'s OOTB library, tuned through forge\'s own development, made concrete.',

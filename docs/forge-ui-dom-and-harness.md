@@ -411,6 +411,43 @@ inventory rather than one shared page-level contract:
   independently confirms by staying `"not-installed"` after a suppressed
   attempt). Action errors surface as `[data-component="community-action-error"]`.
 
+- **`/agents` — the agents index (T2 lane W6-IA-3, 2026-08-15).** New route;
+  did not exist before. `StudioNav`'s "Agents" nav item still points at
+  `/agents/new` (IA-5's concern, untouched here) — this route gives agents
+  a browsable index of their own, reachable by direct navigation. Root:
+  `main[data-page="agents-index"][data-page-ready][data-agent-count]`. Two
+  independently-ready sections (two different fetches, never one shared
+  "loading" flag — a page-level `ready` gates the roster, a separate
+  `recentRunsReady` gates the runs section, so neither section's honest
+  loading/empty state ever depends on the other's fetch latency):
+  - `section[data-section="agent-roster"][data-count]` — the full roster as
+    REAL `AgentCard`s (`components/studio/LibraryCard.tsx`, reused
+    UNCHANGED — the SAME card `/library`'s own agents pillar renders),
+    linking to `/agents/<id>`, plus a `a[data-action="new-agent"]` CTA to
+    `/agents/new`. `[data-component="agent-roster-loading"]` before the
+    roster fetch resolves, `[data-component="agent-roster-empty"]` once
+    resolved with zero agents — honest-empty, never a fabricated card.
+  - `section[data-section="recent-agent-runs"]` — a cross-agent "recent
+    runs" ledger, rendered by the SAME shared `HistoryLedger.tsx` the flow
+    monitor and `/agents/[id]`'s own per-agent ledger use (reused
+    UNCHANGED, D2 — so the row contract documented once under `/flows/[id]`
+    and restated for `/agents/[id]` below is **not restated a third time
+    here**). `[data-component="recent-agent-runs-loading"]` before this
+    fetch resolves. **There is no aggregate "all agents" bridge route** —
+    `lib/agents-index.ts`'s `fetchRecentAgentRuns` fans the existing
+    per-agent `GET /api/agents/:slug/history` out across the whole roster
+    in parallel, merges the "found" rows, and re-sorts the WHOLE merged set
+    newest-first (`sortLedgerRowsNewestFirst`, reused unchanged) before
+    bounding to `RECENT_AGENT_RUNS_LIMIT` (20). KNOWN LIMITATION (documented
+    in that module's header, not closed here): a single flow run with two
+    nodes owned by two different agents appears once per owning agent in
+    this merge (same `row.id`, different `row.href`) — a server-side
+    aggregate route could dedupe this by (run, node) instead of by agent;
+    this client-side join cannot. Journey coverage:
+    `scripts/journeys/agents.mjs`'s `agents-index-roster` beat (roster +
+    CTA + ledger-mount + roster-card-navigates-to-builder only — the ledger
+    row contract itself is pinned elsewhere, this beat only proves the
+    route reuses it).
 - **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
   default (`[data-section="advanced"][data-advanced-open]`) behind which sit
