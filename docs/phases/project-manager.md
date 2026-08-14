@@ -54,9 +54,7 @@ Locked in the `orchestrator/phases/pm-binding.ts` user prompt + `orchestrator/ph
 
 ## Out-of-scope WI recovery
 
-If the PM emits a WI whose acceptance criteria or files_in_scope have no grounding in the initiative body, the validator can detect the mismatch. The recovery flow mirrors the former feature-hallucination flow: the orchestrator wipes the stale `.forge/work-items/` dir and re-invokes the PM once with an augmented prompt pointing to the initiative body. If the retry still drifts, the orchestrator emits a terminal `pm.out-of-scope` event and throws.
-
-> Note (2026-06-04): `feature_id` validation (`knownFeatureIds`) was removed with the feature tier. The `cycle-pm-hallucination.test.ts` test covers the retry mechanics and may be refactored by sibling clusters to match the new model.
+If the PM emits a WI whose acceptance criteria or files_in_scope have no grounding in the initiative body, the validator detects the mismatch. The orchestrator wipes the stale `.forge/work-items/` dir and re-invokes the PM once with an augmented prompt pointing to the initiative body. If the retry still drifts, the orchestrator emits a terminal `pm.out-of-scope` event and throws. `cycle-pm-hallucination.test.ts` covers the retry mechanics.
 
 ## Locked formats
 
@@ -65,7 +63,7 @@ If the PM emits a WI whose acceptance criteria or files_in_scope have no groundi
 
 ## Known failure modes (to defend against)
 
-The prompt guidance and validator-layer guards (`detectHiddenCoupling`, `one_creator_per_file`) are live; `knownFeatureIds` was removed with the feature tier (2026-06-04). Phase quality is judged on real merged cycles.
+The prompt guidance and validator-layer guards (`detectHiddenCoupling`, `one_creator_per_file`) are live. Phase quality is judged on real merged cycles.
 
 - **Over-decomposition** — 50 work items for a simple initiative. Capped via sizing-band prompt guidance (2–8 WIs per initiative).
 - **Under-decomposition** — one giant work item that covers the whole initiative. Same remedy.

@@ -133,7 +133,7 @@ The **UI is the sole operator surface** ([ADR 031](./decisions/031-studio-consol
 `forge studio`; the Recovery screen replaces the old `review`/`requeue` verbs, and new
 runs go through the architect flow or `POST /api/initiatives`. The only operator CLI
 verbs are `forge init`, `forge studio`, and `forge studio lint`. The scheduler daemon
-(`forge serve`) is still spawnable for CI/headless use but is no longer an operator command.
+(`forge serve`) is spawnable for CI/headless use; it is not an operator command.
 
 ---
 

@@ -1,67 +1,87 @@
-# Forge Studio Documentation
+# Forge Studio documentation
 
-Forge Studio is a visual SWE pipeline that develops your projects autonomously between a few human moments. This index splits the docs into two audiences. If you only want to **run forge on your own project**, read the *Using Forge Studio* set. If you want to understand or change **how forge is built**, read the *Developing Forge Studio* set.
+Forge Studio is a visual SWE pipeline that develops your projects autonomously
+between a few human moments. The docs split into **three scopes** — pick your
+entry point:
+
+- **Operate** — run forge on your own project (install, Studio, cycles,
+  projects, KBs). The operator manual.
+- **Develop** — understand or change how forge is built (architecture, seams,
+  conventions, testing/harnesses).
+- **Plan** — direction, decisions, and design (the roadmap set, the ADRs,
+  the product vision, the mockups).
+
+Every page here describes the **current state**. History is not narrated in
+these pages — it lives in git, in the ADRs (`decisions/`), and in the brain
+(`brain/forge-dev/themes/`, `brain/cycles/themes/`).
 
 ---
 
-## Using Forge Studio (operators)
+## Operate — run forge on your project
 
-Docs are labelled by [Diátaxis](https://diataxis.fr/) type — **Tutorial** (learning-oriented), **How-to** (task-oriented), **Reference** (information lookup), **Explanation** (understanding).
+Docs are labelled by [Diátaxis](https://diataxis.fr/) type — **Tutorial**,
+**How-to**, **Reference**, **Explanation**.
 
 | Doc | Type | What it covers |
 |-----|------|----------------|
 | [Getting started](./getting-started.md) | Tutorial | Install → onboard a project → first merged PR. Projects are auto-discovered from disk — there is no registry file to edit. |
 | [Project contract](./forge-project-contract.md) | How-to · Reference | The forge↔project contract every managed repo must satisfy (acceptance tiers, demo shapes, the C10 release final-loop). The SSOT. |
-| [Operator journey](./operator-journey.md) | Explanation | The AUTHOR / RUN / SWAP narrative — what Studio actually does end to end. |
-| [Product vision](./product/minimum-viable-user-story.md) | Explanation | The canonical user story: idea → autonomous build → review → release → reflect. |
+| [Operator journey](./operator-journey.md) | Explanation | The AUTHOR / RUN / SWAP narrative — what Studio does end to end. |
+| [CLI reference](./reference/cli.md) | Reference | `forge --help`: the launcher (`forge studio`), the scheduler daemon (`forge serve`), and the scaffolding verbs. |
+| [Serve supervision](./operations/serve-supervision.md) | How-to | Running `forge serve` under a process supervisor. |
+| [Gate-script template](./gate-script-template.md) | Reference | The errexit-exempt-safe template for a project's multi-step `quality_gate_cmd` script. |
+| [`.forge/project.json` schema](./schemas/project-config.schema.json) | Reference | A project's config schema, with real examples: [mdtoc](./schemas/examples/project.mdtoc.json) (creds-free, out-of-the-box) and [betterado](./schemas/examples/project.betterado.json) (live external resources). |
 | [Licensing & dependencies](./licensing-and-dependencies.md) | Reference | What AGPL-3.0 means for you, plus the dependency audit. |
-| [`.forge/project.json` schema](./schemas/project-config.schema.json) | Reference | Reference schema for a project's config, with real examples: [mdtoc](./schemas/examples/project.mdtoc.json) (creds-free, out-of-the-box) and [betterado](./schemas/examples/project.betterado.json) (live external resources). |
 
-The human moments: **architect interview** (shape the work), **review verdict** (approve / send back), and **release approve** (sign off the changelog before forge merges). Everything between runs unattended.
-
-## Vision & positioning
-
-Perishable strategy docs (dated; not onboarding material):
-
-- [What makes it different](./forge-studio-market-and-differentiation.md) — *Explanation.* Competitive position + the modularity-as-subsumption thesis. **Dated 2026-06-14 positioning**, not current-state reference.
+The three human moments: **architect interview** (shape the work), **review
+verdict** (approve / send back), and **release approve** (sign off the changelog
+before forge merges). Everything between runs unattended.
 
 ---
 
-## Developing Forge Studio (contributors)
+## Develop — how forge is built
 
 **Orientation**
-- [Repository map](./repo-map.md) — *Explanation.* The three scopes and which rule governs each path. Start here.
+- [Repository map](./repo-map.md) — the three code scopes and which rule governs each path. Start here.
 - [ARCHITECTURE.md](../ARCHITECTURE.md) — narrative as-built architecture (repo root).
 - [PRINCIPLES.md](../PRINCIPLES.md) — the five non-negotiable principles (repo root).
 - [CONTRIBUTING.md](../CONTRIBUTING.md) — build/test gates and how to extend forge (repo root).
-- [Architecture overview](./architecture/overview.md) — internal index into phases, decisions, and the contract.
-- [CLI reference](./reference/cli.md) — *Reference.* The committed `forge --help` plus the daemon / scaffolding / phase verbs.
-- [Forge-UI DOM contract & harness](./forge-ui-dom-and-harness.md) — *Reference.* The per-route `data-*` contract, status vocabularies, and the journeys-as-data + real-capability harnesses (moved out of CLAUDE.md so the always-injected instructions stay lean).
-
-**Direction**
-- [Roadmap set](./roadmaps/README.md) — *Explanation · Reference.* The living forge-dev roadmaps (R1–R8): the planning SSOT for everything forge builds next, with the coverage map routing every architecture pillar to its owning roadmap. Start any forge-dev work here.
-- [R2-03 fanout research spike](./investigations/R2-03-fanout-merge-resolution-spike.md) — *Explanation.* The R2-D1 go/no-go evidence (**NO-GO**): a 76-source survey of parallel-agent merge practices, concluding forge's scheduler-ordering merge-gate suffices over a merge-resolution capability. (Investigation reports are normally scratch; this one is a tracked roadmap-gate artifact.)
-
-**Decisions**
-- [ADR index](./decisions/README.md) — every load-bearing choice plus the retirement ledger.
+- [Architecture overview](./architecture/overview.md) — the diagram convention + the structural source of truth.
 
 **Phases** (purpose + success signals)
 - [architect](./phases/architect.md) · [brain](./phases/brain.md) · [project-manager](./phases/project-manager.md) · [developer-loop](./phases/developer-loop.md) · [review-loop](./phases/review-loop.md) · [reflection](./phases/reflection.md)
 
 **Seams & extension**
 - [Extending forge](./extending-forge.md) — add a runtime adapter, flow, or skill.
-- [Harness-overlay seam](./architecture/harness-overlay-seam.md) — the parked injection seam.
-- [Gate-script template](./gate-script-template.md) — the errexit-exempt-safe template for a multi-step `quality_gate_cmd` script.
+- [Harness-overlay seam](./architecture/harness-overlay-seam.md) — the parked `PhaseAgentSpec` injection seam.
 
-**Operations & backlog**
-- [Serve supervision](./operations/serve-supervision.md) — running `forge serve` under a supervisor.
-- [Headroom token-efficiency trial](./operations/headroom-token-efficiency-trial.md) — runbook + decision criteria for trialling the headroom context-compression proxy against forge.
+**UI, testing & security**
+- [Forge-UI DOM contract & harness](./forge-ui-dom-and-harness.md) — the per-route `data-*` contract, status vocabularies, the journeys-as-data harness, and the real-capability (`verify-cycle`) harness. (Kept out of CLAUDE.md so the always-injected instructions stay lean.)
+- [Studio first-flow UX](./reference/studio-first-flow-ux.md) — the UX spec backing the shipped first-flow starters.
+- [Request-derived filesystem path audit](./security-request-path-audit.md) — the finite enumeration of every fs read/write whose path comes from request data, each classified `guarded` / `unguarded` / `accidentally-safe`, plus the escape-shape catalogue. Add a row when a route turns request data into a path.
 - [Verify-cycle idea corpus](./verify-cycle-ideas/README.md) — hand-authored initiative ideas fed to `scripts/verify-cycle.mjs --idea-file` for the gitpulse reference-project harness.
-- [Request-derived filesystem path audit](./security-request-path-audit.md) — *Reference.* The finite enumeration of every fs read/write in `cli/` and `orchestrator/` whose path comes from request data, each classified `guarded` / `unguarded` / `accidentally-safe` (with the accident named), plus the escape-shape catalogue. Add a row here whenever a route turns request data into a path.
-- [Architect + PM merger brief](./architect-pm-merger-brief.md) — *Decision record (R4-15-F2, ratified 2026-08-06).* Why the wave-5 mockup's merged `architect-planning` roster entry does NOT merge the runtimes, what the two agents actually differ on, and the measurement that would settle R4-D1's deferred re-entry condition.
-- [Known gaps](./known-gaps.md) — the open hardening backlog (internal).
-- [UX reference](./reference/studio-first-flow-ux.md)
 
 ---
 
-*Historical milestone plans, completed roadmaps, and one-shot review reports have been removed; they live in git history. Durable lessons live in the brain (`brain/forge-dev/themes/`) and the ADRs.*
+## Plan — direction, decisions, design
+
+- [Roadmap set](./roadmaps/README.md) — the living forge-dev roadmaps (R1–R8) with the coverage map routing every architecture pillar to its owning roadmap. The planning SSOT; start any forge-dev work here.
+- [ADR index](./decisions/README.md) — every load-bearing decision plus the retirement ledger. The decision log — history is its job.
+- [Product vision (MVUS)](./product/minimum-viable-user-story.md) — the canonical vision for the shipped OOTB suite (Scope 2): idea → autonomous build → review → release → reflect.
+- [Architect + PM merger brief](./architect-pm-merger-brief.md) — the ratified R4-15-F2 decision record: why the merged `architect-planning` roster entry does not merge the runtimes, and the measurement that would settle R4-D1's deferred re-entry.
+- [R2-03 fanout research spike](./investigations/R2-03-fanout-merge-resolution-spike.md) — the R2-D1 go/no-go evidence (**NO-GO**): a 76-source survey concluding forge's scheduler-ordering merge-gate suffices over a merge-resolution capability. (Investigation reports are otherwise scratch and gitignored; this one is a tracked roadmap-gate artifact.)
+- **Mockups** — the Studio end-state mockups live at the repo root under [`mockups/`](../mockups/) (a separate tree; work backwards from them to functionality).
+- [What makes it different](./forge-studio-market-and-differentiation.md) — competitive position + the modularity-as-subsumption thesis. **Dated 2026-06-14 positioning** (perishable strategy; external positioning is owned by R8-03), not current-state reference.
+
+---
+
+## Standing logs (not ground-truth pages)
+
+- [Known gaps](./known-gaps.md) — the open hardening/defect backlog.
+- [CHANGELOG.md](../CHANGELOG.md) — the release log (repo root).
+
+---
+
+*Historical campaign notes, superseded plans, and one-shot investigation reports
+are not kept here — they live in git history, the brain
+(`brain/forge-dev/themes/`, `brain/cycles/themes/`), and the ADRs.*

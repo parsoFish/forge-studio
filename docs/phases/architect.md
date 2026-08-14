@@ -77,8 +77,8 @@ All phase infrastructure is live:
 - [x] Brain grounding at turn start — ARCH-1: `loadBrainIndex` injected into system prompt, brain reads captured in `brain_context`.
 - [x] Reject → archive — ARCH-6: `archiveSessionDir` wired into rejected phase turn.
 - [x] Roadmap is a derived view (architect does not write roadmap.md) — ARCH-2.
-- [x] Feature list removed from manifests — ARCH-3 resolved: architect emits initiatives with GWT ACs in the body; PM decomposes ACs directly into WIs (2026-06-04).
-- [x] `forge studio` is the canonical launcher (`forge watch` alias was removed in M8-E — ADR 031).
+- [x] Initiatives carry GWT ACs in the body; the PM decomposes ACs directly into WIs (no intermediate feature list) — ARCH-3.
+- [x] `forge studio` is the canonical launcher (ADR 031).
 
 ## Exploration stage (R4-04-F4, 2026-07-24)
 

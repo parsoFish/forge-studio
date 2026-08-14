@@ -72,7 +72,7 @@ skips this entirely (the phase no-ops with `release_status: 'skipped'`).
 
 ## Skills
 
-- [`skills/developer-unifier/SKILL.md`](../../skills/developer-unifier/SKILL.md) — the unifier sub-phase that owns the review-prep iteration (post-S4 collapse; the dedicated `skills/reviewer/` was archived 2026-05-23).
+- [`skills/developer-unifier/SKILL.md`](../../skills/developer-unifier/SKILL.md) — the unifier sub-phase that owns the review-prep iteration.
 
 ## Success signals
 
@@ -87,31 +87,25 @@ skips this entirely (the phase no-ops with `release_status: 'skipped'`).
 - **PR description is what-not-why** — explicit prompt rule.
 - **Squash-merge stacked PRs** — explicitly forbidden (lesson in the brain). Use layered merge order.
 - **Stale demo capture** — the demo must capture *this* branch's build, never a stray/ambient dev server (`reuseExistingServer: true` latching the wrong app silently). The reviewer mandates an isolated strict-port server / built `preview`; pattern of record: [`brain/cycles/themes/pr-as-sole-review-window.md`](../../brain/cycles/themes/pr-as-sole-review-window.md).
-- **Reviewer never reaches the verdict gate** — historically a too-tight per-iteration $/turn budget cut every iteration before a verdict (0 verdicts, mislabelled send-back-cap). Those guards were removed; the loop is bounded only by the iteration cap.
+- **Reviewer never reaches the verdict gate** — the loop is bounded only by the adaptive iteration cap; there is no per-iteration $/turn budget guard that could cut a round before a verdict is reached.
 
 ## Status (as-built)
 
-Closed end-to-end. The send-back loop, demo-embedded self-contained PR,
-visibility-aware demo commit, and closure-as-single-mover are all
-implemented (Phase-6 redesign + the 2026-05-18 operator-review
-reliability pass + the 2026-05-23 S4 unifier collapse). The loop is
-exercised by real merged cycles.
+Closed end-to-end and exercised by real merged cycles. The load-bearing
+behaviours:
 
-**2026-05-18 P2/P3 (unit-tested; not yet exercised against a live cycle):**
-- **PR at end of review iteration 1, not on approve.** The gate ensures
-  the demo-embedded PR (`pr.ts:ensurePullRequest`, idempotent) as soon as
-  the branch is reviewable, so the PR is a durable review window that
-  survives a dead serve process. The old `if (approved) openPullRequest()`
-  creation point is removed.
-- **Verdict via PR comments** (`pr-verdict.ts:makePrCommentVerdict`),
-  with the file-verdict provider as a fallback when no PR can be created
-  (no remote / gh down) — never strands. *(Historical — [ADR 031](../decisions/031-studio-consolidation.md)
-  retired the PR-comment + CLI verdict ingress; `pr-verdict.ts` is deleted and
-  the verdict now arrives solely from the unified `/artifact?...&mode=review`
-  Studio surface as a `verdict-response.md`.)*
-- **P2 mechanical integrity gate:** a WI marked `complete` whose declared
-  `files_in_scope` are entirely absent from the branch diff auto-sends-
-  back into the loop WITHOUT consuming a human verdict round
-  (`detectFalselyCompleteWorkItems`). Surfaced as
-  `reviewer.integrity-autosendback` events.
-- Operability: the scheduler runs as a managed daemon (`orchestrator/daemon.ts`). The lifecycle commands (`start/stop/status/pause/resume`) were retired from the CLI in M7 (ADR 031); the bridge `/api/scheduler/*` routes are the operator API. `forge studio` is the canonical launcher; `forge watch` was removed in M8-E.
+- **PR opened at the end of review-prep, not on approve.** The demo-embedded PR
+  (`pr.ts:ensurePullRequest`, idempotent) is created as soon as the branch is
+  reviewable, so the PR is a durable review window that survives a dead serve
+  process.
+- **The verdict arrives solely from the unified `/artifact?…&mode=review` Studio
+  surface** as a `verdict-response.md` (ADR 031); there is no PR-comment or CLI
+  verdict ingress.
+- **Mechanical integrity gate.** A WI marked `complete` whose declared
+  `files_in_scope` are entirely absent from the branch diff auto-sends-back into
+  the loop WITHOUT consuming a human verdict round
+  (`detectFalselyCompleteWorkItems`), surfaced as `reviewer.integrity-autosendback`
+  events.
+- **Operability.** The scheduler runs as a managed daemon
+  (`orchestrator/daemon.ts`); the bridge `/api/scheduler/*` routes are the operator
+  API and `forge studio` is the canonical launcher (ADR 031).

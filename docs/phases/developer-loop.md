@@ -27,7 +27,7 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 ## Loop runtime
 
 - [`loops/ralph/runner.ts`](../../loops/ralph/runner.ts) — driver.
-- [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts) — quality-gates-pass | iteration-budget. (Wedged-detection was removed in Tier 2, 2026-05-25; the iteration budget is now the only no-progress backstop.)
+- [`loops/ralph/stop-conditions.ts`](../../loops/ralph/stop-conditions.ts) — quality-gates-pass | iteration-budget. The iteration budget is the only no-progress backstop.
 - [`loops/_adapters/`](../../loops/_adapters/) — RuntimeAdapter registry (ADR 029). The Claude adapter (`loops/_adapters/claude/`) is the reference implementation; Gemini and Aider adapters shipped in M8 as the second implementations (both `available: false` until provisioned). The flow engine's dev node calls `getAdapter(sdkId).createAgent(...)` — never `createClaudeAgent` directly. Adding a new runtime is one file + registry row, no orchestrator edit.
 
 ## Success signals
@@ -40,17 +40,10 @@ Take a work item and drive it to "complete" (quality gates pass + acceptance cri
 
 ## Known failure modes (to defend against)
 
-- **Wedged loops** — Ralph never converges. The iteration budget is the backstop (loop aborts when iterations are exhausted). A dedicated wedged-detector existed historically but was removed in Tier 2 (2026-05-25); the iteration budget is now the only no-progress backstop.
+- **Wedged loops** — Ralph never converges. The iteration budget is the backstop (loop aborts when iterations are exhausted); it is the only no-progress backstop.
 - **Token burn on no-op iterations** — iteration budget caps this; cost budget per initiative caps it harder.
 - **Hallucinated test passes** — quality gate verification runs in the orchestrator, not the agent.
 - **Merge conflicts across parallel loops** — handled by per-work-item branches off the initiative branch + orchestrator-level rebase before declaring the initiative complete.
-
-## TODO (post-scaffold)
-
-- [x] Wire the Claude Agent SDK in `runner.ts` past skeleton — done via [`loops/ralph/claude-agent.ts`](../../loops/ralph/claude-agent.ts) (`createClaudeAgent` factory). The runner's `AgentInvocation` parameter accepts either the stub (default, for tests) or the SDK-backed agent. The flow engine drives the dev loop via the RuntimeAdapter registry (`getAdapter(sdkId)`) — M8, ADR 029.
-- [ ] ~~Implement wedged-detector (no-progress heuristic).~~ Removed in Tier 2 (2026-05-25) — the iteration budget is the only no-progress backstop; no dedicated wedged-detector exists.
-- [x] Implement quality-gates-pass stop condition with per-WI commands — done. `LoopInput.qualityGate` is injectable; the live cycle reads each WI's `quality_gate_cmd` (or the project's `quality_gate_cmd` from `.forge/project.json`).
-- [x] Per-iteration commit discipline + JSONL event emission — done. `orchestrator/cycle.ts:runDeveloperLoop` walks WIs in topological order, emits `ralph.start` / `ralph.end` per WI plus a phase-level summary.
 
 ## Onboarding a project
 
