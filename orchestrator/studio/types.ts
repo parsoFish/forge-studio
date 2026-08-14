@@ -405,6 +405,16 @@ export type KbDescriptor = {
   processes?: KbProcesses;
   /** Storage backend; absent ⇒ filesystem (the historical default). */
   backend?: string;
+  /**
+   * Provenance stamp (forge-3oq, ADR-042 disclose-not-park additive-optional
+   * field): `'seed'` on the two shipped OOTB brains, `'studio'` on a KB
+   * created via `POST /api/studio/kbs`, absent on every pre-existing brain
+   * that predates this field (an honest gap — the server-side
+   * `provenanceOfOrigin` in cli/studio-provenance.ts reports those as
+   * `'unknown'`, never a guessed `'operator'`). Never invented by the
+   * loader/serializer — read verbatim when present, omitted when absent.
+   */
+  origin?: string;
   path: string;
 };
 

@@ -29,6 +29,7 @@ import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from './stu
 import matter from 'gray-matter';
 
 import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
+import { provenanceOfOrigin } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
@@ -70,6 +71,9 @@ type KbWithCounts = {
   binding: KbBinding;
   desc: string;
   path: string;
+  /** Present when kb.yaml carries an `origin:` key (forge-3oq) — absent on
+   *  every pre-existing brain that predates the stamp, an honest gap. */
+  origin?: string;
   counts: { index: number; themes: number; raw: number };
 };
 
@@ -747,7 +751,13 @@ export async function handleStudioKbRoutes(
   // list, never per-KB (the cost option (a) refused).
   if (url === '/api/studio/kbs' && method === 'GET') {
     try {
-      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot));
+      // forge-3oq: honest per-kb provenance, derived per request from the
+      // real (optional) origin: stamp on kb.yaml via the ONE shared mapping
+      // — never a second, driftable inline comparison.
+      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot)).map((kb) => ({
+        ...kb,
+        provenance: provenanceOfOrigin(kb.origin),
+      }));
       sendJson(res, 200, { kbs }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -1025,8 +1035,13 @@ export async function handleStudioKbRoutes(
       // 8. Write brain/<id>/kb.yaml via the canonical serializer (leaves
       // `processes` absent — the KB resolves every obligation to its default
       // via resolveKbProcesses until an operator opts into an override).
+      // forge-3oq: stamp `origin: 'studio'` on every KB created through this
+      // route — mirrors the flow write path's `origin: existing?.origin ??
+      // 'studio'` stamp (cli/bridge-studio-writes.ts). Never 'seed' — that
+      // token is reserved for the two shipped OOTB brains, committed by
+      // hand, so an operator-created KB can never claim OOTB provenance.
       const kbYamlPath = join(kbDir, 'kb.yaml');
-      writeFileSync(kbYamlPath, serializeKbDescriptor({ id, name, binding, desc, path: kbYamlPath }), 'utf8');
+      writeFileSync(kbYamlPath, serializeKbDescriptor({ id, name, binding, desc, path: kbYamlPath, origin: 'studio' }), 'utf8');
 
       // 9. Verify loadKbDescriptor can round-trip it
       loadKbDescriptor(kbYamlPath);
