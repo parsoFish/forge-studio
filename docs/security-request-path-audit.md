@@ -965,3 +965,47 @@ is the same residual the pre-R4-23 per-runner `readFileSync` calls carried. The
 one behavioural change is in the opposite direction from a weakening: those
 helpers **failed open** on an unreadable file (returning a one-line default
 prompt); the shared loader throws.
+
+---
+
+### W6-P3 — the production-build freshness scan (`cli/forge-watch.ts`)
+
+W6-P3 made `forge studio` serve a production Next.js build (`next build` once,
+skipped when the existing output is already fresh, then `next start`) by
+default instead of `next dev`; `--dev` keeps the previous path. This grew the
+sink counts the ratchet tracks for `cli/forge-watch.ts` — `readdirSync` 0 → 1,
+`statSync` 0 → 2, `spawn` 2 → 4 (`--write`-accepted alongside this entry).
+**None of the four new call sites is request-derived:**
+
+- **`scanNewestSourceMtime`/`newestMtimeMs`** (`readdirSync` ×1, `statSync` ×1
+  in the recursive walk) stat the forge-ui workspace's own source tree. Every
+  path scanned is built from a FIXED root — `uiDir`, itself
+  `resolve(forgeRoot, 'forge-ui')`, where `forgeRoot` is the CLI's own install
+  root (`orchestrator/cli.ts`'s `FORGE_ROOT`, resolved from `import.meta.dirname`
+  at process start — never a request/HTTP input) — plus a small, literal set of
+  subpath names (`app`, `components`, `lib`, `package.json`,
+  `next.config.mjs`). No caller-supplied value reaches any path built here; the
+  walk only follows entries the filesystem itself enumerates beneath that fixed
+  root — the identical shape already audited for `collectAllThemeSlugs` in the
+  R4-19-F2 section above.
+- **`readBuildStampMs`** (`statSync` ×1) reads the mtime of
+  `resolve(uiDir, '.next', 'BUILD_ID')` — the same fixed `uiDir` root plus two
+  literal path segments. No request-derived input reaches it.
+- **The two new `spawn` calls** (`next build`'s child on a stale/missing build,
+  `next start`'s child on the default production path) run
+  `npm run {build,start} --workspace forge-ui [-- -p <uiPort>]` via the pure,
+  unit-tested `buildUiSpawnArgs`/`startUiSpawnArgs`. `uiPort` is `forge
+  studio`'s own `--ui-port` CLI flag — an operator-typed argv value on their
+  own machine at process-launch time, the identical shape as the pre-existing
+  `next dev` spawn already in the baseline — never an HTTP request field; the
+  rest of the argv is a literal string array.
+
+**Why this file is walked at all despite carrying no bridge-reachable runtime
+code:** `cli/ui-bridge.ts` imports only a **type** from it
+(`import type { BridgeIdentity } from './forge-watch.ts'`). The ratchet's
+reachability walker is a line-based import scanner that does not distinguish
+`import type` from a value import (a documented limit — see "What it provably
+cannot do" above), so it treats the type-only edge as a reachability edge.
+There is no runtime call path from any bridge route into `cli/forge-watch.ts`
+— it is the foreground `forge studio` launcher itself, never spawned by nor
+reachable from the bridge process.

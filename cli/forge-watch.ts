@@ -4,7 +4,13 @@
  *
  * Spawns two children:
  *   1. The forge-ui bridge (cli/ui-bridge.ts) — WebSocket + HTTP API.
- *   2. The forge-ui Next.js dev server (forge-ui workspace) — the browser.
+ *   2. The forge-ui Next.js server (forge-ui workspace) — the browser.
+ *      Default (W6-P3): a production build (`next build`, once — skipped when
+ *      the existing `.next/` output is already fresh, see {@link isBuildFresh})
+ *      followed by `next start`. `--dev` keeps the previous `next dev` path
+ *      (webpack dev server, StrictMode double-effects) for fast UI-code
+ *      iteration. Only one UI child is ever active at a time: a production
+ *      build (when run) completes before `next start` spawns.
  *
  * Readiness is DETERMINISTIC, not stdout-scraped: the launcher awaits the
  * bridge's bound-port promise, then polls the bridge `GET /api/health` until
@@ -14,11 +20,12 @@
  * (when `--ready-file <path>` is passed) an atomically-written JSON file. No
  * dependency on Next.js's "Ready in" log wording.
  *
- * On SIGINT (Ctrl-C) it tears both children down and exits 0.
+ * On SIGINT (Ctrl-C) it tears both children down and exits 0 — including
+ * during a production build, which can run long on a cold cache.
  */
 
 import { spawn, execSync, type ChildProcess } from 'node:child_process';
-import { existsSync, writeFileSync, renameSync } from 'node:fs';
+import { existsSync, writeFileSync, renameSync, readdirSync, statSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 import { startBridge } from './ui-bridge.ts';
@@ -68,6 +75,107 @@ export function isValidPort(raw: string | undefined): raw is string {
   if (raw === undefined || raw.startsWith('-')) return false;
   const n = Number(raw);
   return Number.isInteger(n) && n >= 1 && n <= 65535;
+}
+
+// ---------------------------------------------------------------------------
+// Production-build freshness (W6-P3): decide whether the existing forge-ui
+// `.next/` output is fresh enough to skip a `next build` before `next start`.
+// ---------------------------------------------------------------------------
+
+/** Source roots (relative to `forge-ui/`) scanned for the freshness check —
+ *  everything a `next build` output actually depends on. */
+const BUILD_FRESHNESS_SOURCE_DIRS = ['app', 'components', 'lib'];
+/** Individual source files (relative to `forge-ui/`) included alongside the
+ *  directories above — config/manifest changes also invalidate a build. */
+const BUILD_FRESHNESS_SOURCE_FILES = ['package.json', 'next.config.mjs'];
+
+/** Recursively find the newest mtime (ms) among all files reachable from
+ *  `paths` (files are included directly; directories are walked). A path
+ *  that doesn't exist is skipped rather than thrown on, so a workspace
+ *  missing one of the optional source dirs (e.g. no `lib/` yet) still works.
+ *  Returns `-Infinity` when nothing exists — treated as "no known source",
+ *  which never wins against a real build stamp in {@link isBuildFresh}. */
+function newestMtimeMs(paths: string[]): number {
+  let newest = -Infinity;
+  const stack = [...paths];
+  while (stack.length > 0) {
+    const p = stack.pop() as string;
+    let st;
+    try {
+      st = statSync(p);
+    } catch {
+      continue; // doesn't exist — skip
+    }
+    if (st.isDirectory()) {
+      for (const entry of readdirSync(p)) stack.push(resolve(p, entry));
+    } else if (st.mtimeMs > newest) {
+      newest = st.mtimeMs;
+    }
+  }
+  return newest;
+}
+
+/** Scan the forge-ui workspace for the newest mtime across the directories/
+ *  files that feed a `next build` (see {@link BUILD_FRESHNESS_SOURCE_DIRS}/
+ *  {@link BUILD_FRESHNESS_SOURCE_FILES}). Impure (real filesystem) — kept
+ *  separate from the pure decision in {@link isBuildFresh} so that one is
+ *  unit-tested with synthetic timestamps and this one only needs a smoke
+ *  test against a real directory tree. */
+export function scanNewestSourceMtime(uiDir: string): number {
+  const paths = [
+    ...BUILD_FRESHNESS_SOURCE_DIRS.map((d) => resolve(uiDir, d)),
+    ...BUILD_FRESHNESS_SOURCE_FILES.map((f) => resolve(uiDir, f)),
+  ];
+  return newestMtimeMs(paths);
+}
+
+/**
+ * Read the production build's completion stamp. `.next/BUILD_ID` is written
+ * by `next build` (node_modules/next/dist/build/write-build-id.js — reachable
+ * only from the `next build` compiler pipeline, never from `next dev`) as
+ * essentially its last step, so its mtime is a reliable "a production build
+ * finished at this time" signal that dev-mode runs never touch. Returns null
+ * when no production build has ever completed (fresh checkout, or `.next/`
+ * only ever populated by `next dev`).
+ */
+export function readBuildStampMs(uiDir: string): number | null {
+  try {
+    return statSync(resolve(uiDir, '.next', 'BUILD_ID')).mtimeMs;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pure freshness decision: is the existing production build stamp newer than
+ * (or equal to) every scanned source file? Unit-tested directly with
+ * synthetic timestamps — no filesystem involved. `buildStampMs === null`
+ * (no prior build) is always stale.
+ */
+export function isBuildFresh(buildStampMs: number | null, newestSourceMs: number): boolean {
+  return buildStampMs !== null && buildStampMs >= newestSourceMs;
+}
+
+// ---------------------------------------------------------------------------
+// UI child spawn argv — pure, so the exact argv forge studio hands to `npm`
+// is asserted by a unit test without actually spawning a process (mirrors
+// this file's existing style of testing pure decisions directly).
+// ---------------------------------------------------------------------------
+
+/** `next dev` argv — `--dev` only, webpack dev server + StrictMode. */
+export function devUiSpawnArgs(uiPort: number): string[] {
+  return ['run', 'dev', '--workspace', 'forge-ui', '--', '-p', String(uiPort)];
+}
+
+/** `next build` argv — the one-time production compile step, run before
+ *  `next start` when the existing build is missing/stale. Takes no port. */
+export function buildUiSpawnArgs(): string[] {
+  return ['run', 'build', '--workspace', 'forge-ui'];
+}
+
+/** `next start` argv — the default production-serve path. */
+export function startUiSpawnArgs(uiPort: number): string[] {
+  return ['run', 'start', '--workspace', 'forge-ui', '--', '-p', String(uiPort)];
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -210,8 +318,12 @@ export type WatchOptions = {
   forgeRoot: string;
   /** Override the bridge's HTTP port. Default 4123 (takes over if in use). */
   bridgePort?: number;
-  /** Override the Next.js dev port. Default 4124 (takes over if in use). */
+  /** Override the UI port. Default 4124 (takes over if in use). Serves
+   *  `next start` (production) by default, or `next dev` under `dev: true`. */
   uiPort?: number;
+  /** Keep the pre-W6-P3 `next dev` path (webpack dev server, StrictMode
+   *  double-effects) instead of the default production build+serve. `--dev`. */
+  dev?: boolean;
   /** Skip the browser open (useful for headless CI). */
   noOpen?: boolean;
   /** Skip launching the UI dev server (bridge only). Lets the operator
@@ -291,47 +403,14 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   const bridge = await startBridge({ forgeRoot, port: bridgePort });
   console.log(`${label} bridge at ${bridge.url}`);
 
-  // 2. Start Next.js dev (unless --bridge-only or forge-ui not installed).
+  // 2. Bring up the UI (unless --bridge-only or forge-ui not installed).
   let uiProc: ChildProcess | null = null;
   let uiLaunched = false;
-  if (!opts.bridgeOnly) {
-    if (!existsSync(resolve(uiDir, 'package.json'))) {
-      console.log(`${label} forge-ui workspace not present yet (forge-ui/package.json missing).`);
-      console.log(`${label} running bridge-only — install the workspace then re-run.`);
-    } else {
-      takeoverPort(uiPort, 'ui', label);
-      console.log(`${label} ui at ${uiUrl} (starting next dev…)`);
 
-      uiProc = spawn(
-        'npm',
-        ['run', 'dev', '--workspace', 'forge-ui', '--', '-p', String(uiPort)],
-        {
-          cwd: forgeRoot,
-          env: {
-            ...process.env,
-            FORGE_BRIDGE_URL: bridge.url,
-          },
-          stdio: 'inherit',
-        },
-      );
-      uiLaunched = true;
-      uiProc.on('error', (err) => {
-        console.error(`${label} forge-ui dev server failed to start: ${err.message}`);
-      });
-      // If Next.js dies after startup (OOM, build error, port conflict) we must
-      // surface it and tear the bridge down — otherwise the launcher blocks
-      // forever in the never-resolving Promise below with an orphaned bridge.
-      uiProc.on('exit', (code, signal) => {
-        if (!shuttingDown) {
-          console.error(`${label} forge-ui dev server exited unexpectedly (code=${code ?? signal})`);
-          void shutdown();
-        }
-      });
-    }
-  }
-
-  // 3. Clean up on Ctrl-C. Wired BEFORE the (awaited) readiness poll so
-  //    Ctrl-C during a slow Next.js build still tears the children down.
+  // 3. Clean up on Ctrl-C. Wired BEFORE any UI child spawns — including a
+  //    potentially slow production build (step 2b below) — so Ctrl-C during
+  //    the build, or a slow `next dev` warm-up, still tears the bridge (and
+  //    whichever UI child is currently active) down instead of orphaning it.
   let shuttingDown = false;
   const shutdown = async (): Promise<void> => {
     if (shuttingDown) return;
@@ -357,6 +436,77 @@ export async function runWatch(opts: WatchOptions): Promise<void> {
   };
   process.on('SIGINT', () => { void shutdown(); });
   process.on('SIGTERM', () => { void shutdown(); });
+
+  if (!opts.bridgeOnly) {
+    if (!existsSync(resolve(uiDir, 'package.json'))) {
+      console.log(`${label} forge-ui workspace not present yet (forge-ui/package.json missing).`);
+      console.log(`${label} running bridge-only — install the workspace then re-run.`);
+    } else {
+      takeoverPort(uiPort, 'ui', label);
+      const uiEnv = { ...process.env, FORGE_BRIDGE_URL: bridge.url };
+      const mode = opts.dev ? 'dev' : 'prod';
+
+      if (opts.dev) {
+        console.log(`${label} ui at ${uiUrl} (starting next dev…)`);
+        uiProc = spawn('npm', devUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+        uiLaunched = true;
+      } else {
+        // 2b. Production path (default, W6-P3): build once (skipped when the
+        //     existing `.next/` output is already fresh), then `next start`.
+        //     The build child is tracked as `uiProc` while it runs so Ctrl-C
+        //     during a cold-cache build (it's slow — first run can take a
+        //     minute+) tears it down via `shutdown()` above; it is cleared
+        //     before `next start` spawns so only one UI child is ever active.
+        const fresh = isBuildFresh(readBuildStampMs(uiDir), scanNewestSourceMtime(uiDir));
+        if (fresh) {
+          console.log(`${label} production build is up to date — skipping next build.`);
+        } else {
+          console.log(
+            `${label} building forge-ui for production (first run or source changed — this can take a minute)…`,
+          );
+          const buildProc = spawn('npm', buildUiSpawnArgs(), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+          uiProc = buildProc;
+          const buildExitCode = await new Promise<number | null>((resolveBuild) => {
+            buildProc.on('error', (err) => {
+              console.error(`${label} forge-ui production build failed to start: ${err.message}`);
+              resolveBuild(1);
+            });
+            buildProc.on('exit', (code) => resolveBuild(code));
+          });
+          uiProc = null;
+          if (shuttingDown) return; // Ctrl-C landed during the build; shutdown() above owns the exit.
+          if (buildExitCode !== 0) {
+            console.error(
+              `${label} forge-ui production build failed (exit code ${buildExitCode ?? 'signal'}) — aborting.`,
+            );
+            try { await bridge.close(); } catch { /* ignore */ }
+            process.exit(1);
+          }
+        }
+        console.log(`${label} ui at ${uiUrl} (starting next start…)`);
+        uiProc = spawn('npm', startUiSpawnArgs(uiPort), { cwd: forgeRoot, env: uiEnv, stdio: 'inherit' });
+        uiLaunched = true;
+      }
+
+      // Always non-null here: every path above either spawns `next dev` or
+      // falls through to spawning `next start` before reaching this line (the
+      // one path that leaves `uiProc` null — a build-phase Ctrl-C — already
+      // returned above).
+      const launchedProc = uiProc as ChildProcess;
+      launchedProc.on('error', (err) => {
+        console.error(`${label} forge-ui ${mode} server failed to start: ${err.message}`);
+      });
+      // If Next.js dies after startup (OOM, crash, port conflict) we must
+      // surface it and tear the bridge down — otherwise the launcher blocks
+      // forever in the never-resolving Promise below with an orphaned bridge.
+      launchedProc.on('exit', (code, signal) => {
+        if (!shuttingDown) {
+          console.error(`${label} forge-ui ${mode} server exited unexpectedly (code=${code ?? signal})`);
+          void shutdown();
+        }
+      });
+    }
+  }
 
   // 4. Deterministic readiness: poll the bridge /api/health, then (when the
   //    UI was launched) the UI port — ONLY THEN open the browser and emit the
