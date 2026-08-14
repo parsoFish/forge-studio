@@ -282,6 +282,7 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-kb-cleanup-approve'],
   ['knowledge', 'knowledge-explore-tabs'],
 
+  ['agents', 'agents-index-roster'],
   ['agents', 'agents-starters'],
   ['agents', 'agents-scratch-build'],
   ['agents', 'agents-builder'],
