@@ -281,13 +281,60 @@ export type FilePackageArtifact = {
   files: FilePackageFile[];
 };
 
+// R4-19-F2: "cleanup-plan" — the kb-cleanup session's brain-maintenance
+// artifact (studio/session-kinds.yaml's `id: kb-cleanup`, `agent:
+// brain-maintenance`). Mirrors orchestrator/studio/session-transcript.ts's
+// CleanupPlanAction/CleanupPlanArtifact exactly (hand-mirrored, per this
+// file's convention — never a cross-boundary import of the orchestrator
+// type). Live from birth (never reserved), unlike generation-gallery/
+// contract-buildout/file-package's reserved→live histories above.
+//
+// Three action states, not two: `state` is DERIVED server-side, fresh on
+// every read, by joining the drafted plan against a live brain-lint scan —
+// there is no stored per-action status anywhere. The third state, `unknown`,
+// is load-bearing and was won the hard way: a real run once reported every
+// action `cleared` while nothing had been repaired, because absence of a
+// matching finding was wrongly treated as proof of repair. `unknown` is the
+// fail-safe default whenever coverage cannot be established (no scanned-
+// domain evidence, or the target resolves outside the scanned KB dir) — a
+// client that ever collapses `unknown` into `cleared` reintroduces that
+// defect one layer up.
+
+const CLEANUP_ACTION_STATES = ['open', 'cleared', 'unknown'] as const;
+export type CleanupActionState = (typeof CLEANUP_ACTION_STATES)[number];
+
+export type CleanupPlanAction = {
+  kind: string;
+  target: string;
+  proposal: string;
+  state: CleanupActionState;
+};
+
+export type CleanupPlanArtifact = {
+  kind: 'cleanup-plan';
+  label: string;
+  /** The raw plan text, verbatim, whether or not any line parsed into an
+   *  action — null only when no plan file exists at all. Never null merely
+   *  because zero lines parsed: a drafted-but-unparseable plan must never
+   *  collapse onto "no plan yet" — that ambiguity is exactly what this field
+   *  exists to disambiguate. */
+  plan: string | null;
+  actions: CleanupPlanAction[];
+  /** The count of `actions` whose `state` is 'open' — the SERVER's number,
+   *  never recomputed client-side from `actions` (mirrors
+   *  BrainStructureArtifact.themeCount: a legitimately divergent
+   *  server-reported count must round-trip honestly, never be "corrected"). */
+  openFindingCount: number;
+};
+
 export type SessionArtifactPayload =
   | RoadmapDraftArtifact
   | MarkdownDraftArtifact
   | BrainStructureArtifact
   | GenerationGalleryArtifact
   | ContractBuildoutArtifact
-  | FilePackageArtifact;
+  | FilePackageArtifact
+  | CleanupPlanArtifact;
 
 function parseRoadmapDraftRow(raw: unknown, index: number): RoadmapDraftRow {
   if (!isPlainObject(raw)) {

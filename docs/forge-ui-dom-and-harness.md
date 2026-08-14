@@ -1023,6 +1023,40 @@ inventory rather than one shared page-level contract:
   `selectedStage` straight to the dispatcher as `activeStage`
   (`SessionArtifactPane`'s new optional prop) — every OTHER live kind treats
   it as a no-op (stage-UNAWARE by nature).
+- **Cleanup plan — the kb-cleanup session's artifact (R4-19-F2).** The
+  `kb-cleanup` session-kind descriptor (`studio/session-kinds.yaml`, `agent:
+  brain-maintenance`, `stages: [brain]`) declares a **live-from-birth**
+  artifact kind `cleanup-plan` (`orchestrator/studio/session-kinds.ts`'s
+  `id: 'cleanup-plan', status: 'live'` — never reserved, unlike
+  generation-gallery/contract-buildout/file-package's reserved→live
+  histories above). A brain-maintenance agent drafts `plan/cleanup-plan.md`
+  (`skills/brain-maintenance/SKILL.md`'s mandated
+  `- [<kind>] <target> — <proposal>` line format) against one KB's agent-tier
+  brain-lint findings, then stops for operator approval; a separate route
+  (`POST /api/studio/kbs/:id/cleanup/apply`) drains the approved plan. Each
+  parsed action's `state` — `open` | `cleared` | `unknown` — is DERIVED fresh
+  on every read by joining the plan against a LIVE brain-lint scan
+  (`session-transcript.ts`'s `deriveCleanupPlan`), never stored. **The three
+  states are load-bearing**: a real run once reported every action `cleared`
+  while nothing had been repaired, because absence of a finding was wrongly
+  treated as proof of repair — `unknown` is the fail-safe default whenever
+  coverage cannot be established, so the UI can never again imply a repair
+  landed when it wasn't verified. Contract:
+  `[data-component="cleanup-plan"][data-cleanup-plan-state="no-plan"|"unparsed-plan"|"has-actions"]`
+  (mirrors `markdown-draft`'s own three-state idiom — "not drafted yet" vs
+  "drafted but the parser found no action lines" vs "at least one row"; a
+  drafted-but-unparseable plan still renders its raw text, never an
+  empty/"nothing here" pane) and
+  `[data-cleanup-plan-settled="true"|"false"]` (true iff every action is
+  `cleared` AND at least one action exists — **never**
+  `openFindingCount === 0`: a plan with a lone `unknown` row and zero `open`
+  rows is unverified, not settled, per `cleanupPlanView`'s own AT-127 pin).
+  Per action row: `[data-cleanup-action-state="open"|"cleared"|"unknown"]`,
+  rendered with a distinct colour (red/green/amber), a distinct left-border
+  stripe, and a spelled-out label — never colour alone — so the three states
+  read as visually distinct, not merely attribute-distinct.
+  `openFindingCount` is the server's number, surfaced verbatim, never
+  recounted client-side (mirrors `brain-structure`'s `themeCount`).
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser and the
   band-scoped, agent-seeded create + maintain surface (R1-01's binding
   contract, extended by R1-06 WI-2/WI-3, R4-19 WI-1/WI-2 and R6-08 WI-1/WI-2/

@@ -1,12 +1,12 @@
 /**
  * Pure, per-renderer view-state for the session shell's artifact pane
- * (R2-10, PR2) — one module covering all six LIVE artifact kinds
+ * (R2-10, PR2) — one module covering all seven LIVE artifact kinds
  * (roadmap-draft, markdown-draft, brain-structure, generation-gallery,
- * contract-buildout, file-package), rather than one file per kind: they are
- * tightly-related renderers for the SAME pane of the SAME page, and the
- * combined module stays well under this repo's file-size discipline. No
- * DOM, no React, no network — mirrors file-package.ts's / skill-library-
- * view.ts's testability convention.
+ * contract-buildout, file-package, cleanup-plan), rather than one file per
+ * kind: they are tightly-related renderers for the SAME pane of the SAME
+ * page, and the combined module stays well under this repo's file-size
+ * discipline. No DOM, no React, no network — mirrors file-package.ts's /
+ * skill-library-view.ts's testability convention.
  *
  * REUSE, not fork (T2 ruling, binding on this module): `brainStructureView`'s
  * file tabs go through the SHARED `forge-ui/lib/file-package.ts`
@@ -31,6 +31,8 @@ import { filePackageTabs, selectFile, type FilePackageState } from './file-packa
 import { dependencyDagView, type DependencyDagView } from './dependency-dag';
 import type {
   BrainStructureArtifact,
+  CleanupPlanAction,
+  CleanupPlanArtifact,
   ContractBuildoutArtifact,
   ContractStageRow,
   FilePackageArtifact,
@@ -274,6 +276,70 @@ export function contractBuildoutView(
 }
 
 // ---------------------------------------------------------------------------
+// cleanupPlanView — R4-19-F2 (kb-cleanup's cleanup-plan artifact)
+// ---------------------------------------------------------------------------
+
+export type CleanupPlanViewState = 'no-plan' | 'unparsed-plan' | 'has-actions';
+
+export type CleanupPlanView = {
+  kind: 'cleanup-plan';
+  /** Threaded through so the pane can render it without a second read of
+   *  the raw artifact — every other live kind's view carries no `label` of
+   *  its own (the wrapper reads `artifact.label` directly); this kind is a
+   *  deliberate, additive divergence (flagged for T2 to ratify/redirect). */
+  label: string;
+  state: CleanupPlanViewState;
+  /** Verbatim, byte-for-byte — never re-typed or summarised. */
+  plan: string | null;
+  /** Verbatim per action (kind/target/proposal/state) — the server already
+   *  computed `state` once (a live findings join); this view never computes
+   *  a second, potentially-drifting copy. */
+  actions: CleanupPlanAction[];
+  /** Passed through VERBATIM from the artifact — never recomputed from the
+   *  actions' own 'open' states (mirrors AT-78's brainStructureView.
+   *  themeCount precedent: a legitimately divergent server-reported count
+   *  must never be "corrected" client-side). */
+  openFindingCount: number;
+  /**
+   * True iff EVERY action's state is 'cleared' AND at least one action
+   * exists. Deliberately NOT `openFindingCount === 0` and NOT
+   * `actions.every(a => a.state !== 'open')` — either shape reintroduces,
+   * at the presentation layer, the exact defect this artifact kind exists
+   * to prevent: a plan with zero OPEN rows but one UNKNOWN row (coverage
+   * never established) is unverified, not settled. A no-plan/unparsed-plan
+   * pane (zero actions) is also never settled — vacuous truth over an empty
+   * actions[] would itself be "absence treated as proof of repair" one
+   * layer up.
+   */
+  settled: boolean;
+};
+
+/** Mirrors `markdownDraftView`'s own three-state idiom exactly
+ *  ('no-draft'|'empty-draft'|'has-content'), renamed for this kind's own
+ *  vocabulary: 'no-plan' (the agent hasn't drafted yet — `plan: null`),
+ *  'unparsed-plan' (the agent drafted prose but the server-side parser found
+ *  no `- [<kind>] <target> — <proposal>` action lines in it — `plan`
+ *  non-null, `actions: []`; the raw text still renders, never an empty
+ *  pane), 'has-actions' (at least one row parsed). */
+function cleanupPlanViewState(artifact: CleanupPlanArtifact): CleanupPlanViewState {
+  if (artifact.plan === null) return 'no-plan';
+  if (artifact.actions.length === 0) return 'unparsed-plan';
+  return 'has-actions';
+}
+
+export function cleanupPlanView(artifact: CleanupPlanArtifact): CleanupPlanView {
+  return {
+    kind: 'cleanup-plan',
+    label: artifact.label,
+    state: cleanupPlanViewState(artifact),
+    plan: artifact.plan,
+    actions: artifact.actions,
+    openFindingCount: artifact.openFindingCount,
+    settled: artifact.actions.length > 0 && artifact.actions.every((a) => a.state === 'cleared'),
+  };
+}
+
+// ---------------------------------------------------------------------------
 // sessionArtifactView — dispatcher + reserved/unknown kind guards
 // ---------------------------------------------------------------------------
 
@@ -283,7 +349,8 @@ export type SessionArtifactView =
   | BrainStructureView
   | GenerationGalleryView
   | ContractBuildoutView
-  | FilePackageArtifactView;
+  | FilePackageArtifactView
+  | CleanupPlanView;
 
 /** Vocabulary-reserved artifact kinds (mirrors orchestrator/studio/session-
  *  kinds.ts's SESSION_ARTIFACT_KINDS `reserved` rows) — a session carrying
@@ -306,12 +373,15 @@ function stageSuffix(stage: string | undefined): string {
   return stage === undefined ? '' : ` (requested stage: ${JSON.stringify(stage)})`;
 }
 
-/** Dispatches each of the 3 live artifact kinds to its matching renderer —
- *  `stage`, when passed, is a no-op for all three (they are stage-UNAWARE
- *  by nature; AT-91). A RESERVED kind throws an explicit error naming it and
- *  saying "reserved" (distinguishable from a totally unknown kind's message,
- *  which names the kind but never claims "reserved") — never a silent
- *  stub. */
+/** Dispatches each live artifact kind to its matching renderer — `stage`,
+ *  when passed, is a no-op for every kind except contract-buildout (they are
+ *  stage-UNAWARE by nature; AT-91/109/AT-124's cleanup-plan pin). A RESERVED
+ *  kind throws an explicit error naming it and saying "reserved"
+ *  (distinguishable from a totally unknown kind's message, which names the
+ *  kind but never claims "reserved") — never a silent stub. cleanup-plan is
+ *  LIVE FROM BIRTH (declared `status: 'live'` in orchestrator/studio/
+ *  session-kinds.ts) — it must never throw "reserved" OR fall through to the
+ *  unrecognised-kind throw. */
 export function sessionArtifactView(artifact: SessionArtifactPayload | { kind: string }, stage?: string): SessionArtifactView {
   switch (artifact.kind) {
     case 'roadmap-draft':
@@ -326,6 +396,8 @@ export function sessionArtifactView(artifact: SessionArtifactPayload | { kind: s
       return contractBuildoutView(artifact as ContractBuildoutArtifact, stage);
     case 'file-package':
       return filePackageArtifactView(artifact as FilePackageArtifact);
+    case 'cleanup-plan':
+      return cleanupPlanView(artifact as CleanupPlanArtifact);
     default: {
       const kind = artifact.kind;
       if ((RESERVED_ARTIFACT_KINDS as readonly string[]).includes(kind)) {
