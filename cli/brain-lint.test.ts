@@ -1008,6 +1008,96 @@ test('checkDanglingEdges: a theme with no related_themes key at all produces zer
   }
 });
 
+test('checkDanglingEdges: related_themes entries with a trailing ".md" suffix, surrounding whitespace, or both, normalize and resolve when the target theme exists — zero findings (kills replacing the trim()/".md"-strip normalization with a bare String(rawEntry))', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/norm-target.md', fm: {} },
+      { path: 'cycles/themes/norm-suffix.md', fm: { related_themes: ['norm-target.md'] } },
+      { path: 'cycles/themes/norm-whitespace.md', fm: { related_themes: ['  norm-target  '] } },
+      { path: 'cycles/themes/norm-both.md', fm: { related_themes: ['  norm-target.md  '] } },
+    ],
+  });
+  try {
+    const findings = checkDanglingEdges(root);
+    const hits = findings.filter(
+      (f) =>
+        f.file.endsWith('norm-suffix.md') ||
+        f.file.endsWith('norm-whitespace.md') ||
+        f.file.endsWith('norm-both.md'),
+    );
+    assert.equal(
+      hits.length,
+      0,
+      `".md"-suffixed / whitespace-padded related_themes entries must normalize and resolve against the existing target, got ${JSON.stringify(hits)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges MIRROR: a whitespace-and-".md"-padded related_themes entry that still does not resolve after normalization DOES fire (kills a normalization "fix" that degenerates into never reporting anything)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/norm-unresolvable.md', fm: { related_themes: ['  really-does-not-exist.md  '] } },
+    ],
+  });
+  try {
+    const hits = checkDanglingEdges(root).filter((f) => f.file.endsWith('norm-unresolvable.md'));
+    assert.equal(hits.length, 1, `expected exactly one finding for the unresolvable normalized slug, got ${JSON.stringify(hits)}`);
+    assert.match(hits[0].message, /really-does-not-exist/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges: a bare-scalar (non-array) related_themes value is a DELIBERATE no-op — zero findings even though the slug does not exist anywhere (kills an unreviewed "improvement" that starts scanning scalar related_themes and silently diverges the lint from the graph it audits)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    // Planted directly on disk: `related_themes: some-slug` as a bare YAML
+    // scalar (NOT `related_themes: [some-slug]`) — buildBrainFixture's
+    // ThemeSpec is typed to `string[]` and always emits the array form, so
+    // this shape can only be produced by hand-writing the file.
+    //
+    // WHY this is a deliberate pin, not an accidental gap:
+    //   (a) MIRRORS orchestrator/kb-graph.ts:327-329's own
+    //       `Array.isArray(parsed?.data.related_themes) ? (...) : []` guard —
+    //       the graph builder treats a non-array related_themes as "no edges
+    //       declared" and never attempts to resolve it. If this lint check
+    //       scanned scalar values, it would report an edge as "broken" that
+    //       the graph never tried to build in the first place — going
+    //       STRICTER than the graph, not matching it.
+    //   (b) Known blind spot, not an oversight: a genuinely-scalar
+    //       `related_themes: some-slug` (vs. the array form) is a real
+    //       authoring mistake the graph silently drops today with zero
+    //       signal anywhere. It is a filed, tracked gap (this test IS that
+    //       tracking record, alongside the `danglingEdgeFindings`
+    //       "tolerate missing/absent/non-array" comment a few lines above in
+    //       cli/brain-lint.ts and the sibling cross-KB gap documented in
+    //       `checkDanglingEdges`'s own doc comment). Zero occurrences exist
+    //       in the live 364-theme corpus as of 2026-08-14, which is why it
+    //       is parked rather than fixed now.
+    //   (c) EXPIRY CONDITION (immutable-gates: a deliberately-green gap-pin
+    //       must document when it should be revisited) — THIS TEST MUST
+    //       FLIP the moment orchestrator/kb-graph.ts starts coercing or
+    //       otherwise honouring a scalar `related_themes` value into a real
+    //       edge (i.e. the day the `Array.isArray(...)` guard at
+    //       kb-graph.ts:327 is loosened/removed). Until then, staying a
+    //       no-op here is correct; going stricter than the graph is the bug.
+    writeFileSync(
+      join(root, 'brain', 'cycles', 'themes', 'scalar-related.md'),
+      '---\ntitle: Scalar Related\ndescription: none.\ncategory: pattern\ncreated_at: 2026-01-01T00:00:00Z\nupdated_at: 2026-01-01T00:00:00Z\nrelated_themes: definitely-does-not-exist-anywhere\n---\n\n# Scalar Related\n',
+    );
+    const findings = checkDanglingEdges(root).filter((f) => f.file.endsWith('scalar-related.md'));
+    assert.equal(
+      findings.length,
+      0,
+      `a bare-scalar related_themes value must be a no-op (mirrors kb-graph.ts:327-329's Array.isArray guard), got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
 // =============================================================================
 // checkDuplicateThemes (R4-19-F2) — near-duplicate theme pairs.
 // =============================================================================
@@ -1082,6 +1172,31 @@ test('checkDuplicateThemes NEGATIVE: two themes with 2 identical keywords each (
       0,
       `identical-but-thin (2-keyword) sets are below the >=3 minimum and must not be flagged, got ${JSON.stringify(findings)}`,
     );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: DUPLICATE_KEYWORD_MIN_DECLARED boundary — exactly 3 declared keywords each with a qualifying Jaccard DOES fire, exactly 2 declared keywords each (otherwise identical) does NOT (kills mutating the ">=3" floor comparisons to ">3")', () => {
+  const root = buildBrainFixture({
+    themes: [
+      // Exactly 3 keywords each, identical sets -> Jaccard 3/3 = 1.0 (>= 0.8),
+      // landing exactly ON the >=3-declared floor. Distinct default titles
+      // rule out a title-collision false positive.
+      { path: 'cycles/themes/floor3-a.md', fm: { keywords: ['f1', 'f2', 'f3'] } },
+      { path: 'cycles/themes/floor3-b.md', fm: { keywords: ['f1', 'f2', 'f3'] } },
+      // Exactly 2 keywords each (one below the floor), identical sets ->
+      // Jaccard 1.0 but below the >=3-declared floor -> must NOT fire.
+      { path: 'cycles/themes/floor2-a.md', fm: { keywords: ['g1', 'g2'] } },
+      { path: 'cycles/themes/floor2-b.md', fm: { keywords: ['g1', 'g2'] } },
+    ],
+  });
+  try {
+    const findings = checkDuplicateThemes(root);
+    const at3 = findings.filter((f) => f.file.endsWith('floor3-a.md') || f.file.endsWith('floor3-b.md'));
+    const at2 = findings.filter((f) => f.file.endsWith('floor2-a.md') || f.file.endsWith('floor2-b.md'));
+    assert.equal(at3.length, 1, `exactly-3-declared-keywords pair AT the floor must fire, got ${JSON.stringify(at3)}`);
+    assert.equal(at2.length, 0, `exactly-2-declared-keywords pair BELOW the floor must not fire, got ${JSON.stringify(at2)}`);
   } finally {
     cleanup(root);
   }
