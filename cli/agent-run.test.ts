@@ -253,8 +253,12 @@ function* walkEventJsonLines(forgeRoot: string, baseline?: LogBaseline): Generat
     const eventsPath = join(logsRoot, entry, 'events.jsonl');
     if (!existsSync(eventsPath)) continue;
     const prior = baseline?.get(eventsPath);
-    const startByte = prior?.existed ? prior.size : 0;
-    const lines = readFileSync(eventsPath).subarray(startByte).toString('utf8').trim().split('\n').filter(Boolean);
+    const buf = readFileSync(eventsPath);
+    // Buffer.prototype.subarray clamps rather than throwing when start >
+    // length — a file that SHRANK below its snapshotted size has unknowable
+    // provenance, so re-scan it from byte 0 instead of trusting a stale offset.
+    const startByte = prior?.existed && buf.length >= prior.size ? prior.size : 0;
+    const lines = buf.subarray(startByte).toString('utf8').trim().split('\n').filter(Boolean);
     for (const line of lines) {
       let parsed: Record<string, unknown> | undefined;
       try {
@@ -1033,6 +1037,37 @@ test('forge-q1z: assertNoInteractiveRunnerSkillEvent is scoped to a baseline sna
       () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline2, 'new dir event must still be caught'),
       /interactive-runner/,
       'a brand-new _logs/ directory created AFTER the baseline snapshot must still be fully inspected',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// forge-q1z shrink-guard (T3, MAJOR, adversarial review) — kills a
+// `subarray(startByte)` that clamps to empty when the file shrank, silently
+// hiding every event in it (Buffer.prototype.subarray clamps rather than
+// throwing when start > length).
+// ---------------------------------------------------------------------------
+
+test('forge-q1z: a shrunken events.jsonl is re-scanned in full, not clamped to empty', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'q1z-shrink-guard-'));
+  try {
+    const dir = join(forgeRoot, '_logs', '_journeyscratch-shrinkme');
+    mkdirSync(dir, { recursive: true });
+    const eventsPath = join(dir, 'events.jsonl');
+    const bigLines = Array.from({ length: 20 }, (_, i) => fakeInteractiveRunnerStartLine(`sid-${i}`, `kind-${i}`)).join('\n') + '\n';
+    writeFileSync(eventsPath, bigLines);
+    const baseline = snapshotLogs(forgeRoot);
+
+    // Shrink well below the snapshotted size — still a real event, fewer bytes.
+    writeFileSync(eventsPath, fakeInteractiveRunnerStartLine('shrunk-sid', 'shrunk-kind') + '\n');
+    assert.ok(statSync(eventsPath).size < baseline.get(eventsPath)!.size, 'fixture must actually shrink');
+
+    assert.throws(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'shrunken file must be re-scanned, not skipped'),
+      /interactive-runner/,
+      "a `subarray(startByte)` that clamps to empty when the file shrank, silently hiding every event in it",
     );
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
