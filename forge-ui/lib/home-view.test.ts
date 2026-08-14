@@ -16,15 +16,29 @@
  * RUN: cd forge-ui && npx vitest run lib/home-view.test.ts
  */
 import { test, expect } from 'vitest';
+import { readFileSync, readdirSync } from 'node:fs';
+import { join, dirname, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   deriveFlowStatus,
   deriveAgentStatus,
   deriveProjectStatus,
   buildConstellation,
   buildHomeAttention,
+  // forge-2am/n5r (R6-07 batch-H honesty pass) — NOT exported yet at pin
+  // time: both resolve to `undefined` under this repo's vitest module
+  // runner (same "missing named export resolves to undefined, not a
+  // collection-time throw" convention studio-client.test.ts's
+  // fetchContractStages/bootstrapKb pins already document), so this import
+  // alone does not disturb any of the already-green tests above — only the
+  // new tests below that actually CALL these two go red, on an honest
+  // "is not a function" reason.
+  buildKbAttention,
+  runsForFlow,
   type HomeHex,
+  type HomeAttentionItem,
 } from './home-view.ts';
-import type { Flow, Agent, Project, Kb, Run, FlowNode } from './studio-client.ts';
+import type { Flow, Agent, Project, Kb, Run, FlowNode, KbLintSummary } from './studio-client.ts';
 import type { ProjectAttentionItem } from './bridge-client.ts';
 
 // ---- fixtures --------------------------------------------------------------
@@ -41,8 +55,46 @@ function makeProject(id: string): Project {
   return { id, name: id, skills: [] };
 }
 
-function makeKb(id: string): Kb {
-  return { id, name: id, binding: { kind: 'unique' }, counts: { index: 0, themes: 0, raw: 0 } };
+// FORCED EDIT (Kb gains required `lint`/`provenance` fields, forge-2am/3oq
+// seam): every existing makeKb('kbN') call site below keeps compiling
+// unchanged because both new fields default here — `lint: null` /
+// `provenance: 'unknown'` are themselves the HONEST defaults (absence, never
+// a fabricated clean verdict or a guessed shipped/authored claim).
+//
+// BEFORE:
+//   function makeKb(id: string): Kb {
+//     return { id, name: id, binding: { kind: 'unique' }, counts: { index: 0, themes: 0, raw: 0 } };
+//   }
+function makeKb(id: string, overrides: Partial<Pick<Kb, 'lint' | 'provenance'>> = {}): Kb {
+  return {
+    id,
+    name: id,
+    binding: { kind: 'unique' },
+    counts: { index: 0, themes: 0, raw: 0 },
+    lint: null,
+    provenance: 'unknown',
+    ...overrides,
+  };
+}
+
+function makeLint(overrides: Partial<KbLintSummary> = {}): KbLintSummary {
+  return { errors: 0, flags: 0, checksRun: 1, checksTotal: 10, ...overrides };
+}
+
+/**
+ * FORCED EDIT (HomeAttentionItem widens to a `{kind:'gate';...} |
+ * {kind:'kb';...}` discriminated union, forge-2am seam): `.projectId` only
+ * exists on the 'gate' variant, so the pre-existing buildHomeAttention tests
+ * further down that read `.projectId` directly need a narrow first —
+ * TypeScript can no longer infer it from the (now-widened)
+ * HomeAttentionItem[] return type alone. Narrows-or-throws (rather than a
+ * silent `as`) so a wrong implementation that returns a 'kb' item from
+ * buildHomeAttention fails LOUDLY here instead of the assertion below just
+ * seeing `undefined`.
+ */
+function asGateItem(item: HomeAttentionItem): Extract<HomeAttentionItem, { kind: 'gate' }> {
+  if (item.kind !== 'gate') throw new Error(`expected a 'gate' attention item, got kind="${item.kind}"`);
+  return item;
 }
 
 function makeRun(overrides: Partial<Run> & { id: string; flowId: string }): Run {
@@ -232,7 +284,8 @@ test('buildHomeAttention: gated > 0 -> exactly one item, href/projectId pulled f
   const items = buildHomeAttention(attention);
   expect(items).toHaveLength(1);
   expect(items[0].href).toBe('/projects/p1/roadmap');
-  expect(items[0].projectId).toBe('p1');
+  // FORCED EDIT (union-type change): was `items[0].projectId` — see asGateItem's header comment above.
+  expect(asGateItem(items[0]).projectId).toBe('p1');
   expect(items[0].kind).toBe('gate');
 });
 
@@ -240,7 +293,8 @@ test('buildHomeAttention: flagged > 0 alone (no gated) also fires', () => {
   const attention = [makeAttention({ projectId: 'p2', gated: 0, flagged: 1, link: '/projects/p2/roadmap' })];
   const items = buildHomeAttention(attention);
   expect(items).toHaveLength(1);
-  expect(items[0].projectId).toBe('p2');
+  // FORCED EDIT (union-type change): was `items[0].projectId` — see asGateItem's header comment above.
+  expect(asGateItem(items[0]).projectId).toBe('p2');
 });
 
 test('buildHomeAttention: mixed list only surfaces the rows that actually need attention', () => {
@@ -249,5 +303,232 @@ test('buildHomeAttention: mixed list only surfaces the rows that actually need a
     makeAttention({ projectId: 'noisy', gated: 1, flagged: 0 }),
   ];
   const items = buildHomeAttention(attention);
-  expect(items.map((i) => i.projectId)).toEqual(['noisy']);
+  // FORCED EDIT (union-type change): was `items.map((i) => i.projectId)` — see asGateItem's header comment above.
+  expect(items.map((i) => asGateItem(i).projectId)).toEqual(['noisy']);
+});
+
+// ---- runsForFlow (forge-n5r): the ONE flow<->run matcher -------------------
+//
+// deriveFlowStatus already has the RIGHT predicate inline (this file's own
+// `r.flowId === flowId || r.flowLineage.includes(flowId)`, above); the
+// defect is that it isn't EXTRACTED, so FlowCard (LibraryCard.tsx:115) and
+// the flow monitor (app/flows/[id]/page.tsx:101) each keep their own copy —
+// one of which (LibraryCard.tsx) drops flowLineage entirely
+// (`runs.filter(r => r.flowId === flow.id)`). These tests pin runsForFlow as
+// the ONE shared matcher and pin deriveFlowStatus as BUILT ON it, not merely
+// agreeing with it by coincidence.
+
+test('runsForFlow: matches a run by direct flowId', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'f1', status: 'active' })];
+  expect(runsForFlow('f1', runs).map((r) => r.id)).toEqual(['r1']);
+});
+
+test('runsForFlow: matches a run by flowLineage even when flowId is a DIFFERENT flow', () => {
+  // Kills LibraryCard.tsx's `runs.filter(r => r.flowId === flow.id)` — the
+  // exact defect this AT is named for.
+  const runs = [makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'f1'], status: 'active' })];
+  expect(runsForFlow('f1', runs).map((r) => r.id)).toEqual(['r1']);
+});
+
+test('runsForFlow: excludes a run matching neither flowId nor flowLineage', () => {
+  const runs = [makeRun({ id: 'r1', flowId: 'other', flowLineage: ['other'], status: 'active' })];
+  expect(runsForFlow('f1', runs)).toEqual([]);
+});
+
+test('deriveFlowStatus agrees with a status hand-computed from runsForFlow() for a lineage-only run — proves deriveFlowStatus is BUILT ON runsForFlow, not a second independent predicate', () => {
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'f1'], status: 'gated' }),
+  ];
+  const viaRunsForFlow = runsForFlow('f1', runs).some((r) => r.status === 'gated') ? 'gated' : 'idle';
+  expect(deriveFlowStatus('f1', runs)).toBe(viaRunsForFlow);
+  expect(deriveFlowStatus('f1', runs)).toBe('gated'); // sanity: a real, non-vacuous status
+});
+
+// ---- SOURCE: the flowLineage predicate collapses to ONE copy ---------------
+
+test('SOURCE: the flowLineage-matching predicate exists in EXACTLY ONE file under forge-ui/ — lib/home-view.ts (runsForFlow). Every other consumer (FlowCard, the flow monitor) must call runsForFlow/deriveFlowStatus, never re-write the predicate inline', () => {
+  // A plain literal search for "flowLineage.includes(" under-counts today: it
+  // misses app/flows/[id]/page.tsx's own copy, which spells the SAME
+  // predicate as `(r.flowLineage ?? []).includes(id)` — a `?? []` null-guard
+  // sits between the property read and the `.includes(` call. This regex
+  // matches BOTH spellings of the inline predicate (with or without the
+  // `?? []` guard) so the count is honest about how many copies exist today.
+  //
+  // Verified against the real tree before writing this test (`node -e`
+  // walking forge-ui/**/*.{ts,tsx} with this exact regex): TWO PRODUCTION
+  // matches today — lib/home-view.ts (line 55) + app/flows/[id]/page.tsx
+  // (line 101). RED at pin: after the fix only lib/home-view.ts's own
+  // runsForFlow definition should remain, so `elsewhere` below must become
+  // `[]`.
+  //
+  // Exclusion needed, confirmed by actually running this test once before
+  // finalising it: `.test.ts`/`.test.tsx` files ARE excluded from the walk.
+  // THIS FILE would otherwise self-match — the explanatory prose two
+  // paragraphs up literally quotes the predicate shape
+  // "(r.flowLineage ?? []).includes(id)" for documentation, which is
+  // indistinguishable from a real third copy to a plain-text regex scan.
+  // Fixture-only files (`flowLineage: [...]` assignments, never
+  // `.includes(` calls) would not have needed the exclusion on their own,
+  // but every test file is excluded uniformly rather than special-casing
+  // "no comment happens to quote the shape" per file.
+  //
+  // Exclusion considered and NOT needed: lib/studio-client.ts's
+  // `flowLineage:   r.flowLineage   ?? [],` (parseRun's field-default
+  // assignment) has no `.includes(` after it, so the regex never matches it
+  // — verified directly, no exclusion required for it.
+  const forgeUiRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const LINEAGE_PREDICATE_RE = /flowLineage(\s*\?\?\s*\[\]\s*\))?\s*\.includes\(/;
+
+  function walk(dir: string, out: string[]): string[] {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name === '.next') continue;
+      const p = join(dir, entry.name);
+      if (entry.isDirectory()) walk(p, out);
+      else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) out.push(p);
+    }
+    return out;
+  }
+
+  const matches = walk(forgeUiRoot, [])
+    .filter((f) => LINEAGE_PREDICATE_RE.test(readFileSync(f, 'utf8')))
+    .map((f) => relative(forgeUiRoot, f));
+
+  const HOME_VIEW = join('lib', 'home-view.ts');
+  const elsewhere = matches.filter((f) => f !== HOME_VIEW);
+  expect(elsewhere, `the lineage predicate must live ONLY in lib/home-view.ts; also found in: ${JSON.stringify(elsewhere)}`).toEqual([]);
+});
+
+// ---- type invariant: derive-dont-store (no stored .status field) ----------
+
+test('Flow/Agent/Project/Kb carry no stored `.status` field — a wrong "fix" that stores status instead of deriving it has nowhere to write, and this guard has nowhere to read', () => {
+  const flow = makeFlow('f1');
+  const agent = makeAgent('a1');
+  const project = makeProject('p1');
+  const kb = makeKb('kb1');
+  expect('status' in flow).toBe(false);
+  expect('status' in agent).toBe(false);
+  expect('status' in project).toBe(false);
+  expect('status' in kb).toBe(false);
+});
+
+// ---- buildKbAttention (forge-2am): KB rows for the attention strip --------
+//
+// Mirrors buildHomeAttention's own real-condition rule (see that section's
+// header above): a KB row fires ONLY on an honest signal from ITS OWN lint
+// summary, never from mere existence, and never folds "no data" into a
+// fabricated clean verdict.
+
+test('buildKbAttention: errors > 0 -> status "fail"', () => {
+  const kbs = [makeKb('kb1', { lint: makeLint({ errors: 2 }) })];
+  const items = buildKbAttention(kbs);
+  expect(items).toHaveLength(1);
+  expect(items[0].status).toBe('fail');
+});
+
+test('buildKbAttention: flags > 0 with errors 0 -> status "warn"', () => {
+  const kbs = [makeKb('kb1', { lint: makeLint({ flags: 3 }) })];
+  const items = buildKbAttention(kbs);
+  expect(items).toHaveLength(1);
+  expect(items[0].status).toBe('warn');
+});
+
+test('buildKbAttention: lint.error present -> status "unknown", even when errors/flags are also 0', () => {
+  const kbs = [makeKb('kb1', { lint: makeLint({ error: 'lint run threw' }) })];
+  const items = buildKbAttention(kbs);
+  expect(items).toHaveLength(1);
+  expect(items[0].status).toBe('unknown');
+});
+
+test('buildKbAttention: an all-zero clean lint -> NO row (existence alone never fires a row)', () => {
+  // Kills a row fabricated from mere KB existence.
+  const kbs = [makeKb('kb1', { lint: makeLint() })];
+  expect(buildKbAttention(kbs)).toEqual([]);
+});
+
+test('buildKbAttention: lint === null -> NO row (absence is honest; a fabricated "clean" row is not)', () => {
+  // Kills folding "no data" into a clean verdict.
+  const kbs = [makeKb('kb1', { lint: null })];
+  expect(buildKbAttention(kbs)).toEqual([]);
+});
+
+test("buildKbAttention: row numbers come from the KB's OWN lint summary — a 2-KB fixture where only one is dirty proves no cross-KB attribution", () => {
+  const kbs = [
+    makeKb('clean-kb', { lint: makeLint({ errors: 0, flags: 0, checksRun: 9, checksTotal: 9 }) }),
+    makeKb('dirty-kb', { lint: makeLint({ errors: 1, flags: 2, checksRun: 3, checksTotal: 10 }) }),
+  ];
+  const items = buildKbAttention(kbs);
+  expect(items).toHaveLength(1);
+  const row = items[0];
+  if (row.kind !== 'kb') throw new Error('expected a kb row');
+  expect(row.kbId).toBe('dirty-kb');
+  expect(row.lint.errors).toBe(1);
+  expect(row.lint.flags).toBe(2);
+  expect(row.lint.checksRun).toBe(3);
+  expect(row.lint.checksTotal).toBe(10);
+});
+
+test('buildKbAttention: checksRun < checksTotal is surfaced on the row verbatim — the n/a-invariant reaching the operator', () => {
+  // Kills a row that implies a full clean sweep when most checks never
+  // actually inspected this KB (only checkProjectBrainIndexes's
+  // project-indexes scope applies to a project-brain KB; the other ~9
+  // forge-themes/global checks never touched it — see cli/brain-lint.ts's
+  // CHECK_SCOPE).
+  const kbs = [makeKb('kb1', { lint: makeLint({ flags: 1, checksRun: 1, checksTotal: 10 }) })];
+  const items = buildKbAttention(kbs);
+  const row = items[0];
+  if (row.kind !== 'kb') throw new Error('expected a kb row');
+  expect(row.lint.checksRun).toBe(1);
+  expect(row.lint.checksTotal).toBe(10);
+  expect(row.lint.checksRun < row.lint.checksTotal).toBe(true);
+});
+
+test('buildKbAttention: row id is kb-<id>, href is /knowledge?id=<id>', () => {
+  const kbs = [makeKb('my-kb', { lint: makeLint({ errors: 1 }) })];
+  const items = buildKbAttention(kbs);
+  expect(items[0].id).toBe('kb-my-kb');
+  expect(items[0].href).toBe('/knowledge?id=my-kb');
+});
+
+test('buildKbAttention: gate rows from buildHomeAttention are unaffected by KB rows — the two functions tag `kind` independently and neither leaks into the other', () => {
+  const attention = [makeAttention({ projectId: 'p1', gated: 1 })];
+  const kbs = [makeKb('kb1', { lint: makeLint({ errors: 1 }) })];
+  const gateItems = buildHomeAttention(attention);
+  const kbItems = buildKbAttention(kbs);
+  expect(gateItems.every((i) => i.kind === 'gate')).toBe(true);
+  expect(kbItems.every((i) => i.kind === 'kb')).toBe(true);
+  expect([...gateItems, ...kbItems]).toHaveLength(2);
+});
+
+// ---- SOURCE: purity + no-new-fetch guards (forge-2am) ----------------------
+//
+// Restates scripts/home-no-new-polling.test.ts's contract at the forge-ui
+// vitest level, scoped to what buildKbAttention's arrival must NOT change:
+// home-view.ts stays a pure derivation (kbs are ALREADY-FETCHED input, same
+// as flows/agents/projects/runs/attention today), and app/page.tsx gains no
+// fetch identifier beyond app/library/page.tsx's existing set — the park
+// record's explicit refusal of an N-fan-out `Promise.all(kbs.map(fetchKb))`.
+// These currently pass (nothing has regressed yet) — they are forward
+// guards, not RED pins for new behaviour.
+
+test('SOURCE: lib/home-view.ts stays pure after buildKbAttention — no fetch(, no /api/, no await, no subscribe(', () => {
+  const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'home-view.ts'), 'utf8');
+  expect(/\bfetch\(/.test(src)).toBe(false);
+  expect(src.includes('/api/')).toBe(false);
+  expect(/\bawait\b/.test(src)).toBe(false);
+  expect(/\bsubscribe\(/.test(src)).toBe(false);
+});
+
+test("SOURCE: app/page.tsx's fetch identifiers stay a SUBSET of app/library/page.tsx's — buildKbAttention must consume the ALREADY-FETCHED fetchStudioKbs() result, never a per-KB fan-out fetch", () => {
+  const forgeUiRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const homeSrc = readFileSync(join(forgeUiRoot, 'app', 'page.tsx'), 'utf8');
+  const librarySrc = readFileSync(join(forgeUiRoot, 'app', 'library', 'page.tsx'), 'utf8');
+  const ALLOWED = ['fetchStudioFlows', 'fetchStudioAgents', 'fetchStudioProjects', 'fetchStudioKbs', 'fetchRuns', 'fetchProjectAttention', 'subscribe'];
+  const usedIn = (src: string) => ALLOWED.filter((id) => new RegExp(`\\b${id}\\b`).test(src));
+  const homeIds = usedIn(homeSrc);
+  const libraryIds = usedIn(librarySrc);
+  const notInLibrary = homeIds.filter((id) => !libraryIds.includes(id));
+  expect(notInLibrary, `Home uses fetch identifiers outside Library's set: ${JSON.stringify(notInLibrary)}`).toEqual([]);
+  // Kills the N-fan-out shape specifically: no per-item fetch helper name
+  // (fetchKb, etc.) appears in Home's source at all.
+  expect(/\bfetchKb\b/.test(homeSrc)).toBe(false);
 });

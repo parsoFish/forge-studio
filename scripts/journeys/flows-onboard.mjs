@@ -175,7 +175,7 @@ export const journey = defineJourney({
     {
       id: 'flows-onboard-monitor',
       title: 'The onboard-project flow: a peer of forge-develop, its own two-node topology',
-      narration: 'onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library — now its own pillar at /library, since Home took the first nav slot (R6-03-F3; the Home dashboard itself lands in R6-07) — beside forge-develop, and both OOTB seed flows carry a provenance badge derived from flow.origin. It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.',
+      narration: 'onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library — now its own pillar at /library, since Home took the first nav slot (R6-03-F3; the Home dashboard itself lands in R6-07) — beside forge-develop. Every flow card now carries a live data-flow-status (derived through the SAME shared runsForFlow matcher Home and the flow monitor use — forge-n5r) and a data-provenance read straight off the server, never re-derived from flow.origin client-side (forge-3oq); the same server-sourced data-provenance now reaches non-flow cards too (KBs/agents/projects). It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.',
       drive: async (ctx) => {
         const { page, watch, frame, check } = ctx;
         console.log('\n[FOB.1] The onboard-project flow monitor renders');
@@ -202,7 +202,37 @@ export const journey = defineJourney({
         check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"][data-provenance="ootb"]').count() > 0, 'FOB.prov: the OOTB seed flow forge-develop card is marked data-provenance="ootb"');
         check(await page.locator('[data-card-type="flow"][data-card-id="forge-develop"] .badge-ootb').count() > 0, 'FOB.prov: forge-develop renders the visible ootb badge');
 
-        await frame(page, 'fob-0-library-card', 'FOB — onboard-project on the library shelf, beside forge-develop');
+        // forge-n5r: FlowCard's status is now derived through the SAME
+        // shared runsForFlow() matcher Home/the flow monitor use (never a
+        // card-local re-filter that drops flowLineage) — every flow card on
+        // the shelf carries a real data-flow-status, one of active/gated/idle.
+        const flowStatuses = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('[data-card-type="flow"][data-flow-status]'))
+            .map((el) => ({ id: el.getAttribute('data-card-id'), status: el.getAttribute('data-flow-status') })));
+        check(flowStatuses.length >= 2,
+          `FOB.status: every flow card on the library shelf carries data-flow-status (got ${JSON.stringify(flowStatuses)})`);
+        const VALID_FLOW_STATUS = new Set(['active', 'gated', 'idle']);
+        check(flowStatuses.every((f) => VALID_FLOW_STATUS.has(f.status)),
+          `FOB.status: every data-flow-status value is one of active/gated/idle (got ${JSON.stringify(flowStatuses)})`);
+
+        // forge-3oq: data-provenance reaches every flow card (already pinned
+        // above for forge-develop's specific "ootb" value) — this widens the
+        // check to the WHOLE flow shelf, plus a NON-flow card (a top-level
+        // OOTB KB, always present regardless of what's been onboarded in
+        // this run), proving the server-sourced field reaches every card
+        // type, not just Flow (which alone had a client-inferable signal
+        // before this fix).
+        const flowProvenanceCount = await page.locator('[data-card-type="flow"][data-provenance]').count();
+        check(flowProvenanceCount === flowStatuses.length,
+          `FOB.prov: every flow card carrying data-flow-status ALSO carries data-provenance (${flowProvenanceCount} of ${flowStatuses.length})`);
+
+        const VALID_PROVENANCE = new Set(['ootb', 'operator', 'unknown']);
+        const kbProvenance = await page.evaluate(() =>
+          document.querySelector('[data-card-type="kb"][data-card-id="forge-dev"]')?.getAttribute('data-provenance') ?? null);
+        check(kbProvenance !== null && VALID_PROVENANCE.has(kbProvenance),
+          `FOB.prov: the forge-dev KB card (a non-flow card type) carries a real server-sourced data-provenance value (got "${kbProvenance}")`);
+
+        await frame(page, 'fob-0-library-card', 'FOB — onboard-project on the library shelf, beside forge-develop, every card carrying a live status and a server-sourced provenance');
 
         await page.goto(watch.uiUrl + '/flows/onboard-project', { waitUntil: 'domcontentloaded' });
         await page.waitForFunction(
