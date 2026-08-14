@@ -1059,7 +1059,23 @@ function isRootExpr(expr, roots) {
  *  seen in the cleaned view (so comment/string noise is already gone and a
  *  multi-line call collapses to one line). This is what an allowlist row pins,
  *  because a LOCATION cannot be pinned honestly -- see the allowlist docstring.
- *  Truncated so a pathological expression cannot bloat the report. */
+ *  Truncated so a pathological expression cannot bloat the report.
+ *
+ *  TWO HONEST CONSEQUENCES, both of which fail toward an EXTRA finding (a row
+ *  stops matching) and never toward a silent suppression:
+ *   - Normalization only COLLAPSES runs of whitespace. It does not add or remove
+ *     a lone space, rewrite quote style, or absorb a trailing comma -- so a
+ *     purely cosmetic reformat of an audited line (a formatter run, a
+ *     single-to-double quote change, wrapping the call across lines) stops
+ *     matching its row and trips the ratchet until the row is updated. Treat an
+ *     audited fold line as format-locked, or expect to re-copy its site.
+ *   - The site is taken from the CLEANED view, where a string-literal root is
+ *     canonicalized to `projects` and padded to its original length. For the
+ *     ordinary spelling (`'projects'`) the cleaned text equals the source, which
+ *     is why the shipped rows are hand-writable; for an unusual spelling
+ *     (`'ProjectsRoot'`) the recorded site carries that padding and cannot be
+ *     transcribed from source by eye -- run the scanner and copy what it
+ *     reports. */
 function normalizeSite(text) {
   return text.replace(/\s+/g, ' ').trim().slice(0, 160);
 }
