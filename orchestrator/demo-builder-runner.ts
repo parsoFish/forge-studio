@@ -60,7 +60,7 @@ import { deriveAgentSpec } from './studio/derive.ts';
 import { loadProjectConfig } from './project-config.ts';
 import { listDemoElements } from './studio/registry.ts';
 import type { DemoStep, DemoElementDefinition } from './studio/types.ts';
-import { skillPath, skillPathRelative, SLUG_RE } from './skill-path.ts';
+import { skillPathRelative, loadSkillTurnPrompt, SLUG_RE } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024: spec derived from skills/demo-builder/SKILL.md (single source)
@@ -279,7 +279,6 @@ async function runGenerateStep(args: {
   onText: (text: string) => void;
 }): Promise<RunDemoBuilderTurnResult> {
   const { input, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText } = args;
-  const skill = loadSkillPrompt(input.skillPromptPath, forgeRoot);
   const baseCss = readBaseCss(forgeRoot);
   const feedback = readFeedback(input.projectRoot, input.sessionId);
 
@@ -295,21 +294,22 @@ async function runGenerateStep(args: {
   const target = status.targetElement && byId.has(status.targetElement) ? status.targetElement : undefined;
   const composed = elementSteps.length > 0;
 
+  // ADR-024 (R4-23): the turn id selects the SAME branch this runner has always
+  // taken — `target` ⇒ per-element, `composed` ⇒ multi-element, else the legacy
+  // monolithic generator — but the task instructions for that branch now live in
+  // skills/demo-builder/SKILL.md as a `<!-- turn: ... -->` section rather than
+  // being hand-composed here; this function keeps only the branch selection + data.
+  const turnId = target ? 'generate-element' : composed ? 'generate-composed' : 'generate-legacy';
+  const skill = loadSkillTurnPrompt({ name: 'demo-builder', turnId, skillPromptPath: input.skillPromptPath, root: forgeRoot });
+
   const taskLines = demoTaskLines({ status, target, composed, elementSteps, byId });
 
   const prompt = [
     skill,
     '',
-    `## Your task this turn: ${target ? `refine the '${target}' demo element` : 'build the demo + render a sample'}`,
-    '',
+    `Mode: ${status.mode ?? 'create'}`,
     `Project: ${status.project}`,
     `Project repo (your working directory): ${status.project_repo_path}`,
-    ...(status.mode === 'update' && !target
-      ? ['',
-         `UPDATE MODE: a locked demo already exists — ${DEMO_SKILL_REL_PATH} (the composer) and ` +
-         `${DEMO_HTML_REL_PATH} (the sample). READ them and REVISE per the operator's change-notes below; ` +
-         'do NOT rebuild from scratch.']
-      : []),
     '',
     status.mode === 'update' ? 'Operator change-notes:' : 'Operator look-and-feel guidance:',
     status.prompt || '_(none — choose a clean, faithful before/after treatment)_',
@@ -706,10 +706,9 @@ export function demoTaskLines(args: {
     const el = byId.get(target)!;
     return [
       `## Iterate ONE element: '${target}' (${el.name})`,
-      `Author/refine the project-side element-skill at ${elementSkillRelPath(target)} using its generator (below). Write this element's rendered HTML fragment to ${DEMO_FRAGMENTS_REL_DIR}/${target}.html (so the operator can view this part's output independently), and render ${DEMO_HTML_REL_PATH} as JUST this element's fragment (wrapped, with the base CSS) — a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated) — so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.`,
+      `Target element skill path: ${elementSkillRelPath(target)}`,
+      `Target element fragment path: ${DEMO_FRAGMENTS_REL_DIR}/${target}.html`,
       ...elementGeneratorLines([el]),
-      '',
-      `Stop when ${elementSkillRelPath(target)} and ${DEMO_HTML_REL_PATH} exist.`,
     ];
   }
   if (composed) {
@@ -720,23 +719,13 @@ export function demoTaskLines(args: {
     return [
       '## This demo is COMPOSED of demo elements, run in this order:',
       order,
-      '',
-      `For each element kind above: author/refresh a project-side element-skill at .forge/skills/demo/<id>/SKILL.md using its generator (below) AND have it write its rendered HTML fragment to ${DEMO_FRAGMENTS_REL_DIR}/<id>.html (one file per element, so each part's output is viewable independently). Then author ${DEMO_SKILL_REL_PATH} — the composer that reads those fragments IN THIS ORDER and assembles them into ${DEMO_HTML_REL_PATH} (wrapped with <html>/<body> + the base CSS). Ground every fragment in a real before/after of a representative recent change (use git log/diff; REAL output, never fabricated).`,
       ...elementGeneratorLines(usedEls),
-      '',
-      `Scope to what a change introduced, not the whole project. Stop when ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
     ];
   }
   // Legacy / no elements configured — the single monolithic generator.
   return [
     'Configured demo process (capture / verify / present steps to bake into the skill):',
     describeDemoProcess(status.project_repo_path),
-    '',
-    'Deliver BOTH:',
-    `1. ${DEMO_SKILL_REL_PATH} — the reusable generator that renders a before/after HTML demo of an INITIATIVE'S CHANGES.`,
-    `2. ${DEMO_HTML_REL_PATH} — a real sample produced by running that generator against a representative recent change (use git log/diff; real before/after, never fabricated).`,
-    '',
-    `Scope the demo to what a change introduced, not the whole project. Stop when both ${DEMO_SKILL_REL_PATH} and ${DEMO_HTML_REL_PATH} exist.`,
   ];
 }
 
@@ -767,19 +756,4 @@ function makeReasoningSink(logger: EventLogger, initiativeId: string, sessionId:
       message: capped, metadata: { session_id: sessionId, kind: 'reasoning' },
     });
   };
-}
-
-let cachedSkill: string | null = null;
-function loadSkillPrompt(skillPromptPath: string | undefined, forgeRoot: string): string {
-  if (skillPromptPath) {
-    try {
-      return readFileSync(skillPromptPath, 'utf8');
-    } catch {
-      /* fall through */
-    }
-  }
-  if (cachedSkill !== null) return cachedSkill;
-  const def = skillPath('demo-builder', forgeRoot);
-  cachedSkill = existsSync(def) ? readFileSync(def, 'utf8') : 'You are the forge demo-builder agent.';
-  return cachedSkill;
 }
