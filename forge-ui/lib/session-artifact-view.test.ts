@@ -108,11 +108,26 @@ import {
   // exact precedent (AT-82/83, below) for the sibling `brain-structure` kind.
   filePackageArtifactView,
   selectFilePackageFile,
+  // R4-19-F2 (kb-cleanup's cleanup-plan artifact): does not exist yet — same
+  // esbuild-named-export note as contractBuildoutView/generationGalleryView/
+  // preferredGenerationFor above: an unresolved named import resolves to
+  // `undefined`, so only the tests that actually CALL cleanupPlanView (or
+  // dispatch to it through sessionArtifactView) go red. See the AT-123..134
+  // block near the end of this file for the fixtures and the full rationale.
+  cleanupPlanView,
 } from './session-artifact-view.ts';
 import { filePackageTabs, selectFile } from './file-package.ts';
 import type { RoadmapDraftArtifact, MarkdownDraftArtifact, BrainStructureArtifact, GenerationGalleryArtifact, ContractBuildoutArtifact } from './session-client.ts';
 import { sessionShellState, selectStage } from './session-shell-view.ts';
 import type { SessionShellPayload } from './session-client.ts';
+// R4-19-F2 — reads the REAL r4-19-f2-live-capture fixture's cleanup-plan.md
+// off disk for AT-134's end-to-end row, rather than re-typing the captured
+// markdown inline (per the task brief: "read them from disk, never inline
+// them"). Mirrors knowledge-page-kb-maintenance.test.ts's own
+// `resolve(__dirname, ...)` + `readFileSync` precedent for reading a real
+// on-disk artifact into a test fixture.
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 // R4-15: the SHARED dependency-DAG view model roadmapDraftView's new "dag"
 // field is built through — imported here so AT-95..97 can assert against the
 // REAL, shared function rather than a hand-rolled expected shape (proving
@@ -947,4 +962,292 @@ test('R4-17 AT-122 (D10): sessionArtifactView: an UNRECOGNISED artifact kind (ne
   // this genuinely throws rather than degrading into SOME view shape that a
   // careless caller could render as if it were valid.
   expect(thrownMessage).not.toContain('"kind":"generation-gallery"');
+});
+
+// ===========================================================================
+// R4-19-F2 — cleanupPlanView, the NEW renderer for the "cleanup-plan"
+// artifact kind (kb-cleanup's brain-maintenance session), plus
+// sessionArtifactView's dispatch flip (cleanup-plan is declared LIVE at
+// birth in orchestrator/studio/session-kinds.ts — id:'cleanup-plan',
+// status:'live' — never reserved, unlike generation-gallery/contract-buildout/
+// file-package's reserved->live histories above). TEST-FIRST PIN: the export
+// does not exist yet — module-not-found on this one named import resolves to
+// `undefined` per this file's esbuild-named-export convention (see the
+// header note by the import above), so only the tests below, which actually
+// CALL `cleanupPlanView` (directly or via the dispatcher), are red; every
+// pre-existing AT-70..122 test above is unaffected. — AT-123..134
+//
+// `CleanupPlanArtifact`/`CleanupPlanAction` are NOT imported from
+// ./session-client.ts -- it does not declare this shape yet (implementation
+// target, out of scope for this test-only file); hand-declared here exactly
+// like FILE_PACKAGE_ARTIFACT's own `FilePackageArtifact` precedent above
+// (RED-3a/b): never cross-importing a not-yet-shipped type from the module
+// under test's own dependency. The shape mirrors the AUTHORITATIVE type from
+// the concurrently-landing backend (orchestrator/studio/session-transcript.ts's
+// CleanupPlanArtifact/CleanupPlanAction) -- three action states, not two:
+// 'open' | 'cleared' | 'unknown'. The third state is load-bearing and was won
+// the hard way -- a real run once reported every action 'cleared' while
+// nothing had been fixed, because absence-of-a-finding was wrongly treated as
+// proof of repair. 'unknown' exists precisely so this view can never again
+// imply a repair landed when coverage could not be established, which is why
+// AT-127 below (not AT-126's simpler all-cleared case) is this section's
+// mandatory adversarial pin: it is the one that actually kills a
+// `settled = openFindingCount === 0` implementation, the exact shape of the
+// original defect re-surfacing at the presentation layer.
+//
+// DESIGN CHOICE THIS FILE PINS (flagged for T2 -- the task brief names the
+// required OUTPUT shape but not an exact field list; this mirrors
+// contractBuildoutView's own "DESIGN CHOICE THIS FILE PINS" precedent
+// above): `cleanupPlanView` returns
+//   { kind: 'cleanup-plan', label, state, plan, actions, openFindingCount, settled }
+// -- `label` and `openFindingCount` pass through VERBATIM from the artifact
+// (mirrors AT-78's `brainStructureView.themeCount` precedent: a legitimately
+// divergent server-reported count must never be "corrected" by a client-side
+// recount -- see AT-132 below, this section's version of that exact pin).
+// `state` is a NEW three-way pane-level token -- 'no-plan' | 'unparsed-plan' |
+// 'has-actions' -- mirroring `markdownDraftView`'s own three-state idiom
+// ('no-draft' | 'empty-draft' | 'has-content') exactly, just renamed for this
+// kind's own vocabulary (AT-129..131 below mirror AT-74..77's structure
+// one-for-one). `settled` is a NEW boolean, true iff every action's `state`
+// is 'cleared' AND at least one action exists -- false for a no-plan/
+// unparsed-plan pane (vacuous truth over an empty actions[] would itself be
+// the "absence treated as proof of repair" bug one layer up) and false the
+// instant ANY action is 'open' OR 'unknown' (AT-126..128). Every action row
+// in `actions` is threaded through UNCHANGED (kind/target/proposal/state, no
+// re-derivation) -- the server already computed `state` once; this view never
+// computes a second, potentially-drifting copy.
+//
+// Every existing live kind's view carries no `label` field of its own -- the
+// wrapper (`SessionArtifactPane.tsx`) already reads `artifact.label`
+// directly for `data-artifact-label`, so no per-kind view has needed to
+// duplicate it. `cleanupPlanView` is the one exception, because the task
+// brief for this kind explicitly names "carrying the label" as part of the
+// view's job (item 1) -- pinned here as a deliberate, additive divergence
+// from the 6 existing kinds' shape, not a signal that they should grow one
+// too. Flagged in the report for T2 to ratify or redirect.
+// ===========================================================================
+
+const CLEANUP_PLAN_ALL_STATES: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  plan: '# Cleanup Plan\n\nThree findings, three different outcomes.\n',
+  actions: [
+    { kind: 'length.soft-cap', target: 'brain/forge-dev/themes/alpha.md', proposal: 'Condense the theme toward the soft cap.', state: 'open' },
+    { kind: 'edge.dangling', target: 'brain/forge-dev/themes/beta.md', proposal: 'Drop the dangling related_themes entry.', state: 'cleared' },
+    { kind: 'frontmatter.missing-field', target: 'brain/forge-dev/themes/gamma.md', proposal: 'Add the missing category field.', state: 'unknown' },
+  ],
+  openFindingCount: 1,
+};
+
+const CLEANUP_PLAN_ALL_CLEARED: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  plan: '# Cleanup Plan\n\nBoth findings resolved.\n',
+  actions: [
+    { kind: 'length.soft-cap', target: 'brain/forge-dev/themes/alpha.md', proposal: 'Condense the theme toward the soft cap.', state: 'cleared' },
+    { kind: 'edge.dangling', target: 'brain/forge-dev/themes/beta.md', proposal: 'Drop the dangling related_themes entry.', state: 'cleared' },
+  ],
+  openFindingCount: 0,
+};
+
+// The mandatory adversarial fixture (AT-127): zero OPEN rows -- openFindingCount
+// is honestly 0 -- yet the plan is NOT settled, because one row's coverage was
+// never established. This is the exact shape of the real P1: a naive
+// `settled = openFindingCount === 0` (or `actions.every(a => a.state !==
+// 'open')`) implementation passes AT-126 but WRONGLY reports settled:true here.
+const CLEANUP_PLAN_HAS_UNKNOWN: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  plan: '# Cleanup Plan\n\nOne resolved, one unverifiable.\n',
+  actions: [
+    { kind: 'length.soft-cap', target: 'brain/forge-dev/themes/alpha.md', proposal: 'Condense the theme toward the soft cap.', state: 'cleared' },
+    { kind: 'edge.dangling', target: 'brain/forge-dev/themes/beta.md', proposal: 'Drop the dangling related_themes entry.', state: 'unknown' },
+  ],
+  openFindingCount: 0,
+};
+
+const CLEANUP_PLAN_HAS_OPEN: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  plan: '# Cleanup Plan\n\nOne resolved, one still outstanding.\n',
+  actions: [
+    { kind: 'length.soft-cap', target: 'brain/forge-dev/themes/alpha.md', proposal: 'Condense the theme toward the soft cap.', state: 'cleared' },
+    { kind: 'edge.dangling', target: 'brain/forge-dev/themes/beta.md', proposal: 'Drop the dangling related_themes entry.', state: 'open' },
+  ],
+  openFindingCount: 1,
+};
+
+const CLEANUP_PLAN_UNPARSED: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  // Free-form prose the agent drafted with no bracketed `[kind] target -- proposal`
+  // action lines anywhere in it -- nothing for the server-side parser to turn
+  // into a row, per session-transcript.ts's parseCleanupPlanActions contract
+  // (a non-matching line is silently ignored for actions[], but the raw text
+  // still ships in `plan` verbatim).
+  plan: 'The KB looked clean on this pass. No structural findings stood out enough to write up as discrete actions, so this draft is closing without an action list.',
+  actions: [],
+  openFindingCount: 0,
+};
+
+const CLEANUP_PLAN_NO_PLAN: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  plan: null,
+  actions: [],
+  openFindingCount: 0,
+};
+
+// A server-reported openFindingCount that DISAGREES with the actual count of
+// 'open' rows in `actions` (AT-132) -- deliberately: 1 real open row, but the
+// server says 4. The view must surface the server's number unchanged.
+const CLEANUP_PLAN_DISAGREEING_COUNT: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'KB cleanup plan',
+  plan: '# Cleanup Plan\n\nOne row, one deliberately mismatched count.\n',
+  actions: [{ kind: 'length.soft-cap', target: 'brain/forge-dev/themes/alpha.md', proposal: 'Condense the theme toward the soft cap.', state: 'open' }],
+  openFindingCount: 4,
+};
+
+// AT-133's real-capture fixture: the plan text is READ FROM DISK (the real
+// r4-19-f2-live-capture fixture's cleanup-plan.md), never re-typed inline.
+// The two actions' kind/target are hand-copied VERBATIM from that same real
+// file's two `- [<kind>] <target> -- <proposal>` lines (both findings are
+// still present, unmatched by any repair, in the fixture's status.json --
+// `findings[0].kind === 'length.soft-cap'`, `findings[1].kind ===
+// 'edge.dangling'`, both `resolution: 'agent'` -- so both actions carry
+// state:'open' here, the state a live join against that same findings[] would
+// produce). This is a hand-fixtured CleanupPlanArtifact (the already-derived
+// wire shape this view consumes), not a re-run of the server-side markdown
+// parser -- this test file has no business importing session-transcript.ts's
+// parser (mirrors this whole file's established "never cross the
+// orchestrator/forge-ui boundary" rule).
+const REAL_CAPTURE_DIR = resolve(__dirname, '../../scripts/journeys/fixtures/r4-19-f2-live-capture');
+const REAL_CLEANUP_PLAN_MD = readFileSync(resolve(REAL_CAPTURE_DIR, 'cleanup-plan.md'), 'utf8');
+
+const REAL_CLEANUP_PLAN_ARTIFACT: CleanupPlanArtifact = {
+  kind: 'cleanup-plan',
+  label: 'Cleanup plan',
+  plan: REAL_CLEANUP_PLAN_MD,
+  actions: [
+    {
+      kind: 'length.soft-cap',
+      target: 'brain/forge-dev/themes/brain-read-policy.md',
+      proposal:
+        'Condense the theme from 65 to ≤60 body lines by merging the two near-duplicate source bullets and folding the R1-01 / R1-06 blockquote callouts into a compact inline history note.',
+      state: 'open',
+    },
+    {
+      kind: 'edge.dangling',
+      target: 'brain/forge-dev/themes/exploration-vs-implementation-initiatives.md',
+      proposal:
+        'Drop the `related_themes` entry `forge-current-architecture-as-built` because no matching theme file exists anywhere under `brain/**/themes/` and no plausible surviving slug was found.',
+      state: 'open',
+    },
+  ],
+  openFindingCount: 2,
+};
+
+test('R4-19-F2 AT-123: cleanupPlanView: the view model EXISTS for the "cleanup-plan" kind and carries label, raw plan text, action rows, and the open count through -- kills a kind that falls through to a default/unknown branch and renders nothing', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_ALL_STATES);
+  expect(view.kind).toBe('cleanup-plan');
+  expect(view.label).toBe(CLEANUP_PLAN_ALL_STATES.label);
+  expect(view.plan).toBe(CLEANUP_PLAN_ALL_STATES.plan);
+  expect(view.actions).toEqual(CLEANUP_PLAN_ALL_STATES.actions);
+  expect(view.openFindingCount).toBe(CLEANUP_PLAN_ALL_STATES.openFindingCount);
+  expect(view.state).toBe('has-actions');
+});
+
+test('R4-19-F2 AT-124: sessionArtifactView: dispatches "cleanup-plan" to cleanupPlanView -- the kind is LIVE from birth (orchestrator/studio/session-kinds.ts), never reserved, so it must never throw "reserved" OR fall through to the unrecognised-kind throw', () => {
+  expect(() => sessionArtifactView(CLEANUP_PLAN_ALL_STATES)).not.toThrow();
+  const dispatched = sessionArtifactView(CLEANUP_PLAN_ALL_STATES) as { kind: string };
+  expect(dispatched.kind).toBe('cleanup-plan');
+  expect(dispatched).toEqual(cleanupPlanView(CLEANUP_PLAN_ALL_STATES));
+
+  // Stage-UNAWARE like every other live kind today (mirrors AT-91/AT-109's
+  // invariance pin exactly) -- a KB-cleanup plan has no notion of "which
+  // stage" any more than a roadmap draft does; passing a stage must never
+  // make this renderer stage-sensitive.
+  const withStage = sessionArtifactView(CLEANUP_PLAN_ALL_STATES, 'roadmap');
+  expect(withStage).toEqual(dispatched);
+});
+
+test('R4-19-F2 AT-125: cleanupPlanView: given one action of EACH state (open/cleared/unknown), every row exposes its OWN state, passed through verbatim (kind/target/proposal unchanged) -- no two states collapse to the same rendered value', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_ALL_STATES);
+  expect(view.actions).toHaveLength(3);
+  expect(view.actions[0]).toEqual(CLEANUP_PLAN_ALL_STATES.actions[0]);
+  expect(view.actions[1]).toEqual(CLEANUP_PLAN_ALL_STATES.actions[1]);
+  expect(view.actions[2]).toEqual(CLEANUP_PLAN_ALL_STATES.actions[2]);
+  const states = view.actions.map((a) => a.state);
+  expect(states).toEqual(['open', 'cleared', 'unknown']);
+  // The mandatory pairwise-distinctness check: a Set collapses any two equal
+  // values, so this is the direct kill of "unknown renders the same as
+  // cleared" (or as open) at the presentation layer.
+  expect(new Set(states).size).toBe(3);
+});
+
+test('R4-19-F2 AT-126: cleanupPlanView: settled is true when EVERY action is "cleared" -- the fully-resolved case', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_ALL_CLEARED);
+  expect(view.settled).toBe(true);
+});
+
+test('R4-19-F2 AT-127 (mandatory adversarial AT -- kills the P1 re-surfacing at the presentation layer): cleanupPlanView: settled is FALSE when any action is "unknown", even though openFindingCount is honestly 0 (zero OPEN rows) -- kills a settled=openFindingCount===0 (or any open-only) implementation, the exact "absence of a finding treated as proof of repair" defect one layer up', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_HAS_UNKNOWN);
+  expect(view.openFindingCount).toBe(0);
+  expect(view.actions.some((a) => a.state === 'unknown')).toBe(true);
+  expect(view.actions.some((a) => a.state === 'open')).toBe(false);
+  expect(view.settled).toBe(false);
+});
+
+test('R4-19-F2 AT-128: cleanupPlanView: settled is false when any action is "open" -- the baseline still-outstanding case, distinguished from AT-127\'s unknown-only case', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_HAS_OPEN);
+  expect(view.settled).toBe(false);
+});
+
+test('R4-19-F2 AT-129: cleanupPlanView: a drafted-but-unparseable plan (plan non-null, actions: []) still surfaces the raw plan text verbatim and does NOT render as an empty/"nothing here" state -- kills a renderer that shows nothing when the agent wrote prose the parser could not turn into rows', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_UNPARSED);
+  expect(view.plan).toBe(CLEANUP_PLAN_UNPARSED.plan);
+  expect(view.plan).not.toBeNull();
+  expect(view.actions).toEqual([]);
+  expect(view.state).toBe('unparsed-plan');
+  expect(view.settled).toBe(false); // nothing to settle is not the same as settled
+});
+
+test('R4-19-F2 AT-130: cleanupPlanView: NO PLAN YET (plan: null, actions: []) renders an honest empty/pending state, distinct from a drafted-but-unparseable plan -- kills conflating "not drafted yet" with "drafted but unparseable"', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_NO_PLAN);
+  expect(view.plan).toBeNull();
+  expect(view.actions).toEqual([]);
+  expect(view.state).toBe('no-plan');
+  expect(view.state).not.toBe(cleanupPlanView(CLEANUP_PLAN_UNPARSED).state);
+  expect(view.settled).toBe(false);
+});
+
+test('R4-19-F2 AT-131: cleanupPlanView: the three pane states (no-plan, unparsed-plan, has-actions) are pairwise distinct tokens -- mirrors markdownDraftView\'s AT-77 precedent for this kind\'s own three-state idiom', () => {
+  const states = [cleanupPlanView(CLEANUP_PLAN_NO_PLAN).state, cleanupPlanView(CLEANUP_PLAN_UNPARSED).state, cleanupPlanView(CLEANUP_PLAN_ALL_STATES).state];
+  expect(new Set(states).size).toBe(3);
+});
+
+test('R4-19-F2 AT-132: cleanupPlanView: openFindingCount is displayed EXACTLY as the server supplied it, never recomputed from the actions\' own "open" states -- mirrors AT-78\'s brainStructureView.themeCount precedent: a legitimately divergent server-reported count must never be "corrected" client-side', () => {
+  const view = cleanupPlanView(CLEANUP_PLAN_DISAGREEING_COUNT);
+  const actualOpenRows = CLEANUP_PLAN_DISAGREEING_COUNT.actions.filter((a) => a.state === 'open').length;
+  expect(actualOpenRows).toBe(1); // sanity: the fixture really does only have 1 open row...
+  expect(CLEANUP_PLAN_DISAGREEING_COUNT.openFindingCount).toBe(4); // ...while the server reports 4
+  expect(view.openFindingCount).toBe(4); // the view surfaces the SERVER's number
+  expect(view.openFindingCount).not.toBe(actualOpenRows); // never the client-recomputed one
+});
+
+test('R4-19-F2 AT-133 (real-capture end-to-end): cleanupPlanView: built from the REAL r4-19-f2-live-capture fixture\'s two actions, both render with their real kinds (length.soft-cap, edge.dangling) and real target paths -- kills a view that only works on tidy hand-made fixtures', () => {
+  const view = cleanupPlanView(REAL_CLEANUP_PLAN_ARTIFACT);
+  expect(view.actions).toHaveLength(2);
+  expect(view.actions.map((a) => a.kind)).toEqual(['length.soft-cap', 'edge.dangling']);
+  expect(view.actions.map((a) => a.target)).toEqual([
+    'brain/forge-dev/themes/brain-read-policy.md',
+    'brain/forge-dev/themes/exploration-vs-implementation-initiatives.md',
+  ]);
+  expect(view.actions.every((a) => a.state === 'open')).toBe(true);
+  // The raw captured markdown, read from disk -- never re-typed inline -- is
+  // what `plan` carries, verbatim.
+  expect(view.plan).toBe(REAL_CLEANUP_PLAN_MD);
+  expect(view.plan).toContain('Cleanup Plan — KB `forge-dev`'); // sanity: genuinely this real file's content, not a lookalike (real em dash, matching the fixture's own heading byte-for-byte)
+  expect(view.state).toBe('has-actions');
 });
