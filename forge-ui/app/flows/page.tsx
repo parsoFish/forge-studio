@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { subscribe } from '@/lib/bridge-client';
 import { StudioNav } from '@/components/StudioNav';
 import { FlowsIndexBody } from '@/components/studio/FlowsIndexBody';
 import {
@@ -18,18 +19,25 @@ import {
 //
 // The flows pillar's own browse surface: every flow the operator can run, as
 // a card grid (reusing the REAL FlowCard from the library shelf's flows
-// section), with a zero-state carrying the same "+ New flow" CTA when none
-// exist yet. `StudioNav.tsx`'s Flows nav item still deep-links straight to
+// section), with a first-run banner / true-empty state carrying the same
+// "+ New flow" CTA (see `FlowsIndexBody`'s header for the three-state split).
+// `StudioNav.tsx`'s Flows nav item still deep-links straight to
 // `/flows/forge-develop` — repointing it to this index is a LATER lane
 // (IA-5) and is deliberately NOT done here; this route is reached today via
 // direct navigation and its own card on `/library`.
 //
 // This is a thin connected shell: all render CONTRACT (grid rows,
-// zero-state, card reuse) lives on `FlowsIndexBody`
+// first-run/zero-state, card reuse) lives on `FlowsIndexBody`
 // (components/studio/FlowsIndexBody.tsx), which is render-tested directly —
 // see `lib/flows-index-render.test.ts`'s header for why the page itself
 // isn't (a `useEffect` fetch that doesn't run under SSR-style rendering,
 // same known gap as every other dynamic Studio page).
+//
+// The `cycle-list-changed` bridge subscription (mirrors
+// `app/library/page.tsx:67-89`'s `loadAll`/`refreshRuns` split exactly) keeps
+// FlowCard's run-derived badges (`data-flow-status`/gated/failed counts)
+// live — without it a run starting/finishing after the initial load would
+// leave every card frozen at its load-time snapshot.
 // ---------------------------------------------------------------------------
 
 export default function FlowsIndexPage() {
@@ -38,19 +46,47 @@ export default function FlowsIndexPage() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [ready, setReady] = useState(false);
 
-  useEffect(() => {
-    let cancelled = false;
-    async function load() {
+  async function loadAll(signal: { cancelled: boolean }): Promise<void> {
+    try {
       const [f, r, p] = await Promise.all([fetchStudioFlows(), fetchRuns(), fetchStudioProjects()]);
-      if (cancelled) return;
+      if (signal.cancelled) return;
       setFlows(f);
       setRuns(r);
       setProjects(p);
-      setReady(true);
+    } finally {
+      if (!signal.cancelled) setReady(true);
     }
-    void load();
+  }
+
+  async function refreshRuns(signal: { cancelled: boolean }): Promise<void> {
+    const r = await fetchRuns();
+    if (signal.cancelled) return;
+    setRuns(r);
+  }
+
+  useEffect(() => {
+    // intentional mount-only — loadAll/refreshRuns are stable fetch helpers
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const signal = { cancelled: false };
+
+    void loadAll(signal);
+
+    // Subscribe to bridge WS to re-fetch runs on cycle-list-changed (a run
+    // starting/gating/completing anywhere) — same event/handler shape as
+    // app/library/page.tsx's own subscription.
+    const sub = subscribe({
+      onState: () => { /* page does not show connection state */ },
+      onMessage: (msg) => {
+        if (signal.cancelled) return;
+        if (msg.type === 'cycle-list-changed') {
+          void refreshRuns(signal);
+        }
+      },
+    });
+
     return () => {
-      cancelled = true;
+      signal.cancelled = true;
+      sub.close();
     };
   }, []);
 

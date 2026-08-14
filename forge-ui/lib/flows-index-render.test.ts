@@ -7,11 +7,22 @@
  * deep-links straight to `/flows/forge-develop` (`StudioNav.tsx:26`) — that
  * repoint is a LATER lane (IA-5); this file does not touch it.
  *
+ * Review round: "what counts as empty" mirrors `app/library/page.tsx:
+ * 95-113`'s `hasUserFlow` first-run key, not a naive `flows.length === 0` —
+ * a real install ships ~5 OOTB seed flows, so that check alone is dead code.
+ * THREE states are pinned below: true-empty (no flows at all — artificial,
+ * kept honest), first-run (OOTB flows exist, no `origin: 'studio'` flow yet
+ * — banner renders ABOVE the still-visible grid), and steady-state (a user
+ * flow exists — no banner). Both "build your first flow" CTAs (true-empty +
+ * first-run) carry `data-action="new-flow-first"`, distinct from the page
+ * header's ALWAYS-present `data-action="new-flow"` — see
+ * `FlowsIndexBody.tsx`'s header comment for the full rationale.
+ *
  * TWO render surfaces, tested two different ways:
  *
  *  - `FlowsIndexBody` (`components/studio/FlowsIndexBody.tsx`) — the
- *    presentational grid/zero-state body — is rendered directly via
- *    `react-dom/server`'s `renderToStaticMarkup`, exactly like
+ *    presentational grid/first-run/zero-state body — is rendered directly
+ *    via `react-dom/server`'s `renderToStaticMarkup`, exactly like
  *    `./library-card-render.test.ts` and `./run-view-render.test.ts` (no
  *    jsdom/@testing-library; react/react-dom are already forge-ui deps; the
  *    `resolve.alias['@']` + `oxc.jsx: {runtime:'automatic'}` this needs are
@@ -28,10 +39,11 @@
  *    mocked to a fixed pathname so the shell's OWN literal `data-page`
  *    contract can still be asserted directly off the real file, without
  *    reimplementing it as a decoy constant. The page's `useEffect` data
- *    fetch does not run under SSR-style rendering (same known gap), so this
- *    only proves the pre-fetch shell shape (`data-page`, `data-page-ready=
- *    "false"`, the nav) — the grid/zero-state CONTRACT is pinned on
- *    `FlowsIndexBody` above instead.
+ *    fetch (and its `cycle-list-changed` bridge subscription — mirrors
+ *    `app/library/page.tsx`'s own) does not run under SSR-style rendering
+ *    (same known gap), so this only proves the pre-fetch shell shape
+ *    (`data-page`, `data-page-ready="false"`, the nav) — the grid/first-run/
+ *    zero-state CONTRACT is pinned on `FlowsIndexBody` above instead.
  *
  * RUN: npx vitest run lib/flows-index-render.test.ts   (from forge-ui/)
  */
@@ -48,35 +60,56 @@ function makeFlow(overrides: Partial<Flow> & { id: string }): Flow {
   return { id: overrides.id, name: overrides.id, goal: '', nodes: [], edges: [], triggers: [], ...overrides };
 }
 
-// ---- FlowsIndexBody: zero-state ----------------------------------------------
+// ---- FlowsIndexBody: true-empty state -----------------------------------
 
-test('FlowsIndexBody: zero flows renders the zero-state with a "New flow" CTA pointing at /flows/new', () => {
+test('FlowsIndexBody: zero flows (true-empty — no flows registered at all) renders the zero-state with a "New flow" CTA pointing at /flows/new, tagged data-action="new-flow-first"', () => {
   const html = renderToStaticMarkup(
     React.createElement(FlowsIndexBody, { flows: [], runs: [], projects: [] } satisfies { flows: Flow[]; runs: Run[]; projects: Project[] }),
   );
   expect(html).toContain('data-component="flows-zero-state"');
-  expect(html).toContain('data-action="new-flow"');
+  expect(html).toContain('data-action="new-flow-first"');
   expect(html).toContain('href="/flows/new"');
   expect(html).not.toContain('data-component="flows-grid"');
+  expect(html).not.toContain('data-component="flows-first-run"');
 });
 
-// ---- FlowsIndexBody: grid rows -----------------------------------------------
+// ---- FlowsIndexBody: first-run state (OOTB flows exist, no user flow yet) --
 
-test('FlowsIndexBody: one or more flows renders a card-grid row per flow, reusing the REAL FlowCard (data-card-type="flow")', () => {
+test('FlowsIndexBody: OOTB-only flows (none with origin "studio") render the first-run banner ABOVE the grid — the OOTB flows stay visible, not replaced', () => {
   const flows = [
-    makeFlow({ id: 'forge-develop', name: 'Forge Develop' }),
-    makeFlow({ id: 'onboard-project', name: 'Onboard Project' }),
+    makeFlow({ id: 'forge-develop', name: 'Forge Develop', origin: 'seed' }),
+    makeFlow({ id: 'onboard-project', name: 'Onboard Project', origin: 'ootb-library' }),
   ];
   const html = renderToStaticMarkup(React.createElement(FlowsIndexBody, { flows, runs: [], projects: [] }));
+  expect(html).toContain('data-component="flows-first-run"');
   expect(html).toContain('data-component="flows-grid"');
+  expect(html).not.toContain('data-component="flows-zero-state"');
+  // banner's CTA is the distinct first-flow action, not the header's
+  expect(html).toContain('data-action="new-flow-first"');
+  // the OOTB cards are genuinely present underneath the banner
   expect((html.match(/data-card-type="flow"/g) ?? []).length).toBe(2);
   expect(html).toContain('href="/flows/forge-develop"');
   expect(html).toContain('href="/flows/onboard-project"');
+  // banner precedes the grid in document order (rendered above it)
+  expect(html.indexOf('data-component="flows-first-run"')).toBeLessThan(html.indexOf('data-component="flows-grid"'));
+});
+
+// ---- FlowsIndexBody: steady-state (a user-authored flow exists) -----------
+
+test('FlowsIndexBody: at least one flow with origin "studio" suppresses the first-run banner entirely — grid only', () => {
+  const flows = [
+    makeFlow({ id: 'forge-develop', name: 'Forge Develop', origin: 'seed' }),
+    makeFlow({ id: 'my-flow', name: 'My Flow', origin: 'studio' }),
+  ];
+  const html = renderToStaticMarkup(React.createElement(FlowsIndexBody, { flows, runs: [], projects: [] }));
+  expect(html).toContain('data-component="flows-grid"');
+  expect(html).not.toContain('data-component="flows-first-run"');
   expect(html).not.toContain('data-component="flows-zero-state"');
+  expect((html.match(/data-card-type="flow"/g) ?? []).length).toBe(2);
 });
 
 test('FlowsIndexBody: each flow card links to its OWN /flows/<id> monitor route, not back to the shared /flows index', () => {
-  const flows = [makeFlow({ id: 'my-scratch-flow' })];
+  const flows = [makeFlow({ id: 'my-scratch-flow', origin: 'studio' })];
   const html = renderToStaticMarkup(React.createElement(FlowsIndexBody, { flows, runs: [], projects: [] }));
   expect(html).toContain('href="/flows/my-scratch-flow"');
 });

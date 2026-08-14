@@ -127,17 +127,32 @@ inventory rather than one shared page-level contract:
   is a separate presentational component, `FlowsIndexBody`
   (`components/studio/FlowsIndexBody.tsx`, render-tested directly since the
   page itself fetches via `useEffect` — the same known SSR-render gap as
-  every other dynamic Studio page): zero flows renders
-  `[data-component="flows-zero-state"]` with a `[data-action="new-flow"]` CTA
-  (`href="/flows/new"`); one or more renders
+  every other dynamic Studio page). "What counts as empty" mirrors
+  `/library`'s own `hasUserFlow` first-run key (review-round fix — a naive
+  `flows.length === 0` check is dead code on any real install, which ships
+  ~5 OOTB seed flows), giving **three** states: **true-empty**
+  (`flows.length === 0`, an artificial state kept honest rather than assumed
+  unreachable) renders `[data-component="flows-zero-state"]`; **first-run**
+  (OOTB flows exist but none carry `origin: "studio"`) renders
+  `[data-component="flows-first-run"]` **above** the still-visible grid, not
+  instead of it; **steady-state** (a user-authored flow exists) renders the
+  grid alone. Both "build your first flow" CTAs (true-empty + first-run)
+  carry `[data-action="new-flow-first"]` (`href="/flows/new"`) — deliberately
+  DISTINCT from the page header's own always-visible
+  `[data-action="new-flow"]` CTA (same target, mirroring `/library`'s
+  per-section "+ New X" convention), so automation can tell the one-time
+  onboarding nudge apart from the persistent create affordance instead of
+  matching two identically-tagged actions. One or more flows renders
   `[data-component="flows-grid"]`, one **REAL, reused** `FlowCard` per flow
   (same card as the library shelf's flows section — same
-  `data-card-type="flow"` contract, byte-identical rendering). The page
-  header carries its own `[data-action="new-flow"]` CTA too (same target,
-  always visible, mirroring `/library`'s per-section "+ New X" convention) —
-  a flow with no cards yet therefore shows the CTA twice (header + zero-state
-  body), both real. `StudioNav`'s Flows nav item still deep-links straight to
-  `/flows/forge-develop`, not here — repointing it is a later lane (IA-5).
+  `data-card-type="flow"` contract, byte-identical rendering, including its
+  live `data-flow-status`/`data-flow-gated-count`/`data-flow-failed-count`).
+  The page subscribes to the bridge's `cycle-list-changed` event and
+  re-fetches runs on it (mirrors `/library`'s own `loadAll`/`refreshRuns`
+  split) so those run-derived badges stay live rather than freezing at the
+  page's initial load. `StudioNav`'s Flows nav item still deep-links straight
+  to `/flows/forge-develop`, not here — repointing it is a later lane
+  (IA-5).
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
