@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from '@/lib/bridge-client';
 import {
   fetchRuns,
@@ -146,12 +147,12 @@ export default function HomePage() {
       lede="One surface for the whole fleet: live flows and agents, the portfolio behind them, and every run that shaped it."
       actions={
         <>
-          <a className="btn" href="/projects" data-action="onboard-project" style={{ textDecoration: 'none' }}>
+          <Link className="btn" href="/projects" data-action="onboard-project" style={{ textDecoration: 'none' }}>
             Onboard a project
-          </a>
-          <a className="btn btn-primary" href="/flows/forge-develop" data-action="watch-live-run" style={{ textDecoration: 'none' }}>
+          </Link>
+          <Link className="btn btn-primary" href="/flows/forge-develop" data-action="watch-live-run" style={{ textDecoration: 'none' }}>
             Watch live run
-          </a>
+          </Link>
         </>
       }
     >
@@ -168,7 +169,7 @@ export default function HomePage() {
               // THIS kb's own lint summary (buildKbAttention), never
               // cross-attributed from another kb or fabricated on absence.
               return (
-                <a
+                <Link
                   key={item.id}
                   href={item.href}
                   data-attention-item
@@ -197,7 +198,7 @@ export default function HomePage() {
                     <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
                   </span>
                   <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>open →</span>
-                </a>
+                </Link>
               );
             }
 
@@ -211,7 +212,7 @@ export default function HomePage() {
             // data-attention-kind alongside them.
             const raw = attention.find((a) => a.projectId === item.projectId);
             return (
-            <a
+            <Link
               key={item.id}
               href={item.href}
               data-attention-item
@@ -243,7 +244,7 @@ export default function HomePage() {
                 <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
               </span>
               <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>open →</span>
-            </a>
+            </Link>
             );
           })}
         </section>
@@ -292,7 +293,7 @@ export default function HomePage() {
 
 function HomeHexCell({ hex }: { hex: HomeHex }) {
   return (
-    <a
+    <Link
       href={hex.href}
       className="home-hex"
       data-hex-kind={hex.kind}
@@ -306,6 +307,6 @@ function HomeHexCell({ hex }: { hex: HomeHex }) {
         </span>
       </span>
       <span className="home-hex-label">{hex.label}</span>
-    </a>
+    </Link>
   );
 }

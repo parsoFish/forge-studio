@@ -8,6 +8,7 @@
  */
 
 import { useEffect, useRef } from 'react';
+import Link from 'next/link';
 import type { Agent } from '@/lib/studio-client';
 
 type Props = {
@@ -160,7 +161,7 @@ export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemo
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {/* Open in Agent Builder */}
-          <a
+          <Link
             href={agent ? `/agents/${encodeURIComponent(agent.id)}` : '#'}
             style={{
               display: 'inline-flex',
@@ -191,7 +192,7 @@ export function NodeMiniPanel({ nodeId, agent, anchorX, anchorY, onClose, onRemo
             data-action="open-in-agent-builder"
           >
             ⬡ Open in Agent Builder
-          </a>
+          </Link>
 
           {/* Remove from flow */}
           <button
