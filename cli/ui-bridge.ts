@@ -64,12 +64,19 @@ import {
   SAFE_ID_RE,
 } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { handleStudioKbRoutes } from './bridge-studio-kbs.ts';
+import {
+  handleStudioKbRoutes,
+  loadKbDescriptors,
+  computeAgentCleanupFindings,
+  runBrainConsolidateNow,
+  enqueueConsolidate,
+  KB_SEEDING_ANCHOR_PREFIX,
+} from './bridge-studio-kbs.ts';
 import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
 import { handleStudioCommunityRoutes } from './bridge-studio-community.ts';
@@ -2009,7 +2016,7 @@ async function handleHttp(
  *  `['instructions','run']`, `['demo-builder','run']`,
  *  `['project-brain','run']` are the SAME tokens the old `{verb}+'run'`
  *  construction produced, just spelled as a literal array. */
-type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring';
+type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
 
 const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
   architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
@@ -2017,6 +2024,10 @@ const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[
   'demo-builder': { argvPrefix: ['demo-builder', 'run'], logPrefix: 'demo' },
   'project-brain': { argvPrefix: ['project-brain', 'run'], logPrefix: 'project-brain' },
   authoring: { argvPrefix: ['agent', 'run', 'authoring'], logPrefix: 'authoring' },
+  // R4-19-F2 — the kb-cleanup session, riding the SAME generic
+  // runInteractiveTurn spine as authoring (ADR-043 §3): `forge agent run
+  // kb-cleanup <sid> --project <p>`.
+  'kb-cleanup': { argvPrefix: ['agent', 'run', 'kb-cleanup'], logPrefix: 'kb-cleanup' },
 };
 
 /** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
@@ -4166,6 +4177,221 @@ async function handleDemoBuilder(
         { ok: true, sessionId, runId, project, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/authoring/start', sessionId) },
         origin,
       );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/studio/kbs/:id/cleanup/start — R4-19-F2, the kb-cleanup
+  // session's kickoff route (ADR-043 §1/§3, brain-maintenance /
+  // cleanup-plan). Mirrors `POST /api/studio/authoring/start` immediately
+  // above where the shapes match: the KB id is validated with SLUG_RE
+  // BEFORE any fs call, a server-generated `sessionId` (never
+  // request-derived), and `spawnAgentTurn` rides the SAME generic
+  // `runInteractiveTurn` spine via the `kb-cleanup` SPAWN_AGENT_SPECS row
+  // above.
+  //
+  // Session-dir anchor: mirrors the KB-create hand-off's own anchor rule
+  // EXACTLY (cli/bridge-studio-kbs.ts ~:1189) — a project-bound KB anchors
+  // its cleanup session under its OWN real, discovered project
+  // (`binding.ref`); every OTHER binding kind (flow/band/unique) has no
+  // natural project home, so it anchors under the dot-prefixed KB-seeding
+  // anchor (`KB_SEEDING_ANCHOR_PREFIX + id`) instead — the SAME carve-out
+  // that keeps `discoverProjects` from surfacing a phantom `projects/<id>/`
+  // for a non-project KB (the MAJOR-2 defect that hand-off's own R1-06 WI-2
+  // fix guards against).
+  //
+  // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
+  // here (unlike authoring/start): `guardedWriteSessionStatus`
+  // (orchestrator/interactive-session.ts) already realpath-guards the whole
+  // `[sessionProject, '_kb-cleanup', sessionId, 'status.json']` path AND
+  // creates the session dir (`mkdirSync(dirname(p), {recursive:true})`) as
+  // part of the SAME guarded write — a project (or a fresh `.kb-<id>`
+  // anchor) need not pre-exist, mirroring the KB-create hand-off's own
+  // session write exactly.
+  const kbCleanupStartMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/);
+  if (method === 'POST' && kbCleanupStartMatch) {
+    try {
+      const kbId = decodeURIComponent(kbCleanupStartMatch[1]);
+      if (!SLUG_RE.test(kbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+      const kb = loadKbDescriptors(ctx.forgeRoot).find((k) => k.id === kbId);
+      if (!kb) {
+        sendJson(res, 404, { error: `unknown kb: ${kbId}` }, origin);
+        return true;
+      }
+
+      const sessionProject = kb.binding.kind === 'project' ? kb.binding.ref : `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
+      const sessionId = newArchitectSessionId();
+
+      // A LIVE, KB-scoped brain-lint pass — the honest per-KB scoping
+      // buildKbHealth uses (cli/bridge-studio-kbs.ts's
+      // computeAgentCleanupFindings), never a fabricated/hardcoded []. This
+      // IS the turn input the agent reads as read-only context
+      // (orchestrator/interactive-runner.ts's `buildTurnPrompt` inlines the
+      // whole status object) — it is NOT the cleanup-plan artifact's source
+      // of truth: the artifact re-derives live from a FRESH scan at read
+      // time (derive-don't-store, orchestrator/studio/session-transcript.ts's
+      // `deriveCleanupPlan`). Never "optimise" the renderer into reading
+      // this stored copy back — a resolved finding after this snapshot
+      // would then never show as cleared.
+      const findings = computeAgentCleanupFindings(ctx.forgeRoot, kbId);
+
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const written = guardedWriteSessionStatus(
+        projectsRoot,
+        [sessionProject, '_kb-cleanup', sessionId],
+        {
+          session_id: sessionId,
+          project: sessionProject,
+          phase: 'drafting',
+          kb_id: kbId,
+          kb_binding: kb.binding,
+          findings,
+        },
+      );
+      if (written === null) {
+        sendJson(res, 500, { error: `kb-cleanup start: hand-off session status.json for kb "${kbId}" failed containment` }, origin);
+        return true;
+      }
+
+      spawnAgentTurn(ctx.forgeRoot, 'kb-cleanup', sessionProject, sessionId);
+      sendJson(
+        res, 200,
+        { ok: true, sessionId, project: sessionProject, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/kbs/:id/cleanup/start', sessionId) },
+        origin,
+      );
+    } catch (err) {
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
+    }
+    return true;
+  }
+
+  // POST /api/studio/kbs/:id/cleanup/apply {project, sessionId} — R4-19-F2,
+  // the kb-cleanup session's approval-gated apply route. The gate itself
+  // (`awaiting-approval` carries no `next` in the turnSpec table,
+  // studio/session-kinds.yaml) means the ORDINARY turn-dispatch path can
+  // never write `phase: 'applied'` — this route is the ONLY writer, and it
+  // enforces the SAME gate independently by checking `phase ===
+  // 'awaiting-approval'` itself before doing anything real-acting (409
+  // otherwise — belt-and-suspenders on top of the turn spine's own refusal,
+  // never trusting a single enforcement point for an approval boundary).
+  //
+  // SECURITY INVARIANT (do not regress — AT-13): the KB to drain is read
+  // from the session's OWN recorded `kb_id` (status.json), never the URL's
+  // `:id` segment — the session is the authoritative record of which KB its
+  // approved plan is for; trusting the URL instead would let a caller with
+  // a legitimate {project, sessionId} point the drain at an unrelated KB by
+  // varying the path alone. The `:id` == `status.kb_id` equality check
+  // below (DEFECT B) makes the two identical by construction from this
+  // point on — that does NOT make it safe to swap the drain's source to
+  // `:id`; see the comment at the actual drain call site.
+  const kbCleanupApplyMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/apply$/);
+  if (method === 'POST' && kbCleanupApplyMatch) {
+    try {
+      // DEFECT B (adversarial-review fix): the URL's ":id" was parsed and
+      // never referenced anywhere in this handler — ANY value, including a
+      // bogus or traversal-shaped one, reached the session lookup below and
+      // silently 200'd. Validated FIRST — a cheap format check (SLUG_RE, no
+      // I/O), before the request body is even read — mirroring the sibling
+      // /cleanup/start route's own first check, ~40 lines above.
+      const urlKbId = decodeURIComponent(kbCleanupApplyMatch[1]);
+      if (!SLUG_RE.test(urlKbId)) {
+        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+        return true;
+      }
+
+      const body = (await readJson(req)) as { project?: unknown; sessionId?: unknown };
+      if (typeof body.project !== 'string' || typeof body.sessionId !== 'string') {
+        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
+        return true;
+      }
+      // DEFECT B: `project`/`sessionId` gain the SAME charset+length
+      // validation cli/bridge-studio-sessions.ts's stated convention
+      // applies to its own session-shell route — BOTH checked before any fs
+      // call. Reused verbatim (not re-implemented) via that file's own
+      // exported helpers, so the KB-seeding dot-anchor carve-out
+      // (`.kb-<id>` project values — every non-project-bound kb-cleanup
+      // session in this file anchors under one) stays defined in exactly
+      // one place.
+      const projectReason = invalidProjectReason(body.project);
+      if (projectReason !== null) {
+        sendJson(res, 400, { error: projectReason }, origin);
+        return true;
+      }
+      const sessionIdReason = invalidSessionIdReason(body.sessionId);
+      if (sessionIdReason !== null) {
+        sendJson(res, 400, { error: sessionIdReason }, origin);
+        return true;
+      }
+      const { project, sessionId } = body;
+
+      const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
+      const dirSegs = [project, '_kb-cleanup', sessionId];
+      const status = guardedReadSessionStatus<{ phase?: unknown; kb_id?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
+      if (!status || typeof status.phase !== 'string') {
+        sendJson(res, 404, { error: 'session not found', sessionId, project }, origin);
+        return true;
+      }
+      if (typeof status.kb_id !== 'string') {
+        sendJson(res, 500, { error: `kb-cleanup apply: session "${sessionId}" status.json has no string "kb_id"` }, origin);
+        return true;
+      }
+      // DEFECT B: the URL's ":id" must name the SAME kb this session
+      // actually belongs to. A well-formed but MISMATCHED id is a 404 — no
+      // (kbId, project, sessionId) triple names this pairing — never a
+      // silent drain of whichever kb the session happens to carry. Checked
+      // BEFORE the phase gate below: 409 is reserved for a
+      // CORRECTLY-identified resource in the wrong state, which this
+      // request is not yet proven to be.
+      if (urlKbId !== status.kb_id) {
+        sendJson(res, 404, { error: `session "${sessionId}" does not belong to kb "${urlKbId}"`, sessionId, project }, origin);
+        return true;
+      }
+      if (status.phase !== 'awaiting-approval') {
+        sendJson(res, 409, { error: `session "${sessionId}" is not awaiting-approval (current phase: "${status.phase}")` }, origin);
+        return true;
+      }
+      // The drain's SOLE source of truth is `status.kb_id`, never `urlKbId`
+      // — see the SECURITY INVARIANT comment at this route's own header.
+      // The equality check just above makes the two values identical by
+      // construction from here on, which is exactly why a reviewer cannot
+      // observe a swap to `urlKbId` from outside (AT-13) — do not make one.
+      const kbId = status.kb_id;
+
+      // Runs the KB's existing local consolidate drain — the SAME
+      // deterministic in-process repair path `POST /api/studio/kbs/:id/
+      // maintenance (op=consolidate)` already dispatches
+      // (cli/bridge-studio-kbs.ts's `runBrainConsolidateNow`). That helper
+      // ALREADY self-suppresses its own agent-tier spawn under dry-bridge
+      // (`const noSpawn = FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge()`,
+      // cli/bridge-studio-kbs.ts:502) — running deterministic fixes only —
+      // so this route needs no dry-bridge guard of its own (see
+      // cli/dry-bridge.ts's `exempt-local` row for this route).
+      //
+      // DEFECT A fix: routed through `enqueueConsolidate` — the SAME
+      // per-kbId serialization queue the sibling maintenance op=consolidate
+      // route uses — instead of calling `runBrainConsolidateNow` directly.
+      // That function's own doc comment requires this: "Always invoked via
+      // enqueueConsolidate (never directly)". Without it, two applies (or
+      // an apply racing the Consolidate button) against the same kbId could
+      // race-edit the same on-disk category-index file. Awaited (unlike the
+      // maintenance route's fire-and-forget dispatch) so this route can
+      // still write `phase: 'applied'` and respond only once the QUEUED run
+      // has actually finished, not merely been enqueued.
+      const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
+      await enqueueConsolidate(kbId, () => runBrainConsolidateNow(ctx.forgeRoot, kbId, runId));
+
+      const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
+      if (written === null) {
+        sendJson(res, 500, { error: `kb-cleanup apply: status.json write for session "${sessionId}" failed containment` }, origin);
+        return true;
+      }
+
+      sendJson(res, 200, { ok: true, runId }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

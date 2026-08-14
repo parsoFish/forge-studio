@@ -120,6 +120,14 @@
       "inComposableRoster": true
     },
     {
+      "slug": "brain-maintenance",
+      "band": null,
+      "canonicalSlug": null,
+      "loopStrategy": null,
+      "dispatchPath": "generic",
+      "inComposableRoster": false
+    },
+    {
       "slug": "contract-check",
       "band": "onboard-preflight",
       "canonicalSlug": "contract-check",

@@ -928,6 +928,49 @@ inventory rather than one shared page-level contract:
   `[data-page="architect-new"][data-page-ready]` wrapping
   `[data-section="new-idea"][data-new-idea-ready]` — and now pushes into
   `/sessions/architect/<sid>`.
+  **R4-19-F2 — the kb-cleanup kind's `SessionCleanupPanel`**
+  (`components/studio/session/SessionCleanupPanel.tsx`), the brain-maintenance
+  session's live affordance — mirrors `SessionAuthoringPanel`'s shape (a
+  status block + one explicit operator commit act) rather than the
+  artifact-rendering pane's job; it works off the shell's own `cleanup-plan`
+  artifact plus the shell's `phase`. This is the THIRD layer
+  `brain/cycles/themes/new-session-kind-needs-ui-wiring.md` names — without
+  it the kind was backend- and view-complete yet had no control anywhere
+  that could ever call the apply route (R4-21's prior instance of the exact
+  same gap). Root: `[data-component="cleanup-panel"]`, status block
+  `[data-section="cleanup-status"][data-cleanup-panel-phase=<phase>]`. The
+  approve control is gated on the session's OWN phase AND a resolvable
+  `kbId` (R4-19-F2 WI-4c BLOCKER fix) — the apply route (`cli/ui-bridge.ts`'s
+  `kbCleanupApplyMatch` handler) 409s unless phase is EXACTLY
+  `"awaiting-approval"`, and separately 400s "invalid kb id" if the URL's
+  `:id` segment isn't a real KB slug — never on the artifact's own
+  `state`/`settled` (those describe the plan's content, not the session's
+  approval window): `[data-section="cleanup-approve"]` with
+  `[data-action="approve-cleanup-plan"]` renders ONLY while
+  `phase === "awaiting-approval"` AND `kbId !== undefined`; every other case
+  renders `[data-section="cleanup-not-approvable"]` instead — an explanatory
+  line (a dedicated "no resolvable KB id on record" reason when `kbId` is
+  `undefined`, distinct from the phase-mismatch/already-applied reasons),
+  never a disabled-but-clickable button that would still invite a 400/409.
+  `kbId` is forwarded from the session-shell read route's own `kbId` field
+  (`SessionShellPayload.kbId`, sourced from `status.kb_id`, present only
+  when the status genuinely carries one — see the read-contract entry
+  below). Approving calls `applyKbCleanup(kbId, {project, sessionId})` —
+  `kbId` is the URL's `:id` segment, `sessionId`/`project` are body-only;
+  because that route itself AWAITS the drain before responding 200, the fetch
+  resolving IS the terminal event — no separate poll-to-terminal loop is
+  needed (unlike `KbMaintenance`'s Consolidate). On success the panel settles
+  into `[data-section="cleanup-applied"]` and stamps
+  `[data-cleanup-apply-state="applied"]` on the panel root (mirrors
+  `KbMaintenance`'s own `[data-consolidate-state]` convention: a plain string
+  state set ONLY once the async act has genuinely finished, present so a
+  journey can assert the settled terminal instead of racing an async
+  display); a failure — including the 409 approval-gate refusal, passed
+  through verbatim — sets `[data-cleanup-apply-state="error"]` and renders
+  the server's own message, never swallowed. The launcher that starts this
+  session lives on `/knowledge` (see the KB maintenance panel entry, below)
+  — `[data-action="start-kb-cleanup"]`, POSTing
+  `POST /api/studio/kbs/:id/cleanup/start`.
 - **Session-shell read contract (R2-10-F1/F2, 2026-08-05) — the API side.**
   The three session routes above converge on one shared shell. Its data comes
   from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`
@@ -1067,6 +1110,40 @@ inventory rather than one shared page-level contract:
   `selectedStage` straight to the dispatcher as `activeStage`
   (`SessionArtifactPane`'s new optional prop) — every OTHER live kind treats
   it as a no-op (stage-UNAWARE by nature).
+- **Cleanup plan — the kb-cleanup session's artifact (R4-19-F2).** The
+  `kb-cleanup` session-kind descriptor (`studio/session-kinds.yaml`, `agent:
+  brain-maintenance`, `stages: [brain]`) declares a **live-from-birth**
+  artifact kind `cleanup-plan` (`orchestrator/studio/session-kinds.ts`'s
+  `id: 'cleanup-plan', status: 'live'` — never reserved, unlike
+  generation-gallery/contract-buildout/file-package's reserved→live
+  histories above). A brain-maintenance agent drafts `plan/cleanup-plan.md`
+  (`skills/brain-maintenance/SKILL.md`'s mandated
+  `- [<kind>] <target> — <proposal>` line format) against one KB's agent-tier
+  brain-lint findings, then stops for operator approval; a separate route
+  (`POST /api/studio/kbs/:id/cleanup/apply`) drains the approved plan. Each
+  parsed action's `state` — `open` | `cleared` | `unknown` — is DERIVED fresh
+  on every read by joining the plan against a LIVE brain-lint scan
+  (`session-transcript.ts`'s `deriveCleanupPlan`), never stored. **The three
+  states are load-bearing**: a real run once reported every action `cleared`
+  while nothing had been repaired, because absence of a finding was wrongly
+  treated as proof of repair — `unknown` is the fail-safe default whenever
+  coverage cannot be established, so the UI can never again imply a repair
+  landed when it wasn't verified. Contract:
+  `[data-component="cleanup-plan"][data-cleanup-plan-state="no-plan"|"unparsed-plan"|"has-actions"]`
+  (mirrors `markdown-draft`'s own three-state idiom — "not drafted yet" vs
+  "drafted but the parser found no action lines" vs "at least one row"; a
+  drafted-but-unparseable plan still renders its raw text, never an
+  empty/"nothing here" pane) and
+  `[data-cleanup-plan-settled="true"|"false"]` (true iff every action is
+  `cleared` AND at least one action exists — **never**
+  `openFindingCount === 0`: a plan with a lone `unknown` row and zero `open`
+  rows is unverified, not settled, per `cleanupPlanView`'s own AT-127 pin).
+  Per action row: `[data-cleanup-action-state="open"|"cleared"|"unknown"]`,
+  rendered with a distinct colour (red/green/amber), a distinct left-border
+  stripe, and a spelled-out label — never colour alone — so the three states
+  read as visually distinct, not merely attribute-distinct.
+  `openFindingCount` is the server's number, surfaced verbatim, never
+  recounted client-side (mirrors `brain-structure`'s `themeCount`).
 - **`/knowledge` + `/knowledge/new`** — the knowledge-graph browser and the
   band-scoped, agent-seeded create + maintain surface (R1-01's binding
   contract, extended by R1-06 WI-2/WI-3, R4-19 WI-1/WI-2 and R6-08 WI-1/WI-2/
@@ -1074,7 +1151,8 @@ inventory rather than one shared page-level contract:
   `knowledge-graph`, `knowledge-pin-guidance`, `knowledge-create-kb`,
   `knowledge-ingest`, `knowledge-lint-index`, `knowledge-create-kb-band-scope`,
   `knowledge-create-kb-band-scope-seed`, `knowledge-create-kb-band-scope-commit`,
-  `knowledge-kb-maintain-session`, `knowledge-explore-tabs`).
+  `knowledge-kb-maintain-session`, `knowledge-kb-cleanup-launch`,
+  `knowledge-kb-cleanup-approve`, `knowledge-explore-tabs`).
   - **Tabs (R6-08 WI-3, RULING 5 — URL-synced via `?tab=`):**
     `[data-tab="explore"|"health"|"ingest-activity"][data-tab-active="true"|"false"]`,
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable
@@ -1180,9 +1258,10 @@ inventory rather than one shared page-level contract:
       as a real agent run. Docs/roadmap pointer:
       `docs/roadmaps/R1-contract-componentry.md` R1-06-F2,
       `docs/roadmaps/R4-ootb-suite.md` R4-19. `kb-maintain`'s SEPARATE
-      multi-turn "maintenance agent" narration gap (R4-19-F2) is untouched by
-      this — Consolidate's real shipped shape stays a direct dispatch-and-
-      poll, not a chat session.
+      multi-turn "maintenance agent" narration has since shipped for real, as
+      its own session kind — `kb-cleanup` (see "KB maintenance panel" below
+      and "Cleanup plan" above) — never folded into Consolidate itself, which
+      stays a direct dispatch-and-poll, not a chat session.
   - **KB maintenance panel:**
     `[data-component="kb-maintenance"]`, with `[data-consolidate-state]` on
     that same root once a consolidate run reaches a terminal (`'cleared'` |
@@ -1191,8 +1270,20 @@ inventory rather than one shared page-level contract:
     `[data-action="kb-lint"]` (deterministic `forge brain lint`, scoped to
     the KB's own dir), `[data-action="kb-index"]` (index refresh),
     **`[data-action="kb-maintain-session"]` (R1-06 WI-3 — dispatches
-    `op=consolidate`)**, `[data-action="kb-delete"]` (guarded: `cycles` and
-    `forge-dev` are server-refused, 403). Consolidate is genuinely
+    `op=consolidate`)**, **`[data-action="start-kb-cleanup"]` (R4-19-F2 — the
+    kb-cleanup LAUNCHER, closing the reachability gap
+    `brain/cycles/themes/new-session-kind-needs-ui-wiring.md` documents)**,
+    `[data-action="kb-delete"]` (guarded: `cycles` and
+    `forge-dev` are server-refused, 403). `start-kb-cleanup` calls
+    `startKbCleanup(kbId)` (`POST /api/studio/kbs/:id/cleanup/start`) and, on
+    success, navigates to `/sessions/kb-cleanup/<sessionId>?project=<p>`
+    using the **`project` the route itself returns**, never one re-derived
+    from `kbId` — a non-project-bound KB anchors its session under a
+    server-minted `.kb-<id>` scratch project
+    (`KB_SEEDING_ANCHOR_PREFIX`, `cli/ui-bridge.ts`), so building the URL
+    from `kbId` instead would 404 for every such KB. A failure surfaces
+    verbatim in the SAME `[data-component="kb-maintenance-result"]` span the
+    other three ops already use, never swallowed. Consolidate is genuinely
     asynchronous — `forge-ui/lib/kb-consolidate.ts`'s `runConsolidateToTerminal`
     dispatches, reads the returned `runId`, and polls
     `getAgentFixStatus` (bounded, 40 × 250ms) to a real terminal before the
@@ -1226,11 +1317,12 @@ inventory rather than one shared page-level contract:
     - **Per-check itemization (R6-08 WI-1, honesty invariant "4on"):**
       `checks: KbHealthCheck[]` renders one row per named check —
       `[data-check=<name>][data-check-status="pass"|"warn"|"fail"|"unknown"|"n/a"][data-check-count]`
-      (`errorCount+flagCount`) — for the 10 checks in `CHECK_NAMES`
+      (`errorCount+flagCount`) — for the 12 checks in `CHECK_NAMES`
       (`cli/brain-lint.ts`, in order): `checkFrontmatter`, `checkIndexSync`,
       `checkSourceLinks`, `checkStaleness`, `checkOrphans`,
       `checkProjectBrainIndexes`, `checkLengthSoftCap`, `checkContradictions`,
-      `checkCategoryScope`, `checkReflectorLoss`. **`status:'pass'` means the
+      `checkCategoryScope`, `checkReflectorLoss`, `checkDanglingEdges`,
+      `checkDuplicateThemes` (the last two added by R4-19-F2). **`status:'pass'` means the
       check genuinely ran over THIS KB's own content and found nothing** —
       never a silent pass for a check that never looked (the
       declared-data-fails-open bug class 4on fixed). A check is real
@@ -1238,7 +1330,8 @@ inventory rather than one shared page-level contract:
       this KB's exact dir (`forge-themes` ⇒ `brain/cycles`/`brain/forge-dev`
       only; `project-indexes` ⇒ a direct `brain/projects/<id>` child) or
       (b) it's one of `LINT_THEME_FILE_CHECKS` (`checkFrontmatter`/
-      `checkSourceLinks`/`checkIndexSync`) and this KB's own theme files are
+      `checkSourceLinks`/`checkIndexSync`/`checkDanglingEdges`/
+      `checkDuplicateThemes`) and this KB's own theme files are
       scanned directly (`lintThemeFiles`, covers ANY kb kind — including
       project/band KBs the shared full-scope scan never walks). Everything
       else reports the honest `'n/a'` — `checkReflectorLoss` (a `global`

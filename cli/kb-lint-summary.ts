@@ -118,7 +118,7 @@ const KB_OWN_THEME_INDEX_FILES = new Set([
  * file's `guardKbTail` convention) so the leaf re-enters as a `segments[]`
  * element and is identity-checked, never folded into the guard's `root`.
  */
-function listOwnThemeFiles(brainDir: string): string[] {
+export function listOwnThemeFiles(brainDir: string): string[] {
   const names = guardedReadDir(dirname(brainDir), [basename(brainDir), 'themes']);
   if (!names) return [];
   return names
@@ -139,7 +139,7 @@ function findingIdentity(f: Finding): string {
 
 /** Union two finding lists by `findingIdentity`, preserving `a`'s findings
  *  first then any of `b`'s not already present. */
-function unionFindings(a: readonly Finding[], b: readonly Finding[]): Finding[] {
+export function unionFindings(a: readonly Finding[], b: readonly Finding[]): Finding[] {
   const seen = new Map<string, Finding>();
   for (const f of a) seen.set(findingIdentity(f), f);
   for (const f of b) if (!seen.has(findingIdentity(f))) seen.set(findingIdentity(f), f);

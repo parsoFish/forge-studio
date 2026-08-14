@@ -510,3 +510,59 @@ test('fixture: a block-bodied method check (e.g. the CSRF gate shape) is not tra
   // no gate recognised -> ambiguous '*', not silently excluded as GET.
   assert.deepEqual(c.map((x) => [x.method, x.route]), [['*', '/api/thing']]);
 });
+
+// ===========================================================================
+// R4-19-F2 — the kb-cleanup session's two new real-acting routes. RED at
+// branch base: neither route exists in cli/ui-bridge.ts yet, so
+// BRIDGE_ROUTE_CLASSIFICATION carries no row for either — the automatic
+// direction-1/2 scans above cannot catch this gap on their own (a route that
+// doesn't exist yet has no derived dispatch candidate to compare against —
+// direction 1 is vacuously satisfied by "nothing to classify"). These two
+// tests assert the table DIRECTLY, so the classification rows are pinned
+// BEFORE the routes land — the UI journey runs with FORGE_DRY_BRIDGE=1, so a
+// route missing from this table breaks the journey gate (per the task
+// brief) — exactly the unclassified-route gap the 2026-07-16 incident
+// motivated this whole table to prevent.
+// ===========================================================================
+
+// Kills: an implementation that ships POST /api/studio/kbs/:id/cleanup/start
+// (which spawns a real agent turn via the generic runInteractiveTurn spine —
+// the SAME real-acting shape as /api/studio/authoring/start, the sibling row
+// immediately above this test's own home in dry-bridge.ts) without adding a
+// matching classification row — leaving it silently unclassified/unguarded
+// under FORGE_DRY_BRIDGE=1.
+test('R4-19-F2: BRIDGE_ROUTE_CLASSIFICATION has a stub-actions/spawn-helper row for POST /api/studio/kbs/:id/cleanup/start (the kb-cleanup session kickoff — mirrors authoring/start\'s row exactly, both real-acting spawns riding the same generic spine)', () => {
+  const row = BRIDGE_ROUTE_CLASSIFICATION.find((r) => r.method === 'POST' && r.route === '/api/studio/kbs/:id/cleanup/start');
+  assert.ok(
+    row,
+    `expected a BRIDGE_ROUTE_CLASSIFICATION row for POST /api/studio/kbs/:id/cleanup/start — not present yet (this IS the RED this test pins). Known rows: ${BRIDGE_ROUTE_CLASSIFICATION.map((r) => `${r.method} ${r.route}`).join(', ')}`,
+  );
+  assert.equal(
+    row!.classification,
+    'stub-actions',
+    `expected classification "stub-actions" (mirrors /api/studio/authoring/start, which spawns via the same generic runInteractiveTurn spine), got "${row!.classification}"`,
+  );
+  assert.equal(row!.guard, 'spawn-helper', 'expected guard:"spawn-helper", mirroring the other turnSpec-spine spawn routes (authoring/start, onboarding/start)');
+});
+
+// Kills: an implementation that ships POST /api/studio/kbs/:id/cleanup/apply
+// (which drains approved findings into the brain — a real, brain-mutating
+// action) without adding ANY classification row for it — leaving a
+// brain-mutating route completely unclassified. This test deliberately does
+// NOT pin a specific classification value (the task brief leaves the exact
+// real-acting shape of "runs the existing consolidate drain" ambiguous
+// between exempt-local/stub-actions/refuse — see this WI's report) — it
+// pins only that the route is classified as SOMETHING, never silently
+// absent from the table.
+test('R4-19-F2: BRIDGE_ROUTE_CLASSIFICATION has a row for POST /api/studio/kbs/:id/cleanup/apply (drains the approved plan into the brain — a real, brain-mutating action that must never be silently unclassified)', () => {
+  const row = BRIDGE_ROUTE_CLASSIFICATION.find((r) => r.method === 'POST' && r.route === '/api/studio/kbs/:id/cleanup/apply');
+  assert.ok(
+    row,
+    `expected a BRIDGE_ROUTE_CLASSIFICATION row for POST /api/studio/kbs/:id/cleanup/apply — not present yet (this IS the RED this test pins). Known rows: ${BRIDGE_ROUTE_CLASSIFICATION.map((r) => `${r.method} ${r.route}`).join(', ')}`,
+  );
+  const validClassifications: RouteClassification['classification'][] = ['refuse', 'stub-actions', 'exempt-local', 'read-only'];
+  assert.ok(
+    validClassifications.includes(row!.classification),
+    `classification must be one of ${validClassifications.join('|')}, got "${row!.classification}"`,
+  );
+});

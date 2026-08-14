@@ -99,7 +99,7 @@
 
 import { readdirSync, readFileSync, realpathSync } from 'node:fs';
 import type { Dirent } from 'node:fs';
-import { join, sep } from 'node:path';
+import { isAbsolute, join, resolve, sep } from 'node:path';
 
 import { parseManifest } from '../manifest.ts';
 import { MAX_PACKAGE_BYTES, MAX_PACKAGE_FILES } from './skill-library.ts';
@@ -699,13 +699,252 @@ function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifa
   return { kind: 'file-package', label, files };
 }
 
+// ---------------------------------------------------------------------------
+// cleanup-plan (R4-19-F2) — brain-maintenance's KB-cleanup session.
+// DERIVE-DON'T-STORE (the binding contract, this repo's #1 defect class):
+// the session dir's `plan/cleanup-plan.md` supplies the agent's PROPOSED
+// ACTIONS only (kind/target/proposal per line, per skills/brain-maintenance/
+// SKILL.md's output contract). CURRENT truth is ALWAYS the caller-supplied
+// `cleanupFindings` — a live, KB-scoped brain-lint run the caller
+// (cli/bridge-studio-sessions.ts, via cli/bridge-studio-kbs.ts's
+// `computeAgentCleanupFindings`) computes fresh on every call. Each action's
+// `state` is DERIVED at read time by joining the two on (kind, target) —
+// there is no stored per-action status field anywhere: not in the plan
+// file, not in status.json, not anywhere. Mirrors contract-buildout's D4
+// caller-supplied-input pattern exactly, just with a different field name
+// (`cleanupFindings`, ORCHESTRATOR RULING — mirrors `contractStages`).
+// ---------------------------------------------------------------------------
+
+const CLEANUP_PLAN_DIRNAME = 'plan';
+const CLEANUP_PLAN_FILENAME = 'cleanup-plan.md';
+
+/** The caller-supplied CURRENT-truth shape — a subset of cli/brain-lint.ts's
+ *  real `Finding` (post-`classify`) this module deliberately does NOT import
+ *  (mirrors `fixtureContractStages`'s own rationale: this module stays a
+ *  pure, fs-only derivation with no business importing the lint engine). Any
+ *  object carrying at least these two fields satisfies this structurally —
+ *  the caller may (and in production does) supply richer Finding objects. */
+export type CleanupFinding = { readonly kind: string; readonly file: string };
+
+/** R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — the scanned-domain signal.
+ *  Additive-optional on `deriveSessionArtifact`'s input (ADR-042
+ *  disclose-not-park), threaded through to `deriveCleanupPlan`, mirroring
+ *  how `contractStages` is already threaded. `forgeRoot` is the absolute
+ *  root a repo-relative plan `target` resolves against; `brainDir` is the
+ *  absolute directory the caller's `cleanupFindings` were ACTUALLY scanned
+ *  from (cli/bridge-studio-sessions.ts resolves this via `resolveKbBrainDir`
+ *  at the same call site that already computes `cleanupFindings`). Presence
+ *  of this field is what makes `'cleared'` derivable at all — see
+ *  `CleanupPlanAction.state`'s own doc for the full three-way contract. */
+export type CleanupScan = { readonly forgeRoot: string; readonly brainDir: string };
+
+export type CleanupPlanAction = {
+  readonly kind: string;
+  readonly target: string;
+  readonly proposal: string;
+  /** DERIVED per call, never stored (R4-19-F2 P1 fix — declared-data-fails-
+   *  open: a REAL live run showed a plan where every action already looked
+   *  'cleared' while both findings were provably still live, because an
+   *  absolute `Finding.file` was joined against a repo-relative plan
+   *  `target` with NO normalization, so nothing ever matched and "no match"
+   *  was silently read as 'cleared'). Computed fresh on EVERY call, by
+   *  precedence:
+   *    'open'    — a live finding matches the action (kind + normalized
+   *                target — see `findingMatchesAction`).
+   *    'cleared' — no match, AND the caller supplied `cleanupScan`, AND the
+   *                action's normalized target resolves INSIDE
+   *                `cleanupScan.brainDir` — absence is then real evidence:
+   *                the region was scanned and came back clean.
+   *    'unknown' — no match and coverage cannot be established: `cleanupScan`
+   *                was omitted, or the target resolves OUTSIDE `brainDir`.
+   *                The FAIL-SAFE default — never silently 'cleared'. */
+  readonly state: 'open' | 'cleared' | 'unknown';
+};
+
+export type CleanupPlanArtifact = {
+  readonly kind: 'cleanup-plan';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
+  /** The raw plan text, verbatim, whether or not any line parsed into an
+   *  action — null only when no plan file exists at all (or it escapes
+   *  sessionDir). Never null merely because zero lines parsed (AT-4): a
+   *  drafted-but-unparseable plan must never render as "no plan and no
+   *  actions" — that ambiguity is indistinguishable from "the agent hasn't
+   *  drafted yet" (AT-5), which this field exists to disambiguate. */
+  readonly plan: string | null;
+  // Mutable element array — see RoadmapDraftArtifact.rows for the identical
+  // rationale (the pinned AT idiom casts to a plain mutable-array shape).
+  readonly actions: CleanupPlanAction[];
+  /** The count of `actions` whose derived `state` is 'open' (ORCHESTRATOR
+   *  RULING) — never a separate count sourced from `cleanupFindings.length`
+   *  directly (a finding with no matching plan action would inflate that). */
+  readonly openFindingCount: number;
+};
+
+/** Matches skills/brain-maintenance/SKILL.md's mandated action-line format:
+ *  `- [<kind>] <theme-file-path> — <one-sentence proposal>`. Adversarial-
+ *  review hardening (the task brief): the SKILL.md shows the em-dash
+ *  separator only inside a code fence, and LLM prose frequently contains
+ *  dashes of its own — so FOUR separator variants are accepted: em dash
+ *  (—, U+2014), en dash (–, U+2013), " - ", and " -- ". A theme-file-path
+ *  never contains whitespace, so `(\S+)` captures exactly the target token
+ *  and the separator alternation is anchored immediately after it
+ *  (whitespace-bounded on both sides) — this is, by construction, the FIRST
+ *  separator occurrence after the target, so a proposal sentence containing
+ *  its own dash later on is captured intact by the trailing `(.*)$`, never
+ *  re-split. `--` is listed before the single `-` in the alternation so a
+ *  double-hyphen separator is tried whole first (defensive; regex
+ *  backtracking would reach the same result either order, since the two
+ *  literal sequences never share a starting position once the shared
+ *  boundary is a full `\s` character). */
+const ACTION_LINE_RE = /^-\s*\[([^\]]+)\]\s+(\S+)\s+(?:—|–|--|-)\s+(.*)$/;
+
+type ParsedCleanupAction = { readonly kind: string; readonly target: string; readonly proposal: string };
+
+/** Parses `plan/cleanup-plan.md`'s action lines only — a line that does not
+ *  match ACTION_LINE_RE is silently IGNORED for `actions[]` (the raw text
+ *  still surfaces verbatim in `plan`, per CleanupPlanArtifact.plan's own
+ *  doc). Prose sections (an intro, grouping headers, rationale) around the
+ *  mandated action lines are expected and welcome — SKILL.md explicitly
+ *  allows them. */
+function parseCleanupPlanActions(raw: string): ParsedCleanupAction[] {
+  const actions: ParsedCleanupAction[] = [];
+  for (const line of raw.split('\n')) {
+    const m = ACTION_LINE_RE.exec(line.trim());
+    if (!m) continue; // ignored for actions[] — the raw plan text still carries it
+    actions.push({ kind: m[1], target: m[2], proposal: m[3] });
+  }
+  return actions;
+}
+
+// ---------------------------------------------------------------------------
+// R4-19-F2 P1 fix -- path normalization + the cleared/unknown fail-safe
+// split. The live defect: a caller-supplied Finding.file is ABSOLUTE by
+// contract (cli/brain-lint.ts:54), but the agent's plan writes a
+// REPO-RELATIVE target (skills/brain-maintenance/SKILL.md's mandated
+// shape) -- comparing the two literally never matched anything, and "no
+// match" silently read as 'cleared'. These helpers normalize BOTH shapes
+// before comparing, and keep the brainDir containment check a REAL
+// resolved-path check (never prefix string math -- see isPathInside's own
+// doc for why).
+// ---------------------------------------------------------------------------
+
+/** Strips a single leading "./" -- the only prefix form SKILL.md's real
+ *  agent output (and this repo's own live-captured fixture) is known to
+ *  produce. Nothing fancier is normalized here (no repeated "./", no
+ *  embedded "./" mid-path) -- matching the three normalization directions
+ *  the task brief names by name: repo-relative, "./"-prefixed, and
+ *  already-absolute. */
+function stripLeadingDotSlash(target: string): string {
+  return target.startsWith('./') ? target.slice(2) : target;
+}
+
+/** Whether a caller-supplied finding is evidence FOR one parsed plan
+ *  action. Matches on kind AND normalized target (the P1 fix -- see this
+ *  section's header). Two join shapes cover every real Finding.file shape
+ *  this repo produces (absolute) AND every plan-target shape the agent can
+ *  write (repo-relative, "./"-prefixed, or already-absolute), with no
+ *  forgeRoot required to establish a MATCH (only the cleared/unknown split
+ *  below needs one):
+ *    - exact string equality -- handles an already-absolute target against
+ *      an absolute finding.file 1:1 (NORM-2), and also a hand-fixtured
+ *      test finding whose .file happens to be repo-relative itself
+ *      (AT-1/AT-3).
+ *    - a path-separator-BOUNDED suffix match -- handles a repo-relative
+ *      target naming the tail of an absolute finding.file (the
+ *      real-capture shape, NORM-1/NORM-3/REGRESSION-LOCK). Bounded by sep
+ *      so a target of "themes/foo.md" can never falsely match a finding
+ *      whose path merely ends in "...other-themes/foo.md". */
+function findingMatchesAction(finding: CleanupFinding, kind: string, target: string): boolean {
+  if (finding.kind !== kind) return false;
+  const normalized = stripLeadingDotSlash(target);
+  return finding.file === normalized || finding.file.endsWith(sep + normalized);
+}
+
+/** Resolves a plan target to an absolute path against forgeRoot,
+ *  collapsing any "." / ".." segments via `resolve` -- this is what lets
+ *  the brainDir containment check (isPathInside, below) defeat a LEXICAL
+ *  ".."-escape (SCAN-6 shape 1): the escape is collapsed away here, before
+ *  containment is ever checked. An already-absolute target is resolved
+ *  AS-IS, never re-rooted under forgeRoot -- the explicit isAbsolute
+ *  branch keeps the intent legible rather than relying on `resolve`'s own
+ *  "rightmost absolute argument wins" semantics (mirrors NORM-2's own
+ *  regression note against a naive unconditional join). */
+function resolveTargetAbsolute(target: string, forgeRoot: string): string {
+  const normalized = stripLeadingDotSlash(target);
+  return isAbsolute(normalized) ? resolve(normalized) : resolve(forgeRoot, normalized);
+}
+
+/** Real containment, not string math (SCAN-6 -- this repo's recurring
+ *  escape shape per the adversarial-containment-review skill). A
+ *  trailing-separator-aware identity/prefix check performed AFTER lexical
+ *  resolution (resolveTargetAbsolute already collapsed any ".." above) --
+ *  that combination is what defeats BOTH of SCAN-6's escape shapes:
+ *    - a ".."-escaping target (<brainDir>/../elsewhere/x.md): resolves to
+ *      a path OUTSIDE brainDir before this function ever runs, so the raw
+ *      escaping string is never even compared.
+ *    - a "<brainDir>-sibling/" prefix collision: a bare
+ *      childAbs.startsWith(parentAbs) would wrongly match -- "...forge-dev-
+ *      sibling" textually starts with "...forge-dev" -- so the parent's
+ *      OWN trailing separator is required before comparing, mirroring this
+ *      module's own safeReadFileInSession containment idiom exactly. */
+function isPathInside(childAbs: string, parentAbs: string): boolean {
+  const resolvedParent = resolve(parentAbs);
+  const boundary = resolvedParent.endsWith(sep) ? resolvedParent : resolvedParent + sep;
+  return childAbs === resolvedParent || childAbs.startsWith(boundary);
+}
+
+/** Derives one action's `state` -- see CleanupPlanAction.state's own doc
+ *  for the full three-way contract. Precedence is load-bearing: a genuine
+ *  match ALWAYS wins over the cleared/unknown derivation (SCAN-5 --
+ *  checking brainDir containment before checking for a match would invert
+ *  this). */
+function deriveActionState(
+  kind: string,
+  target: string,
+  cleanupFindings: readonly CleanupFinding[],
+  cleanupScan: CleanupScan | undefined,
+): CleanupPlanAction['state'] {
+  if (cleanupFindings.some((f) => findingMatchesAction(f, kind, target))) return 'open';
+  if (cleanupScan === undefined) return 'unknown'; // no scanned-domain evidence at all -- fail safe
+  const absoluteTarget = resolveTargetAbsolute(target, cleanupScan.forgeRoot);
+  return isPathInside(absoluteTarget, cleanupScan.brainDir) ? 'cleared' : 'unknown';
+}
+
+/** `plan/cleanup-plan.md` — read through the SAME realpath-containment
+ *  choke point (`safeReadFileInSession`) every other single-file derivation
+ *  in this module goes through, so a `plan/` directory that is itself a
+ *  symlink escaping `sessionDir` contributes NO file (collapsed to the same
+ *  "no plan file at all" outcome `safeReadFileInSession` already gives every
+ *  other escaping read — AT-6). `cleanupFindings` supplies CURRENT truth;
+ *  `state` is derived fresh on every call (see this section's own header). */
+function deriveCleanupPlan(
+  sessionDir: string,
+  label: string,
+  cleanupFindings: readonly CleanupFinding[],
+  cleanupScan: CleanupScan | undefined,
+): CleanupPlanArtifact {
+  const raw = safeReadFileInSession(sessionDir, join(CLEANUP_PLAN_DIRNAME, CLEANUP_PLAN_FILENAME));
+  if (raw === null) {
+    return { kind: 'cleanup-plan', label, plan: null, actions: [], openFindingCount: 0 };
+  }
+  const actions: CleanupPlanAction[] = parseCleanupPlanActions(raw).map((a) => ({
+    ...a,
+    state: deriveActionState(a.kind, a.target, cleanupFindings, cleanupScan),
+  }));
+  const openFindingCount = actions.filter((a) => a.state === 'open').length;
+  return { kind: 'cleanup-plan', label, plan: raw, actions, openFindingCount };
+}
+
 export type SessionArtifactPayload =
   | RoadmapDraftArtifact
   | MarkdownDraftArtifact
   | BrainStructureArtifact
   | GenerationGalleryArtifact
   | ContractBuildoutArtifact
-  | FilePackageArtifact;
+  | FilePackageArtifact
+  | CleanupPlanArtifact;
 
 function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
@@ -868,8 +1107,18 @@ export function deriveSessionArtifact(input: {
   /** R4-17 — only consumed by the 'contract-buildout' kind; see that case
    *  below and the module-header note on D4. Ignored for every other kind. */
   contractStages?: ContractStageRow[];
+  /** R4-19-F2 — only consumed by the 'cleanup-plan' kind; see that case
+   *  below and the cleanup-plan section's own header note (derive-don't-
+   *  store). Ignored for every other kind. */
+  cleanupFindings?: readonly CleanupFinding[];
+  /** R4-19-F2 fail-safe fix (ORCHESTRATOR RULING) — additive-optional
+   *  (ADR-042 disclose-not-park), only consumed by the 'cleanup-plan' kind.
+   *  See CleanupScan's own doc for the full contract this unlocks. Omitted
+   *  entirely ⇒ every unmatched action derives 'unknown', never 'cleared' —
+   *  the fail-safe default. Ignored for every other kind. */
+  cleanupScan?: CleanupScan;
 }): SessionArtifactPayload {
-  const { descriptor, sessionDir, contractStages } = input;
+  const { descriptor, sessionDir, contractStages, cleanupFindings, cleanupScan } = input;
   const kind = descriptor.artifact.kind;
   const label = descriptor.artifact.label;
   const state = sessionArtifactKindState(kind);
@@ -907,6 +1156,19 @@ export function deriveSessionArtifact(input: {
         stages: contractStages,
         sourcesScanned: ['contractStages supplied by the caller (cli/contract-stages.ts) — this module performs no filesystem scanning for this kind (D4)'],
       };
+    }
+    case 'cleanup-plan': {
+      // DERIVE-DON'T-STORE: cleanupFindings is REQUIRED — a caller that
+      // omits it gets a NAMED throw, never a silent empty/defaulted
+      // artifact (mirrors the contract-buildout throw immediately above).
+      if (cleanupFindings === undefined) {
+        throw new Error(
+          'deriveSessionArtifact: artifact kind "cleanup-plan" requires cleanupFindings to be supplied by the caller ' +
+            '(cli/bridge-studio-sessions.ts derives them via a live, KB-scoped brain-lint scan, cli/bridge-studio-kbs.ts\'s ' +
+            'computeAgentCleanupFindings) — never defaults to an empty/silent artifact',
+        );
+      }
+      return deriveCleanupPlan(sessionDir, label, cleanupFindings, cleanupScan);
     }
     default: {
       // Exhaustiveness guard: state === 'live' but the kind matched none of

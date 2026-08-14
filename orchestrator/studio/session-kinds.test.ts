@@ -146,7 +146,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import yaml from 'js-yaml';
@@ -158,8 +158,21 @@ import {
   sessionArtifactKindState,
   loadSessionKinds,
   validateSessionKinds,
+  FINALIZER_IDS,
   type SessionKindDescriptor,
 } from './session-kinds.ts';
+// R4-19-F2 — the constraint test (ADR-043's whole point): a new interactive
+// session kind must ride the EXISTING generic runInteractiveTurn spine, never
+// a new AGENT_RUNNERS entry. Imported directly from the real production
+// registry (cli/agent-run.ts), not re-derived, so the assertion below is
+// against the actual dispatch table a "just add a fifth runner"
+// implementation would touch. `cli/` importing FROM `orchestrator/studio/` is
+// the established direction (this test file lives at
+// orchestrator/studio/session-kinds.test.ts and imports cli/agent-run.ts, the
+// mirror image of cli/agent-run.ts's own `import { loadSessionKinds } from
+// '../orchestrator/studio/session-kinds.ts'` at its top) — no cycle: this
+// TEST file is never itself imported by production code.
+import { AGENT_RUNNERS } from '../../cli/agent-run.ts';
 // The real Finding type (level/object/check/message) `validateSessionKinds`
 // actually returns — imported directly rather than hand-narrowed/cast so the
 // AT-R422-* assertions below typecheck against the SAME shape production
@@ -294,9 +307,14 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
   });
 
-  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 6 live + 0 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer; R4-21: file-package flips reserved→live, the creation-agent authoring session\'s renderer)', () => {
+  it('AT-2: SESSION_ARTIFACT_KINDS carries exactly 7 live + 0 reserved rows, in order, frozen (R4-16: generation-gallery flips reserved→live; R4-17: contract-buildout flips reserved→live, deriveContractBuildout wires the onboarding session\'s renderer; R4-21: file-package flips reserved→live, the creation-agent authoring session\'s renderer; R4-19-F2: cleanup-plan lands as a brand-new LIVE row, the brain-maintenance kb-cleanup session\'s renderer)', () => {
     const ids = SESSION_ARTIFACT_KINDS.map((k) => k.id);
-    assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
+    // R4-19-F2 (this edit): cleanup-plan is a NEW row (not a reserved→live
+    // flip like its predecessors) — asserted as a SET, not a bare count, so
+    // an implementation that lands a 7th row under the wrong id, or in the
+    // wrong declared position, is still caught (a count alone cannot
+    // distinguish "cleanup-plan appended last" from "some other row added").
+    assert.deepEqual(ids, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery', 'cleanup-plan']);
     const live = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'live').map((k) => k.id);
     const reserved = SESSION_ARTIFACT_KINDS.filter((k) => k.status === 'reserved').map((k) => k.id);
     // R4-17: contract-buildout now has a real renderer (the onboarding
@@ -315,8 +333,16 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
     // session's renderer but forgets to promote the row, leaving the
     // authoring descriptor a permanent lint error per validateSessionKinds's
     // reserved-artifact-kind check).
-    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery']);
-    assert.deepEqual(reserved, [], 'R4-21 empties the reserved set entirely — file-package was the last row');
+    // R4-19-F2 (stale-count fix — this edit): with the reserved set already
+    // empty (R4-21 emptied it), cleanup-plan cannot be a reserved→live flip;
+    // it lands as a brand-new row, appended last, straight to 'live'. This
+    // grows the live set to 7 without ever re-opening the reserved set —
+    // kills an implementation that ships cleanup-plan as 'reserved' (the
+    // deriveSessionArtifact renderer already exists, so that would be a
+    // permanent lint error) or that inserts it anywhere but the declared
+    // last position.
+    assert.deepEqual(live, ['roadmap-draft', 'markdown-draft', 'brain-structure', 'file-package', 'contract-buildout', 'generation-gallery', 'cleanup-plan']);
+    assert.deepEqual(reserved, [], 'R4-21 empties the reserved set entirely — file-package was the last row; R4-19-F2\'s cleanup-plan never touches it (this edit)');
     assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS));
   });
 
@@ -566,9 +592,21 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
   });
 
-  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 6 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding"; R4-21 adds "authoring")', () => {
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 7 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding"; R4-21 adds "authoring"; R4-19-F2 adds "kb-cleanup")', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 6, `expected exactly 6 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding", R4-21 adds "authoring"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 7, `expected exactly 7 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding", R4-21 adds "authoring", R4-19-F2 adds "kb-cleanup"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    // R4-19-F2 (this edit): the length check alone cannot tell "kb-cleanup
+    // landed" apart from "some other 7th row landed under a wrong id" — this
+    // set-equality assertion pins the exact membership (order-independent;
+    // declaration order in the yaml is not this AT's concern, the individual
+    // per-descriptor checks below are) so a wrong-row-added regression is
+    // caught here, not silently passed through to the specific `byId` probes
+    // below (which would simply not find a bogus id and throw on `!`).
+    assert.deepEqual(
+      descs.map((d) => d.id).sort(),
+      ['architect', 'authoring', 'demo', 'instructions', 'kb-cleanup', 'onboarding', 'project-brain'].sort(),
+      `expected exactly this 7-id set, got: ${descs.map((d) => d.id).join(', ')}`,
+    );
 
     const architect = byId(descs, 'architect');
     assert.equal(architect.agent, 'architect');
@@ -1096,11 +1134,26 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
   // PRESERVED for every one of the 5 pre-existing kinds — this only adds the
   // POSITIVE half (a turnSpec-bearing real descriptor validates clean and
   // matches the ratified table) for the ONE kind D1 explicitly wires it onto.
-  it('AT-R422-5 (updated for R4-21 phase 2, WI-1, D1): ADDITIVE-OPTIONAL, proven against the REAL repo — 5 of the 6 real session kinds still carry no turnSpec at all (loadSessionKinds/validateSessionKinds(REPO_ROOT) behaves EXACTLY as before for them); "authoring" is the ONE declared exception and its turnSpec deep-equals ADR-043 §1\'s table exactly (kills an implementation that makes turnSpec required on every kind, that emits a finding merely for its absence on the OTHER 5, or that ships "authoring" with a turnSpec that drifts from the ratified table)', () => {
+  //
+  // UPDATED AGAIN (R4-19-F2, this edit): commit 9342825f landed "kb-cleanup"
+  // as ADR-043's SECOND turnSpec consumer (the commit message's own words:
+  // "ADR-043 consumer #2") — so the "authoring is the ONE declared
+  // exception" framing above is now stale on its own terms, same failure
+  // shape as the R4-21-phase-2 rebase note directly above it: descs.length
+  // is 7, not 6, and the turnSpec-less loop must also skip "kb-cleanup" or
+  // it fails on the very row this initiative adds. The additive-optionality
+  // guarantee itself is unweakened — it now has TWO declared exceptions
+  // instead of one, and the other 5 kinds are still asserted turnSpec-less
+  // exactly as before.
+  it('AT-R422-5 (updated for R4-19-F2): ADDITIVE-OPTIONAL, proven against the REAL repo — 5 of the 7 real session kinds still carry no turnSpec at all (loadSessionKinds/validateSessionKinds(REPO_ROOT) behaves EXACTLY as before for them); "authoring" and "kb-cleanup" are the TWO declared exceptions, each turnSpec deep-equaling its own ratified table exactly (kills an implementation that makes turnSpec required on every kind, that emits a finding merely for its absence on the OTHER 5, or that ships either exception with a turnSpec that drifts from its ratified table)', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 6, `expected exactly 6 real session kinds (R4-16 "demo", R4-17 "onboarding", R4-21 "authoring"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 7, `expected exactly 7 real session kinds (R4-16 "demo", R4-17 "onboarding", R4-21 "authoring", R4-19-F2 "kb-cleanup"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    // R4-19-F2 (this edit): "kb-cleanup" joins "authoring" as a turnSpec-
+    // bearing exception — excluded from the turnSpec-less loop below same as
+    // "authoring" always has been, so kb-cleanup's real turnSpec does not
+    // trip the negative-control assertion meant for the OTHER 5 kinds.
     for (const d of descs) {
-      if (d.id === 'authoring') continue;
+      if (d.id === 'authoring' || d.id === 'kb-cleanup') continue;
       assert.equal(
         (d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec,
         undefined,
@@ -1118,6 +1171,32 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
 
     const findings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:authoring');
     assert.deepEqual(findings, [], `expected zero turnspec-* findings for the real "authoring" descriptor, got: ${JSON.stringify(findings)}`);
+
+    // R4-19-F2 (this edit): the SECOND turnSpec consumer, kb-cleanup, gets
+    // the exact same positive-control treatment as authoring above — its own
+    // ratified table (drafting→awaiting-approval→applied, mirroring the
+    // literal shape pinned by this file's own "R4-19-F2 AT-1" below, kept as
+    // an independent literal here rather than a cross-describe-block import
+    // so this AT's assertion is not silently defeated by an unrelated edit
+    // to that other block's local fixture).
+    const kbCleanup = byId(descs, 'kb-cleanup');
+    assert.ok(kbCleanup.turnSpec, 'expected the real "kb-cleanup" descriptor to carry a turnSpec (R4-19-F2 — ADR-043 consumer #2)');
+    assert.deepEqual(
+      kbCleanup.turnSpec,
+      {
+        kindDir: '_kb-cleanup',
+        style: 'agent',
+        phases: [
+          { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
+          { phase: 'awaiting-approval', step: 'noop' },
+          { phase: 'applied', step: 'terminal' },
+        ],
+      },
+      `kb-cleanup's real turnSpec must deep-equal its ratified 3-phase table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applied, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
+    );
+
+    const kbCleanupFindings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:kb-cleanup');
+    assert.deepEqual(kbCleanupFindings, [], `expected zero turnspec-* findings for the real "kb-cleanup" descriptor, got: ${JSON.stringify(kbCleanupFindings)}`);
   });
 });
 
@@ -1418,5 +1497,148 @@ describe('loadSessionKinds — the six new graph-coherence checks are STRUCTURAL
         `expected validateSessionKinds to independently flag "${expected}" on the SAME evidence the loader carried through unmodified, got checks: ${[...checks].join(', ')}`,
       );
     }
+  });
+});
+
+// ===========================================================================
+// R4-19-F2 — the "kb-cleanup" session kind (ADR-043 §1/§2/§3, brain-
+// maintenance / cleanup-plan). RED at branch base: `studio/session-kinds.yaml`
+// carries no "kb-cleanup" row yet, and `SESSION_ARTIFACT_KINDS` carries no
+// "cleanup-plan" row yet. This block pins the DESCRIPTOR/REGISTRY half of the
+// feature only — the renderer lives in session-transcript.test.ts, the turn
+// spine in interactive-runner.test.ts, the routes in
+// cli/ui-bridge-kb-cleanup.test.ts, and dry-bridge coverage in
+// cli/dry-bridge-coverage.test.ts.
+// ===========================================================================
+
+describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup-plan)', () => {
+  // The exact ADR-043-shaped turnSpec table the task brief specifies
+  // verbatim. Binding note (deliberate, the approval gate this whole feature
+  // hinges on): "awaiting-approval" carries NO `next` — re-running the turn
+  // while a session sits there must never advance it.
+  const KB_CLEANUP_TURNSPEC = {
+    kindDir: '_kb-cleanup',
+    style: 'agent',
+    phases: [
+      { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
+      { phase: 'awaiting-approval', step: 'noop' },
+      { phase: 'applied', step: 'terminal' },
+    ],
+  };
+
+  // Kills: a "kb-cleanup" row that never lands in the real
+  // studio/session-kinds.yaml at all (RED today — this is the primary red);
+  // a row whose turnSpec drifts from the ADR-043-shaped table (e.g. a `next`
+  // added to awaiting-approval, which would silently defeat the approval
+  // gate item #11 below pins); a wrong kindDir/agent/artifact.
+  it('R4-19-F2 AT-1: loadSessionKinds(REPO_ROOT) returns a "kb-cleanup" descriptor with the exact agent/title/legacyRoutes/stages/defaultStage/artifact/turnSpec', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    const kbCleanup = descs.find((d) => d.id === 'kb-cleanup');
+    assert.ok(
+      kbCleanup,
+      'expected a "kb-cleanup" row in the real studio/session-kinds.yaml — not present yet (this IS the RED this test pins)',
+    );
+    assert.equal(kbCleanup!.agent, 'brain-maintenance');
+    assert.equal(kbCleanup!.title, 'KB cleanup session');
+    assert.deepEqual(kbCleanup!.legacyRoutes, []);
+    assert.deepEqual(kbCleanup!.stages, ['brain']);
+    assert.equal(kbCleanup!.defaultStage, 'brain');
+    assert.deepEqual(kbCleanup!.artifact, { kind: 'cleanup-plan', label: 'Cleanup plan' });
+    assert.deepEqual(
+      kbCleanup!.turnSpec,
+      KB_CLEANUP_TURNSPEC,
+      `kb-cleanup's turnSpec must deep-equal the ADR-043-shaped table exactly — in particular "awaiting-approval" must declare NO "next" key at all (that absence IS the approval gate); got: ${JSON.stringify(kbCleanup!.turnSpec)}`,
+    );
+  });
+
+  // Kills: a "kb-cleanup" row whose `agent:` does not resolve to a
+  // runtime-bearing SKILL.md (a typo, or brain-maintenance shipped without a
+  // `runtime:` block) — validateSessionKinds' unknown-agent check is the one
+  // place that would catch it. The positive control (asserting the
+  // descriptor genuinely exists) matters here: filtering findings down to
+  // `session-kind:kb-cleanup` would trivially yield `[]` if the row is
+  // simply ABSENT, which would make a bare "findings must be empty"
+  // assertion pass for the wrong reason.
+  it('R4-19-F2 AT-2: validateSessionKinds(REPO_ROOT) reports ZERO findings scoped to session-kind:kb-cleanup, and the descriptor genuinely exists (non-vacuous)', () => {
+    const descs = loadSessionKinds(REPO_ROOT);
+    assert.ok(
+      descs.some((d) => d.id === 'kb-cleanup'),
+      'positive control: the "kb-cleanup" descriptor must actually exist, or a zero-findings result below is vacuous (an absent row trivially has zero findings scoped to it)',
+    );
+    const findings = validateSessionKinds(REPO_ROOT).filter((f) => f.object === 'session-kind:kb-cleanup');
+    assert.deepEqual(findings, [], `expected zero findings for session-kind:kb-cleanup, got: ${JSON.stringify(findings)}`);
+  });
+
+  // Kills: shipping the 'cleanup-plan' artifact renderer without promoting
+  // its row in SESSION_ARTIFACT_KINDS (leaving kb-cleanup a permanent
+  // reserved-artifact-kind lint error, mirroring every prior reserved->live
+  // flip's own pin above); a row added as a plain mutable object instead of
+  // individually Object.freeze()'d (defeating the registry's whole
+  // deep-freeze discipline, per this file's own header note on
+  // SESSION_ARTIFACT_KINDS).
+  it('R4-19-F2 AT-3: SESSION_ARTIFACT_KINDS gains a frozen {id:"cleanup-plan", status:"live"} row, and sessionArtifactKindState("cleanup-plan") === "live" — a mutation attempt on the row must never take effect', () => {
+    const row = SESSION_ARTIFACT_KINDS.find((k) => k.id === 'cleanup-plan');
+    assert.ok(row, 'expected a "cleanup-plan" row in SESSION_ARTIFACT_KINDS — not present yet (this IS the RED this test pins)');
+    assert.equal(row!.status, 'live', 'cleanup-plan must ship live (a real renderer) — never reserved');
+    assert.ok(
+      Object.isFrozen(row),
+      'each row must be individually frozen — SESSION_ARTIFACT_KINDS.push(Object.freeze({...})) is not enough; the file header is explicit that Object.freeze is SHALLOW on the outer array alone',
+    );
+    assert.equal(sessionArtifactKindState('cleanup-plan'), 'live');
+    assert.ok(Object.isFrozen(SESSION_ARTIFACT_KINDS), 'the outer array must stay frozen');
+    // A mutation attempt on a genuinely-frozen row either throws (strict
+    // mode) or silently no-ops — either way the total lookup function's
+    // answer must be unaffected, proving the freeze is real, not merely
+    // present in name.
+    try {
+      (row as { status: string }).status = 'HACKED';
+    } catch {
+      /* a strict-mode TypeError is an equally valid proof of the freeze */
+    }
+    assert.equal(sessionArtifactKindState('cleanup-plan'), 'live', 'a row mutation attempt must never actually change what the total lookup function reports');
+  });
+});
+
+// ===========================================================================
+// R4-19-F2 — THE CONSTRAINT TEST. ADR-043's entire reason for existing: a new
+// interactive session kind is authored as turnSpec DATA riding the EXISTING
+// generic `runInteractiveTurn` spine — NEVER a new orchestrator runner, NEVER
+// a new `AGENT_RUNNERS` entry, NEVER a new `FINALIZER_IDS` row (kb-cleanup's
+// phase table — drafting(agent) -> awaiting-approval(noop) -> applied
+// (terminal) — has no `finalize` step at all, so it needs no finalizer).
+// Asserted against the REAL source files, not a fixture or a hand-built
+// registry snapshot — this is the test that kills a "just add a fifth
+// runner" implementation, the exact per-kind re-invention ADR-043 dissolves.
+//
+// Both checks below are ALREADY TRUE today (GREEN, not RED) — they are
+// regression ratchets pinning an invariant a correct kb-cleanup
+// implementation must never violate, not a not-yet-built capability like
+// AT-1..AT-3 above.
+// ===========================================================================
+
+describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup', () => {
+  it('AGENT_RUNNERS (cli/agent-run.ts) gains NO "kb-cleanup" key — the session rides the existing turnSpec dispatch fork in cmdAgentRun, not a new bespoke runner', () => {
+    assert.ok(
+      !Object.prototype.hasOwnProperty.call(AGENT_RUNNERS, 'kb-cleanup'),
+      `AGENT_RUNNERS must not gain a "kb-cleanup" entry — got keys: ${Object.keys(AGENT_RUNNERS).join(', ')}. A turnSpec-bearing descriptor is dispatched by cmdAgentRun's ADR-043 §3 fork BEFORE AGENT_RUNNERS is ever consulted (cli/agent-run.ts); adding a key here re-opens the exact per-runner cap park ADR-043 dissolved.`,
+    );
+    // Belt-and-suspenders grep on the real source TEXT (not just the
+    // imported object's own keys) — catches a "kb-cleanup" entry added under
+    // a shape the plain object-key check above might not observe (e.g. a
+    // computed-key assignment appended after the object literal).
+    const src = readFileSync(join(REPO_ROOT, 'cli', 'agent-run.ts'), 'utf8');
+    assert.doesNotMatch(
+      src,
+      /['"]kb-cleanup['"]\s*:/,
+      'the real cli/agent-run.ts source text must not declare a "kb-cleanup" key anywhere',
+    );
+  });
+
+  it('FINALIZER_IDS (orchestrator/studio/session-kinds.ts) gains no new row for kb-cleanup — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it', () => {
+    assert.deepEqual(
+      FINALIZER_IDS.map((f) => f.id),
+      ['copyStagingToLibrary'],
+      `FINALIZER_IDS must remain exactly the pre-existing single row — kb-cleanup's turnSpec (drafting -> awaiting-approval -> applied) declares no "finalize" step anywhere, so it needs no finalizer. Got: ${JSON.stringify(FINALIZER_IDS.map((f) => f.id))}`,
+    );
   });
 });

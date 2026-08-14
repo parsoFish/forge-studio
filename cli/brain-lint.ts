@@ -3,7 +3,7 @@
  *
  * CLI: `forge brain lint [--scope <s>] [--project <name>] [--file <path>] [--cycle <id>] [--fix]`
  *
- * Implements 9 checks (per `brain/LINT.md`):
+ * Implements 13 checks (per `brain/LINT.md`):
  *
  *   1. checkFrontmatter        — required fields + category whitelist
  *   2. checkIndexSync          — themes appear in their category index exactly once
@@ -14,6 +14,10 @@
  *   7. checkContradictions     — warn-only stretch: pattern+antipattern with overlapping keywords
  *   8. checkCleanupCandidates  — retention frontmatter triage (archived/stale themes)
  *   9. checkReflectorLoss      — advisory: `_queue/done/` initiatives missing a reflection archive
+ *  10. checkProjectBrainIndexes — project-brain (Brain 3) category-index sync
+ *  11. checkCategoryScope      — theme category routes to the brain sub-wiki it lives in
+ *  12. checkDanglingEdges      — `related_themes[]` entries that resolve to no theme file
+ *  13. checkDuplicateThemes    — near-duplicate theme pairs (title collision / keyword Jaccard)
  *
  * Each check is a pure function `(forgeRoot) => Finding[]`. The CLI aggregates,
  * prints a human-readable report, and exits non-zero iff ≥1 error.
@@ -82,10 +86,10 @@ export type RunBrainLintResult = {
 };
 
 /**
- * R6-08 4on (F3 hardening) — the single source of truth for the 10 full-scope
+ * R6-08 4on (F3 hardening) — the single source of truth for the 12 full-scope
  * checks. Declared as `[name, fn]` pairs rather than a bare name list so
  * `runBrainLint` (below) can ITERATE this array to run the checks instead of
- * separately hand-typing the same 10 calls — the shape that let `CHECK_NAMES`
+ * separately hand-typing the same 12 calls — the shape that let `CHECK_NAMES`
  * (adversarial-review MAJOR F3) drift from the checks `runBrainLint` actually
  * ran, with nothing forcing the two lists to match. `checkCleanupCandidates`
  * is deliberately EXCLUDED from this registry — it only ever contributes
@@ -106,10 +110,12 @@ const FULL_SCOPE_CHECKS: ReadonlyArray<readonly [name: string, fn: (cwd: string)
   ['checkContradictions', checkContradictions],
   ['checkCategoryScope', checkCategoryScope],
   ['checkReflectorLoss', checkReflectorLoss],
+  ['checkDanglingEdges', checkDanglingEdges],
+  ['checkDuplicateThemes', checkDuplicateThemes],
 ];
 
 /**
- * The 10 `check` names a `scope:'full'` run always contributes — DERIVED from
+ * The 12 `check` names a `scope:'full'` run always contributes — DERIVED from
  * `FULL_SCOPE_CHECKS` (never hand-duplicated) so the two can never drift
  * apart. Consumers that need to itemize per-check health (Studio's KB Health
  * tab, `cli/bridge-studio-kbs.ts`'s `buildKbHealth`) import this rather than
@@ -146,6 +152,8 @@ export const CHECK_SCOPE: Readonly<Record<string, CheckScope>> = {
   checkContradictions: 'forge-themes',
   checkCategoryScope: 'forge-themes',
   checkReflectorLoss: 'global',
+  checkDanglingEdges: 'forge-themes',
+  checkDuplicateThemes: 'forge-themes',
 };
 
 const ALLOWED_CATEGORIES = new Set([
@@ -905,6 +913,199 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
   return findings;
 }
 
+// ---------- checkDanglingEdges / checkDuplicateThemes (R4-19-F2) ----------
+
+/**
+ * Slug universe for dangling-edge resolution: the basenames (sans `.md`) of
+ * EVERY theme file anywhere under `brain/**\/themes/` — both forge sub-wikis
+ * (`cycles/`, `forge-dev/`) AND every project brain (`brain/projects/*\/themes/`).
+ * A `cycles` theme legitimately points at a `forge-dev` theme (and vice
+ * versa), so the universe must span both forge sub-wikis even though the
+ * SOURCE iteration for the full-scope check stays forge-only (see
+ * `checkDanglingEdges` below) — narrowing this to "the same sub-wiki" is
+ * exactly the naive shape a pinned test kills.
+ */
+function collectAllThemeSlugs(brainRoot: string): Set<string> {
+  const slugs = new Set<string>();
+  const addDir = (dir: string): void => {
+    if (!existsSync(dir)) return;
+    for (const entry of readdirSync(dir)) {
+      if (entry === 'README.md' || !entry.endsWith('.md')) continue;
+      slugs.add(basename(entry, '.md'));
+    }
+  };
+  for (const sub of THEME_SUBDIRS) {
+    addDir(join(brainRoot, sub, 'themes'));
+  }
+  const projectsRoot = join(brainRoot, 'projects');
+  if (existsSync(projectsRoot)) {
+    for (const name of readdirSync(projectsRoot)) {
+      if (name.startsWith('.')) continue; // skip `.staging-<id>-*` leftovers, same guard as checkProjectBrainIndexes
+      addDir(join(projectsRoot, name, 'themes'));
+    }
+  }
+  return slugs;
+}
+
+/**
+ * Pure core shared by `checkDanglingEdges` (full-scope, `readThemeFiles`
+ * domain) and `lintThemeFiles` (explicit per-KB file list) — ONE
+ * implementation of the rule, never two. `files` is the set of theme files to
+ * SCAN for dangling entries; `knownSlugs` is the (separately-scoped)
+ * universe an entry is checked against — always ALL brain theme basenames,
+ * regardless of which `files` are being scanned, because a KB's theme may
+ * legitimately reference a theme outside that KB.
+ */
+function danglingEdgeFindings(files: string[], knownSlugs: ReadonlySet<string>): Finding[] {
+  const findings: Finding[] = [];
+  for (const file of files) {
+    const parsed = parseTheme(file);
+    if (!parsed) continue;
+    const related = parsed.data.related_themes;
+    if (!Array.isArray(related)) continue; // tolerate missing/absent/non-array — many themes predate this field
+    for (const rawEntry of related) {
+      // Strip a trailing `.md` and surrounding whitespace before resolving.
+      const slug = String(rawEntry).trim().replace(/\.md$/, '').trim();
+      if (!slug) continue;
+      if (!knownSlugs.has(slug)) {
+        findings.push({
+          category: 'flag',
+          file,
+          message: `dangling related_themes entry: "${slug}" (no theme file found anywhere under brain/**/themes/)`,
+          check: 'checkDanglingEdges',
+        });
+      }
+    }
+  }
+  return findings;
+}
+
+/**
+ * checkDanglingEdges — a `related_themes[]` entry whose slug resolves to no
+ * theme file anywhere in the brain is a broken graph edge with NO upstream
+ * signal today: `orchestrator/kb-graph.ts:407`'s `if (nodeIds.has(relSlug))`
+ * silently SKIPS emitting the edge when the target doesn't exist, and the
+ * `validEdges` filter at `orchestrator/kb-graph.ts:464` drops it a second
+ * time when building the KB graph — the entry just quietly fails to render,
+ * with nothing telling the reflector or a maintenance agent it's stale.
+ *
+ * Source iteration is `readThemeFiles`'s existing forge-only domain
+ * (`brain/cycles/themes` + `brain/forge-dev/themes`), matching this check's
+ * `CHECK_SCOPE: 'forge-themes'` classification — the per-KB path for
+ * project/band brains is `lintThemeFiles` (below), which reuses the same
+ * `danglingEdgeFindings` core over its own explicit file list.
+ *
+ * SCOPE HONESTY (adversarial review, 2026-08-14 — measured, do not "fix" by
+ * widening this check). The slug universe here is deliberately EVERY brain
+ * theme basename, so a `cycles` theme referencing a `forge-dev` theme is
+ * legitimate CONTENT and is NOT reported. `buildKbGraph`, by contrast, scopes
+ * `nodeIds` to the ONE KB it is graphing, so it drops those cross-sub-wiki
+ * edges too — 25 of them exist in the live brain today. This check does NOT
+ * surface that second, separate case, and must not: flagging 25 correct links
+ * as broken would steer the maintenance agent into "repairing" them. The
+ * silent cross-KB drop is a defect on the GRAPH side (a per-KB graph
+ * discarding declared, resolvable links with no signal) and is filed as its
+ * own bead. What this check closes is exactly the UNRESOLVABLE-slug case.
+ */
+export function checkDanglingEdges(forgeRoot: string): Finding[] {
+  const brainRoot = join(forgeRoot, 'brain');
+  const knownSlugs = collectAllThemeSlugs(brainRoot);
+  return danglingEdgeFindings(readThemeFiles(brainRoot), knownSlugs);
+}
+
+/** Jaccard threshold a keyword-set pair must meet/exceed to count as a near-duplicate. */
+const DUPLICATE_KEYWORD_JACCARD_THRESHOLD = 0.8;
+/** Minimum keywords BOTH themes in a pair must declare before the keyword clause is even evaluated. */
+const DUPLICATE_KEYWORD_MIN_DECLARED = 3;
+
+/** `String(title)` lowercased, non-`[a-z0-9 ]` stripped, whitespace runs collapsed, trimmed. */
+function normalizeThemeTitle(title: unknown): string {
+  return String(title ?? '')
+    .toLowerCase()
+    .replace(/[^a-z0-9 ]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function jaccardSimilarity(a: ReadonlySet<string>, b: ReadonlySet<string>): number {
+  let intersection = 0;
+  for (const x of a) if (b.has(x)) intersection += 1;
+  const union = a.size + b.size - intersection;
+  return union === 0 ? 0 : intersection / union;
+}
+
+/**
+ * Pure core shared by `checkDuplicateThemes` (full-scope) and
+ * `lintThemeFiles` (explicit per-KB file list) — ONE implementation of the
+ * near-duplicate rule. Reports ONE finding per pair, filed on the
+ * lexicographically-LATER absolute file path (plain string comparison of the
+ * paths as returned by the caller — theme files always come from `join()`
+ * against an absolute `forgeRoot`/`brainRoot`, so this is stable), naming the
+ * earlier (partner) file in the message.
+ */
+function duplicateThemeFindings(files: string[]): Finding[] {
+  type ThemeDupMeta = { file: string; normTitle: string; keywords: Set<string> };
+  const metas: ThemeDupMeta[] = [];
+  for (const file of files) {
+    const parsed = parseTheme(file);
+    if (!parsed) continue;
+    const kwArr = Array.isArray(parsed.data.keywords) ? parsed.data.keywords.map(String) : [];
+    metas.push({
+      file,
+      normTitle: normalizeThemeTitle(parsed.data.title),
+      keywords: new Set(kwArr),
+    });
+  }
+
+  const findings: Finding[] = [];
+  const seenPairs = new Set<string>();
+  for (let i = 0; i < metas.length; i++) {
+    for (let j = i + 1; j < metas.length; j++) {
+      const a = metas[i];
+      const b = metas[j];
+
+      // An empty normalized title never participates in a title collision.
+      const titleCollision = a.normTitle !== '' && a.normTitle === b.normTitle;
+
+      const keywordCollision =
+        a.keywords.size >= DUPLICATE_KEYWORD_MIN_DECLARED &&
+        b.keywords.size >= DUPLICATE_KEYWORD_MIN_DECLARED &&
+        jaccardSimilarity(a.keywords, b.keywords) >= DUPLICATE_KEYWORD_JACCARD_THRESHOLD;
+
+      if (!titleCollision && !keywordCollision) continue;
+
+      const [earlier, later] = a.file <= b.file ? [a, b] : [b, a];
+      const pairKey = `${earlier.file}::${later.file}`;
+      if (seenPairs.has(pairKey)) continue;
+      seenPairs.add(pairKey);
+
+      const reason = titleCollision
+        ? 'normalized-title collision'
+        : `keyword Jaccard ${jaccardSimilarity(a.keywords, b.keywords).toFixed(2)} over >=${DUPLICATE_KEYWORD_MIN_DECLARED} declared keywords`;
+
+      findings.push({
+        category: 'flag',
+        file: later.file,
+        message: `possible duplicate theme: ${basename(later.file)} ~ ${basename(earlier.file)} (${reason})`,
+        check: 'checkDuplicateThemes',
+      });
+    }
+  }
+  return findings;
+}
+
+/**
+ * checkDuplicateThemes — near-duplicate theme pairs the brain has quietly
+ * accumulated (e.g. the same lesson re-captured across cycles under a
+ * slightly different title). Flag severity: a merge decision needs the fuller
+ * content of both files, so this never gates — it only surfaces the pair for
+ * a maintenance agent (`runBrainConsolidateNow`) to fold together.
+ */
+export function checkDuplicateThemes(forgeRoot: string): Finding[] {
+  const brainRoot = join(forgeRoot, 'brain');
+  return duplicateThemeFindings(readThemeFiles(brainRoot));
+}
+
 // ---------- lintThemeFiles (explicit file list, project-aware) ----------
 
 /**
@@ -928,16 +1129,21 @@ export function checkCategoryScope(forgeRoot: string): Finding[] {
  * positive), matching the shared `checkSourceLinks`' own project caveat.
  */
 /**
- * R6-08 4on (F1 hardening) — the exact `check` names `lintThemeFiles` (below)
- * emits findings under: `checkFrontmatter`, `checkSourceLinks`,
- * `checkCategoryScope`, `checkIndexSync` (mirrors the `check:` literals in the
- * function body — never `checkStaleness`/`checkOrphans`/`checkLengthSoftCap`/
- * `checkContradictions`/`checkProjectBrainIndexes`/`checkReflectorLoss`, which
- * `lintThemeFiles` does not implement). A per-KB consumer (`buildKbHealth`)
- * uses this to know which checks get a REAL verdict from a KB's OWN theme
- * files even when the shared `readThemeFiles`-based full-scope checks never
- * see that KB's brain dir (project/band KBs) — the fix for the declared-data-
- * fails-open defect where those checks silently reported `pass`.
+ * R6-08 4on (F1 hardening); extended R4-19-F2 — the exact `check` names
+ * `lintThemeFiles` (below) emits findings under: `checkFrontmatter`,
+ * `checkSourceLinks`, `checkCategoryScope`, `checkIndexSync`,
+ * `checkDanglingEdges`, `checkDuplicateThemes` (mirrors the `check:` literals
+ * in the function body — never `checkStaleness`/`checkOrphans`/
+ * `checkLengthSoftCap`/`checkContradictions`/`checkProjectBrainIndexes`/
+ * `checkReflectorLoss`, which `lintThemeFiles` does not implement). A per-KB
+ * consumer (`buildKbHealth`) uses this to know which checks get a REAL
+ * verdict from a KB's OWN theme files even when the shared
+ * `readThemeFiles`-based full-scope checks never see that KB's brain dir
+ * (project/band KBs) — the fix for the declared-data-fails-open defect where
+ * those checks silently reported `pass`. `checkDanglingEdges` and
+ * `checkDuplicateThemes` are meaningful per-KB regardless of KB type (a
+ * dangling `related_themes` entry or a near-duplicate pair is just as real
+ * inside one KB's own theme set), unlike `checkCategoryScope` below.
  */
 // The per-KB checks lintThemeFiles gives a REAL verdict on for a KB's OWN
 // themes, regardless of KB type. checkCategoryScope is deliberately EXCLUDED:
@@ -952,6 +1158,8 @@ export const LINT_THEME_FILE_CHECKS: ReadonlySet<string> = new Set([
   'checkFrontmatter',
   'checkSourceLinks',
   'checkIndexSync',
+  'checkDanglingEdges',
+  'checkDuplicateThemes',
 ]);
 
 export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
@@ -1018,6 +1226,21 @@ export function lintThemeFiles(forgeRoot: string, files: string[]): Finding[] {
       }
     }
   }
+
+  // checkDanglingEdges — the slug universe is ALL brain theme basenames, NOT
+  // just the supplied `files` list: a project KB's theme legitimately
+  // references a forge theme (or vice versa), so scoping the universe to
+  // `files` alone would false-positive on every cross-KB related_themes edge.
+  // Shares the exact same core `checkDanglingEdges` (full-scope) uses.
+  const knownSlugs = collectAllThemeSlugs(brainRoot);
+  findings.push(...danglingEdgeFindings(files, knownSlugs));
+
+  // checkDuplicateThemes — scoped to exactly the supplied `files` list: a
+  // per-KB duplicate scan naturally only compares that KB's own themes
+  // against each other. Shares the exact same core `checkDuplicateThemes`
+  // (full-scope) uses.
+  findings.push(...duplicateThemeFindings(files));
+
   return findings;
 }
 
@@ -1135,6 +1358,10 @@ export function classifyFinding(f: Finding): { kind: string; resolution: Resolut
       return { kind: 'reflector.loss', resolution: 'user' };
     case 'checkProjectBrainIndexes':
       return { kind: 'index.project', resolution: 'agent', fixHint: 'In the project brain dir (brain/projects/<name>/), ensure this theme is listed exactly once under its category index (patterns/antipatterns/decisions/reference.md), creating the index from the cycles-index template if absent.' };
+    case 'checkDanglingEdges':
+      return { kind: 'edge.dangling', resolution: 'agent', fixHint: 'Repoint the related_themes entry at the correct existing slug (very often the same title carrying a date prefix), or drop the entry entirely if the target theme is genuinely gone.' };
+    case 'checkDuplicateThemes':
+      return { kind: 'theme.duplicate', resolution: 'agent', fixHint: 'Keep the richer file as survivor, fold in any unique facts from the other file, repoint related_themes/wikilinks/index entries at the survivor, then delete the loser.' };
     default:
       return { kind: 'unknown', resolution: 'user' };
   }

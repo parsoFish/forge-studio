@@ -63,12 +63,15 @@
  *
  * `allDefinitions` is a SECOND, wider table over the SAME fixture: every
  * on-disk `SKILL.md` under `skills/` that declares a `composition:` block at
- * all — 16 defs, not just the 10 `listAgentDefinitions` returns. `isStudioAgent`
- * filters 6 of those 16 out of the composable roster (`library: false`:
- * `architect-completeness-critic`, `brain-fix`, `demo-builder`,
- * `instructions-creator`, `preflight-fix`, `project-brain-builder`) — but the
- * upcoming rename sweeps ALL 16 SKILL.mds regardless of that flag, so
- * `roster` alone would leave those 6 with no brake at all. Enumerated by
+ * all — 19 defs, not just the 11 `listAgentDefinitions` returns. `isStudioAgent`
+ * filters 8 of those 19 out of the composable roster (`library: false`:
+ * `architect-completeness-critic`, `brain-fix`, `brain-maintenance`,
+ * `creation-agent`, `demo-builder`, `instructions-creator`, `preflight-fix`,
+ * `project-brain-builder`) — but the upcoming rename sweeps ALL 19 SKILL.mds
+ * regardless of that flag, so `roster` alone would leave those 8 with no brake
+ * at all. (Counts corrected R4-19-F2: the prose still said 16/10/6 while the
+ * fixture already held 18/11/7 before this branch added brain-maintenance —
+ * measured off the regenerated capture, not incremented by hand.) Enumerated by
  * disk walk (`listSkillMdDirs`), never a hardcoded slug list: a def is
  * included iff its raw frontmatter has a `composition` key (checked via
  * gray-matter on the RAW file, before `loadAgentDefinition`'s parsing) —

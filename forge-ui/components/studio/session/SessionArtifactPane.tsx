@@ -4,17 +4,17 @@ import { FilePackage } from '@/components/studio/FilePackage';
 import { DependencyDag } from '@/components/studio/DependencyDag';
 import { GenerationGallery } from '@/components/studio/GenerationGallery';
 import { ContractBuildout } from '@/components/studio/ContractBuildout';
-import { roadmapDraftView, markdownDraftView, sessionArtifactView, type SessionArtifactView } from '@/lib/session-artifact-view';
-import type { SessionArtifactPayload, RoadmapDraftRow } from '@/lib/session-client';
+import { roadmapDraftView, markdownDraftView, cleanupPlanView, type SessionArtifactView, type CleanupPlanView, sessionArtifactView } from '@/lib/session-artifact-view';
+import type { SessionArtifactPayload, RoadmapDraftRow, CleanupPlanAction, CleanupActionState } from '@/lib/session-client';
 
 // ---------------------------------------------------------------------------
 // SessionArtifactPane — the RIGHT-hand "living artifact" pane of the shared
-// session shell (R2-10 PR2, WI-7). One module covering all five LIVE
+// session shell (R2-10 PR2, WI-7). One module covering all seven LIVE
 // artifact kinds (roadmap-draft / markdown-draft / brain-structure /
-// generation-gallery — R4-16 / contract-buildout — R4-17) — mirrors
-// session-artifact-view.ts's own "one module, not one file per kind"
-// precedent (they are tightly-related renderers for the SAME pane of the
-// SAME page).
+// generation-gallery — R4-16 / contract-buildout — R4-17 / file-package —
+// R4-21 / cleanup-plan — R4-19-F2) — mirrors session-artifact-view.ts's own
+// "one module, not one file per kind" precedent (they are tightly-related
+// renderers for the SAME pane of the SAME page).
 //
 // D10 (R4-17, binding, ruled by T2): branch selection DELEGATES to the
 // `sessionArtifactView` dispatcher instead of a bespoke
@@ -145,6 +145,8 @@ export function SessionArtifactPane({
           <ContractBuildout view={view} activeStage={activeStage} />
         ) : view.kind === 'file-package' ? (
           <FilePackageBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'file-package' }>} />
+        ) : view.kind === 'cleanup-plan' ? (
+          <CleanupPlanBody artifact={artifact as Extract<SessionArtifactPayload, { kind: 'cleanup-plan' }>} />
         ) : (
           <UnhandledArtifactBody kind={artifact.kind} error={`sessionArtifactView returned an unhandled view kind ${JSON.stringify((view as { kind: string }).kind)}`} />
         )}
@@ -250,6 +252,115 @@ function BrainStructureBody({ artifact }: { artifact: Extract<SessionArtifactPay
 
 function FilePackageBody({ artifact }: { artifact: Extract<SessionArtifactPayload, { kind: 'file-package' }> }): JSX.Element {
   return <FilePackage files={artifact.files} />;
+}
+
+// ---------------------------------------------------------------------------
+// CleanupPlanBody — R4-19-F2, the kb-cleanup session's artifact. The three
+// action states (open/cleared/unknown) are LOAD-BEARING (cleanupPlanView's
+// own doc): a real run once reported every action 'cleared' while nothing had
+// been repaired, because absence of a finding was wrongly treated as proof of
+// repair. Every visual cue below (dot colour, left-border stripe, AND a
+// spelled-out label) is deliberately triple-redundant so the three states
+// read as distinct even to an operator not attending to colour alone — never
+// collapsing 'unknown' into 'cleared' at the presentation layer, which is
+// exactly how that defect would resurface here.
+// ---------------------------------------------------------------------------
+
+const CLEANUP_ACTION_STATE_STYLE: Record<CleanupActionState, { color: string; label: string; bg: string }> = {
+  open: { color: 'var(--red)', label: 'Open — still outstanding', bg: 'rgba(248, 113, 113, 0.08)' },
+  cleared: { color: 'var(--green)', label: 'Cleared — repair confirmed', bg: 'rgba(74, 222, 128, 0.08)' },
+  unknown: { color: 'var(--amber)', label: 'Unknown — coverage not established', bg: 'rgba(251, 191, 36, 0.08)' },
+};
+
+function CleanupPlanBody({ artifact }: { artifact: Extract<SessionArtifactPayload, { kind: 'cleanup-plan' }> }): JSX.Element {
+  const view = cleanupPlanView(artifact);
+  return (
+    <div
+      data-component="cleanup-plan"
+      data-cleanup-plan-state={view.state}
+      data-cleanup-plan-settled={view.settled}
+      style={{ display: 'flex', flexDirection: 'column', gap: 14 }}
+    >
+      <CleanupPlanStatusBanner view={view} />
+      {view.state === 'no-plan' ? (
+        <EmptyNote text="No cleanup plan yet — the agent has not drafted plan/cleanup-plan.md." />
+      ) : (
+        <>
+          <pre
+            style={{
+              margin: 0,
+              fontFamily: 'var(--font-mono)',
+              fontSize: 12.5,
+              lineHeight: 1.55,
+              color: 'var(--text)',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-word',
+            }}
+          >
+            {view.plan}
+          </pre>
+          {view.state === 'has-actions' && <CleanupActionList actions={view.actions} />}
+        </>
+      )}
+    </div>
+  );
+}
+
+/** Never claims "open" as the reason a plan is unsettled when it isn't —
+ *  AT-127's exact shape (settled:false with openFindingCount:0, because of
+ *  an 'unknown' row) would otherwise read as a contradiction on screen
+ *  ("0 open findings" next to "not settled"). Names the unknown rows
+ *  explicitly instead of only the server's open count. */
+function CleanupPlanStatusBanner({ view }: { view: CleanupPlanView }): JSX.Element | null {
+  if (view.state !== 'has-actions') return null;
+  const unknownCount = view.actions.filter((a) => a.state === 'unknown').length;
+  if (view.settled) {
+    return (
+      <div style={{ fontSize: 12.5, color: 'var(--green)', fontWeight: 600 }}>All actions cleared — plan settled.</div>
+    );
+  }
+  const parts: string[] = [];
+  if (view.openFindingCount > 0) parts.push(`${view.openFindingCount} open`);
+  if (unknownCount > 0) parts.push(`${unknownCount} unverified (coverage unknown)`);
+  return (
+    <div style={{ fontSize: 12.5, color: 'var(--amber)', fontWeight: 600 }}>
+      Not settled{parts.length > 0 ? ` — ${parts.join(', ')}` : ''}.
+    </div>
+  );
+}
+
+function CleanupActionList({ actions }: { actions: CleanupPlanAction[] }): JSX.Element {
+  return (
+    <ul data-section="cleanup-action-list" style={{ margin: 0, padding: 0, listStyle: 'none', display: 'flex', flexDirection: 'column', gap: 8 }}>
+      {actions.map((action, index) => {
+        const style = CLEANUP_ACTION_STATE_STYLE[action.state];
+        return (
+          <li
+            key={`${action.kind}#${action.target}#${index}`}
+            data-cleanup-action-state={action.state}
+            style={{
+              borderLeft: `3px solid ${style.color}`,
+              background: style.bg,
+              borderRadius: 6,
+              padding: '8px 10px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 4,
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span aria-hidden="true" style={{ width: 8, height: 8, borderRadius: '50%', background: style.color, flexShrink: 0 }} />
+              <strong style={{ fontSize: 12, color: style.color, textTransform: 'uppercase', letterSpacing: '.03em' }}>{style.label}</strong>
+            </div>
+            <div style={{ fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--dim)' }}>
+              [{action.kind}] {action.target}
+            </div>
+            <div style={{ fontSize: 12.5, color: 'var(--text)' }}>{action.proposal}</div>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 /** D10's explicit failure state: an artifact kind `sessionArtifactView` could

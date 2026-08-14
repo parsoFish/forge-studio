@@ -21,6 +21,8 @@ import { join } from 'node:path';
 import {
   checkCategoryScope,
   checkContradictions,
+  checkDanglingEdges,
+  checkDuplicateThemes,
   checkFrontmatter,
   checkIndexSync,
   checkLengthSoftCap,
@@ -32,7 +34,10 @@ import {
   runBrainLint,
   classifyFinding,
   resolutionCounts,
+  lintThemeFiles,
   CHECK_NAMES,
+  CHECK_SCOPE,
+  LINT_THEME_FILE_CHECKS,
   type Finding,
 } from './brain-lint.ts';
 
@@ -893,6 +898,14 @@ test('CHECK_NAMES drift guard: a maximal fixture tripping every check emits find
       // checkCategoryScope — a `decision` theme mis-routed into cycles/themes/
       // (decisions belong in forge-dev/themes/).
       { path: 'cycles/themes/max-f.md', fm: { category: 'decision' }, body: '# Max F\n' },
+
+      // checkDanglingEdges — a related_themes slug that resolves nowhere
+      // under brain/**/themes/.
+      { path: 'cycles/themes/max-g.md', fm: { category: 'pattern', related_themes: ['max-slug-does-not-exist-xyz'] }, body: '# Max G\n' },
+
+      // checkDuplicateThemes — a title-normalization collision pair.
+      { path: 'cycles/themes/max-h-dup1.md', fm: { category: 'pattern', title: 'Max Duplicate Pair' }, body: '# Max H\n' },
+      { path: 'cycles/themes/max-i-dup2.md', fm: { category: 'pattern', title: 'max duplicate pair!' }, body: '# Max I\n' },
     ],
   });
   try {
@@ -919,4 +932,433 @@ test('CHECK_NAMES drift guard: a maximal fixture tripping every check emits find
   } finally {
     cleanup(root);
   }
+});
+
+// =============================================================================
+// checkDanglingEdges (R4-19-F2) — related_themes entries that resolve nowhere.
+// =============================================================================
+
+test('checkDanglingEdges: a related_themes slug with no matching theme file anywhere produces exactly one finding naming the file and the slug (kills a no-op / unimplemented check)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/has-dangler.md', fm: { related_themes: ['does-not-exist'] } },
+    ],
+  });
+  try {
+    const findings = checkDanglingEdges(root);
+    const hits = findings.filter((f) => f.file.endsWith('has-dangler.md'));
+    assert.equal(hits.length, 1, `expected exactly one finding, got ${JSON.stringify(findings)}`);
+    assert.equal(hits[0].check, 'checkDanglingEdges');
+    assert.match(hits[0].message, /does-not-exist/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges: a related_themes slug resolving in a DIFFERENT forge sub-wiki (cycles -> forge-dev) is NOT dangling (kills a naive same-directory-only / same-sub-wiki-only slug resolution)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/a.md', fm: { related_themes: ['b'] } },
+      { path: 'forge-dev/themes/b.md', fm: {} },
+    ],
+  });
+  try {
+    const findings = checkDanglingEdges(root);
+    assert.equal(
+      findings.filter((f) => f.file.endsWith('a.md')).length,
+      0,
+      `slug "b" resolves in brain/forge-dev/themes/ — must not be reported dangling, got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges: two bad slugs in one theme yields two findings (kills an implementation that dedupes per-file rather than per-slug)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/multi.md', fm: { related_themes: ['missing-one', 'missing-two'] } },
+    ],
+  });
+  try {
+    const findings = checkDanglingEdges(root).filter((f) => f.file.endsWith('multi.md'));
+    assert.equal(findings.length, 2, `expected two findings (one per bad slug), got ${JSON.stringify(findings)}`);
+    assert.ok(findings.some((f) => /missing-one/.test(f.message)));
+    assert.ok(findings.some((f) => /missing-two/.test(f.message)));
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges: a theme with no related_themes key at all produces zero findings and does not crash (kills an implementation that assumes the field always exists / throws on undefined)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    // Planted directly on disk WITHOUT the related_themes key — buildBrainFixture's
+    // ThemeSpec always writes `related_themes: []`, which is a different (and
+    // easier) shape than "key absent entirely". Many real themes predate the
+    // field, so the check must tolerate `data.related_themes === undefined`.
+    writeFileSync(
+      join(root, 'brain', 'cycles', 'themes', 'nokey.md'),
+      '---\ntitle: No Key\ndescription: none.\ncategory: pattern\ncreated_at: 2026-01-01T00:00:00Z\nupdated_at: 2026-01-01T00:00:00Z\n---\n\n# No Key\n',
+    );
+    const findings = checkDanglingEdges(root);
+    assert.equal(findings.length, 0, `expected no findings/crash, got ${JSON.stringify(findings)}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges: related_themes entries with a trailing ".md" suffix, surrounding whitespace, or both, normalize and resolve when the target theme exists — zero findings (kills replacing the trim()/".md"-strip normalization with a bare String(rawEntry))', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/norm-target.md', fm: {} },
+      { path: 'cycles/themes/norm-suffix.md', fm: { related_themes: ['norm-target.md'] } },
+      { path: 'cycles/themes/norm-whitespace.md', fm: { related_themes: ['  norm-target  '] } },
+      { path: 'cycles/themes/norm-both.md', fm: { related_themes: ['  norm-target.md  '] } },
+    ],
+  });
+  try {
+    const findings = checkDanglingEdges(root);
+    const hits = findings.filter(
+      (f) =>
+        f.file.endsWith('norm-suffix.md') ||
+        f.file.endsWith('norm-whitespace.md') ||
+        f.file.endsWith('norm-both.md'),
+    );
+    assert.equal(
+      hits.length,
+      0,
+      `".md"-suffixed / whitespace-padded related_themes entries must normalize and resolve against the existing target, got ${JSON.stringify(hits)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges MIRROR: a whitespace-and-".md"-padded related_themes entry that still does not resolve after normalization DOES fire (kills a normalization "fix" that degenerates into never reporting anything)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/norm-unresolvable.md', fm: { related_themes: ['  really-does-not-exist.md  '] } },
+    ],
+  });
+  try {
+    const hits = checkDanglingEdges(root).filter((f) => f.file.endsWith('norm-unresolvable.md'));
+    assert.equal(hits.length, 1, `expected exactly one finding for the unresolvable normalized slug, got ${JSON.stringify(hits)}`);
+    assert.match(hits[0].message, /really-does-not-exist/);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDanglingEdges: a bare-scalar (non-array) related_themes value is a DELIBERATE no-op — zero findings even though the slug does not exist anywhere (kills an unreviewed "improvement" that starts scanning scalar related_themes and silently diverges the lint from the graph it audits)', () => {
+  const root = buildBrainFixture({ themes: [] });
+  try {
+    // Planted directly on disk: `related_themes: some-slug` as a bare YAML
+    // scalar (NOT `related_themes: [some-slug]`) — buildBrainFixture's
+    // ThemeSpec is typed to `string[]` and always emits the array form, so
+    // this shape can only be produced by hand-writing the file.
+    //
+    // WHY this is a deliberate pin, not an accidental gap:
+    //   (a) MIRRORS orchestrator/kb-graph.ts:327-329's own
+    //       `Array.isArray(parsed?.data.related_themes) ? (...) : []` guard —
+    //       the graph builder treats a non-array related_themes as "no edges
+    //       declared" and never attempts to resolve it. If this lint check
+    //       scanned scalar values, it would report an edge as "broken" that
+    //       the graph never tried to build in the first place — going
+    //       STRICTER than the graph, not matching it.
+    //   (b) Known blind spot, not an oversight: a genuinely-scalar
+    //       `related_themes: some-slug` (vs. the array form) is a real
+    //       authoring mistake the graph silently drops today with zero
+    //       signal anywhere. It is a filed, tracked gap (this test IS that
+    //       tracking record, alongside the `danglingEdgeFindings`
+    //       "tolerate missing/absent/non-array" comment a few lines above in
+    //       cli/brain-lint.ts and the sibling cross-KB gap documented in
+    //       `checkDanglingEdges`'s own doc comment). Zero occurrences exist
+    //       in the live 364-theme corpus as of 2026-08-14, which is why it
+    //       is parked rather than fixed now.
+    //   (c) EXPIRY CONDITION (immutable-gates: a deliberately-green gap-pin
+    //       must document when it should be revisited) — THIS TEST MUST
+    //       FLIP the moment orchestrator/kb-graph.ts starts coercing or
+    //       otherwise honouring a scalar `related_themes` value into a real
+    //       edge (i.e. the day the `Array.isArray(...)` guard at
+    //       kb-graph.ts:327 is loosened/removed). Until then, staying a
+    //       no-op here is correct; going stricter than the graph is the bug.
+    writeFileSync(
+      join(root, 'brain', 'cycles', 'themes', 'scalar-related.md'),
+      '---\ntitle: Scalar Related\ndescription: none.\ncategory: pattern\ncreated_at: 2026-01-01T00:00:00Z\nupdated_at: 2026-01-01T00:00:00Z\nrelated_themes: definitely-does-not-exist-anywhere\n---\n\n# Scalar Related\n',
+    );
+    const findings = checkDanglingEdges(root).filter((f) => f.file.endsWith('scalar-related.md'));
+    assert.equal(
+      findings.length,
+      0,
+      `a bare-scalar related_themes value must be a no-op (mirrors kb-graph.ts:327-329's Array.isArray guard), got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// =============================================================================
+// checkDuplicateThemes (R4-19-F2) — near-duplicate theme pairs.
+// =============================================================================
+
+test('checkDuplicateThemes: two themes whose titles normalize to the same string are flagged as a pair (kills an implementation that only does exact-string title equality, no normalization)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/dup-a.md', fm: { title: 'The Same Thing' } },
+      { path: 'cycles/themes/dup-b.md', fm: { title: 'the same thing!' } },
+    ],
+  });
+  try {
+    const findings = checkDuplicateThemes(root);
+    assert.equal(findings.length, 1, `expected exactly one pair finding, got ${JSON.stringify(findings)}`);
+    assert.equal(findings[0].check, 'checkDuplicateThemes');
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: keywords Jaccard >= 0.8 (8/10, distinct titles) fires (kills an implementation that never implements the keywords clause and only checks titles)', () => {
+  const common = ['kw-1', 'kw-2', 'kw-3', 'kw-4', 'kw-5', 'kw-6', 'kw-7', 'kw-8'];
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/kwdup-a.md', fm: { keywords: [...common, 'only-a'] } },
+      { path: 'cycles/themes/kwdup-b.md', fm: { keywords: [...common, 'only-b'] } },
+    ],
+  });
+  try {
+    // Precondition: distinct (default) titles, so a title-only implementation
+    // could not accidentally pass this test.
+    const findings = checkDuplicateThemes(root);
+    const hits = findings.filter(
+      (f) => f.file.endsWith('kwdup-a.md') || f.file.endsWith('kwdup-b.md'),
+    );
+    assert.equal(hits.length, 1, `expected exactly one pair finding (8/10 = 0.8 Jaccard), got ${JSON.stringify(findings)}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes NEGATIVE: two themes sharing only 1 of 4 keywords (Jaccard ~0.14) and distinct titles produce zero findings (kills a too-loose Jaccard threshold)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/lowj-a.md', fm: { keywords: ['w1', 'w2', 'w3', 'w4'] } },
+      { path: 'cycles/themes/lowj-b.md', fm: { keywords: ['w1', 'x2', 'x3', 'x4'] } },
+    ],
+  });
+  try {
+    const findings = checkDuplicateThemes(root).filter(
+      (f) => f.file.endsWith('lowj-a.md') || f.file.endsWith('lowj-b.md'),
+    );
+    assert.equal(findings.length, 0, `low-overlap keyword sets must not be flagged, got ${JSON.stringify(findings)}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes NEGATIVE: two themes with 2 identical keywords each (below the >=3 minimum) and distinct titles produce zero findings (kills a too-loose "any keyword overlap" implementation that ignores the minimum-declared-keywords floor)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/thin-a.md', fm: { keywords: ['p1', 'p2'] } },
+      { path: 'cycles/themes/thin-b.md', fm: { keywords: ['p1', 'p2'] } },
+    ],
+  });
+  try {
+    const findings = checkDuplicateThemes(root).filter(
+      (f) => f.file.endsWith('thin-a.md') || f.file.endsWith('thin-b.md'),
+    );
+    assert.equal(
+      findings.length,
+      0,
+      `identical-but-thin (2-keyword) sets are below the >=3 minimum and must not be flagged, got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: DUPLICATE_KEYWORD_MIN_DECLARED boundary — exactly 3 declared keywords each with a qualifying Jaccard DOES fire, exactly 2 declared keywords each (otherwise identical) does NOT (kills mutating the ">=3" floor comparisons to ">3")', () => {
+  const root = buildBrainFixture({
+    themes: [
+      // Exactly 3 keywords each, identical sets -> Jaccard 3/3 = 1.0 (>= 0.8),
+      // landing exactly ON the >=3-declared floor. Distinct default titles
+      // rule out a title-collision false positive.
+      { path: 'cycles/themes/floor3-a.md', fm: { keywords: ['f1', 'f2', 'f3'] } },
+      { path: 'cycles/themes/floor3-b.md', fm: { keywords: ['f1', 'f2', 'f3'] } },
+      // Exactly 2 keywords each (one below the floor), identical sets ->
+      // Jaccard 1.0 but below the >=3-declared floor -> must NOT fire.
+      { path: 'cycles/themes/floor2-a.md', fm: { keywords: ['g1', 'g2'] } },
+      { path: 'cycles/themes/floor2-b.md', fm: { keywords: ['g1', 'g2'] } },
+    ],
+  });
+  try {
+    const findings = checkDuplicateThemes(root);
+    const at3 = findings.filter((f) => f.file.endsWith('floor3-a.md') || f.file.endsWith('floor3-b.md'));
+    const at2 = findings.filter((f) => f.file.endsWith('floor2-a.md') || f.file.endsWith('floor2-b.md'));
+    assert.equal(at3.length, 1, `exactly-3-declared-keywords pair AT the floor must fire, got ${JSON.stringify(at3)}`);
+    assert.equal(at2.length, 0, `exactly-2-declared-keywords pair BELOW the floor must not fire, got ${JSON.stringify(at2)}`);
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('checkDuplicateThemes: reports exactly ONE finding per pair, on the lexicographically-LATER path, with the partner file named in the message (kills a double-reporting implementation that emits one finding per file)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/aaa-first.md', fm: { title: 'Lexicographic Duplicate' } },
+      { path: 'cycles/themes/zzz-second.md', fm: { title: 'lexicographic duplicate' } },
+    ],
+  });
+  try {
+    const findings = checkDuplicateThemes(root).filter(
+      (f) => f.file.endsWith('aaa-first.md') || f.file.endsWith('zzz-second.md'),
+    );
+    assert.equal(findings.length, 1, `expected exactly ONE finding for the pair (not one per file), got ${JSON.stringify(findings)}`);
+    assert.ok(
+      findings[0].file.endsWith('zzz-second.md'),
+      `finding must be filed on the lexicographically-later path (zzz-second.md), got ${findings[0].file}`,
+    );
+    assert.match(
+      findings[0].message,
+      /aaa-first\.md/,
+      `message must name the partner file (aaa-first.md), got: ${findings[0].message}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// =============================================================================
+// Severity lock (R4-19-F2) — the two new checks must NEVER be 'error'.
+// =============================================================================
+
+test('SEVERITY LOCK: a fixture whose ONLY problems are one dangling edge and one duplicate pair keeps runBrainLint exitCode 0, with every finding from the two new checks category:"flag" (kills an implementation that raises them as errors and silently breaks the `forge brain lint` gate)', () => {
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/lone.md', fm: { title: 'Lone Theme', related_themes: ['missing-slug'] } },
+      { path: 'cycles/themes/dup-x.md', fm: { title: 'Duplicate Title' } },
+      { path: 'cycles/themes/dup-y.md', fm: { title: 'duplicate title!' } },
+    ],
+    extra: [
+      {
+        path: 'cycles/patterns.md',
+        content:
+          '# patterns\n\n' +
+          '- [Lone Theme](./themes/lone.md)\n' +
+          '- [Duplicate Title](./themes/dup-x.md)\n' +
+          '- [Duplicate Title Two](./themes/dup-y.md)\n',
+      },
+    ],
+  });
+  try {
+    const { findings, exitCode } = runBrainLint({ cwd: root, scope: 'full' });
+    assert.equal(exitCode, 0, `exitCode must be 0 (flag-only fixture), got ${exitCode}. Findings: ${JSON.stringify(findings)}`);
+
+    const relevant = findings.filter(
+      (f) => f.check === 'checkDanglingEdges' || f.check === 'checkDuplicateThemes',
+    );
+    assert.equal(
+      relevant.length,
+      2,
+      `expected exactly 2 findings total (1 dangling + 1 duplicate pair), got ${JSON.stringify(findings)}`,
+    );
+    for (const f of relevant) {
+      assert.equal(f.category, 'flag', `${f.check} finding must be category:'flag', never 'error', got ${JSON.stringify(f)}`);
+    }
+    // This fixture is otherwise squeaky-clean (linked, no broken links, no
+    // mis-routing, no length/contradiction/project/reflector issues) — so the
+    // two new-check findings really are the ONLY problems, not merely a
+    // filtered subset of a noisier fixture.
+    assert.equal(
+      findings.length,
+      2,
+      `fixture must be otherwise clean — any other finding means the fixture isn't isolating the two new checks. Got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+// =============================================================================
+// Registration contract (R4-19-F2) — CHECK_NAMES / CHECK_SCOPE / LINT_THEME_FILE_CHECKS.
+// =============================================================================
+
+test('CHECK_NAMES: exactly the 12 expected full-scope check names (kills a registration that adds the check function but forgets to append it to FULL_SCOPE_CHECKS)', () => {
+  const expected = [
+    'checkFrontmatter',
+    'checkIndexSync',
+    'checkSourceLinks',
+    'checkStaleness',
+    'checkOrphans',
+    'checkProjectBrainIndexes',
+    'checkLengthSoftCap',
+    'checkContradictions',
+    'checkCategoryScope',
+    'checkReflectorLoss',
+    'checkDanglingEdges',
+    'checkDuplicateThemes',
+  ];
+  assert.equal(CHECK_NAMES.length, 12, `expected 12 full-scope checks, got ${CHECK_NAMES.length}: ${JSON.stringify(CHECK_NAMES)}`);
+  assert.deepEqual(
+    [...CHECK_NAMES].sort(),
+    [...expected].sort(),
+    `CHECK_NAMES must be exactly the expected 12-name set, got ${JSON.stringify(CHECK_NAMES)}`,
+  );
+});
+
+test('CHECK_SCOPE: both new checks map to "forge-themes", and every CHECK_NAMES entry has a CHECK_SCOPE mapping (kills a registration that updates CHECK_NAMES but forgets CHECK_SCOPE, silently defaulting per-KB health to a false verdict)', () => {
+  assert.equal(CHECK_SCOPE['checkDanglingEdges'], 'forge-themes');
+  assert.equal(CHECK_SCOPE['checkDuplicateThemes'], 'forge-themes');
+  for (const name of CHECK_NAMES) {
+    assert.ok(name in CHECK_SCOPE, `CHECK_SCOPE is missing an entry for "${name}" (CHECK_NAMES/CHECK_SCOPE drift)`);
+  }
+});
+
+test('LINT_THEME_FILE_CHECKS: declares both new checks AND lintThemeFiles(forgeRoot, files) actually emits findings under both check names (kills declaring membership without implementing it — the declared-data-fails-open shape)', () => {
+  assert.ok(LINT_THEME_FILE_CHECKS.has('checkDanglingEdges'), 'LINT_THEME_FILE_CHECKS must include checkDanglingEdges');
+  assert.ok(LINT_THEME_FILE_CHECKS.has('checkDuplicateThemes'), 'LINT_THEME_FILE_CHECKS must include checkDuplicateThemes');
+
+  const root = buildBrainFixture({
+    themes: [
+      { path: 'cycles/themes/lf-dangler.md', fm: { related_themes: ['lf-nowhere-slug'] } },
+      { path: 'cycles/themes/lf-dup-a.md', fm: { title: 'Lint File Dup' } },
+      { path: 'cycles/themes/lf-dup-b.md', fm: { title: 'lint file dup' } },
+    ],
+  });
+  try {
+    const files = [
+      join(root, 'brain', 'cycles', 'themes', 'lf-dangler.md'),
+      join(root, 'brain', 'cycles', 'themes', 'lf-dup-a.md'),
+      join(root, 'brain', 'cycles', 'themes', 'lf-dup-b.md'),
+    ];
+    const findings = lintThemeFiles(root, files);
+    assert.ok(
+      findings.some((f) => f.check === 'checkDanglingEdges'),
+      `lintThemeFiles must emit a checkDanglingEdges finding for the seeded dangling edge, got ${JSON.stringify(findings)}`,
+    );
+    assert.ok(
+      findings.some((f) => f.check === 'checkDuplicateThemes'),
+      `lintThemeFiles must emit a checkDuplicateThemes finding for the seeded duplicate pair, got ${JSON.stringify(findings)}`,
+    );
+  } finally {
+    cleanup(root);
+  }
+});
+
+test('classifyFinding: checkDanglingEdges/checkDuplicateThemes classify as agent-tier with a non-empty fixHint, and resolutionCounts tallies them under "agent" (kills a classifyFinding that leaves the new checks unhandled, silently falling through to the "user" default)', () => {
+  const dangling = classifyFinding(cf('checkDanglingEdges', 'dangling related_themes slug: missing-slug'));
+  assert.equal(dangling.kind, 'edge.dangling');
+  assert.equal(dangling.resolution, 'agent');
+  assert.ok(dangling.fixHint && dangling.fixHint.length > 0, 'checkDanglingEdges must carry a non-empty fixHint');
+
+  const duplicate = classifyFinding(cf('checkDuplicateThemes', 'possible duplicate of cycles/themes/other.md'));
+  assert.equal(duplicate.kind, 'theme.duplicate');
+  assert.equal(duplicate.resolution, 'agent');
+  assert.ok(duplicate.fixHint && duplicate.fixHint.length > 0, 'checkDuplicateThemes must carry a non-empty fixHint');
+
+  const counts = resolutionCounts([
+    cf('checkDanglingEdges', 'dangling related_themes slug: x'),
+    cf('checkDuplicateThemes', 'possible duplicate of y'),
+  ]);
+  assert.deepEqual(counts, { auto: 0, agent: 2, user: 0 });
 });

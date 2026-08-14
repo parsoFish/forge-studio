@@ -11,8 +11,8 @@ cli/brain-index.ts readdirSync 3
 cli/brain-index.ts readFileSync 3
 cli/brain-index.ts statSync 2
 cli/brain-index.ts writeFileSync 1
-cli/brain-lint.ts existsSync 19
-cli/brain-lint.ts readdirSync 8
+cli/brain-lint.ts existsSync 21
+cli/brain-lint.ts readdirSync 10
 cli/brain-lint.ts readFileSync 5
 cli/brain-lint.ts statSync 1
 cli/bridge-recovery.ts execFileSync 4
