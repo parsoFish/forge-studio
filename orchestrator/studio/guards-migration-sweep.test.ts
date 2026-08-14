@@ -11,21 +11,23 @@
  *
  * This is the STRONGEST acceptance test in the migration suite: it proves
  * the eventual sweep commit moved every single declared guard id across all
- * 17 composition-bearing SKILL.mds and dropped none.
+ * 19 composition-bearing SKILL.mds and dropped none.
  *
  * A1 — `EXPECTED_GUARDS_BY_SLUG` below is a HARDCODED literal table, GENERATED
  * by reading the on-disk `composition.hooks` data (`grep`/manual transcription)
  * BEFORE any sweep happens — frozen ground truth, deliberately independent of
- * whatever the sweep commit does to disk. It covers all 18 SKILL.mds that
+ * whatever the sweep commit does to disk. It covers all 19 SKILL.mds that
  * declare a `composition:` block (`architect`, `architect-completeness-critic`,
  * `brain-fix`, `demo-builder`, `instructions-creator`, `preflight-fix`,
  * `project-brain-builder` included — NOT just the 11 in the composable
  * roster; the rename sweeps every SKILL.md regardless of `library: false`).
  * 16 at generation time (2026-08-04); R4-18 added `contract-check` — a 17th
  * composition-bearing SKILL.md that is also the 11th member of the composable
- * roster (it declares `library: true`) — and R4-21 added `creation-agent`
- * (18th, `library: false`, with its own real `event-log` guard); both were
- * appended rather than backdated into the "generated" set.
+ * roster (it declares `library: true`) — R4-21 added `creation-agent`
+ * (18th, `library: false`, with its own real `event-log` guard) — and
+ * R4-19-F2 added `brain-maintenance` (19th, `library: false`, its own
+ * single `event-log` guard, same shape as `brain-fix`/`creation-agent`);
+ * all three were appended rather than backdated into the "generated" set.
  * The test asserts `composition.guards` (once it exists) deep-equals this
  * table for every one of them, sorted for stable comparison.
  *
@@ -85,6 +87,11 @@ const EXPECTED_GUARDS_BY_SLUG: Readonly<Record<string, readonly string[]>> = {
   'architect-completeness-critic': ['event-log'],
   'brain-fix': ['event-log'],
   'brain-ingest': ['event-log'],
+  // R4-19-F2: brain-maintenance — a new `library: false` interactive helper
+  // dispatched by the bridge for one KB's brain-lint findings (never
+  // composed into a flow) — declares only the `event-log` guard, the same
+  // single-guard shape as `brain-fix`/`creation-agent`.
+  'brain-maintenance': ['event-log'],
   // R4-18: contract-check declares the onboard-preflight band guard (its
   // display identity + composition.guards entry — see skills/contract-check).
   'contract-check': ['event-log', 'onboard-preflight'],
@@ -133,7 +140,7 @@ test('A1: every composition-bearing SKILL.md carries composition.guards matching
   assert.deepEqual(
     foundSlugs,
     expectedSlugs,
-    'sanity: the frozen table must cover exactly the composition-bearing SKILL.mds on disk today (17) — if this fails, the table itself is stale, not the migration',
+    'sanity: the frozen table must cover exactly the composition-bearing SKILL.mds on disk today (19) — if this fails, the table itself is stale, not the migration',
   );
 
   const mismatches: Array<{ slug: string; expected: readonly string[]; actual: string[] | undefined }> = [];
