@@ -87,7 +87,7 @@
 
 import { describe, it, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, symlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 
@@ -1303,5 +1303,264 @@ describe('deriveSessionArtifact — contract-buildout (R4-17)', () => {
       contractStages: [],
     } as Parameters<typeof deriveSessionArtifact>[0] & { contractStages: unknown[] }) as { stages: unknown[] };
     assert.deepEqual(artifact.stages, [], 'an explicitly empty array must be accepted and round-tripped, not treated as "absent" and thrown on');
+  });
+});
+
+// ===========================================================================
+// R4-19-F2 — deriveSessionArtifact — cleanup-plan (brain-maintenance's
+// KB-cleanup session). RED at branch base: 'cleanup-plan' is not yet a member
+// of SESSION_ARTIFACT_KINDS at all, so every test below currently throws
+// inside deriveSessionArtifact's own `state === undefined` gate before ever
+// reaching a 'cleanup-plan' case — mirrors this file's own precedent for
+// every prior not-yet-shipped kind (see e.g. the contract-buildout block's
+// header note above).
+//
+// DERIVE-DON'T-STORE (the binding contract, per the task brief): the session
+// dir's plan/cleanup-plan.md supplies the agent's PROPOSED ACTIONS only. The
+// CURRENT findings are ALWAYS supplied by the CALLER (a live, KB-scoped
+// brain-lint run) — mirrors contract-buildout's D4 pattern exactly, just
+// with a different caller-supplied field name. DESIGN CALL (stated
+// explicitly, mirroring this file's own precedent for undeclared names,
+// e.g. the R4-22/interactive-runner suite's "MY CALL" convention): the
+// caller-supplied parameter is named `cleanupFindings` on
+// deriveSessionArtifact's input object — this name is NOT dictated anywhere
+// in ADR-043 or the task brief; if the implementer picks a different name,
+// update the calls below to match (the BEHAVIOUR these tests pin — a
+// caller-supplied findings list, DERIVED joins, a throw when absent — is the
+// load-bearing contract, not this exact identifier).
+// ===========================================================================
+
+/** R4-19-F2: the new "kb-cleanup" session kind (studio/session-kinds.yaml —
+ *  not shipped yet at branch base; see session-kinds.test.ts's own R4-19-F2
+ *  block). deriveSessionArtifact never reads `stages` at all, so this stays
+ *  decoupled from the SEPARATE SESSION_STAGES vocabulary concern, mirroring
+ *  authoringDescriptor's own header note. */
+function kbCleanupDescriptor(overrides: Partial<SessionKindDescriptor> = {}): SessionKindDescriptor {
+  return {
+    id: 'kb-cleanup',
+    agent: 'brain-maintenance',
+    title: 'KB cleanup session',
+    legacyRoutes: [],
+    stages: ['brain'],
+    defaultStage: 'brain',
+    artifact: { kind: 'cleanup-plan', label: 'Cleanup plan' },
+    ...overrides,
+  } as SessionKindDescriptor;
+}
+
+/** Writes the session dir's `plan/cleanup-plan.md` — the ONLY place the
+ *  agent's proposed actions live (never the findings; those are ALWAYS
+ *  caller-supplied — see the derive-don't-store header above). Mirrors this
+ *  file's own `writeStagingFile` idiom: a DEDICATED subdirectory, so a
+ *  kb-cleanup session's plan can never collide with the fixed
+ *  CANDIDATE_SOURCE_FILES transcript scan every session dir is
+ *  unconditionally scanned against regardless of kind. */
+function writeCleanupPlanFile(sessionDir: string, body: string): void {
+  const abs = join(sessionDir, 'plan', 'cleanup-plan.md');
+  mkdirSync(join(abs, '..'), { recursive: true });
+  writeFileSync(abs, body, 'utf8');
+}
+
+/** A minimal caller-supplied finding, shaped like skills/brain-maintenance/
+ *  SKILL.md's own documented input contract (`check`, `kind`, `file`,
+ *  `message`) — deliberately NOT imported from cli/brain-lint.ts's real
+ *  `Finding` type: this module stays a pure, fs-only derivation with no
+ *  business importing the lint engine (mirrors `fixtureContractStages`'s own
+ *  header rationale, above, for hand-fixturing rather than cross-importing —
+ *  the route, cli/bridge-studio-sessions.ts, is the layer that wires the
+ *  real `runBrainLint`/`lintThemeFiles` output in). */
+function fixtureFinding(kind: string, file: string, message = 'fixture finding'): { check: string; kind: string; file: string; message: string } {
+  return { check: kind, kind, file, message };
+}
+
+// The exact byte form skills/brain-maintenance/SKILL.md's output-contract
+// section mandates verbatim: `- [<kind>] <theme-file-path> — <one-sentence
+// proposal>` (an em dash, "—", not a hyphen).
+const PLAN_TWO_ACTIONS = [
+  '# Cleanup plan',
+  '',
+  'Two proposed actions from the drafting turn.',
+  '',
+  '- [edge.dangling] brain/forge-dev/themes/foo.md — repoint the related_themes entry at `2026-05-17-foo`.',
+  '- [theme.duplicate] brain/cycles/themes/bar.md — merge into baz.md, the richer survivor.',
+  '',
+].join('\n');
+
+describe('deriveSessionArtifact — cleanup-plan (R4-19-F2, brain-maintenance KB-cleanup session)', () => {
+  // Kills: a renderer that ignores the plan file entirely and returns
+  // actions:[]; a renderer that mis-splits the `[<kind>] <target> — <proposal>`
+  // line shape (e.g. swaps kind/target, or includes the leading "- " marker
+  // in `target`); a renderer that marks every action "open" unconditionally
+  // regardless of whether its finding is actually present in the
+  // caller-supplied list.
+  it('R4-19-F2 AT-1: parses the plan\'s action lines into actions[] with kind/target/proposal, each marked "open" when its matching finding IS present in the caller-supplied list', () => {
+    const sessionDir = makeTmpDir('cleanupplan-parse-');
+    writeCleanupPlanFile(sessionDir, PLAN_TWO_ACTIONS);
+    const findings = [
+      fixtureFinding('edge.dangling', 'brain/forge-dev/themes/foo.md'),
+      fixtureFinding('theme.duplicate', 'brain/cycles/themes/bar.md'),
+    ];
+
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: findings,
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupFindings: typeof findings }) as {
+      kind: string;
+      label: string;
+      plan: string | null;
+      actions: Array<{ kind: string; target: string; proposal: string; state: string }>;
+      openFindingCount: number;
+    };
+
+    assert.equal(artifact.kind, 'cleanup-plan');
+    assert.equal(artifact.actions.length, 2, `expected 2 parsed actions, got: ${JSON.stringify(artifact.actions)}`);
+    const byTarget = new Map(artifact.actions.map((a) => [a.target, a]));
+    const foo = byTarget.get('brain/forge-dev/themes/foo.md');
+    assert.ok(foo, `expected an action targeting brain/forge-dev/themes/foo.md, got: ${JSON.stringify(artifact.actions)}`);
+    assert.equal(foo!.kind, 'edge.dangling');
+    assert.equal(foo!.proposal, 'repoint the related_themes entry at `2026-05-17-foo`.');
+    assert.equal(foo!.state, 'open');
+    const bar = byTarget.get('brain/cycles/themes/bar.md');
+    assert.ok(bar, `expected an action targeting brain/cycles/themes/bar.md, got: ${JSON.stringify(artifact.actions)}`);
+    assert.equal(bar!.kind, 'theme.duplicate');
+    assert.equal(bar!.proposal, 'merge into baz.md, the richer survivor.');
+    assert.equal(bar!.state, 'open');
+    assert.equal(artifact.openFindingCount, 2);
+  });
+
+  // Kills: a renderer that defaults to an empty actions:[]/openFindingCount:0
+  // artifact when the caller supplies nothing — the exact "declared-data-
+  // fails-open" antipattern the contract-buildout precedent (D4) exists to
+  // rule out; mirrors that block's own AT-2 exactly, one screen up.
+  it('R4-19-F2 AT-2: cleanupFindings ABSENT -> THROWS a named error naming the missing input, never returns a silent empty/defaulted artifact', () => {
+    const sessionDir = makeTmpDir('cleanupplan-missing-findings-');
+    writeCleanupPlanFile(sessionDir, PLAN_TWO_ACTIONS);
+    assert.throws(
+      () => deriveSessionArtifact({ descriptor: kbCleanupDescriptor(), sessionDir }),
+      (err: unknown) => {
+        assert.ok(err instanceof Error);
+        assert.match(err.message, /finding/i, `error must name the missing caller-supplied input, got: ${err.message}`);
+        return true;
+      },
+      'an implementation that defaults to actions:[]/openFindingCount:0 instead of throwing is exactly the defect this pins',
+    );
+  });
+
+  // DERIVE-DON'T-STORE — the repo's #1 defect class, per the task brief.
+  // Kills: any implementation that stores a per-action status field
+  // (in the plan file, in status.json, or anywhere else) instead of
+  // deriving `state` fresh from the caller-supplied findings on EVERY call.
+  // Proven by calling deriveSessionArtifact TWICE against the SAME
+  // byte-unchanged plan file with two DIFFERENT findings lists — a
+  // stored-status implementation would report 'open' both times (whatever
+  // was written once); a correctly-derived implementation must flip.
+  it('R4-19-F2 AT-3 (DERIVE-DON\'T-STORE): with the plan file BYTE-UNCHANGED across two calls, removing one action\'s finding from the caller-supplied list flips ONLY that action\'s state to "cleared" and lowers openFindingCount — state is derived at read time, never stored', () => {
+    const sessionDir = makeTmpDir('cleanupplan-derive-');
+    writeCleanupPlanFile(sessionDir, PLAN_TWO_ACTIONS);
+    const planPath = join(sessionDir, 'plan', 'cleanup-plan.md');
+    const planBytesBefore = readFileSync(planPath, 'utf8');
+
+    const bothFindings = [
+      fixtureFinding('edge.dangling', 'brain/forge-dev/themes/foo.md'),
+      fixtureFinding('theme.duplicate', 'brain/cycles/themes/bar.md'),
+    ];
+    type Artifact = { actions: Array<{ target: string; state: string }>; openFindingCount: number };
+    const before = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: bothFindings,
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupFindings: typeof bothFindings }) as Artifact;
+    assert.equal(before.actions.find((a) => a.target === 'brain/forge-dev/themes/foo.md')?.state, 'open', 'arrange: both actions start open');
+    assert.equal(before.actions.find((a) => a.target === 'brain/cycles/themes/bar.md')?.state, 'open', 'arrange: both actions start open');
+    assert.equal(before.openFindingCount, 2, 'arrange: both findings open');
+
+    // The SECOND finding is now resolved elsewhere (e.g. auto-fixed by a
+    // later lint pass) — the CALLER supplies a shorter list. The plan file
+    // on disk is never touched between these two calls.
+    const oneFindingLeft = [fixtureFinding('edge.dangling', 'brain/forge-dev/themes/foo.md')];
+    const after = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: oneFindingLeft,
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupFindings: typeof oneFindingLeft }) as Artifact;
+
+    assert.equal(
+      readFileSync(planPath, 'utf8'),
+      planBytesBefore,
+      'the plan file on disk must be BYTE-UNCHANGED between the two calls — the state flip must come purely from the different findings list, never a write to the plan',
+    );
+    assert.equal(after.actions.find((a) => a.target === 'brain/forge-dev/themes/foo.md')?.state, 'open', 'the still-present finding\'s action must stay open');
+    assert.equal(
+      after.actions.find((a) => a.target === 'brain/cycles/themes/bar.md')?.state,
+      'cleared',
+      'the NOW-ABSENT finding\'s action must flip to cleared — proves state is derived at read time from the findings list, never a stored per-action status field anywhere',
+    );
+    assert.equal(after.openFindingCount, 1, 'openFindingCount must drop from 2 to 1 as the resolved finding leaves the caller-supplied list');
+  });
+
+  // Kills: a renderer that treats "the plan has no matching action lines" the
+  // SAME as "there is no plan at all" — e.g. returning plan:null whenever
+  // actions[] is empty, which would silently hide a drafted-but-malformed
+  // plan from the operator (the exact "no actions and no plan" failure mode
+  // the task brief calls out by name).
+  it('R4-19-F2 AT-4: a plan file present but with ZERO parseable action lines yields actions:[] AND a non-null plan carrying the raw text — never silently "no actions and no plan"', () => {
+    const sessionDir = makeTmpDir('cleanupplan-unparseable-');
+    const RAW_PROSE = '# Cleanup plan\n\nI looked at the findings but none of them warrant a structured action yet — more investigation needed before I can propose anything concrete.\n';
+    writeCleanupPlanFile(sessionDir, RAW_PROSE);
+
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupFindings: unknown[] }) as { plan: string | null; actions: unknown[] };
+
+    assert.deepEqual(artifact.actions, [], 'zero lines match the mandated action-line format, so actions must be empty');
+    assert.equal(
+      artifact.plan,
+      RAW_PROSE,
+      'the raw plan text must still surface verbatim even with zero parseable action lines — a renderer returning plan:null here is indistinguishable from "no plan file at all" (AT-5 below), the exact ambiguity this pins',
+    );
+  });
+
+  // Kills: a renderer that throws, or fabricates a plan string, when the
+  // session simply hasn't reached a drafted turn yet (e.g. read before the
+  // first agent turn ran).
+  it('R4-19-F2 AT-5: no plan file at all yields plan:null and actions:[] without throwing', () => {
+    const sessionDir = makeTmpDir('cleanupplan-noplan-');
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupFindings: unknown[] }) as { plan: string | null; actions: unknown[] };
+    assert.equal(artifact.plan, null);
+    assert.deepEqual(artifact.actions, []);
+  });
+
+  // Kills: a renderer that reads plan/cleanup-plan.md via a raw
+  // join()+readFileSync (or any path that skips the module's shared
+  // realpath-containment choke point) — mirrors deriveFilePackage's own
+  // RED-2b/RED-2e symlink-escape guard exactly, one screen up in this file,
+  // just at the single-file granularity cleanup-plan uses instead of a
+  // recursive walk.
+  it('R4-19-F2 AT-6 (containment): a plan/ directory that is a symlink escaping the session dir contributes NO file — mirrors deriveFilePackage/walkPackageFiles\'s existing containment guarantee (RED-2b/RED-2e\'s idiom)', () => {
+    const outsideDir = makeTmpDir('cleanupplan-escape-outside-');
+    const SECRET_MARKER = 'TOP-SECRET-CLEANUP-PLAN-MARKER-5541';
+    writeFileSync(join(outsideDir, 'cleanup-plan.md'), `- [edge.dangling] brain/x/themes/y.md — ${SECRET_MARKER}\n`, 'utf8');
+
+    const sessionDir = makeTmpDir('cleanupplan-escape-session-');
+    symlinkSync(outsideDir, join(sessionDir, 'plan'));
+    assert.ok(existsSync(join(sessionDir, 'plan')), 'arrange: the symlinked plan/ must resolve to something');
+
+    const artifact = deriveSessionArtifact({
+      descriptor: kbCleanupDescriptor(),
+      sessionDir,
+      cleanupFindings: [],
+    } as Parameters<typeof deriveSessionArtifact>[0] & { cleanupFindings: unknown[] }) as { plan: string | null; actions: unknown[] };
+
+    const serialized = JSON.stringify(artifact);
+    assert.ok(!serialized.includes(SECRET_MARKER), 'the escaped file\'s content must never appear anywhere in the derived cleanup-plan artifact');
+    assert.equal(artifact.plan, null, 'a plan/ that escapes the session dir must contribute NO file — collapsed to the same "no plan file at all" outcome as AT-5');
+    assert.deepEqual(artifact.actions, []);
   });
 });

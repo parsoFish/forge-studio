@@ -120,6 +120,8 @@ const NON_STRING_PHASE_STATUS_SESSION = '2026-08-08T17-04-00';
 // R4-17 — onboarding / contract-buildout route-threading fixtures.
 const ONBOARDING_SESSION = '2026-08-10T09-00-00';
 const ONBOARDING_BAD_CONFIG_SESSION = '2026-08-10T09-01-00';
+// R4-19-F2 — kb-cleanup read-branch fixture (an unresolvable kb_id).
+const KB_CLEANUP_UNRESOLVABLE_SESSION = '2026-08-14T10-00-00';
 
 function writeSkillAgent(root: string, slug: string, opts: { libraryFalse?: boolean } = {}): void {
   const dir = join(root, 'skills', slug);
@@ -184,7 +186,56 @@ function writeSessionKindsYaml(root: string): void {
         defaultStage: 'contract',
         artifact: { kind: 'contract-buildout', label: 'Contract build-out' },
       },
+      // R4-19-F2: the new "kb-cleanup" session kind — the ADR-043-shaped
+      // turnSpec table verbatim (see orchestrator/studio/session-kinds.test.ts's
+      // own R4-19-F2 block for the pin against the REAL, checked-in yaml;
+      // this file's fixture yaml is this file's OWN pre-existing convention
+      // of hand-writing every shipped kind locally rather than reading the
+      // real repo file — see e.g. the "onboarding" row immediately above,
+      // added the same way by R4-17).
+      {
+        id: 'kb-cleanup',
+        agent: 'brain-maintenance',
+        title: 'KB cleanup session',
+        legacyRoutes: [],
+        stages: ['brain'],
+        defaultStage: 'brain',
+        artifact: { kind: 'cleanup-plan', label: 'Cleanup plan' },
+        turnSpec: {
+          kindDir: '_kb-cleanup',
+          style: 'agent',
+          phases: [
+            { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
+            { phase: 'awaiting-approval', step: 'noop' },
+            { phase: 'applied', step: 'terminal' },
+          ],
+        },
+      },
     ]),
+    'utf8',
+  );
+}
+
+/** Plants a kb-cleanup session directly on disk (never through a route) at
+ *  `<projectsRoot>/<project>/_kb-cleanup/<sessionId>/status.json`, carrying
+ *  a `kb_id` that resolves to NO real KB anywhere under `brain/` — the
+ *  fixture for the bridge read-branch's "kb_id no longer resolves" fail-loud
+ *  contract (task brief §4). Deliberately does NOT write a `brain/` dir at
+ *  all — the whole point is that this kb_id is unresolvable. */
+function writeCleanupSessionWithUnresolvableKb(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      session_id: sessionId,
+      project,
+      phase: 'awaiting-approval',
+      kb_id: 'no-such-kb-anywhere-on-disk',
+      kb_binding: { kind: 'unique' },
+      findings: [],
+      updated_at: new Date().toISOString(),
+    }),
     'utf8',
   );
 }
@@ -376,6 +427,10 @@ before(async () => {
   writeOnboardedProjectFixture(projectsRoot, 'onboardedproj');
   writeOnboardingSession(projectsRoot, 'malformedcontractproj', ONBOARDING_BAD_CONFIG_SESSION);
   writeMalformedContractProjectFixture(projectsRoot, 'malformedcontractproj');
+
+  // R4-19-F2 — the kb-cleanup read-branch's "kb_id no longer resolves" fixture.
+  writeSkillAgent(forgeRoot, 'brain-maintenance');
+  writeCleanupSessionWithUnresolvableKb(projectsRoot, 'demoproj', KB_CLEANUP_UNRESOLVABLE_SESSION);
 
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
@@ -995,4 +1050,50 @@ test('R4-19 WI-2 AT-8 (companion — unaffected by the carve-out, both before an
   assert.equal(body.kind, 'project-brain');
   assert.equal(body.project, 'gitpulse');
   assert.equal(body.phase, 'analyzing', 'phase must be the real value read from the session\'s status.json — the non-dot path\'s behavior must be identical to AT-40');
+});
+
+// ===========================================================================
+// R4-19-F2 — the kb-cleanup read branch's fail-loud contract (task brief §4,
+// NOT among the 16 explicitly numbered acceptance tests — flagged separately
+// in this WI's report as a gap in the enumerated list, but load-bearing per
+// the brief's own wording: "A session whose kb_id no longer resolves must
+// fail loud, not render an empty artifact"). This is the single test in this
+// file exercising that branch; the renderer-level throw-on-missing-findings
+// contract is pinned exhaustively in session-transcript.test.ts's own
+// R4-19-F2 block instead.
+// ===========================================================================
+
+// Kills: a bridge read branch that catches deriveContractStages/lint-lookup
+// failures the wrong way and falls through to `deriveSessionArtifact({
+// descriptor, sessionDir })` with no cleanupFindings — which (once
+// 'cleanup-plan' ships live) throws a DIFFERENT error ("cleanupFindings
+// required") that gets smoothed into a generic 500 with no mention of the
+// actual root cause (the unresolvable kb_id); also kills a branch that
+// swallows the kb_id-resolution failure and renders a 200 with an empty
+// cleanup-plan artifact — the exact "declared-data-fails-open" shape this
+// whole campaign guards against.
+test('R4-19-F2: GET /api/studio/sessions/kb-cleanup/<id>?project=<p> whose stored kb_id resolves to NO real KB fails loud (a non-200 naming the cause), never a 200 with an empty/silent cleanup-plan artifact', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_UNRESOLVABLE_SESSION}?project=demoproj`);
+  assert.notEqual(
+    res.status,
+    200,
+    'a session whose kb_id no longer resolves to any real KB must never be smoothed into a 200 — the fixture\'s status.json genuinely has kb_id:"no-such-kb-anywhere-on-disk" with no matching brain/ dir anywhere',
+  );
+  const body = (await res.json()) as { error?: string; ok?: boolean };
+  assert.ok(
+    typeof body.error === 'string' && body.error.length > 0,
+    `the error response must name the cause, got: ${JSON.stringify(body)}`,
+  );
+  assert.notEqual(body.ok, true, 'the response must not claim ok:true alongside an error');
+  // Tightened beyond a bare non-200: the error must actually name the
+  // UNRESOLVABLE kb_id itself, not just some unrelated failure incidentally
+  // reached first (e.g. "cleanup-plan" not yet being a recognised artifact
+  // kind at all, today's status quo) — this is what makes this test a real
+  // RED pin for the branch-specific fail-loud behaviour rather than a
+  // vacuous pass from an earlier-stage failure.
+  assert.match(
+    body.error!,
+    /no-such-kb-anywhere-on-disk/,
+    `the error must name the specific unresolvable kb_id the fixture's status.json carries, not a generic/unrelated failure — got: ${body.error}`,
+  );
 });

@@ -1,0 +1,319 @@
+/**
+ * Acceptance tests for the kb-cleanup session's two new bridge routes
+ * (R4-19-F2 — the `kb-cleanup` interactive session kind, ADR-043 §1/§3):
+ *
+ *   POST /api/studio/kbs/:id/cleanup/start
+ *   POST /api/studio/kbs/:id/cleanup/apply {project, sessionId}
+ *
+ * Neither route exists yet — this file is RED at branch base (every
+ * assertion below fails against a 404 fallthrough on the un-added routes;
+ * `startBridge` itself exists today, so this is NOT a module-not-found red
+ * — mirrors `cli/ui-bridge-onboarding-start.test.ts`'s own header note for
+ * the identical situation).
+ *
+ * Mirrors `POST /api/studio/authoring/start` (`cli/ui-bridge-authoring-
+ * start.test.ts`) and the KB-create hand-off (`cli/bridge-studio-kbs.ts`
+ * ~:1189) for the session-anchor shape: a project-bound KB anchors its
+ * cleanup session under the real project (`<projectsRoot>/<ref>/`); every
+ * OTHER binding kind anchors under the dot-prefixed KB-seeding anchor
+ * (`<projectsRoot>/.kb-<id>/`) so `discoverProjects` never surfaces a
+ * phantom project for it.
+ *
+ * DESIGN CALLS this file makes explicit (task brief left them open —
+ * report to the implementer, not silently resolved):
+ *   - The start route's `findings` are asserted to be a real, non-fabricated
+ *     array reflecting an ACTUAL on-disk lint defect (a theme file missing a
+ *     required frontmatter field) — never a hardcoded shape. The EXACT
+ *     scoping mechanism (`runBrainLint`+`scopeFindingsToKb` vs.
+ *     `lintThemeFiles`+`listOwnThemeFiles` vs. something new) is an
+ *     implementation choice this file does not dictate.
+ *   - The apply route's exact request/response shape beyond `{project,
+ *     sessionId}` -> `{ok:true}` and the phase transition is not over-
+ *     specified; classification of its dry-bridge row is pinned separately
+ *     in `cli/dry-bridge-coverage.test.ts` (deliberately without hardcoding
+ *     WHICH classification — see that file's own comment).
+ */
+
+import { test, before, after } from 'node:test';
+import assert from 'node:assert/strict';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
+
+import { startBridge } from './ui-bridge.ts';
+import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+
+const CSRF = { 'content-type': 'application/json', 'x-forge-csrf': '1' };
+
+let forgeRoot: string;
+let url: string;
+let close: () => Promise<void>;
+
+before(async () => {
+  forgeRoot = mkdtempSync(join(tmpdir(), 'bridge-kb-cleanup-'));
+  for (const state of ['pending', 'in-flight', 'ready-for-review', 'done', 'failed']) {
+    mkdirSync(join(forgeRoot, '_queue', state), { recursive: true });
+  }
+  mkdirSync(join(forgeRoot, '_logs'), { recursive: true });
+  mkdirSync(join(forgeRoot, 'projects'), { recursive: true });
+
+  process.env.FORGE_DRY_BRIDGE = '1';
+  ({ url, close } = await startBridge({ forgeRoot, port: 0 }));
+});
+
+after(async () => {
+  if (close) await close();
+  delete process.env.FORGE_DRY_BRIDGE;
+  if (forgeRoot) rmSync(forgeRoot, { recursive: true, force: true });
+});
+
+// ---------------------------------------------------------------------------
+// Fixture helpers
+// ---------------------------------------------------------------------------
+
+/** Writes a minimal, real `brain/<id>/kb.yaml` (+ themes/ + _raw/) directly
+ *  on disk — mirrors `cli/bridge-studio-kb-seeding-pins.test.ts`'s own
+ *  `CYCLES_KB_YAML`/`FORGE_DEV_KB_YAML` fixture idiom, never manufactured
+ *  through a route. `bindingYaml` is the raw flow-style YAML for the
+ *  `binding:` field, e.g. `{ kind: project, ref: demoproj }` or
+ *  `{ kind: unique }`. */
+function writeKb(id: string, bindingYaml: string): void {
+  const dir = join(forgeRoot, 'brain', id);
+  mkdirSync(join(dir, 'themes'), { recursive: true });
+  mkdirSync(join(dir, '_raw'), { recursive: true });
+  writeFileSync(join(dir, 'kb.yaml'), `id: ${id}\nname: Fixture KB ${id}\nbinding: ${bindingYaml}\ndesc: A fixture KB for kb-cleanup route tests.\n`, 'utf8');
+}
+
+/** Plants a theme file under `brain/<kbId>/themes/` that is missing the
+ *  required `description` frontmatter field — a REAL, detectable
+ *  `checkFrontmatter`-shaped defect (cli/brain-lint.ts's
+ *  REQUIRED_FRONTMATTER_FIELDS), not a fabricated finding. */
+function writeBrokenTheme(kbId: string, filename = 'broken.md'): string {
+  const themesDir = join(forgeRoot, 'brain', kbId, 'themes');
+  mkdirSync(themesDir, { recursive: true });
+  const abs = join(themesDir, filename);
+  writeFileSync(
+    abs,
+    ['---', 'title: Broken Theme', 'category: pattern', 'created_at: "2026-01-01"', 'updated_at: "2026-01-01"', '---', '# Broken Theme', '', 'Body text with no description field in frontmatter.', ''].join('\n'),
+    'utf8',
+  );
+  return abs;
+}
+
+/** Recursively snapshot a directory as a sorted list of relative file paths
+ *  — for asserting "nothing new was written" without caring about content. */
+function snapshotFileList(dir: string): string[] {
+  const out: string[] = [];
+  function walk(current: string, rel: string): void {
+    if (!existsSync(current)) return;
+    for (const entry of readdirSync(current, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const abs = join(current, entry.name);
+      const relPath = rel ? `${rel}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) walk(abs, relPath);
+      else out.push(relPath);
+    }
+  }
+  walk(dir, '');
+  return out;
+}
+
+function start(kbId: string): Promise<Response> {
+  return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/start`, { method: 'POST', headers: CSRF, body: '{}' });
+}
+
+function apply(kbId: string, body: unknown): Promise<Response> {
+  return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/apply`, { method: 'POST', headers: CSRF, body: JSON.stringify(body) });
+}
+
+type CleanupStatus = {
+  session_id: string;
+  project: string;
+  phase: string;
+  kb_id: string;
+  kb_binding: unknown;
+  findings: unknown[];
+  updated_at: string;
+};
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/kbs/:id/cleanup/start — validation
+// ---------------------------------------------------------------------------
+
+// Kills: a route that skips slug validation on the kb id and lets a
+// traversal/control-char id reach a filesystem call.
+test('AT-1: malformed kb id ("..") -> 400, nothing written anywhere under forgeRoot', async () => {
+  const before = snapshotFileList(forgeRoot);
+  const res = await start('..');
+  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${await res.text()}`);
+  assert.deepEqual(snapshotFileList(forgeRoot), before, 'a rejected request must create nothing on disk anywhere under forgeRoot — the ARTIFACT, not merely the status code');
+});
+
+// Kills: a route that 200s (or 500s) instead of a clean 404 for a
+// well-formed but non-existent kb id.
+test('AT-2: unknown (but well-formed) kb id -> 404', async () => {
+  const res = await start('no-such-kb-at-all');
+  assert.equal(res.status, 404, `expected 404, got ${res.status}: ${await res.text()}`);
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/kbs/:id/cleanup/start — happy path, project-bound anchor
+// ---------------------------------------------------------------------------
+
+// Kills: a route that anchors the session anywhere other than the KB's OWN
+// bound project (e.g. hardcoding `.kb-<id>` regardless of binding kind, or
+// dropping kb_id/kb_binding/findings from status.json — the declared-data-
+// fails-open shape this campaign keeps finding).
+test('AT-3: a project-bound KB\'s start route resolves the session anchor to the REAL bound project (mirrors the KB-create hand-off, cli/bridge-studio-kbs.ts ~:1189) — 200, server-generated sessionId, status.json at <project>/_kb-cleanup/<sid>/ with phase:drafting + kb_id + kb_binding + findings array, dry-bridge marker present', async () => {
+  writeKb('proj-bound-cleanup-kb', '{ kind: project, ref: demoproj }');
+  mkdirSync(join(forgeRoot, 'projects', 'demoproj'), { recursive: true });
+
+  const res = await start('proj-bound-cleanup-kb');
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; sessionId: string; dryBridge?: { skipped: string[] } };
+  assert.equal(body.ok, true);
+  assert.ok(typeof body.sessionId === 'string' && body.sessionId.length > 0, 'sessionId must be server-generated and present');
+  assert.ok(body.dryBridge, `expected a dryBridge marker on the response under FORGE_DRY_BRIDGE=1 (mirrors authoring/start), got: ${text}`);
+
+  const sessionDir = join(forgeRoot, 'projects', 'demoproj', '_kb-cleanup', body.sessionId);
+  assert.ok(existsSync(join(sessionDir, 'status.json')), `expected a real status.json at ${sessionDir}`);
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
+  assert.equal(status.session_id, body.sessionId);
+  assert.equal(status.project, 'demoproj', 'a project-bound KB\'s sessionProject must be the REAL project ref, not a dot-anchor');
+  assert.equal(status.phase, 'drafting', 'the seeded phase must be "drafting" — the kb-cleanup turnSpec\'s first row');
+  assert.equal(status.kb_id, 'proj-bound-cleanup-kb');
+  assert.deepEqual(status.kb_binding, { kind: 'project', ref: 'demoproj' }, 'kb_binding must be the KB\'s own descriptor-derived binding, not a re-derived guess');
+  assert.ok(Array.isArray(status.findings), 'findings must be a real array (possibly empty for a clean KB), never absent');
+  assert.ok(typeof status.updated_at === 'string' && status.updated_at.length > 0);
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/kbs/:id/cleanup/start — happy path, non-project anchor
+// ---------------------------------------------------------------------------
+
+// Kills: a route that anchors EVERY kb-cleanup session under a real project
+// regardless of binding kind — a non-project-bound KB (flow/unique/band)
+// would then create a phantom `projects/<kbId>/` directory `discoverProjects`
+// surfaces as a fake project (the exact MAJOR-2 defect the KB-create
+// hand-off's own R1-06 WI-2 fix pinned — this route must mirror that fix,
+// not re-introduce it).
+test('AT-4: a NON-project-bound KB\'s start route anchors the session under the dot-prefixed KB-seeding anchor (.kb-<id>), never under projects/<kbId>/ directly', async () => {
+  writeKb('unique-cleanup-kb', '{ kind: unique }');
+
+  const res = await start('unique-cleanup-kb');
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { sessionId: string };
+
+  const expectedAnchor = `${KB_SEEDING_ANCHOR_PREFIX}unique-cleanup-kb`;
+  const sessionDir = join(forgeRoot, 'projects', expectedAnchor, '_kb-cleanup', body.sessionId);
+  assert.ok(existsSync(join(sessionDir, 'status.json')), `expected the session anchored under the dot-prefixed anchor at ${sessionDir}`);
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
+  assert.equal(status.project, expectedAnchor, 'the echoed project must be the dot-anchored value, verbatim');
+
+  assert.ok(
+    !existsSync(join(forgeRoot, 'projects', 'unique-cleanup-kb')),
+    'a phantom projects/<kbId>/ (without the dot-prefix) must never be created — this is the exact phantom-project defect the KB-create hand-off\'s own MAJOR-2 fix guards against',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/kbs/:id/cleanup/start — findings come from a LIVE scan
+// ---------------------------------------------------------------------------
+
+// Kills: a route that writes `findings: []` unconditionally (a fabricated/
+// hardcoded empty result) instead of actually running a live, KB-scoped
+// brain-lint pass — proven by planting a REAL, detectable defect (a theme
+// file missing a required frontmatter field) and requiring it to show up.
+test('AT-5: findings reflect a REAL on-disk lint defect for this KB — not a fabricated/hardcoded empty array', async () => {
+  writeKb('defect-cleanup-kb', '{ kind: unique }');
+  writeBrokenTheme('defect-cleanup-kb');
+
+  const res = await start('defect-cleanup-kb');
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { sessionId: string };
+
+  const sessionDir = join(forgeRoot, 'projects', `${KB_SEEDING_ANCHOR_PREFIX}defect-cleanup-kb`, '_kb-cleanup', body.sessionId);
+  const status = JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')) as CleanupStatus;
+
+  assert.ok(status.findings.length > 0, `expected at least one real finding for the planted defect, got: ${JSON.stringify(status.findings)}`);
+  const serialized = JSON.stringify(status.findings);
+  assert.match(serialized, /broken\.md/, `expected a finding naming the broken theme file, got: ${serialized}`);
+  assert.match(serialized, /frontmatter|description/i, `expected a finding describing the missing-frontmatter-field defect, got: ${serialized}`);
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/studio/kbs/:id/cleanup/apply
+// ---------------------------------------------------------------------------
+
+/** Plants a kb-cleanup session's status.json DIRECTLY on disk (never through
+ *  the start route) at the exact shape the start route is expected to
+ *  produce — keeps the apply-route tests below independent of whether the
+ *  start route itself is implemented correctly yet. */
+function plantCleanupSession(sessionProject: string, sessionId: string, phase: string, kbId: string): string {
+  const sessionDir = join(forgeRoot, 'projects', sessionProject, '_kb-cleanup', sessionId);
+  mkdirSync(sessionDir, { recursive: true });
+  const status: CleanupStatus = {
+    session_id: sessionId,
+    project: sessionProject,
+    phase,
+    kb_id: kbId,
+    kb_binding: { kind: 'unique' },
+    findings: [],
+    updated_at: new Date().toISOString(),
+  };
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify(status, null, 2), 'utf8');
+  return sessionDir;
+}
+
+// Kills: an apply route that applies the plan regardless of the session's
+// current phase — the whole point of the approval gate (item #11 in the
+// turn-spine suite) is worthless if the APPLY route itself doesn't also
+// enforce it.
+test('AT-6: apply refuses with 409 when the session\'s phase is NOT exactly awaiting-approval (e.g. still "drafting")', async () => {
+  writeKb('apply-wrongphase-kb', '{ kind: unique }');
+  const sessionId = 'apply-wrongphase-001';
+  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-wrongphase-kb`;
+  const sessionDir = plantCleanupSession(sessionProject, sessionId, 'drafting', 'apply-wrongphase-kb');
+  // Precondition, asserted before reading any verdict.
+  assert.equal(JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase, 'drafting', 'arrange: seeded status must start in drafting');
+
+  const res = await apply('apply-wrongphase-kb', { project: sessionProject, sessionId });
+  assert.equal(res.status, 409, `expected 409 for a session not at awaiting-approval, got ${res.status}: ${await res.text()}`);
+  assert.equal(
+    JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase,
+    'drafting',
+    'a refused apply must leave status.json byte-identical in its load-bearing field — phase must NOT have moved',
+  );
+});
+
+// Kills: an apply route with no real "session not found" handling (e.g. a
+// 500 crash, or worse, a 200 that silently no-ops).
+test('AT-7: apply against an unknown sessionId -> 404 (or another explicit non-2xx/non-409), never a silent 200', async () => {
+  writeKb('apply-unknown-kb', '{ kind: unique }');
+  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-unknown-kb`;
+  const res = await apply('apply-unknown-kb', { project: sessionProject, sessionId: 'no-such-session-at-all' });
+  assert.notEqual(res.status, 200, 'applying against a session that was never started must never silently 200');
+});
+
+// Kills: an apply route that never actually flips the phase to "applied" on
+// success (e.g. it drains the deterministic fixes but forgets the terminal
+// status write), leaving the session stuck at awaiting-approval forever.
+test('AT-8: apply from awaiting-approval succeeds and writes phase:applied to status.json on disk', async () => {
+  writeKb('apply-success-kb', '{ kind: unique }');
+  const sessionId = 'apply-success-001';
+  const sessionProject = `${KB_SEEDING_ANCHOR_PREFIX}apply-success-kb`;
+  const sessionDir = plantCleanupSession(sessionProject, sessionId, 'awaiting-approval', 'apply-success-kb');
+  // Precondition, asserted before reading any verdict.
+  assert.equal(JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase, 'awaiting-approval', 'arrange: seeded status must start in awaiting-approval');
+
+  const res = await apply('apply-success-kb', { project: sessionProject, sessionId });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  assert.equal(
+    JSON.parse(readFileSync(join(sessionDir, 'status.json'), 'utf8')).phase,
+    'applied',
+    'status.json on disk must reflect phase:applied after a successful apply — the ONLY route allowed to write this phase',
+  );
+});
