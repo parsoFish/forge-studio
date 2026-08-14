@@ -43,7 +43,10 @@ inventory rather than one shared page-level contract:
     carry that derived field (Library shows every project, Home shows only the
     rows that fired). **KB rows** (`buildKbAttention`, forge-2am) are
     `a[data-attention-item][data-attention-kind="kb"][data-attention-kb][data-attention-status]`
-    with `href="/knowledge?id=<id>"` and `id="kb-<id>"`; `data-attention-status`
+    with `href="/knowledge?id=<id>"` (the row's React `key` is `kb-<id>`-shaped
+    but a `key` is React-internal bookkeeping, never rendered to the DOM — the
+    row carries no `id` attribute at all; find it via `data-attention-kb`
+    instead); `data-attention-status`
     is `fail|warn|unknown` (never `gated|flagged`, the gate-row vocabulary) —
     `unknown` means the KB's own lint run threw (`lint.error` present), an
     HONEST "the server cannot attest" signal, never a default. The row also
@@ -93,7 +96,16 @@ inventory rather than one shared page-level contract:
   (forge-n5r) — derived through the ONE shared `runsForFlow`/`deriveFlowStatus`
   matcher `lib/home-view.ts` and the `/flows/[id]` monitor also use (a run
   belongs to a flow by direct `run.flowId` OR by `run.flowLineage` — a
-  threaded-spine run must not leave the card wrongly idle). Every card type —
+  threaded-spine run must not leave the card wrongly idle). `data-flow-status`
+  is this SHARED, LIVE 3-state derivation only — it carries no `'failed'`
+  state, by design. The same `FlowCard` also carries `data-flow-failed-count`
+  and `data-flow-gated-count` (review round, GAP 3) — plain integers, ALWAYS
+  present (`"0"` when none), sourced from the SAME lineage-aware `runsForFlow`
+  set that already feeds the "N failed"/"N needs you" chips, so a failed-only
+  flow (which still reads `data-flow-status="idle"`, since "failed" is not a
+  live state) is DOM-distinguishable from a truly never-run one. Automation
+  must read these counts rather than infer a failure from `data-flow-status`
+  alone. Every card type —
   `FlowCard`/`AgentCard`/`ProjectCard`/`KbCard` — carries
   `data-provenance="ootb"|"operator"|"unknown"` (forge-3oq), read STRAIGHT off
   the server's per-object `provenance` field (`fetchStudioKbs`/`Flows`/`Agents`/

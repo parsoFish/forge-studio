@@ -76,18 +76,49 @@ export function parseProvenance(raw: unknown): Provenance {
  * fabrication is the declared-data-fails-open shape this seam exists to
  * close (`buildKbAttention` in `home-view.ts` treats `null` as "no row",
  * never as "clean").
+ *
+ * Review round (GAP 1/GAP 2, R6-07 batch-H honesty pass): two more ways this
+ * boundary was failing open, both fixed here —
+ *
+ *  - GAP 1: `error`'s PRESENCE (not its absence) is the server's "the lint
+ *    run itself threw" signal (see `KbLintSummary`'s header above). The
+ *    prior `typeof l.error === 'string' ? {error} : {}` silently DROPPED a
+ *    present-but-wrong-typed `error` instead of rejecting the object — that
+ *    fabricates exactly the all-clean verdict this parser exists to refuse.
+ *    A present-but-non-string `error` now invalidates the WHOLE object to
+ *    `null`. `error: null` (and an absent key) both mean "no error was
+ *    reported" and stay valid, with no `error` key on the result — `null`
+ *    is not itself a rejection reason, only a wrong-typed non-null value is.
+ *  - GAP 2: `typeof x === 'number'` alone admits NaN/Infinity/negative/
+ *    non-integer counts, and nothing checked `checksRun <= checksTotal` —
+ *    together these could reach the DOM as `data-attention-lint-errors="NaN"`
+ *    or an inverted "50/10 checks ran". All four counts must now be finite,
+ *    non-negative integers with `checksRun <= checksTotal`.
  */
 export function parseKbLintSummary(raw: unknown): KbLintSummary | null {
   if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
   const l = raw as Partial<KbLintSummary>;
+
+  const isValidCount = (x: unknown): x is number =>
+    typeof x === 'number' && Number.isInteger(x) && x >= 0;
+
   if (
-    typeof l.errors !== 'number' ||
-    typeof l.flags !== 'number' ||
-    typeof l.checksRun !== 'number' ||
-    typeof l.checksTotal !== 'number'
+    !isValidCount(l.errors) ||
+    !isValidCount(l.flags) ||
+    !isValidCount(l.checksRun) ||
+    !isValidCount(l.checksTotal) ||
+    l.checksRun > l.checksTotal
   ) {
     return null;
   }
+
+  // A present-but-non-string, non-null `error` is a malformed payload —
+  // reject the WHOLE object rather than silently dropping just this field
+  // (GAP 1 above). `undefined` (absent) and `null` both mean "no error".
+  if (l.error !== undefined && l.error !== null && typeof l.error !== 'string') {
+    return null;
+  }
+
   return {
     errors: l.errors,
     flags: l.flags,

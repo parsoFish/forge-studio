@@ -128,6 +128,14 @@ export function FlowCard({
   const gatedRuns = flowRuns.filter((r) => r.status === 'gated');
   const failedRuns = flowRuns.filter((r) => r.status === 'failed');
 
+  // review round (GAP 3): deriveFlowStatus stays a 3-state derivation
+  // (active|gated|idle) shared byte-for-byte with the flow monitor — a
+  // 4th 'failed' state is deliberately NOT added here. Instead
+  // data-flow-failed-count/data-flow-gated-count below mirror the SAME
+  // lineage-aware runsForFlow set that already feeds the gated/failed
+  // chips, so DOM-driven automation can tell a failed-only flow apart
+  // from a never-run one without scraping chip text. Always present
+  // ("0" when none) — never omitted just because the count is zero.
   return (
     <Link
       href={`/flows/${encodeURIComponent(flow.id)}`}
@@ -136,6 +144,8 @@ export function FlowCard({
       data-card-id={flow.id}
       data-provenance={provenance}
       data-flow-status={flowStatus}
+      data-flow-failed-count={failedRuns.length}
+      data-flow-gated-count={gatedRuns.length}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
