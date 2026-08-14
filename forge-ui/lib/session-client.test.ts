@@ -109,6 +109,16 @@ import {
   parseSessionShellPayload,
   interpretSessionShellOutcome,
 } from './session-client.ts';
+// R4-19-F2 AT-116..124 (below): `sessionArtifactView` is imported ONLY for
+// the AT-124 end-to-end seam test — this is the ONE test in this file that
+// deliberately crosses into session-artifact-view.ts, to prove the two
+// modules compose (parseSessionArtifact's wire output is exactly what
+// sessionArtifactView accepts) for the REAL captured kb-cleanup fixture.
+// Every other test in this file stays scoped to session-client.ts alone,
+// per this file's own header convention.
+import { sessionArtifactView, type CleanupPlanView } from './session-artifact-view.ts';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 
 // ---------------------------------------------------------------------------
 // Fixtures — mirror the REAL on-disk-derived shapes verified in
@@ -863,4 +873,188 @@ test('R4-17 AT-115: parseSessionArtifact: contract-buildout "sourcesScanned" or 
   const { label: _drop2, ...missingLabel } = WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT;
   expect(() => parseSessionArtifact(missingLabel)).toThrow();
   expect(() => parseSessionArtifact({ ...WELL_FORMED_CONTRACT_BUILDOUT_ARTIFACT, label: 7 })).toThrow();
+});
+
+// ===========================================================================
+// R4-19-F2 — "cleanup-plan" (the kb-cleanup session's brain-maintenance
+// artifact, orchestrator/studio/session-transcript.ts's CleanupPlanArtifact/
+// CleanupPlanAction) — AT-116..124.
+//
+// THE DEFECT this block exists to kill: `parseSessionArtifact`'s switch has
+// NO `case 'cleanup-plan':` today — every payload of this kind falls through
+// to the `default` branch and throws `unrecognised session artifact kind:
+// "cleanup-plan"`, even though the session-kind descriptor declares it
+// `status: 'live'` (studio/session-kinds.yaml) and the VIEW layer
+// (session-artifact-view.ts's cleanupPlanView, fully covered by session-
+// artifact-view.test.ts's AT-123..133) is already built and green. The whole
+// kind is backend-complete and view-complete yet unreachable in the product
+// — exactly the shape brain/cycles/themes/new-session-kind-needs-ui-wiring.md
+// documents (R4-21's prior instance) — because this ONE parse case was never
+// added. AT-116 is the direct kill of that failure.
+//
+// DEFENSIVENESS CONTRACT (AT-117..122): mirrors 'contract-buildout' (AT-110.
+// .115) for the array-of-per-row-objects-with-an-enum-field shape — the
+// closest structural analog to `actions: CleanupPlanAction[]` (each row
+// carrying its own closed-set `state`, exactly like ContractStageRow's
+// `status`). `openFindingCount` mirrors 'brain-structure''s `themeCount`
+// (AT-20) — a server-reported count threaded through VERBATIM, never
+// re-derived client-side from the array it accompanies. `plan` mirrors
+// 'markdown-draft''s `body` (AT-13/AT-16) — a nullable string field, `null`
+// being a LEGITIMATE "no draft/plan yet" value, not an error.
+//
+// This block deliberately does NOT require the file-package/contract-
+// buildout "wrap so a bare {kind:'cleanup-plan'} names the kind in its error
+// message" behaviour AT-21 pins for those two kinds — 'generation-gallery'
+// (AT-102..109) is live proof that behaviour is NOT a universal contract
+// (AT-21's own comment explains it was REMOVED from that test, not added to,
+// when generation-gallery flipped live): requiring it here would invent a
+// stricter contract than the majority of this file's own live kinds already
+// have. See the T3 report for this explicit ruling.
+// ===========================================================================
+
+const WELL_FORMED_CLEANUP_PLAN_ARTIFACT = {
+  kind: 'cleanup-plan',
+  label: 'Cleanup plan', // studio/session-kinds.yaml's kb-cleanup artifact.label, verbatim
+  plan: '# Cleanup Plan\n\nOne finding.\n',
+  actions: [
+    { kind: 'length.soft-cap', target: 'brain/forge-dev/themes/alpha.md', proposal: 'Condense the theme toward the soft cap.', state: 'open' },
+  ],
+  openFindingCount: 1,
+};
+
+test('R4-19-F2 AT-116: parseSessionArtifact: a well-formed cleanup-plan artifact round-trips exactly, actions in server order — kills the current "unrecognised session artifact kind: cleanup-plan" failure that makes the whole kb-cleanup feature unreachable client-side, no matter how correct the server + view layers are', () => {
+  expect(() => parseSessionArtifact(WELL_FORMED_CLEANUP_PLAN_ARTIFACT)).not.toThrow();
+  expect(parseSessionArtifact(WELL_FORMED_CLEANUP_PLAN_ARTIFACT)).toEqual(WELL_FORMED_CLEANUP_PLAN_ARTIFACT);
+});
+
+test('R4-19-F2 AT-117: parseSessionArtifact: cleanup-plan "actions" missing or non-array THROWS — never coerced to [] — mirrors AT-111\'s contract-buildout "stages" contract, the closest structural analog', () => {
+  // Sanity (mirrors AT-111's own precedent): a WELL-FORMED payload must
+  // parse cleanly — proves this test is genuinely red today for the right
+  // reason. Without this, the malformed-input assertions below would pass
+  // VACUOUSLY: today EVERY cleanup-plan input throws "unrecognised session
+  // artifact kind" regardless of "actions"' shape, since the case doesn't
+  // exist yet — that is not proof this parser validates "actions" at all.
+  expect(() => parseSessionArtifact(WELL_FORMED_CLEANUP_PLAN_ARTIFACT)).not.toThrow();
+  const { actions: _drop, ...missing } = WELL_FORMED_CLEANUP_PLAN_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, actions: 'nope' })).toThrow();
+});
+
+test('R4-19-F2 AT-118: parseSessionArtifact: a cleanup-plan action with an unrecognised "state" (not "open"|"cleared"|"unknown") THROWS naming it — mirrors AT-112\'s contract-buildout "status" enum contract exactly, never silently coerced to the most permissive reading', () => {
+  const badState = {
+    ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT,
+    actions: [{ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT.actions[0], state: 'resolved' }],
+  };
+  expect(() => parseSessionArtifact(badState)).toThrow(/resolved/);
+});
+
+test('R4-19-F2 AT-119: parseSessionArtifact: a cleanup-plan action with a missing/non-string "kind", "target", or "proposal" THROWS — mirrors AT-113\'s contract-buildout per-field row contract', () => {
+  // Sanity (mirrors AT-111/AT-117's own precedent): proves this test is
+  // genuinely red today for the right reason, not vacuously passing because
+  // EVERY cleanup-plan input already throws for the unrelated "unrecognised
+  // kind" reason.
+  expect(() => parseSessionArtifact(WELL_FORMED_CLEANUP_PLAN_ARTIFACT)).not.toThrow();
+  const badKind = { ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, actions: [{ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT.actions[0], kind: 7 }] };
+  expect(() => parseSessionArtifact(badKind)).toThrow();
+  const badTarget = { ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, actions: [{ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT.actions[0], target: null }] };
+  expect(() => parseSessionArtifact(badTarget)).toThrow();
+  const badProposal = { ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, actions: [{ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT.actions[0], proposal: undefined }] };
+  expect(() => parseSessionArtifact(badProposal)).toThrow();
+});
+
+test('R4-19-F2 AT-120: parseSessionArtifact: cleanup-plan "openFindingCount" missing or non-number THROWS, and is NEVER re-derived from the actions\' own "open" states by this parser — mirrors AT-20\'s brain-structure themeCount precedent exactly', () => {
+  const { openFindingCount: _drop, ...missing } = WELL_FORMED_CLEANUP_PLAN_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, openFindingCount: '1' })).toThrow();
+  // A count that legitimately diverges from actions.filter(a => a.state ===
+  // 'open').length (zero actual open rows here) must round-trip verbatim,
+  // never be silently "corrected" to the client-recomputed number.
+  const divergent = {
+    ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT,
+    actions: [{ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT.actions[0], state: 'cleared' }],
+    openFindingCount: 9,
+  };
+  expect((parseSessionArtifact(divergent) as { openFindingCount: number }).openFindingCount).toBe(9);
+});
+
+test('R4-19-F2 AT-121: parseSessionArtifact: cleanup-plan "plan" accepts a string OR literal null (no drafted plan yet) but THROWS on any other type — mirrors markdown-draft\'s "body" contract (AT-13/AT-16) applied to this kind\'s own nullable plan field', () => {
+  const noPlanYet = { kind: 'cleanup-plan', label: 'Cleanup plan', plan: null, actions: [], openFindingCount: 0 };
+  expect(() => parseSessionArtifact(noPlanYet)).not.toThrow();
+  expect((parseSessionArtifact(noPlanYet) as { plan: string | null }).plan).toBeNull();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, plan: 7 })).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, plan: [] })).toThrow();
+});
+
+test('R4-19-F2 AT-122: parseSessionArtifact: cleanup-plan "label" missing or non-string THROWS — same treatment pinned for every other live kind (AT-90\'s contract)', () => {
+  const { label: _drop, ...missing } = WELL_FORMED_CLEANUP_PLAN_ARTIFACT;
+  expect(() => parseSessionArtifact(missing)).toThrow();
+  expect(() => parseSessionArtifact({ ...WELL_FORMED_CLEANUP_PLAN_ARTIFACT, label: 7 })).toThrow();
+  expect(parseSessionArtifact(WELL_FORMED_CLEANUP_PLAN_ARTIFACT).label).toBe('Cleanup plan');
+});
+
+// ---------------------------------------------------------------------------
+// AT-123/124 — round-trip against the REAL captured fixture
+// (scripts/journeys/fixtures/r4-19-f2-live-capture/), read from disk, never
+// inlined. `plan` is the raw markdown, byte-for-byte, read via readFileSync.
+// The two actions' kind/target/proposal are hand-copied from that same
+// file's two `- [<kind>] <target> — <proposal>` lines — mirrors session-
+// artifact-view.test.ts's own REAL_CLEANUP_PLAN_ARTIFACT precedent exactly
+// (this test file has no business importing session-transcript.ts's
+// server-side action-line parser; see that file's header note for the full
+// rationale). AT-123 is a drift guard: if status.json's findings ever stop
+// matching what AT-124 hand-copies below, AT-123 fails first, with a message
+// naming the fixture mismatch — instead of AT-124 failing confusingly on a
+// state:'open' assertion for the wrong reason.
+// ---------------------------------------------------------------------------
+
+const REAL_CAPTURE_DIR = resolve(__dirname, '../../scripts/journeys/fixtures/r4-19-f2-live-capture');
+const REAL_CLEANUP_PLAN_MD = readFileSync(resolve(REAL_CAPTURE_DIR, 'cleanup-plan.md'), 'utf8');
+const REAL_STATUS_JSON = JSON.parse(readFileSync(resolve(REAL_CAPTURE_DIR, 'status.json'), 'utf8')) as {
+  findings: Array<{ kind: string; file: string }>;
+};
+
+const REAL_CLEANUP_PLAN_WIRE_PAYLOAD = {
+  kind: 'cleanup-plan',
+  label: 'Cleanup plan',
+  plan: REAL_CLEANUP_PLAN_MD,
+  actions: [
+    {
+      kind: 'length.soft-cap',
+      target: 'brain/forge-dev/themes/brain-read-policy.md',
+      proposal:
+        'Condense the theme from 65 to ≤60 body lines by merging the two near-duplicate source bullets and folding the R1-01 / R1-06 blockquote callouts into a compact inline history note.',
+      state: 'open',
+    },
+    {
+      kind: 'edge.dangling',
+      target: 'brain/forge-dev/themes/exploration-vs-implementation-initiatives.md',
+      proposal:
+        'Drop the `related_themes` entry `forge-current-architecture-as-built` because no matching theme file exists anywhere under `brain/**/themes/` and no plausible surviving slug was found.',
+      state: 'open',
+    },
+  ],
+  openFindingCount: 2,
+};
+
+test('R4-19-F2 AT-123: sanity/drift guard — the real status.json fixture still carries both findings AT-124\'s wire payload assumes (not itself the seam proof)', () => {
+  expect(REAL_STATUS_JSON.findings).toHaveLength(2);
+  expect(REAL_STATUS_JSON.findings[0].kind).toBe('length.soft-cap');
+  expect(REAL_STATUS_JSON.findings[0].file.endsWith('brain/forge-dev/themes/brain-read-policy.md')).toBe(true);
+  expect(REAL_STATUS_JSON.findings[1].kind).toBe('edge.dangling');
+  expect(REAL_STATUS_JSON.findings[1].file.endsWith('brain/forge-dev/themes/exploration-vs-implementation-initiatives.md')).toBe(true);
+});
+
+test('R4-19-F2 AT-124 (real-capture END-TO-END seam — the ONE test proving server -> parser -> view composition): the REAL r4-19-f2-live-capture fixture, wire-shaped exactly as the bridge sends it, survives parseSessionArtifact then renders through sessionArtifactView with both real actions. session-artifact-view.test.ts\'s own AT-133 calls cleanupPlanView directly on an already-typed, HAND-BUILT CleanupPlanArtifact — it never goes through parseSessionArtifact, so it stays green even while this parser still throws "unrecognised session artifact kind: cleanup-plan" for the exact same real data. This test is the missing link; a fix on only one side of the break would leave this one red.', () => {
+  const parsed = parseSessionArtifact(REAL_CLEANUP_PLAN_WIRE_PAYLOAD);
+  expect(parsed).toEqual(REAL_CLEANUP_PLAN_WIRE_PAYLOAD);
+
+  const view = sessionArtifactView(parsed) as CleanupPlanView;
+  expect(view.kind).toBe('cleanup-plan');
+  expect(view.state).toBe('has-actions');
+  expect(view.actions).toHaveLength(2);
+  expect(view.actions.map((a) => a.kind)).toEqual(['length.soft-cap', 'edge.dangling']);
+  expect(view.actions.every((a) => a.state === 'open')).toBe(true);
+  expect(view.openFindingCount).toBe(2);
+  expect(view.settled).toBe(false); // both actions still open, nothing cleared yet
+  expect(view.plan).toBe(REAL_CLEANUP_PLAN_MD);
 });
