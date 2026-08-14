@@ -75,10 +75,6 @@ export function listCycles(logsDir = '_logs'): string[] {
     .sort();
 }
 
-export function summariseAll(logsDir = '_logs'): CycleMetrics[] {
-  return listCycles(logsDir).map((id) => summariseCycle(id, logsDir));
-}
-
 export function aggregate(cycleId: string, events: EventLogEntry[]): CycleMetrics {
   const m = emptyCycle(cycleId);
   const initiatives = new Set<string>();
