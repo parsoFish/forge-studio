@@ -10,6 +10,7 @@
 - [`health-check-protocol`](./themes/health-check-protocol.md) — Post-merge test discovery + worktree-isolated execution; halts the merge train on failure.
 - [`forge-never-self-modifies`](./themes/forge-never-self-modifies.md) — Reflection outputs recommendations; humans implement forge changes in a separate session after `forge serve` is stopped.
 - [`audit-live-state-not-captured-snapshot`](./themes/audit-live-state-not-captured-snapshot.md) — Forge's captured artifacts (local clones, reflection archives, retro cost figures) go stale silently; any audit must re-derive facts from the live source of truth (origin, current _queue/done, raw events.jsonl).
+- [`environmental-failure-masquerades-as-defect`](./themes/environmental-failure-masquerades-as-defect.md) — browser-journey failures where a whole page's checks fail together ("Target crashed") are usually the host OOMing, not a code defect; run `free -h` before any `ui:journey`/`ui:deadpaths` pass (batch F: a foreign 10.3 GB leaked process cost a 45-min blind re-run that `free -h` + deadpaths diagnosed in 3).
 
 ## Operational entry points
 

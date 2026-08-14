@@ -394,10 +394,11 @@ through the live `aggregateRun` rather than invented.
 
 ### R6-03 IA & convention stewardship
 
-- **Status:** planned  ·  **Wave:** unsequenced pre-wave-5; **F3 = wave 5,
-  batch E** (sequenced late — after the surfaces it rehomes exist)
+- **Status:** F1/F2 planned; **F3 IMPLEMENTED** (2026-08-14, PR #121 `7dd423b6` —
+  six-pillar nav, one shared shell proven by deletion, redirects RED-pinned,
+  self-hosted font; batch F, not batch E as originally sequenced)  ·  **Wave:** 5
 - **Depends on:** — (grows as R3/R4 add surfaces). **Depended on by:** R6-07
-  (F3's Home pillar precedes the dashboard).
+  (F3's Home pillar precedes the dashboard — satisfied, R6-07 shipped PR #124).
 - **Context:** The set adds routes and pillars (skills library R3-01-F3, KB
   scope chips R1-01, merged states R4-11) — the conventions that keep Studio
   coherent need an owner: the DOM-as-metrics contract, the status-vocabulary
@@ -539,7 +540,11 @@ through the live `aggregateRun` rather than invented.
 
 ### R6-07 Home dashboard
 
-- **Status:** planned  ·  **Wave:** 5 (module: home-dashboard)
+- **Status:** IMPLEMENTED (2026-08-14, PR #124 `0efc1da8` — `/` is Home:
+  hex-constellation + attention strip + activity ledger, live status DERIVED
+  from the monitors' run-model reads with no new polling path; ruling-49
+  real-data acceptance verified against a ≥2-project fixture)  ·  **Wave:** 5
+  (module: home-dashboard)
 - **Depends on:** R6-03-F3 (the Home pillar exists in nav), R4-11-F4 (the
   attention strip this surfaces feeds on).
 - **Context:** Wave-5 cut. Mockup deliberate-evolution item 1: a **new Home

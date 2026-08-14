@@ -296,7 +296,7 @@ execution detail; THIS table is the driving view.
 | **C — Runs, triggers & monitors** | triggers-runtime · agent-kickoff+run · flow-run-detail · flows-home/monitor · agents-home/monitor | R2-08 · R6-04 · R6-01-F1/F4/F5 (+the R2-05 slice typed outputs need) · R6-05 · R6-06 | run-agent · run-flow · run-agent-{developer, adversarial-review, demo-runner, reflector} — all three trigger framings |
 | **D — Projects & knowledge** | projects-list/detail · project-roadmap-tab · demo-showcase · kb-create/maintain · kb-explore · per-OOTB flows · per-OOTB authoring | R4-12 · R4-13 · R4-14 · R1-06 · R6-08 · R4-19 · R4-18 · R4-20 · R4-21 | create-kb-project · create-kb-cycle · kb-maintain · run-agent-brain-creation · run-flow-onboard · run-flow-brain-tune · build-skill · build-hook |
 | **E — Interactive runtime bridge** ✅ closed 2026-08-11 | interactive-runtime-primitive · authoring-agent · onboard-flow · ~~brain-maintenance~~ (slipped at open) | R4-22 · R4-21 · R4-18 · ~~R4-19-F2~~ | build-skill ✓ · build-hook ✓ (real, live — PR #118) · run-flow-onboard ✓ (PR #116) — the 4 legacy runners green + byte-identical behind the dispatch fork; migrations re-homed to R4-23 (operator ruling; `_wave5/batch-e-exit-disposition.md`) |
-| **F — IA & Home** | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav + Home live; nav/landing beats across the gallery |
+| **F — IA & Home** ✅ closed 2026-08-14 | nav/page-shell · home-dashboard | R6-03-F3 · R6-07 | six-pillar nav ✓ (PR #121) · Home dashboard live ✓ (PR #124) · +SEC-06/07 root-fold class closed mid-batch (PR #122/#123); `_wave5/batch-f-exit-disposition.md` |
 | **G — Refinement & ground truth** | cross-cutting, terminal | R5-08 · R5-09 | dead-code sweep clean; three-scope docs (operate / develop / plan) |
 
 Batch rules: order **A→G** (batch E — interactive-runtime bridge — inserted
@@ -870,3 +870,19 @@ genuinely "planned but not yet built".
   reproduced spine defect (log-dir identity split). ADR-043's net
   surface-decrease claim is amended to "owed via R4-23" (net deletion in
   batch E: zero). Retro: `_wave5/batch-e-retro.md`.
+
+- 2026-08-14 — **Batch F CLOSED** (opened 2026-08-11; PRs #121–#124; interrupted
+  ~2 days by a weekly API limit). Exit record: `_wave5/batch-f-exit-disposition.md`.
+  All four rows closed: six-pillar nav + one shared shell proven-by-deletion +
+  redirects RED-pinned (PR #121, R6-03-F3), and the Home dashboard at `/` with
+  live status **derived** from the monitors' run-model (no new polling path),
+  ruling-49 real-data acceptance verified against a ≥2-project fixture (PR #124,
+  R6-07). Mid-batch, on operator fix-now/terse rulings, the **untrusted-`--project`
+  root-fold class was closed**: SEC-06 (legacy `cmdAgentRun`, PR #122) then SEC-07
+  (`cmdAgentDispatch` + demo-capture + bridge realpath-identity + a mutation-tested
+  ratchet extension that catches re-introduction, PR #123). The weekly-limit kill
+  cost zero work (file-durable substrate); T1 finished the parked SEC-07 merge via
+  git/gh and respawned R6-07 from its intact commits. Durable operator lesson:
+  **`free -h` before any `ui:journey`/`ui:deadpaths` run** — a foreign OOM produced
+  `Target crashed` failures that read exactly like journey-beat defects. Retro:
+  `_wave5/batch-f-retro.md`. Remaining: batch G (R5-08 · R5-09) — the last.
