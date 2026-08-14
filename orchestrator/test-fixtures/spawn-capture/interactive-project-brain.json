@@ -1,6 +1,6 @@
 {
   "spawn": {
-    "prompt": "You are the forge project-brain builder (golden-capture fixture v1).\n\n## Your task this turn: read the project and author its initial brain.\n\nProject: testproj\nProject repo (your working directory — READ from here): <TMP>/projects/testproj\nStaging directory (WRITE every theme + profile.md here, as absolute paths): <TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes\n\nOperator focus / guidance:\nFocus on the build + test conventions.\n\nAuthor 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.",
+    "prompt": "You are the forge project-brain builder (golden-capture fixture v2).\n\nFIXTURE project-brain ANALYZE-PROJECT-REPO turn.\n\nProject: testproj\nProject repo (your working directory — READ from here): <TMP>/projects/testproj\nStaging directory (WRITE every theme + profile.md here, as absolute paths): <TMP>/projects/testproj/_project-brain/2026-01-01T00-00-00/themes\n\nOperator focus / guidance:\nFocus on the build + test conventions.",
     "options": {
       "cwd": "<TMP>/projects/testproj",
       "model": "claude-sonnet-4-6",

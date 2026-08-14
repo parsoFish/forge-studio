@@ -125,10 +125,70 @@ const SESSION_ID = '2026-01-01T00-00-00';
 // Fixture skill-prompt bodies — deliberately NOT the live skills/*/SKILL.md
 // (see file header). Each is a small, distinctive literal so a one-byte
 // mutation during the WI-0 mutation proof is trivial to grep-confirm.
-const ARCHITECT_SKILL_FIXTURE = 'You are the forge architect (golden-capture fixture v1).';
-const INSTRUCTIONS_SKILL_FIXTURE = 'You are the forge instructions-creator (golden-capture fixture v1).';
-const DEMO_BUILDER_SKILL_FIXTURE = 'You are the forge demo-builder (golden-capture fixture v1).';
-const PROJECT_BRAIN_SKILL_FIXTURE = 'You are the forge project-brain builder (golden-capture fixture v1).';
+// R4-23 (v2): each runner now sources its per-turn task prose from its own
+// `SKILL.md` via `loadSkillTurnPrompt`, which selects ONE `<!-- turn: id -->`
+// section and fails loud when the requested id is absent. The fixtures below
+// therefore carry EVERY turn id their runner can request, each with distinct
+// text — so the captured prompt proves not just "a skill was read" but
+// "the RIGHT section was selected for this phase". A v1 single-line fixture
+// would now make the runner throw, which is the fail-loud contract working.
+//
+// These stay fixture strings, not the live `skills/<name>/SKILL.md`, for the
+// same reason as v1: the pin must be sensitive to a PROMPT-ASSEMBLY
+// regression without being coupled to unrelated SKILL.md prose edits. What
+// the pin now additionally kills: a runner that requests the wrong turn id
+// for its phase, or that concatenates every section instead of selecting one.
+const ARCHITECT_SKILL_FIXTURE = [
+  'You are the forge architect (golden-capture fixture v2).',
+  '',
+  '<!-- turn: interview -->',
+  'FIXTURE architect INTERVIEW turn.',
+  '',
+  '<!-- turn: explore -->',
+  'FIXTURE architect EXPLORE turn.',
+  '',
+  '<!-- turn: draft -->',
+  'FIXTURE architect DRAFT turn.',
+  '',
+  '<!-- turn: draft-force-emit -->',
+  'FIXTURE architect FORCE-EMIT turn.',
+].join('\n');
+const INSTRUCTIONS_SKILL_FIXTURE = [
+  'You are the forge instructions-creator (golden-capture fixture v2).',
+  '',
+  '<!-- turn: interview -->',
+  'FIXTURE instructions INTERVIEW turn (init mode).',
+  '',
+  '<!-- turn: interview-edit -->',
+  'FIXTURE instructions INTERVIEW turn (edit mode).',
+  '',
+  '<!-- turn: draft -->',
+  'FIXTURE instructions DRAFT turn (init mode).',
+  '',
+  '<!-- turn: draft-edit -->',
+  'FIXTURE instructions DRAFT turn (edit mode).',
+].join('\n');
+const DEMO_BUILDER_SKILL_FIXTURE = [
+  'You are the forge demo-builder (golden-capture fixture v2).',
+  '',
+  '<!-- turn: generate-element -->',
+  'FIXTURE demo-builder GENERATE-ELEMENT turn.',
+  '',
+  '<!-- turn: generate-composed -->',
+  'FIXTURE demo-builder GENERATE-COMPOSED turn.',
+  '',
+  '<!-- turn: generate-legacy -->',
+  'FIXTURE demo-builder GENERATE-LEGACY turn.',
+].join('\n');
+const PROJECT_BRAIN_SKILL_FIXTURE = [
+  'You are the forge project-brain builder (golden-capture fixture v2).',
+  '',
+  '<!-- turn: analyze-project-repo -->',
+  'FIXTURE project-brain ANALYZE-PROJECT-REPO turn.',
+  '',
+  '<!-- turn: analyze-cycle-archives -->',
+  'FIXTURE project-brain ANALYZE-CYCLE-ARCHIVES turn.',
+].join('\n');
 
 /** Read+parse a JSON file fresh off disk (no caching) — used both for the
  *  PRE-turn precondition check and the POST-turn statusAfter capture. */
