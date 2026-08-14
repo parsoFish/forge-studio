@@ -1,6 +1,6 @@
 # 043 — The generic interactive-surface primitive
 
-- **Status:** Accepted (2026-08-10, operator) — amended 2026-08-11 (migration commitment re-homed to R4-23; see Amendment)
+- **Status:** Accepted (2026-08-10, operator) — amended 2026-08-11 (migration commitment re-homed to R4-23), 2026-08-14 (R4-23 close: architect never migrates, mirror deleted, net-decrease corrected), 2026-08-15 (wave-6: interaction panel un-deferred, `panel.phases`, kickoff model tier)
 - **Date:** 2026-08-10
 - **Supersedes / amends:** Amends [ADR 042](./042-surface-cap-scope-and-testability.md) (the orchestrator surface cap) by ratifying a single sanctioned extension seam. Builds on [ADR 024](./024-phases-as-subagents-invoking-skills.md) (agent composes skills; `SKILL.md` as runtime prompt) and [ADR 039](./039-ships-as-artifact.md) (the flow-runner executor registry — which this ADR deliberately does **not** extend).
 - **Related roadmap:** `docs/roadmaps/R4-ootb-suite.md` — R4-21 (OOTB authoring agent) is consumer #1.
@@ -174,3 +174,37 @@ The exported-symbol accounting is the smaller story and is nearly flat: **+2** (
 ### 4. One disclosed consequence of the fail-loud contract
 
 The four runner-private `loadSkillPrompt` helpers failed **open** (`catch { return 'You are the forge <x> agent.' }`). That was survivable while the skill file was only a preamble; now that the task instructions live in `SKILL.md`, a fallback would launch an agent with no task and no signal — the declared-data-fails-open antipattern — so the shared loader throws instead, naming the skill, the turn id and the available ids. The disclosed cost: `cmdAgentRun` (`cli/agent-run.ts`) does not wrap the turn call, and the bridge spawns it as a detached child, so a throw on this path leaves the session's `status.json` at its pre-turn phase with the trace only in `_logs/<cycle>/stderr.log`. That wedge mechanism predates R4-23 (the "produced no theme files" throw has the same shape); R4-23 widens the set of triggers rather than creating it. Writing a terminal `failed` phase on this path is tracked separately and is deliberately not folded into this PR.
+
+## Amendment — 2026-08-15 (wave-6 daily-driver): the interaction panel is un-deferred, and the operator picks a model tier at kickoff
+
+Ruled by the operator in the wave-6 planning interview (plan: wave-6 "Daily-Driver", 2026-08-15). Four changes, none of which touch the dispatch fork or the four legacy runners.
+
+### 1. §Consequences "declared new sink … deferred" is un-deferred — to its own spec, verbatim
+
+The generic interaction panel and the `POST /api/studio/sessions/:kind/:sessionId/:affordance` write endpoint are now built (wave-6 batches B3/B4/B6), exactly under the constraints the deferral paragraph pre-committed: every path through the `resolveGuardedPath`/`guardedReadDir` choke point with the `isSafeRunId` ratchet; unknown affordances fail loud via `UnhandledAffordanceBody` (mirroring `UnhandledArtifactBody`); the endpoint lives in `cli/` (not capped, per ADR 042); `adversarial-containment-review` gates the build; the sessions journeys gate every affordance so a dropped one breaks the gate rather than rotting the demo.
+
+Affordances stay **derived, not authored** (§1 discipline): the shell read route computes an `affordances[]` view server-side from the phase table; the client renders what it is handed and never re-derives.
+
+### 2. `panel.phases` — the read-half twin of `turnSpec`, for the legacy kinds
+
+The four legacy kinds (and `onboarding`) have no `turnSpec`, and routing them through one is forbidden by the 2026-08-11 amendment (their backends stay on `AGENT_RUNNERS` / dispatch). But their *panels* need the same derived affordances. `SessionKindDescriptor` gains one additive-optional field, `panel`, whose `phases` rows use the **same deep-frozen phase-row vocabulary** as `turnSpec.phases`:
+
+- Consumed **only** by affordance derivation (the read half). The `cmdAgentRun` fork condition remains `turnSpec` presence — `panel` is invisible to dispatch, by validated exclusivity: `validateSessionKinds` rejects a descriptor carrying both `turnSpec` and `panel` (one error, naming the kind and both fields).
+- Same AT-16 split: `loadSessionKinds` parses structurally; all semantic checks live in `validateSessionKinds`.
+- This resolves the batch-E open question on `onboarding` at the UI layer only: it gains a `panel` row (its dispatch path is untouched and stays out of this ADR's scope).
+
+### 3. Kickoff model selection — a tier choice *within* the SKILL-declared envelope
+
+New requirement (operator, wave-6): pick the model at session kickoff. The seam honors ADR 024 — `SKILL.md` remains the sole source of intent AND the capability envelope:
+
+- `runtime.strategy: range` derivation already states that escalation is applied at spawn time (`orchestrator/studio/derive.ts`); this amendment ratifies the operator as one source of that spawn-time choice.
+- Kickoff writes `modelTier` into the session's `status.json` (the session dir is already the SSOT for session-scoped state; no CLI flag, no argv change).
+- One pure exported fn, `resolveSessionModel(spec, requestedTier?)` (beside `modelForSpec` in `orchestrator/phase-agent.ts`), validates `requestedTier` against the SKILL-declared range — or equality with a fixed model — and throws naming the value and the allowed set. This is the ADR-042 ratified pure-function boundary; it is the only orchestrator surface this amendment adds.
+- A skill with `strategy: fixed` renders a read-only model chip; widening a skill to `range` is a per-skill SKILL.md edit, not a UI decision.
+- Free model override (outside the declared range) was proposed and **refused** — it would make the UI a second source of runtime truth over SKILL.md.
+
+### 4. Architect keeps its bespoke *panel* permanently
+
+The frontend mirror of the 2026-08-14 amendment §1: architect is never migrated onto the generic panel. `SessionArchitectPanel` stays bespoke for the same reasons its runner does (branching control flow, council/interview affordances a linear phase table cannot express without per-kind creep). Every other kind's panel migrates: demo + onboarding first (they render nothing today), then kb-cleanup + authoring, then instructions. The bespoke panels are deleted as each kind migrates — no dual paths.
+
+One consequence restated for the panel axis: the wedge disclosed in the 2026-08-14 amendment §4 (a runner throw leaves `status.json` at its pre-turn phase) becomes operator-visible on the generic panel; writing a terminal `failed` phase on that path is in wave-6 scope (bead `forge-poc`) rather than deferred indefinitely.
