@@ -18,6 +18,9 @@
  *      registry.ts) and the reflection-path builtin invocation
  *      (orchestrator/kb-health.ts) — never in a dispatch arm or a UI
  *      action.
+ *   4. No `skills/*\/SKILL.md`'s `composition.skills` list names
+ *      `brain-ingest`, EXCEPT `skills/reflector/SKILL.md` — the ONE place
+ *      ingest is legitimately invoked (ingest stays reflection-only).
  *
  * This is a pure structural ratchet (same "prove-or-warn, one actionable
  * line per failure" model as check-request-path-sinks.mjs) — no baseline
@@ -35,6 +38,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join, relative, resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import matter from 'gray-matter';
 
 const FORGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -48,6 +52,15 @@ export const ALLOWED_INGEST_FILES = new Set([
   'orchestrator/studio/kb-descriptor.ts',
   'orchestrator/studio/registry.ts',
   'orchestrator/kb-health.ts',
+]);
+// Top-level dir of runtime-agent SKILL.md files (rule 4 below).
+const SKILLS_DIR = 'skills';
+// skills/reflector/SKILL.md is the ONE legitimate composer of `brain-ingest`
+// (`composition.skills: [brain-query, brain-ingest]`) — it is precisely the
+// place ingest is invoked, which is what "ingest stays reflection-only"
+// means. Every other agent's composition.skills must never name it.
+export const ALLOWED_INGEST_SKILL_COMPOSERS = new Set([
+  'skills/reflector/SKILL.md',
 ]);
 
 function isTestFile(p) {
@@ -121,6 +134,45 @@ export function checkNoIngestAffordance(root = FORGE_ROOT) {
     const text = readFileSync(file, 'utf8');
     if (text.includes('reflector-ingest') || text.includes('DEFAULT_KB_INGEST')) {
       violations.push(`${relPath}: references reflector-ingest/DEFAULT_KB_INGEST outside the allowed descriptor-default/reflection files`);
+    }
+  }
+
+  // 4. skills/*/SKILL.md: composition.skills must not name `brain-ingest`,
+  //    except the one allowed composer (reflector — ingest stays
+  //    reflection-only, see ALLOWED_INGEST_SKILL_COMPOSERS above).
+  const skillsRootAbs = join(root, SKILLS_DIR);
+  let skillDirs;
+  try {
+    skillDirs = readdirSync(skillsRootAbs, { withFileTypes: true }).filter((e) => e.isDirectory());
+  } catch {
+    skillDirs = []; // no skills/ dir in this tree — nothing to scan
+  }
+  for (const dirent of skillDirs) {
+    const skillMdAbs = join(skillsRootAbs, dirent.name, 'SKILL.md');
+    let raw;
+    try {
+      raw = readFileSync(skillMdAbs, 'utf8');
+    } catch {
+      continue; // no SKILL.md in this skill dir — nothing to scan
+    }
+    const relPath = relative(root, skillMdAbs).split('\\').join('/');
+    if (ALLOWED_INGEST_SKILL_COMPOSERS.has(relPath)) continue;
+
+    let data;
+    try {
+      ({ data } = matter(raw, {})); // {} opts out of gray-matter's parse cache
+    } catch {
+      continue; // unparseable frontmatter is brain-lint's concern, not this ratchet's
+    }
+    const composition = data && typeof data === 'object' && !Array.isArray(data) ? data.composition : undefined;
+    const skillsList =
+      composition && typeof composition === 'object' && !Array.isArray(composition) && Array.isArray(composition.skills)
+        ? composition.skills
+        : [];
+    if (skillsList.includes('brain-ingest')) {
+      violations.push(
+        `${relPath}: composition.skills includes 'brain-ingest' (forbidden — operator decision 3, ingest stays reflection-only. Remove it from composition.skills, or if this is a legitimate reflection-path composer add it to ALLOWED_INGEST_SKILL_COMPOSERS.)`,
+      );
     }
   }
 
