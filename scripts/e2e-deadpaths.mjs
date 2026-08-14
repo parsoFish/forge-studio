@@ -38,6 +38,13 @@ const ROUTES = [
   { path: '/agents/developer-ralph/run/nonexistent-run-e2e-deadpath', name: 'agent run view (unknown runId — 404/not-found)' },
   { path: '/projects', name: 'projects index' },
   { path: '/projects/new', name: 'project onboarding' },
+  // W6-IA-2: the flows pillar's own browse index (card grid, reuses
+  // FlowCard) — new alongside the pre-existing /flows/[id] monitor+build and
+  // /flows/new routes below. `StudioNav`'s Flows nav item still deep-links
+  // straight to /flows/forge-develop (repointed in a later lane, IA-5), so
+  // this route isn't reachable from the nav yet, but it renders a real
+  // [data-page] and must not read as a dead path.
+  { path: '/flows', name: 'flows index (W6-IA-2)' },
   { path: '/flows/forge-develop', name: 'flow monitor (seed)' },
   // R6-01 WI-2 (F4): the flow-run analogue of the agent-run entry above — an
   // UNKNOWN runId on a REAL seed flow (forge-develop) must render the honest
