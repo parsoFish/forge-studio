@@ -43,6 +43,18 @@ const FORGE_ROOT = '/fake/forge-root';
 const STAGING = '/fake/forge-root/projects/demoproj/_project-brain/2026-08-10T00-00-00/themes';
 const SKILL = 'You are the forge project-brain builder.';
 
+/**
+ * R4-23 WI-3: `buildAnalyzePlan`'s 4th parameter changed from a pre-loaded
+ * `skill: string` to a per-turn supplier `skillFor: (turnId) => string` — it
+ * now selects its own turn section (the task PROSE moved out to
+ * skills/project-brain-builder/SKILL.md; see the immutable
+ * project-brain-skill-prompt.test.ts for that contract). This fixture
+ * supplier stands in for the real `loadSkillTurnPrompt` call and encodes the
+ * selected turnId into its own output so assertions below can also confirm
+ * the correct turn id was requested per branch.
+ */
+const skillFor = (turnId: string) => `${SKILL} [[turn:${turnId}]]`;
+
 const PROJECT_REPO_PATH = '/fake/forge-root/projects/demoproj';
 
 function baseStatus(overrides: Partial<ProjectBrainStatus> = {}): ProjectBrainStatus {
@@ -57,13 +69,19 @@ function baseStatus(overrides: Partial<ProjectBrainStatus> = {}): ProjectBrainSt
   };
 }
 
-/** The exact prompt `runAnalyzeStep` assembles today (project-brain-builder-runner.ts ~201-214) —
- *  reproduced here so test (2) can assert byte-compatibility, not a loose substring match. */
+/**
+ * The DATA-half prompt `buildAnalyzePlan` assembles for the ordinary
+ * (project-repo) branch. R4-23 WI-3: the `## Your task this turn: …`
+ * header and the closing `Author 3–6 theme … Then stop.` instruction moved
+ * to SKILL.md's `analyze-project-repo` turn section (pinned by the
+ * immutable project-brain-skill-prompt.test.ts AT-1) — `buildAnalyzePlan`
+ * itself now only composes `skillFor('analyze-project-repo')` + the DATA
+ * lines, so this helper drops those two lines and asserts turn selection via
+ * `skillFor` instead.
+ */
 function expectedProjectPrompt(status: ProjectBrainStatus, staging: string): string {
   return [
-    SKILL,
-    '',
-    '## Your task this turn: read the project and author its initial brain.',
+    skillFor('analyze-project-repo'),
     '',
     `Project: ${status.project}`,
     `Project repo (your working directory — READ from here): ${status.project_repo_path}`,
@@ -71,8 +89,6 @@ function expectedProjectPrompt(status: ProjectBrainStatus, staging: string): str
     '',
     'Operator focus / guidance:',
     status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
-    '',
-    'Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.',
   ].join('\n');
 }
 
@@ -82,7 +98,7 @@ test('RED (R4-19 WI-1): a flow/band kb_binding reads CYCLE evidence, not the (no
     kb_binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
   });
 
-  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, SKILL);
+  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, skillFor);
 
   // cwd must NOT be the (nonexistent, for this binding) project repo — it
   // must be the forge-owned cycle-evidence scope. Grounded in the real
@@ -109,45 +125,50 @@ test('RED (R4-19 WI-1): a flow/band kb_binding reads CYCLE evidence, not the (no
   // staging-dir WRITE line (companion test below) necessarily contains STAGING,
   // hence its parent. The real intent (no project-repo READ) is fully captured
   // by the assertion above; the removed check contradicted the WRITE contract.
-  // ...and it must instead point the agent at the cycle archives + the
-  // review-band / adversarial-review findings logged inside them.
+  // ...and it must instead point the agent at the cycle archives dir as its
+  // working directory.
   assert.ok(
-    plan.prompt.includes(cyclesRawDir(FORGE_ROOT)),
+    plan.prompt.includes(`Cycle archives (your working directory — READ from here): ${cyclesRawDir(FORGE_ROOT)}`),
     'prompt must reference the cycle-archives dir as the read source',
   );
+  // R4-23 WI-3: the "read the cycle archives / synthesize the review-band
+  // findings" PROSE moved to SKILL.md's analyze-cycle-archives turn section
+  // (pinned by the immutable project-brain-skill-prompt.test.ts AT-1/AT-3);
+  // buildAnalyzePlan itself now only supplies the VALUES as named data lines
+  // the SKILL.md prose refers to.
+  assert.ok(plan.prompt.includes('Evidence flow: forge-develop'), 'prompt must carry the evidence flow (binding.ref) as a named data line');
+  assert.ok(plan.prompt.includes('Evidence band: review-band'), 'prompt must carry the evidence band (binding.band) as a named data line');
   assert.ok(
-    /cycle/i.test(plan.prompt) && /archiv/i.test(plan.prompt),
-    'prompt must reference the cycle archives as evidence',
-  );
-  assert.ok(
-    plan.prompt.includes('review-band') && /adversarial-review|finding/i.test(plan.prompt),
-    'prompt must reference the review-band / adversarial-review findings as evidence',
+    plan.prompt.startsWith(skillFor('analyze-cycle-archives')),
+    'the flow/band branch must select the analyze-cycle-archives turn id via skillFor',
   );
 });
 
 test('companion (R4-19 WI-1): a project kb_binding stays byte-compatible with the shipped project-brain plan', () => {
   const status = baseStatus({ kb_binding: { kind: 'project', ref: 'demoproj' } });
 
-  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, SKILL);
+  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, skillFor);
 
   assert.equal(plan.cwd, status.project_repo_path, 'a project binding must still read from the project repo');
   assert.equal(
     plan.prompt,
     expectedProjectPrompt(status, STAGING),
-    'a project binding must produce byte-identical prompt text to the pre-WI-1 project-brain flow',
+    'a project binding must produce the same DATA-half prompt shape as before — the header/closing PROSE now ' +
+      'lives in SKILL.md (R4-23 WI-3), selected via skillFor("analyze-project-repo")',
   );
 });
 
 test('companion (R4-19 WI-1): an absent kb_binding (the ordinary, non-KB-scoped flow) also stays byte-compatible', () => {
   const status = baseStatus(); // no kb_binding at all — the historical default path
 
-  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, SKILL);
+  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, skillFor);
 
   assert.equal(plan.cwd, status.project_repo_path, 'no kb_binding must still read from the project repo (historical default)');
   assert.equal(
     plan.prompt,
     expectedProjectPrompt(status, STAGING),
-    'no kb_binding must produce byte-identical prompt text to the pre-WI-1 project-brain flow',
+    'no kb_binding must produce the same DATA-half prompt shape as before — the header/closing PROSE now lives ' +
+      'in SKILL.md (R4-23 WI-3), selected via skillFor("analyze-project-repo")',
   );
 });
 
@@ -157,17 +178,20 @@ test('companion (R4-19 WI-1): the flow/band branch keeps the unchanged WRITE con
     kb_binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
   });
 
-  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, SKILL);
+  const plan = buildAnalyzePlan(status, FORGE_ROOT, STAGING, skillFor);
 
   // Only the READ source differs on this branch — the WRITE contract (staging
-  // dir + theme-count guidance) must be untouched, matching the project
-  // branch's closing instruction verbatim.
+  // dir) is DATA and must be untouched. The "Author 3-6 themes… Then stop."
+  // instruction itself moved to SKILL.md's analyze-cycle-archives turn
+  // section (R4-23 WI-3) — pinned there by the immutable
+  // project-brain-skill-prompt.test.ts AT-1, not by buildAnalyzePlan's own
+  // (now prose-free) composition.
   assert.ok(
     plan.prompt.includes(`Staging directory (WRITE every theme + profile.md here, as absolute paths): ${STAGING}`),
     'flow/band prompt must still name the staging dir as the WRITE target',
   );
   assert.ok(
-    plan.prompt.includes('Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.'),
-    'flow/band prompt must still instruct authoring 3-6 themes + profile.md — the write contract is unchanged',
+    plan.prompt.startsWith(skillFor('analyze-cycle-archives')),
+    'flow/band branch must select the analyze-cycle-archives turn id via skillFor',
   );
 });

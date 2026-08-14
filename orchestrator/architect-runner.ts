@@ -80,7 +80,7 @@ import {
   CRITIC_MAX_MANIFEST_BODY_CHARS,
   type CompletenessCriticFinding,
 } from './completeness-critic-runner.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { skillPath, skillPathRelative, loadSkillTurnPrompt, splitSkillTurnSections } from './skill-path.ts';
 
 // ---------------------------------------------------------------------------
 // ADR-024 / M2-4: spec derived from skills/architect/SKILL.md (single source)
@@ -515,7 +515,7 @@ async function runInterviewStep(args: {
   onText?: (text: string) => void;
 }): Promise<InterviewDecision> {
   const { status, interview, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
-  const skill = loadSkillPrompt(skillPromptPath);
+  const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'interview', skillPromptPath });
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(no answers yet — this is the first round)_';
@@ -534,8 +534,6 @@ async function runInterviewStep(args: {
       : []),
     skill,
     '',
-    '## Your task this turn: the interview step',
-    '',
     `Project: ${status.project}`,
     '',
     'Operator idea / brief:',
@@ -543,14 +541,6 @@ async function runInterviewStep(args: {
     '',
     'Interview so far:',
     priorQa,
-    '',
-    'Decide whether you have enough to draft a coherent, releasable initiative ' +
-      'WITHOUT unresolved scope / success-signal / constraint ambiguity. ' +
-      'If you do, return `{ "done": true }`. Otherwise return `{ "done": false, ' +
-      '"questions": [...] }` with 1-4 high-leverage questions in the ' +
-      'AskUserQuestion shape (question, header ≤12 chars, 2-4 options each with ' +
-      'label + description). Ask only what unblocks drafting; stop as soon as ' +
-      'further questions would merely refine.',
   ].join('\n');
 
   const { output: out } = await runStructured<{ done?: boolean; questions?: ArchitectQuestion[] }>({
@@ -655,7 +645,7 @@ async function runExploreStep(args: {
   onText?: (text: string) => void;
 }): Promise<ExploreFindings | null> {
   const { status, projectRoot, sessionId, queryFn, skillPromptPath, brainIndex, onToolUse, onHeartbeat, onText } = args;
-  const skill = loadSkillPrompt(skillPromptPath);
+  const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'explore', skillPromptPath });
   const interview = readInterview(projectRoot, sessionId);
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
@@ -675,8 +665,6 @@ async function runExploreStep(args: {
       : []),
     skill,
     '',
-    '## Your task this turn: the exploration step',
-    '',
     `Project: ${status.project}`,
     '',
     'Operator idea / brief:',
@@ -684,17 +672,6 @@ async function runExploreStep(args: {
     '',
     'Interview answers:',
     priorQa,
-    '',
-    'Before drafting, ENUMERATE what could break or be forgotten: edge cases, ' +
-      'failure modes, boundary conditions, and cross-cutting invariants. For ' +
-      'each edge case give a disposition — `covered` (a drafted initiative\'s ' +
-      'ACs will own it), `needs-initiative` (it demands its own initiative), or ' +
-      '`deferred` (explicitly out of this plan, with the reason in `detail`). ' +
-      'Separately list `brainConstraints`: constraints sourced from the brain ' +
-      'themes you read, each citing its theme path — these must shape the ' +
-      'acceptance criteria you draft next. Finish with a 2-3 sentence ' +
-      '`exploreSummary`. Enumerate honestly — an empty list on a non-trivial ' +
-      'idea is the smell this stage exists to catch.',
   ].join('\n');
 
   const { output } = await runStructured<ExploreFindings>({
@@ -831,7 +808,7 @@ async function runDraftStep(args: {
 }): Promise<RunArchitectTurnResult> {
   const { input, paths, status, queryFn, logger, resolvedDecisions, brainIndex, onToolUse, onHeartbeat, onText } = args;
   const interview = readInterview(input.projectRoot, input.sessionId);
-  const skill = loadSkillPrompt(input.skillPromptPath);
+  const skill = loadSkillTurnPrompt({ name: 'architect', turnId: 'draft', skillPromptPath: input.skillPromptPath });
 
   const prompt = [
     ...(brainIndex
@@ -848,8 +825,6 @@ async function runDraftStep(args: {
       : []),
     skill,
     '',
-    '## Your task this turn: draft the initiative(s)',
-    '',
     `Project: ${status.project}`,
     '',
     'Operator idea / brief:',
@@ -863,35 +838,6 @@ async function runDraftStep(args: {
       ? ['', 'Resolved design decisions (bake these into the manifests):', resolvedDecisions]
       : []),
     ...renderExploreBlock(readExploreFindings(input.projectRoot, input.sessionId)),
-    '',
-    'Produce one or more coherent, releasable initiatives. For each: a kebab ' +
-      '`slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), ' +
-      'and a markdown `body` spec with concrete, Given-When-Then acceptance criteria ' +
-      '(one GWT block per independently-deliverable outcome). The PM decomposes ' +
-      'those ACs directly into work items — there is no intermediate feature layer.',
-    '',
-    '### Build order (cross-initiative dependencies)',
-    "If a later initiative would fail without an earlier one merged first — a " +
-      'green-CI gate before feature work, a base resource before the data source ' +
-      'that reads it — set that initiative\'s `depends_on` to the earlier ' +
-      'initiative slug(s). Leave it empty for initiatives that can run in ' +
-      'parallel. The scheduler runs independent initiatives concurrently and ' +
-      'holds dependents until their prerequisites merge, so under-declaring ' +
-      'order causes parallel failures and over-declaring serialises needlessly.',
-    '',
-    '### Size — what an initiative / work item IS',
-    '- **Initiative**: one coherent, releasable capability you could describe in ' +
-      'a sentence and review as a single PR-worthy outcome (functionality + its ' +
-      'tests + its docs). It is the unit of build order above. A roadmap is many ' +
-      'initiatives.',
-    '- **Work item** (the PM derives these from your body ACs): the atomic ' +
-      'verifiable change — the smallest diff that lands as one mergeable ' +
-      'commit-set and is proven by one sharp test/gate, roughly a focused ' +
-      'half-day. Write ACs at THIS grain when an initiative is small; the ' +
-      'PM enriches them rather than re-decomposing.',
-    '- **Each GWT block in the body = one independently-deliverable outcome.** ' +
-      'Split into multiple GWT blocks only when two parts change genuinely ' +
-      'independent files/surfaces — never to reach a count.',
   ].join('\n');
 
   let { output: draft, brainReads } = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
@@ -920,9 +866,10 @@ async function runDraftStep(args: {
       message: 'draft returned no initiatives — retrying with a forced-emit turn (no further research)',
       metadata: { session_id: input.sessionId },
     });
+    const forceEmitSection = loadForceEmitTurnSection(input.skillPromptPath);
     const retry = await runStructured<{ vision?: string; initiatives?: DraftInitiative[] }>({
       queryFn,
-      prompt: `${prompt}\n\n## EMIT NOW — do not research further\nYou have already done enough research (this turn and the interview rounds). Do NOT call any more tools. Synthesize what you already know and return the structured draft immediately, with AT LEAST ONE initiative.`,
+      prompt: `${prompt}\n\n${forceEmitSection}`,
       schema: DRAFT_SCHEMA,
       onToolUse,
       onHeartbeat,
@@ -1380,22 +1327,47 @@ async function runStructured<T>(args: {
 }
 
 // ---------------------------------------------------------------------------
-// Prompt source (ADR 003 — prompt is skill content, not re-baked TS)
+// Prompt source (ADR 003 / ADR 024 — prompt is skill content, not re-baked TS)
 // ---------------------------------------------------------------------------
+//
+// Per-turn prose now lives in `skills/architect/SKILL.md` as `<!-- turn: id -->`
+// sections, loaded through the shared, fail-loud `loadSkillTurnPrompt`
+// (`orchestrator/skill-path.ts`, R4-23) at each of the three call sites above
+// — no runner-private fallback survives.
 
-let cachedSkill: string | null = null;
-function loadSkillPrompt(skillPromptPath?: string): string {
-  if (skillPromptPath) {
-    try {
-      return readFileSync(skillPromptPath, 'utf8');
-    } catch {
-      /* fall through to default */
-    }
+/**
+ * The `draft-force-emit` turn section's raw text WITHOUT the shared `base`
+ * preamble. The forced-emit retry APPENDS this to the already-composed draft
+ * prompt rather than rebuilding it from scratch (park §2c / AT-7: the retry
+ * prompt must be the first prompt with this text appended, a strict prefix
+ * relationship). `loadSkillTurnPrompt` always returns `base + '\n\n' +
+ * section`, which would duplicate `base` into the appended tail, so this
+ * reads the same file and pulls just the one section via the shared, pure
+ * `splitSkillTurnSections`. Fails loud on the same two conditions
+ * `loadSkillTurnPrompt` does (unreadable file / missing turn id) — no silent
+ * default here either (the declared-data-fails-open antipattern this whole
+ * lane exists to close).
+ */
+function loadForceEmitTurnSection(skillPromptPath?: string): string {
+  const resolvedPath = skillPromptPath ?? skillPath('architect');
+  let text: string;
+  try {
+    text = readFileSync(resolvedPath, 'utf8');
+  } catch (err) {
+    throw new Error(
+      `architect runner: could not read skill "architect" (turn "draft-force-emit") at ${resolvedPath}: ` +
+        `${err instanceof Error ? err.message : String(err)}`,
+    );
   }
-  if (cachedSkill !== null) return cachedSkill;
-  const def = skillPath('architect');
-  cachedSkill = existsSync(def) ? readFileSync(def, 'utf8') : 'You are the forge architect.';
-  return cachedSkill;
+  const { turns } = splitSkillTurnSections(text);
+  const section = turns.get('draft-force-emit');
+  if (section === undefined) {
+    const available = [...turns.keys()].sort().join(', ');
+    throw new Error(
+      `architect runner: skill "architect" (${resolvedPath}) has no turn "draft-force-emit" — available turns: ${available}.`,
+    );
+  }
+  return section;
 }
 
 // ---------------------------------------------------------------------------

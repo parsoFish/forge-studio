@@ -23,7 +23,7 @@
  *                        └ (bridge: reject)  ──▶ rejected
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
@@ -46,7 +46,7 @@ import { makeToolEventSink } from './tool-event-emit.ts';
 import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { readAgentInstructionsFile } from './project-config.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { skillPathRelative, loadSkillTurnPrompt } from './skill-path.ts';
 import { listInstructionSeeds } from './studio/registry.ts';
 import type { InstructionSeed } from './studio/types.ts';
 import {
@@ -318,7 +318,12 @@ async function runInterviewStep(args: {
   onText?: (text: string) => void;
 }): Promise<InterviewDecision> {
   const { status, interview, queryFn, skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
-  const skill = loadSkillPrompt(skillPromptPath);
+  // R4-23 round 2 (R2-AT-3): the mode branches are two SEPARATE, self-contained
+  // turn sections — the runner selects exactly one, mirroring the pre-refactor
+  // TypeScript ternary this replaces, instead of showing the agent both
+  // branches' instructions in a single concatenated section.
+  const turnId = status.mode === 'edit' ? 'interview-edit' : 'interview';
+  const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId, skillPromptPath });
   const priorQa = interview.length
     ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
     : '_(no answers yet — this is the first round)_';
@@ -327,8 +332,7 @@ async function runInterviewStep(args: {
   const prompt = [
     skill,
     '',
-    '## Your task this turn: the interview step',
-    '',
+    `Mode: ${status.mode ?? 'init'}`,
     `Project: ${status.project}`,
     `Project repo path: ${status.project_repo_path}`,
     ...editContext,
@@ -339,15 +343,6 @@ async function runInterviewStep(args: {
     '',
     'Interview so far:',
     priorQa,
-    '',
-    status.mode === 'edit'
-      ? 'You are UPDATING the existing AGENTS.md above per the change-notes. You can usually ' +
-        'proceed without questions — return `{ "done": true }`. Only return ' +
-        '`{ "done": false, "questions": [...] }` (1-4 AskUserQuestion-shaped) if a note is genuinely ambiguous.'
-      : 'Inspect the repo with your read tools, then decide whether you can write an ' +
-        'accurate AGENTS.md without unresolved ambiguity. If yes, return ' +
-        '`{ "done": true }`. Otherwise return `{ "done": false, "questions": [...] }` ' +
-        'with 1-4 high-leverage questions in the AskUserQuestion shape.',
   ].join('\n');
 
   const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
@@ -390,15 +385,16 @@ async function runDraftStep(args: {
   // SEC-04 leaf: answers.json READ routed through the guard (leaf included).
   const interview = readAnswerRounds(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
   const feedback = readFeedback(input.projectRoot, input.sessionId);
-  const skill = loadSkillPrompt(input.skillPromptPath);
+  // R4-23 round 2 (R2-AT-3): same mode-branch selection as the interview step.
+  const turnId = status.mode === 'edit' ? 'draft-edit' : 'draft';
+  const skill = loadSkillTurnPrompt({ name: 'instructions-creator', turnId, skillPromptPath: input.skillPromptPath });
 
   const editContext = editContextLines(status);
   const seedSection = renderSeedPromptSection(matchedSeeds ?? []);
   const prompt = [
     skill,
     '',
-    '## Your task this turn: draft AGENTS.md',
-    '',
+    `Mode: ${status.mode ?? 'init'}`,
     `Project: ${status.project}`,
     `Project repo path: ${status.project_repo_path}`,
     ...editContext,
@@ -412,14 +408,6 @@ async function runDraftStep(args: {
       ? interview.map((r, i) => `${i + 1}. Q: ${r.question}\n   A: ${r.answer}`).join('\n')
       : '_(operator drafted directly)_',
     ...(feedback ? ['', 'Revision feedback from the operator (apply it):', feedback] : []),
-    '',
-    status.mode === 'edit'
-      ? 'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the existing AGENTS.md above, REVISED to ' +
-        'incorporate the operator\'s change-notes. Preserve everything they did not ask to change; ' +
-        'keep commands copy-accurate; keep it tight. List any seed ids you composed from in composed_seed_ids.'
-      : 'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the complete AGENTS.md content, ' +
-        'ready to write verbatim to the repo root. Keep commands copy-accurate; keep it tight. ' +
-        'List any seed ids you composed from in composed_seed_ids ([] if none applied).',
   ].join('\n');
 
   const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
@@ -585,19 +573,4 @@ function makeReasoningSink(
       message: capped, metadata: { session_id: sessionId, kind: 'reasoning' },
     });
   };
-}
-
-let cachedSkill: string | null = null;
-function loadSkillPrompt(skillPromptPath?: string): string {
-  if (skillPromptPath) {
-    try {
-      return readFileSync(skillPromptPath, 'utf8');
-    } catch {
-      /* fall through */
-    }
-  }
-  if (cachedSkill !== null) return cachedSkill;
-  const def = skillPath('instructions-creator');
-  cachedSkill = existsSync(def) ? readFileSync(def, 'utf8') : 'You are the forge instructions-creator agent.';
-  return cachedSkill;
 }

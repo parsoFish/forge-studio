@@ -10,7 +10,7 @@
  * Mirrors the demo-builder runner (runAgentTurn + a review gate). Injectable
  * queryFn for tests.
  */
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import { pinnedSdkQuery as sdkQuery } from './pinned-sdk-query.ts';
@@ -29,7 +29,7 @@ import { modelForSpec } from './phase-agent.ts';
 import { deriveAgentSpec } from './studio/derive.ts';
 import { loadKbDescriptor, serializeKbDescriptor } from './studio/registry.ts';
 import { regenerateBrainIndex } from '../cli/brain-index.ts';
-import { skillPath, skillPathRelative } from './skill-path.ts';
+import { skillPathRelative, loadSkillTurnPrompt } from './skill-path.ts';
 import { cyclesRawDir } from './brain-paths.ts';
 import type { KbBinding } from './studio/types.ts';
 
@@ -94,15 +94,6 @@ export function projectBrainSessionDir(projectRoot: string, sessionId: string): 
 
 function stagingThemesDir(sessionDir: string): string {
   return join(sessionDir, 'themes');
-}
-
-function loadSkillPrompt(skillPromptPath: string | undefined, forgeRoot: string): string {
-  const path = skillPromptPath ?? skillPath('project-brain-builder', forgeRoot);
-  try {
-    return readFileSync(path, 'utf8');
-  } catch {
-    return 'You are the forge project-brain builder.';
-  }
 }
 
 export async function runProjectBrainTurn(
@@ -198,22 +189,30 @@ export async function runProjectBrainTurn(
  *     review-band / adversarial-review findings logged inside them.
  *   - every other binding shape (`project`, `unique`, a `flow` binding
  *     WITHOUT a band, or no `kb_binding` at all — the historical default)
- *     stays on the ordinary project-repo read, BYTE-IDENTICAL to the
- *     pre-WI-1 project-brain prompt.
+ *     stays on the ordinary project-repo read.
+ *
+ * R4-23 WI-3: the task PROSE for each branch (the `## Your task this turn:
+ * …` header, the evidence-source sentence, the closing write-contract
+ * instruction) now lives in `skills/project-brain-builder/SKILL.md` as the
+ * `analyze-project-repo` / `analyze-cycle-archives` turn sections (ADR-024 —
+ * SKILL.md is the single source of intent). This function selects the right
+ * turn id per branch via `skillFor` and composes it with DATA ONLY (project
+ * name, working directory, staging directory, operator guidance, and —
+ * replacing the old inline `${binding.ref}` / `${binding.band}`
+ * interpolation into the prose — the `Evidence flow:` / `Evidence band:`
+ * data lines the SKILL.md prose now names instead of embedding).
  */
 export function buildAnalyzePlan(
   status: ProjectBrainStatus,
   forgeRoot: string,
   staging: string,
-  skill: string,
+  skillFor: (turnId: string) => string,
 ): { cwd: string; prompt: string } {
   const binding = status.kb_binding;
   if (binding?.kind === 'flow' && binding.band) {
     const cwd = cyclesRawDir(forgeRoot);
     const prompt = [
-      skill,
-      '',
-      '## Your task this turn: read the CYCLE ARCHIVES and author the review-insights brain.',
+      skillFor('analyze-cycle-archives'),
       '',
       `Project: ${status.project}`,
       `Cycle archives (your working directory — READ from here): ${cwd}`,
@@ -222,18 +221,15 @@ export function buildAnalyzePlan(
       'Operator focus / guidance:',
       status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
       '',
-      `Evidence source: this KB has no project repo — read the \`${binding.ref}\` flow's archived cycles under the cycle archives dir above, and synthesize the durable patterns from each cycle's logged \`${binding.band}\` band / adversarial-review findings.`,
-      '',
-      'Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.',
+      `Evidence flow: ${binding.ref}`,
+      `Evidence band: ${binding.band}`,
     ].join('\n');
     return { cwd, prompt };
   }
 
   const cwd = status.project_repo_path;
   const prompt = [
-    skill,
-    '',
-    '## Your task this turn: read the project and author its initial brain.',
+    skillFor('analyze-project-repo'),
     '',
     `Project: ${status.project}`,
     `Project repo (your working directory — READ from here): ${status.project_repo_path}`,
@@ -241,8 +237,6 @@ export function buildAnalyzePlan(
     '',
     'Operator focus / guidance:',
     status.prompt || '_(none — author a faithful, well-rounded initial brain)_',
-    '',
-    'Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.',
   ].join('\n');
   return { cwd, prompt };
 }
@@ -260,8 +254,9 @@ async function runAnalyzeStep(args: {
   const staging = stagingThemesDir(sessionDir);
   mkdirSync(staging, { recursive: true });
 
-  const skill = loadSkillPrompt(input.skillPromptPath, forgeRoot);
-  const { cwd, prompt } = buildAnalyzePlan(status, forgeRoot, staging, skill);
+  const skillFor = (turnId: string) =>
+    loadSkillTurnPrompt({ name: 'project-brain-builder', turnId, skillPromptPath: input.skillPromptPath });
+  const { cwd, prompt } = buildAnalyzePlan(status, forgeRoot, staging, skillFor);
 
   await runAgentTurn({
     queryFn,

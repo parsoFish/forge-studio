@@ -57,24 +57,66 @@ runner writes AGENTS.md from your structured output once the operator approves.
 Use Bash only for read-only inspection (e.g. `ls`, `cat package.json`,
 `git log --oneline -10`). Never mutate the repo.
 
-## Turn shape
+Each turn the runner gives you a data block below with the project, the
+operator's brief (or change-notes), and the interview so far. The `Mode:` line
+in that data block tells you whether this is `init` (no AGENTS.md exists yet —
+author one from scratch) or `edit` (an AGENTS.md already exists and you are
+revising it per change-notes).
 
-Each turn the runner gives you the project, the operator's brief, and the
-interview so far, and asks you for ONE of two structured outputs:
+<!-- turn: interview -->
+## Your task this turn: the interview step
 
-### Interview step
+First inspect the repo (read manifests, CI config, existing CLAUDE.md/AGENTS.md, a few source files).
 Decide whether you have enough to write a coherent, accurate AGENTS.md WITHOUT
-unresolved ambiguity about commands, conventions, or constraints. First inspect
-the repo (read manifests, CI config, existing CLAUDE.md/AGENTS.md, a few source
-files). If you have enough, return `{ "done": true }`. Otherwise return
-`{ "done": false, "questions": [...] }` with 1–4 high-leverage questions in the
-AskUserQuestion shape (question, header ≤12 chars, 2–4 options each with label +
-description). Ask only what unblocks an accurate draft — things the code cannot
-tell you (intended audience, what's off-limits, release conventions). Stop as
-soon as more questions would only refine.
+unresolved ambiguity about commands, conventions, or constraints. Ask only
+what unblocks an accurate draft — things the code cannot tell you (intended
+audience, what's off-limits, release conventions). Stop as soon as more
+questions would only refine. When you do ask, follow the AskUserQuestion
+shape: question, header ≤12 chars, 2–4 options each with label + description.
 
-### Draft step
-Return `{ "agents_md": "<full markdown>" }` — the complete AGENTS.md content,
-ready to write verbatim to the repo root. Fold in the operator's interview
-answers and any resolved revision feedback. Lead with the project's purpose;
-keep every command copied-accurate; keep it tight.
+Inspect the repo with your read tools, then decide whether you can write an
+accurate AGENTS.md without unresolved ambiguity. If yes, return `{ "done":
+true }`. Otherwise return `{ "done": false, "questions": [...] }` with 1-4
+high-leverage questions in the AskUserQuestion shape.
+
+<!-- turn: interview-edit -->
+## Your task this turn: the interview step
+
+First inspect the repo (read manifests, CI config, existing CLAUDE.md/AGENTS.md, a few source files).
+Decide whether you have enough to write a coherent, accurate AGENTS.md WITHOUT
+unresolved ambiguity about commands, conventions, or constraints. Ask only
+what unblocks an accurate draft — things the code cannot tell you (intended
+audience, what's off-limits, release conventions). Stop as soon as more
+questions would only refine. When you do ask, follow the AskUserQuestion
+shape: question, header ≤12 chars, 2–4 options each with label + description.
+
+You are UPDATING the existing AGENTS.md (the `## Existing AGENTS.md` block in
+the data below) per the change-notes. You can usually proceed without
+questions — return `{ "done": true }`. Only return `{ "done": false,
+"questions": [...] }` (1-4 AskUserQuestion-shaped) if a note is genuinely
+ambiguous.
+
+<!-- turn: draft -->
+## Your task this turn: draft AGENTS.md
+
+Fold in the operator's interview answers and any resolved revision feedback.
+Lead with the project's purpose; keep every command copied-accurate; keep it
+tight.
+
+Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` —
+the complete AGENTS.md content, ready to write verbatim to the repo root.
+Keep commands copy-accurate; keep it tight. List any seed ids you composed
+from in composed_seed_ids ([] if none applied).
+
+<!-- turn: draft-edit -->
+## Your task this turn: draft AGENTS.md
+
+Fold in the operator's interview answers and any resolved revision feedback.
+Lead with the project's purpose; keep every command copied-accurate; keep it
+tight.
+
+Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` —
+the existing AGENTS.md (the `## Existing AGENTS.md` block in the data
+below), REVISED to incorporate the operator's change-notes. Preserve
+everything they did not ask to change; keep commands copy-accurate; keep it
+tight. List any seed ids you composed from in composed_seed_ids.

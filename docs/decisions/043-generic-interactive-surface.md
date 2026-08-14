@@ -130,3 +130,47 @@ The batch-E migration pass **measured** (probes driving `runInteractiveTurn` aga
 - The "batch-E migration steps" this ADR committed are **re-homed to R4-23** (`docs/roadmaps/R4-ootb-suite.md`): re-author each runner's composed prompt into its agent's `SKILL.md` (ADR-024's thesis) and accept **live** per kind — a golden byte-match cannot gate a prompt that changes by design.
 - The honest surface accounting: batch E's net production deletion from the migration path was **zero**. The transient growth this ADR disclosed stands; the promised net decrease is **owed via R4-23**, and it is smaller than the original text implied because the spine-owned plumbing is a minority of each runner's lines.
 - The dispatch fork and the four untouched runners remain the standing state — verified byte-identical behind the fork at batch-E close (`_wave5/batch-e-exit-disposition.md`).
+
+## Amendment — 2026-08-14 (R4-23): architect is never migrated, the mirror is deleted, and the owed decrease is not what this ADR implied
+
+R4-23 (bead `forge-lt4`, wave-5 batch H) executed the re-authoring the 2026-08-11 amendment re-homed. It re-authored all four legacy runners' composed prompts into their agents' `SKILL.md` files as `<!-- turn: <id> -->` sections behind one shared loader (`loadSkillTurnPrompt` / `splitSkillTurnSections`, `orchestrator/skill-path.ts`), with **live per-kind acceptance** — one real spawn per runner producing a real artifact (`_wave5/gate-logs/R4-23-live-{instructions,demo-builder,project-brain,architect}.log`). Three things this ADR left open are now closed.
+
+### 1. §3 corrected — `AGENT_RUNNERS` is NOT deleted, and architect is NEVER migrated onto the primitive
+
+§3 says *"`AGENT_RUNNERS` is deleted only after architect migrates."* That sentence is retired. Architect is **never** migrated onto `turnSpec`, and `AGENT_RUNNERS` therefore survives, deliberately, with its four entries. The reasoning is the F4 measurement pass's recommendation (`_wave5/parks/R4-22-F4-architect-migration.md` §3), adopted here:
+
+- The cap-dissolution goal §Consequences claims is **already fully achieved without architect**. Since PR #117/#118 a new interactive kind is a yaml row — `authoring` proved it live. Migrating architect adds **zero** cap-dissolution value; it is pure surface accounting.
+- Architect's four load-bearing behaviours — brain-first prompt injection (ADR-010 makes it *mandatory* for a planner), the fail-open `exploring` step, the forced-emit retry, and the completeness-critic bounce-back — all fire only on paths a happy-path golden fixture never reaches. A migration's own gate would be structurally blind to exactly what it might break.
+- The honest cost of keeping it is one registry with four entries and one legacy branch in `cli/agent-run.ts` — `cli/` is not capped by [ADR 042](./042-surface-cap-scope-and-testability.md) at all.
+
+R4-23 still re-authored architect's *prompts* (the ADR-024 axis is orthogonal to the primitive), and the live run measured no degradation: the brain-navigation index stayed byte-identical and first in all three prompts, the interviewing → exploring → drafting fall-through executed in one invocation, and the plan it produced carried five cited brain themes, seven `source:`-attributed constraints, twelve enumerated edge cases and ten GWT acceptance criteria. The pre-authorised park was **not** taken.
+
+### 2. §4 corrected — `resolveInteractiveAgent` is DELETED, not kept as a twin
+
+§4 says *"Add its mirror, `resolveInteractiveAgent(slug, defs)`."* That mirror never gained a production caller: on main it was referenced only by its own throw strings and its tests (bead `forge-4y7`). ADR-042's cap forbids dead exported orchestrator surface, so R4-23 deleted it. Wiring it was not merely undone but **not dischargeable**, measured: `skills/architect/SKILL.md` declares no `surface:` at all and `skills/project-brain-builder/SKILL.md` declares `surface: unattended`, so an interactive-only host would refuse two of the four session kinds it was meant to admit; and `AGENT_RUNNERS`' keys are session-kind ids, not agent slugs, so there is no 1:1 roster lookup to perform. The sharpest evidence is now pinned in `orchestrator/agent-dispatch.test.ts`: the **real roster contains zero interactive defs**, so the mirror accepted nothing on the live roster for its entire life.
+
+`resolveDispatchableAgent` — §4's one non-negotiable — is left byte-for-byte untouched, and the complement property the pair was meant to guarantee is now asserted directly against the one shared predicate both hosts were required to use, `agentCapabilityDescriptor(def).interactive`. It goes red on purpose if an interactive agent ever enters the roster, which is the trigger to revisit this deletion.
+
+### 3. The owed net decrease — MEASURED, and it is an INCREASE
+
+This ADR's §Consequences promised that the transient orchestrator growth would be repaid by the migrations. The 2026-08-11 amendment already reduced that promise to *"smaller than the original text implied"*. R4-23's measurement closes it honestly: on the prompt-re-authoring axis there is **no net orchestrator LOC decrease at all**. Measured on `orchestrator/` production files, base `c45e3892` → R4-23:
+
+| file | net |
+|---|---|
+| `orchestrator/architect-runner.ts` | −28 |
+| `orchestrator/instructions-runner.ts` | −27 |
+| `orchestrator/demo-builder-runner.ts` | −26 |
+| `orchestrator/agent-dispatch.ts` (mirror deleted) | −12 |
+| `orchestrator/project-brain-builder-runner.ts` | −5 |
+| `orchestrator/skill-path.ts` (the shared turn-section loader) | **+208** |
+| **net** | **+110** |
+
+Why, plainly: the ~403 lines the F4 park named as realizable were **spine-owned plumbing** on the *migration* axis — and no runner migrated, so none of it was removed. On the *re-authoring* axis what leaves `orchestrator/` is prompt PROSE, and prose leaves TypeScript for markdown (`skills/*/SKILL.md` grew by ~128 lines net) rather than disappearing. The mechanism that makes a `SKILL.md` per-turn selectable — marker splitting with fenced-block awareness and duplicate-id rejection, a fail-loud loader with three named error paths, and a default-path cache — costs more lines than the four runners shed, even though it replaced four private `loadSkillPrompt` copies.
+
+The exported-symbol accounting is the smaller story and is nearly flat: **+2** (`splitSkillTurnSections`, `loadSkillTurnPrompt`) **−1** (`resolveInteractiveAgent`) = **+1**, alongside four private duplicate helpers deleted.
+
+**So the promise is discharged as a correction, not a payment: ADR-043's implied net orchestrator decrease is not collectable, and no future initiative should be planned on the assumption that it is.** What R4-23 actually bought is the thing ADR-024 asked for and the LOC metric does not show — the agents' *intent* now lives in exactly one place. Before this change every one of these four agents was driven by two prompts: its `SKILL.md` and a second, hand-written TypeScript prompt appended after it, with the TypeScript half winning. That duplication is gone.
+
+### 4. One disclosed consequence of the fail-loud contract
+
+The four runner-private `loadSkillPrompt` helpers failed **open** (`catch { return 'You are the forge <x> agent.' }`). That was survivable while the skill file was only a preamble; now that the task instructions live in `SKILL.md`, a fallback would launch an agent with no task and no signal — the declared-data-fails-open antipattern — so the shared loader throws instead, naming the skill, the turn id and the available ids. The disclosed cost: `cmdAgentRun` (`cli/agent-run.ts`) does not wrap the turn call, and the bridge spawns it as a detached child, so a throw on this path leaves the session's `status.json` at its pre-turn phase with the trace only in `_logs/<cycle>/stderr.log`. That wedge mechanism predates R4-23 (the "produced no theme files" throw has the same shape); R4-23 widens the set of triggers rather than creating it. Writing a terminal `failed` phase on this path is tracked separately and is deliberately not folded into this PR.

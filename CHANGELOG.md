@@ -7,6 +7,41 @@ and this project adheres (loosely, pre-1.0) to [Semantic Versioning](https://sem
 
 ## [Unreleased]
 
+### Changed
+
+- **Runner prompts re-authored onto `SKILL.md` (R4-23, ADR-024).** The four
+  legacy interactive runners (instructions-creator, demo-builder,
+  project-brain-builder, architect) were each driven by TWO prompts: their
+  agent's `SKILL.md` **and** a second, hand-written TypeScript prompt appended
+  after it — so the agent's intent lived in two places and the TypeScript half
+  won. Each runner's task prose now lives in its `SKILL.md` as
+  `<!-- turn: <id> -->` sections selected by one shared loader
+  (`loadSkillTurnPrompt`), and the runner keeps only data assembly and control
+  flow. Accepted LIVE, one real spawn per kind, not by golden byte-match.
+- **Skill-prompt loading now fails LOUD.** The four runner-private
+  `loadSkillPrompt` helpers fell back to a one-line default when the skill file
+  was missing or unreadable. That was survivable when the skill was only a
+  preamble; now that the task instructions live there, a fallback would launch
+  an agent with no task and no signal. The shared loader throws instead, naming
+  the skill, the requested turn id and the available ids.
+
+### Removed
+
+- **`resolveInteractiveAgent`** (ADR-043 §4's interactive-host mirror) — dead
+  exported orchestrator surface with zero production callers since it landed
+  (bead `forge-4y7`). `resolveDispatchableAgent` is byte-for-byte untouched;
+  the complement property is now asserted against the shared
+  `agentCapabilityDescriptor` predicate.
+
+### Fixed
+
+- **ADR-043 corrected on three counts** (2026-08-14 amendment): architect is
+  never migrated onto the interactive primitive and `AGENT_RUNNERS` is not
+  deleted; §4's mirror is deleted rather than kept; and the ADR's implied net
+  orchestrator-surface decrease is measured, reported as a **+110-line
+  increase**, and declared not collectable — so no future initiative is planned
+  against it.
+
 ## [0.6.0] - 2026-07-17
 
 Production-repo cleanup campaign sessions **S5–S6** (zero platform-function

@@ -171,18 +171,9 @@ the PLAN's "Edge cases & constraints" section for the operator's review.
 
 (`architect.plan-approved` / `plan-revised` / `plan-rejected` are emitted by the runner's finalize step, not this skill.)
 
-## What to return each turn
+## What the runner owns
 
-Runner appends a per-turn task block specifying **interview step** or **draft step**.
-
-- **Interview step** — apply value-of-information gate, hypothesis-first framing, coverage-map tracking, 5-round cap, security hard-block. Ask 1-4 high-leverage questions per round, each with a recommended option and `Other (specify)` escape. Set `done: true` once coverage saturates.
-- **Draft step** — return coherent, releasable initiatives, each with:
-  - Concrete GWT or EARS ACs (one per independently-deliverable outcome).
-  - A `### Not in scope` block.
-  - Y-statement decision log for every resolved design decision.
-  - Explicit `depends_on` where a later initiative needs an earlier one merged first.
-
-The runner owns all mechanics — renders questions, builds manifests, writes PLAN.md/PLAN.html, emits events, and (only on operator **approve**) promotes manifests. You never call `AskUserQuestion` or `writePlanDoc`.
+The runner owns all mechanics — renders questions, builds manifests, writes PLAN.md/PLAN.html, emits events, and (only on operator **approve**) promotes manifests. You never call `AskUserQuestion` or `writePlanDoc` — each turn section below tells you what structured output to return instead.
 
 ## Constraints
 
@@ -190,3 +181,33 @@ The runner owns all mechanics — renders questions, builds manifests, writes PL
 - **ACs are concrete.** Reject your own draft if you can't write a GWT (or EARS equivalent) for it. Each initiative body MUST contain ≥1 AC block.
 - **Dependencies are explicit.** Set `depends_on` on each initiative for scheduler ordering. No intra-initiative feature dependency layer — the PM orders WIs directly.
 - **Aggregate footprint is informational** (C19). PLAN.md surfaces total iteration budget + per-initiative estimated cost as a single line; forge does NOT enforce a budget gate or auto-escalate. The operator decides.
+
+<!-- turn: interview -->
+## Your task this turn: the interview step
+
+Decide whether you have enough to draft a coherent, releasable initiative WITHOUT unresolved scope / success-signal / constraint ambiguity. If you do, return `{ "done": true }`. Otherwise return `{ "done": false, "questions": [...] }` with 1-4 high-leverage questions in the AskUserQuestion shape (question, header ≤12 chars, 2-4 options each with label + description). Ask only what unblocks drafting; stop as soon as further questions would merely refine.
+
+<!-- turn: explore -->
+## Your task this turn: the exploration step
+
+Before drafting, ENUMERATE what could break or be forgotten: edge cases, failure modes, boundary conditions, and cross-cutting invariants. For each edge case give a disposition — `covered` (a drafted initiative's ACs will own it), `needs-initiative` (it demands its own initiative), or `deferred` (explicitly out of this plan, with the reason in `detail`). Separately list `brainConstraints`: constraints sourced from the brain themes you read, each citing its theme path — these must shape the acceptance criteria you draft next. Finish with a 2-3 sentence `exploreSummary`. Enumerate honestly — an empty list on a non-trivial idea is the smell this stage exists to catch.
+
+<!-- turn: draft -->
+## Your task this turn: draft the initiative(s)
+
+Produce one or more coherent, releasable initiatives. For each: a kebab `slug`, a `title`, an `iteration_budget` (>0) and `cost_budget_usd` (>0), and a markdown `body` spec with concrete, Given-When-Then acceptance criteria (one GWT block per independently-deliverable outcome). The PM decomposes those ACs directly into work items — there is no intermediate feature layer.
+
+### Build order (cross-initiative dependencies)
+
+If a later initiative would fail without an earlier one merged first — a green-CI gate before feature work, a base resource before the data source that reads it — set that initiative's `depends_on` to the earlier initiative slug(s). Leave it empty for initiatives that can run in parallel. The scheduler runs independent initiatives concurrently and holds dependents until their prerequisites merge, so under-declaring order causes parallel failures and over-declaring serialises needlessly.
+
+### Size — what an initiative / work item IS
+
+- **Initiative**: one coherent, releasable capability you could describe in a sentence and review as a single PR-worthy outcome (functionality + its tests + its docs). It is the unit of build order above. A roadmap is many initiatives.
+- **Work item** (the PM derives these from your body ACs): the atomic verifiable change — the smallest diff that lands as one mergeable commit-set and is proven by one sharp test/gate, roughly a focused half-day. Write ACs at THIS grain when an initiative is small; the PM enriches them rather than re-decomposing.
+- **Each GWT block in the body = one independently-deliverable outcome.** Split into multiple GWT blocks only when two parts change genuinely independent files/surfaces — never to reach a count.
+
+<!-- turn: draft-force-emit -->
+## EMIT NOW — do not research further
+
+You have already done enough research (this turn and the interview rounds). Do NOT call any more tools. Synthesize what you already know and return the structured draft immediately, with AT LEAST ONE initiative.
