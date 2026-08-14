@@ -427,8 +427,9 @@ was needed.
 
 ### R5-08 Dead-code & component minimisation pass
 
-- **Status:** planned  ·  **Wave:** 5, batch F (terminal sweep; F1 rule is
-  continuous from batch A)
+- **Status:** implemented (2026-08-14 — terminal sweep landed in batch G;
+  as-built facts in the change-log entry below)  ·  **Wave:** 5, batch G
+  (terminal sweep; F1 rule is continuous from batch A)
 - **Depends on:** — (terminal-sweep half sequenced after the wave-5 surface
   batches so it sweeps their leavings too).
 - **Context:** Operator directive (2026-08-03, wave-5 restructure): after
@@ -557,3 +558,24 @@ maintenance contract; nothing currently carries a deferral condition.
   current-state pages; ADRs stay the decision log, known-gaps stays the
   defect log; ⚑ operator reviews the F1 disposition map). Both live in
   wave-5 batch F of the index §4 batch plan.
+- 2026-08-14 — **R5-08 implemented** (branch `feat/r5-08-dead-code-sweep`,
+  batch G terminal sweep): status planned → implemented. **F1** verified
+  retrospectively — the delete-as-you-go rule is recorded at index §4
+  (README L306, "batch PR deletes what it obsoletes") and was honored every
+  wave-5 batch (each exit disposition/retro names its deletions; `ui:deadpaths`
+  green per batch, latest 465✓/0✗ over 29 routes). **F2** ran knip@latest +
+  ts-prune@0.10.3 + depcheck@1.4.7 over `orchestrator/ cli/ forge-ui/ loops/
+  scripts/`; every hit triaged (ruling 51). Deletions (all zero-reference
+  proven, type-only where in the hot path, no behaviour change): `cli/visualise.ts`
+  (122-line orphan — ADR-008 already records its removal), the dead
+  `summariseAll`/`hasAgentInstructions` helpers, the retired-unifier type
+  cluster `UnifierGateFailure`/`MissingDelivery`/`DeliveryCheck` (~70 lines,
+  R4-01-F4 straggler), and the obsolete `@types/dompurify` devDep (dompurify
+  v3 ships its own types). Net −201 LOC (ts/tsx). knip's forge-ui results were
+  a documented false-positive class (the `app/projects/[id]` dynamic-route
+  entry is not traversed, so live JSX-rendered components read as "unused") →
+  kept. **F3** grep-proved the three shared-component claims hold with one
+  implementation each: log-line renderer (`lib/run-log-line.ts`,
+  `flow-node-log.ts` composes it), ledger vocabulary (`lib/history-ledger.ts`
+  engine, `flow-ledger`/`agent-ledger` import it), package-tab renderer
+  (`lib/file-package.ts`, five surfaces) — no near-duplicates, F3 delta 0.

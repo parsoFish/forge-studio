@@ -107,8 +107,3 @@ export function composeAgentsMd(input: {
   const gateCovered = gateCmd !== '' && body.includes(gateCmd);
   return { path: agentsPath, seedIds: matched.map((s) => s.id), gateCmd, gateCovered, wrote: true };
 }
-
-/** True iff the project already has an AGENTS.md/CLAUDE.md (C8 presence). */
-export function hasAgentInstructions(projectDir: string): boolean {
-  return existsSync(join(projectDir, 'AGENTS.md')) || existsSync(join(projectDir, 'CLAUDE.md'));
-}
