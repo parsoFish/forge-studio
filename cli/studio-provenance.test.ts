@@ -489,3 +489,154 @@ test('AT-7: brain/cycles/kb.yaml and brain/forge-dev/kb.yaml (the two shipped OO
   assert.match(cyclesKb, /origin:\s*seed\b/, `brain/cycles/kb.yaml must contain "origin: seed", got:\n${cyclesKb}`);
   assert.match(forgeDevKb, /origin:\s*seed\b/, `brain/forge-dev/kb.yaml must contain "origin: seed", got:\n${forgeDevKb}`);
 });
+
+// ---------------------------------------------------------------------------
+// AT-8 through AT-11 — forge-3oq review round. The four list routes above
+// (AT-1 through AT-7) all got `provenance`, but there are SECOND construction
+// sites for the same descriptors that were left out: GET /api/studio/kbs/:id
+// (cli/bridge-studio-kbs.ts) builds its own `kbPublic` straight off
+// `loadKbDescriptors`'s raw result with no `provenanceOfOrigin` call, and
+// GET /api/studio/flows/:id (cli/bridge-studio.ts) returns
+// `loadFlowDefinition(...)` directly. Reproduced against commit `aeef037f`.
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// AT-8 — the KB DETAIL route carries provenance. Kills: a fix applied only
+// at the list route, leaving GET /api/studio/kbs/:id's separately
+// constructed `kbPublic` silently missing the field.
+// ---------------------------------------------------------------------------
+
+test('AT-8: GET /api/studio/kbs/:id reports the same honest provenance as the list route (seed->ootb, studio->operator, unstamped->unknown)', async () => {
+  const [ootbRes, operatorRes, unstampedRes] = await Promise.all([
+    get(`/api/studio/kbs/${OOTB_KB_ID}`),
+    get(`/api/studio/kbs/${OPERATOR_KB_ID}`),
+    get(`/api/studio/kbs/${UNSTAMPED_KB_ID}`),
+  ]);
+  assert.equal(ootbRes.status, 200, JSON.stringify(ootbRes.json));
+  assert.equal(operatorRes.status, 200, JSON.stringify(operatorRes.json));
+  assert.equal(unstampedRes.status, 200, JSON.stringify(unstampedRes.json));
+
+  const ootbKb = ootbRes.json['kb'] as Record<string, unknown>;
+  const operatorKb = operatorRes.json['kb'] as Record<string, unknown>;
+  const unstampedKb = unstampedRes.json['kb'] as Record<string, unknown>;
+
+  assert.equal(ootbKb['provenance'], 'ootb', `origin:seed kb detail must report 'ootb', got ${JSON.stringify(ootbKb['provenance'])}`);
+  assert.equal(operatorKb['provenance'], 'operator', `origin:studio kb detail must report 'operator', got ${JSON.stringify(operatorKb['provenance'])}`);
+  assert.equal(unstampedKb['provenance'], 'unknown', `unstamped kb detail must report 'unknown', got ${JSON.stringify(unstampedKb['provenance'])}`);
+});
+
+// ---------------------------------------------------------------------------
+// AT-9 — list and detail AGREE. Kills: two independent attachments that can
+// drift (a fix hand-applied at both routes separately, or fixed at one and
+// forgotten at the other).
+// ---------------------------------------------------------------------------
+
+test('AT-9: list and detail AGREE on provenance for every fixture kb — no second, driftable attachment', async () => {
+  const { json: listJson } = await get('/api/studio/kbs');
+  const listRows = listJson['kbs'] as Array<Record<string, unknown>>;
+
+  for (const id of [OOTB_KB_ID, OPERATOR_KB_ID, UNSTAMPED_KB_ID]) {
+    const listRow = findById(listRows, id);
+    const { json: detailJson } = await get(`/api/studio/kbs/${id}`);
+    const detailKb = detailJson['kb'] as Record<string, unknown>;
+    assert.equal(
+      detailKb['provenance'],
+      listRow['provenance'],
+      `kb "${id}": list reports ${JSON.stringify(listRow['provenance'])} but detail reports ${JSON.stringify(detailKb['provenance'])} — two independent attachments have drifted`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AT-10 — the loader is the single attachment point (structural). Asserts at
+// the SOURCE level, house precedent: cli/kb-lint-summary.test.ts's AT-4a/
+// AT-4b use the exact same comment-stripping + brace-depth function-body
+// extraction to prove a call site lives inside a specific function. Kills: a
+// future route layered over `loadKbDescriptors` forgetting the field, by
+// requiring the ONE attachment point be the loader itself, not any one
+// caller of it.
+// ---------------------------------------------------------------------------
+
+/** Strips block + line comments so a doc comment mentioning
+ *  `provenanceOfOrigin(` in prose can't masquerade as a real call site, and
+ *  can't corrupt brace-depth counting below. Mirrors
+ *  cli/kb-lint-summary.test.ts's `stripComments` — same technique,
+ *  duplicated locally rather than imported across test files. */
+function stripCommentsForCallSiteCheck(src: string): string {
+  return src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+}
+
+/**
+ * Extract a top-level `function <fnName>` declaration's BODY only — the
+ * LAST top-level (depth 0->1->0) brace block within the span from the
+ * signature to the next top-level `export`. Mirrors
+ * cli/kb-lint-summary.test.ts's `extractFunctionBody` — same technique,
+ * duplicated locally rather than imported across test files.
+ */
+function extractFunctionBodyForCallSiteCheck(src: string, fnName: string, fileLabel: string): string {
+  const sigIdx = src.indexOf(`function ${fnName}`);
+  assert.ok(sigIdx >= 0, `expected a "function ${fnName}" declaration in ${fileLabel}`);
+  let nextIdx = src.indexOf('\nexport ', sigIdx + 1);
+  if (nextIdx === -1) nextIdx = src.length;
+  const span = src.slice(sigIdx, nextIdx);
+
+  let depth = 0;
+  let blockStart = -1;
+  let lastBlock: [number, number] | null = null;
+  for (let i = 0; i < span.length; i++) {
+    if (span[i] === '{') {
+      if (depth === 0) blockStart = i;
+      depth++;
+    } else if (span[i] === '}') {
+      depth--;
+      if (depth === 0 && blockStart >= 0) {
+        lastBlock = [blockStart, i];
+        blockStart = -1;
+      }
+    }
+  }
+  assert.ok(lastBlock, `could not locate a { } body for ${fnName} in ${fileLabel}`);
+  const [start, end] = lastBlock as [number, number];
+  return span.slice(start, end + 1);
+}
+
+test('AT-10: cli/bridge-studio-kbs.ts contains exactly ONE provenanceOfOrigin( call site, and it lives inside loadKbDescriptors — so no route built over the loader can forget the field', () => {
+  const filePath = join(process.cwd(), 'cli', 'bridge-studio-kbs.ts');
+  const src = stripCommentsForCallSiteCheck(readFileSync(filePath, 'utf8'));
+
+  const callSites = src.match(/\bprovenanceOfOrigin\s*\(/g) ?? [];
+  assert.equal(
+    callSites.length,
+    1,
+    `expected exactly ONE provenanceOfOrigin( call site in cli/bridge-studio-kbs.ts (the single attachment point every route inherits), found ${callSites.length}`,
+  );
+
+  const loaderBody = extractFunctionBodyForCallSiteCheck(src, 'loadKbDescriptors', 'cli/bridge-studio-kbs.ts');
+  assert.ok(
+    /\bprovenanceOfOrigin\s*\(/.test(loaderBody),
+    'provenanceOfOrigin( must be called INSIDE loadKbDescriptors — a call site anywhere else (e.g. only in the list route handler) means every OTHER caller of loadKbDescriptors (detail, resolve-node, delete, guidance) silently misses the field',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// AT-11 — the FLOW detail route carries provenance. Kills: the same
+// list-only fix on the flow side — GET /api/studio/flows/:id returns
+// loadFlowDefinition(...) directly, with no provenance attached.
+// ---------------------------------------------------------------------------
+
+test('AT-11: GET /api/studio/flows/:id reports provenance derived from the REAL origin field (seed->ootb, studio->operator)', async () => {
+  const [ootbRes, operatorRes] = await Promise.all([
+    get(`/api/studio/flows/${OOTB_FLOW_ID}`),
+    get(`/api/studio/flows/${OPERATOR_FLOW_ID}`),
+  ]);
+  assert.equal(ootbRes.status, 200, JSON.stringify(ootbRes.json));
+  assert.equal(operatorRes.status, 200, JSON.stringify(operatorRes.json));
+
+  const ootbFlow = ootbRes.json['flow'] as Record<string, unknown>;
+  const operatorFlow = operatorRes.json['flow'] as Record<string, unknown>;
+
+  assert.equal(ootbFlow['origin'], 'seed');
+  assert.equal(operatorFlow['origin'], 'studio');
+  assert.equal(ootbFlow['provenance'], 'ootb', `origin:seed flow detail must report 'ootb', got ${JSON.stringify(ootbFlow['provenance'])}`);
+  assert.equal(operatorFlow['provenance'], 'operator', `origin:studio flow detail must report 'operator', got ${JSON.stringify(operatorFlow['provenance'])}`);
+});
