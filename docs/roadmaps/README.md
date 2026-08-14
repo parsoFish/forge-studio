@@ -560,6 +560,13 @@ registry + parity view; §4 story-beat parity rule).
 
 ## Change log
 
+> **Convention note (2026-08-14):** paths under `_wave5/` cited in this file
+> (goal packs, retros, exit dispositions, parks) are **operator-local campaign
+> state** — the directory is gitignored and those files are not in the repo.
+> The citations are kept as pointers for the operator's own records; every
+> load-bearing outcome they support is also stated inline in the entry that
+> cites them.
+
 - 2026-07-17 — Index created (initial forge-dev roadmap planning session).
 - 2026-07-17 — Adversarial-review amendment pass: §3 dependency table +
   mermaid regenerated from per-file edges (several file-recorded edges were
