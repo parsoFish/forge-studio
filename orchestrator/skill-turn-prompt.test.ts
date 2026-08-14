@@ -514,3 +514,485 @@ test('AT-10: no fail-open default-prompt literal remains in instructions-runner.
     'the fail-open fallback literal must be deleted — loadSkillTurnPrompt fails loud instead',
   );
 });
+
+// ===========================================================================
+// ROUND 2 — adversarial-review-driven ATs (R2-AT-1..7). An adversarial review
+// of the landed WI-1 commit (90cbc634) found real defects in the composed
+// prompt and in the loader itself. These ATs are written BEFORE any fix
+// lands (test-writer role, same as AT-1..10 above): an implementer may make
+// them PASS by fixing the real defect described in each comment; it may NOT
+// edit this file to make them pass.
+// ===========================================================================
+
+/**
+ * Whitespace-tolerant phrase containment: `skills/instructions-creator/SKILL.md`
+ * is hand-wrapped markdown prose, so a multi-word pinned phrase can straddle a
+ * source line-wrap (e.g. "the existing\nAGENTS.md above" — a newline where a
+ * plain-space regex would expect a single space). Reuses the file's existing
+ * `collapseWhitespace` helper (defined below, hoisted) on BOTH sides so a pin
+ * matches regardless of where the markdown happens to wrap.
+ */
+function promptContains(haystack: string, needle: string): boolean {
+  return collapseWhitespace(haystack).toLowerCase().includes(collapseWhitespace(needle).toLowerCase());
+}
+
+// ---------------------------------------------------------------------------
+// R2-AT-1 — a positional reference ("the existing AGENTS.md above") must
+// resolve correctly now that the `## Existing <file>` data block sits AFTER
+// the composed skill text in the prompt, not before it as in the
+// pre-refactor prompt. Verbatim-moving "above" from the old prompt leaves it
+// pointing the wrong direction (design doc: "Re-anchor positional
+// references (mandatory)").
+// ---------------------------------------------------------------------------
+
+function writeExistingAgentsMd(repoPath: string): void {
+  writeFileSync(join(repoPath, 'AGENTS.md'), '# Demo project\n\nBuild: `npm test`.\n');
+}
+
+test('R2-AT-1a: real production SKILL.md, edit mode, INTERVIEW turn — no "existing AGENTS.md above" phrase, and the "## Existing" data block comes AFTER the skill text', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setupSession({ phase: 'interviewing', mode: 'edit' });
+  writeExistingAgentsMd(repoPath);
+  const { queryFn, prompts } = capturingQueryFn({
+    done: false,
+    questions: [
+      {
+        question: 'Anything else operators should know?',
+        header: 'Anything else',
+        options: [{ label: 'a', description: 'd' }, { label: 'b', description: 'e' }],
+      },
+    ],
+  });
+
+  await runInstructionsTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queryFn,
+    // NO skillPromptPath override — exercises the real production skill.
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(prompts.length, 1, 'exactly one LLM call for the interview step');
+  const prompt = prompts[0];
+  assert.ok(
+    !promptContains(prompt, 'existing AGENTS.md above'),
+    'no instruction sentence may refer to the existing-AGENTS.md data block by a position ' +
+      '("above") — the block now sits AFTER the composed skill text, not before it',
+  );
+  const skillTextIdx = prompt.indexOf('Your task this turn: the interview step');
+  const dataBlockIdx = prompt.indexOf('## Existing AGENTS.md');
+  assert.ok(skillTextIdx !== -1, 'the skill turn-section text must reach the prompt');
+  assert.ok(
+    dataBlockIdx !== -1,
+    'the ## Existing edit-context data block must reach the prompt (real on-disk AGENTS.md was seeded)',
+  );
+  assert.ok(
+    skillTextIdx < dataBlockIdx,
+    `the skill text (index ${skillTextIdx}) must come BEFORE the ## Existing data block (index ${dataBlockIdx}) — proving "above" points the wrong way`,
+  );
+});
+
+test('R2-AT-1b: real production SKILL.md, edit mode, DRAFT turn — no "existing AGENTS.md above" phrase, and the "## Existing" data block comes AFTER the skill text', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setupSession({ phase: 'drafting', mode: 'edit' });
+  writeExistingAgentsMd(repoPath);
+  const { queryFn, prompts } = capturingQueryFn({ agents_md: '# Demo project (revised)\n\nBuild: `npm test`.\n' });
+
+  await runInstructionsTurn({
+    sessionId,
+    projectRoot,
+    logsRoot,
+    queryFn,
+    logger: logger(logsRoot, sessionId),
+  });
+
+  assert.equal(prompts.length, 1, 'exactly one LLM call for the draft step');
+  const prompt = prompts[0];
+  assert.ok(
+    !promptContains(prompt, 'existing AGENTS.md above'),
+    'no instruction sentence may refer to the existing-AGENTS.md data block by a position ' +
+      '("above") — the block now sits AFTER the composed skill text, not before it',
+  );
+  const skillTextIdx = prompt.indexOf('Your task this turn: draft AGENTS.md');
+  const dataBlockIdx = prompt.indexOf('## Existing AGENTS.md');
+  assert.ok(skillTextIdx !== -1, 'the skill turn-section text must reach the prompt');
+  assert.ok(
+    dataBlockIdx !== -1,
+    'the ## Existing edit-context data block must reach the prompt (real on-disk AGENTS.md was seeded)',
+  );
+  assert.ok(
+    skillTextIdx < dataBlockIdx,
+    `the skill text (index ${skillTextIdx}) must come BEFORE the ## Existing data block (index ${dataBlockIdx}) — proving "above" points the wrong way`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R2-AT-2 — no instruction content was silently dropped by the migration. A
+// frozen list of every distinct instruction sentence the agent received
+// BEFORE this refactor (base commit c45e3892), reconstructed from BOTH
+// `skills/instructions-creator/SKILL.md` AND the two prompt-building arrays
+// in `orchestrator/instructions-runner.ts` (interview + draft, both mode
+// branches). Each entry must still be reachable in today's
+// `skills/instructions-creator/SKILL.md` (whitespace-collapsed substring
+// match) — either verbatim, or (where the mover deliberately generalised
+// rather than kept the sentence verbatim) via a distinctive clause of it,
+// noted inline. `## Turn shape` / `### Interview step` / `### Draft step`
+// are section HEADERS, not instruction sentences, and are excluded — the
+// content they introduced is covered by the sentences below (now under
+// `<!-- turn: interview -->` / `<!-- turn: draft -->`). The unchanged
+// preamble ("What AGENTS.md is for" bullets, the rest of "Read-only
+// contract") is represented by two samples rather than exhaustively
+// enumerated, since `git diff c45e3892 HEAD -- skills/instructions-creator/SKILL.md`
+// shows ZERO diff hunks in that region — it is provably untouched, so
+// per-bullet pins would only re-prove "identity is identity".
+//
+// Every entry below was verified against the base text with a throwaway
+// whitespace-collapsed substring check before this test was written; only
+// the "read manifests, CI config, ..." entry came back ABSENT from today's
+// SKILL.md — that is the one real drop this AT pins.
+//
+// Reuses `collapseWhitespace` already defined above (AT-9's helper).
+// ---------------------------------------------------------------------------
+
+type FrozenSentence = { source: string; sentence: string; note?: string };
+
+const FROZEN_SENTENCES_BASE_C45E3892: FrozenSentence[] = [
+  {
+    source: 'skills/instructions-creator/SKILL.md (interview step, base)',
+    sentence:
+      'Decide whether you have enough to write a coherent, accurate AGENTS.md WITHOUT unresolved ' +
+      'ambiguity about commands, conventions, or constraints.',
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (interview step, base)',
+    sentence: 'read manifests, CI config, existing CLAUDE.md/AGENTS.md, a few source files',
+    note:
+      'GENUINELY DROPPED — the full base sentence was "First inspect the repo (read manifests, ' +
+      'CI config, existing CLAUDE.md/AGENTS.md, a few source files)." This distinctive clause ' +
+      '(WHAT to inspect) survives nowhere post-refactor: only the generic "Inspect the repo with ' +
+      'your read tools, then decide..." sentence (sourced from instructions-runner.ts, see below) ' +
+      'remains. This entry is EXPECTED TO FAIL right now — it is the pin for the review finding.',
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (interview step, base)',
+    sentence:
+      "Ask only what unblocks an accurate draft — things the code cannot tell you (intended " +
+      "audience, what's off-limits, release conventions).",
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (interview step, base)',
+    sentence: 'Stop as soon as more questions would only refine.',
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (interview step, base)',
+    sentence: 'question, header ≤12 chars, 2–4 options each with label + description',
+    note:
+      'Base wraps this clause in "AskUserQuestion shape (...)"; today it reads "AskUserQuestion ' +
+      'shape: ...". Re-wrapped, not reworded — pin the clause, not the wrapper punctuation.',
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (draft step, base)',
+    sentence: "Fold in the operator's interview answers and any resolved revision feedback.",
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (draft step, base)',
+    sentence: "Lead with the project's purpose; keep every command copied-accurate; keep it tight.",
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md (draft step, base — no composed_seed_ids field yet)',
+    sentence: 'the complete AGENTS.md content, ready to write verbatim to the repo root.',
+    note:
+      "Base SKILL.md's Return-shape lacked composed_seed_ids (that field lived only in the " +
+      'runner .ts at base — see the init-draft-branch entry below); pin the clause the two ' +
+      'versions share rather than either exact "Return {...}" literal.',
+  },
+  {
+    source: 'skills/instructions-creator/SKILL.md ("## Turn shape" framing, base)',
+    sentence: 'and the interview so far',
+    note:
+      "Base: \"Each turn the runner gives you the project, the operator's brief, and the " +
+      'interview so far, and asks you for ONE of two structured outputs:". The data-block framing ' +
+      "sentence was deliberately reworded (it now also explains the Mode: line) — pin the clause " +
+      'common to both rather than the whole sentence.',
+  },
+  {
+    source: 'orchestrator/instructions-runner.ts (runInterviewStep, edit-mode branch, base)',
+    sentence:
+      'You are UPDATING the existing AGENTS.md above per the change-notes. You can usually ' +
+      'proceed without questions — return `{ "done": true }`. Only return ' +
+      '`{ "done": false, "questions": [...] }` (1-4 AskUserQuestion-shaped) if a note is genuinely ambiguous.',
+  },
+  {
+    source: 'orchestrator/instructions-runner.ts (runInterviewStep, init-mode branch, base)',
+    sentence:
+      'Inspect the repo with your read tools, then decide whether you can write an accurate ' +
+      'AGENTS.md without unresolved ambiguity. If yes, return `{ "done": true }`. Otherwise ' +
+      'return `{ "done": false, "questions": [...] }` with 1-4 high-leverage questions in the AskUserQuestion shape.',
+  },
+  {
+    source: 'orchestrator/instructions-runner.ts (runDraftStep, edit-mode branch, base)',
+    sentence:
+      'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the existing ' +
+      "AGENTS.md above, REVISED to incorporate the operator's change-notes. Preserve everything " +
+      'they did not ask to change; keep commands copy-accurate; keep it tight. List any seed ids ' +
+      'you composed from in composed_seed_ids.',
+  },
+  {
+    source: 'orchestrator/instructions-runner.ts (runDraftStep, init-mode branch, base)',
+    sentence:
+      'Return `{ "agents_md": "<full markdown>", "composed_seed_ids": [...] }` — the complete ' +
+      'AGENTS.md content, ready to write verbatim to the repo root. Keep commands copy-accurate; ' +
+      'keep it tight. List any seed ids you composed from in composed_seed_ids ([] if none applied).',
+  },
+  {
+    source:
+      'skills/instructions-creator/SKILL.md (unchanged preamble sample 1 — proves the untouched region is still covered)',
+    sentence:
+      "Author the project's **AGENTS.md** — the single source of agent instructions for a " +
+      'managed project — the way `claude init` does: explore the real code, ask the operator ' +
+      'what only they can answer, draft, and let them confirm or revise before anything is written.',
+  },
+  {
+    source:
+      'skills/instructions-creator/SKILL.md (unchanged preamble sample 2 — proves the untouched region is still covered)',
+    sentence: 'You have read tools only (Read, Grep, Glob, Bash). You never write files.',
+  },
+];
+
+test("R2-AT-2: every distinct pre-refactor instruction sentence (SKILL.md + both instructions-runner.ts prompt arrays, base c45e3892) is still reachable in today's SKILL.md", () => {
+  const skillMd = readFileSync(
+    join(import.meta.dirname, '..', 'skills', 'instructions-creator', 'SKILL.md'),
+    'utf8',
+  );
+  const collapsedSkillMd = collapseWhitespace(skillMd);
+
+  const missing = FROZEN_SENTENCES_BASE_C45E3892.filter(
+    ({ sentence }) => !collapsedSkillMd.includes(collapseWhitespace(sentence)),
+  );
+
+  assert.deepEqual(
+    missing.map((m) => `[${m.source}] "${m.sentence}"${m.note ? ` — ${m.note}` : ''}`),
+    [],
+    'every pre-refactor instruction sentence/clause must still be reachable in SKILL.md; the ' +
+      'array above (if non-empty) names exactly what was silently dropped',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R2-AT-3 — mode branches are SELECTED, not shown both at once. Today one
+// turn section contains BOTH the edit- and init-mode instruction text, so
+// every turn shows the agent the inapplicable branch too (before the
+// refactor, the runner's TypeScript ternary selected exactly one). This AT
+// does not dictate HOW the fix is achieved (separate turn ids vs. some other
+// selection) — only that exactly one branch's text reaches the agent.
+// ---------------------------------------------------------------------------
+
+const EDIT_DRAFT_DISTINCTIVE = "REVISED to incorporate the operator's change-notes";
+const INIT_DRAFT_DISTINCTIVE = 'the complete AGENTS.md content, ready to write verbatim to the repo root';
+const EDIT_INTERVIEW_DISTINCTIVE = 'AskUserQuestion-shaped';
+const INIT_INTERVIEW_DISTINCTIVE = 'high-leverage questions in the AskUserQuestion shape';
+
+test("R2-AT-3a: an init-mode DRAFT turn prompt must not contain the edit-branch's distinctive sentence (real production SKILL.md)", async () => {
+  const { projectRoot, logsRoot, sessionId } = setupSession({ phase: 'drafting', mode: 'init' });
+  const { queryFn, prompts } = capturingQueryFn({ agents_md: '# Demo\n\nBuild: `npm test`.\n' });
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(prompts.length, 1);
+  assert.ok(
+    !promptContains(prompts[0], EDIT_DRAFT_DISTINCTIVE),
+    'an init-mode draft turn must not show the agent the inapplicable edit-branch instructions',
+  );
+});
+
+test("R2-AT-3b: an edit-mode DRAFT turn prompt must not contain the init-branch's distinctive sentence (real production SKILL.md)", async () => {
+  const { projectRoot, logsRoot, sessionId } = setupSession({ phase: 'drafting', mode: 'edit' });
+  const { queryFn, prompts } = capturingQueryFn({ agents_md: '# Demo\n\nBuild: `npm test`.\n' });
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(prompts.length, 1);
+  assert.ok(
+    !promptContains(prompts[0], INIT_DRAFT_DISTINCTIVE),
+    'an edit-mode draft turn must not show the agent the inapplicable init-branch instructions',
+  );
+});
+
+test("R2-AT-3c: an init-mode INTERVIEW turn prompt must not contain the edit-branch's distinctive sentence (real production SKILL.md)", async () => {
+  const { projectRoot, logsRoot, sessionId } = setupSession({ phase: 'interviewing', mode: 'init' });
+  const { queryFn, prompts } = capturingQueryFn({
+    done: false,
+    questions: [
+      { question: 'What is off-limits?', header: 'Off-limits', options: [{ label: 'a', description: 'd' }, { label: 'b', description: 'e' }] },
+    ],
+  });
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(prompts.length, 1);
+  assert.ok(
+    !promptContains(prompts[0], EDIT_INTERVIEW_DISTINCTIVE),
+    'an init-mode interview turn must not show the agent the inapplicable edit-branch instructions',
+  );
+});
+
+test("R2-AT-3d: an edit-mode INTERVIEW turn prompt must not contain the init-branch's distinctive sentence (real production SKILL.md)", async () => {
+  const { projectRoot, logsRoot, sessionId } = setupSession({ phase: 'interviewing', mode: 'edit' });
+  const { queryFn, prompts } = capturingQueryFn({
+    done: false,
+    questions: [
+      { question: 'What is off-limits?', header: 'Off-limits', options: [{ label: 'a', description: 'd' }, { label: 'b', description: 'e' }] },
+    ],
+  });
+
+  await runInstructionsTurn({ sessionId, projectRoot, logsRoot, queryFn, logger: logger(logsRoot, sessionId) });
+
+  assert.equal(prompts.length, 1);
+  assert.ok(
+    !promptContains(prompts[0], INIT_INTERVIEW_DISTINCTIVE),
+    'an edit-mode interview turn must not show the agent the inapplicable init-branch instructions',
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R2-AT-4 — a duplicate turn id must be refused, not silently last-write-wins
+// (today `splitSkillTurnSections` does `turns.set(id, ...)`, so a repeated
+// `<!-- turn: draft -->` silently drops the first section).
+// ---------------------------------------------------------------------------
+
+test('R2-AT-4: splitSkillTurnSections THROWS on a document with two sections carrying the same turn id, naming the duplicated id', () => {
+  const doc = [
+    'Base preamble.',
+    '',
+    '<!-- turn: draft -->',
+    'First draft body.',
+    '',
+    '<!-- turn: draft -->',
+    'Second draft body (duplicate id — must be refused, not last-write-wins).',
+    '',
+  ].join('\n');
+
+  assert.throws(
+    () => skillPathMod.splitSkillTurnSections(doc),
+    (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.ok(
+        err.message.includes('draft'),
+        `message should name the duplicated turn id "draft", got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R2-AT-5 — a marker DOCUMENTED inside a fenced code block is not a real
+// section boundary.
+// ---------------------------------------------------------------------------
+
+test('R2-AT-5: a <!-- turn: ... --> marker written inside a fenced code block (documenting the syntax) is not treated as a real section boundary', () => {
+  const doc = [
+    'Base preamble.',
+    '',
+    'The turn-marker syntax looks like this:',
+    '```md',
+    '<!-- turn: example -->',
+    '## Some turn',
+    '```',
+    '',
+    'End of base preamble sentinel: BASE_TAIL_af03c1',
+  ].join('\n');
+
+  const { base, turns } = skillPathMod.splitSkillTurnSections(doc);
+
+  assert.equal(turns.size, 0, 'the fenced-block marker must not be parsed as a real turn boundary');
+  assert.equal(base, doc, 'the fenced block stays inside base verbatim, byte-for-byte');
+});
+
+// ---------------------------------------------------------------------------
+// R2-AT-6 — a malformed marker id is diagnosable: the thrown message must
+// mention the near-miss marker line, not just report "no turns available"
+// while a marker is visibly present two lines away.
+// ---------------------------------------------------------------------------
+
+test('R2-AT-6a: an uppercase near-miss marker ("<!-- turn: Interview -->") is named in the fail-loud message', () => {
+  const path = writeFixture(
+    'at-r2-6a',
+    'skill.md',
+    [
+      'Base preamble.',
+      '',
+      '<!-- turn: Interview -->',
+      '## Interview (uppercase id — does not match the marker id shape)',
+      'Interview body.',
+      '',
+    ].join('\n'),
+  );
+
+  assert.throws(
+    () => skillPathMod.loadSkillTurnPrompt({ name: 'fixture-skill', turnId: 'interview', skillPromptPath: path }),
+    (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.ok(
+        err.message.includes('<!-- turn: Interview -->'),
+        `message should mention the malformed marker line, not just say no turns are available ` +
+          `while one visibly sits two lines away, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+});
+
+test('R2-AT-6b: an underscore near-miss marker ("<!-- turn: interview_step -->") is named in the fail-loud message', () => {
+  const path = writeFixture(
+    'at-r2-6b',
+    'skill.md',
+    [
+      'Base preamble.',
+      '',
+      '<!-- turn: interview_step -->',
+      '## Interview step (underscore id — does not match the marker id shape)',
+      'Interview body.',
+      '',
+    ].join('\n'),
+  );
+
+  assert.throws(
+    () =>
+      skillPathMod.loadSkillTurnPrompt({ name: 'fixture-skill', turnId: 'interview-step', skillPromptPath: path }),
+    (err: unknown) => {
+      assert.ok(err instanceof Error);
+      assert.ok(
+        err.message.includes('<!-- turn: interview_step -->'),
+        `message should mention the malformed marker line, not just say no turns are available ` +
+          `while one visibly sits two lines away, got: ${err.message}`,
+      );
+      return true;
+    },
+  );
+});
+
+// ---------------------------------------------------------------------------
+// R2-AT-7 — CRLF input must split correctly with no stray `\r` left behind.
+// ---------------------------------------------------------------------------
+
+test('R2-AT-7: a CRLF-line-ended SKILL.md splits correctly with no stray \\r left in base or any section body', () => {
+  const doc = [
+    'Base preamble line one.',
+    'Base preamble line two.',
+    '',
+    '<!-- turn: draft -->',
+    '## Draft turn',
+    'Draft body line.',
+    '',
+  ].join('\r\n');
+
+  const { base, turns } = skillPathMod.splitSkillTurnSections(doc);
+
+  assert.equal(turns.size, 1, 'the CRLF-ended marker line must still be recognised as a turn boundary');
+  assert.ok(turns.has('draft'));
+  assert.match(base, /Base preamble line one\./);
+  assert.doesNotMatch(base, /\r/, 'no stray \\r characters may remain in base');
+  const draftSection = turns.get('draft')!;
+  assert.match(draftSection, /Draft body line\./);
+  assert.doesNotMatch(draftSection, /\r/, 'no stray \\r characters may remain in the section body');
+});
