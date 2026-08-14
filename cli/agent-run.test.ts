@@ -93,6 +93,7 @@ import {
   readdirSync,
   existsSync,
   rmSync,
+  statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -238,7 +239,10 @@ function setupTurnspecFixture(): TurnspecFixture {
  *  raw JSONL line from every `<forgeRoot>/_logs/<dir>/events.jsonl`,
  *  alongside its parsed form (`undefined` if the line failed to
  *  `JSON.parse`) and the events.jsonl path it came from. */
-function* walkEventJsonLines(forgeRoot: string): Generator<{
+/** Opaque to callers (forge-q1z): per events.jsonl, existed-at-snapshot + byte size. */
+type LogBaseline = Map<string, { existed: boolean; size: number }>;
+
+function* walkEventJsonLines(forgeRoot: string, baseline?: LogBaseline): Generator<{
   eventsPath: string;
   line: string;
   parsed: Record<string, unknown> | undefined;
@@ -248,7 +252,9 @@ function* walkEventJsonLines(forgeRoot: string): Generator<{
   for (const entry of readdirSync(logsRoot)) {
     const eventsPath = join(logsRoot, entry, 'events.jsonl');
     if (!existsSync(eventsPath)) continue;
-    const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean);
+    const prior = baseline?.get(eventsPath);
+    const startByte = prior?.existed ? prior.size : 0;
+    const lines = readFileSync(eventsPath).subarray(startByte).toString('utf8').trim().split('\n').filter(Boolean);
     for (const line of lines) {
       let parsed: Record<string, unknown> | undefined;
       try {
@@ -282,8 +288,21 @@ function findInteractiveRunnerStartEvent(
  *  `findInteractiveRunnerStartEvent`'s doc above for why a dir-name
  *  discriminator alone stops working once the spine's directory name
  *  collides with a legacy runner's own. */
-function assertNoInteractiveRunnerSkillEvent(forgeRoot: string, msg: string): void {
-  for (const { eventsPath, line, parsed } of walkEventJsonLines(forgeRoot)) {
+/** Snapshot (forge-q1z) — take right before the invocation under test. */
+function snapshotLogs(forgeRoot: string): LogBaseline {
+  const baseline: LogBaseline = new Map();
+  const logsRoot = join(forgeRoot, '_logs');
+  if (!existsSync(logsRoot)) return baseline;
+  for (const entry of readdirSync(logsRoot)) {
+    const eventsPath = join(logsRoot, entry, 'events.jsonl');
+    const existed = existsSync(eventsPath);
+    baseline.set(eventsPath, { existed, size: existed ? statSync(eventsPath).size : 0 });
+  }
+  return baseline;
+}
+
+function assertNoInteractiveRunnerSkillEvent(forgeRoot: string, baseline: LogBaseline, msg: string): void {
+  for (const { eventsPath, line, parsed } of walkEventJsonLines(forgeRoot, baseline)) {
     if (!parsed) continue;
     assert.notEqual(
       parsed.skill,
@@ -361,11 +380,12 @@ const LEGACY_FAST_FAIL_CASES: { agentId: string; args: string[]; expected: RegEx
 for (const { agentId, args, expected } of LEGACY_FAST_FAIL_CASES) {
   test(`R4-22 WI-5, AT-2 (legacy road untouched): 'agent run ${agentId}' still hits the legacy AGENT_RUNNERS fast-fail text, never runInteractiveTurn`, async () => {
     assert.notEqual(AGENT_RUNNERS[agentId], undefined, `fixture precondition: "${agentId}" must be a real AGENT_RUNNERS key`);
+    const baseline = snapshotLogs(ROOT);
     const r = await run(args, ROOT);
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
     assert.match(r.err, expected, `expected the legacy entry.verb-flavored text, got: ${r.err}`);
     assert.doesNotMatch(r.err, /runInteractiveTurn/, 'the legacy fast-fail path must never mention runInteractiveTurn');
-    assertNoInteractiveRunnerSkillEvent(ROOT, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
+    assertNoInteractiveRunnerSkillEvent(ROOT, baseline, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
   });
 }
 
@@ -435,11 +455,12 @@ test('R4-22 WI-5, AT-5: a descriptor WITHOUT turnSpec ("architect" — a real AG
     assert.equal(descriptor?.turnSpec, undefined, 'fixture precondition: this row must carry NO turnSpec');
     assert.notEqual(AGENT_RUNNERS.architect, undefined, 'fixture precondition: "architect" must be a real AGENT_RUNNERS key');
 
+    const baseline = snapshotLogs(fx.forgeRoot);
     const r = await withCwd(fx.forgeRoot, () => run(['architect'], fx.forgeRoot)); // no session-id at all
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
     assert.match(r.err, /^forge architect run: missing <session-id>$/m, `expected the legacy entry.verb-flavored error, got: ${r.err}`);
     assert.doesNotMatch(r.err, /runInteractiveTurn/);
-    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a turnSpec-less "architect" descriptor must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, baseline, 'a turnSpec-less "architect" descriptor must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -461,12 +482,13 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
     const descriptor = loadSessionKinds(fx.forgeRoot).find((d) => d.id === TURNSPEC_ONLY_ID);
     assert.ok(descriptor?.turnSpec, 'fixture precondition: descriptor must carry a turnSpec');
 
+    const baseline = snapshotLogs(fx.forgeRoot);
     const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId], fx.forgeRoot)); // no --project
     assert.equal(r.exitCode, 2, `must exit 2 when --project is omitted for a turnSpec kind, got stdout: ${r.out}, stderr: ${r.err}`);
     assert.match(r.err, /--project/i, `expected the error to mention --project, got: ${r.err}`);
     assert.match(r.err, /required/i, `expected the error to say --project is required, got: ${r.err}`);
     assert.match(r.err, /Usage:.*--project <name>/s, `expected a Usage: line naming --project <name>, got: ${r.err}`);
-    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a rejected (missing --project) call must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, baseline, 'a rejected (missing --project) call must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -747,12 +769,13 @@ test('R4-21 phase 2, correction B, AT-B2: cmdAgentRun resolves the projects root
 test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides as its OWN guarded segment under a reconfigured projectsDir — "..", an absolute path, and a "/"-bearing name are all refused', async () => {
   const fx = setupTurnspecFixtureWithProjectsDir({ kind: 'config', relativeDirName: 'custom-projects' });
   try {
+    const baseline = snapshotLogs(fx.forgeRoot);
     for (const bad of ['..', '/etc', 'a/b']) {
       const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', bad], fx.forgeRoot));
       assert.equal(r.exitCode, 2, `--project ${JSON.stringify(bad)} must be refused, got exit(${r.exitCode}), stdout: ${r.out}`);
       assert.match(r.err, /not a valid project name/, `expected the guarded-segment refusal text for ${JSON.stringify(bad)}, got: ${r.err}`);
     }
-    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a refused --project value must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, baseline, 'a refused --project value must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
