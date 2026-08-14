@@ -672,7 +672,7 @@ These are **not** fixed. Each is blocked by a side effect of unrelated code; a r
 | `orchestrator/kb-graph.ts` | themes / `_raw` / `_guidance` / `INDEX.md` / node-leaf / `listPendingGuidance` / `deleteGuidanceFile` | **fixed** |
 | `orchestrator/studio/session-transcript.ts` | `safeReadFileInSession`, `listDirEntries`, `listDirEntriesTyped` (R4-21 T3, BLOCKER-1 fix — `deriveFilePackage`'s recursive `package/` walk) | guarded |
 | `orchestrator/studio/hook-library.ts` | `resolveHookScriptPath`; `hookDir` / `hookYamlPath` | guarded; the latter two **fixed at the call sites** |
-| `orchestrator/skill-path.ts` | `skillPath` / `skillDir` | **fixed at the call sites** |
+| `orchestrator/skill-path.ts` | `skillPath` / `skillDir`; **`loadSkillTurnPrompt`'s `readFileSync` (new, R4-23)** | **fixed at the call sites**; the new read is `accidentally-safe`-by-construction — see the R4-23 note below |
 | `orchestrator/project-config.ts` | `readAgentInstructionsFile`, `readQualityGateSidecar` | unguarded → `forge-2zz` |
 | `orchestrator/studio/skill-library.ts`, `community-install.ts`, `community-index.ts` | package install/read | unguarded → `forge-q80` |
 | `orchestrator/requeue-resume.ts`, `flow-artifacts.ts`, `logging.ts` | manifest-carried `worktree_path` / `cycle_id` | **fixed in SEC-02** (`forge-d1f`) |
@@ -923,3 +923,45 @@ over a caller-supplied file list. That list reaches it from
 `brainDir` is `resolveKbBrainDir(forgeRoot, kbId)`'s output — the per-segment
 realpath-identity walk, not a lexical prefix check — so the request-derived `kbId`
 is already confined at that choke point before any theme file is read.
+
+---
+
+### R4-23 — `loadSkillTurnPrompt`'s `readFileSync` (`orchestrator/skill-path.ts`)
+
+R4-23 consolidated the four legacy interactive runners' private `loadSkillPrompt`
+helpers into one shared, fail-loud loader in `orchestrator/skill-path.ts`. That
+moved a `readFileSync` FROM those runner files INTO this one, so
+`check-request-path-sinks` reports `orchestrator/skill-path.ts readFileSync:
+baseline 0 -> now 1` alongside `tighten` rows removing the same sink from
+`orchestrator/instructions-runner.ts` and its siblings. It is a relocation, not
+new surface, and the baseline is accepted on that basis.
+
+Classification: **no request-derived path reaches this sink.** Two arguments feed
+the read and neither is request-supplied:
+
+- `name` — a skill directory slug, and it is `assertSkillSlug`-validated inside
+  `skillPath` before any join. That guard is this module's whole reason for
+  existing (see the module header): it rejects `.`, `..`, `/`, `\`, the empty
+  string and any id over `MAX_SKILL_ID_LENGTH`, so a `name` can never collapse,
+  escape, or reach outside `<root>/skills/`. Every call site passes a
+  **hardcoded string literal** (`'instructions-creator'`, `'demo-builder'`,
+  `'project-brain-builder'`, `'architect'`) — no route, CLI flag, or manifest
+  field selects it.
+- `skillPromptPath` — the pre-existing test/DI seam every runner already carried
+  on its own `RunXTurnInput` type. Its only non-test callers are the runners
+  themselves, which never populate it in production; the golden-capture harness
+  and the per-runner suites point it at their own `mkdtemp` fixture files.
+
+`root` defaults to this module's own `FORGE_ROOT` and is never fed an untrusted
+id (no root-folding). The read is therefore of the same class as the existing
+`skillPath`/`skillDir` row above: contained by the slug guard at the one
+resolution point, with the leaf a fixed literal (`SKILL.md`).
+
+Residual, disclosed rather than claimed away: like every other read in this
+family the loader is **symlink-blind** — a symlinked `skills/<name>/SKILL.md`
+inside a checkout would be followed. Planting it requires write access to the
+forge repo itself, which is strictly more privilege than the read grants, and it
+is the same residual the pre-R4-23 per-runner `readFileSync` calls carried. The
+one behavioural change is in the opposite direction from a weakening: those
+helpers **failed open** on an unreadable file (returning a one-line default
+prompt); the shared loader throws.

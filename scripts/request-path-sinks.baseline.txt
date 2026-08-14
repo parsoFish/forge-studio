@@ -120,7 +120,7 @@ cli/studio-path-guard.ts readdirSync 1
 cli/studio-path-guard.ts readFileSync 1
 cli/studio-path-guard.ts realpathSync 2
 cli/studio-path-guard.ts writeFileSync 1
-cli/ui-bridge.ts existsSync 26
+cli/ui-bridge.ts existsSync 25
 cli/ui-bridge.ts mkdirSync 7
 cli/ui-bridge.ts openSync 3
 cli/ui-bridge.ts readdirSync 13
@@ -130,10 +130,10 @@ cli/ui-bridge.ts spawn 2
 cli/ui-bridge.ts statSync 7
 cli/ui-bridge.ts writeFileSync 4
 orchestrator/agent-dispatch.ts readdirSync 1
-orchestrator/architect-runner.ts existsSync 10
+orchestrator/architect-runner.ts existsSync 9
 orchestrator/architect-runner.ts mkdirSync 4
 orchestrator/architect-runner.ts readdirSync 4
-orchestrator/architect-runner.ts readFileSync 9
+orchestrator/architect-runner.ts readFileSync 8
 orchestrator/architect-runner.ts rmSync 1
 orchestrator/architect-runner.ts sessionPaths@caller 1
 orchestrator/architect-runner.ts writeFileSync 6
@@ -175,9 +175,9 @@ orchestrator/daemon.ts rmSync 3
 orchestrator/daemon.ts spawn 1
 orchestrator/daemon.ts statSync 1
 orchestrator/daemon.ts writeFileSync 2
-orchestrator/demo-builder-runner.ts existsSync 7
+orchestrator/demo-builder-runner.ts existsSync 6
 orchestrator/demo-builder-runner.ts mkdirSync 5
-orchestrator/demo-builder-runner.ts readFileSync 8
+orchestrator/demo-builder-runner.ts readFileSync 6
 orchestrator/demo-builder-runner.ts realpathSync 2
 orchestrator/demo-builder-runner.ts writeFileSync 8
 orchestrator/demo-fix-loop.ts existsSync 1
@@ -228,9 +228,8 @@ orchestrator/initiative-id.ts readFileSync 1
 orchestrator/instruction-seed-match.ts existsSync 1
 orchestrator/instruction-seed-match.ts readdirSync 1
 orchestrator/instruction-seed-match.ts readFileSync 2
-orchestrator/instructions-runner.ts existsSync 2
+orchestrator/instructions-runner.ts existsSync 1
 orchestrator/instructions-runner.ts mkdirSync 1
-orchestrator/instructions-runner.ts readFileSync 2
 orchestrator/instructions-runner.ts writeFileSync 1
 orchestrator/interactive-finalizers.ts lstatSync 1
 orchestrator/interactive-finalizers.ts mkdirSync 1
@@ -325,7 +324,6 @@ orchestrator/pr.ts readdirSync 1
 orchestrator/pr.ts readFileSync 1
 orchestrator/pr.ts writeFileSync 1
 orchestrator/project-brain-builder-runner.ts mkdirSync 1
-orchestrator/project-brain-builder-runner.ts readFileSync 1
 orchestrator/project-brain-seed.ts existsSync 2
 orchestrator/project-brain-seed.ts mkdirSync 2
 orchestrator/project-brain-seed.ts writeFileSync 1
@@ -382,6 +380,7 @@ orchestrator/scheduler.ts symlinkSync 1
 orchestrator/scheduler.ts writeFileSync 2
 orchestrator/skill-path.ts existsSync 1
 orchestrator/skill-path.ts readdirSync 1
+orchestrator/skill-path.ts readFileSync 1
 orchestrator/studio/community-index.ts existsSync 10
 orchestrator/studio/community-index.ts readdirSync 2
 orchestrator/studio/community-index.ts readFileSync 1
