@@ -39,6 +39,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { request as httpRequest } from 'node:http';
 
 import { startBridge } from './ui-bridge.ts';
 import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
@@ -121,6 +122,64 @@ function start(kbId: string): Promise<Response> {
   return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/start`, { method: 'POST', headers: CSRF, body: '{}' });
 }
 
+/**
+ * DEFECT FIX (this file's own AT-1 was originally written with `fetch()`,
+ * which cannot deliver a literal ".." path segment to the server at all: the
+ * WHATWG URL Standard's "shorten a URL's path" step removes a double-dot
+ * path segment CLIENT-SIDE, before the request ever leaves the process — so
+ * `fetch('${url}/api/studio/kbs/../cleanup/start')` is actually sent as a
+ * request for `/api/studio/cleanup/start` (three segments collapse to one:
+ * `kbs`, then `..`, cancel each other out). That collapsed path has no `kbs`
+ * segment at all, so the real
+ * `/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/start$/` route (cli/ui-bridge.ts)
+ * can never match it — no server-side implementation could ever satisfy an
+ * assertion against that shape, because the request the assertion actually
+ * probes is a DIFFERENT, unrelated path. This is the exact "client-side
+ * normalization masks a server-side hole" class this repo has already fixed
+ * once for GET (`cli/ui-bridge-agent-history.test.ts`'s "D5 (ROUND 4, RAW
+ * WIRE)" `rawGet`) and once for POST
+ * (`cli/ui-bridge-demo-generations.test.ts`'s `rawPostBody`) — this is the
+ * SAME fix for THIS route, copied locally (neither sibling file exports its
+ * helper, and this file is scoped to leave both siblings' own assertions
+ * untouched).
+ *
+ * The WHATWG URL spec defines a "double-dot URL path segment" as ".." OR any
+ * ASCII-case-insensitive match for ".%2e", "%2e.", or "%2e%2e" — so
+ * `%2e%2e` is collapsed by fetch() JUST AS thoroughly as the literal `..`;
+ * probing only the literal form would leave the percent-encoded bypass shape
+ * completely untested. Both variants are asserted below.
+ *
+ * Node's low-level `http.request({ path })` places the `path` option
+ * directly onto the request line with NO normalization of any kind — no
+ * WHATWG URL parsing, no dot-segment removal, no percent-decoding — so it is
+ * the only client that can actually ask the real route this question. DO NOT
+ * "simplify" this back to `fetch()`: doing so silently stops testing the
+ * real route (fetch() cannot reach it for either probed shape), which would
+ * make the test pass — or not even compile a meaningful request — for the
+ * wrong reason.
+ */
+function rawPost(rawPath: string, bodyText = '{}'): Promise<{ status: number; text: string }> {
+  return new Promise((resolvePromise, reject) => {
+    const u = new URL(url);
+    const req = httpRequest(
+      {
+        hostname: u.hostname,
+        port: u.port,
+        path: rawPath,
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'x-forge-csrf': '1', 'content-length': Buffer.byteLength(bodyText) },
+      },
+      (res) => {
+        let data = '';
+        res.on('data', (chunk: Buffer) => { data += chunk.toString('utf8'); });
+        res.on('end', () => resolvePromise({ status: res.statusCode ?? 0, text: data }));
+      },
+    );
+    req.on('error', reject);
+    req.end(bodyText);
+  });
+}
+
 function apply(kbId: string, body: unknown): Promise<Response> {
   return fetch(`${url}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/apply`, { method: 'POST', headers: CSRF, body: JSON.stringify(body) });
 }
@@ -140,12 +199,51 @@ type CleanupStatus = {
 // ---------------------------------------------------------------------------
 
 // Kills: a route that skips slug validation on the kb id and lets a
-// traversal/control-char id reach a filesystem call.
-test('AT-1: malformed kb id ("..") -> 400, nothing written anywhere under forgeRoot', async () => {
+// traversal/control-char id reach a filesystem call. REWRITTEN over the raw
+// wire (see `rawPost`'s own doc comment above) — the original fetch()-based
+// version tested an unreachable path shape and could never have been
+// satisfied by any implementation. Also strengthened per the task brief: the
+// ARTIFACT is proven (a canary file's bytes + a plausible escape-target
+// directory's absence), not just the status code, and the "%2e%2e"
+// percent-encoded double-dot segment is probed alongside the literal one —
+// that shape is ALSO invisible to fetch(), for the identical WHATWG-spec
+// reason, and is exactly why the wire-level test exists rather than a single
+// literal-".." probe.
+test('AT-1 (RAW WIRE — a fetch()-delivered ".." cannot reach this route at all, see rawPost doc comment): the literal ".." kb id AND its "%2e%2e" percent-encoded equivalent both -> 400 "invalid kb id" (the route\'s FIRST check, cli/ui-bridge.ts\'s kbCleanupStartMatch handler validates SLUG_RE before any KB lookup or fs write), and NO directory or file is created anywhere outside forgeRoot\'s pre-existing state', async () => {
+  // Canary #1: a file OUTSIDE any kb-cleanup-related path, at forgeRoot's
+  // own top level. Content (not just presence) must be byte-identical
+  // afterwards — a filename-list snapshot alone would miss an in-place
+  // overwrite of a pre-existing file at a colliding path.
+  const canaryPath = join(forgeRoot, 'CANARY-ROOT-OUTSIDE-KB-CLEANUP.txt');
+  const canaryContent = 'SENTINEL-kb-cleanup-at1-canary-must-never-change';
+  writeFileSync(canaryPath, canaryContent, 'utf8');
+
+  // Canary #2: the concrete, plausible escape TARGET. The real route joins
+  // `sessionProject` (resolved from a genuine KB lookup) under
+  // `<forgeRoot>/projects/<sessionProject>/_kb-cleanup/<sid>`. An
+  // implementation that instead used the RAW, request-derived kb id AS
+  // `sessionProject` before ever validating or resolving it would land
+  // `join(projectsRoot, '..', '_kb-cleanup', sid)` — i.e. `..` from
+  // `<forgeRoot>/projects/` resolves to `<forgeRoot>` itself, so a
+  // `_kb-cleanup/` directory appearing directly under forgeRoot (one level
+  // above `projects/`) is that specific wrong implementation's exact,
+  // detectable on-disk signature.
+  const escapeTargetDir = join(forgeRoot, '_kb-cleanup');
+  assert.ok(!existsSync(escapeTargetDir), 'arrange: the plausible escape-target dir must not pre-exist');
+
   const before = snapshotFileList(forgeRoot);
-  const res = await start('..');
-  assert.equal(res.status, 400, `expected 400, got ${res.status}: ${await res.text()}`);
+
+  const literal = await rawPost('/api/studio/kbs/../cleanup/start');
+  assert.equal(literal.status, 400, `expected 400 for the raw, un-normalized ".." kb id delivered over the real wire, got ${literal.status}: ${literal.text}`);
+  assert.match(literal.text, /invalid kb id/, `expected the SLUG_RE validation's own error message — the FIRST check in the route, before any KB lookup or fs write — got: ${literal.text}`);
+
+  const percentEncoded = await rawPost('/api/studio/kbs/%2e%2e/cleanup/start');
+  assert.equal(percentEncoded.status, 400, `expected the "%2e%2e" percent-encoded double-dot segment to be rejected IDENTICALLY to the literal ".." — both decodeURIComponent to the same string before SLUG_RE ever inspects them — got ${percentEncoded.status}: ${percentEncoded.text}`);
+  assert.equal(percentEncoded.text, literal.text, 'the percent-encoded and literal traversal shapes must produce a byte-identical response body (both take the exact same decodeURIComponent -> SLUG_RE path in the real handler)');
+
   assert.deepEqual(snapshotFileList(forgeRoot), before, 'a rejected request must create nothing on disk anywhere under forgeRoot — the ARTIFACT, not merely the status code');
+  assert.ok(!existsSync(escapeTargetDir), 'the plausible escape-target dir must still be absent after both probes — proves the traversal never reached a path join');
+  assert.equal(readFileSync(canaryPath, 'utf8'), canaryContent, 'the canary file outside any kb-cleanup path must be byte-unchanged after both probes');
 });
 
 // Kills: a route that 200s (or 500s) instead of a clean 404 for a
