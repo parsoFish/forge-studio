@@ -70,8 +70,8 @@ export function ProjectsIndexBody({
             No projects yet
           </h2>
           <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6, margin: 0 }}>
-            Onboard an existing repository so a flow can build it, or start something new from a
-            framework template — both open the same onboarding form.
+            Onboard an existing repository so a flow can build it, or start a greenfield project
+            with no repo checked out yet — both open the same onboarding form.
           </p>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
             <a

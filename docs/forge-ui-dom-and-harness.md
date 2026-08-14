@@ -702,7 +702,17 @@ inventory rather than one shared page-level contract:
   keeps `[data-action="onboard-project"]` (the two ids never collided on the
   same page, but shared one name for two different operations — link-navigate
   vs. form-submit — which this index's own CTAs also now follow). Journey
-  coverage: `scripts/journeys/home.mjs` asserts the Home CTA's href.
+  coverage: `scripts/journeys/home.mjs`'s `home-landing` beat asserts the
+  Home CTA's own href; its `home-projects-index` beat (the very next beat,
+  while `home-landing`'s two seeded scratch projects are still live) is the
+  one that actually NAVIGATES to `/projects` and asserts the index's own
+  contract — `data-page="projects-index"`, `data-page-ready`, both seeded
+  projects' own cards present, `data-project-count`/the grid's `data-count`
+  matching a REAL `GET /api/studio/projects` read (never a re-derived client
+  guess), and the persistent onboard CTA surviving onto the index page
+  itself. An upstream link's href is not the same claim as the destination's
+  own DOM contract — this beat exists to cover the latter, not duplicate the
+  former.
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).

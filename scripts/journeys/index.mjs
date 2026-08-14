@@ -228,6 +228,7 @@ export const JOURNEYS = [
 
 export const RUN_ORDER = [
   ['home', 'home-landing'],
+  ['home', 'home-projects-index'],
   ['home', 'home-attention'],
   ['home', 'home-clickthrough'],
 
