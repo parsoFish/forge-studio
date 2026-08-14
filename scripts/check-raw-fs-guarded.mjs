@@ -1055,6 +1055,15 @@ function isRootExpr(expr, roots) {
  * the sibling caller-count ratchet remain the backstop for anything this
  * lexical scan cannot see.
  */
+/** The audited-SITE key: the fold EXPRESSION itself, whitespace-normalized, as
+ *  seen in the cleaned view (so comment/string noise is already gone and a
+ *  multi-line call collapses to one line). This is what an allowlist row pins,
+ *  because a LOCATION cannot be pinned honestly -- see the allowlist docstring.
+ *  Truncated so a pathological expression cannot bloat the report. */
+function normalizeSite(text) {
+  return text.replace(/\s+/g, ' ').trim().slice(0, 160);
+}
+
 /** Reduce a captured folded-SEGMENT expression to the untrusted value it
  *  governs: a bare identifier chain is itself; one level of call wrapping
  *  (`decodeURIComponent(seg)`) yields the first identifier chain INSIDE the
@@ -1098,7 +1107,7 @@ export function scanProjectsRootFold(text, relFile) {
     if (!isRootExpr(m[1], roots)) continue;
     const folded = foldedTokenOf(m[2]);
     if (folded === null) continue; // wrapper with no identifier inside (a literal) -- not a fold
-    out.push({ file: relFile, line: lineOf(m.index), folded, why });
+    out.push({ file: relFile, line: lineOf(m.index), folded, site: normalizeSite(m[0]), why });
   }
 
   // (2) template form: `` `projects/${x}` `` or `` `${projectsRoot}/${x}` ``.
@@ -1116,57 +1125,63 @@ export function scanProjectsRootFold(text, relFile) {
       continue;
     }
     const fm = /\$\{\s*([A-Za-z_$][\w$.]*)\s*\}/.exec(rest);
-    if (fm) out.push({ file: relFile, line: lineOf(m.index), folded: fm[1], why });
+    if (fm) out.push({ file: relFile, line: lineOf(m.index), folded: fm[1], site: normalizeSite(m[0]), why });
   }
   return out;
 }
 
 /**
- * COUNT-AWARE, folded-token-keyed (file + folded) audited residuals --
- * public-repo-safe, defensive facts only. A row survives line drift (it is
- * not line-keyed) but suppresses only its AUDITED `count` of occurrences: any
- * SURPLUS finding beyond that budget is kept as its own build-failing finding
- * (a fresh, un-audited fold reusing an audited token is no longer invisible --
- * see the runLint wiring below). `count` must equal the MEASURED number of
- * occurrences in the real tree, or the row goes stale (reported non-fatally,
- * same as the line-keyed allowlist's stale handling) -- the real tree must
- * report zero stale fold rows.
+ * COUNT-AWARE, SITE-PINNED audited residuals -- public-repo-safe, defensive
+ * facts only. A row pins the audited fold EXPRESSION (`site`, whitespace-
+ * normalized as the scan sees it) in a file, plus the `count` of occurrences of
+ * that expression the audit covered. A finding is suppressed only when its own
+ * normalized expression EQUALS an audited `site` in the same file, and only up
+ * to that row's budget; everything else is kept and fails the build.
  *
- * `line` is an ATTRIBUTION ANCHOR, never a key: the line the audit actually
- * looked at. When a file holds more occurrences of an audited token than the
- * budget covers, the occurrences NEAREST the anchor are the ones the audit is
- * taken to cover and every other occurrence is KEPT. Consuming the budget in
- * plain scan order instead (the first cut of this rule) still failed the build,
- * but REPORTED the wrong site whenever the new fold was inserted ABOVE the
- * audited one: the author saw an already-reviewed line flagged, and the fastest
- * way to clear it was to raise `count` -- silently permitting the un-reported
- * new site. Anchoring keeps drift resilience (a moved-but-single occurrence is
- * still nearest its anchor, so suppression survives) while attributing an
- * INSERTED occurrence to the inserted site. A row with no anchor falls back to
- * scan order.
+ * WHY AN EXPRESSION AND NOT A LOCATION. Two earlier cuts of this rule keyed the
+ * audit positionally and both leaked in the same direction. A pure (file,
+ * folded-token) key with a count let ANY future fold reusing that token be
+ * absorbed. Adding the audited LINE as a nearest-wins attribution anchor fixed
+ * the common insert-above case but not the class: with occurrences still within
+ * budget the anchor was never consulted at all, so deleting the audited fold and
+ * introducing a DIFFERENT one that happened to capture the same token elsewhere
+ * in the file passed silently -- the ratchet reporting audit coverage for a line
+ * nobody had looked at. Line numbers cannot express "this is the thing I
+ * audited"; the source text can, and it is also what survives drift, which was
+ * the original reason the rows were not line-keyed.
+ *
+ * WHAT THIS STILL DOES NOT DISTINGUISH (disclosed, not hidden): a row audits an
+ * EXPRESSION, not a scope. An identical fold expression appearing elsewhere in
+ * the SAME file is covered by the same row (bounded by `count`), even though the
+ * reason prose names the function the audit read. Moving an audited fold into a
+ * different function therefore needs the row's reason re-read by a human; the
+ * ratchet cannot see function boundaries. `count` must equal the MEASURED number
+ * of occurrences, or the row goes stale (reported non-fatally, same as the
+ * line-keyed allowlist's stale handling) -- the real tree must report zero stale
+ * fold rows.
  */
 export const PROJECTS_ROOT_FOLD_ALLOWLIST = [
   {
     file: 'orchestrator/cli.ts',
     folded: 'target',
+    site: "resolve('projects', target)",
     count: 1,
-    line: 791,
     reason:
       "resolvePreflightProjectDir dual-mode name-or-path resolver — target is a project NAME or an explicit path, both existsSync-checked; out of the folded-untrusted-name class. Measured: exactly one occurrence in the real tree, orchestrator/cli.ts:791 (`const asManaged = resolve('projects', target);`), inside resolvePreflightProjectDir.",
   },
   {
     file: 'orchestrator/scheduler.ts',
     folded: 'm.project',
+    site: "resolve('projects', m.project)",
     count: 1,
-    line: 897,
     reason:
       "scheduler manifest fallback (m.project_repo_path || resolve(projects,m.project)); the resulting repo path is contained at the write choke point by isContainedProjectRepoPath (cli/manifest-path-guard.ts). Measured: exactly one occurrence in the real tree, orchestrator/scheduler.ts:897 (`projectRepoPath: m.project_repo_path || resolve('projects', m.project),`).",
   },
   {
     file: 'cli/agent-run.ts',
     folded: 'name',
+    site: 'join(projectsDir, name)',
     count: 1,
-    line: 708,
     reason:
       "findSessionProject readdir loop — name is a readdirSync(projectsDir)-enumerated real in-tree directory name, not caller-supplied; join builds a candidate to probe. Measured: exactly one occurrence in the real tree, cli/agent-run.ts:708 (`const candidate = join(projectsDir, name);`), inside findSessionProject's readdir loop.",
   },
@@ -1189,37 +1204,31 @@ export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLI
     if (!existsSync(abs)) continue;
     foldFindings.push(...scanProjectsRootFold(readFileSync(abs, 'utf8'), rel));
   }
-  // Each (file, folded) key gets an audited occurrence BUDGET (row.count),
-  // spent on the occurrences NEAREST the row's attribution anchor (row.line);
-  // every other occurrence is kept, so a surplus, un-audited reuse of an
-  // audited token both fails the build AND is reported at ITS OWN line rather
-  // than displacing the audited site. See the allowlist's docstring for why
-  // scan order was not good enough.
+  // Each (file, SITE) pair gets an audited occurrence BUDGET (row.count). A
+  // finding is suppressed only when its own normalized fold EXPRESSION equals
+  // an audited site in the same file, and only within that budget: a fold whose
+  // expression differs -- even one capturing the same folded token -- is a
+  // fresh, un-audited site and is kept at ITS OWN line. See the allowlist's
+  // docstring for the two positional keying schemes this replaced and why.
   const foldSeenByKey = new Map();
   const keptFold = [];
-  const foldGroups = new Map(); // key -> { row, findings[] }
   for (const f of foldFindings) {
-    const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((a) => a.file === f.file && a.folded === f.folded);
-    if (!row) { keptFold.push(f); continue; }
-    const key = `${row.file} ${row.folded}`;
-    if (!foldGroups.has(key)) foldGroups.set(key, { row, findings: [] });
-    foldGroups.get(key).findings.push(f);
-  }
-  for (const [key, { row, findings }] of foldGroups) {
-    foldSeenByKey.set(key, findings.length);
-    // Rank by distance from the audited anchor (scan order when a row carries
-    // no anchor); the closest `count` are the audited residual.
-    const ranked = [...findings].sort((a, b) =>
-      typeof row.line === 'number' ? Math.abs(a.line - row.line) - Math.abs(b.line - row.line) : 0,
-    );
-    const audited = new Set(ranked.slice(0, row.count));
-    for (const f of findings) {
-      if (audited.has(f)) continue; // within the audited budget -- suppressed
-      keptFold.push({
-        ...f,
-        why: `audited occurrence budget exceeded for ${row.file} + "${row.folded}" (audited count: ${row.count} at line ${row.line ?? 'unanchored'}, this file now holds ${findings.length}) — this line is a fresh, un-audited fold: route it through resolveGuardedPath, or add its own audited allowlist row (raising the existing row's count is only correct if THIS line is the one you audited)`,
-      });
+    const row = PROJECTS_ROOT_FOLD_ALLOWLIST.find((a) => a.file === f.file && a.site === f.site);
+    if (!row) {
+      const tokenRow = PROJECTS_ROOT_FOLD_ALLOWLIST.find((a) => a.file === f.file && a.folded === f.folded);
+      keptFold.push(tokenRow
+        ? { ...f, why: `${f.why} [${f.file} has an audited row for the token "${f.folded}", but it pins the expression \`${tokenRow.site}\` — this line folds a different expression (\`${f.site}\`) and is NOT covered by that audit]` }
+        : f);
+      continue;
     }
+    const key = `${row.file}\u0000${row.site}`;
+    const seen = (foldSeenByKey.get(key) ?? 0) + 1;
+    foldSeenByKey.set(key, seen);
+    if (seen <= row.count) continue; // within the audited budget -- suppressed
+    keptFold.push({
+      ...f,
+      why: `audited occurrence budget exceeded in ${row.file} for the expression \`${row.site}\` (audited count: ${row.count}, this file now holds ${seen}) — a fresh, un-audited occurrence; route it through resolveGuardedPath, or raise the row's count only after auditing THIS occurrence too`,
+    });
   }
   // A fold-allowlist row whose audited budget is NOT fully consumed (fewer
   // real occurrences than its `count`) is STALE -- reported non-fatally,
@@ -1227,7 +1236,7 @@ export function runLint({ root = FORGE_ROOT, modules = null, allowlist = ALLOWLI
   // carries a token marker so main()'s `${s.file}:${s.line}` print stays
   // readable.) The real tree must report zero stale fold rows.
   const foldStale = PROJECTS_ROOT_FOLD_ALLOWLIST
-    .filter((a) => (foldSeenByKey.get(`${a.file} ${a.folded}`) ?? 0) < a.count)
+    .filter((a) => (foldSeenByKey.get(`${a.file}\u0000${a.site}`) ?? 0) < a.count)
     .map((a) => ({ file: a.file, line: `fold:${a.folded}` }));
 
   return {
