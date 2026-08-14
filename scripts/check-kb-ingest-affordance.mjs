@@ -18,9 +18,13 @@
  *      registry.ts) and the reflection-path builtin invocation
  *      (orchestrator/kb-health.ts) — never in a dispatch arm or a UI
  *      action.
- *   4. No `skills/*\/SKILL.md`'s `composition.skills` list names
- *      `brain-ingest`, EXCEPT `skills/reflector/SKILL.md` — the ONE place
- *      ingest is legitimately invoked (ingest stays reflection-only).
+ *   4. No `skills/*\/SKILL.md`'s `composition.skills` names `brain-ingest`,
+ *      EXCEPT `skills/reflector/SKILL.md` — the ONE place ingest is
+ *      legitimately invoked (ingest stays reflection-only).
+ *      `composition.skills` is normalized before the check: a flow-list is
+ *      used as-is, and a bare YAML scalar (`skills: brain-ingest` — a single
+ *      string, not a list) is treated as a one-element list rather than
+ *      silently skipped, since that shape is an easy authoring typo.
  *
  * This is a pure structural ratchet (same "prove-or-warn, one actionable
  * line per failure" model as check-request-path-sinks.mjs) — no baseline
@@ -30,6 +34,18 @@
  * scripts/check-kb-ingest-affordance.test.ts, which keeps its own inline
  * copy of this logic to prove the contract from first principles before
  * trusting this script's copy against the real tree).
+ *
+ * LIMITATIONS, DISCLOSED (this ratchet does NOT cover these — a future pass
+ * would need to extend it, not assume it already catches them):
+ *   - Rule 4 only inspects `composition.skills`. It does not look at
+ *     `composition.tools`, `composition.mcps`, or `materials`, nor at any
+ *     prose-body instruction telling an agent to compose/invoke ingest.
+ *   - Rule 4 only walks one level of `skills/<slug>/SKILL.md`; a nested
+ *     `skills/<a>/<b>/SKILL.md` is not discovered.
+ *   - Rule 4 does not follow symlinked skill directories.
+ *   The last two mirror production's own skill-discovery walk (one-level,
+ *   non-symlink-following), so they are a symmetric blind spot shared with
+ *   the real runtime, not a unique hole in the ratchet.
  *
  * Usage:
  *   node scripts/check-kb-ingest-affordance.mjs
@@ -165,10 +181,13 @@ export function checkNoIngestAffordance(root = FORGE_ROOT) {
       continue; // unparseable frontmatter is brain-lint's concern, not this ratchet's
     }
     const composition = data && typeof data === 'object' && !Array.isArray(data) ? data.composition : undefined;
-    const skillsList =
-      composition && typeof composition === 'object' && !Array.isArray(composition) && Array.isArray(composition.skills)
-        ? composition.skills
-        : [];
+    // composition.skills is normally a flow-list (Array), but a bare YAML
+    // scalar (`skills: brain-ingest`) is valid frontmatter too — an easy
+    // authoring typo. Normalize a bare string to a single-element list
+    // before the membership test below, so it isn't silently treated as
+    // zero skills.
+    const rawSkills = composition && typeof composition === 'object' && !Array.isArray(composition) ? composition.skills : undefined;
+    const skillsList = Array.isArray(rawSkills) ? rawSkills : typeof rawSkills === 'string' ? [rawSkills] : [];
     if (skillsList.includes('brain-ingest')) {
       violations.push(
         `${relPath}: composition.skills includes 'brain-ingest' (forbidden — operator decision 3, ingest stays reflection-only. Remove it from composition.skills, or if this is a legitimate reflection-path composer add it to ALLOWED_INGEST_SKILL_COMPOSERS.)`,
@@ -193,7 +212,7 @@ export function runCheck({ root = FORGE_ROOT } = {}) {
     console.error('Ingest stays reflection-only (docs/decisions/010-brain-first.md). Remove the UI action / bridge dispatch arm / stray reference, or move it into the allowed descriptor-default files.');
     return 1;
   }
-  console.log('check-kb-ingest-affordance: PASS — no ingest affordance in forge-ui or the bridge KB routes');
+  console.log('check-kb-ingest-affordance: PASS — no ingest affordance in forge-ui, the bridge KB routes, stray reflector-ingest/DEFAULT_KB_INGEST references, or skills/*/SKILL.md composition.skills');
   return 0;
 }
 
