@@ -39,7 +39,7 @@ import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.t
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
-import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, type Finding } from './brain-lint.ts';
+import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, type Finding } from './brain-lint.ts';
 import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
@@ -485,7 +485,7 @@ function applyDeterministicConsolidateFixes(
  * entirely), so a CI run with residual findings still reaches a terminal
  * state deterministically — just with an honest `cleared: false`.
  */
-async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: string): Promise<void> {
+export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, runId: string): Promise<void> {
   // MINOR 1: the whole body is wrapped so the SINGLE terminal event is
   // guaranteed even on an unexpected throw in the pre-terminal repair phase
   // (the initial runBrainLint, or applyDeterministicConsolidateFixes'
@@ -795,6 +795,58 @@ function buildKbHealth(
     checks,
     ...(healthError !== undefined ? { healthError } : {}),
   };
+}
+
+/**
+ * R4-19-F2 — the kb-cleanup session's live-findings computation. Exported
+ * (cli/ is uncapped) so both the session kickoff (`POST /api/studio/kbs/:id/
+ * cleanup/start`, cli/ui-bridge.ts) and the session read branch
+ * (`GET /api/studio/sessions/kb-cleanup/:id`, cli/bridge-studio-sessions.ts)
+ * share ONE implementation of this union rather than each duplicating it.
+ *
+ * Reuses `buildKbHealth`'s own honest per-KB scoping (R6-08 4on) — the union
+ * of `scopeFindingsToKb(runBrainLint(scope:'full').findings)` (the shared,
+ * `readThemeFiles`-based scan, scoped to this KB's own resolved brain dir)
+ * and `lintThemeFiles(listOwnThemeFiles(brainDir))` (this KB's OWN theme
+ * files, covering `LINT_THEME_FILE_CHECKS` for ANY kb kind — including
+ * project/band KBs the shared scan never walks at all). This is the ONLY
+ * mechanism that gives a real verdict for BOTH forge brains
+ * (`brain/cycles`, `brain/forge-dev`) and project/band brains — the
+ * full-scope checks alone only ever walk `brain/cycles/themes` +
+ * `brain/forge-dev/themes`.
+ *
+ * Filtered to `resolution === 'agent'` — the tier brain-maintenance's
+ * SKILL.md is scoped to drafting a plan for: 'auto' findings are handled by
+ * the deterministic consolidate drain with no plan needed, and 'user'
+ * findings need an operator decision neither the agent nor this session can
+ * make. Every finding is stamped via `classify` (idempotent, total — safe to
+ * call on an already-stamped Finding) so `.kind` is always populated, which
+ * `deriveCleanupPlan`'s (orchestrator/studio/session-transcript.ts) plan-line
+ * join requires (it matches a parsed action against a finding on (kind,
+ * file)).
+ *
+ * Throws, naming the kb id, when it does not resolve to any real brain
+ * directory — fail loud, never a silent empty findings array for an
+ * unresolvable KB (the declared-data-fails-open shape this campaign guards
+ * against).
+ */
+export function computeAgentCleanupFindings(forgeRoot: string, kbId: string): (Finding & { kind: string })[] {
+  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
+  if (!brainDir) {
+    throw new Error(`computeAgentCleanupFindings: kb id "${kbId}" does not resolve to any real brain directory`);
+  }
+  const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
+  const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
+  const ownThemeFiles = listOwnThemeFiles(brainDir);
+  const ownFindings = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
+  return unionFindings(scopedFull, ownFindings)
+    .map((f) => classify(f))
+    // `.kind` is narrowed to `string` here (classify's own signature keeps
+    // it optional — it stamps the SAME field it declares, so TS cannot see
+    // that the stamp always lands) — the narrowing is what lets this
+    // return type satisfy deriveCleanupPlan's CleanupFinding contract
+    // (orchestrator/studio/session-transcript.ts) without a cast.
+    .filter((f): f is Finding & { kind: string } => f.resolution === 'agent' && typeof f.kind === 'string');
 }
 
 // ---------------------------------------------------------------------------

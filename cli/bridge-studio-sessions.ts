@@ -79,7 +79,7 @@ import { resolve } from 'node:path';
 
 import { sendJson, allowedOrigin, sanitizeError, pathOnly, parseQuery, SAFE_ID_RE, type StudioContext } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
-import { KB_SEEDING_ANCHOR_PREFIX } from './bridge-studio-kbs.ts';
+import { KB_SEEDING_ANCHOR_PREFIX, computeAgentCleanupFindings } from './bridge-studio-kbs.ts';
 import { MAX_SKILL_ID_LENGTH } from '../orchestrator/skill-path.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { loadSessionKinds, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
@@ -319,6 +319,29 @@ export async function handleStudioSessionsRoutes(
           return true;
         }
         artifact = deriveSessionArtifact({ descriptor, sessionDir, contractStages: contractResult.rows });
+      } else if (descriptor.artifact.kind === 'cleanup-plan') {
+        // R4-19-F2 — the kb-cleanup session needs a LIVE, KB-scoped
+        // brain-lint pass (derive-don't-store: the plan file on disk only
+        // ever supplies the agent's PROPOSED actions, never current truth).
+        // `kb_id` comes from the session's own status.json — an
+        // unresolvable kb_id (the KB was deleted/renamed since the session
+        // started) fails LOUD here, naming it, rather than falling through
+        // to deriveSessionArtifact with no cleanupFindings (which would
+        // throw a DIFFERENT, less specific error) or smoothing into a 200
+        // with an empty artifact.
+        const kbId = typeof statusParsed.kb_id === 'string' ? statusParsed.kb_id : null;
+        if (kbId === null) {
+          sendJson(res, 409, { ok: false, error: `session "${sessionId}" status.json has no string "kb_id" — cannot compute live cleanup findings` }, origin);
+          return true;
+        }
+        let cleanupFindings: ReturnType<typeof computeAgentCleanupFindings>;
+        try {
+          cleanupFindings = computeAgentCleanupFindings(ctx.forgeRoot, kbId);
+        } catch (findingsErr) {
+          sendJson(res, 409, { ok: false, error: sanitizeError(findingsErr) }, origin);
+          return true;
+        }
+        artifact = deriveSessionArtifact({ descriptor, sessionDir, cleanupFindings });
       } else {
         artifact = deriveSessionArtifact({ descriptor, sessionDir });
       }

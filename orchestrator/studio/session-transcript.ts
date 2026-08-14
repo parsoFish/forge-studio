@@ -699,13 +699,137 @@ function deriveFilePackage(sessionDir: string, label: string): FilePackageArtifa
   return { kind: 'file-package', label, files };
 }
 
+// ---------------------------------------------------------------------------
+// cleanup-plan (R4-19-F2) — brain-maintenance's KB-cleanup session.
+// DERIVE-DON'T-STORE (the binding contract, this repo's #1 defect class):
+// the session dir's `plan/cleanup-plan.md` supplies the agent's PROPOSED
+// ACTIONS only (kind/target/proposal per line, per skills/brain-maintenance/
+// SKILL.md's output contract). CURRENT truth is ALWAYS the caller-supplied
+// `cleanupFindings` — a live, KB-scoped brain-lint run the caller
+// (cli/bridge-studio-sessions.ts, via cli/bridge-studio-kbs.ts's
+// `computeAgentCleanupFindings`) computes fresh on every call. Each action's
+// `state` is DERIVED at read time by joining the two on (kind, target) —
+// there is no stored per-action status field anywhere: not in the plan
+// file, not in status.json, not anywhere. Mirrors contract-buildout's D4
+// caller-supplied-input pattern exactly, just with a different field name
+// (`cleanupFindings`, ORCHESTRATOR RULING — mirrors `contractStages`).
+// ---------------------------------------------------------------------------
+
+const CLEANUP_PLAN_DIRNAME = 'plan';
+const CLEANUP_PLAN_FILENAME = 'cleanup-plan.md';
+
+/** The caller-supplied CURRENT-truth shape — a subset of cli/brain-lint.ts's
+ *  real `Finding` (post-`classify`) this module deliberately does NOT import
+ *  (mirrors `fixtureContractStages`'s own rationale: this module stays a
+ *  pure, fs-only derivation with no business importing the lint engine). Any
+ *  object carrying at least these two fields satisfies this structurally —
+ *  the caller may (and in production does) supply richer Finding objects. */
+export type CleanupFinding = { readonly kind: string; readonly file: string };
+
+export type CleanupPlanAction = {
+  readonly kind: string;
+  readonly target: string;
+  readonly proposal: string;
+  /** DERIVED per call, never stored — 'open' iff a matching (kind, target)
+   *  entry is present in the caller-supplied `cleanupFindings` THIS call. */
+  readonly state: 'open' | 'cleared';
+};
+
+export type CleanupPlanArtifact = {
+  readonly kind: 'cleanup-plan';
+  /** The session-kind descriptor's declared `artifact.label` — see
+   *  RoadmapDraftArtifact.label. */
+  readonly label: string;
+  /** The raw plan text, verbatim, whether or not any line parsed into an
+   *  action — null only when no plan file exists at all (or it escapes
+   *  sessionDir). Never null merely because zero lines parsed (AT-4): a
+   *  drafted-but-unparseable plan must never render as "no plan and no
+   *  actions" — that ambiguity is indistinguishable from "the agent hasn't
+   *  drafted yet" (AT-5), which this field exists to disambiguate. */
+  readonly plan: string | null;
+  // Mutable element array — see RoadmapDraftArtifact.rows for the identical
+  // rationale (the pinned AT idiom casts to a plain mutable-array shape).
+  readonly actions: CleanupPlanAction[];
+  /** The count of `actions` whose derived `state` is 'open' (ORCHESTRATOR
+   *  RULING) — never a separate count sourced from `cleanupFindings.length`
+   *  directly (a finding with no matching plan action would inflate that). */
+  readonly openFindingCount: number;
+};
+
+/** Matches skills/brain-maintenance/SKILL.md's mandated action-line format:
+ *  `- [<kind>] <theme-file-path> — <one-sentence proposal>`. Adversarial-
+ *  review hardening (the task brief): the SKILL.md shows the em-dash
+ *  separator only inside a code fence, and LLM prose frequently contains
+ *  dashes of its own — so FOUR separator variants are accepted: em dash
+ *  (—, U+2014), en dash (–, U+2013), " - ", and " -- ". A theme-file-path
+ *  never contains whitespace, so `(\S+)` captures exactly the target token
+ *  and the separator alternation is anchored immediately after it
+ *  (whitespace-bounded on both sides) — this is, by construction, the FIRST
+ *  separator occurrence after the target, so a proposal sentence containing
+ *  its own dash later on is captured intact by the trailing `(.*)$`, never
+ *  re-split. `--` is listed before the single `-` in the alternation so a
+ *  double-hyphen separator is tried whole first (defensive; regex
+ *  backtracking would reach the same result either order, since the two
+ *  literal sequences never share a starting position once the shared
+ *  boundary is a full `\s` character). */
+const ACTION_LINE_RE = /^-\s*\[([^\]]+)\]\s+(\S+)\s+(?:—|–|--|-)\s+(.*)$/;
+
+type ParsedCleanupAction = { readonly kind: string; readonly target: string; readonly proposal: string };
+
+/** Parses `plan/cleanup-plan.md`'s action lines only — a line that does not
+ *  match ACTION_LINE_RE is silently IGNORED for `actions[]` (the raw text
+ *  still surfaces verbatim in `plan`, per CleanupPlanArtifact.plan's own
+ *  doc). Prose sections (an intro, grouping headers, rationale) around the
+ *  mandated action lines are expected and welcome — SKILL.md explicitly
+ *  allows them. */
+function parseCleanupPlanActions(raw: string): ParsedCleanupAction[] {
+  const actions: ParsedCleanupAction[] = [];
+  for (const line of raw.split('\n')) {
+    const m = ACTION_LINE_RE.exec(line.trim());
+    if (!m) continue; // ignored for actions[] — the raw plan text still carries it
+    actions.push({ kind: m[1], target: m[2], proposal: m[3] });
+  }
+  return actions;
+}
+
+/** Stable join key for matching a parsed action against a caller-supplied
+ *  finding — (kind, target/file) pairs, mirroring `findingIdentity`'s own
+ *  join-key idiom in cli/bridge-studio-kbs.ts (a different file, same
+ *  shape: never collide two DIFFERENT (kind, file)/(kind, target) pairs on
+ *  a naive string concat). */
+function cleanupJoinKey(kind: string, target: string): string {
+  return `${kind} ${target}`;
+}
+
+/** `plan/cleanup-plan.md` — read through the SAME realpath-containment
+ *  choke point (`safeReadFileInSession`) every other single-file derivation
+ *  in this module goes through, so a `plan/` directory that is itself a
+ *  symlink escaping `sessionDir` contributes NO file (collapsed to the same
+ *  "no plan file at all" outcome `safeReadFileInSession` already gives every
+ *  other escaping read — AT-6). `cleanupFindings` supplies CURRENT truth;
+ *  `state` is derived fresh on every call (see this section's own header). */
+function deriveCleanupPlan(sessionDir: string, label: string, cleanupFindings: readonly CleanupFinding[]): CleanupPlanArtifact {
+  const raw = safeReadFileInSession(sessionDir, join(CLEANUP_PLAN_DIRNAME, CLEANUP_PLAN_FILENAME));
+  if (raw === null) {
+    return { kind: 'cleanup-plan', label, plan: null, actions: [], openFindingCount: 0 };
+  }
+  const openKeys = new Set(cleanupFindings.map((f) => cleanupJoinKey(f.kind, f.file)));
+  const actions: CleanupPlanAction[] = parseCleanupPlanActions(raw).map((a) => ({
+    ...a,
+    state: openKeys.has(cleanupJoinKey(a.kind, a.target)) ? 'open' : 'cleared',
+  }));
+  const openFindingCount = actions.filter((a) => a.state === 'open').length;
+  return { kind: 'cleanup-plan', label, plan: raw, actions, openFindingCount };
+}
+
 export type SessionArtifactPayload =
   | RoadmapDraftArtifact
   | MarkdownDraftArtifact
   | BrainStructureArtifact
   | GenerationGalleryArtifact
   | ContractBuildoutArtifact
-  | FilePackageArtifact;
+  | FilePackageArtifact
+  | CleanupPlanArtifact;
 
 function deriveRoadmapDraft(sessionDir: string, label: string): RoadmapDraftArtifact {
   const files = listDirEntries(sessionDir, MANIFESTS_DIRNAME, '.md');
@@ -868,8 +992,12 @@ export function deriveSessionArtifact(input: {
   /** R4-17 — only consumed by the 'contract-buildout' kind; see that case
    *  below and the module-header note on D4. Ignored for every other kind. */
   contractStages?: ContractStageRow[];
+  /** R4-19-F2 — only consumed by the 'cleanup-plan' kind; see that case
+   *  below and the cleanup-plan section's own header note (derive-don't-
+   *  store). Ignored for every other kind. */
+  cleanupFindings?: readonly CleanupFinding[];
 }): SessionArtifactPayload {
-  const { descriptor, sessionDir, contractStages } = input;
+  const { descriptor, sessionDir, contractStages, cleanupFindings } = input;
   const kind = descriptor.artifact.kind;
   const label = descriptor.artifact.label;
   const state = sessionArtifactKindState(kind);
@@ -907,6 +1035,19 @@ export function deriveSessionArtifact(input: {
         stages: contractStages,
         sourcesScanned: ['contractStages supplied by the caller (cli/contract-stages.ts) — this module performs no filesystem scanning for this kind (D4)'],
       };
+    }
+    case 'cleanup-plan': {
+      // DERIVE-DON'T-STORE: cleanupFindings is REQUIRED — a caller that
+      // omits it gets a NAMED throw, never a silent empty/defaulted
+      // artifact (mirrors the contract-buildout throw immediately above).
+      if (cleanupFindings === undefined) {
+        throw new Error(
+          'deriveSessionArtifact: artifact kind "cleanup-plan" requires cleanupFindings to be supplied by the caller ' +
+            '(cli/bridge-studio-sessions.ts derives them via a live, KB-scoped brain-lint scan, cli/bridge-studio-kbs.ts\'s ' +
+            'computeAgentCleanupFindings) — never defaults to an empty/silent artifact',
+        );
+      }
+      return deriveCleanupPlan(sessionDir, label, cleanupFindings);
     }
     default: {
       // Exhaustiveness guard: state === 'live' but the kind matched none of
