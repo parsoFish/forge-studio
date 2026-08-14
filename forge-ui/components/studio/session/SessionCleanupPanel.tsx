@@ -60,6 +60,7 @@ export function SessionCleanupPanel({
   sessionId,
   project = null,
   phase,
+  kbId,
   artifact,
   onApplied,
 }: {
@@ -73,6 +74,14 @@ export function SessionCleanupPanel({
   /** The session's OWN phase (generic shell `viewState.phase`) — the sole
    *  approvability gate; see this file's header. */
   phase: string;
+  /** R4-19-F2 WI-4c BLOCKER fix — the KB id (session-client.ts's
+   *  `SessionShellPayload.kbId`, forwarded from `status.kb_id` by
+   *  cli/bridge-studio-sessions.ts). `undefined` when the session's own
+   *  status.json genuinely has no resolvable kb_id — a real, not a
+   *  hypothetical, case (a KB deleted/renamed since the session started).
+   *  This is `applyKbCleanup`'s FIRST argument; the shipped defect was
+   *  passing `sessionId` there instead (see this file's header). */
+  kbId: string | undefined;
   artifact: SessionArtifactPayload | null;
   /** Called with the dispatched consolidate `runId` on a successful apply —
    *  the caller may use it to refresh KB health, mirroring
@@ -87,14 +96,26 @@ export function SessionCleanupPanel({
   const [applyState, setApplyState] = useState<CleanupApplyState | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
 
-  const approvable = phase === AWAITING_APPROVAL_PHASE;
+  // R4-19-F2 WI-4c BLOCKER fix — approvability now ALSO requires a real
+  // `kbId`: offering the approve control when `kbId` is `undefined` would be
+  // a button that is known, in advance, to 400 (`applyKbCleanup`'s first
+  // argument would have nothing valid to build the URL from) — exactly the
+  // failure mode this whole fix exists to close. `phase` alone is no longer
+  // sufficient.
+  const approvable = phase === AWAITING_APPROVAL_PHASE && kbId !== undefined;
   const canApprove = approvable && Boolean(project) && !applying;
 
   async function onApprove(): Promise<void> {
-    if (!canApprove || !project) return;
+    if (!canApprove || !project || !kbId) return;
     setApplying(true);
     setError(null);
-    const result = await applyKbCleanup(sessionId, { project, sessionId });
+    // Argument order is LOAD-BEARING and invisible to the type checker: both
+    // `kbId` and `sessionId` are plain strings, so a swap here compiles
+    // clean and only fails at runtime (the shipped defect this fix closes —
+    // see this file's header). `applyKbCleanup`'s FIRST positional argument
+    // is the KB id (it builds `POST /api/studio/kbs/<id>/cleanup/apply`);
+    // `sessionId`/`project` belong in the body, not the URL slug.
+    const result = await applyKbCleanup(kbId, { project, sessionId });
     setApplying(false);
     if (!result.ok) {
       // Never swallowed: the 409 approval-gate refusal (or any other server
@@ -170,6 +191,13 @@ export function SessionCleanupPanel({
           {error && <div style={{ fontSize: 12.5, color: 'var(--red, #f87171)', marginBottom: 8 }}>{error}</div>}
           {phase === APPLIED_PHASE
             ? 'This cleanup plan has already been applied.'
+            : kbId === undefined
+            ? // R4-19-F2 WI-4c BLOCKER fix: an honest reason, never a button
+              // that is known in advance to 400. This session's own
+              // status.json has no resolvable kb_id on record (e.g. the KB
+              // was deleted/renamed since the session started) — the same
+              // condition the read route itself fails loud on server-side.
+              'Approval is unavailable: this session has no resolvable KB id on record.'
             : `Approval opens once the plan reaches "${AWAITING_APPROVAL_PHASE}" (current phase: "${phase}").`}
         </div>
       )}

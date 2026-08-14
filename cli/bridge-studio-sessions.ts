@@ -393,6 +393,16 @@ export async function handleStudioSessionsRoutes(
         defaultStage: descriptor.defaultStage,
         turns: transcriptResult.turns,
         artifact,
+        // R4-19-F2 WI-4c BLOCKER fix — `kbId`, sourced from the already-read
+        // `statusParsed.kb_id`, threaded the same way `title` is threaded
+        // above: present ONLY when the status genuinely carries a string
+        // kb_id, spread in rather than assigned, so kinds with no kb_id
+        // (e.g. architect) get no `kbId` key at all — not `''`, not `null`.
+        // This is the field SessionCleanupPanel needs as `applyKbCleanup`'s
+        // FIRST argument; broadcasting a fabricated default here would be
+        // the exact declared-data-fails-open shape this campaign guards
+        // against, just for a new field (AT-KBID-2 pins the omission).
+        ...(typeof statusParsed.kb_id === 'string' ? { kbId: statusParsed.kb_id } : {}),
       },
       origin,
     );

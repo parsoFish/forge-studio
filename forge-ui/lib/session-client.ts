@@ -637,6 +637,17 @@ export type SessionShellPayload = {
   defaultStage: string;
   turns: SessionTurn[];
   artifact: SessionArtifactPayload;
+  /**
+   * R4-19-F2 WI-4c BLOCKER fix — the KB id `SessionCleanupPanel` needs as
+   * `applyKbCleanup`'s FIRST argument (cli/bridge-studio-sessions.ts's
+   * `statusParsed.kb_id` forward). Mirrors `dependsOn`'s ABSENCE-TOLERANT
+   * attitude, not its empty-array DEFAULT: `dependsOn` has a sensible "no
+   * deps" default (`[]`), but there is no sentinel "no KB" string, so a
+   * session kind with no real kb_id (e.g. architect) must parse to
+   * `undefined`, never a fabricated `''`. Optional, never hard-required —
+   * a payload omitting the key is not malformed.
+   */
+  kbId?: string;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -685,7 +696,16 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const artifact = parseSessionArtifact(raw['artifact']);
 
-  return { ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact };
+  // Absence-tolerant like `dependsOn`, but with NO default value (see the
+  // field doc above): a non-string "kbId" is left untyped-absent rather than
+  // thrown on, since a malformed kbId is advisory (it degrades the panel to
+  // its honest not-approvable branch) not envelope-fatal like every other
+  // field in this payload — spread in only when genuinely a string, so the
+  // key is OMITTED (not `undefined`-valued) to match the wire contract.
+  const kbIdRaw = raw['kbId'];
+  const kbId = typeof kbIdRaw === 'string' ? kbIdRaw : undefined;
+
+  return { ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact, ...(kbId !== undefined ? { kbId } : {}) };
 }
 
 // ---------------------------------------------------------------------------

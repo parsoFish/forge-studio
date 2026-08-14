@@ -895,17 +895,25 @@ inventory rather than one shared page-level contract:
   that could ever call the apply route (R4-21's prior instance of the exact
   same gap). Root: `[data-component="cleanup-panel"]`, status block
   `[data-section="cleanup-status"][data-cleanup-panel-phase=<phase>]`. The
-  approve control is gated on the session's OWN phase — the apply route
-  (`cli/ui-bridge.ts`'s `kbCleanupApplyMatch` handler) 409s unless it is
-  EXACTLY `"awaiting-approval"` — never on the artifact's own
+  approve control is gated on the session's OWN phase AND a resolvable
+  `kbId` (R4-19-F2 WI-4c BLOCKER fix) — the apply route (`cli/ui-bridge.ts`'s
+  `kbCleanupApplyMatch` handler) 409s unless phase is EXACTLY
+  `"awaiting-approval"`, and separately 400s "invalid kb id" if the URL's
+  `:id` segment isn't a real KB slug — never on the artifact's own
   `state`/`settled` (those describe the plan's content, not the session's
   approval window): `[data-section="cleanup-approve"]` with
   `[data-action="approve-cleanup-plan"]` renders ONLY while
-  `phase === "awaiting-approval"`; every other phase renders
-  `[data-section="cleanup-not-approvable"]` instead — an explanatory line,
-  never a disabled-but-clickable button that would still invite a 409.
-  Approving calls `applyKbCleanup(sessionId, {project, sessionId})`; because
-  that route itself AWAITS the drain before responding 200, the fetch
+  `phase === "awaiting-approval"` AND `kbId !== undefined`; every other case
+  renders `[data-section="cleanup-not-approvable"]` instead — an explanatory
+  line (a dedicated "no resolvable KB id on record" reason when `kbId` is
+  `undefined`, distinct from the phase-mismatch/already-applied reasons),
+  never a disabled-but-clickable button that would still invite a 400/409.
+  `kbId` is forwarded from the session-shell read route's own `kbId` field
+  (`SessionShellPayload.kbId`, sourced from `status.kb_id`, present only
+  when the status genuinely carries one — see the read-contract entry
+  below). Approving calls `applyKbCleanup(kbId, {project, sessionId})` —
+  `kbId` is the URL's `:id` segment, `sessionId`/`project` are body-only;
+  because that route itself AWAITS the drain before responding 200, the fetch
   resolving IS the terminal event — no separate poll-to-terminal loop is
   needed (unlike `KbMaintenance`'s Consolidate). On success the panel settles
   into `[data-section="cleanup-applied"]` and stamps
