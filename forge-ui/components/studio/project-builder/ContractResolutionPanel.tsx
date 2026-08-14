@@ -5,15 +5,24 @@ import { useRouter } from 'next/navigation';
 
 import { preflightFixAuto, preflightFixAgent, preflightFixStatus, type PreflightClause } from '@/lib/studio-client';
 import { startInstructions, startDemoBuilder } from '@/lib/bridge-client';
+import { agentResolveLabel, brainFixHref } from '@/lib/contract-resolution-view';
 
 /**
  * Stage D — guided contract-resolution panel. Mirrors LintResolutionPanel for
  * preflight clauses: each FAILING clause is grouped by its resolution tier.
  *   - AUTO  → one click applies every deterministic fixer.
  *   - AGENT → routes the clause to the matching builder (C8→instructions,
- *             DEMO→demo-builder) or the brain UI; the operator drives it there.
+ *             DEMO→demo-builder) or the project's own Brain 3 KB health tab
+ *             (BRAIN→brain-fix, `/knowledge?id=<projectId>&tab=health` — the
+ *             per-project KB id equals the project id, ADR 035); the operator
+ *             drives resolution there. NONE of these three routes runs an
+ *             agent turn from the click itself — see `agentResolveLabel`
+ *             (./contract-resolution-view.ts), which the button label uses so
+ *             it never claims "with agent" for a click that only navigates.
  *   - USER  → the operator's decision drives the preflight-fix agent, which
- *             applies it and re-runs preflight to confirm the clause cleared.
+ *             applies it and re-runs preflight to confirm the clause cleared
+ *             (this tier — and only this tier — genuinely dispatches + polls
+ *             an agent turn, ~90s bounded; see `poll` below).
  * Load-bearing state is mirrored to data-* for the harness.
  */
 
@@ -82,7 +91,9 @@ export function ContractResolutionPanel({
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
       if (s.ok && s.sessionId) onDemoSessionStarted?.(s.sessionId);
     } else if (r.route === 'brain-fix') {
-      setMsg('Resolve the stale brain citation from the Knowledge tab → Resolve Lint.');
+      // The project's own Brain 3 KB (id == projectId, ADR 035) — its health
+      // tab is where the stale-citation Resolve Lint flow lives.
+      router.push(brainFixHref(projectId));
     }
   }, [projectId, router, onDemoSessionStarted]);
 
@@ -134,7 +145,7 @@ export function ContractResolutionPanel({
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <ClauseRow c={c} state={runState[c.id]} />
               <button data-action="resolve-clause-agent" data-resolve-clause-id={c.id} style={btn} disabled={busy !== null} onClick={() => void resolveAgent(c)}>
-                {busy === `agent:${c.id}` ? 'Routing…' : 'Resolve with agent'}
+                {busy === `agent:${c.id}` ? 'Routing…' : agentResolveLabel(c.route)}
               </button>
             </div>
           ))}
@@ -164,7 +175,7 @@ export function ContractResolutionPanel({
                 disabled={busy !== null || (notes[c.id] ?? '').trim() === ''}
                 onClick={() => void submitUser(c)}
               >
-                {busy === `user:${c.id}` ? 'Applying…' : 'Apply decision'}
+                {busy === `user:${c.id}` ? 'Applying…' : 'Apply with agent'}
               </button>
             </div>
           ))}

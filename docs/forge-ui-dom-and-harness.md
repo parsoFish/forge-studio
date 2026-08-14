@@ -766,6 +766,20 @@ inventory rather than one shared page-level contract:
   The editor aside also carries two PERMANENT read-only surfaces (R4-12), on
   the project at rest — distinct from the preflight VERDICT surfaces
   (`ContractReadiness` / `[data-section="contract-resolution"]`).
+  **`[data-section="contract-resolution"]` agent-tier buttons**
+  (`[data-action="resolve-clause-agent"][data-resolve-clause-id]`, one per
+  agent-tier clause — `ContractResolutionPanel.tsx`) navigate to the matching
+  builder or KB tab; they never dispatch an agent turn themselves, so their
+  label is route-honest per clause (`instructions`/`demo-builder`/`brain-fix`
+  → "Open in instructions builder…"/"Open in demo builder…"/"Open in
+  Knowledge…", `contract-resolution-view.ts`'s `agentResolveLabel`). The
+  `brain-fix` route (the BRAIN clause) navigates to
+  `/knowledge?id=<projectId>&tab=health` — the project's own Brain 3 KB
+  declares `id: <projectId>` in its `kb.yaml` (ADR 035), so the id is derived
+  from the projectId already in scope, no separate lookup. The USER-tier
+  `[data-action="apply-clause-decision"]` button genuinely dispatches +
+  polls a preflight-fix agent (~90s bounded) and is labelled "Apply with
+  agent" accordingly.
   **`[data-section="contract-panel"]` (R4-12-F1)** —
   `ProjectContractPanel.tsx`, an async server component mounted client-side by
   the page's `ContractPanelMount`; it issues its OWN
