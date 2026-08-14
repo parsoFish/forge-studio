@@ -128,6 +128,52 @@ export async function waitForFile(path, ms = 12000) {
   return existsSync(path);
 }
 
+/**
+ * Fill a REACT-CONTROLLED field and prove the value reached React state, not
+ * just the DOM. Kills a specific class of race: a beat that gates on an
+ * SSR-satisfiable selector (e.g. `[data-section="..."]`, present in the
+ * server-rendered HTML before React hydrates) and then treats the page as
+ * interactive. If `fill()` lands before hydration attaches, it can set the
+ * DOM `.value` directly while React's controlled-input state is still its
+ * initial `''`; hydration then re-renders the input back to that state,
+ * silently discarding the fill, and any button gated on the field
+ * (`disabled={!canSubmit}`) stays disabled forever. This is exactly the
+ * failure that killed `stand-up-onboard/su-onboard-project` (J4): a 30s
+ * timeout waiting for `[data-action="onboard-project"]` to become enabled.
+ *
+ * Fills, then checks — after a short settle — that the element's own
+ * `.value` still holds what was written; re-fills up to `attempts` times if
+ * hydration reset it. THROWS (never silently continues) naming the selector
+ * and the last-observed value if the fill never sticks — a silent fallback
+ * here would just re-create the exact blindness this helper exists to
+ * remove. Do not delete this as ceremony: the retry-and-verify is the fix,
+ * not decoration.
+ *
+ * @param {import('playwright').Page} page
+ * @param {string} selector   CSS selector for the controlled input/textarea.
+ * @param {string} value      the value to fill.
+ * @param {object} [opts]
+ * @param {number} [opts.attempts=3]   max fill attempts before throwing.
+ * @param {number} [opts.settleMs=300] wait after each fill before re-reading `.value`.
+ * @param {number} [opts.timeout=5000] Playwright per-fill locator timeout (ms).
+ */
+export async function fillWhenLive(page, selector, value, opts = {}) {
+  const { attempts = 3, settleMs = 300, timeout = 5000 } = opts;
+  let lastSeen = '<never read>';
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    await page.locator(selector).fill(value, { timeout });
+    await sleep(settleMs);
+    lastSeen = await page.locator(selector).inputValue().catch(() => '<unreadable>');
+    if (lastSeen === value) return;
+  }
+  throw new Error(
+    `fillWhenLive: "${selector}" never held "${value}" after ${attempts} attempt(s) ` +
+    `(last observed value: "${lastSeen}"). The field is likely not hydrated yet — ` +
+    `React reset the DOM value after a fill landed pre-hydration. Do not silence this ` +
+    `error; fix the gate the calling beat waits on before filling.`,
+  );
+}
+
 // J3: the flow the operator authors from the basic starter (new-flow builder).
 export const J3_FLOW = 'my-first-flow';
 export const J3_FLOW_DIR = join(FORGE_ROOT, 'studio', 'flows', J3_FLOW);

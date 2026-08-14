@@ -14,6 +14,10 @@ import { test, expect, vi, afterEach } from 'vitest';
 
 import {
   parseCapability,
+  // review round (GAP 1/GAP 2, R6-07 batch-H honesty pass): pinned directly
+  // at the wire boundary, alongside parseCapability's own precedent above —
+  // both are "carry-through-or-reject-whole-object" parsers.
+  parseKbLintSummary,
   buildTriggerDeclaration,
   isValidCronSchedule,
   parseRunInputs,
@@ -142,6 +146,86 @@ test('parseCapability: malformed shapes return undefined without throwing (older
   expect(parseCapability({ interactive: true })).toBeUndefined();
   expect(parseCapability('not-an-object')).toBeUndefined();
   expect(parseCapability(42)).toBeUndefined();
+});
+
+// ---------------------------------------------------------------------------
+// parseKbLintSummary (review round on forge-2am, R6-07 batch-H honesty pass)
+// ---------------------------------------------------------------------------
+//
+// GAP 1 (MAJOR): today `error` is handled as
+// `typeof l.error === 'string' ? {error: l.error} : {}` — a PRESENT
+// but wrong-typed `error` is silently dropped instead of rejecting the whole
+// object. `error`'s presence is the server's "the lint run itself threw"
+// signal (KbLintSummary's own header above); dropping it turns a real
+// lint-failure into a fabricated counts-only "clean" summary — exactly the
+// declared-data-fails-open shape this seam exists to close.
+//
+// GAP 2 (MINOR): `typeof x === 'number'` admits NaN/Infinity/negative/
+// non-integer, and nothing today checks `checksRun <= checksTotal`.
+
+test('parseKbLintSummary: a present-but-non-string `error` (42 / true / {}) invalidates the WHOLE object to null — kills the `typeof l.error === "string" ? {error} : {}` implementation, which silently DROPS a present-but-wrong-typed error instead of rejecting the object', () => {
+  const base = { errors: 0, flags: 0, checksRun: 5, checksTotal: 10 };
+  expect(parseKbLintSummary({ ...base, error: 42 })).toBeNull();
+  expect(parseKbLintSummary({ ...base, error: true })).toBeNull();
+  expect(parseKbLintSummary({ ...base, error: {} })).toBeNull();
+});
+
+test('parseKbLintSummary: GAP 1 wire-level assertion — the reviewer-reproduced { errors:0, flags:0, checksRun:5, checksTotal:10, error:42 } payload never becomes the counts-only summary {errors:0,flags:0,checksRun:5,checksTotal:10} (dropping `error` instead of rejecting fabricates an all-clean verdict)', () => {
+  const parsed = parseKbLintSummary({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10, error: 42 });
+  expect(parsed).not.toEqual({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10 });
+  expect(parsed).toBeNull();
+});
+
+test('parseKbLintSummary: `error: null` means ABSENT and stays a VALID counts-only summary — null is not itself a rejection reason', () => {
+  const parsed = parseKbLintSummary({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10, error: null });
+  expect(parsed).toEqual({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10 });
+  expect(parsed && 'error' in parsed).toBe(false);
+});
+
+test('parseKbLintSummary: `error` absent entirely also stays VALID, with no `error` key on the result', () => {
+  const parsed = parseKbLintSummary({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10 });
+  expect(parsed).toEqual({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10 });
+  expect(parsed && 'error' in parsed).toBe(false);
+});
+
+test('parseKbLintSummary: positive control — a well-formed summary WITH a real string `error` still parses, carrying `error` through verbatim', () => {
+  const parsed = parseKbLintSummary({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10, error: 'lint run threw' });
+  expect(parsed).toEqual({ errors: 0, flags: 0, checksRun: 5, checksTotal: 10, error: 'lint run threw' });
+});
+
+test('parseKbLintSummary: NaN in any count field invalidates the whole object to null — kills a bare `typeof x === "number"` check, which admits NaN', () => {
+  const base = { errors: 0, flags: 0, checksRun: 5, checksTotal: 10 };
+  expect(parseKbLintSummary({ ...base, errors: NaN })).toBeNull();
+  expect(parseKbLintSummary({ ...base, flags: NaN })).toBeNull();
+  expect(parseKbLintSummary({ ...base, checksRun: NaN })).toBeNull();
+  expect(parseKbLintSummary({ ...base, checksTotal: NaN })).toBeNull();
+});
+
+test('parseKbLintSummary: Infinity in any count field invalidates the whole object to null', () => {
+  const base = { errors: 0, flags: 0, checksRun: 5, checksTotal: 10 };
+  expect(parseKbLintSummary({ ...base, errors: Infinity })).toBeNull();
+  expect(parseKbLintSummary({ ...base, checksTotal: Infinity })).toBeNull();
+});
+
+test('parseKbLintSummary: a negative count invalidates the whole object to null — the reviewer-reproduced {errors:NaN,flags:2,checksRun:-1,checksTotal:10} class of render (data-attention-checks-run="-1") must never parse clean', () => {
+  expect(parseKbLintSummary({ errors: 0, flags: 2, checksRun: -1, checksTotal: 10 })).toBeNull();
+});
+
+test('parseKbLintSummary: a non-integer count (1.5) invalidates the whole object to null', () => {
+  expect(parseKbLintSummary({ errors: 1.5, flags: 0, checksRun: 5, checksTotal: 10 })).toBeNull();
+});
+
+test('parseKbLintSummary: checksRun > checksTotal invalidates the whole object to null — kills the inverted n/a-invariant that would render "50/10 checks ran"', () => {
+  expect(parseKbLintSummary({ errors: 0, flags: 0, checksRun: 11, checksTotal: 10 })).toBeNull();
+});
+
+test('parseKbLintSummary: positive control — well-formed finite/integer/bounded summaries (all-zero, and checksRun === checksTotal, and a real dirty summary) still parse', () => {
+  expect(parseKbLintSummary({ errors: 0, flags: 0, checksRun: 0, checksTotal: 10 }))
+    .toEqual({ errors: 0, flags: 0, checksRun: 0, checksTotal: 10 });
+  expect(parseKbLintSummary({ errors: 0, flags: 0, checksRun: 10, checksTotal: 10 }))
+    .toEqual({ errors: 0, flags: 0, checksRun: 10, checksTotal: 10 });
+  expect(parseKbLintSummary({ errors: 3, flags: 4, checksRun: 7, checksTotal: 10 }))
+    .toEqual({ errors: 3, flags: 4, checksRun: 7, checksTotal: 10 });
 });
 
 // ---------------------------------------------------------------------------

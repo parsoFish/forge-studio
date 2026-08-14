@@ -180,6 +180,10 @@ export function serializeKbDescriptor(kb: KbDescriptor): string {
   out['desc'] = kb.desc;
   if (kb.processes !== undefined) out['processes'] = kb.processes;
   if (kb.backend !== undefined) out['backend'] = kb.backend;
+  // forge-3oq: preserve a present origin verbatim; never invent one when
+  // the descriptor doesn't carry it (an absent origin is an honest gap the
+  // server reports as 'unknown' — see cli/studio-provenance.ts).
+  if (kb.origin !== undefined) out['origin'] = kb.origin;
   return yaml.dump(out, { lineWidth: 120, quotingType: '"', forceQuotes: false });
 }
 
@@ -198,6 +202,9 @@ export function loadKbDescriptor(kbYamlPath: string): KbDescriptor {
     desc: reqString(d, 'desc', kbYamlPath),
     processes,
     backend: optString(d, 'backend'),
+    // forge-3oq: read a present origin: key verbatim; absent stays absent
+    // (optString already returns undefined for a missing/empty key).
+    origin: optString(d, 'origin'),
     path: kbYamlPath,
   };
 }

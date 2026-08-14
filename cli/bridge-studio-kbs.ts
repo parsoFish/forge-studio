@@ -18,17 +18,18 @@
  */
 
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync, realpathSync } from 'node:fs';
+import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync, appendFileSync, openSync, closeSync, rmSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { basename, dirname, join, resolve, sep } from 'node:path';
-import { resolveGuardedPath, guardedReadFile, guardedReadDir, type PathGuardResult } from './studio-path-guard.ts';
+import { resolveGuardedPath, guardedReadFile, type PathGuardResult } from './studio-path-guard.ts';
 // gray-matter has no usable types; treated as `any` like cli/brain-lint.ts and
 // cli/brain-fix-auto.ts, which import it the same way.
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 import matter from 'gray-matter';
 
 import { loadKbDescriptor, serializeKbDescriptor, listFlowIds, discoverProjects, resolveKbProcesses } from '../orchestrator/studio/registry.ts';
+import { provenanceOfOrigin, type Provenance } from './studio-provenance.ts';
 import { resolveKbBrainDir } from '../orchestrator/brain-paths.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import { getKbBackend } from '../orchestrator/kb-backend.ts';
@@ -39,10 +40,19 @@ import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.t
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
-import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, CHECK_NAMES, CHECK_SCOPE, LINT_THEME_FILE_CHECKS, type Finding } from './brain-lint.ts';
+import { runBrainLint, resolutionCounts, applyAutoFixesUntilStable, lintThemeFiles, classify, CHECK_NAMES, type Finding } from './brain-lint.ts';
 import { listCycles } from './metrics.ts';
 import { regenerateBrainIndex } from './brain-index.ts';
 import { isDryBridge, refuseDryBridge } from './dry-bridge.ts';
+import {
+  findingUnderDir,
+  scopeFindingsToKb,
+  listOwnThemeFiles,
+  unionFindings,
+  computeKbLintChecks,
+  attachKbLintSummaries,
+  type CheckHealthEntry,
+} from './kb-lint-summary.ts';
 import {
   sendJson,
   allowedOrigin,
@@ -63,7 +73,16 @@ type KbWithCounts = {
   binding: KbBinding;
   desc: string;
   path: string;
+  /** Present when kb.yaml carries an `origin:` key (forge-3oq) — absent on
+   *  every pre-existing brain that predates the stamp, an honest gap. */
+  origin?: string;
   counts: { index: number; themes: number; raw: number };
+  /** Derived from `origin` via the ONE shared `provenanceOfOrigin` mapping,
+   *  attached HERE inside `loadKbDescriptors` (forge-3oq review) so every
+   *  caller of the loader — list, detail, resolve-node, delete, guidance —
+   *  inherits it and none can independently forget it. Never persisted;
+   *  recomputed on every call. */
+  provenance: Provenance;
 };
 
 function countLayerFiles(dir: string): number {
@@ -90,113 +109,13 @@ function subDirs(dir: string): string[] {
   }
 }
 
-/**
- * Walk brain/ for kb.yaml files and enrich each with layer counts.
- *
- * Scans every direct sub-directory of brain/ (the top-level brains — cycles,
- * forge-dev) AND every sub-directory of brain/projects/ (the central per-project
- * brains, ADR 035 — gitpulse, mdtoc, …). Without the second pass, project brains
- * are invisible in Studio's KB graph even though the reflector writes to them.
- */
-export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
-  const brainRoot = join(resolve(forgeRoot), 'brain');
-  if (!existsSync(brainRoot)) return [];
-
-  const result: KbWithCounts[] = [];
-
-  // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
-  // so a symlinked `brain/<id>` DIRECTORY never reaches here — but that
-  // accident says nothing about the LEAF. A genuinely real `brain/<id>/` whose
-  // `kb.yaml` is a symlink was confirmed live disclosing the outside file's
-  // contents verbatim in this route's 200 response, because this function read
-  // `kb.yaml` with no guard at all and every other KB route's fix went in
-  // around it. `base` is the fixed containment root and `name` is its own
-  // segment (never folded into the root — ./studio-path-guard.ts, CONTRACT).
-  const pushFrom = (base: string, name: string): void => {
-    const yamlGuard = resolveGuardedPath(base, [name, 'kb.yaml']);
-    if (!yamlGuard.ok || !yamlGuard.exists) return;
-    try {
-      const kb = loadKbDescriptor(yamlGuard.realPath);
-      // Each layer path is independently guarded — a real kb.yaml is no
-      // warrant for a symlinked `themes/` or `_raw/` beside it.
-      const layer = (tail: string): string | null => {
-        const g = resolveGuardedPath(base, [name, tail]);
-        return g.ok && g.exists ? g.realPath : null;
-      };
-      const indexPath = layer('INDEX.md');
-      const themesPath = layer('themes');
-      const rawPath = layer('_raw');
-      const counts = {
-        index: indexPath ? 1 : 0,
-        themes: themesPath ? countLayerFiles(themesPath) : 0,
-        raw: rawPath ? countLayerFiles(rawPath) : 0,
-      };
-      result.push({ ...kb, counts });
-    } catch {
-      // Skip unreadable kb.yaml
-    }
-  };
-
-  // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
-  // own, so it is naturally skipped here).
-  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
-  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
-  // a SECOND containment root and gets the identical treatment — a fix that
-  // hardens only the primary root leaves the fallback wide open.
-  const projectsRoot = join(brainRoot, 'projects');
-  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
-
-  return result;
-}
-
 // ---------------------------------------------------------------------------
 // Lint-resolution helpers (the guided-resolution UI)
 // ---------------------------------------------------------------------------
-
-/**
- * R1-06 WI-3 review MAJOR 1 + MAJOR 2 — the ONE exact-dir scoping root both a
- * KB's health lint COUNT (read) and its consolidate/fix-auto obligation (WRITE)
- * share. A finding belongs to `kbId` iff its file resolves to a path AT or
- * nested UNDER the KB's OWN resolved brain dir — `resolveKbBrainDir`, the SAME
- * resolution consolidate/lint/health use, covering BOTH `brain/<id>` and the
- * central per-project `brain/projects/<id>` (ADR 035).
- *
- * The two shapes this replaces were both live defects:
- *   - substring `f.file.includes(kbId)` (the old `scopeFindingsToKb`) folded a
- *     SIBLING like `alpha-two` into `alpha` — and because consolidate turns the
- *     scope into WRITES, consolidating `alpha` mutated `brain/projects/alpha-two/`
- *     (cross-KB write, MAJOR 2);
- *   - the hardcoded `brain/<id>` prefix (buildKbHealth's old filter) matched
- *     NOTHING for a project brain at `brain/projects/<id>`, so health reported
- *     lintFlags=0 and hid the Lint section for exactly the project KBs WI-3
- *     targets (declared-data-fails-open, MAJOR 1).
- *
- * Comparison is by identity-after-realpath (not a lexical prefix): the finding's
- * file is realpath'd where it exists, matching `resolveKbBrainDir`'s own
- * realpath'd return — so a symlinked forge-root component (e.g. macOS `/tmp`)
- * can't defeat the prefix check, and a theme reached through a symlink that
- * escapes the dir is correctly EXCLUDED from a write scope rather than folded in.
- */
-function findingUnderDir(forgeRoot: string, brainDir: string, f: Finding): boolean {
-  if (!f.file) return false;
-  const abs = resolve(forgeRoot, f.file);
-  // Never let a realpath fs-throw (e.g. a TOCTOU unlink between existsSync and
-  // realpathSync) escape the scoping path and 500 an otherwise-fine lint —
-  // fall back to the lexical absolute path.
-  let real = abs;
-  try {
-    if (existsSync(abs)) real = realpathSync(abs);
-  } catch {
-    real = abs;
-  }
-  return real === brainDir || real.startsWith(brainDir + sep);
-}
-
-function scopeFindingsToKb(forgeRoot: string, kbId: string, findings: readonly Finding[]): Finding[] {
-  const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-  if (!brainDir) return [];
-  return findings.filter((f) => findingUnderDir(forgeRoot, brainDir, f));
-}
+//
+// `findingUnderDir`/`scopeFindingsToKb` moved to cli/kb-lint-summary.ts
+// (forge-2am) — imported back above for the consolidate path (below) and
+// the fix-auto op, which both still need the exact-dir write scope.
 
 /** Spawn ONE detached `forge brain fix` agent turn; events stream to
  *  _logs/_brainfix-<runId>/events.jsonl. Mirrors spawnArchitectTurn. */
@@ -576,73 +495,11 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
 // KB health computation
 // ---------------------------------------------------------------------------
 
-/** R6-08 WI-1 — per-check itemization row. `status` is 'unknown' only when
- *  the whole lint run threw (RULING 3) — never a per-check outcome otherwise.
- *
- *  R6-08 4on (declared-data-fails-open fix) — `status:'n/a'` means this check
- *  never actually inspected THIS KB's content: neither the shared full-scope
- *  scan (`readThemeFiles`-based, forge-cycles/forge-dev only) nor this KB's
- *  own theme files (via `lintThemeFiles`) cover it. THE HONESTY INVARIANT: a
- *  check reports `'pass'` ONLY when it genuinely ran over this KB's content
- *  and found nothing — a check that never looked reports `'n/a'`, never a
- *  silent `'pass'`. */
-type CheckHealthStatus = 'pass' | 'warn' | 'fail' | 'unknown' | 'n/a';
-type CheckHealthEntry = { check: string; status: CheckHealthStatus; errorCount: number; flagCount: number };
-
-/** Index/category pages that live alongside a KB's `themes/` dir siblings but
- *  are never themselves a theme — excluded from the KB's OWN theme-file list.
- *  Mirrors `orchestrator/kb-health.ts`'s `THEME_INDEX_FILES` listing style
- *  (kept local rather than imported — that module lives under `orchestrator/`,
- *  which this fix does not touch). */
-const KB_OWN_THEME_INDEX_FILES = new Set([
-  'README.md',
-  'patterns.md',
-  'antipatterns.md',
-  'operations.md',
-  'decisions.md',
-  'reference.md',
-]);
-
-/**
- * R6-08 4on — a KB's OWN theme files (`<brainDir>/themes/*.md`, index pages
- * excluded), for ANY KB kind — including project/band KBs whose themes the
- * shared `readThemeFiles`-based checks (cli/brain-lint.ts) never scan. This is
- * what lets `buildKbHealth` give those KBs a REAL (not silently-passing)
- * verdict on the `LINT_THEME_FILE_CHECKS` subset via `lintThemeFiles`.
- *
- * Routed through `guardedReadDir` (a recognized containment-guard producer,
- * cli/studio-path-guard.ts) rather than a raw `readdirSync` — `brainDir` is
- * split back into its trusted base + its own leaf segment (mirrors this
- * file's `guardKbTail` convention) so the leaf re-enters as a `segments[]`
- * element and is identity-checked, never folded into the guard's `root`.
- */
-function listOwnThemeFiles(brainDir: string): string[] {
-  const names = guardedReadDir(dirname(brainDir), [basename(brainDir), 'themes']);
-  if (!names) return [];
-  return names
-    .filter((name) => name.endsWith('.md') && !KB_OWN_THEME_INDEX_FILES.has(name))
-    .map((name) => join(brainDir, 'themes', name));
-}
-
-/** Stable identity for a Finding, used to union `scopedFull` and `ownFindings`
- *  without double-counting the SAME defect surfaced by both lenses (e.g. a
- *  forge-side KB's theme scanned by both the shared `readThemeFiles`-based
- *  check and `lintThemeFiles` emit byte-identical check/file/message). Two
- *  DIFFERENT checks (e.g. `checkProjectBrainIndexes` vs `checkIndexSync`)
- *  independently flagging the same underlying theme are NOT deduped — they
- *  are two genuinely distinct, now-real per-check verdicts. */
-function findingIdentity(f: Finding): string {
-  return `${f.check ?? ''}::${f.file}::${f.message}`;
-}
-
-/** Union two finding lists by `findingIdentity`, preserving `a`'s findings
- *  first then any of `b`'s not already present. */
-function unionFindings(a: readonly Finding[], b: readonly Finding[]): Finding[] {
-  const seen = new Map<string, Finding>();
-  for (const f of a) seen.set(findingIdentity(f), f);
-  for (const f of b) if (!seen.has(findingIdentity(f))) seen.set(findingIdentity(f), f);
-  return [...seen.values()];
-}
+// `CheckHealthStatus`/`CheckHealthEntry` types, `KB_OWN_THEME_INDEX_FILES`,
+// `listOwnThemeFiles`, `findingIdentity`, and `unionFindings` moved to
+// cli/kb-lint-summary.ts (forge-2am) — `CheckHealthEntry` re-imported above
+// for the `KbHealth` type below; the rest are internal to
+// `computeKbLintChecks` now and no longer needed here.
 
 type KbHealth = {
   layerBalance: { index: number; theme: number; raw: number };
@@ -742,59 +599,16 @@ function buildKbHealth(
   let checks: CheckHealthEntry[];
   let healthError: string | undefined;
   try {
-    const brainDir = resolveKbBrainDir(forgeRoot, kbId);
-    const brainRoot = join(forgeRoot, 'brain');
-
+    // The per-check itemization (scopedFull ∪ ownFindings, CHECK_SCOPE
+    // applicability, LINT_THEME_FILE_CHECKS own-file coverage, the F3
+    // aggregate roll-up) lives in `computeKbLintChecks` (cli/kb-lint-summary.ts)
+    // now — the ONE derivation both this per-KB detail route and the list
+    // route's `attachKbLintSummaries` share, so the two can never drift.
     const { findings } = runBrainLint({ cwd: forgeRoot, scope: 'full' });
-    const scopedFull = scopeFindingsToKb(forgeRoot, kbId, findings);
-
-    const ownThemeFiles = brainDir ? listOwnThemeFiles(brainDir) : [];
-    const ownFindings = ownThemeFiles.length > 0 ? lintThemeFiles(forgeRoot, ownThemeFiles) : [];
-
-    // Is this KB's brain dir within a given check's CHECK_SCOPE domain?
-    const isApplicableScoped = (name: string): boolean => {
-      if (!brainDir) return false;
-      switch (CHECK_SCOPE[name]) {
-        case 'forge-themes':
-          // readThemeFiles (brain-lint.ts) only ever walks brain/cycles/themes
-          // and brain/forge-dev/themes — a project/band KB's dir is never one
-          // of these two exact top-level dirs.
-          return brainDir === join(brainRoot, 'cycles') || brainDir === join(brainRoot, 'forge-dev');
-        case 'project-indexes':
-          // checkProjectBrainIndexes walks brain/projects/* — applicable iff
-          // this KB's dir is a direct child of brain/projects/.
-          return dirname(brainDir) === join(brainRoot, 'projects');
-        case 'global':
-        default:
-          // checkReflectorLoss (_queue/done) is never scoped to any one KB.
-          return false;
-      }
-    };
-    const isCoveredByOwn = (name: string): boolean => LINT_THEME_FILE_CHECKS.has(name) && ownThemeFiles.length > 0;
-
-    checks = CHECK_NAMES.map((name) => {
-      const applicable = isApplicableScoped(name);
-      const coveredByOwn = isCoveredByOwn(name);
-      if (!applicable && !coveredByOwn) {
-        // Never scanned THIS kb for this check — honest 'n/a', never 'pass'.
-        return { check: name, status: 'n/a' as const, errorCount: 0, flagCount: 0 };
-      }
-      const fromScoped = applicable ? scopedFull.filter((f) => f.check === name) : [];
-      const fromOwn = coveredByOwn ? ownFindings.filter((f) => f.check === name) : [];
-      const list = unionFindings(fromScoped, fromOwn);
-      const errorCount = list.filter((f) => f.category === 'error').length;
-      const flagCount = list.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
-      const status: CheckHealthStatus = errorCount > 0 ? 'fail' : flagCount > 0 ? 'warn' : 'pass';
-      return { check: name, status, errorCount, flagCount };
-    });
-
-    // F3: the aggregate rolls up over the FULL union of scopedFull ∪
-    // ownFindings — EVERY finding, regardless of whether its `check` is one
-    // of CHECK_NAMES — so a finding whose check name isn't itemized is never
-    // silently dropped from the totals (the bug this WI's F3 also fixes).
-    const allFindings = unionFindings(scopedFull, ownFindings);
-    lintErrors = allFindings.filter((f) => f.category === 'error').length;
-    lintFlags = allFindings.filter((f) => f.category === 'flag' || f.category === 'auto-fix').length;
+    const result = computeKbLintChecks(forgeRoot, kbId, findings);
+    checks = result.checks;
+    lintErrors = result.lintErrors;
+    lintFlags = result.lintFlags;
   } catch (err) {
     checks = CHECK_NAMES.map((name) => ({ check: name, status: 'unknown' as const, errorCount: 0, flagCount: 0 }));
     healthError = err instanceof Error ? err.message : String(err);
@@ -908,6 +722,75 @@ function newProjectBrainSessionId(): string {
 }
 
 /**
+ * Walk brain/ for kb.yaml files and enrich each with layer counts.
+ *
+ * Scans every direct sub-directory of brain/ (the top-level brains — cycles,
+ * forge-dev) AND every sub-directory of brain/projects/ (the central per-project
+ * brains, ADR 035 — gitpulse, mdtoc, …). Without the second pass, project brains
+ * are invisible in Studio's KB graph even though the reflector writes to them.
+ *
+ * Sited here (rather than beside the other list-building helpers above) so
+ * this declaration is immediately followed by a top-level `export` — the
+ * exact structural shape `cli/studio-provenance.test.ts`'s AT-10 walks to
+ * prove `provenanceOfOrigin(` is called INSIDE this function and nowhere
+ * else (a `function` declaration hoists, so this relocation changes nothing
+ * about when or how it runs).
+ */
+export function loadKbDescriptors(forgeRoot: string): KbWithCounts[] {
+  const brainRoot = join(resolve(forgeRoot), 'brain');
+  if (!existsSync(brainRoot)) return [];
+
+  const result: KbWithCounts[] = [];
+
+  // CONTAINMENT (SEC-01 guard-attack round). `subDirs` filters on dirent type,
+  // so a symlinked `brain/<id>` DIRECTORY never reaches here — but that
+  // accident says nothing about the LEAF. A genuinely real `brain/<id>/` whose
+  // `kb.yaml` is a symlink was confirmed live disclosing the outside file's
+  // contents verbatim in this route's 200 response, because this function read
+  // `kb.yaml` with no guard at all and every other KB route's fix went in
+  // around it. `base` is the fixed containment root and `name` is its own
+  // segment (never folded into the root — ./studio-path-guard.ts, CONTRACT).
+  const pushFrom = (base: string, name: string): void => {
+    const yamlGuard = resolveGuardedPath(base, [name, 'kb.yaml']);
+    if (!yamlGuard.ok || !yamlGuard.exists) return;
+    try {
+      const kb = loadKbDescriptor(yamlGuard.realPath);
+      // Each layer path is independently guarded — a real kb.yaml is no
+      // warrant for a symlinked `themes/` or `_raw/` beside it.
+      const layer = (tail: string): string | null => {
+        const g = resolveGuardedPath(base, [name, tail]);
+        return g.ok && g.exists ? g.realPath : null;
+      };
+      const indexPath = layer('INDEX.md');
+      const themesPath = layer('themes');
+      const rawPath = layer('_raw');
+      const counts = {
+        index: indexPath ? 1 : 0,
+        themes: themesPath ? countLayerFiles(themesPath) : 0,
+        raw: rawPath ? countLayerFiles(rawPath) : 0,
+      };
+      // forge-3oq review: attach provenance HERE, the single construction
+      // site — never at an individual route (see the `provenance` field's
+      // doc comment on KbWithCounts above).
+      result.push({ ...kb, counts, provenance: provenanceOfOrigin(kb.origin) });
+    } catch {
+      // Skip unreadable kb.yaml
+    }
+  };
+
+  // Top-level brains: brain/<id>/kb.yaml (brain/projects has no kb.yaml of its
+  // own, so it is naturally skipped here).
+  for (const d of subDirs(brainRoot)) pushFrom(brainRoot, d);
+  // Central per-project brains: brain/projects/<id>/kb.yaml (ADR 035). This is
+  // a SECOND containment root and gets the identical treatment — a fix that
+  // hardens only the primary root leaves the fallback wide open.
+  const projectsRoot = join(brainRoot, 'projects');
+  for (const d of subDirs(projectsRoot)) pushFrom(projectsRoot, d);
+
+  return result;
+}
+
+/**
  * R1-06 WI-2 review (MAJOR 2): dot-prefixed anchor for a NON-project KB
  * seeding session's `projects/<anchor>/_project-brain/<sid>/` directory. A
  * flow/unique-bound KB has no natural project home, so anchoring it under the
@@ -949,9 +832,17 @@ export async function handleStudioKbRoutes(
   const origin = allowedOrigin(req);
 
   // ---- GET /api/studio/kbs (list) -----------------------------------------
+  // forge-2am (R6-07 option (b)): fold a cheap per-KB lint summary into the
+  // SAME list response Home already reads via fetchStudioKbs() — no new
+  // polling path. attachKbLintSummaries runs runBrainLint ONCE for the whole
+  // list, never per-KB (the cost option (a) refused).
   if (url === '/api/studio/kbs' && method === 'GET') {
     try {
-      const kbs = loadKbDescriptors(ctx.forgeRoot);
+      // forge-3oq: honest per-kb provenance, derived per request from the
+      // real (optional) origin: stamp on kb.yaml via the ONE shared mapping
+      // — attached inside loadKbDescriptors itself (forge-3oq review), so
+      // this route no longer needs its own copy.
+      const kbs = attachKbLintSummaries(ctx.forgeRoot, loadKbDescriptors(ctx.forgeRoot));
       sendJson(res, 200, { kbs }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
@@ -1229,8 +1120,13 @@ export async function handleStudioKbRoutes(
       // 8. Write brain/<id>/kb.yaml via the canonical serializer (leaves
       // `processes` absent — the KB resolves every obligation to its default
       // via resolveKbProcesses until an operator opts into an override).
+      // forge-3oq: stamp `origin: 'studio'` on every KB created through this
+      // route — mirrors the flow write path's `origin: existing?.origin ??
+      // 'studio'` stamp (cli/bridge-studio-writes.ts). Never 'seed' — that
+      // token is reserved for the two shipped OOTB brains, committed by
+      // hand, so an operator-created KB can never claim OOTB provenance.
       const kbYamlPath = join(kbDir, 'kb.yaml');
-      writeFileSync(kbYamlPath, serializeKbDescriptor({ id, name, binding, desc, path: kbYamlPath }), 'utf8');
+      writeFileSync(kbYamlPath, serializeKbDescriptor({ id, name, binding, desc, path: kbYamlPath, origin: 'studio' }), 'utf8');
 
       // 9. Verify loadKbDescriptor can round-trip it
       loadKbDescriptor(kbYamlPath);

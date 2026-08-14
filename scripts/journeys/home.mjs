@@ -41,6 +41,20 @@
  *     (deriveAgentStatus — owns the `dev` node), and the
  *     HOME_ACTIVE_PROJECT PROJECT hex (deriveProjectStatus, via
  *     `row.inFlight>0`).
+ *   - HOME_LINT_KB (forge-2am) carries a REAL project-brain dir
+ *     (`brain/projects/home-fixture-lint-kb/kb.yaml` + `themes/*.md`) that
+ *     genuinely trips `cli/brain-lint.ts`'s `checkProjectBrainIndexes` — a
+ *     project brain with themes but no category index files
+ *     (patterns.md/antipatterns.md/decisions.md/reference.md) is unindexed.
+ *     Verified directly against the real lint tool before writing this
+ *     fixture (`node --experimental-strip-types` against a scratch copy of
+ *     `runBrainLint`, not guessed): exactly ONE `flag` finding, zero
+ *     `error` findings — `{category:'flag', check:'checkProjectBrainIndexes',
+ *     message:'project brain "home-fixture-lint-kb" has 1 theme(s) but no
+ *     category index files ...; themes are unindexed'}`. flags>0/errors=0
+ *     maps to the honest attention-strip status "warn" (home-view.ts's
+ *     buildKbAttention). This is a REAL brain-lint finding driving the KB
+ *     attention row — never a hand-poked count.
  *
  * Both project directories are brand-new, disposable scratch dirs under
  * `projects/` (never mdtoc's) — `discoverProjects()` (orchestrator/studio/
@@ -84,18 +98,28 @@ const HOME_ACTIVE_CYCLE_ID = `${HOME_ACTIVE_STAMP}_${HOME_ACTIVE_INIT}`;
 const HOME_ACTIVE_MANIFEST_PATH = join(FORGE_ROOT, '_queue', 'in-flight', `${HOME_ACTIVE_INIT}.md`);
 const HOME_ACTIVE_LOG_DIR = join(FORGE_ROOT, '_logs', HOME_ACTIVE_CYCLE_ID);
 
-/** Crash-safe sweep of BOTH of this journey's own fixtures — never a tracked
- *  path (`projects/`, `_queue/`, `_logs/` entries created here are all
- *  gitignored scratch), called both as a leading stale-state guard
- *  (home-landing) and in home-clickthrough's own finally (the last beat that
- *  needs the fixture), mirroring flows-onboard-gate's own
- *  cleanOnboardGateRun() precedent. */
+// forge-2am — a REAL scratch project-brain KB whose lint genuinely flags
+// (see this file's header comment for the exact, directly-verified finding).
+// `brain/projects/<id>/` (never `_queue`/`_logs`/`projects`) so it is
+// discovered the SAME way the real gitpulse/mdtoc/etc. project brains are
+// (cli/bridge-studio-kbs.ts's loadKbDescriptors walks brain/projects/*/kb.yaml)
+// — .gitignore carries its own dedicated entry (never committed).
+export const HOME_LINT_KB = 'home-fixture-lint-kb';
+const HOME_LINT_KB_DIR = join(FORGE_ROOT, 'brain', 'projects', HOME_LINT_KB);
+
+/** Crash-safe sweep of ALL of this journey's own fixtures — never a tracked
+ *  path (`projects/`, `_queue/`, `_logs/`, `brain/projects/home-fixture-lint-kb/`
+ *  entries created here are all gitignored scratch), called both as a
+ *  leading stale-state guard (home-landing) and in home-clickthrough's own
+ *  finally (the last beat that needs the fixture), mirroring
+ *  flows-onboard-gate's own cleanOnboardGateRun() precedent. */
 function cleanHomeFixture() {
   try { rmSync(HOME_GATED_PROJECT_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_GATED_MANIFEST_PATH, { force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_ACTIVE_PROJECT_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_ACTIVE_MANIFEST_PATH, { force: true }); } catch { /* best-effort */ }
   try { rmSync(HOME_ACTIVE_LOG_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
+  try { rmSync(HOME_LINT_KB_DIR, { recursive: true, force: true }); } catch { /* best-effort */ }
 }
 
 /** Minimal `.forge/project.json` — just enough for the constellation label
@@ -186,9 +210,48 @@ function writeHomeActiveManifest() {
   }) + '\n');
 }
 
+/**
+ * The lint-flagged KB fixture (forge-2am) — a real `brain/projects/<id>/`
+ * dir with a valid-frontmatter theme but NO category index files beside it.
+ * Content mirrors exactly what was run through the real `runBrainLint`
+ * (cli/brain-lint.ts) before this journey was written — see this file's
+ * header comment for the observed finding.
+ */
+function writeHomeLintKbFixture() {
+  mkdirSync(join(HOME_LINT_KB_DIR, 'themes'), { recursive: true });
+  writeFileSync(join(HOME_LINT_KB_DIR, 'kb.yaml'), [
+    `id: ${HOME_LINT_KB}`,
+    'name: Home fixture — lint-flagged KB',
+    'binding:',
+    '  kind: unique',
+    'desc: Journey-seeded scratch KB proving the Home attention strip surfaces a real per-KB lint flag.',
+    'backend: filesystem',
+    '',
+  ].join('\n'));
+  writeFileSync(join(HOME_LINT_KB_DIR, 'themes', 'sample-theme.md'), [
+    '---',
+    'title: Sample theme',
+    'description: A journey-seeded theme with valid frontmatter but no category index files.',
+    'category: pattern',
+    'keywords:',
+    '  - home-fixture',
+    'created_at: 2026-08-14',
+    'updated_at: 2026-08-14',
+    '---',
+    '',
+    '# Sample theme',
+    '',
+    'Journey-seeded scratch content — proves checkProjectBrainIndexes flags an ' +
+      'unindexed project brain (no patterns.md/antipatterns.md/decisions.md/ ' +
+      'reference.md beside it). Never a real theme; swept every run.',
+    '',
+  ].join('\n'));
+}
+
 function writeHomeFixture() {
   writeHomeGatedManifest();
   writeHomeActiveManifest();
+  writeHomeLintKbFixture();
 }
 
 /** goto `/` and wait for the real readiness signal — never a fixed sleep. */
@@ -260,12 +323,12 @@ export const journey = defineJourney({
     {
       id: 'home-attention',
       title: 'The attention strip — what needs the operator right now',
-      narration: 'The attention strip fires ONLY on a real gated/flagged condition (home-view.ts\'s buildHomeAttention — an empty result honestly means nothing needs attention). Here it fires for the seeded gated project, and the row links straight through to that project\'s own surface.',
+      narration: 'The attention strip fires ONLY on a real condition — never on mere existence (home-view.ts\'s buildHomeAttention/buildKbAttention). Two independent sources feed it here: the seeded gated project (a real ready-for-review PR) and a REAL per-KB lint flag from a genuinely unindexed project brain — every row tagged data-attention-kind so gate and KB rows are told apart, and every row links straight through to its own owning surface.',
       drive: async (ctx) => {
         const { page, watch, check, frame } = ctx;
         console.log('\n[HOME.2] Home — attention strip');
         await gotoHomeReady(page, watch);
-        await caption(page, 'What needs the operator right now — the attention strip fires only on a REAL gated condition.');
+        await caption(page, 'What needs the operator right now — gated reviews AND a real KB lint flag, never a fabricated row.');
         await sleep(ACT);
 
         const stripCount = await page.locator('section[data-section="attention-strip"]').count();
@@ -273,7 +336,10 @@ export const journey = defineJourney({
 
         const attentionCountAttr = await page.evaluate(() =>
           document.querySelector('[data-page="home"]')?.getAttribute('data-attention-count') ?? '0');
-        check(parseInt(attentionCountAttr, 10) >= 1, `HOME.2: data-attention-count ≥1 (got "${attentionCountAttr}")`);
+        // Both the gate row (seeded project) and the KB row (seeded lint
+        // flag) must be counted — this rose from >=1 to >=2 once the KB row
+        // was added to this beat.
+        check(parseInt(attentionCountAttr, 10) >= 2, `HOME.2: data-attention-count ≥2 (gate row + KB row; got "${attentionCountAttr}")`);
 
         const item = await page.evaluate((projectId) => {
           const el = document.querySelector(`a[data-attention-item][data-attention-project="${projectId}"]`);
@@ -281,18 +347,42 @@ export const journey = defineJourney({
             status: el.getAttribute('data-attention-status'),
             href: el.getAttribute('href'),
             gated: el.getAttribute('data-attention-gated'),
+            kind: el.getAttribute('data-attention-kind'),
           } : null;
         }, HOME_GATED_PROJECT);
         check(item !== null, `HOME.2: a[data-attention-item][data-attention-project="${HOME_GATED_PROJECT}"] is present`);
         check(item?.status === 'gated', `HOME.2: the seeded project's attention status is the REAL derived "gated" (got "${item?.status}")`);
         check(item?.href === `/projects/${HOME_GATED_PROJECT}`,
           `HOME.2: the attention item links to its owning project's own surface (got "${item?.href}")`);
+        check(item?.kind === 'gate', `HOME.2: the gate row now also carries data-attention-kind="gate" (got "${item?.kind}")`);
         // Home mirrors R4-11-F4's full count vocabulary — the raw gated count
         // is on the row too (the seeded manifest put exactly one in ready-for-review).
         check(parseInt(item?.gated ?? '0', 10) >= 1,
           `HOME.2: the row carries the REAL data-attention-gated count from the same fetchProjectAttention() read (got "${item?.gated}")`);
 
-        await frame(page, 'home-1-attention', 'Home — the attention strip: a real gated review surfaces without the operator hunting for it', { key: true });
+        // The KB-skew row (forge-2am) — driven by the REAL lint finding this
+        // file's header comment names verbatim: exactly one `flag`, zero
+        // `error`, from checkProjectBrainIndexes on the seeded, genuinely
+        // unindexed brain/projects/home-fixture-lint-kb/ dir.
+        const kbItem = await page.evaluate((kbId) => {
+          const el = document.querySelector(`a[data-attention-item][data-attention-kind="kb"][data-attention-kb="${kbId}"]`);
+          return el ? {
+            status: el.getAttribute('data-attention-status'),
+            errors: el.getAttribute('data-attention-lint-errors'),
+            flags: el.getAttribute('data-attention-lint-flags'),
+            checksRun: el.getAttribute('data-attention-checks-run'),
+            checksTotal: el.getAttribute('data-attention-checks-total'),
+          } : null;
+        }, HOME_LINT_KB);
+        check(kbItem !== null,
+          `HOME.2: a[data-attention-item][data-attention-kind="kb"][data-attention-kb="${HOME_LINT_KB}"] is present — the real lint flag surfaced`);
+        check(kbItem?.status === 'warn' || kbItem?.status === 'fail',
+          `HOME.2: the KB row's status is the REAL derived warn/fail (got "${kbItem?.status}")`);
+        const lintSum = parseInt(kbItem?.errors ?? '0', 10) + parseInt(kbItem?.flags ?? '0', 10);
+        check(lintSum >= 1,
+          `HOME.2: the KB row's own lint-errors + lint-flags sum to >=1 — a REAL finding, not a fabricated row (errors="${kbItem?.errors}" flags="${kbItem?.flags}")`);
+
+        await frame(page, 'home-1-attention', 'Home — the attention strip: a real gated review AND a real per-KB lint flag, both surfacing without the operator hunting for them', { key: true });
       },
     },
     {

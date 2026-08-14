@@ -17,7 +17,14 @@ import {
 import { StudioPage } from '@/components/StudioPage';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
-import { buildConstellation, buildHomeAttention, type HomeHex, type HomeStatus } from '@/lib/home-view';
+import {
+  buildConstellation,
+  buildHomeAttention,
+  buildKbAttention,
+  type HomeAttentionItem,
+  type HomeHex,
+  type HomeStatus,
+} from '@/lib/home-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
 
 // ---------------------------------------------------------------------------
@@ -39,6 +46,16 @@ const HOME_STATUS_FRAME: Record<HomeStatus, string> = {
   active: 'active',
   gated: 'retrying',
   idle: 'pending',
+};
+
+// forge-2am: same styling-only mapping, for a KB attention row's own
+// 'fail'|'warn'|'unknown' status vocab onto the shared 5-state status-dot
+// CSS. The DOM-contract attribute (data-attention-status) always carries the
+// real buildKbAttention() value untouched.
+const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' }>['status'], string> = {
+  fail: 'failed',
+  warn: 'retrying',
+  unknown: 'pending',
 };
 
 export default function HomePage() {
@@ -107,7 +124,11 @@ export default function HomePage() {
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
   const constellation = buildConstellation({ flows, agents, projects, kbs, runs, attention });
-  const homeAttention = buildHomeAttention(attention);
+  // forge-2am: the attention strip folds the pre-existing project-gate rows
+  // and the KB-lint rows into ONE list. Both read the SAME already-fetched
+  // fetchStudioKbs() result Home already loads (no new fetch, no new poll —
+  // see this file's header + scripts/home-no-new-polling.test.ts).
+  const attentionItems: HomeAttentionItem[] = [...buildHomeAttention(attention), ...buildKbAttention(kbs)];
   const ledgerRows = deriveFlowLedgerRows(runs);
   const liveCount = constellation.filter((h) => h.status === 'active').length;
 
@@ -117,7 +138,7 @@ export default function HomePage() {
       ready={ready}
       data={{
         'data-live-count': liveCount,
-        'data-attention-count': homeAttention.length,
+        'data-attention-count': attentionItems.length,
         'data-hex-count': constellation.length,
       }}
       eyebrow="forge studio"
@@ -135,25 +156,66 @@ export default function HomePage() {
       }
     >
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
-      {homeAttention.length > 0 && (
+      {attentionItems.length > 0 && (
         <section
           data-section="attention-strip"
-          aria-label="Projects needing attention"
+          aria-label="Projects and knowledge bases needing attention"
           style={{ marginBottom: 32, display: 'flex', flexDirection: 'column', gap: 6 }}
         >
-          {homeAttention.map((item) => {
+          {attentionItems.map((item) => {
+            if (item.kind === 'kb') {
+              // forge-2am: a KB-lint row — status/counts come straight from
+              // THIS kb's own lint summary (buildKbAttention), never
+              // cross-attributed from another kb or fabricated on absence.
+              return (
+                <a
+                  key={item.id}
+                  href={item.href}
+                  data-attention-item
+                  data-attention-kind="kb"
+                  data-attention-kb={item.kbId}
+                  data-attention-status={item.status}
+                  data-attention-lint-errors={item.lint.errors}
+                  data-attention-lint-flags={item.lint.flags}
+                  data-attention-checks-run={item.lint.checksRun}
+                  data-attention-checks-total={item.lint.checksTotal}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 12,
+                    padding: '9px 14px',
+                    background: 'var(--panel)',
+                    border: '1px solid var(--ember)',
+                    borderRadius: 'var(--radius)',
+                    textDecoration: 'none',
+                    color: 'var(--text)',
+                  }}
+                >
+                  <span className="status-dot" data-status={KB_ATTENTION_STATUS_FRAME[item.status]} />
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{item.text}</span>
+                    <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>open →</span>
+                </a>
+              );
+            }
+
             // The raw ProjectAttentionItem behind this fired row — Home mirrors
             // R4-11-F4's full DOM contract (the same data-attention-* count
             // vocabulary the Library strip carries) so both attention surfaces
             // speak ONE shared vocabulary, plus data-attention-status for the
             // derived condition. Counts come straight from the same
-            // fetchProjectAttention() row, never re-derived.
+            // fetchProjectAttention() row, never re-derived. Every attribute
+            // this row rendered before forge-2am is unchanged; it only gains
+            // data-attention-kind alongside them.
             const raw = attention.find((a) => a.projectId === item.projectId);
             return (
             <a
               key={item.id}
               href={item.href}
               data-attention-item
+              data-attention-kind="gate"
               data-attention-project={item.projectId}
               data-attention-status={item.status}
               {...(raw ? {

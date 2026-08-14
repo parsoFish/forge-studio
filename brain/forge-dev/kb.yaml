@@ -4,3 +4,4 @@ binding:
   kind: unique
 desc: What forge knows about building forge — engineering patterns, ADR context, antipatterns.
 backend: filesystem
+origin: seed

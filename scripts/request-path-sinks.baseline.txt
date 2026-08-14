@@ -30,12 +30,11 @@ cli/bridge-studio-hooks.ts mkdirSync 1
 cli/bridge-studio-hooks.ts readFileSync 2
 cli/bridge-studio-hooks.ts writeFileSync 2
 cli/bridge-studio-kbs.ts appendFileSync 2
-cli/bridge-studio-kbs.ts existsSync 6
+cli/bridge-studio-kbs.ts existsSync 5
 cli/bridge-studio-kbs.ts mkdirSync 6
 cli/bridge-studio-kbs.ts openSync 1
 cli/bridge-studio-kbs.ts readdirSync 2
 cli/bridge-studio-kbs.ts readFileSync 2
-cli/bridge-studio-kbs.ts realpathSync 1
 cli/bridge-studio-kbs.ts rmSync 1
 cli/bridge-studio-kbs.ts spawn 1
 cli/bridge-studio-kbs.ts writeFileSync 2
@@ -94,6 +93,8 @@ cli/forge-watch.ts existsSync 1
 cli/forge-watch.ts renameSync 1
 cli/forge-watch.ts spawn 2
 cli/forge-watch.ts writeFileSync 1
+cli/kb-lint-summary.ts existsSync 1
+cli/kb-lint-summary.ts realpathSync 1
 cli/materials-staging.ts mkdirSync 1
 cli/materials-staging.ts writeFileSync 1
 cli/metrics.ts existsSync 1

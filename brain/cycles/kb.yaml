@@ -5,3 +5,4 @@ binding:
   ref: forge-develop
 desc: Cross-cycle patterns and archives — what forge has learned about running cycles.
 backend: filesystem
+origin: seed

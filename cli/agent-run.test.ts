@@ -88,10 +88,12 @@ import {
   mkdtempSync,
   mkdirSync,
   writeFileSync,
+  appendFileSync,
   readFileSync,
   readdirSync,
   existsSync,
   rmSync,
+  statSync,
 } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -231,28 +233,54 @@ function setupTurnspecFixture(): TurnspecFixture {
  *  can no longer tell "the spine ran" apart from "the legacy runner with the
  *  same kind id ran"; only the event's own `skill` field still can. Returns
  *  `undefined` if no matching event exists anywhere. */
+/** Shared walk (extracted so findInteractiveRunnerStartEvent's find-one and
+ *  assertNoInteractiveRunnerSkillEvent's assert-none below cannot silently
+ *  drift apart on what counts as "every event under _logs/"): yields every
+ *  raw JSONL line from every `<forgeRoot>/_logs/<dir>/events.jsonl`,
+ *  alongside its parsed form (`undefined` if the line failed to
+ *  `JSON.parse`) and the events.jsonl path it came from. */
+/** Opaque to callers (forge-q1z): per events.jsonl, existed-at-snapshot + byte size. */
+type LogBaseline = Map<string, { existed: boolean; size: number }>;
+
+function* walkEventJsonLines(forgeRoot: string, baseline?: LogBaseline): Generator<{
+  eventsPath: string;
+  line: string;
+  parsed: Record<string, unknown> | undefined;
+}> {
+  const logsRoot = join(forgeRoot, '_logs');
+  if (!existsSync(logsRoot)) return;
+  for (const entry of readdirSync(logsRoot)) {
+    const eventsPath = join(logsRoot, entry, 'events.jsonl');
+    if (!existsSync(eventsPath)) continue;
+    const prior = baseline?.get(eventsPath);
+    const buf = readFileSync(eventsPath);
+    // Buffer.prototype.subarray clamps rather than throwing when start >
+    // length — a file that SHRANK below its snapshotted size has unknowable
+    // provenance, so re-scan it from byte 0 instead of trusting a stale offset.
+    const startByte = prior?.existed && buf.length >= prior.size ? prior.size : 0;
+    const lines = buf.subarray(startByte).toString('utf8').trim().split('\n').filter(Boolean);
+    for (const line of lines) {
+      let parsed: Record<string, unknown> | undefined;
+      try {
+        parsed = JSON.parse(line) as Record<string, unknown>;
+      } catch {
+        parsed = undefined;
+      }
+      yield { eventsPath, line, parsed };
+    }
+  }
+}
+
 function findInteractiveRunnerStartEvent(
   forgeRoot: string,
   sessionId: string,
   sessionKind: string,
 ): Record<string, unknown> | undefined {
-  const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return undefined;
-  for (const entry of readdirSync(logsRoot)) {
-    const eventsPath = join(logsRoot, entry, 'events.jsonl');
-    if (!existsSync(eventsPath)) continue;
-    const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean);
-    for (const line of lines) {
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-      if (parsed.event_type !== 'start' || parsed.skill !== 'interactive-runner') continue;
-      const metadata = parsed.metadata as Record<string, unknown> | undefined;
-      if (metadata?.session_id === sessionId && metadata?.session_kind === sessionKind) return parsed;
-    }
+  for (const { parsed } of walkEventJsonLines(forgeRoot)) {
+    if (!parsed) continue;
+    if (parsed.event_type !== 'start' || parsed.skill !== 'interactive-runner') continue;
+    const metadata = parsed.metadata as Record<string, unknown> | undefined;
+    if (metadata?.session_id === sessionId && metadata?.session_kind === sessionKind) return parsed;
   }
   return undefined;
 }
@@ -264,26 +292,27 @@ function findInteractiveRunnerStartEvent(
  *  `findInteractiveRunnerStartEvent`'s doc above for why a dir-name
  *  discriminator alone stops working once the spine's directory name
  *  collides with a legacy runner's own. */
-function assertNoInteractiveRunnerSkillEvent(forgeRoot: string, msg: string): void {
+/** Snapshot (forge-q1z) — take right before the invocation under test. */
+function snapshotLogs(forgeRoot: string): LogBaseline {
+  const baseline: LogBaseline = new Map();
   const logsRoot = join(forgeRoot, '_logs');
-  if (!existsSync(logsRoot)) return;
+  if (!existsSync(logsRoot)) return baseline;
   for (const entry of readdirSync(logsRoot)) {
     const eventsPath = join(logsRoot, entry, 'events.jsonl');
-    if (!existsSync(eventsPath)) continue;
-    const lines = readFileSync(eventsPath, 'utf8').trim().split('\n').filter(Boolean);
-    for (const line of lines) {
-      let parsed: Record<string, unknown>;
-      try {
-        parsed = JSON.parse(line) as Record<string, unknown>;
-      } catch {
-        continue;
-      }
-      assert.notEqual(
-        parsed.skill,
-        'interactive-runner',
-        `${msg} — found a skill:'interactive-runner' event in ${eventsPath}: ${line}`,
-      );
-    }
+    const existed = existsSync(eventsPath);
+    baseline.set(eventsPath, { existed, size: existed ? statSync(eventsPath).size : 0 });
+  }
+  return baseline;
+}
+
+function assertNoInteractiveRunnerSkillEvent(forgeRoot: string, baseline: LogBaseline, msg: string): void {
+  for (const { eventsPath, line, parsed } of walkEventJsonLines(forgeRoot, baseline)) {
+    if (!parsed) continue;
+    assert.notEqual(
+      parsed.skill,
+      'interactive-runner',
+      `${msg} — found a skill:'interactive-runner' event in ${eventsPath}: ${line}`,
+    );
   }
 }
 
@@ -355,11 +384,12 @@ const LEGACY_FAST_FAIL_CASES: { agentId: string; args: string[]; expected: RegEx
 for (const { agentId, args, expected } of LEGACY_FAST_FAIL_CASES) {
   test(`R4-22 WI-5, AT-2 (legacy road untouched): 'agent run ${agentId}' still hits the legacy AGENT_RUNNERS fast-fail text, never runInteractiveTurn`, async () => {
     assert.notEqual(AGENT_RUNNERS[agentId], undefined, `fixture precondition: "${agentId}" must be a real AGENT_RUNNERS key`);
+    const baseline = snapshotLogs(ROOT);
     const r = await run(args, ROOT);
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
     assert.match(r.err, expected, `expected the legacy entry.verb-flavored text, got: ${r.err}`);
     assert.doesNotMatch(r.err, /runInteractiveTurn/, 'the legacy fast-fail path must never mention runInteractiveTurn');
-    assertNoInteractiveRunnerSkillEvent(ROOT, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
+    assertNoInteractiveRunnerSkillEvent(ROOT, baseline, `'agent run ${agentId}' must never create runInteractiveTurn's log artifact`);
   });
 }
 
@@ -429,11 +459,12 @@ test('R4-22 WI-5, AT-5: a descriptor WITHOUT turnSpec ("architect" — a real AG
     assert.equal(descriptor?.turnSpec, undefined, 'fixture precondition: this row must carry NO turnSpec');
     assert.notEqual(AGENT_RUNNERS.architect, undefined, 'fixture precondition: "architect" must be a real AGENT_RUNNERS key');
 
+    const baseline = snapshotLogs(fx.forgeRoot);
     const r = await withCwd(fx.forgeRoot, () => run(['architect'], fx.forgeRoot)); // no session-id at all
     assert.equal(r.exitCode, 2, `expected exit 2, got stderr: ${r.err}`);
     assert.match(r.err, /^forge architect run: missing <session-id>$/m, `expected the legacy entry.verb-flavored error, got: ${r.err}`);
     assert.doesNotMatch(r.err, /runInteractiveTurn/);
-    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a turnSpec-less "architect" descriptor must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, baseline, 'a turnSpec-less "architect" descriptor must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -455,12 +486,13 @@ test('R4-22 WI-5, AT-6 (argument-handling, PINNED): a turnSpec kind REQUIRES --p
     const descriptor = loadSessionKinds(fx.forgeRoot).find((d) => d.id === TURNSPEC_ONLY_ID);
     assert.ok(descriptor?.turnSpec, 'fixture precondition: descriptor must carry a turnSpec');
 
+    const baseline = snapshotLogs(fx.forgeRoot);
     const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId], fx.forgeRoot)); // no --project
     assert.equal(r.exitCode, 2, `must exit 2 when --project is omitted for a turnSpec kind, got stdout: ${r.out}, stderr: ${r.err}`);
     assert.match(r.err, /--project/i, `expected the error to mention --project, got: ${r.err}`);
     assert.match(r.err, /required/i, `expected the error to say --project is required, got: ${r.err}`);
     assert.match(r.err, /Usage:.*--project <name>/s, `expected a Usage: line naming --project <name>, got: ${r.err}`);
-    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a rejected (missing --project) call must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, baseline, 'a rejected (missing --project) call must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -741,12 +773,13 @@ test('R4-21 phase 2, correction B, AT-B2: cmdAgentRun resolves the projects root
 test('R4-21 phase 2, correction B, AT-B3 (regression pin): --project still rides as its OWN guarded segment under a reconfigured projectsDir — "..", an absolute path, and a "/"-bearing name are all refused', async () => {
   const fx = setupTurnspecFixtureWithProjectsDir({ kind: 'config', relativeDirName: 'custom-projects' });
   try {
+    const baseline = snapshotLogs(fx.forgeRoot);
     for (const bad of ['..', '/etc', 'a/b']) {
       const r = await withCwd(fx.forgeRoot, () => run([TURNSPEC_ONLY_ID, fx.sessionId, '--project', bad], fx.forgeRoot));
       assert.equal(r.exitCode, 2, `--project ${JSON.stringify(bad)} must be refused, got exit(${r.exitCode}), stdout: ${r.out}`);
       assert.match(r.err, /not a valid project name/, `expected the guarded-segment refusal text for ${JSON.stringify(bad)}, got: ${r.err}`);
     }
-    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, 'a refused --project value must never reach runInteractiveTurn');
+    assertNoInteractiveRunnerSkillEvent(fx.forgeRoot, baseline, 'a refused --project value must never reach runInteractiveTurn');
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
   }
@@ -878,5 +911,165 @@ test('R4-22 F4, AT-b: a SYNTHETIC turnSpec-only kind also writes its event log t
     assert.equal(existsSync(oldBuggyLogDir), false, `the OLD, buggy directory ${oldBuggyLogDir} must NOT exist`);
   } finally {
     rmSync(fx.forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ===========================================================================
+// forge-q1z (T3, acceptance test) — assertNoInteractiveRunnerSkillEvent must
+// be SCOPED to a baseline snapshot taken before the invocation under test,
+// not a blanket walk of every _logs/ dir that happens to exist on disk.
+//
+// THE DEFECT: the four AT-2 cases above call assertNoInteractiveRunnerSkillEvent
+// with ROOT = the real repo root (legacy fast-fail paths never touch the
+// filesystem, so there is nothing to isolate into a tmp fixture). After a
+// `npm run ui:journey` run, the real repo's _logs/ accumulates leftover
+// interactive-runner event dirs (gitignored scratch, never cleaned up
+// between runs). The CURRENT (unscoped) assertNoInteractiveRunnerSkillEvent
+// walks EVERY directory under _logs/ regardless of when it was written, so
+// it trips over that pre-existing scratch and false-fails all four AT-2
+// cases — a false red with no code regression behind it (CI stays green
+// because CI's own _logs/ is always empty). See bead forge-q1z.
+//
+// THE FIX (landed separately by the implementer, NOT by this test): a
+// baseline snapshot taken before the invocation under test, so the assertion
+// only inspects (a) _logs/ directories that did NOT exist at snapshot time,
+// and (b) the bytes APPENDED to an existing events.jsonl after its
+// snapshotted length. Pre-existing scratch becomes invisible; anything
+// written DURING the invocation is still fully caught.
+//
+// PINNED SEAM (no design freedom on names/arity — the implementer must land
+// exactly this):
+//
+//   function snapshotLogs(forgeRoot: string): LogBaseline
+//   function assertNoInteractiveRunnerSkillEvent(
+//     forgeRoot: string,
+//     baseline: LogBaseline,
+//     msg: string,
+//   ): void
+//
+// `LogBaseline` itself is opaque to callers — internally it must be able to
+// answer, per `_logs/<dir>/events.jsonl`, both "did this directory exist at
+// snapshot time" and "how many bytes had it already written", so the scoped
+// assertion can skip pre-existing bytes while still inspecting appended
+// bytes and brand-new directories in full.
+//
+// RED-NOW: neither `snapshotLogs` nor the 3-arg
+// `assertNoInteractiveRunnerSkillEvent` exist at this SHA (the function
+// above still takes exactly `(forgeRoot, msg)`) — this test calls the NEW
+// contract directly, so the file does not typecheck as written, and running
+// it hits a ReferenceError on the undefined `snapshotLogs` call before any
+// assertion below is ever reached. That is the intentional RED this WI
+// pins; see the T3 report for the captured tsc + node --test output.
+// ===========================================================================
+
+/** One real-shaped `start`/interactive-runner JSONL line, mirroring EXACTLY
+ *  the event shape `findInteractiveRunnerStartEvent` above parses
+ *  (`event_type:'start'`, `skill:'interactive-runner'`,
+ *  `metadata:{session_id,session_kind,phase,step}`) — not a hand-waved
+ *  stand-in shape. */
+function fakeInteractiveRunnerStartLine(sessionId: string, sessionKind: string): string {
+  return JSON.stringify({
+    event_type: 'start',
+    skill: 'interactive-runner',
+    metadata: { session_id: sessionId, session_kind: sessionKind, phase: 'p1', step: 'noop' },
+  });
+}
+
+test('forge-q1z: assertNoInteractiveRunnerSkillEvent is scoped to a baseline snapshot — pre-existing _logs/ scratch cannot false-fail it, but events written during the invocation (appended OR brand-new) still throw', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'q1z-scoped-logs-'));
+  try {
+    // --- arrange: PRE-EXISTING journey scratch, on disk BEFORE the baseline
+    // is taken — mirrors a real repo _logs/ dir already carrying leftover
+    // interactive-runner events from an earlier `ui:journey` run.
+    const scratchDir = join(forgeRoot, '_logs', '_journeyscratch-preexisting');
+    mkdirSync(scratchDir, { recursive: true });
+    const scratchEventsPath = join(scratchDir, 'events.jsonl');
+    writeFileSync(scratchEventsPath, fakeInteractiveRunnerStartLine('pre-existing-sid', 'pre-existing-kind') + '\n');
+
+    // The baseline snapshot — taken exactly where the AT-2 loop must take
+    // it: AFTER pre-existing scratch is already on disk, BEFORE the
+    // invocation under test.
+    const baseline = snapshotLogs(forgeRoot);
+
+    // =========================================================================
+    // Half 1 — the q1z fix: pre-existing scratch is invisible to the scoped
+    // assertion. Kills the CURRENT (unscoped) implementation outright: it
+    // walks every _logs/<dir>/events.jsonl regardless of write time, so it
+    // would throw here on the pre-existing line planted above — exactly
+    // forge-q1z's false-fail.
+    // =========================================================================
+    assert.doesNotThrow(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'pre-existing scratch must not false-fail'),
+      'a baseline taken after pre-existing _logs/ scratch already exists must make that scratch invisible to the scoped assertion',
+    );
+
+    // =========================================================================
+    // Half 2 — positive control: the scoping must not neuter the assertion.
+    // Two sub-cases, BOTH required — a wrong implementation can satisfy
+    // either alone.
+    // =========================================================================
+
+    // 2a. Append a SECOND interactive-runner line to the SAME pre-existing
+    // file, after the baseline. Kills a wrong implementation that scopes by
+    // "is this _logs/<dir> new" alone (skip any directory that already
+    // existed at snapshot time, wholesale) — that shape would pass 2b below
+    // but silently miss a real event appended to an existing dir, which is
+    // exactly what a second turn in an already-running session does.
+    appendFileSync(scratchEventsPath, fakeInteractiveRunnerStartLine('appended-sid', 'appended-kind') + '\n');
+    assert.throws(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'appended event must still be caught'),
+      /interactive-runner/,
+      'bytes appended to a pre-existing events.jsonl AFTER the baseline snapshot must still be inspected and caught',
+    );
+
+    // 2b. A brand-new _logs/<dir> created after the baseline. Kills a wrong
+    // implementation that only ever re-scans directories present at
+    // snapshot time (an "existing dirs only" scope) — that shape would pass
+    // 2a above but miss a directory freshly created during the invocation,
+    // which is exactly what a NEW session's first turn does. Re-snapshots
+    // on a fresh baseline so this sub-case is proven independently of 2a's
+    // mutation.
+    const baseline2 = snapshotLogs(forgeRoot);
+    const newDir = join(forgeRoot, '_logs', '_brandnew-newlyspawned');
+    mkdirSync(newDir, { recursive: true });
+    writeFileSync(join(newDir, 'events.jsonl'), fakeInteractiveRunnerStartLine('new-sid', 'new-kind') + '\n');
+    assert.throws(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline2, 'new dir event must still be caught'),
+      /interactive-runner/,
+      'a brand-new _logs/ directory created AFTER the baseline snapshot must still be fully inspected',
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// forge-q1z shrink-guard (T3, MAJOR, adversarial review) — kills a
+// `subarray(startByte)` that clamps to empty when the file shrank, silently
+// hiding every event in it (Buffer.prototype.subarray clamps rather than
+// throwing when start > length).
+// ---------------------------------------------------------------------------
+
+test('forge-q1z: a shrunken events.jsonl is re-scanned in full, not clamped to empty', () => {
+  const forgeRoot = mkdtempSync(join(tmpdir(), 'q1z-shrink-guard-'));
+  try {
+    const dir = join(forgeRoot, '_logs', '_journeyscratch-shrinkme');
+    mkdirSync(dir, { recursive: true });
+    const eventsPath = join(dir, 'events.jsonl');
+    const bigLines = Array.from({ length: 20 }, (_, i) => fakeInteractiveRunnerStartLine(`sid-${i}`, `kind-${i}`)).join('\n') + '\n';
+    writeFileSync(eventsPath, bigLines);
+    const baseline = snapshotLogs(forgeRoot);
+
+    // Shrink well below the snapshotted size — still a real event, fewer bytes.
+    writeFileSync(eventsPath, fakeInteractiveRunnerStartLine('shrunk-sid', 'shrunk-kind') + '\n');
+    assert.ok(statSync(eventsPath).size < baseline.get(eventsPath)!.size, 'fixture must actually shrink');
+
+    assert.throws(
+      () => assertNoInteractiveRunnerSkillEvent(forgeRoot, baseline, 'shrunken file must be re-scanned, not skipped'),
+      /interactive-runner/,
+      "a `subarray(startByte)` that clamps to empty when the file shrank, silently hiding every event in it",
+    );
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
   }
 });

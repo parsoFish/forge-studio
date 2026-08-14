@@ -64,6 +64,7 @@ import { AGENT_INSTRUCTION_FILES } from '../orchestrator/project-config.ts';
 import { parseWorkItem } from '../orchestrator/work-item.ts';
 import type { QueueState } from '../orchestrator/queue.ts';
 import { getPaths } from '../orchestrator/queue.ts';
+import { provenanceOfOrigin, AGENT_PROVENANCE, PROJECT_PROVENANCE, type Provenance } from './studio-provenance.ts';
 
 // ---------------------------------------------------------------------------
 // Context surface needed by studio routes
@@ -278,6 +279,10 @@ type ProjectWithMeta = {
    *  (`.forge/demo/demo.lock.json`) — drives the "update the demo" entry + the
    *  locked-demo indicator on the project page. */
   hasLockedDemo?: boolean;
+  /** forge-3oq: always PROJECT_PROVENANCE ('unknown') — Studio has no OOTB-
+   *  project concept and discoverProjects is a pure directory scan, so the
+   *  server has no field to attest either provenance from. */
+  provenance: Provenance;
 };
 
 function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
@@ -290,7 +295,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
   const discovered = discoverProjects(projectsDir, forgeRoot);
 
   return discovered.map((ref) => {
-    const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path };
+    const result: ProjectWithMeta = { id: ref.id, name: ref.id, path: ref.path, provenance: PROJECT_PROVENANCE };
     // SEC-04 (bd forge-ebj): every read of a per-project leaf rides `guardedFile`
     // against the TRUSTED `projectsDir` root, with the on-disk project directory
     // NAME (`basename(ref.absPath)`, not the API-facing normalized id) as its OWN
@@ -359,7 +364,7 @@ function loadProjectsWithMeta(forgeRoot: string): ProjectWithMeta[] {
 // Flows loader
 // ---------------------------------------------------------------------------
 
-function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string[] }> {
+function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string[]; provenance: Provenance }> {
   const flowsDir = join(resolve(forgeRoot), 'studio', 'flows');
   if (!existsSync(flowsDir)) return [];
 
@@ -372,7 +377,7 @@ function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string
     return [];
   }
 
-  const flows: Array<FlowDefinition & { bands: string[] }> = [];
+  const flows: Array<FlowDefinition & { bands: string[]; provenance: Provenance }> = [];
   for (const entry of entries) {
     const flowYamlPath = join(flowsDir, entry, 'flow.yaml');
     if (!existsSync(flowYamlPath)) continue;
@@ -383,7 +388,10 @@ function loadAllFlows(forgeRoot: string): Array<FlowDefinition & { bands: string
       // page's per-flow band picker has something real to source options
       // from over the wire. Fails closed to [] for an underivable flow —
       // handled inside the helper, never re-guessed here.
-      flows.push({ ...flow, bands: listFlowBandIds(forgeRoot, flow.id) });
+      // forge-3oq: `origin` stays on the wire unchanged (additive-only) —
+      // `provenance` is a DERIVED sibling via the one shared mapping, never
+      // a second inline comparison.
+      flows.push({ ...flow, bands: listFlowBandIds(forgeRoot, flow.id), provenance: provenanceOfOrigin(flow.origin) });
     } catch {
       // Skip unreadable flow
     }
@@ -639,7 +647,10 @@ export async function handleStudioRoutes(
         res,
         200,
         {
-          agents: agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a) })),
+          // forge-3oq: AGENT_PROVENANCE is the named 'unknown' constant —
+          // SKILL.md carries no origin field, so guessing would be exactly
+          // the fabricated badge this change exists to remove.
+          agents: agents.map((a) => ({ ...a, capability: agentCapabilityDescriptor(a), provenance: AGENT_PROVENANCE })),
           defaultCostCeilingUsd,
         },
         origin,
@@ -719,8 +730,12 @@ export async function handleStudioRoutes(
         return true;
       }
 
+      // forge-3oq review: this is a SECOND construction site for the same
+      // flow descriptor `loadAllFlows` builds for the list route above —
+      // map it through the identical shared `provenanceOfOrigin` mapping so
+      // list and detail can never disagree.
       const flow = loadFlowDefinition(guarded.realPath);
-      sendJson(res, 200, { flow }, origin);
+      sendJson(res, 200, { flow: { ...flow, provenance: provenanceOfOrigin(flow.origin) } }, origin);
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

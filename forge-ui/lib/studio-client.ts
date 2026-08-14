@@ -32,6 +32,102 @@ import { parseContractStageRow, type ContractStageRow } from './session-client';
 export type RunStatus = 'planned' | 'active' | 'gated' | 'complete' | 'failed';
 export type RunPhaseStatus = 'pending' | 'active' | 'complete' | 'retrying' | 'failed';
 
+/**
+ * forge-3oq: the server's own per-object provenance token — Flow / Agent /
+ * Project / Kb each carry one on the wire now. `'unknown'` is an HONEST wire
+ * value ("the server cannot attest"), not a client-guessed default; every
+ * parser below normalises an absent/malformed token to `'unknown'` rather
+ * than defaulting to `'operator'` (which would silently claim knowledge the
+ * server never asserted) or `'ootb'` (which would fabricate a shipped claim).
+ * The client STOPS inferring provenance from other fields (e.g. Flow.origin
+ * — see `provenanceOfFlowOrigin`'s removal from `components/ProvenanceBadge.tsx`).
+ */
+export type Provenance = 'ootb' | 'operator' | 'unknown';
+
+/**
+ * forge-2am: one KB's lint summary, folded into `GET /api/studio/kbs` by the
+ * server (`cli/bridge-studio-kbs.ts`, landing alongside this seam). `error`
+ * is present only when the underlying lint run itself threw (mirrors
+ * `KbHealth.healthError`'s "whole run threw" convention above) — its
+ * presence, not its absence, is the "unknown" signal for a KB row.
+ */
+export type KbLintSummary = {
+  errors: number;
+  flags: number;
+  checksRun: number;
+  checksTotal: number;
+  error?: string;
+};
+
+/**
+ * Parse the server's provenance token. An absent/unrecognised value
+ * normalises to the honest `'unknown'` — never a fabricated `'operator'`
+ * default. The ONE parser every Flow/Agent/Project/Kb wire boundary below
+ * reuses, so provenance is read off the wire in exactly one place.
+ */
+export function parseProvenance(raw: unknown): Provenance {
+  return raw === 'ootb' || raw === 'operator' ? raw : 'unknown';
+}
+
+/**
+ * Parse the per-KB lint summary (forge-2am). Absent or malformed (wrong
+ * shape, wrong field types) parses to `null` — an honest "no data" — NEVER a
+ * fabricated `{errors:0,flags:0,...}` "clean" verdict; that exact
+ * fabrication is the declared-data-fails-open shape this seam exists to
+ * close (`buildKbAttention` in `home-view.ts` treats `null` as "no row",
+ * never as "clean").
+ *
+ * Review round (GAP 1/GAP 2, R6-07 batch-H honesty pass): two more ways this
+ * boundary was failing open, both fixed here —
+ *
+ *  - GAP 1: `error`'s PRESENCE (not its absence) is the server's "the lint
+ *    run itself threw" signal (see `KbLintSummary`'s header above). The
+ *    prior `typeof l.error === 'string' ? {error} : {}` silently DROPPED a
+ *    present-but-wrong-typed `error` instead of rejecting the object — that
+ *    fabricates exactly the all-clean verdict this parser exists to refuse.
+ *    A present-but-non-string `error` now invalidates the WHOLE object to
+ *    `null`. `error: null` (and an absent key) both mean "no error was
+ *    reported" and stay valid, with no `error` key on the result — `null`
+ *    is not itself a rejection reason, only a wrong-typed non-null value is.
+ *  - GAP 2: `typeof x === 'number'` alone admits NaN/Infinity/negative/
+ *    non-integer counts, and nothing checked `checksRun <= checksTotal` —
+ *    together these could reach the DOM as `data-attention-lint-errors="NaN"`
+ *    or an inverted "50/10 checks ran". All four counts must now be finite,
+ *    non-negative integers with `checksRun <= checksTotal`.
+ */
+export function parseKbLintSummary(raw: unknown): KbLintSummary | null {
+  if (raw == null || typeof raw !== 'object' || Array.isArray(raw)) return null;
+  const l = raw as Partial<KbLintSummary>;
+
+  const isValidCount = (x: unknown): x is number =>
+    typeof x === 'number' && Number.isInteger(x) && x >= 0;
+
+  if (
+    !isValidCount(l.errors) ||
+    !isValidCount(l.flags) ||
+    !isValidCount(l.checksRun) ||
+    !isValidCount(l.checksTotal) ||
+    l.checksRun > l.checksTotal
+  ) {
+    return null;
+  }
+
+  // A present-but-non-string, non-null `error` is a malformed payload —
+  // reject the WHOLE object rather than silently dropping just this field
+  // (GAP 1 above). `undefined` (absent) and `null` both mean "no error".
+  if (l.error !== undefined && l.error !== null && typeof l.error !== 'string') {
+    return null;
+  }
+
+  return {
+    errors: l.errors,
+    flags: l.flags,
+    checksRun: l.checksRun,
+    checksTotal: l.checksTotal,
+    ...(typeof l.error === 'string' ? { error: l.error } : {}),
+  };
+}
+
 export type RunPhaseMeta = {
   costUsd: number;
   retries: number;
@@ -178,6 +274,14 @@ export type Agent = {
    * payload degrades to `false` — never fabricated as enforceable.
    */
   costCeilingEnforceable?: boolean;
+  /**
+   * forge-3oq: server-sourced provenance (see `Provenance`'s header above).
+   * Optional on the client TYPE (not the wire payload) so pre-existing empty/
+   * fallback Agent literals elsewhere in forge-ui keep compiling —
+   * `parseAgentDefinition` always attaches a real value (`'unknown'` at
+   * worst) for every agent that actually came off the wire.
+   */
+  provenance?: Provenance;
 };
 
 export type FlowNode = {
@@ -469,6 +573,19 @@ export type Flow = {
    * `deriveKbBandOptions` below treats an absent value as `[]`.
    */
   bands?: string[];
+  /**
+   * forge-3oq: server-sourced provenance (see `Provenance`'s header above).
+   * REPLACES the client-side `provenanceOfFlowOrigin(origin)` inference —
+   * `origin` stays on the type (the first-run onramp still reads it, see
+   * `app/library/page.tsx`), but provenance itself now comes from the wire,
+   * never re-derived from `origin` client-side. Optional on the TYPE (not
+   * the wire payload) so pre-existing empty/fallback Flow literals elsewhere
+   * in forge-ui (e.g. `EMPTY_FLOW`) keep compiling; both `fetchStudioFlows`
+   * (list) and `fetchFlow` (detail — forge-3oq review) always attach a real
+   * value (`'unknown'` at worst) for every flow that actually came off the
+   * wire.
+   */
+  provenance?: Provenance;
 };
 
 export type DemoStep = {
@@ -491,6 +608,14 @@ export type Project = {
   kb?: string;
   /** True when a reproducible demo is locked in the repo (.forge/demo/demo.lock.json). */
   hasLockedDemo?: boolean;
+  /**
+   * forge-3oq: server-sourced provenance (see `Provenance`'s header above).
+   * Optional on the client TYPE (not the wire payload) so pre-existing
+   * empty/fallback Project literals elsewhere in forge-ui keep compiling;
+   * `fetchStudioProjects` always attaches a real value (`'unknown'` at
+   * worst) for every project that actually came off the wire.
+   */
+  provenance?: Provenance;
 };
 
 export type KbBinding =
@@ -513,6 +638,27 @@ export type Kb = {
   desc?: string;
   binding: KbBinding;
   counts: { index: number; themes: number; raw: number };
+  /**
+   * forge-2am: the per-KB lint summary folded into `GET /api/studio/kbs`
+   * (see `KbLintSummary`'s header above). `null` is the honest "no data"
+   * value — REQUIRED (not optional) precisely so a caller cannot skip
+   * setting it and accidentally leave it `undefined`, which `buildKbAttention`
+   * would then have to treat as a THIRD ambiguous state instead of the two
+   * real ones (a real summary, or honestly none).
+   */
+  lint: KbLintSummary | null;
+  /**
+   * forge-3oq: server-sourced provenance (see `Provenance`'s header above).
+   * REQUIRED (not optional) — every KB that reaches the client passes
+   * through `parseProvenance` at its wire boundary, always attaching a real
+   * value (`'unknown'` at worst), whether it arrived via `fetchStudioKbs`
+   * (list) or `fetchKb` (detail — forge-3oq review closed the gap where the
+   * detail route cast the wire value straight through instead of parsing
+   * it); there is no legitimate "KB with no provenance opinion" state the
+   * way there is for a bare fallback Flow/Agent/Project literal elsewhere in
+   * forge-ui.
+   */
+  provenance: Provenance;
 };
 
 export type KbLayer = 'index' | 'theme' | 'raw' | 'guidance';
@@ -810,6 +956,7 @@ function parseAgentDefinition(raw: unknown): Agent {
     fanout:         parseFanout(r['fanout']),
     materials:      parseMaterials(r['materials']),
     costCeilingEnforceable: cap['costCeilingEnforceable'] === true,
+    provenance:     parseProvenance(r['provenance']),
     runtime: {
       sdk:           typeof rt.sdk           === 'string' ? rt.sdk           : 'claude-code',
       strategy:      (rt.strategy === 'fixed' || rt.strategy === 'range') ? rt.strategy : 'fixed',
@@ -858,10 +1005,19 @@ export async function fetchStarterFlow(): Promise<Flow | null> {
   return body.flow ?? null;
 }
 
-/** Fetch all flow definitions. */
+/**
+ * Fetch all flow definitions. Every other field is carried through as the
+ * wire sent it (an existing cast, unchanged); `provenance` (forge-3oq) is
+ * the one field REAL-parsed at this boundary rather than cast — an
+ * absent/garbage wire value must normalise to `'unknown'`, never pass
+ * through raw or default to `'operator'`.
+ */
 export async function fetchStudioFlows(): Promise<Flow[]> {
-  const body = await studioGet<{ flows: Flow[] }>('/api/studio/flows', { flows: [] });
-  return body.flows;
+  const body = await studioGet<{ flows: unknown[] }>('/api/studio/flows', { flows: [] });
+  return (body.flows ?? []).map((raw) => ({
+    ...(raw as Flow),
+    provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
+  }));
 }
 
 /**
@@ -905,26 +1061,61 @@ export async function fetchStandingTriggers(): Promise<StandingTrigger[]> {
   return parseStandingTriggers(body.triggers);
 }
 
-/** Fetch all projects. */
+/**
+ * Fetch all projects. Every other field is carried through as the wire sent
+ * it (an existing cast, unchanged); `provenance` (forge-3oq) is the one
+ * field REAL-parsed at this boundary rather than cast — an absent/garbage
+ * wire value must normalise to `'unknown'`, never pass through raw or
+ * default to `'operator'`.
+ */
 export async function fetchStudioProjects(): Promise<Project[]> {
-  const body = await studioGet<{ projects: Project[] }>('/api/studio/projects', { projects: [] });
-  return body.projects;
+  const body = await studioGet<{ projects: unknown[] }>('/api/studio/projects', { projects: [] });
+  return (body.projects ?? []).map((raw) => ({
+    ...(raw as Project),
+    provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
+  }));
 }
 
-/** Fetch all knowledge bases. */
+/**
+ * Fetch all knowledge bases. Every other field is carried through as the
+ * wire sent it (an existing cast, unchanged); `provenance` and `lint`
+ * (forge-3oq/forge-2am) are REAL-parsed at this boundary rather than cast —
+ * an absent/garbage `provenance` normalises to `'unknown'`, an absent/
+ * malformed `lint` normalises to `null` — never a fabricated
+ * `{errors:0,flags:0}` "clean" verdict.
+ */
 export async function fetchStudioKbs(): Promise<Kb[]> {
-  const body = await studioGet<{ kbs: Kb[] }>('/api/studio/kbs', { kbs: [] });
-  return body.kbs;
+  const body = await studioGet<{ kbs: unknown[] }>('/api/studio/kbs', { kbs: [] });
+  return (body.kbs ?? []).map((raw) => ({
+    ...(raw as Kb),
+    provenance: parseProvenance((raw as Record<string, unknown> | null)?.['provenance']),
+    lint: parseKbLintSummary((raw as Record<string, unknown> | null)?.['lint']),
+  }));
 }
 
-/** Fetch a single KB with its graph and health. Returns null if not found. */
+/**
+ * Fetch a single KB with its graph and health. Returns null if not found.
+ *
+ * `body.kb` arrives via `studioGet`'s unchecked `as T` cast (same as every
+ * other wire boundary in this module) — `provenance` and `lint` are
+ * REAL-parsed here through the same `parseProvenance`/`parseKbLintSummary`
+ * helpers `fetchStudioKbs` uses (forge-3oq review), so a detail-fetched KB
+ * can never carry a garbage or absent wire value straight through despite
+ * `Kb.provenance`/`Kb.lint` being declared REQUIRED.
+ */
 export async function fetchKb(id: string): Promise<KbDetail | null> {
   const body = await studioGet<{ kb?: Kb; graph?: KbGraph; health?: KbHealth } | null>(
     `/api/studio/kbs/${encodeURIComponent(id)}`,
     null,
   );
   if (!body?.kb || !body.graph || !body.health) return null;
-  return { kb: body.kb, graph: body.graph, health: body.health };
+  const rawKb = body.kb as unknown as Record<string, unknown>;
+  const kb: Kb = {
+    ...body.kb,
+    provenance: parseProvenance(rawKb['provenance']),
+    lint: parseKbLintSummary(rawKb['lint']),
+  };
+  return { kb, graph: body.graph, health: body.health };
 }
 
 /** Fetch a single KB node article. Returns null if not found. */
@@ -1254,13 +1445,21 @@ export async function createGreenfieldProject(input: {
   };
 }
 
-/** Fetch a single flow definition by id. */
+/**
+ * Fetch a single flow definition by id. `provenance` is REAL-parsed through
+ * the same `parseProvenance` helper `fetchStudioFlows` uses (forge-3oq
+ * review) rather than cast straight through — matches the fix at `fetchKb`.
+ */
 export async function fetchFlow(id: string): Promise<Flow | null> {
   const body = await studioGet<{ flow?: Flow } | null>(
     `/api/studio/flows/${encodeURIComponent(id)}`,
     null,
   );
-  return body?.flow ?? null;
+  if (!body?.flow) return null;
+  return {
+    ...body.flow,
+    provenance: parseProvenance((body.flow as unknown as Record<string, unknown>)['provenance']),
+  };
 }
 
 /** Save (PUT) a flow definition by id. Bumps version server-side. */

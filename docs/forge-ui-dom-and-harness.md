@@ -27,18 +27,40 @@ inventory rather than one shared page-level contract:
   `main[data-page="home"][data-page-ready][data-live-count][data-attention-
   count][data-hex-count]`. Three sections:
   - `section[data-section="attention-strip"]` — present ONLY when
-    `buildHomeAttention()` returns ≥1 row (a real gated/flagged condition,
-    never rendered on the mere existence of a project). Each row is a real
-    `a[data-attention-item][data-attention-project][data-attention-status]`
-    whose `href` is `/projects/<id>` (the owning project's own page). Home
-    mirrors R4-11-F4's FULL count vocabulary: the row also carries the same five
-    raw `data-attention-<planned|in-flight|gated|merged|flagged>` counts
-    Library's row carries (below), read straight off the same
+    `[...buildHomeAttention(attention), ...buildKbAttention(kbs)]` returns ≥1
+    row (a real condition, never rendered on the mere existence of a project
+    or KB). Every row carries `data-attention-kind="gate"|"kb"` (forge-2am) so
+    the two sources are told apart in the DOM. **Gate rows**
+    (`buildHomeAttention`) are a real
+    `a[data-attention-item][data-attention-kind="gate"][data-attention-project][data-attention-status]`
+    whose `href` is `/projects/<id>` (the owning project's own page); Home
+    mirrors R4-11-F4's FULL count vocabulary here too — the row also carries the
+    same five raw `data-attention-<planned|in-flight|gated|merged|flagged>`
+    counts Library's row carries (below), read straight off the same
     `fetchProjectAttention()` row — so both attention surfaces speak ONE shared
     DOM vocabulary. Home ADDS `data-attention-status` (the derived
     `gated|flagged` condition) on top; Library's per-project roster does not
     carry that derived field (Library shows every project, Home shows only the
-    rows that fired).
+    rows that fired). **KB rows** (`buildKbAttention`, forge-2am) are
+    `a[data-attention-item][data-attention-kind="kb"][data-attention-kb][data-attention-status]`
+    with `href="/knowledge?id=<id>"` (the row's React `key` is `kb-<id>`-shaped
+    but a `key` is React-internal bookkeeping, never rendered to the DOM — the
+    row carries no `id` attribute at all; find it via `data-attention-kb`
+    instead); `data-attention-status`
+    is `fail|warn|unknown` (never `gated|flagged`, the gate-row vocabulary) —
+    `unknown` means the KB's own lint run threw (`lint.error` present), an
+    HONEST "the server cannot attest" signal, never a default. The row also
+    carries the KB's own lint summary verbatim:
+    `data-attention-lint-errors`, `data-attention-lint-flags`,
+    `data-attention-checks-run`, `data-attention-checks-total` — the last two
+    surface the n/a-invariant (only SOME of forge's brain-lint checks actually
+    inspect a given KB, e.g. a project-brain KB is only ever scanned by
+    `checkProjectBrainIndexes`'s `project-indexes` scope — see
+    `cli/brain-lint.ts`'s `CHECK_SCOPE`) so `checksRun < checksTotal` reaching
+    the operator honestly says "N of M checks actually ran", never implying a
+    full clean sweep. A KB with `lint === null` (no data yet) or an all-zero
+    clean lint renders NO row at all — absence is honest, a fabricated "clean"
+    row is not.
   - `section[data-section="constellation"][data-hex-count]` — one
     `a.home-hex[data-hex-kind][data-hex-id][data-hex-status]` per flow/agent/
     project/KB (`data-hex-kind` is `flow|agent|project|kb`), href routing to
@@ -70,11 +92,33 @@ inventory rather than one shared page-level contract:
   counts — Home (above) now mirrors this same strip on its own landing
   surface, off the identical `fetchProjectAttention()` aggregate, though with
   a narrower attribute set (see the Home entry's own note). Each flow card
-  (`LibraryCard.tsx` `FlowCard`) carries
-  `data-provenance="ootb"|"operator"` (derived from `flow.origin`) — an OOTB
-  seed flow additionally renders a visible `.badge-ootb` span — plus one badge
-  per declared trigger — `[data-trigger-badge]` (value is the trigger's `on`
-  kind) with a `title="<kind> → <target ref>"` tooltip (R2-04-F4).
+  (`LibraryCard.tsx` `FlowCard`) carries `data-flow-status="active"|"gated"|"idle"`
+  (forge-n5r) — derived through the ONE shared `runsForFlow`/`deriveFlowStatus`
+  matcher `lib/home-view.ts` and the `/flows/[id]` monitor also use (a run
+  belongs to a flow by direct `run.flowId` OR by `run.flowLineage` — a
+  threaded-spine run must not leave the card wrongly idle). `data-flow-status`
+  is this SHARED, LIVE 3-state derivation only — it carries no `'failed'`
+  state, by design. The same `FlowCard` also carries `data-flow-failed-count`
+  and `data-flow-gated-count` (review round, GAP 3) — plain integers, ALWAYS
+  present (`"0"` when none), sourced from the SAME lineage-aware `runsForFlow`
+  set that already feeds the "N failed"/"N needs you" chips, so a failed-only
+  flow (which still reads `data-flow-status="idle"`, since "failed" is not a
+  live state) is DOM-distinguishable from a truly never-run one. Automation
+  must read these counts rather than infer a failure from `data-flow-status`
+  alone. Every card type —
+  `FlowCard`/`AgentCard`/`ProjectCard`/`KbCard` — carries
+  `data-provenance="ootb"|"operator"|"unknown"` (forge-3oq), read STRAIGHT off
+  the server's per-object `provenance` field (`fetchStudioKbs`/`Flows`/`Agents`/
+  `Projects` parse + normalise it — an absent/garbage wire value maps to
+  `"unknown"`, never a guessed default), never re-derived client-side; an OOTB
+  flow additionally renders the visible `.badge-ootb` span
+  (`<ProvenanceBadge>`). `"unknown"` is an HONEST "the server cannot attest"
+  signal, not a default — it renders no badge, same as `"operator"`. `Flow`
+  keeps its existing `origin?: string` field (still read by
+  `app/library/page.tsx`), but `ProvenanceBadge` no longer infers from it —
+  `provenanceOfFlowOrigin` is deleted. Flow cards also carry one badge per
+  declared trigger — `[data-trigger-badge]` (value is the trigger's `on` kind)
+  with a `title="<kind> → <target ref>"` tooltip (R2-04-F4).
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is

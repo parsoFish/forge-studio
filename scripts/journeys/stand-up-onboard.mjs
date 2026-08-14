@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync, writeFileSync, existsSync, rmSync, cpSync } from 'node:fs';
 import { join } from 'node:path';
 import { defineJourney } from '../lib/journey-runtime.mjs';
-import { cleanFirstProject, FORGE_ROOT, J4_PROJECT, waitForFile, caption, ONB_EXISTING_SLUG, WORK, cleanOnboardedProject } from '../lib/journey-fixtures.mjs';
+import { cleanFirstProject, FORGE_ROOT, J4_PROJECT, waitForFile, caption, ONB_EXISTING_SLUG, WORK, cleanOnboardedProject, fillWhenLive } from '../lib/journey-fixtures.mjs';
 import { sleep } from '../lib/journey-assertions.mjs';
 
 // The agent-resolvable C8 clause (AGENTS.md or CLAUDE.md at project root) is
@@ -77,8 +77,25 @@ export const journey = defineJourney({
               await frame(page, 'j4-0-onboard-form', 'J4 — onboard a project: required fields only (quality gate, north star)');
 
               // Fill the minimal required fields + onboard. (quality-gate defaults to npm test)
-              await page.locator('[data-field="project-name"]').fill('Journey Demo Project');
-              await page.locator('[data-field="north-star"]').fill('A scratch project onboarded by the e2e journey to prove UI onboarding.');
+              // fillWhenLive proves each value reached React state, not just the DOM: the
+              // [data-section="project-onboard"] wait above is SSR-satisfiable (present in
+              // the server-rendered HTML before hydration), so a plain fill() landing early
+              // can be silently discarded when React re-renders the controlled input back
+              // to its initial '' — see the helper's doc comment for the full failure this
+              // reproduces (the beat's captured 30s timeout on the disabled onboard button).
+              await fillWhenLive(page, '[data-field="project-name"]', 'Journey Demo Project');
+              await fillWhenLive(page, '[data-field="north-star"]', 'A scratch project onboarded by the e2e journey to prove UI onboarding.');
+              // The honest terminal-state assertion the beat was missing: prove the form is
+              // genuinely LIVE (React has hydrated and canSubmit is true) before trusting the
+              // click — not merely that the SSR markup for the button exists.
+              const onboardFormLive = await page.waitForFunction(
+                () => {
+                  const el = document.querySelector('[data-action="onboard-project"]');
+                  return el !== null && !el.disabled;
+                },
+                null, { timeout: 8000 },
+              ).then(() => true).catch(() => false);
+              check(onboardFormLive, 'J4: the onboard form is live and accepts input — "Onboard project" is genuinely enabled (hydrated, not just SSR-present)');
               await page.locator('[data-action="onboard-project"]').click();
 
               const projectJsonPath = join(FORGE_ROOT, 'projects', J4_PROJECT, '.forge', 'project.json');

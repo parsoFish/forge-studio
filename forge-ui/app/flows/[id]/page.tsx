@@ -5,6 +5,7 @@ import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
+import { runsForFlow } from '@/lib/home-view';
 import { StudioNav } from '@/components/StudioNav';
 import { RunRail } from '@/components/studio/RunRail';
 import { MonitorSummary } from '@/components/studio/MonitorSummary';
@@ -98,7 +99,10 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
         // A threaded spine run surfaces under every flow in its lineage
         // (architect→develop→reflect), so each flow's RUNS rail + monitor shows it.
         setFlowsWithRuns(new Set(everyRun.flatMap((r) => (r.flowLineage?.length ? r.flowLineage : [r.flowId]))));
-        const allRuns = everyRun.filter((r) => r.flowId === id || (r.flowLineage ?? []).includes(id));
+        // forge-n5r: the ONE flow<->run matcher (lib/home-view.ts), shared
+        // with FlowCard and Home rather than a third independent copy of
+        // this predicate.
+        const allRuns = runsForFlow(id, everyRun);
         setRuns(allRuns);
 
         // Selection precedence: explicit preserve id → the user's sticky pick

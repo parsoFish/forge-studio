@@ -17,7 +17,7 @@
  * the page (app/page.tsx).
  */
 
-import type { Run, Flow, Agent, Project, Kb } from './studio-client';
+import type { Run, Flow, Agent, Project, Kb, KbLintSummary } from './studio-client';
 import type { ProjectAttentionItem } from './bridge-client';
 
 export type HomeStatus = 'active' | 'gated' | 'idle';
@@ -32,27 +32,60 @@ export type HomeHex = {
   href: string;
 };
 
-export type HomeAttentionItem = {
-  id: string;
-  kind: 'gate';
-  text: string;
-  sub: string;
-  status: string;
-  href: string;
-  projectId: string;
-};
+/**
+ * forge-2am: widened to a discriminated union so the attention strip can
+ * carry KB-lint rows alongside the pre-existing project-gate rows without
+ * either kind borrowing fields it doesn't have (a 'kb' row has no
+ * `projectId`; a 'gate' row has no `kbId`/`lint`). `id`/`text`/`sub`/`href`/
+ * `status` stay common to both so the page can render most of the row
+ * uniformly, branching only on `kind` for the kind-specific `data-*`
+ * attributes and fields.
+ */
+export type HomeAttentionItem =
+  | {
+      id: string;
+      kind: 'gate';
+      text: string;
+      sub: string;
+      status: string;
+      href: string;
+      projectId: string;
+    }
+  | {
+      id: string;
+      kind: 'kb';
+      text: string;
+      sub: string;
+      status: 'fail' | 'warn' | 'unknown';
+      href: string;
+      kbId: string;
+      lint: KbLintSummary;
+    };
 
 /**
- * A flow's live status, derived from the runs threaded through it. A run
- * "belongs" to a flow either directly (`run.flowId`) or by having traversed
- * it as part of a threaded spine (`run.flowLineage`, e.g. architect ->
- * develop -> reflect) — ignoring lineage would leave a spine run's
- * traversed flows permanently 'idle'. 'active' beats 'gated' when both are
- * present (an active run elsewhere on the flow is the more urgent fact); no
- * matching run at all is 'idle' — never a fabricated default.
+ * forge-n5r: the ONE flow<->run matcher. A run "belongs" to a flow either
+ * directly (`run.flowId`) or by having traversed it as part of a threaded
+ * spine (`run.flowLineage`, e.g. architect -> develop -> reflect) —
+ * ignoring lineage would leave a spine run's traversed flows permanently
+ * 'idle'/quiet. Every consumer that needs "the runs for this flow"
+ * (`deriveFlowStatus` below, `FlowCard` in `components/studio/LibraryCard.tsx`,
+ * the flow monitor in `app/flows/[id]/page.tsx`) calls THIS function rather
+ * than re-writing the predicate inline — two independently-written copies is
+ * exactly how `FlowCard`'s `runs.filter(r => r.flowId === flow.id)` drifted
+ * from the correct behaviour in the first place.
+ */
+export function runsForFlow(flowId: string, runs: Run[]): Run[] {
+  return runs.filter((r) => r.flowId === flowId || r.flowLineage.includes(flowId));
+}
+
+/**
+ * A flow's live status, built ON `runsForFlow` (never a second, independent
+ * predicate). 'active' beats 'gated' when both are present (an active run
+ * elsewhere on the flow is the more urgent fact); no matching run at all is
+ * 'idle' — never a fabricated default.
  */
 export function deriveFlowStatus(flowId: string, runs: Run[]): HomeStatus {
-  const matching = runs.filter((r) => r.flowId === flowId || r.flowLineage.includes(flowId));
+  const matching = runsForFlow(flowId, runs);
   if (matching.some((r) => r.status === 'active')) return 'active';
   if (matching.some((r) => r.status === 'gated')) return 'gated';
   return 'idle';
@@ -187,6 +220,55 @@ export function buildHomeAttention(attention: ProjectAttentionItem[]): HomeAtten
       status: row.gated > 0 ? 'gated' : 'flagged',
       href: row.link,
       projectId: row.projectId,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * forge-2am: KB-lint rows for the attention strip, mirroring
+ * `buildHomeAttention`'s own real-condition rule above — a row fires ONLY
+ * on an honest signal from the KB's OWN `lint` summary, never from mere
+ * existence, and `lint === null` (no data) is never folded into a
+ * fabricated clean verdict. Precedence: `lint.error` (the lint run itself
+ * threw) beats a real errors/flags count — an "unknown" verdict is more
+ * honest than reporting stale/partial numbers next to a run that failed to
+ * complete. Otherwise `errors > 0` -> 'fail' beats `flags > 0` -> 'warn'.
+ * A KB with `checksRun < checksTotal` (not every check inspected this KB —
+ * see `Kb.lint`'s header) still fires normally; the n/a-invariant is
+ * surfaced on the row's `lint` object verbatim, not smoothed over.
+ */
+export function buildKbAttention(kbs: Kb[]): HomeAttentionItem[] {
+  const items: HomeAttentionItem[] = [];
+
+  for (const kb of kbs) {
+    const lint = kb.lint;
+    if (lint === null) continue;
+
+    let status: 'fail' | 'warn' | 'unknown' | null = null;
+    if (lint.error) status = 'unknown';
+    else if (lint.errors > 0) status = 'fail';
+    else if (lint.flags > 0) status = 'warn';
+    if (status === null) continue; // an all-clean lint fires no row
+
+    const parts: string[] = [];
+    if (lint.error) {
+      parts.push('lint run failed');
+    } else {
+      if (lint.errors > 0) parts.push(`${lint.errors} lint error${lint.errors === 1 ? '' : 's'}`);
+      if (lint.flags > 0) parts.push(`${lint.flags} flagged`);
+    }
+
+    items.push({
+      id: `kb-${kb.id}`,
+      kind: 'kb',
+      text: `${kb.name} · ${parts.join(' · ')}`,
+      sub: `${lint.checksRun}/${lint.checksTotal} checks run`,
+      status,
+      href: `/knowledge?id=${kb.id}`,
+      kbId: kb.id,
+      lint,
     });
   }
 
