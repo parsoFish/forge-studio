@@ -4203,7 +4203,27 @@ async function handleDemoBuilder(
       }
       // dirOutcome.ok proved the DIR contained; the status.json WRITE below
       // goes through the guarded leaf sibling (leaf included).
-      const repoPath = body.projectRepoPath || join(ctx.projectsRoot, body.project);
+      // forge-4vt — the `projectRepoPath || join(projectsRoot, project)`
+      // fallback below reaches the demo.lock.json READ a few lines down with a
+      // repoPath folded from the untrusted `body.project`. `resolveDemoSessionDir`
+      // above DOES reject an out-of-root project today, but that containment is
+      // an accident of SOURCE ORDER — it guards the session DIR, not this
+      // independently re-derived repoPath, so a refactor that reorders or drops
+      // it would silently reopen the read. Route `body.project` through the
+      // SAME resolveGuardedPath choke point the sibling /start routes use,
+      // BEFORE the read, so containment is structural (the guard's own output)
+      // rather than order-dependent.
+      let repoPath: string;
+      if (body.projectRepoPath) {
+        repoPath = body.projectRepoPath;
+      } else {
+        const guardedProject = resolveGuardedPath(ctx.projectsRoot, [body.project]);
+        if (!guardedProject.ok) {
+          sendJson(res, 400, { error: 'invalid project' }, origin);
+          return true;
+        }
+        repoPath = guardedProject.realPath;
+      }
       // Default the mode by whether a locked demo already exists.
       const mode: 'create' | 'update' =
         body.mode ?? (existsSync(join(repoPath, '.forge', 'demo', 'demo.lock.json')) ? 'update' : 'create');
@@ -4227,7 +4247,10 @@ async function handleDemoBuilder(
       ctx.broadcastDemoChanged();
       sendJson(res, 200, { ok: true, sessionId, mode }, origin);
     } catch (err) {
-      sendJson(res, 500, { error: String(err) }, origin);
+      // sanitizeError, not String(err) — the same helper 13 sibling routes in
+      // this file already use. A genuine fs error on the status write (EACCES,
+      // ENOSPC) otherwise echoes an absolute filesystem path into the response.
+      sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }
     return true;
   }
