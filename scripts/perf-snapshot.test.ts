@@ -1,19 +1,24 @@
 /**
- * perf-snapshot.test.ts — unit tests for the PURE helpers in
- * scripts/perf-snapshot.mjs (W6-P0). Named `.test.ts` (not `.test.mjs`) to
- * match this repo's `npm test` glob (`scripts/*.test.ts` in package.json's
- * "test" script — a plain `.test.mjs` file here would silently NOT run).
- * scripts/ is outside tsconfig.json's `include`, so this file is exercised
- * only via `node --test --experimental-strip-types`, never `tsc`.
+ * perf-snapshot.test.ts — unit tests for scripts/perf-snapshot.mjs (W6-P0).
+ * Named `.test.ts` (not `.test.mjs`) to match this repo's `npm test` glob
+ * (`scripts/*.test.ts` in package.json's "test" script — a plain
+ * `.test.mjs` file here would silently NOT run). scripts/ is outside
+ * tsconfig.json's `include`, so this file is exercised only via
+ * `node --test --experimental-strip-types`, never `tsc`.
  *
- * Covers the impure I/O paths (bridge-health probe, fetch timing, Playwright
- * page loads, fs writes) are exercised for real by an operator running
- * `npm run perf:snapshot` against a live `forge studio` — that requires a
- * running bridge and is explicitly out of scope for an automated unit test
- * (and for this lane, which must not touch a live bridge). This file only
- * covers the deterministic, dependency-free helpers: arg parsing, stats,
- * largest-log discovery (via a synthetic fixture dir), timestamp formatting,
- * and table rendering.
+ * Two groups:
+ *   - PURE helpers (arg parsing, stats, largest-log discovery via a
+ *     synthetic fixture dir, timestamp formatting, table rendering) —
+ *     deterministic, no I/O.
+ *   - timeFetch/measureApiEndpoint — impure (real network I/O in
+ *     production), but both take an injectable `fetchImpl` (mirrors
+ *     cli/forge-watch.ts's `probeBridgeIdentity(url, fetchImpl)`), so they're
+ *     exercised here against a STUBBED fetch — no live bridge required (and
+ *     none is touched from this lane).
+ *
+ * Not covered here: probeHealth/probeUi/measurePage (Playwright) and
+ * main()'s fs writes — those are exercised for real by an operator running
+ * `npm run perf:snapshot` against a live `forge studio`.
  */
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
@@ -27,7 +32,23 @@ import {
   findLargestEventsLog,
   isoTimestampForFilename,
   formatMarkdownTable,
+  timeFetch,
+  measureApiEndpoint,
 } from './perf-snapshot.mjs';
+
+/** Build a stub `fetchImpl`: consumes `responses` in order, one per call.
+ *  Each entry is either `{ ok, status, bytes }` (a fake Response with a
+ *  working .arrayBuffer()) or `{ throwError }` (the call rejects — models a
+ *  network failure/abort-timeout, distinct from an HTTP error status). */
+function makeStubFetch(responses) {
+  let i = 0;
+  return async () => {
+    if (i >= responses.length) throw new Error(`stub fetch called more times (${i + 1}) than responses provided (${responses.length})`);
+    const spec = responses[i++];
+    if (spec.throwError) throw spec.throwError;
+    return { ok: spec.ok, status: spec.status, arrayBuffer: async () => new ArrayBuffer(spec.bytes) };
+  };
+}
 
 // =============================================================================
 // parseArgs
@@ -125,6 +146,105 @@ test('findLargestEventsLog: returns null when logsRoot has no cycle dirs with ev
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test('findLargestEventsLog: returns null (not a throw) when logsRoot exists but is not a directory (ENOTDIR)', () => {
+  const root = mkdtempSync(join(tmpdir(), 'perf-snapshot-notdir-'));
+  const notADir = join(root, 'actually-a-file');
+  try {
+    writeFileSync(notADir, 'irrelevant');
+    // readdirSync(notADir) throws ENOTDIR — findLargestEventsLog must catch
+    // it and return null, matching the adjacent statSync guard's contract,
+    // not propagate and crash the whole snapshot.
+    assert.equal(findLargestEventsLog(notADir), null);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+// =============================================================================
+// timeFetch / measureApiEndpoint — stubbed fetch, no live server
+// =============================================================================
+
+test('timeFetch: ok response — status/bytes/ok pass through, ms is a non-negative number', async () => {
+  const stub = makeStubFetch([{ ok: true, status: 200, bytes: 37 }]);
+  const r = await timeFetch('http://x/api/thing', stub);
+  assert.equal(r.ok, true);
+  assert.equal(r.status, 200);
+  assert.equal(r.bytes, 37);
+  assert.equal(typeof r.ms, 'number');
+  assert.ok(r.ms >= 0);
+});
+
+test('timeFetch: non-2xx response is returned, not thrown — ok:false, status/bytes still captured', async () => {
+  const stub = makeStubFetch([{ ok: false, status: 500, bytes: 12 }]);
+  const r = await timeFetch('http://x/api/thing', stub);
+  assert.equal(r.ok, false);
+  assert.equal(r.status, 500);
+  assert.equal(r.bytes, 12);
+});
+
+test('measureApiEndpoint: all-ok samples — errors:0, min/median computed over all N, bytes from the last response', async () => {
+  const stub = makeStubFetch([
+    { ok: true, status: 200, bytes: 100 },
+    { ok: true, status: 200, bytes: 100 },
+    { ok: true, status: 200, bytes: 100 },
+  ]);
+  const r = await measureApiEndpoint('http://x', '/api/runs', 3, stub);
+  assert.equal(r.name, '/api/runs');
+  assert.equal(r.errors, 0);
+  assert.equal(r.samples.length, 3);
+  assert.deepEqual(r.statuses, [200, 200, 200]);
+  assert.equal(r.bytes, 100);
+  assert.equal(typeof r.minMs, 'number');
+  assert.equal(typeof r.medianMs, 'number');
+});
+
+test('measureApiEndpoint: a non-2xx sample is recorded but EXCLUDED from min/median, and counted in errors', async () => {
+  const stub = makeStubFetch([
+    { ok: true, status: 200, bytes: 100 },
+    { ok: false, status: 500, bytes: 5 },
+    { ok: true, status: 200, bytes: 100 },
+  ]);
+  const r = await measureApiEndpoint('http://x', '/api/runs', 3, stub);
+  assert.equal(r.errors, 1);
+  assert.deepEqual(r.statuses, [200, 500, 200]);
+  // samples[] keeps the raw per-call ms (including the errored call) for
+  // the JSON record, but min/median must come from the two OK calls only —
+  // a 500 must never read as a fast sample.
+  assert.equal(r.samples.length, 3);
+  assert.equal(typeof r.minMs, 'number');
+  assert.equal(typeof r.medianMs, 'number');
+  // bytes reports the last OK response (100), not the 500's body (5).
+  assert.equal(r.bytes, 100);
+});
+
+test('measureApiEndpoint: every sample non-2xx — min/median are null (no valid latency data), errors:N, bytes still diagnostic', async () => {
+  const stub = makeStubFetch([
+    { ok: false, status: 503, bytes: 8 },
+    { ok: false, status: 503, bytes: 9 },
+    { ok: false, status: 503, bytes: 10 },
+  ]);
+  const r = await measureApiEndpoint('http://x', '/api/runs', 3, stub);
+  assert.equal(r.errors, 3);
+  assert.equal(r.minMs, null);
+  assert.equal(r.medianMs, null);
+  assert.equal(r.bytes, 10); // last response's body size, for diagnosis
+});
+
+test('measureApiEndpoint: a thrown fetch (network failure) is caught per-sample, not propagated, and counts as an error', async () => {
+  const stub = makeStubFetch([
+    { ok: true, status: 200, bytes: 100 },
+    { throwError: new Error('ECONNRESET') },
+    { ok: true, status: 200, bytes: 100 },
+  ]);
+  const r = await measureApiEndpoint('http://x', '/api/runs', 3, stub);
+  assert.equal(r.errors, 1);
+  assert.equal(r.statuses[1], null);
+  // The two OK samples' stats must still be present — one thrown sample
+  // must not cost the other two already-collected results.
+  assert.equal(typeof r.minMs, 'number');
+  assert.equal(typeof r.medianMs, 'number');
 });
 
 // =============================================================================

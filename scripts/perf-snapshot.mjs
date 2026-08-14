@@ -19,15 +19,28 @@
  *      /api/cycles, /api/studio/projects/attention, /api/studio/catalog, plus
  *      /api/events/<cycle> for whichever _logs/<cycle>/events.jsonl is
  *      largest on disk (the heaviest realistic payload). Each sample records
- *      wall-clock ms (performance.now() around the fetch) + response bytes;
- *      min/median are derived over the 3 samples.
+ *      wall-clock ms (performance.now() around the fetch) + response bytes +
+ *      HTTP status; non-2xx/thrown samples are EXCLUDED from min/median (a
+ *      500 isn't a latency data point) and counted in that endpoint's
+ *      `errors` field so a failing endpoint reads as failing, not fast.
  *   2. Page timings — only if forge-ui answers on :4124 (else skipped with a
  *      note, not a failure): a COLD Playwright context per page (/, /library,
- *      /knowledge, /projects), timing navigation → the first [data-page]
- *      element becoming visible.
+ *      /knowledge, /projects). Two timestamps per page, per the repo's own
+ *      data-* harness convention (docs/forge-ui-dom-and-harness.md,
+ *      scripts/e2e-journey.mjs's `data-page-ready="true"` readySel): `mountMs`
+ *      (navigation → the first [data-page] element visible — DOM mount, not
+ *      load) and `readyMs` (navigation → [data-page-ready="true"] — the
+ *      page's first fetch actually settling, forge-ui's definition of
+ *      "loaded"). A page whose readiness attribute never appears keeps its
+ *      mountMs and records a `readyError` instead of losing the whole row.
+ *
+ * A single failing sample/page/endpoint never discards results already
+ * collected elsewhere — the JSON is always written with whatever succeeded,
+ * partial rows included.
  *
  * Output: _wave6/perf/snapshot-<ISO-timestamp>.json (full samples + stats)
- * and a compact markdown table on stdout (name / median ms / bytes).
+ * and a compact markdown table on stdout (name / median ms / bytes; API rows
+ * use readyMs for pages, the "loaded" number that's comparable across runs).
  *
  * Exit codes: 2 = no forge bridge detected on :4123 (run `forge studio`
  * first); 1 = any other fatal error; 0 = snapshot written.
@@ -52,6 +65,29 @@ const API_PATHS = [
   '/api/studio/catalog',
 ];
 const UI_ROUTES = ['/', '/library', '/knowledge', '/projects'];
+
+// Named per-purpose (not one shared constant): each guards a different kind
+// of wait with a different expected shape, so a future tune of one must not
+// silently drag the others with it.
+/** GET /api/health probe — short: a healthy bridge answers near-instantly,
+ *  and this only detects PRESENCE, so a slow value here should read as
+ *  "absent", not "still warming up". */
+const HEALTH_PROBE_TIMEOUT_MS = 2000;
+/** GET / probe on the UI port — longer than the health probe because
+ *  forge-ui may still be mid dev-compile moments after `forge studio`
+ *  starts; this only gates whether page timings run at all. */
+const UI_PROBE_TIMEOUT_MS = 3000;
+/** Per-sample API fetch bound — generous because some endpoints (notably
+ *  /api/events/<cycle> for a large events.jsonl) legitimately do real work;
+ *  this is a hang guard, not a performance assertion. */
+const API_FETCH_TIMEOUT_MS = 15000;
+/** Time to the first [data-page] element mounting — should be fast, it's
+ *  just the initial React render before any data has loaded. */
+const PAGE_MOUNT_TIMEOUT_MS = 15000;
+/** Time to [data-page-ready="true"] — the page's first fetch settling.
+ *  Kept generous (equal to the API bound) since it includes a bridge
+ *  round-trip on top of the mount. */
+const PAGE_READY_TIMEOUT_MS = 15000;
 
 function log(msg) {
   console.log(`[perf-snapshot] ${msg}`);
@@ -89,8 +125,14 @@ export function computeStats(samples) {
  *  mkdtempSync temp dir. */
 export function findLargestEventsLog(logsRoot) {
   if (!existsSync(logsRoot)) return null;
+  let entries;
+  try {
+    entries = readdirSync(logsRoot, { withFileTypes: true });
+  } catch {
+    return null; // e.g. ENOTDIR (logsRoot exists but isn't a directory) — skip, don't crash the snapshot
+  }
   let best = null;
-  for (const entry of readdirSync(logsRoot, { withFileTypes: true })) {
+  for (const entry of entries) {
     if (!entry.isDirectory()) continue;
     const eventsPath = join(logsRoot, entry.name, 'events.jsonl');
     if (!existsSync(eventsPath)) continue;
@@ -136,7 +178,7 @@ export function formatMarkdownTable(rows) {
  *  script never starts/kills the bridge, only detects it. */
 async function probeHealth(bridgeUrl) {
   try {
-    const res = await fetch(`${bridgeUrl}/api/health`, { signal: AbortSignal.timeout(2000) });
+    const res = await fetch(`${bridgeUrl}/api/health`, { signal: AbortSignal.timeout(HEALTH_PROBE_TIMEOUT_MS) });
     if (!res.ok) return null;
     const body = await res.json();
     if (body && typeof body === 'object' && body.service === 'forge-bridge') return body;
@@ -150,7 +192,7 @@ async function probeHealth(bridgeUrl) {
  *  (not failed) when it doesn't. */
 async function probeUi(uiUrl) {
   try {
-    const res = await fetch(uiUrl, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(uiUrl, { signal: AbortSignal.timeout(UI_PROBE_TIMEOUT_MS) });
     return res.ok;
   } catch {
     return false;
@@ -159,43 +201,82 @@ async function probeUi(uiUrl) {
 
 /** Time a single GET: wall-clock ms via performance.now() around the fetch
  *  (through to the body being fully read, so it reflects real payload
- *  transfer, not just headers), plus the response's byte length. */
-async function timeFetch(url) {
+ *  transfer, not just headers), plus the response's byte length + status.
+ *  `fetchImpl` is injectable (mirrors cli/forge-watch.ts's
+ *  probeBridgeIdentity) so tests can stub non-2xx/rejecting responses
+ *  without a live server. Never throws on an HTTP error — a non-2xx is a
+ *  valid sample (ok:false); it only throws on a network-level failure
+ *  (rejects, abort-timeout), which the caller is responsible for catching. */
+export async function timeFetch(url, fetchImpl = fetch) {
   const t0 = performance.now();
-  const res = await fetch(url, { signal: AbortSignal.timeout(15000) });
+  const res = await fetchImpl(url, { signal: AbortSignal.timeout(API_FETCH_TIMEOUT_MS) });
   const buf = await res.arrayBuffer();
   const t1 = performance.now();
   return { ms: t1 - t0, bytes: buf.byteLength, status: res.status, ok: res.ok };
 }
 
-/** N=API_SAMPLE_COUNT sequential GETs of one API path; returns the raw
- *  samples plus derived min/median and the last response's byte size. */
-async function measureApiEndpoint(bridgeUrl, path, n = API_SAMPLE_COUNT) {
-  const samples = [];
-  let bytes = null;
-  let lastStatus = null;
+/** N=API_SAMPLE_COUNT sequential GETs of one API path. A non-2xx response OR
+ *  a thrown fetch (network failure, abort-timeout) both count as an error
+ *  sample — recorded (status/error visible in the JSON) but EXCLUDED from
+ *  min/median, so one flaky/erroring sample can't masquerade as a fast
+ *  latency reading. `errors` surfaces the count; `bytes` is the last
+ *  successful response's size (or the last error response's, if every
+ *  sample failed — still a useful diagnostic). Never throws: a per-sample
+ *  failure is recorded, not propagated, so one bad sample can't cost the
+ *  other (n-1) already-collected ones. */
+export async function measureApiEndpoint(bridgeUrl, path, n = API_SAMPLE_COUNT, fetchImpl = fetch) {
+  const all = [];
   for (let i = 0; i < n; i++) {
-    const r = await timeFetch(`${bridgeUrl}${path}`);
-    samples.push(r.ms);
-    bytes = r.bytes;
-    lastStatus = r.status;
+    try {
+      all.push(await timeFetch(`${bridgeUrl}${path}`, fetchImpl));
+    } catch (err) {
+      all.push({ ms: null, bytes: null, status: null, ok: false, error: String(err?.message ?? err) });
+    }
   }
-  const { minMs, medianMs } = computeStats(samples);
-  return { name: path, samples, minMs, medianMs, bytes, status: lastStatus };
+  const ok = all.filter((s) => s.ok && typeof s.ms === 'number');
+  const errors = all.length - ok.length;
+  const { minMs, medianMs } = computeStats(ok.map((s) => s.ms));
+  const last = ok.at(-1) ?? all.at(-1) ?? null;
+  return {
+    name: path,
+    samples: all.map((s) => s.ms),
+    statuses: all.map((s) => s.status),
+    minMs,
+    medianMs,
+    bytes: last?.bytes ?? null,
+    errors,
+  };
 }
 
 /** One COLD page load: a fresh Playwright context (no shared cache/session
- *  with any other page), navigation → the first visible [data-page]
- *  element. */
+ *  with any other page). Two timestamps, matching the repo's own DOM-as-
+ *  metrics harness convention (scripts/e2e-journey.mjs's `readySel =
+ *  '[data-page-ready="true"]'`, docs/forge-ui-dom-and-harness.md): `mountMs`
+ *  (navigation → the first visible [data-page] — DOM mount, NOT load) and
+ *  `readyMs` (navigation → [data-page-ready="true"] — the page's first fetch
+ *  actually settling). If the readiness attribute never appears (a route
+ *  that doesn't set it, or a slow bridge round-trip past the timeout),
+ *  mountMs is still returned — readyMs is null with a readyError, not a lost
+ *  row. */
 async function measurePage(browser, uiUrl, route) {
   const ctx = await browser.newContext();
   try {
     const page = await ctx.newPage();
     const t0 = performance.now();
     await page.goto(`${uiUrl}${route}`, { waitUntil: 'domcontentloaded' });
-    await page.waitForSelector('[data-page]', { state: 'visible', timeout: 15000 });
-    const t1 = performance.now();
-    return { name: `${route} (page)`, medianMs: t1 - t0, bytes: null };
+    await page.waitForSelector('[data-page]', { state: 'visible', timeout: PAGE_MOUNT_TIMEOUT_MS });
+    const mountMs = performance.now() - t0;
+
+    let readyMs = null;
+    let readyError = null;
+    try {
+      await page.waitForSelector('[data-page-ready="true"]', { state: 'visible', timeout: PAGE_READY_TIMEOUT_MS });
+      readyMs = performance.now() - t0;
+    } catch (err) {
+      readyError = `[data-page-ready="true"] not observed within ${PAGE_READY_TIMEOUT_MS}ms: ${err?.message ?? err}`;
+    }
+
+    return { name: `${route} (page)`, mountMs, readyMs, readyError, bytes: null };
   } finally {
     await ctx.close();
   }
@@ -228,7 +309,17 @@ async function main() {
   log(`timing ${apiPaths.length} API endpoint(s), N=${API_SAMPLE_COUNT} each…`);
   const apiResults = [];
   for (const path of apiPaths) {
-    apiResults.push(await measureApiEndpoint(BRIDGE_URL, path));
+    // measureApiEndpoint already swallows per-sample failures; this catch is
+    // a second line of defense (e.g. computeStats/URL-construction blowing
+    // up) so one endpoint can never cost the others' already-collected rows.
+    try {
+      const result = await measureApiEndpoint(BRIDGE_URL, path);
+      if (result.errors > 0) log(`${path}: ${result.errors}/${API_SAMPLE_COUNT} sample(s) were non-2xx or failed — excluded from min/median`);
+      apiResults.push(result);
+    } catch (err) {
+      log(`API timing failed for ${path}: ${err?.message ?? err}`);
+      apiResults.push({ name: path, samples: [], statuses: [], minMs: null, medianMs: null, bytes: null, errors: API_SAMPLE_COUNT, fatalError: String(err?.message ?? err) });
+    }
   }
 
   const uiUp = await probeUi(UI_URL);
@@ -236,13 +327,27 @@ async function main() {
   let pagesNote = null;
   if (uiUp) {
     log(`forge-ui OK on ${UI_URL} — timing ${UI_ROUTES.length} page(s), cold each…`);
-    const browser = await chromium.launch();
+    let browser = null;
     try {
+      browser = await chromium.launch();
       for (const route of UI_ROUTES) {
-        pageResults.push(await measurePage(browser, UI_URL, route));
+        // One page's goto()/mount failure must not discard the other pages'
+        // results (or the API results already collected above) — record an
+        // error row for that page and keep going.
+        try {
+          pageResults.push(await measurePage(browser, UI_URL, route));
+        } catch (err) {
+          log(`page timing failed for ${route}: ${err?.message ?? err}`);
+          pageResults.push({ name: `${route} (page)`, mountMs: null, readyMs: null, bytes: null, error: String(err?.message ?? err) });
+        }
       }
+    } catch (err) {
+      // e.g. chromium.launch() itself failing — page timings are lost, but
+      // the API results collected above are not.
+      pagesNote = `page timings aborted: ${err?.message ?? err}`;
+      log(pagesNote);
     } finally {
-      await browser.close();
+      if (browser) await browser.close();
     }
   } else {
     pagesNote = `forge-ui did not answer on ${UI_URL} — page timings skipped`;
@@ -268,7 +373,10 @@ async function main() {
 
   const tableRows = [
     ...apiResults.map((r) => ({ name: r.name, medianMs: r.medianMs, bytes: r.bytes })),
-    ...pageResults.map((r) => ({ name: r.name, medianMs: r.medianMs, bytes: r.bytes })),
+    // The table's "median ms" column shows readyMs for pages (the "loaded"
+    // number, comparable across runs); mountMs is still in the JSON. Falls
+    // back to mountMs only when readyMs never arrived (readyError set).
+    ...pageResults.map((r) => ({ name: r.name, medianMs: r.readyMs ?? r.mountMs ?? null, bytes: r.bytes ?? null })),
   ];
   console.log(`\n${formatMarkdownTable(tableRows)}`);
 }

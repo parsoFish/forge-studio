@@ -149,8 +149,7 @@ mockups/studio-endstate-v2/journeys/
 .beads-credential-key
 .beads/proxieddb/
 
-# wave-5/wave-6 tiered-orchestration state (session-local) — includes
-# _wave6/perf/ (scripts/perf-snapshot.mjs, W6-P0's JSON snapshot output).
+# wave-5/wave-6 session-local state: tiered-orchestration AND scripts/perf-snapshot.mjs's _wave6/perf/ output.
 _wave5/
 _wave6/
 .beads/
