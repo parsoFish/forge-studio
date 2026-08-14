@@ -551,3 +551,119 @@ test("AT-8 (HAZARD PIN — brainReads narrowing): the draft turn's PLAN.md brain
       'as uncovered by any existing golden fixture',
   );
 });
+
+// ===========================================================================
+// ROUND 2 — adversarial-review acceptance tests (R4-23 WI-4 round-2).
+//
+// The round-2 review found real content-loss/positional-drift defects in
+// WI-2 (demo-builder) and WI-3 (project-brain-builder), and asked for the
+// SAME class of frozen no-content-loss check here for completeness. Unlike
+// those two, WI-4's fold (architect) turns out NOT to have dropped anything
+// at the file level: the one section it removed wholesale — "## What to
+// return each turn" — was a redundant SUMMARY of guidance stated in full,
+// untouched, elsewhere in the same document (Value-of-information gate,
+// Hypothesis-first framing, Coverage map, Security hard-block, Y-statement
+// decision log, the Initiative-body "### Not in scope" rule, and the
+// Constraints "Dependencies are explicit" rule). AT-9 below pins this
+// EXHAUSTIVELY rather than the 5-sentence sample AT-1 already checks — and
+// is expected to be GREEN today. Per the round-2 brief: "If one is green,
+// the defect is not real: say so plainly rather than forcing it." — it is
+// recorded here as a genuine, if currently-satisfied, regression guard
+// against a future re-fold that DOES drop one of these clauses.
+// ===========================================================================
+
+/** Strips markdown emphasis/backtick punctuation and lowercases, on top of
+ *  `normalizeProse`'s whitespace/quote/concatenation normalisation — needed
+ *  here because several of the persisting clauses below cross a `**bold**`
+ *  boundary (e.g. "a **recommended** option") or differ only in heading
+ *  case ("### Value-of-information gate" vs. the dropped summary's lowercase
+ *  "value-of-information gate"). */
+function normalizeProseLoose(text: string): string {
+  return normalizeProse(text).replace(/\*/g, '').toLowerCase();
+}
+
+type ArchitectFrozenEntry = { label: string; source: string; text: string };
+
+const FROZEN_ARCHITECT: ArchitectFrozenEntry[] = [
+  {
+    label: 'interview-step summary — "coverage saturates" persists (Coverage map section)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'coverage saturates',
+  },
+  {
+    label: 'interview-step summary — "5-round cap" persists (Coverage map + Security hard-block sections)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'the 5-round cap',
+  },
+  {
+    label: 'interview-step summary — "value-of-information gate" persists (its own ### heading)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'value-of-information gate',
+  },
+  {
+    label: 'interview-step summary — "hypothesis-first framing" persists (its own ### heading)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'hypothesis-first framing',
+  },
+  {
+    label: 'interview-step summary — "recommended option ... Other (specify) escape" persists',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'recommended option with one-line rationale and an other (specify) escape',
+  },
+  {
+    label: 'draft-step summary — "Concrete GWT ... ACs" persists (draft turn section)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'one gwt block per independently-deliverable outcome',
+  },
+  {
+    label: 'draft-step summary — "### Not in scope block" persists (Initiative body section)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'not in scope block',
+  },
+  {
+    label: 'draft-step summary — "Y-statement decision log" persists (its own ### heading)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'y-statement decision log',
+  },
+  {
+    label: 'draft-step summary — "explicit depends_on ... merged first" persists (draft turn, Build order section)',
+    source: 'c45e3892:skills/architect/SKILL.md ("## What to return each turn")',
+    text: 'a later initiative would fail without an earlier one merged first',
+  },
+];
+
+test('AT-9 (Round-2, Part A): frozen no-content-loss set — every distinct pre-lane instruction from the removed "## What to return each turn" summary is still reachable elsewhere in skills/architect/SKILL.md (expected GREEN today — WI-4 did not drop content, it removed a redundant summary of guidance stated in full elsewhere)', () => {
+  const skillNorm = normalizeProseLoose(readFileSync(ARCHITECT_SKILL_MD, 'utf8'));
+  const failures: string[] = [];
+  for (const entry of FROZEN_ARCHITECT) {
+    if (!skillNorm.includes(normalizeProseLoose(entry.text))) {
+      failures.push(`[${entry.label}] (${entry.source}) NOT reachable in skills/architect/SKILL.md — expected substring: "${entry.text}"`);
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `frozen no-content-loss set has ${failures.length} unreachable instruction(s):\n${failures.join('\n')}`,
+  );
+});
+
+// AT-9b covers the two SAMPLE sentences from the untouched TS region
+// (`renderExploreBlock`'s edge-cases/brain-constraints framing, embedded in
+// the draft prompt) — per `git diff c45e3892 HEAD -- orchestrator/architect-runner.ts`,
+// this region carries NO hunk at all, so two sample sentences stand in for
+// it per the design's untouched-region allowance. This content legitimately
+// STAYS in TypeScript (it is conditionally rendered from `edge-cases.json`,
+// not static instruction prose) — checked against the runner .ts, not SKILL.md.
+test('AT-9b (Round-2, Part A cont.): untouched TS-resident draft-prompt prose (renderExploreBlock) survives verbatim in architect-runner.ts', () => {
+  const runnerSrc = readFileSync(ARCHITECT_RUNNER_TS, 'utf8');
+  const samples = [
+    "Edge cases you enumerated — every one MUST land per its disposition:",
+    'Brain-sourced constraints — shape the matching acceptance criteria and',
+  ];
+  for (const s of samples) {
+    assert.ok(
+      runnerSrc.includes(s),
+      `untouched renderExploreBlock prose must still be present verbatim in architect-runner.ts: "${s}"`,
+    );
+  }
+});

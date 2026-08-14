@@ -53,6 +53,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdirSync, mkdtempSync, writeFileSync, readFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
@@ -68,6 +69,7 @@ import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { createLogger } from './logging.ts';
 import { listDemoElements } from './studio/registry.ts';
 import type { DemoStep } from './studio/types.ts';
+import { splitSkillTurnSections } from './skill-path.ts';
 
 const FORGE_ROOT = resolve(import.meta.dirname, '..');
 const RUNNER_TS_PATH = join(FORGE_ROOT, 'orchestrator', 'demo-builder-runner.ts');
@@ -494,3 +496,308 @@ test('AT-6: the demoTaskLines export contract survives — composed-branch outpu
 // already work. It still pins real value as a regression guard: it goes RED
 // the instant an implementer drops/renames the export, stops calling it from
 // the composed branch, or breaks step ordering while re-authoring the prompt.
+
+// ===========================================================================
+// ROUND 2 — adversarial-review acceptance tests (R4-23 WI-2 round-2).
+//
+// AT-1..AT-6 above pin a HAND-PICKED handful of moved sentences. The round-2
+// review found that the WI-2 fold silently DROPPED two whole instructions
+// nobody's hand-picked list happened to name, and left no positional-drift
+// check at all. AT-7..AT-10 close that gap:
+//   AT-7  (Part A) — a FROZEN, exhaustive no-content-loss catalog: every
+//         distinct pre-lane instruction, not just 6 hand-picked sentences.
+//   AT-8  (Part B) — per-SECTION reachability: a sentence surviving in the
+//         FILE is still a loss if only one of the two multi-fragment
+//         branches (generate-composed / generate-legacy) can see it.
+//   AT-9  (Part C) — positional-reference integrity: no turn section may
+//         call a data item "above" when that data is emitted after it.
+//   AT-10 (Part D) — the project-repo write transaction (ensureStudioBranch
+//         → dispatch → commitStudioChange) must survive a mid-turn throw.
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// AT-7 — Part A: frozen no-content-loss set.
+//
+// Every entry's `text` was verified present, at base c45e3892, in the cited
+// source (`source`) by direct reading of `git show c45e3892:<path>` (see the
+// session investigation this file shipped with). Two entries are KNOWN
+// DROPPED per the round-2 design brief's explicit callout and are expected
+// to make this AT RED today — that is the point: it pins the fix.
+// ---------------------------------------------------------------------------
+
+type FrozenEntry = { label: string; source: string; text: string };
+
+const FROZEN_DEMO_BUILDER: FrozenEntry[] = [
+  // -- untouched region (git diff c45e3892..HEAD carries no hunk before
+  //    "## The two deliverables") — two sample sentences stand in for the
+  //    whole intro paragraph, per the design's untouched-region allowance. --
+  {
+    label: 'untouched intro — job framing ("NOT a one-off marketing page")',
+    source: 'c45e3892:skills/demo-builder/SKILL.md (intro paragraph)',
+    text: 'Your job is **NOT** to write a one-off marketing page for the whole project.',
+  },
+  {
+    label: 'untouched intro — demo.json replacement',
+    source: 'c45e3892:skills/demo-builder/SKILL.md (intro paragraph)',
+    text: "This replaces the rigid `demo.json` contract: demos are bespoke HTML the project's own skill generates, tailored per project, scoped to what an initiative changed.",
+  },
+  // -- untouched "## Scope every demo" / "## Ground it in REAL output"
+  //    sections — one sample sentence each. --
+  {
+    label: 'untouched — scope to an initiative\'s CHANGES',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Scope every demo to an initiative\'s CHANGES")',
+    text: 'The unit of a demo is "what this initiative changed", not "what the project is".',
+  },
+  {
+    label: 'untouched — ground in real output, never fabricate',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Ground it in REAL output")',
+    text: 'Never fabricate results, fake metrics, or invent a passing run.',
+  },
+  // -- "## The two deliverables (every generate turn)" — removed as a
+  //    SHARED section, its content folded per-branch. Deliverable #1's
+  //    elaboration survives (generalised) in generate-legacy. --
+  {
+    label: 'deliverable #1 elaboration — what the generator skill must instruct a future agent to do',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 1)',
+    text: 'render a self-contained Forge-styled HTML demo that showcases the changes that initiative introduced — the new behaviour, the diff that matters, real captured output before vs after, the verification that makes it non-trivial',
+  },
+  {
+    label: 'deliverable #1 — forge preflight DEMO-SKILL significance',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 1)',
+    text: 'This is also the file `forge preflight` DEMO-SKILL checks.',
+  },
+  {
+    // KNOWN DROPPED — verified absent from both orchestrator/demo-builder-runner.ts
+    // and skills/demo-builder/SKILL.md today (see AT-1's file header + the grep
+    // run recorded in this file's session report: 0 hits either side).
+    label: 'KNOWN-DROPPED — deliverable #2, "find a real recent change" sourcing instruction',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## The two deliverables", item 2)',
+    text: 'Use Bash + git to find one (`git log --oneline -20`; pick the most recent substantive feature commit or commit range) and render an actual before/after of it — real output on both sides, not a mock.',
+  },
+  // -- "## Honor the inputs" — the revision-editing discipline. --
+  {
+    // KNOWN DROPPED — same verification as above.
+    label: 'KNOWN-DROPPED — revision discipline ("EDIT the existing skill + sample toward the feedback")',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Honor the inputs")',
+    text: "On a revision, EDIT the existing skill + sample toward the feedback; don't rebuild from scratch unless asked.",
+  },
+  // -- "## Contract" — one untouched bullet survives the section rewrite. --
+  {
+    label: 'Contract — keep the sample tight and readable',
+    source: 'c45e3892:skills/demo-builder/SKILL.md ("## Contract")',
+    text: 'Keep the sample tight and readable; lead with a one-line essence of the change.',
+  },
+  // -- orchestrator/demo-builder-runner.ts's demoTaskLines() branch prose
+  //    (moved into the three turn sections, re-anchored). --
+  {
+    label: 'element branch — perfect-this-element-first / do-not-build-others discipline',
+    source: 'c45e3892:orchestrator/demo-builder-runner.ts (demoTaskLines, target branch)',
+    text: 'so the operator can perfect this element before composing the whole demo. Do NOT build the other elements this turn.',
+  },
+  {
+    label: 'composed branch — composer assembly instruction',
+    source: 'c45e3892:orchestrator/demo-builder-runner.ts (demoTaskLines, composed branch)',
+    text: 'the composer that reads those fragments IN THIS ORDER and assembles them into',
+  },
+  {
+    label: 'legacy branch — deliverable #2 restated (the part that DID survive)',
+    source: 'c45e3892:orchestrator/demo-builder-runner.ts (demoTaskLines, legacy branch)',
+    text: 'a real sample produced by running that generator against a representative recent change (use git log/diff; real before/after, never fabricated). This sample is what the operator reviews to judge the skill.',
+  },
+  {
+    label: "runGenerateStep — UPDATE MODE guidance (mode==='update' block)",
+    source: "c45e3892:orchestrator/demo-builder-runner.ts (runGenerateStep, mode==='update' block)",
+    text: 'UPDATE MODE: a locked demo already exists',
+  },
+];
+
+test('AT-7 (Round-2, Part A): frozen no-content-loss set — every distinct pre-lane instruction is still reachable in skills/demo-builder/SKILL.md (2 entries are KNOWN-DROPPED and pin the round-2 defect; expected RED today)', () => {
+  const skillNorm = norm(readFileSync(SKILL_MD_PATH, 'utf8'));
+  const failures: string[] = [];
+  for (const entry of FROZEN_DEMO_BUILDER) {
+    if (!skillNorm.includes(norm(entry.text))) {
+      failures.push(`[${entry.label}] (${entry.source}) NOT reachable in skills/demo-builder/SKILL.md — expected substring: "${entry.text}"`);
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `frozen no-content-loss set has ${failures.length} unreachable instruction(s):\n${failures.join('\n')}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// AT-8 — Part B: per-SECTION reachability (not just per-file). The composer-
+// skill quality bar must reach BOTH generate-composed and generate-legacy —
+// before this lane it lived in the shared "## The two deliverables" section
+// and reached every generate turn; after the fold it only survives (in full)
+// inside generate-legacy.
+// ---------------------------------------------------------------------------
+
+test('AT-8 (Round-2, Part B): the composer-skill quality bar reaches BOTH generate-composed and generate-legacy turns, not just generate-legacy (expected RED today)', () => {
+  const skillText = readFileSync(SKILL_MD_PATH, 'utf8');
+  const { base, turns } = splitSkillTurnSections(skillText);
+  const composedSection = turns.get('generate-composed');
+  const legacySection = turns.get('generate-legacy');
+  assert.ok(composedSection !== undefined, 'sanity: skills/demo-builder/SKILL.md must carry a generate-composed turn section');
+  assert.ok(legacySection !== undefined, 'sanity: skills/demo-builder/SKILL.md must carry a generate-legacy turn section');
+
+  const reachableComposed = norm(`${base}\n${composedSection}`);
+  const reachableLegacy = norm(`${base}\n${legacySection}`);
+
+  const QUALITY_BAR_CLAUSES = [
+    'the new behaviour, the diff that matters, real captured output before vs after, the verification that makes it non-trivial',
+    'forge preflight` DEMO-SKILL checks',
+  ];
+
+  for (const clause of QUALITY_BAR_CLAUSES) {
+    const needle = norm(clause);
+    assert.ok(
+      reachableComposed.includes(needle),
+      `generate-composed turn (base preamble + its own section) must carry the composer-skill quality-bar clause: "${clause}" — before this lane it lived in the shared "## The two deliverables" section and reached every generate turn`,
+    );
+    assert.ok(
+      reachableLegacy.includes(needle),
+      `generate-legacy turn (base preamble + its own section) must carry the composer-skill quality-bar clause: "${clause}"`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AT-9 — Part C: positional-reference integrity across all 3 generate
+// branches, composed from the REAL skills/demo-builder/SKILL.md (no
+// skillPromptPath fixture override).
+//
+// runGenerateStep always emits `[skill, '', 'Mode: ...', 'Project: ...', ...]`
+// — the skill/turn text is unconditionally FIRST, the data half unconditionally
+// AFTER. So any "above" inside the skill/turn portion of the composed prompt
+// would, by construction, be referring to something that has not been emitted
+// yet in this prompt — it is always emitted BELOW, never above. This is not a
+// blanket ban on the word "above" (architect legitimately uses it to point at
+// a block earlier in the SAME section) — it is scoped to the portion of the
+// prompt that precedes the data half, proven with an index comparison below.
+// ---------------------------------------------------------------------------
+
+test('AT-9 (Round-2, Part C): no stale "above" reference to data emitted after the skill/turn text, in any of the 3 real generate branches', async () => {
+  async function composeRealPrompt(
+    overrides: Partial<DemoBuilderStatus>,
+    demoProcess?: DemoStep[],
+  ): Promise<string> {
+    const { projectRoot, logsRoot, sessionId } = setup(overrides, demoProcess);
+    let captured = '';
+    const queryFn = overrides.targetElement
+      ? makeElementWritingQueryFn(overrides.targetElement, (p) => { captured = p; })
+      : makeWritingQueryFn((p) => { captured = p; });
+    await runDemoBuilderTurn({
+      sessionId,
+      projectRoot,
+      forgeRoot: FORGE_ROOT,
+      // NO skillPromptPath — this drives the REAL skills/demo-builder/SKILL.md.
+      queryFn,
+      logger: loggerFor(logsRoot, sessionId),
+      logsRoot,
+    });
+    return captured;
+  }
+
+  const elementProcess: DemoStep[] = [{ kind: 'capture', text: 'capture the cli', element: 'cli-capture' }];
+  const composedProcess: DemoStep[] = [
+    { kind: 'capture', text: 'capture the cli', element: 'cli-capture' },
+    { kind: 'verify', text: 'npm test', element: 'test-evidence' },
+  ];
+
+  const branches: Array<{ label: string; prompt: string }> = [
+    { label: 'generate-element', prompt: await composeRealPrompt({ phase: 'generating', targetElement: 'cli-capture' }, elementProcess) },
+    { label: 'generate-composed', prompt: await composeRealPrompt({ phase: 'generating' }, composedProcess) },
+    { label: 'generate-legacy', prompt: await composeRealPrompt({ phase: 'generating' }) },
+  ];
+
+  for (const { label, prompt } of branches) {
+    const dataStartIdx = prompt.indexOf('Mode: ');
+    assert.ok(dataStartIdx > 0, `[${label}] sanity: the "Mode: ..." data line must be found, strictly after the skill/turn text`);
+    const skillPortion = prompt.slice(0, dataStartIdx);
+    assert.ok(
+      skillPortion.length > 200,
+      `[${label}] sanity: the skill portion must be non-trivial — proves the REAL skills/demo-builder/SKILL.md was actually loaded, not an empty/fixture stand-in`,
+    );
+    assert.ok(
+      !/\babove\b/i.test(skillPortion),
+      `[${label}] the skill/turn portion (everything before the first "Mode: " data line, index ${dataStartIdx}) must not reference any data item as "above" — every data line in this runner is emitted AFTER the skill text, so "above" can never correctly describe one. Skill portion tail: …${skillPortion.slice(-400)}`,
+    );
+  }
+});
+
+// ---------------------------------------------------------------------------
+// AT-10 — Part D: the project-repo write transaction must survive a mid-turn
+// throw. `runDemoBuilderTurn` calls `ensureStudioBranch` BEFORE the phase
+// dispatch and `commitStudioChange` AFTER it, with NO try/finally between —
+// so a throw inside the generating step (e.g. runGenerateStep's existing
+// required-file check) leaves the project repo checked out on `forge-studio`
+// with the agent's writes UNCOMMITTED. Expected RED today.
+// ---------------------------------------------------------------------------
+
+function gitLine(dir: string, args: string[]): string {
+  return execFileSync('git', ['-C', dir, ...args], { encoding: 'utf8' }).trim();
+}
+
+test('AT-10 (Round-2, Part D): a throw inside runGenerateStep after the agent already wrote into the repo must not leave forge-studio dirty/uncommitted', async () => {
+  const { projectRoot, repoPath, logsRoot, sessionId } = setup({ phase: 'generating' });
+
+  // Turn repoPath into a REAL git repo (mirrors orchestrator/project-repo-tx.test.ts's setupRepo()).
+  execFileSync('git', ['-C', repoPath, 'init', '-b', 'main'], { stdio: 'ignore' });
+  gitLine(repoPath, ['config', 'user.email', 'test@forge.dev']);
+  gitLine(repoPath, ['config', 'user.name', 'Forge Test']);
+  writeFileSync(join(repoPath, 'README.md'), '# project\n');
+  gitLine(repoPath, ['add', '-A']);
+  gitLine(repoPath, ['commit', '-m', 'init']);
+
+  const MARKER_REL = 'AGENT-PARTIAL-WORK-9c21.txt';
+  const throwingQueryFn: QueryFn = ({ options }) => {
+    const cwd = (options?.cwd as string) ?? '.';
+    async function* gen(): AsyncGenerator<unknown> {
+      // The agent DOES write into the repo this turn ...
+      writeFileSync(join(cwd, MARKER_REL), 'partial work from an agent turn that never finished the deliverables\n');
+      // ... but never produces .forge/skills/demo-design/SKILL.md or
+      // .forge/demo/DEMO.html, so runGenerateStep's existing required-file
+      // check throws AFTER this write already landed on disk.
+      yield { type: 'result', total_cost_usd: 0.01 };
+    }
+    return gen();
+  };
+
+  await assert.rejects(
+    () => runDemoBuilderTurn({
+      sessionId,
+      projectRoot,
+      forgeRoot: FORGE_ROOT,
+      queryFn: throwingQueryFn,
+      logger: loggerFor(logsRoot, sessionId),
+      logsRoot,
+    }),
+    /demo-builder runner: the agent turn ended without producing/,
+  );
+
+  // ensureStudioBranch runs BEFORE the dispatch — that part already happens
+  // today regardless of the defect.
+  assert.equal(
+    gitLine(repoPath, ['rev-parse', '--abbrev-ref', 'HEAD']),
+    'forge-studio',
+    'the repo must be left on the forge-studio branch after the throw',
+  );
+
+  // What must ALSO have happened: the post-dispatch commitStudioChange step
+  // (positioned AFTER the dispatch with no try/finally around it) must still
+  // run when the dispatch throws — so the agent's write is committed, not left
+  // dirty on disk.
+  const status = gitLine(repoPath, ['status', '--porcelain']);
+  assert.equal(
+    status,
+    '',
+    `the working tree must be clean after the throw (the post-dispatch commit step must still run despite the mid-turn throw) — got dirty status:\n${status}`,
+  );
+  assert.match(
+    gitLine(repoPath, ['log', '-1', '--pretty=%s']),
+    /demo machinery/,
+    'the post-dispatch commit ("forge-studio: demo machinery (...)") must have landed on forge-studio despite the throw',
+  );
+});

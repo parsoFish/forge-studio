@@ -59,6 +59,7 @@ import {
 } from './project-brain-builder-runner.ts';
 import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
 import { cyclesRawDir } from './brain-paths.ts';
+import { splitSkillTurnSections } from './skill-path.ts';
 
 const RUNNER_TS_PATH = resolve(import.meta.dirname, 'project-brain-builder-runner.ts');
 const SKILL_MD_PATH = resolve(import.meta.dirname, '..', 'skills', 'project-brain-builder', 'SKILL.md');
@@ -472,4 +473,278 @@ test('AT-5: data-half preserved — Project / working-dir / staging-dir / operat
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }
+});
+
+// ===========================================================================
+// ROUND 2 — adversarial-review acceptance tests (R4-23 WI-3 round-2).
+//
+// AT-1..AT-5 above pin a HAND-PICKED handful of moved sentences plus the
+// established selection/fail-loud/data-half contracts. The round-2 review
+// found two further defects those ATs cannot see:
+//   (a) per-SECTION reachability — the "Good themes for a fresh project"
+//       guidance survives in the FILE, but only inside analyze-project-repo;
+//       analyze-cycle-archives never sees it.
+//   (b) a positional reference ("the cycle archives dir above") was left
+//       pointing the wrong way once the turn section moved to the FRONT of
+//       the composed prompt, ahead of the `Cycle archives (...)` data line
+//       it used to follow.
+// AT-6..AT-8 close that gap, using the REAL skills/project-brain-builder/SKILL.md
+// (no skillPromptPath fixture override) so they exercise production content.
+// ===========================================================================
+
+/**
+ * A session whose `forgeRoot` is deliberately NOT threaded into skill
+ * resolution (see `runAnalyzeStep`'s `skillFor`, which calls
+ * `loadSkillTurnPrompt` WITHOUT a `root` override — it always resolves the
+ * REAL `skills/project-brain-builder/SKILL.md` via skill-path.ts's own
+ * `FORGE_ROOT` default, regardless of what `forgeRoot` this runner call was
+ * given). `projectRoot` stays a throwaway temp dir so nothing is written
+ * into the real forge worktree.
+ */
+function setupRealSkillSession(opts: {
+  project: string;
+  prompt?: string;
+  kb_binding?: ProjectBrainStatus['kb_binding'];
+}): { projectRoot: string; forgeRoot: string; sessionDir: string; sessionId: string } {
+  const scratchRoot = mkdtempSync(join(tmpdir(), 'pbrain-realskill-'));
+  const projectRoot = join(scratchRoot, 'projects', opts.project);
+  const sessionId = '2026-08-14T00-00-00';
+  const sessionDir = projectBrainSessionDir(projectRoot, sessionId);
+  mkdirSync(projectRoot, { recursive: true });
+  writeSessionStatus<ProjectBrainStatus>(sessionDir, {
+    session_id: sessionId,
+    project: opts.project,
+    project_repo_path: projectRoot,
+    phase: 'analyzing',
+    prompt: opts.prompt ?? 'focus on the build + test conventions',
+    updated_at: new Date().toISOString(),
+    ...(opts.kb_binding ? { kb_binding: opts.kb_binding } : {}),
+  } as ProjectBrainStatus);
+  return { projectRoot, forgeRoot: scratchRoot, sessionDir, sessionId };
+}
+
+// ---------------------------------------------------------------------------
+// AT-6 — Part A: frozen no-content-loss set. Every entry's `text` was
+// verified present, at base c45e3892, in the cited source by direct reading
+// of `git show c45e3892:<path>` (see the session investigation this file
+// shipped with). Unlike demo-builder's WI-2, WI-3's fold did NOT drop any
+// instruction at the FILE level — its round-2 defects are a per-SECTION
+// reachability gap (AT-7) and a positional-reference bug (AT-8), not a
+// straight content loss. This AT is expected to be GREEN today; it still
+// earns its place as a regression guard against a future re-fold that DOES
+// drop something at the file level.
+// ---------------------------------------------------------------------------
+
+const FROZEN_PROJECT_BRAIN: FrozenEntry2[] = [
+  {
+    label: '"never invent facts" — persisting clause (generalised: code → source)',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you never do\")",
+    text: "if you didn't read it, don't claim it.",
+  },
+  {
+    label: 'never write outside the staging directory',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you never do\")",
+    text: 'Never write outside the staging directory you were given.',
+  },
+  {
+    label: 'read-the-project instruction (step 1)',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you do\", step 1)",
+    text: 'Explore the repo: README, package manifest / build files, the source tree layout, tests, config, any existing CLAUDE.md/AGENTS.md. Use Read / Grep / Glob. Understand the languages, the build + test commands, the module structure, the conventions, and the notable patterns/antipatterns.',
+  },
+  {
+    label: 'theme-authoring frontmatter contract — persisting clause (generalised: "real file path" → "real fact")',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you do\", step 2)",
+    text: 'named `<kebab-slug>.md`, each with frontmatter and\n≥1 reference to a real',
+  },
+  {
+    label: 'good-themes guidance (file-level presence only — see AT-7 for per-section reachability)',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you do\", step 2)",
+    text: "Good themes for a fresh project: **structure** (module layout + entry points),\n**conventions** (naming, error handling, the project's own rules), **build &\ntest** (the exact commands + how to run a focused test), **key patterns** (the\nidioms a contributor must follow), and any **antipatterns / sharp edges** the\ncode reveals.",
+  },
+  {
+    label: 'profile.md — persisting clause ("the planners read first")',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you do\", step 3)",
+    text: 'the planners read first',
+  },
+  {
+    label: 'operator-review closer (generalised: "Stop." prefix dropped, rest verbatim)',
+    source: "c45e3892:skills/project-brain-builder/SKILL.md (\"## What you do\", step 4)",
+    text: 'The operator reviews the staged themes and approves before they land in the central brain.',
+  },
+  {
+    label: 'ordinary-branch task header',
+    source: 'c45e3892:orchestrator/project-brain-builder-runner.ts (buildAnalyzePlan, ordinary branch)',
+    text: '## Your task this turn: read the project and author its initial brain.',
+  },
+  {
+    label: 'archives-branch task header',
+    source: 'c45e3892:orchestrator/project-brain-builder-runner.ts (buildAnalyzePlan, flow+band branch)',
+    text: '## Your task this turn: read the CYCLE ARCHIVES and author the review-insights brain.',
+  },
+  {
+    label: 'shared closing write-contract instruction',
+    source: 'c45e3892:orchestrator/project-brain-builder-runner.ts (buildAnalyzePlan, both branches)',
+    text: 'Author 3–6 theme `.md` files plus a `profile.md` into the staging directory. Then stop.',
+  },
+  {
+    label: 'evidence-source frame, opening clause (generalised: ${binding.ref} → data-line reference)',
+    source: 'c45e3892:orchestrator/project-brain-builder-runner.ts (buildAnalyzePlan, flow+band branch)',
+    text: 'this KB has no project repo — read the',
+  },
+  {
+    label: 'evidence-source frame, closing clause (generalised: ${binding.band} → data-line reference)',
+    source: 'c45e3892:orchestrator/project-brain-builder-runner.ts (buildAnalyzePlan, flow+band branch)',
+    text: "and synthesize the durable patterns from each cycle's logged",
+  },
+];
+
+type FrozenEntry2 = { label: string; source: string; text: string };
+
+test('AT-6 (Round-2, Part A): frozen no-content-loss set — every distinct pre-lane instruction is still reachable in skills/project-brain-builder/SKILL.md (expected GREEN today — WI-3 did not drop content at the file level)', () => {
+  const skillNorm = normalizeWs(readSkillMd());
+  const failures: string[] = [];
+  for (const entry of FROZEN_PROJECT_BRAIN) {
+    if (!skillNorm.includes(normalizeWs(entry.text))) {
+      failures.push(`[${entry.label}] (${entry.source}) NOT reachable in skills/project-brain-builder/SKILL.md — expected substring: "${entry.text}"`);
+    }
+  }
+  assert.deepEqual(
+    failures,
+    [],
+    `frozen no-content-loss set has ${failures.length} unreachable instruction(s):\n${failures.join('\n')}`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// AT-7 — Part B: per-SECTION reachability. The "Good themes for a fresh
+// project" guidance survives in the FILE (AT-6 above), but only inside
+// analyze-project-repo. If the eventual fix is the identical sentence
+// verbatim in both branches, great — but a legitimate fix might instead
+// author an ARCHIVES-appropriate equivalent (cycle/review-insight theme
+// categories look different from repo-structure categories). So rather than
+// re-asserting the SAME sentence in both branches (which would over-fit to
+// one specific fix), this AT asserts the underlying CONCEPT survives: each
+// branch's reachable text (its shared `base` preamble + its own turn
+// section) must name at least 3 of the 5 theme categories the base guidance
+// established (structure / conventions / build & test / key patterns /
+// antipatterns). This is unambiguous (a fixed, quotable keyword set) and
+// non-vacuous (analyze-project-repo genuinely names all 5 today; an
+// implementation that silently drops category guidance from EITHER branch
+// fails it) without locking the fix to one exact wording.
+// ---------------------------------------------------------------------------
+
+const THEME_CATEGORY_PATTERNS: Array<{ name: string; re: RegExp }> = [
+  { name: 'structure', re: /\bstructure\b/i },
+  { name: 'conventions', re: /\bconventions?\b/i },
+  { name: 'build & test', re: /\bbuild\b[^.]{0,40}\btest\b|\btest\b[^.]{0,40}\bbuild\b/i },
+  { name: 'key patterns', re: /\bpatterns?\b/i },
+  { name: 'antipatterns / sharp edges', re: /\bantipatterns?\b|\bsharp edges?\b/i },
+];
+
+/**
+ * Strip the YAML frontmatter block and any fenced code block before counting
+ * category keywords. Without this, the check is VACUOUS: the shared `base`
+ * preamble's frontmatter `description`/`purpose` lines ("real theme pages
+ * (patterns, conventions, structure)…") and the per-theme-file template's
+ * `category: pattern | antipattern | decision | …` enum (inside a fenced
+ * block) both mention several category words for reasons that have nothing
+ * to do with THIS branch's own instructional guidance — they are identical
+ * in `base` for both branches, so counting them would make analyze-project-repo
+ * and analyze-cycle-archives score the same regardless of what each branch's
+ * OWN turn section actually says. Verified empirically: without stripping,
+ * analyze-cycle-archives scores 4/5 from `base` noise alone even though its
+ * own turn section names zero categories.
+ */
+function stripNoise(text: string): string {
+  const noFrontmatter = text.replace(/^---[\s\S]*?\n---\n/, '');
+  return noFrontmatter.replace(/```[\s\S]*?```/g, '');
+}
+
+function countThemeCategories(text: string): { count: number; matched: string[] } {
+  const clean = stripNoise(text);
+  const matched = THEME_CATEGORY_PATTERNS.filter((p) => p.re.test(clean)).map((p) => p.name);
+  return { count: matched.length, matched };
+}
+
+test('AT-7 (Round-2, Part B): the theme-CATEGORY guidance concept reaches BOTH analyze-project-repo and analyze-cycle-archives (each names ≥3 of the 5 established categories) — expected RED today (analyze-cycle-archives names only 1: "key patterns", via the unrelated word "patterns" in "durable patterns")', () => {
+  const skillText = readSkillMd();
+  const { base, turns } = splitSkillTurnSections(skillText);
+  const repoSection = turns.get('analyze-project-repo');
+  const archivesSection = turns.get('analyze-cycle-archives');
+  assert.ok(repoSection !== undefined, 'sanity: SKILL.md must carry an analyze-project-repo turn section');
+  assert.ok(archivesSection !== undefined, 'sanity: SKILL.md must carry an analyze-cycle-archives turn section');
+
+  const repoReachable = `${base}\n${repoSection}`;
+  const archivesReachable = `${base}\n${archivesSection}`;
+
+  const repoResult = countThemeCategories(repoReachable);
+  const archivesResult = countThemeCategories(archivesReachable);
+
+  assert.ok(
+    repoResult.count >= 3,
+    `analyze-project-repo's reachable text must name ≥3 theme categories — found ${repoResult.count} (${repoResult.matched.join(', ') || 'none'})`,
+  );
+  assert.ok(
+    archivesResult.count >= 3,
+    `analyze-cycle-archives's reachable text must name ≥3 theme categories (an archives-appropriate equivalent is fine — it does not have to be the IDENTICAL sentence as analyze-project-repo) — found ${archivesResult.count} (${archivesResult.matched.join(', ') || 'none'}); before this lane this guidance lived in the shared step-2 body and reached both branches`,
+  );
+});
+
+// ---------------------------------------------------------------------------
+// AT-8 — Part C: positional-reference integrity. `buildAnalyzePlan`'s
+// analyze-cycle-archives branch composes `[skillFor('analyze-cycle-archives'),
+// '', 'Project: ...', 'Cycle archives (...): ${cwd}', ...]` — the turn
+// section (carrying "...under the cycle archives dir above...") is emitted
+// FIRST, then the `Cycle archives (...)` DATA LINE that phrase is trying to
+// point at is emitted AFTER it. "above" is therefore backwards: proven below
+// with an index comparison, not just a string-absence check, so the AT
+// documents WHY the reference is wrong.
+// ---------------------------------------------------------------------------
+
+test('AT-8 (Round-2, Part C): the analyze-cycle-archives composed prompt must not call the Cycle-archives data line "above" — it is emitted below the turn section (expected RED today)', async () => {
+  const { projectRoot, forgeRoot, sessionDir, sessionId } = setupRealSkillSession({
+    project: 'review-insights-proj',
+    kb_binding: { kind: 'flow', ref: 'forge-develop', band: 'review-band' },
+  });
+  const staging = join(sessionDir, 'themes');
+  const cap: { prompt?: string } = {};
+
+  await runProjectBrainTurn({
+    sessionId,
+    projectRoot,
+    forgeRoot,
+    logsRoot: join(forgeRoot, '_logs'),
+    // NO skillPromptPath — this drives the REAL skills/project-brain-builder/SKILL.md.
+    queryFn: stubQueryFn(cap, () => {
+      mkdirSync(staging, { recursive: true });
+      writeFileSync(join(staging, 'profile.md'), '# review-insights profile\n');
+    }),
+  });
+
+  const prompt = cap.prompt!;
+  assert.ok(prompt.length > 200, 'sanity: the REAL skill text must have been loaded (non-trivial prompt)');
+
+  // Prove the ordering: the turn section's own mention of "cycle archives dir"
+  // sits BEFORE the `Cycle archives (...)` data line that actually names it.
+  const turnMentionIdx = prompt.indexOf('cycle archives dir');
+  const dataLineIdx = prompt.indexOf('Cycle archives (your working directory');
+  assert.ok(turnMentionIdx !== -1, 'sanity: the turn section\'s "cycle archives dir" mention must be present');
+  assert.ok(dataLineIdx !== -1, 'sanity: the `Cycle archives (...)` data line must be present');
+  assert.ok(
+    turnMentionIdx < dataLineIdx,
+    `the turn section's mention of "cycle archives dir" (index ${turnMentionIdx}) must be positioned BEFORE the \`Cycle archives (...)\` data line (index ${dataLineIdx}) in the composed prompt — this is WHY calling that data line "above" is backwards: it is actually emitted BELOW`,
+  );
+
+  // T2 CORRECTION (round 2): this assertion was a raw `prompt.includes(...)`
+  // and was FALSE-GREEN — the phrase is hand-wrapped across a newline in the
+  // real SKILL.md ("...cycle\narchives dir above, and..."), so the literal
+  // never matched even though the defect was present. Collapse whitespace on
+  // BOTH sides before comparing, the same way the sibling prose-presence ATs
+  // in this lane do. An AT that cannot see the defect it is named for is
+  // worse than no AT.
+  const collapsed = prompt.replace(/\s+/g, ' ');
+  assert.ok(
+    !collapsed.includes('the cycle archives dir above'),
+    'the composed prompt must not contain the phrase "the cycle archives dir above" — the data it refers to is emitted AFTER the turn section, never before it',
+  );
 });
