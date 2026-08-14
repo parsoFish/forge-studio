@@ -144,6 +144,56 @@ test('FlowCard: no matching run at all -> data-flow-status="idle" (never a fabri
   expect(html).toContain('data-flow-status="idle"');
 });
 
+// ---- FlowCard: data-flow-failed-count / data-flow-gated-count (review round,
+// ---- GAP 3) ------------------------------------------------------------------
+//
+// `deriveFlowStatus` stays a 3-state derivation (active|gated|idle) shared
+// byte-for-byte with the flow monitor (exit row 13 parity) — a 4th 'failed'
+// state must NOT be pinned into HomeStatus. The real defect: the failed/
+// gated counts exist ONLY as scraped chip TEXT ("N failed"/"N needs you"),
+// so DOM-driven automation reading `data-flow-status` alone cannot tell a
+// failed-only flow apart from a never-run one — both read "idle". FlowCard
+// must ALSO emit numeric `data-flow-failed-count`/`data-flow-gated-count`
+// attributes (always present, `"0"` when none), sourced from the SAME
+// lineage-aware `runsForFlow` set that already feeds the chips (CLAUDE.md's
+// data-* mirroring rule: load-bearing UI state belongs in data-*, not text).
+
+test('FlowCard: a flow whose ONLY matching run is status:"failed" renders data-flow-status="idle" AND data-flow-failed-count="1" — both true, both DOM-readable (kills reading data-flow-status alone as the whole truth)', () => {
+  const flow = makeFlow({ id: 'f1' });
+  const runs = [makeRun({ id: 'r1', flowId: 'f1', status: 'failed' })];
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs, projects: [], index: 0 }));
+  expect(html).toContain('data-flow-status="idle"');
+  expect(html).toContain('data-flow-failed-count="1"');
+  expect(html).toContain('data-flow-gated-count="0"');
+});
+
+test('FlowCard: no matching runs at all -> data-flow-failed-count="0" and data-flow-gated-count="0", always present (never absent/undefined) — kills an implementation that omits the attribute entirely when the count is zero', () => {
+  const flow = makeFlow({ id: 'f1' });
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs: [], projects: [], index: 0 }));
+  expect(html).toContain('data-flow-status="idle"');
+  expect(html).toContain('data-flow-failed-count="0"');
+  expect(html).toContain('data-flow-gated-count="0"');
+});
+
+test('FlowCard: a run matched ONLY via flowLineage (not flowId) and status:"failed" still counts in data-flow-failed-count — kills a counts implementation that reverts to the non-lineage `runs.filter(r => r.flowId === flow.id)` filter forge-n5r already fixed for the chips/status', () => {
+  const flow = makeFlow({ id: 'forge-develop' });
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'forge-develop'], status: 'failed' }),
+  ];
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs, projects: [], index: 0 }));
+  expect(html).toContain('data-flow-failed-count="1"');
+});
+
+test('FlowCard: data-flow-gated-count mirrors the SAME lineage-aware contract for gated runs', () => {
+  const flow = makeFlow({ id: 'forge-develop' });
+  const runs = [
+    makeRun({ id: 'r1', flowId: 'forge-architect', flowLineage: ['forge-architect', 'forge-develop'], status: 'gated' }),
+  ];
+  const html = renderToStaticMarkup(React.createElement(FlowCard, { flow, runs, projects: [], index: 0 }));
+  expect(html).toContain('data-flow-gated-count="1"');
+  expect(html).toContain('data-flow-failed-count="0"');
+});
+
 // ---- per-card-type data-provenance (forge-3oq) ------------------------------
 
 test('FlowCard: data-provenance carries the SERVER field verbatim — NOT re-derived from flow.origin client-side', () => {
