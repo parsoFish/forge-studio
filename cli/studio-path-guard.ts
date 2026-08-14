@@ -202,8 +202,32 @@ const CONTROL_CHAR_RE = /[\u0000-\u001f]/;
  *  reaches here (defense in depth, not a replacement — see each call site's own
  *  guard); the fixed literal segments this module also receives ('SKILL.md',
  *  '.forge', 'flow.yaml', 'project.json') trivially satisfy this too. This is
- *  the belt for whichever suspenders a future caller forgets. */
+ *  the belt for whichever suspenders a future caller forgets.
+ *
+ * LOAD-BEARING structural gate (forge-01u): `seg: string` is only a
+ * compile-time claim. Every segment on the request path ultimately
+ * originates from a parsed JSON request body (see `cli/ui-bridge.ts`'s route
+ * handlers), and nothing upstream enforces the TypeScript annotation at
+ * runtime — a JSON array, plain object, number, boolean, `null`, or
+ * `undefined` all type-check as `any`/`unknown` at the body-parsing boundary
+ * and can be handed to this function despite the `string` signature; a
+ * direct in-process caller can go further still and pass a `Symbol`. Without
+ * the `typeof` check below, an array slips past every remaining line here —
+ * `Array.prototype.includes` is element-wise so `!seg.includes('/')` is
+ * `true`, a non-empty array's `.length > 0` is `true`, and `CONTROL_CHAR_RE`
+ * coerces its argument to a string before testing — and only fails much
+ * later, when the wrongly-accepted "safe" segment reaches `path.join()`,
+ * which throws a raw `TypeError`; `null`/`undefined` throw immediately on
+ * the `.length` read below. A structurally invalid value must produce this
+ * function's own ordinary `false` — the guard's ordinary rejection, never an
+ * uncaught exception — so every caller (HTTP route included) sees its normal
+ * 400-shaped failure instead of a 500. `typeof` performs a genuine runtime
+ * check here even though the compile-time `string` annotation immediately
+ * narrows the "non-string" branch to `never`; that is expected, not a sign
+ * the check is unreachable — the annotation is exactly the boundary claim
+ * this check exists to verify at runtime. */
 function isSafeSegment(seg: string): boolean {
+  if (typeof seg !== 'string') return false;
   return (
     seg.length > 0 &&
     seg !== '.' &&
@@ -248,6 +272,21 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
   // segment "already passed isSafeSegment". Hoisting the check makes that
   // claim true for the first time.
   for (const seg of segments) {
+    // A non-string `seg` must NEVER be raw-interpolated into the rejection
+    // message below — that is a second, independent way this boundary used
+    // to throw even after `isSafeSegment` itself was hardened: a `Symbol`
+    // is correctly rejected by `isSafeSegment` (no `.length`), but template
+    // literals refuse to implicitly convert a Symbol to a string, so
+    // `` `unsafe path segment "${seg}"` `` throws `TypeError:
+    // Cannot convert a Symbol value to a string` right here. `reason` is
+    // documented as internal-diagnostics-only (see `PathGuardReject` above)
+    // and is never required to echo the offending value, so the non-string
+    // case gets a fixed, value-free message instead of ever touching `seg`
+    // in a template literal. `typeof` is checked explicitly here — not
+    // inferred from `isSafeSegment`'s return — precisely so this file has no
+    // OTHER path that could reach a `${seg}` interpolation with a
+    // non-string value.
+    if (typeof seg !== 'string') return { ok: false, reason: 'unsafe path segment (non-string value)' };
     if (!isSafeSegment(seg)) return { ok: false, reason: `unsafe path segment "${seg}"` };
   }
 
@@ -256,7 +295,13 @@ export function resolveGuardedPath(root: string, segments: readonly string[]): P
     // See the module docstring's CONTRACT section: this deliberately
     // performs NO identity check on `root` itself (only on `segments`
     // below) — `root` must be trusted/config-derived, never built by
-    // folding a caller-supplied id into it.
+    // folding a caller-supplied id into it. Note (forge-01u): `root` needs
+    // no `typeof` gate of its own for the non-string case this fix closes —
+    // a non-string `root` already fails safe today, structurally, for a
+    // different reason: `realpathSync` throws on it (it is not a valid
+    // path-like value), which this `catch` turns into the same ordinary
+    // `{ok:false}` rejection. That is incidental to `root` being trusted,
+    // not a gap; nothing here is request-influenced per the CONTRACT above.
     realRoot = realpathSync(root);
   } catch {
     return { ok: false, reason: 'containment root does not exist' };
