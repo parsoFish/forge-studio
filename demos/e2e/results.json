@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-08-14T11:38:23.043Z",
+  "generatedAt": "2026-08-14T12:19:28.351Z",
   "project": "mdtoc",
   "mode": "full",
   "requestedJourneys": [
@@ -52,11 +52,11 @@
               "pass": true
             },
             {
-              "msg": "HOME.1: constellation data-hex-count reflects the seeded live objects (got 24)",
+              "msg": "HOME.1: constellation data-hex-count reflects the seeded live objects (got 25)",
               "pass": true
             },
             {
-              "msg": "HOME.1: the constellation renders ≥1 clickable hex (found 24, want ≥1)",
+              "msg": "HOME.1: the constellation renders ≥1 clickable hex (found 25, want ≥1)",
               "pass": true
             },
             {
@@ -92,14 +92,14 @@
         },
         "home-attention": {
           "title": "The attention strip — what needs the operator right now",
-          "narration": "The attention strip fires ONLY on a real gated/flagged condition (home-view.ts's buildHomeAttention — an empty result honestly means nothing needs attention). Here it fires for the seeded gated project, and the row links straight through to that project's own surface.",
+          "narration": "The attention strip fires ONLY on a real condition — never on mere existence (home-view.ts's buildHomeAttention/buildKbAttention). Two independent sources feed it here: the seeded gated project (a real ready-for-review PR) and a REAL per-KB lint flag from a genuinely unindexed project brain — every row tagged data-attention-kind so gate and KB rows are told apart, and every row links straight through to its own owning surface.",
           "checks": [
             {
               "msg": "HOME.2: [data-section=\"attention-strip\"] renders — the seeded gated project fired it (got 1)",
               "pass": true
             },
             {
-              "msg": "HOME.2: data-attention-count ≥1 (got \"1\")",
+              "msg": "HOME.2: data-attention-count ≥2 (gate row + KB row; got \"6\")",
               "pass": true
             },
             {
@@ -115,7 +115,23 @@
               "pass": true
             },
             {
+              "msg": "HOME.2: the gate row now also carries data-attention-kind=\"gate\" (got \"gate\")",
+              "pass": true
+            },
+            {
               "msg": "HOME.2: the row carries the REAL data-attention-gated count from the same fetchProjectAttention() read (got \"1\")",
+              "pass": true
+            },
+            {
+              "msg": "HOME.2: a[data-attention-item][data-attention-kind=\"kb\"][data-attention-kb=\"home-fixture-lint-kb\"] is present — the real lint flag surfaced",
+              "pass": true
+            },
+            {
+              "msg": "HOME.2: the KB row's status is the REAL derived warn/fail (got \"warn\")",
+              "pass": true
+            },
+            {
+              "msg": "HOME.2: the KB row's own lint-errors + lint-flags sum to >=1 — a REAL finding, not a fabricated row (errors=\"0\" flags=\"2\")",
               "pass": true
             }
           ],
@@ -123,7 +139,7 @@
             {
               "kind": "frame",
               "file": "02-home-1-attention.png",
-              "caption": "Home — the attention strip: a real gated review surfaces without the operator hunting for it",
+              "caption": "Home — the attention strip: a real gated review AND a real per-KB lint flag, both surfacing without the operator hunting for them",
               "key": true
             }
           ],
@@ -160,7 +176,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 16,
+      "checksTotal": 20,
       "checksFailed": 0
     },
     "skills": {
@@ -317,7 +333,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-edit.webm under 5M (got 2119029)",
+              "msg": "clip skill-edit.webm under 5M (got 2205847)",
               "pass": true
             },
             {
@@ -336,7 +352,7 @@
               "kind": "clip",
               "file": "clips/skill-edit.webm",
               "caption": "discovering skills in the library, then editing a real shipped skill (project-scoped-review) in place — saved to its own SKILL.md, then restored",
-              "sizeBytes": 2119029
+              "sizeBytes": 2205847
             }
           ],
           "pass": true
@@ -362,7 +378,7 @@
               "pass": true
             },
             {
-              "msg": "clip sk-create.webm under 5M (got 887402)",
+              "msg": "clip sk-create.webm under 5M (got 893790)",
               "pass": true
             },
             {
@@ -385,7 +401,7 @@
               "kind": "clip",
               "file": "clips/sk-create.webm",
               "caption": "discovering \"+ author a skill\" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder",
-              "sizeBytes": 887402
+              "sizeBytes": 893790
             },
             {
               "kind": "frame",
@@ -520,7 +536,7 @@
               "pass": true
             },
             {
-              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-14T11-23-05-f25f64db)",
+              "msg": "SK-4: the agent route opens an inline demo-builder session on the project page (http://localhost:4124/projects/mdtoc?demo=2026-08-14T12-04-07-3f97cde3)",
               "pass": true
             },
             {
@@ -536,7 +552,7 @@
               "pass": true
             },
             {
-              "msg": "clip skill-agentic.webm under 5M (got 1832879)",
+              "msg": "clip skill-agentic.webm under 5M (got 1701339)",
               "pass": true
             },
             {
@@ -566,7 +582,7 @@
               "kind": "clip",
               "file": "clips/skill-agentic.webm",
               "caption": "a preflight contract gap resolved by an agent-authored skill (generation staged for the demo)",
-              "sizeBytes": 1832879
+              "sizeBytes": 1701339
             }
           ],
           "pass": true
@@ -580,7 +596,7 @@
               "pass": true
             },
             {
-              "msg": "SK-6: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T11-23-22-2c147fa3?project=mdtoc)",
+              "msg": "SK-6: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T12-04-24-0ba4b460?project=mdtoc)",
               "pass": true
             },
             {
@@ -588,7 +604,7 @@
               "pass": true
             },
             {
-              "msg": "SK-6: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T11-23-22-2c147fa3/status.json",
+              "msg": "SK-6: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T12-04-24-0ba4b460/status.json",
               "pass": true
             },
             {
@@ -925,7 +941,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-blocked.webm under 5M (got 715760)",
+              "msg": "clip hook-blocked.webm under 5M (got 764144)",
               "pass": true
             },
             {
@@ -966,7 +982,7 @@
               "kind": "clip",
               "file": "clips/hook-blocked.webm",
               "caption": "Declaring the exfiltration doesn't excuse it: still blocked, approval refused, then an explicit, recorded override — the verdict never clears",
-              "sizeBytes": 715760
+              "sizeBytes": 764144
             }
           ],
           "pass": true
@@ -1032,7 +1048,7 @@
               "pass": true
             },
             {
-              "msg": "clip hook-bind.webm under 5M (got 781045)",
+              "msg": "clip hook-bind.webm under 5M (got 533349)",
               "pass": true
             },
             {
@@ -1067,7 +1083,7 @@
               "kind": "clip",
               "file": "clips/hook-bind.webm",
               "caption": "Binding a hook lives only in the Agent Builder — drag it into the dedicated hook zone and save",
-              "sizeBytes": 781045
+              "sizeBytes": 533349
             }
           ],
           "pass": true
@@ -1081,7 +1097,7 @@
               "pass": true
             },
             {
-              "msg": "HK-5: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T11-23-53-033fe64a?project=mdtoc)",
+              "msg": "HK-5: starting opens a real session at /sessions/authoring/<sid> (http://localhost:4124/sessions/authoring/2026-08-14T12-04-56-899b52e0?project=mdtoc)",
               "pass": true
             },
             {
@@ -1089,7 +1105,7 @@
               "pass": true
             },
             {
-              "msg": "HK-5: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T11-23-53-033fe64a/status.json",
+              "msg": "HK-5: the real POST /start route wrote projects/mdtoc/_authoring/2026-08-14T12-04-56-899b52e0/status.json",
               "pass": true
             },
             {
@@ -1520,7 +1536,7 @@
               "pass": true
             },
             {
-              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-r4-19-f2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-r4-19-f2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CONN-2: the shown argv is byte-exact vs. this script's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ui-h/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ui-h/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -1671,6 +1687,10 @@
               "pass": true
             },
             {
+              "msg": "J4: the onboard form is live and accepts input — \"Onboard project\" is genuinely enabled (hydrated, not just SSR-present)",
+              "pass": true
+            },
+            {
               "msg": "J4: onboarding writes projects/journey-demo-project/.forge/project.json",
               "pass": true
             },
@@ -1699,15 +1719,15 @@
               "pass": true
             },
             {
-              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-14T11-24-04-905-31if\") — same runner as the agent page",
+              "msg": "J4 (R4-02-F1): dispatching the onboarding agent from /projects returns a runId (got \"_agent-onboarding-agent-2026-08-14T12-05-07-735-w7vd\") — same runner as the agent page",
               "pass": true
             },
             {
-              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-14T11-24-04-47feb7b5\")",
+              "msg": "J4 (R4-17-F1): the onboarding dispatch opens a staged session and surfaces its id (got \"2026-08-14T12-05-07-3ff77e1b\")",
               "pass": true
             },
             {
-              "msg": "clip onboard-form.webm under 5M (got 1527424)",
+              "msg": "clip onboard-form.webm under 5M (got 1551530)",
               "pass": true
             },
             {
@@ -1739,7 +1759,7 @@
               "kind": "clip",
               "file": "clips/onboard-form.webm",
               "caption": "From the library — onboarding an existing repo, fresh, through to the contract-readiness checklist with failures visible",
-              "sizeBytes": 1527424
+              "sizeBytes": 1551530
             }
           ],
           "pass": true
@@ -1749,7 +1769,7 @@
           "narration": "The dispatch the previous beat fired is not fire-and-forget any more: it opened a real staged session on the shared R2-10 shell. Opening it shows the contract building out stage by stage — contract, instructions, secrets, demo, roadmap — each row derived from the project's own artifacts on disk, with secrets shown by NAME only. The same five rows are served by the project-page data contract R4-12-F1 renders in batch D.",
           "checks": [
             {
-              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-14T11-24-04-47feb7b5\")",
+              "msg": "J4b (R4-17-F1): the previous beat captured a staged onboarding session id (got \"2026-08-14T12-05-07-3ff77e1b\")",
               "pass": true
             },
             {
@@ -1819,7 +1839,7 @@
               "pass": true
             },
             {
-              "msg": "clip onboard-resolve.webm under 5M (got 1261164)",
+              "msg": "clip onboard-resolve.webm under 5M (got 1308147)",
               "pass": true
             },
             {
@@ -1863,7 +1883,7 @@
               "kind": "clip",
               "file": "clips/onboard-resolve.webm",
               "caption": "A failing checklist, dwelt on, then resolved live: auto-fix → agent-resolvable → all-green",
-              "sizeBytes": 1261164
+              "sizeBytes": 1308147
             },
             {
               "kind": "frame",
@@ -1880,7 +1900,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 36,
+      "checksTotal": 37,
       "checksFailed": 0
     },
     "stand-up-create": {
@@ -1916,7 +1936,7 @@
               "pass": true
             },
             {
-              "msg": "clip project-create.webm under 5M (got 849032)",
+              "msg": "clip project-create.webm under 5M (got 856797)",
               "pass": true
             },
             {
@@ -1939,7 +1959,7 @@
               "kind": "clip",
               "file": "clips/project-create.webm",
               "caption": "From the library's \"+ New Project\" CTA — a second project created from nothing, live, born contract-green",
-              "sizeBytes": 849032
+              "sizeBytes": 856797
             },
             {
               "kind": "frame",
@@ -2139,7 +2159,7 @@
               "pass": true
             },
             {
-              "msg": "clip instr-generate.webm under 5M (got 1478436)",
+              "msg": "clip instr-generate.webm under 5M (got 1513302)",
               "pass": true
             },
             {
@@ -2162,7 +2182,7 @@
               "kind": "clip",
               "file": "clips/instr-generate.webm",
               "caption": "clicking \"Generate AGENTS.md with the instructions agent\" on the project page — briefing → interviewing → drafting → the generated draft",
-              "sizeBytes": 1478436
+              "sizeBytes": 1513302
             },
             {
               "kind": "frame",
@@ -2201,7 +2221,7 @@
               "pass": true
             },
             {
-              "msg": "clip pbrain-generate.webm under 5M (got 1075152)",
+              "msg": "clip pbrain-generate.webm under 5M (got 1047145)",
               "pass": true
             },
             {
@@ -2224,7 +2244,7 @@
               "kind": "clip",
               "file": "clips/pbrain-generate.webm",
               "caption": "the project page's \"Build project brain with the agent\" — briefing → analyzing → the generated seed themes, awaiting review",
-              "sizeBytes": 1075152
+              "sizeBytes": 1047145
             },
             {
               "kind": "frame",
@@ -2323,7 +2343,7 @@
               "pass": true
             },
             {
-              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-14T11-22-04Z_INIT-2026-08-14-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-14T11-22-04Z_INIT-2026-08-14-r4-12-ledger-nav\"})",
+              "msg": "AT-F2-4: clicking the ledger row lands on the shared flow run-detail (main[data-page=\"flow-run\"][data-run-found=\"true\"][data-run-id=\"2026-08-14T12-03-06Z_INIT-2026-08-14-r4-12-ledger-nav\"]) — the F2 producer→consumer proof (got {\"found\":\"true\",\"runId\":\"2026-08-14T12-03-06Z_INIT-2026-08-14-r4-12-ledger-nav\"})",
               "pass": true
             }
           ],
@@ -2486,7 +2506,7 @@
               "pass": true
             },
             {
-              "msg": "kb-create: the project-brain seeding session is viewable at /sessions/project-brain/2026-08-14T11-26-53-04cd3c3c?project=mdtoc",
+              "msg": "kb-create: the project-brain seeding session is viewable at /sessions/project-brain/2026-08-14T12-07-59-b62d6c04?project=mdtoc",
               "pass": true
             },
             {
@@ -2494,7 +2514,7 @@
               "pass": true
             },
             {
-              "msg": "kb-create: data-session-id=\"2026-08-14T11-26-53-04cd3c3c\" (got \"2026-08-14T11-26-53-04cd3c3c\")",
+              "msg": "kb-create: data-session-id=\"2026-08-14T12-07-59-b62d6c04\" (got \"2026-08-14T12-07-59-b62d6c04\")",
               "pass": true
             },
             {
@@ -2517,7 +2537,7 @@
             {
               "kind": "frame",
               "file": "76-kb-2b-create-session-viewable.png",
-              "caption": "Knowledge — the create hand-off's seeding session, viewable at /sessions/project-brain/2026-08-14T11-26-53-04cd3c3c (real project anchor, mdtoc)",
+              "caption": "Knowledge — the create hand-off's seeding session, viewable at /sessions/project-brain/2026-08-14T12-07-59-b62d6c04 (real project anchor, mdtoc)",
               "key": true
             }
           ],
@@ -2540,7 +2560,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-ingest.webm under 5M (got 788898)",
+              "msg": "clip kb-ingest.webm under 5M (got 852435)",
               "pass": true
             },
             {
@@ -2574,7 +2594,7 @@
               "kind": "clip",
               "file": "clips/kb-ingest.webm",
               "caption": "From the library KB card to a folded theme — guidance becomes a real graph node",
-              "sizeBytes": 788898
+              "sizeBytes": 852435
             },
             {
               "kind": "frame",
@@ -2607,7 +2627,7 @@
               "pass": true
             },
             {
-              "msg": "clip kb-lint.webm under 5M (got 1535075)",
+              "msg": "clip kb-lint.webm under 5M (got 1466500)",
               "pass": true
             }
           ],
@@ -2626,7 +2646,7 @@
               "kind": "clip",
               "file": "clips/kb-lint.webm",
               "caption": "KB lint findings triaged from the maintenance surface",
-              "sizeBytes": 1535075
+              "sizeBytes": 1466500
             }
           ],
           "pass": true
@@ -2656,7 +2676,7 @@
               "pass": true
             },
             {
-              "msg": "kb-band: kb.yaml's binding carries \"band: review-band\" (got:\nid: journey-scratch-kb-review-band\nname: Journey scratch KB (review band)\nbinding:\n  kind: flow\n  ref: forge-develop\n  band: review-band\ndesc: >-\n  Ephemeral, flow-bound + band-scoped KB created by the e2e journey itself, to demo the kb-binding-band field threading\n  a real flow band into the create request.\n)",
+              "msg": "kb-band: kb.yaml's binding carries \"band: review-band\" (got:\nid: journey-scratch-kb-review-band\nname: Journey scratch KB (review band)\nbinding:\n  kind: flow\n  ref: forge-develop\n  band: review-band\ndesc: >-\n  Ephemeral, flow-bound + band-scoped KB created by the e2e journey itself, to demo the kb-binding-band field threading\n  a real flow band into the create request.\norigin: studio\n)",
               "pass": true
             },
             {
@@ -2696,7 +2716,7 @@
               "pass": true
             },
             {
-              "msg": "kb-band-seed: data-session-id=\"2026-08-14T11-27-31-f30a6d33\" (got \"2026-08-14T11-27-31-f30a6d33\")",
+              "msg": "kb-band-seed: data-session-id=\"2026-08-14T12-08-39-aa09f60c\" (got \"2026-08-14T12-08-39-aa09f60c\")",
               "pass": true
             },
             {
@@ -2812,7 +2832,7 @@
               "pass": true
             },
             {
-              "msg": "kb-maintain: the named-check itemization renders checkProjectBrainIndexes with a real per-check status (R6-08 WI-1, not a pooled data-lint-warnings count; got \"pass\")",
+              "msg": "kb-maintain: the named-check itemization renders checkProjectBrainIndexes with a real per-check status (R6-08 WI-1, not a pooled data-lint-warnings count; got \"warn\")",
               "pass": true
             },
             {
@@ -2820,7 +2840,7 @@
               "pass": true
             },
             {
-              "msg": "kb-maintain: the named-check itemization still renders checkProjectBrainIndexes post-Consolidate (got \"warn\")",
+              "msg": "kb-maintain: the named-check itemization still renders checkProjectBrainIndexes post-Consolidate (got \"pass\")",
               "pass": true
             }
           ],
@@ -2828,7 +2848,7 @@
             {
               "kind": "frame",
               "file": "88-kb-maintain-1-flagged.png",
-              "caption": "Knowledge — the seeded scratch KB opened, KB HEALTH shows the named per-check itemization (checkProjectBrainIndexes observed status=pass)"
+              "caption": "Knowledge — the seeded scratch KB opened, KB HEALTH shows the named per-check itemization (checkProjectBrainIndexes observed status=warn)"
             },
             {
               "kind": "frame",
@@ -2838,7 +2858,7 @@
             {
               "kind": "frame",
               "file": "90-kb-maintain-3-healed.png",
-              "caption": "Knowledge — Consolidate ran the real op=consolidate pipeline to a cleared terminal (checkProjectBrainIndexes observed status=warn; the authoritative warn→pass flip is API-pinned)",
+              "caption": "Knowledge — Consolidate ran the real op=consolidate pipeline to a cleared terminal (checkProjectBrainIndexes observed status=pass; the authoritative warn→pass flip is API-pinned)",
               "key": true
             }
           ],
@@ -2857,7 +2877,7 @@
               "pass": true
             },
             {
-              "msg": "kb-cleanup-launch: POST /api/studio/kbs/:id/cleanup/start hands off a real {sessionId, project} (got sessionId=\"2026-08-14T11-28-02-23e97dd1\", project=\".kb-journey-scratch-kb-cleanup\")",
+              "msg": "kb-cleanup-launch: POST /api/studio/kbs/:id/cleanup/start hands off a real {sessionId, project} (got sessionId=\"2026-08-14T12-09-00-baba61d0\", project=\".kb-journey-scratch-kb-cleanup\")",
               "pass": true
             },
             {
@@ -2865,7 +2885,7 @@
               "pass": true
             },
             {
-              "msg": "kb-cleanup-launch: the kb-cleanup session is genuinely reachable at /sessions/kb-cleanup/2026-08-14T11-28-02-23e97dd1",
+              "msg": "kb-cleanup-launch: the kb-cleanup session is genuinely reachable at /sessions/kb-cleanup/2026-08-14T12-09-00-baba61d0",
               "pass": true
             },
             {
@@ -3201,7 +3221,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-scratch-build.webm under 5M (got 963164)",
+              "msg": "clip agent-scratch-build.webm under 5M (got 1162638)",
               "pass": true
             }
           ],
@@ -3240,7 +3260,7 @@
               "kind": "clip",
               "file": "clips/agent-scratch-build.webm",
               "caption": "Composing an agent from scratch — blank, a dropped skill, a picked runtime",
-              "sizeBytes": 963164
+              "sizeBytes": 1162638
             }
           ],
           "pass": true
@@ -3306,7 +3326,7 @@
               "pass": true
             },
             {
-              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-14T11-28-36-346-6mkd\")",
+              "msg": "agent-builder (R2-01-F3): clicking Run dispatches through the generic host — a runId is returned (got \"_agent-project-manager-2026-08-14T12-09-33-262-0mni\")",
               "pass": true
             },
             {
@@ -3354,7 +3374,7 @@
               "pass": true
             },
             {
-              "msg": "clip agent-build.webm under 5M (got 922183)",
+              "msg": "clip agent-build.webm under 5M (got 966031)",
               "pass": true
             }
           ],
@@ -3378,7 +3398,7 @@
               "kind": "clip",
               "file": "clips/agent-build.webm",
               "caption": "From the library agent card to a saved edit — project-manager, reopened and tuned",
-              "sizeBytes": 922183
+              "sizeBytes": 966031
             }
           ],
           "pass": true
@@ -3861,7 +3881,7 @@
           "narration": "The headline gap this initiative closes: no unit test can prove the click wires to the request (no jsdom in this repo — RunPanel.tsx's own header). A real browser click is intercepted at the wire — the actual POST body IS project, costCeilingUsd, and the base64 material — then the server side is checked independently (the staged file on disk, the run being a real resolvable identity on the status surface) rather than trusting the client's own claim. No terminal state is reachable under this harness's no-spawn seam: `spawnAgentDispatch` (cli/ui-bridge.ts) returns before the child `agent dispatch` process is ever spawned, so `runAgent()` never runs and never writes the `run-agent.spawn-suppressed` event the status route's `suppressed` branch requires — the run stays `running` by construction, not by a timing fluke, so that is the honest state this beat asserts.",
           "checks": [
             {
-              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-14T11-29-36-406-oesx\")",
+              "msg": "agents-kickoff: clicking Run dispatches — a runId is returned (got \"_agent-journey-kickoff-agent-2026-08-14T12-10-34-460-pmcv\")",
               "pass": true
             },
             {
@@ -3939,7 +3959,7 @@
               "pass": true
             },
             {
-              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-14T11-29-36-406-oesx) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-14T11-29-36-406-oesx\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
+              "msg": "R6-06 REACHABILITY: the REAL, un-fixtured standalone run this beat just dispatched (_agent-journey-kickoff-agent-2026-08-14T12-10-34-460-pmcv) appears in its own agent's history ledger (GET /api/agents/journey-kickoff-agent/history) — got rows [\"_agent-journey-kickoff-agent-2026-08-14T12-10-34-460-pmcv\"]. If this is RED, see the LOUD FINDING above: this run's one event carries identity via 'skill', not 'metadata.agent_slug' — Task 1 must accept both.",
               "pass": true
             }
           ],
@@ -4224,7 +4244,7 @@
               "pass": true
             },
             {
-              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→244)",
+              "msg": "J3: dragging node \"plan\" moved + saved its position (x 120→242)",
               "pass": true
             },
             {
@@ -4232,7 +4252,7 @@
               "pass": true
             },
             {
-              "msg": "J3: node position PERSISTS across reload (x 244 → 244)",
+              "msg": "J3: node position PERSISTS across reload (x 242 → 242)",
               "pass": true
             }
           ],
@@ -4292,7 +4312,7 @@
               "pass": true
             },
             {
-              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-mssv7r9z, fn-mssv7rac, fn-mssv7ram, fn-mssv7rav)",
+              "msg": "author-from-scratch: dropped nodes resolve to real node ids (fn-msswog2u, fn-msswog36, fn-msswog3e, fn-msswog3n)",
               "pass": true
             },
             {
@@ -4384,7 +4404,7 @@
               "pass": true
             },
             {
-              "msg": "clip flow-scratch-build.webm under 5M (got 3860387)",
+              "msg": "clip flow-scratch-build.webm under 5M (got 3921005)",
               "pass": true
             }
           ],
@@ -4438,7 +4458,7 @@
               "kind": "clip",
               "file": "clips/flow-scratch-build.webm",
               "caption": "From the library \"+ New Flow\" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate",
-              "sizeBytes": 3860387
+              "sizeBytes": 3921005
             }
           ],
           "pass": true
@@ -4628,7 +4648,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-idea-interview.webm under 5M (got 1368383)",
+              "msg": "clip run-idea-interview.webm under 5M (got 1583677)",
               "pass": true
             },
             {
@@ -4647,7 +4667,7 @@
               "kind": "clip",
               "file": "clips/run-idea-interview.webm",
               "caption": "From the new-idea box to the architect's clarifying questions — answered, one option and one in your own words",
-              "sizeBytes": 1368383
+              "sizeBytes": 1583677
             },
             {
               "kind": "frame",
@@ -4798,7 +4818,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-plan-gate.webm under 5M (got 1316188)",
+              "msg": "clip run-plan-gate.webm under 5M (got 1432615)",
               "pass": true
             }
           ],
@@ -4813,7 +4833,7 @@
               "kind": "clip",
               "file": "clips/run-plan-gate.webm",
               "caption": "From \"Open the plan\" to the gate itself — dwell on the plan, send-back in reach, holding on approve",
-              "sizeBytes": 1316188
+              "sizeBytes": 1432615
             }
           ],
           "pass": true
@@ -4997,7 +5017,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-build-monitor.webm under 5M (got 1557136)",
+              "msg": "clip run-build-monitor.webm under 5M (got 1665424)",
               "pass": true
             }
           ],
@@ -5012,7 +5032,7 @@
               "kind": "clip",
               "file": "clips/run-build-monitor.webm",
               "caption": "From the library, into the flow monitor — WI fan-out, demo own-node, cost pills accruing",
-              "sizeBytes": 1557136
+              "sizeBytes": 1665424
             }
           ],
           "pass": true
@@ -5178,7 +5198,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-verdict-gate.webm under 5M (got 1326766)",
+              "msg": "clip run-verdict-gate.webm under 5M (got 1242699)",
               "pass": true
             }
           ],
@@ -5193,7 +5213,7 @@
               "kind": "clip",
               "file": "clips/run-verdict-gate.webm",
               "caption": "From \"Open gate\" on the monitor into the verdict surface — demo comparison, resolved comment, holding on approve-and-merge",
-              "sizeBytes": 1326766
+              "sizeBytes": 1242699
             }
           ],
           "pass": true
@@ -5289,11 +5309,11 @@
               "pass": true
             },
             {
-              "msg": "R6-05: the just-archived run (2026-08-14T11-22-04Z_INIT-2026-08-14-e2e-toc-write-mode) has its own ledger row",
+              "msg": "R6-05: the just-archived run (2026-08-14T12-03-06Z_INIT-2026-08-14-e2e-toc-write-mode) has its own ledger row",
               "pass": true
             },
             {
-              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-14T11-22-04Z_INIT-2026-08-14-e2e-toc-write-mode\")",
+              "msg": "R6-05: ledger row links to /flows/forge-develop/run/<id> (got \"/flows/forge-develop/run/2026-08-14T12-03-06Z_INIT-2026-08-14-e2e-toc-write-mode\")",
               "pass": true
             },
             {
@@ -5309,7 +5329,7 @@
               "pass": true
             },
             {
-              "msg": "clip run-reflect-complete.webm under 5M (got 1520901)",
+              "msg": "clip run-reflect-complete.webm under 5M (got 1323636)",
               "pass": true
             }
           ],
@@ -5341,7 +5361,7 @@
               "kind": "clip",
               "file": "clips/run-reflect-complete.webm",
               "caption": "From the completed run’s review link to the reflection itself — the lesson banked, the run rail reading complete",
-              "sizeBytes": 1520901
+              "sizeBytes": 1323636
             }
           ],
           "pass": true
@@ -5441,7 +5461,7 @@
           "narration": "The same gated run's own standalone detail page — every node on the flow with its own real cost and status, not just the ones a live monitor happens to be showing — reached from the SAME run-rail row every earlier beat in this run has already been clicking.",
           "checks": [
             {
-              "msg": "monitor: run rail row [data-run-id=\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\"] present (the reachability starting point)",
+              "msg": "monitor: run rail row [data-run-id=\"2026-08-14T12-17-36Z_INIT-2026-08-14-e2e-studio-demo\"] present (the reachability starting point)",
               "pass": true
             },
             {
@@ -5457,15 +5477,15 @@
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-id matches the run navigated to (got {\"runId\":\"2026-08-14T12-17-36Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-flow-id=\"forge-develop\" (got {\"runId\":\"2026-08-14T12-17-36Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
-              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-14T11-36-39Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
+              "msg": "run-detail: data-run-status=\"gated\" — the real derived status, not a live-looking default (got {\"runId\":\"2026-08-14T12-17-36Z_INIT-2026-08-14-e2e-studio-demo\",\"flowId\":\"forge-develop\",\"runStatus\":\"gated\"})",
               "pass": true
             },
             {
@@ -5570,7 +5590,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786707415204\")",
+              "msg": "drawer-live: a NEW review-loop log line posted while the drawer stayed open appears without closing/reopening it — the F1 AC (marker \"review.LIVE-TAIL-1786709874602\")",
               "pass": true
             },
             {
@@ -5578,7 +5598,7 @@
               "pass": true
             },
             {
-              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786707415416\")",
+              "msg": "drawer-live: the node's OWN terminal (failed) line appears in the still-open drawer without closing/reopening it, even though that SAME event flipped the node to terminal status (marker \"review.VERDICT-FAILED-1786709874819\")",
               "pass": true
             }
           ],
@@ -5659,7 +5679,7 @@
       "beats": {
         "flows-onboard-monitor": {
           "title": "The onboard-project flow: a peer of forge-develop, its own two-node topology",
-          "narration": "onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library — now its own pillar at /library, since Home took the first nav slot (R6-03-F3; the Home dashboard itself lands in R6-07) — beside forge-develop, and both OOTB seed flows carry a provenance badge derived from flow.origin. It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.",
+          "narration": "onboard-project (R4-18) ships as an OOTB flow, not just a standalone agent: it lands on the library — now its own pillar at /library, since Home took the first nav slot (R6-03-F3; the Home dashboard itself lands in R6-07) — beside forge-develop. Every flow card now carries a live data-flow-status (derived through the SAME shared runsForFlow matcher Home and the flow monitor use — forge-n5r) and a data-provenance read straight off the server, never re-derived from flow.origin client-side (forge-3oq); the same server-sourced data-provenance now reaches non-flow cards too (KBs/agents/projects). It opens its own monitor: two real nodes, onboard → contract-check, visible before a single run exists.",
           "checks": [
             {
               "msg": "FOB.1: onboard-project renders as a real flow card on the library shelf ([data-card-type=\"flow\"][data-card-id=\"onboard-project\"])",
@@ -5690,6 +5710,22 @@
               "pass": true
             },
             {
+              "msg": "FOB.status: every flow card on the library shelf carries data-flow-status (got [{\"id\":\"forge-architect\",\"status\":\"gated\"},{\"id\":\"forge-develop\",\"status\":\"gated\"},{\"id\":\"forge-develop-scratch\",\"status\":\"idle\"},{\"id\":\"forge-reflect\",\"status\":\"idle\"},{\"id\":\"my-first-flow\",\"status\":\"idle\"},{\"id\":\"onboard-project\",\"status\":\"idle\"}])",
+              "pass": true
+            },
+            {
+              "msg": "FOB.status: every data-flow-status value is one of active/gated/idle (got [{\"id\":\"forge-architect\",\"status\":\"gated\"},{\"id\":\"forge-develop\",\"status\":\"gated\"},{\"id\":\"forge-develop-scratch\",\"status\":\"idle\"},{\"id\":\"forge-reflect\",\"status\":\"idle\"},{\"id\":\"my-first-flow\",\"status\":\"idle\"},{\"id\":\"onboard-project\",\"status\":\"idle\"}])",
+              "pass": true
+            },
+            {
+              "msg": "FOB.prov: every flow card carrying data-flow-status ALSO carries data-provenance (6 of 6)",
+              "pass": true
+            },
+            {
+              "msg": "FOB.prov: the forge-dev KB card (a non-flow card type) carries a real server-sourced data-provenance value (got \"ootb\")",
+              "pass": true
+            },
+            {
               "msg": "FOB.1: /flows/onboard-project renders with data-flow-id=\"onboard-project\" (got {\"flowId\":\"onboard-project\",\"canStart\":\"true\",\"runCount\":\"0\"})",
               "pass": true
             },
@@ -5714,7 +5750,7 @@
             {
               "kind": "frame",
               "file": "203-fob-0-library-card.png",
-              "caption": "FOB — onboard-project on the library shelf, beside forge-develop"
+              "caption": "FOB — onboard-project on the library shelf, beside forge-develop, every card carrying a live status and a server-sourced provenance"
             },
             {
               "kind": "frame",
@@ -5759,7 +5795,7 @@
               "pass": true
             },
             {
-              "msg": "FOB.3 (fixture precondition): at least one HARD clause fails (got [{\"clause\":\"C1\",\"title\":\"Fast, trustworthy quality gate\",\"hard\":true,\"pass\":false,\"detail\":\"no deterministic test command — need testProcess.local.cmd in .forge/project.json, the .forge/quality_gate_cmd sidecar, or a package.json \\\"test\\\" script (none found)\"},{\"clause\":\"C1b\",\"title\":\"CI merge-boundary net (testProcess.ci)\",\"hard\":false,\"pass\":false,\"detail\":\"no testProcess.ci declared — the merge decision rests on the per-WI gate alone; declare the full CI mirror (cmd/fixCmd/unsetEnv) so a red whole-module baseline can never ship (advisory)\"},{\"clause\":\"C2\",\"title\":\"Scratch hygiene (forge scratch untracked + ignored)\",\"hard\":true,\"pass\":false,\"detail\":\"not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR\"},{\"clause\":\"C4\",\"title\":\"Machine-readable architecture context\",\"hard\":true,\"pass\":false,\"detail\":\"missing roadmap.md (in project root) and brain/projects/journey-onboard-gate-red-t0SkSQ/profile.md (forge-owned central project brain — Brain 3, ADR 035) — the architect/PM have no queryable structure and will hallucinate paths\"},{\"clause\":\"C5\",\"title\":\"Locked-core constraints declared\",\"hard\":false,\"pass\":false,\"detail\":\"no constraints doc (CLAUDE.md / AGENTS.md / .forge/constraints.md / CONSTRAINTS.md). Advisory: forge cannot honour locked-core mandates it was never told about — strongly recommend a CLAUDE.md.\"},{\"clause\":\"C6\",\"title\":\"Satisfiable merge model\",\"hard\":false,\"pass\":false,\"detail\":\"forge-side-satisfied for the merge model, BUT no GitHub remote found — there is no PR surface for the operator to merge. Add a GitHub `origin` remote. (Advisory.)\"},{\"clause\":\"C7\",\"title\":\"Live-acceptance tier (testProcess.acceptance)\",\"hard\":false,\"pass\":true,\"detail\":\"no acceptance tier declared (n/a — external-resource projects declare testProcess.acceptance; hard enforcement lives in the PM phase + dev-loop requires-env guard)\"},{\"clause\":\"C8\",\"title\":\"Agent-instruction file (AGENTS.md or CLAUDE.md)\",\"hard\":false,\"pass\":false,\"detail\":\"no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint commands at the top and any locked-core mandates (e.g. \\\"never edit tests to pass\\\").\"},{\"clause\":\"C10\",\"title\":\"Documentation parity & release substrate\",\"hard\":false,\"pass\":true,\"detail\":\"no releaseProcess declared — release clause inert (opt-in)\"},{\"clause\":\"DEMO\",\"title\":\"Demo process declared (.forge/project.json demoProcess)\",\"hard\":false,\"pass\":false,\"detail\":\"no .forge/project.json — demoProcess undeclared. Advisory.\"},{\"clause\":\"DEMO-SKILL\",\"title\":\"Generated demo-design skill present (.forge/skills/demo-design/SKILL.md)\",\"hard\":false,\"pass\":true,\"detail\":\"no demoProcess declared yet — demo-design generator not applicable\"},{\"clause\":\"DEMO-ALIGN\",\"title\":\"Demo builds off the test process (alignment recommended)\",\"hard\":false,\"pass\":true,\"detail\":\"no capture steps declared — alignment not applicable\"},{\"clause\":\"BUILD\",\"title\":\"Build process declared (local + remote/CI, distinct from test)\",\"hard\":false,\"pass\":true,\"detail\":\"no buildProcess declared and none inferable (pure-script project) — build clause inert\"},{\"clause\":\"ARTIFACTS\",\"title\":\"Build artifacts gitignored (no stray outputs in the PR)\",\"hard\":false,\"pass\":true,\"detail\":\"no language-specific build-output check (unknown project shape)\"},{\"clause\":\"BRAIN\",\"title\":\"Brain freshness (themes cite live source paths)\",\"hard\":false,\"pass\":true,\"detail\":\"no project brain themes to check\"}])",
+              "msg": "FOB.3 (fixture precondition): at least one HARD clause fails (got [{\"clause\":\"C1\",\"title\":\"Fast, trustworthy quality gate\",\"hard\":true,\"pass\":false,\"detail\":\"no deterministic test command — need testProcess.local.cmd in .forge/project.json, the .forge/quality_gate_cmd sidecar, or a package.json \\\"test\\\" script (none found)\"},{\"clause\":\"C1b\",\"title\":\"CI merge-boundary net (testProcess.ci)\",\"hard\":false,\"pass\":false,\"detail\":\"no testProcess.ci declared — the merge decision rests on the per-WI gate alone; declare the full CI mirror (cmd/fixCmd/unsetEnv) so a red whole-module baseline can never ship (advisory)\"},{\"clause\":\"C2\",\"title\":\"Scratch hygiene (forge scratch untracked + ignored)\",\"hard\":true,\"pass\":false,\"detail\":\"not a git repo and no .gitignore — forge scratch (.forge/, AGENT.md, PROMPT.md, fix_plan.md) would be committed into the PR\"},{\"clause\":\"C4\",\"title\":\"Machine-readable architecture context\",\"hard\":true,\"pass\":false,\"detail\":\"missing roadmap.md (in project root) and brain/projects/journey-onboard-gate-red-0xjLq6/profile.md (forge-owned central project brain — Brain 3, ADR 035) — the architect/PM have no queryable structure and will hallucinate paths\"},{\"clause\":\"C5\",\"title\":\"Locked-core constraints declared\",\"hard\":false,\"pass\":false,\"detail\":\"no constraints doc (CLAUDE.md / AGENTS.md / .forge/constraints.md / CONSTRAINTS.md). Advisory: forge cannot honour locked-core mandates it was never told about — strongly recommend a CLAUDE.md.\"},{\"clause\":\"C6\",\"title\":\"Satisfiable merge model\",\"hard\":false,\"pass\":false,\"detail\":\"forge-side-satisfied for the merge model, BUT no GitHub remote found — there is no PR surface for the operator to merge. Add a GitHub `origin` remote. (Advisory.)\"},{\"clause\":\"C7\",\"title\":\"Live-acceptance tier (testProcess.acceptance)\",\"hard\":false,\"pass\":true,\"detail\":\"no acceptance tier declared (n/a — external-resource projects declare testProcess.acceptance; hard enforcement lives in the PM phase + dev-loop requires-env guard)\"},{\"clause\":\"C8\",\"title\":\"Agent-instruction file (AGENTS.md or CLAUDE.md)\",\"hard\":false,\"pass\":false,\"detail\":\"no AGENTS.md or CLAUDE.md at project root. Advisory: human-authored agent-instruction files give ~4pp task-completion uplift; auto-generated ones hurt. Create one with build/test/lint commands at the top and any locked-core mandates (e.g. \\\"never edit tests to pass\\\").\"},{\"clause\":\"C10\",\"title\":\"Documentation parity & release substrate\",\"hard\":false,\"pass\":true,\"detail\":\"no releaseProcess declared — release clause inert (opt-in)\"},{\"clause\":\"DEMO\",\"title\":\"Demo process declared (.forge/project.json demoProcess)\",\"hard\":false,\"pass\":false,\"detail\":\"no .forge/project.json — demoProcess undeclared. Advisory.\"},{\"clause\":\"DEMO-SKILL\",\"title\":\"Generated demo-design skill present (.forge/skills/demo-design/SKILL.md)\",\"hard\":false,\"pass\":true,\"detail\":\"no demoProcess declared yet — demo-design generator not applicable\"},{\"clause\":\"DEMO-ALIGN\",\"title\":\"Demo builds off the test process (alignment recommended)\",\"hard\":false,\"pass\":true,\"detail\":\"no capture steps declared — alignment not applicable\"},{\"clause\":\"BUILD\",\"title\":\"Build process declared (local + remote/CI, distinct from test)\",\"hard\":false,\"pass\":true,\"detail\":\"no buildProcess declared and none inferable (pure-script project) — build clause inert\"},{\"clause\":\"ARTIFACTS\",\"title\":\"Build artifacts gitignored (no stray outputs in the PR)\",\"hard\":false,\"pass\":true,\"detail\":\"no language-specific build-output check (unknown project shape)\"},{\"clause\":\"BRAIN\",\"title\":\"Brain freshness (themes cite live source paths)\",\"hard\":false,\"pass\":true,\"detail\":\"no project brain themes to check\"}])",
               "pass": true
             },
             {
@@ -5771,7 +5807,7 @@
               "pass": true
             },
             {
-              "msg": "FOB.3: a REAL event log landed on disk at _logs/2026-08-14T11-22-04Z_INIT-2026-08-14-onboard-preflight-red/events.jsonl — never hand-authored",
+              "msg": "FOB.3: a REAL event log landed on disk at _logs/2026-08-14T12-03-06Z_INIT-2026-08-14-onboard-preflight-red/events.jsonl — never hand-authored",
               "pass": true
             },
             {
@@ -5779,7 +5815,7 @@
               "pass": true
             },
             {
-              "msg": "FOB.3: the seeded run is selected as active (data-active-run=\"2026-08-14T11-22-04Z_INIT-2026-08-14-onboard-preflight-red\")",
+              "msg": "FOB.3: the seeded run is selected as active (data-active-run=\"2026-08-14T12-03-06Z_INIT-2026-08-14-onboard-preflight-red\")",
               "pass": true
             },
             {
@@ -5803,7 +5839,7 @@
         }
       },
       "pass": true,
-      "checksTotal": 24,
+      "checksTotal": 28,
       "checksFailed": 0
     },
     "roadmap": {
@@ -5937,7 +5973,7 @@
           "narration": "A decomposed-but-not-yet-built initiative offers \"Start development\" right on its DAG node; clicking it repoints the manifest at the forge-develop flow and threads the architect-minted cycle id — the roadmap node itself is the trigger, not a separate queue command.",
           "checks": [
             {
-              "msg": "clip roadmap-drive.webm under 5M (got 1209760)",
+              "msg": "clip roadmap-drive.webm under 5M (got 1210679)",
               "pass": true
             },
             {
@@ -5962,7 +5998,7 @@
               "kind": "clip",
               "file": "clips/roadmap-drive.webm",
               "caption": "The operator reads the dependency DAG, toggles a finished initiative’s card, then eyes the \"Start development\" trigger on the initiative queued up next",
-              "sizeBytes": 1209760
+              "sizeBytes": 1210679
             },
             {
               "kind": "frame",
@@ -6057,7 +6093,7 @@
               "pass": true
             },
             {
-              "msg": "clip showcase-entry.webm under 5M (got 810288)",
+              "msg": "clip showcase-entry.webm under 5M (got 797480)",
               "pass": true
             }
           ],
@@ -6077,7 +6113,7 @@
               "kind": "clip",
               "file": "clips/showcase-entry.webm",
               "caption": "From the project page — \"Open showcase\" leads straight into the project's standing demo evidence.",
-              "sizeBytes": 810288
+              "sizeBytes": 797480
             }
           ],
           "pass": true
@@ -6267,7 +6303,7 @@
               "pass": true
             },
             {
-              "msg": "clip demo-generate.webm under 5M (got 1751006)",
+              "msg": "clip demo-generate.webm under 5M (got 1754880)",
               "pass": true
             }
           ],
@@ -6287,7 +6323,7 @@
               "kind": "clip",
               "file": "clips/demo-generate.webm",
               "caption": "The demo builder, inline on the project page: briefed, then composing the page element by element — capture, verify, present",
-              "sizeBytes": 1751006
+              "sizeBytes": 1754880
             }
           ],
           "pass": true
@@ -7014,7 +7050,7 @@
               "pass": true
             },
             {
-              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-r4-19-f2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-r4-19-f2/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
+              "msg": "CM-19: the shown argv is byte-exact vs. this journey's own independent reconstruction from the catalog pin (got \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ui-h/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\", want \"npm install --prefix /home/parso/forge/.claude/worktrees/lane-ui-h/_connections --ignore-scripts --no-audit --no-fund --save-exact @modelcontextprotocol/server-memory@2026.7.4\")",
               "pass": true
             },
             {
@@ -7124,7 +7160,7 @@
     "captures": []
   },
   "totals": {
-    "checksTotal": 1052,
+    "checksTotal": 1061,
     "checksFailed": 0,
     "framesTotal": 244,
     "clipsTotal": 23
