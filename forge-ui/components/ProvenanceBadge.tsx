@@ -1,38 +1,45 @@
 import type { ReactElement } from 'react';
-
-export type Provenance = 'ootb' | 'operator' | 'vision';
+import type { Provenance } from '../lib/studio-client';
 
 /**
- * OOTB-provenance badge (R6-03-F3), mirroring the end-state mockup
- * (mockups/studio-endstate-v2/components.jsx `ProvenanceBadge`):
+ * The badge's own value space widens the wire's `Provenance`
+ * (`'ootb' | 'operator' | 'unknown'`, `lib/studio-client.ts`) with `'vision'`
+ * — a BADGE-COMPONENT concern ("declared but not built yet"), not a wire
+ * value: no object type on the wire ever carries `provenance: 'vision'`.
+ */
+export type ProvenanceBadgeValue = Provenance | 'vision';
+
+/**
+ * OOTB-provenance badge (R6-03-F3; REWRITTEN forge-3oq, R6-07 batch-H
+ * honesty pass):
  *
  *   ootb     -> a small "ootb" badge  (this object ships out of the box)
  *   vision   -> a dim "planned" badge (declared but not built yet)
  *   operator -> nothing; operator-authored objects are the unbadged default
+ *   unknown  -> nothing; the server itself could not attest a provenance —
+ *               an honest "no data", never upgraded to "operator" or "ootb"
  *
- * The badge is only ever rendered from a REAL provenance signal, never a
- * fabricated default. Today the one object type carrying a per-object OOTB
- * signal is Flow (`origin`) — see `provenanceOfFlowOrigin`. Other object types
- * have no per-object provenance field yet (a server data-model gap reported at
- * R6-03-F3 close); this component is the shared primitive they adopt once they
- * do.
+ * `provenance` is a SERVER FACT now — every object type (Flow / Agent /
+ * Project / Kb, `lib/studio-client.ts`) carries its own real `provenance`
+ * field on the wire. This component only RENDERS that field; it no longer
+ * infers one. `provenanceOfFlowOrigin` (the prior client-side inference from
+ * `flow.origin`) is DELETED — origin-based inference was itself the defect
+ * (a client claiming to know something only the server can actually attest,
+ * and doing so for Flow alone while every other object type rendered no
+ * badge at all).
  */
-export function ProvenanceBadge({ provenance }: { provenance?: Provenance | null }): ReactElement | null {
+export function ProvenanceBadge({
+  provenance,
+}: {
+  provenance?: ProvenanceBadgeValue | null;
+}): ReactElement | null {
   if (provenance === 'ootb') {
     return <span className="badge badge-ootb" data-provenance="ootb">ootb</span>;
   }
   if (provenance === 'vision') {
     return <span className="badge badge-dim" data-provenance="vision">planned</span>;
   }
-  return null; // operator-authored (or unknown): the default, unbadged
-}
-
-/**
- * Map a Flow's `origin` to provenance. Only the shipped seeds
- * (`seed` / `ootb-library`) are OOTB; everything else — operator `studio`, or
- * an absent origin — is operator-authored and carries no badge. Never claims
- * OOTB without the seed signal.
- */
-export function provenanceOfFlowOrigin(origin?: string | null): Provenance {
-  return origin === 'seed' || origin === 'ootb-library' ? 'ootb' : 'operator';
+  // operator-authored, unknown (the server cannot attest), or null/undefined:
+  // the unbadged default. A badge is only ever shown from a REAL positive signal.
+  return null;
 }

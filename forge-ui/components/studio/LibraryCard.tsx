@@ -2,7 +2,8 @@
 
 import Link from 'next/link';
 import type { Agent, Flow, Kb, Project, Run } from '@/lib/studio-client';
-import { ProvenanceBadge, provenanceOfFlowOrigin } from '@/components/ProvenanceBadge';
+import { ProvenanceBadge } from '@/components/ProvenanceBadge';
+import { deriveFlowStatus, runsForFlow } from '@/lib/home-view';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -31,10 +32,12 @@ export function ProjectCard({ project, kbs, index }: { project: Project; kbs: Kb
       className="lib-card"
       data-card-type="project"
       data-card-id={project.id}
+      data-provenance={project.provenance}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{project.name}</span>
+        <ProvenanceBadge provenance={project.provenance} />
         <span className="badge badge-project">project</span>
       </div>
       <p className="card-body">{truncate(project.northStar, 120)}</p>
@@ -69,10 +72,12 @@ export function AgentCard({ agent, index }: { agent: Agent; index: number }) {
       className="lib-card"
       data-card-type="agent"
       data-card-id={agent.id}
+      data-provenance={agent.provenance}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{agent.name}</span>
+        <ProvenanceBadge provenance={agent.provenance} />
         <span className="badge badge-agent">agent</span>
       </div>
       <p className="card-body">{truncate(agent.purpose, 110)}</p>
@@ -109,10 +114,16 @@ export function FlowCard({
 
   const proj = flow.project ? projects.find((p) => p.id === flow.project) : null;
   const triggers = flow.triggers ?? [];
-  const provenance = provenanceOfFlowOrigin(flow.origin);
-
-  // Runs for this flow
-  const flowRuns = runs.filter((r) => r.flowId === flow.id);
+  // forge-3oq: provenance is a SERVER FACT (Flow.provenance) — read
+  // verbatim, never re-derived from flow.origin client-side.
+  const provenance = flow.provenance;
+  // forge-n5r: deriveFlowStatus/runsForFlow (lib/home-view.ts) — the ONE
+  // shared flow<->run matcher, byte-identical to the flow monitor's and
+  // Home's own derivation. runsForFlow honours run.flowLineage; the prior
+  // `runs.filter(r => r.flowId === flow.id)` here dropped it entirely,
+  // leaving a threaded-spine run's traversed flows wrongly quiet.
+  const flowStatus = deriveFlowStatus(flow.id, runs);
+  const flowRuns = runsForFlow(flow.id, runs);
   const activeRun = flowRuns.find((r) => r.status === 'active');
   const gatedRuns = flowRuns.filter((r) => r.status === 'gated');
   const failedRuns = flowRuns.filter((r) => r.status === 'failed');
@@ -124,6 +135,7 @@ export function FlowCard({
       data-card-type="flow"
       data-card-id={flow.id}
       data-provenance={provenance}
+      data-flow-status={flowStatus}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
@@ -194,10 +206,12 @@ export function KbCard({ kb, index }: { kb: Kb; index: number }) {
       className="lib-card"
       data-card-type="kb"
       data-card-id={kb.id}
+      data-provenance={kb.provenance}
       style={{ animationDelay: `${index * 0.045}s`, display: 'block' }}
     >
       <div className="card-top">
         <span className="card-name">{kb.name}</span>
+        <ProvenanceBadge provenance={kb.provenance} />
         <span className="badge badge-kb">kb</span>
       </div>
       <p className="card-body">{truncate(kb.desc, 110)}</p>
