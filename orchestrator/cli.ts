@@ -129,12 +129,14 @@ function cmdHelp(): void {
 
 Usage:
   forge init                              Scaffold a runnable install (forge.config.json + _queue/ layout) and check the environment
-  forge studio [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+  forge studio [--bridge-only] [--no-open] [--dev] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
                                           Bring up the forge operator UI — the SOLE operator surface (DEC-6).
                                           Run a cycle, review/approve, recover a stuck initiative, inspect cost +
                                           events + artifacts: all in the browser. Foreground (Ctrl-C quits).
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over any
                                           previous forge process so a pinned browser tab auto-reconnects).
+                                          Serves a production build by default (\`next build\` once, then
+                                          \`next start\`); pass --dev to keep the \`next dev\` dev-server path.
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
 
 S9/DEC-6: the CLI is retired as the operator surface. Cycle management, review, and
@@ -391,33 +393,37 @@ async function cmdStudioLauncher(rest: string[], logLabel = '[forge studio]'): P
   };
   const opts: {
     bridgeOnly?: boolean; bridgePort?: number; uiPort?: number;
-    noOpen?: boolean; readyFile?: string;
+    noOpen?: boolean; readyFile?: string; dev?: boolean;
     noTakeover?: boolean; forceTakeover?: boolean;
   } = {};
   for (let i = 0; i < rest.length; i += 1) {
     const a = rest[i];
     if (a === '--bridge-only') opts.bridgeOnly = true;
     else if (a === '--no-open') opts.noOpen = true;
+    else if (a === '--dev') opts.dev = true;
     else if (a === '--attach' || a === '--no-takeover') opts.noTakeover = true;
     else if (a === '--force-takeover') opts.forceTakeover = true;
     else if (a === '--bridge-port') opts.bridgePort = parsePortFlag(rest[++i], '--bridge-port');
     else if (a === '--ui-port') opts.uiPort = parsePortFlag(rest[++i], '--ui-port');
     else if (a === '--ready-file') opts.readyFile = rest[++i];
     else if (a === '--help' || a === '-h') {
-      console.log(`forge studio [--bridge-only] [--no-open] [--attach|--no-takeover] [--force-takeover] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+      console.log(`forge studio [--bridge-only] [--no-open] [--dev] [--attach|--no-takeover] [--force-takeover] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
   Bring up the forge operator UI at http://localhost:4124 (foreground; Ctrl-C quits).
   Awaits a health probe on the bridge then the UI before opening the browser,
   then emits a deterministic 'forge-studio-ready {json}' line on stdout.
   By default a second \`forge studio\` ATTACHES read-only to a healthy running
   bridge (the agent's session stays alive); only a free/stale/foreign port is
   taken over so a pinned browser tab auto-reconnects via WebSocket backoff.
-    --bridge-only    Run only the WebSocket bridge (no Next.js dev server).
+    --bridge-only    Run only the WebSocket bridge (no Next.js server).
     --no-open        Skip launching the browser.
+    --dev            Serve via \`next dev\` instead of a production build (default:
+                     \`next build\` — skipped when the existing build is already
+                     fresh — then \`next start\`). Use for iterating on forge-ui code.
     --attach         Attach read-only to a running bridge; never take it over
     --no-takeover    (alias of --attach) — error if none is healthy.
     --force-takeover Replace a running bridge even if it is healthy (escape hatch).
     --bridge-port    HTTP/WS port for the bridge (default: 4123).
-    --ui-port        Port for the Next.js dev server (default: 4124).
+    --ui-port        Port for the UI server (default: 4124).
     --ready-file     Atomically write the ready-info JSON to this path on readiness.`);
       return;
     } else {

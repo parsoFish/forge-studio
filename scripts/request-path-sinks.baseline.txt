@@ -90,9 +90,13 @@ cli/forge-requeue.ts rmSync 3
 cli/forge-requeue.ts writeFileSync 1
 cli/forge-watch.ts execSync 4
 cli/forge-watch.ts existsSync 1
+cli/forge-watch.ts readdirSync 1
+cli/forge-watch.ts readFileSync 1
 cli/forge-watch.ts renameSync 1
-cli/forge-watch.ts spawn 2
-cli/forge-watch.ts writeFileSync 1
+cli/forge-watch.ts rmSync 1
+cli/forge-watch.ts spawn 4
+cli/forge-watch.ts statSync 1
+cli/forge-watch.ts writeFileSync 2
 cli/kb-lint-summary.ts existsSync 1
 cli/kb-lint-summary.ts realpathSync 1
 cli/materials-staging.ts mkdirSync 1
