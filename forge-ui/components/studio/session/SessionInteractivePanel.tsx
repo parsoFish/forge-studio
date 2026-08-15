@@ -401,7 +401,16 @@ export function SessionInteractivePanel({
           </div>
         );
       })}
-      {drawer}
+      {/* Merge-fix: no `{drawer}` here — this branch (affordances.length > 0)
+          is gated by `showActivityLog` alone (rendered above, before the
+          `.map()`). A trailing unconditional `{drawer}` here (as shipped in
+          W6-B8's own commit) double-rendered the ActivityLog for every
+          NON-terminal session with a real actionable affordance (e.g. a
+          `verdict` at `awaiting-review`) — `!terminal` is true whenever a
+          session isn't finished, regardless of whether anything is actually
+          "not yet wired". `terminal:false renders the ActivityLog drawer`'s
+          own test (zero-affordances branch, below) is the ONLY place
+          `drawer` belongs. */}
     </div>
   );
 }
