@@ -905,16 +905,20 @@ export const journey = defineJourney({
                 await sleep(READ);
                 // Clip: composing an agent — open Advanced, edit the purpose field
                 // (dirty), and SAVE. Fresh context, own navigation.
-                await recordClip(browser, watch, 'agent-build', '/library', async (p) => {
-                  // Entry point: the library's agents section — a real click into
-                  // /agents/project-manager, not a direct goto.
+                await recordClip(browser, watch, 'agent-build', '/agents', async (p) => {
+                  // Entry point: the agents index roster — a real click into
+                  // /agents/project-manager, not a direct goto. (W6-IA-4: was the
+                  // library's own "agents" shelf section — /agents, W6-IA-3, is now
+                  // the real index; Library dropped its projects/agents/flows/kb
+                  // shelves down to shelves-only: skills/hooks/connections/templates/
+                  // community.)
                   await p.waitForFunction(
-                    () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                    () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
                     null, { timeout: 8000 },
                   ).catch(() => {});
-                  const agentsSection = p.locator('[data-section="agents"]');
+                  const agentsSection = p.locator('[data-section="agent-roster"]');
                   await agentsSection.scrollIntoViewIfNeeded().catch(() => {});
-                  await caption(p, 'The OOTB agent library — plan, dev, review, project-manager: curated, already shipped.');
+                  await caption(p, 'The OOTB agent roster — plan, dev, review, project-manager: curated, already shipped.');
                   await sleep(THINK);
                   const pmCard = p.locator('[data-card-type="agent"][data-card-id="project-manager"]');
                   await pmCard.click().catch(() => {});
@@ -941,7 +945,7 @@ export const journey = defineJourney({
                     ).catch(() => {});
                     await sleep(800);
                   }
-                }, { readySel: '[data-page="library"]', caption: 'From the library agent card to a saved edit — project-manager, reopened and tuned', holdTailMs: 1500 });
+                }, { readySel: '[data-page="agents-index"]', caption: 'From the agents index card to a saved edit — project-manager, reopened and tuned', holdTailMs: 1500 });
               } finally {
                 // Crash-safe + clip-safe: the clip above also writes to this SAME real
                 // file (its own ephemeral context, same on-disk path) — restore covers both.
@@ -1469,19 +1473,19 @@ export const journey = defineJourney({
       },
       {
         id: 'agents-kickoff-entry',
-        title: 'Kickoff — reopen the fixture agent from its real library card',
-        narration: 'Not a direct URL: the operator lands on the freshly saved agent through its own home-page card (LibraryCard.tsx) — the real entry point every agent page is reached through, and the same click the run-agent mockup story scripts as "click the agent card".',
+        title: 'Kickoff — reopen the fixture agent from its real agents-index card',
+        narration: 'Not a direct URL: the operator lands on the freshly saved agent through its own real index card (LibraryCard.tsx\'s AgentCard, reused unchanged on /agents — W6-IA-3) — the real entry point every agent page is reached through, and the same click the run-agent mockup story scripts as "click the agent card". (W6-IA-4: was the library\'s own "agents" shelf card — /agents is now the real index; Library dropped its projects/agents/flows/kb shelves down to shelves-only.)',
         drive: async (ctx) => {
               const { page, watch, frame, check } = ctx;
-              console.log('\n[R6-04] Kickoff — reopen the fixture agent via its library card');
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              console.log('\n[R6-04] Kickoff — reopen the fixture agent via its agents-index card');
+              await page.goto(watch.uiUrl + '/agents', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 20000 },
               ).catch(() => {});
               const card = page.locator(`[data-card-type="agent"][data-card-id="${KICKOFF_AGENT_SLUG}"]`);
               const cardPresent = (await card.count()) > 0;
-              check(cardPresent, `agents-kickoff: the freshly saved fixture agent has a real library card (data-card-id="${KICKOFF_AGENT_SLUG}")`);
+              check(cardPresent, `agents-kickoff: the freshly saved fixture agent has a real agents-index card (data-card-id="${KICKOFF_AGENT_SLUG}")`);
               if (cardPresent) await card.click();
               await page.waitForFunction(
                 (slug) => document.querySelector('[data-page="agents"]')?.getAttribute('data-agent-id') === slug,

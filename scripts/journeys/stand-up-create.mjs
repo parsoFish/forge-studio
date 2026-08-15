@@ -194,12 +194,15 @@ export const journey = defineJourney({
 
               // Clip: a second from-scratch project, created live in its own isolated
               // browser context on its own throwaway slug — proves the create-new path
-              // is real and repeatable, not a one-off fixture. Starts at the LIBRARY,
-              // the real user-facing entry point, not the /projects/new URL directly.
-              await recordClip(browser, watch, 'project-create', '/library', async (p) => {
-                await p.waitForFunction(() => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
-                await sleep(1400); // dwell — the library's "+ New Project" CTA
-                await p.locator('[data-action="new-project"]').click().catch(() => {});
+              // is real and repeatable, not a one-off fixture. Starts at the PROJECTS
+              // INDEX, the real user-facing entry point (W6-IA-4: was the library
+              // "+ New Project" shelf CTA — Library dropped its projects/agents/flows/kb
+              // shelves down to shelves-only: skills/hooks/connections/templates/
+              // community), not the /projects/new URL directly.
+              await recordClip(browser, watch, 'project-create', '/projects', async (p) => {
+                await p.waitForFunction(() => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
+                await sleep(1400); // dwell — the projects index's "Onboard a project" CTA
+                await p.locator('[data-action="onboard-project-cta"]').click().catch(() => {});
                 await p.waitForURL('**/projects/new', { timeout: 10000 }).catch(() => {});
                 await p.waitForSelector('[data-section="project-onboard"]', { timeout: 10000 }).catch(() => {});
                 await sleep(500); // hydrate the onboard form before typing
@@ -222,7 +225,7 @@ export const journey = defineJourney({
                   null, { timeout: 12000 },
                 ).catch(() => {});
                 await sleep(WORK);
-              }, { readySel: 'main[data-page="library"]', caption: 'From the library\'s "+ New Project" CTA — a second project created from nothing, live, born contract-green' });
+              }, { readySel: 'main[data-page="projects-index"]', caption: 'From the projects index\'s "Onboard a project" CTA — a second project created from nothing, live, born contract-green' });
 
               // Already on the real project page (contract-green birth navigated
               // there); a direct navigate below is the crash-safe fallback.
@@ -295,84 +298,104 @@ export const journey = defineJourney({
       },
       {
         id: 'su-create-library',
-        title: 'Library — everything is data',
-        narration: 'With a brand-new project just stood up from nothing, the library renders flows, agents, projects, and knowledge bases side by side as data cards, plus an operator-pulse panel — including the OOTB flows (forge-develop is the one the operator rebuilds from scratch, live, later in this walkthrough).',
+        title: 'Everything is data — projects index, Library shelves, Home attention strip',
+        narration: 'With a brand-new project just stood up from nothing, its own index page renders it as a real data card, the rebuilt Library page renders its five shelves (skills/hooks/connections/templates/community, W6-IA-4) as real registry data, and Home\'s cross-project attention strip still surfaces this project. (W6-IA-4: Library is shelves-only now — the flows/agents/projects/knowledge shelves this beat used to check on /library moved onto their own real index routes; /flows and /agents each get their own dedicated journey coverage, so this beat checks /projects — the one index route with no other dedicated journey file yet — plus the rebuilt Library shelves and Home\'s attention strip.)',
         drive: async (ctx) => {
               const { page, watch, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
               // ACT 1 — AUTHOR. Everything in Studio is data you can edit.
               // ════════════════════════════════════════════════════════════════════════
 
-              // ── A1.0: the library reports ready before anything else loads ────────────
-              console.log('\n[A1.0] Library ready');
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              // ── A1.0: the projects index reports ready before anything else loads ─────
+              console.log('\n[A1.0] Projects index ready');
+              await page.goto(watch.uiUrl + '/projects', { waitUntil: 'domcontentloaded' });
               try {
                 await page.waitForFunction(
-                  () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                  () => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 30000 },
                 );
-                check(true, 'library: [data-page="library"][data-page-ready="true"]');
+                check(true, 'projects: [data-page="projects-index"][data-page-ready="true"]');
               } catch {
                 const pr = await page.evaluate(() =>
-                  document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') ?? '(no data-page=library)');
-                check(false, `library: data-page-ready (got "${pr}")`);
+                  document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') ?? '(no data-page=projects-index)');
+                check(false, `projects: data-page-ready (got "${pr}")`);
               }
-              // ── A1.1: Library — flows / agents / projects / KBs as data ───────────────
-              console.log('\n[A1.1] Library — everything is data');
-              await caption(page, 'Flows, agents, projects, and knowledge — one screen, all editable definitions.');
+              // ── A1.1: the projects index — every registered project as a real card ────
+              console.log('\n[A1.1] Projects index — everything is data');
+              await caption(page, 'Every registered project, as a real, editable data card.');
               await sleep(ACT);
-              await countAtLeast(page, '[data-section="flows"]', 1, 'library: [data-section="flows"] present');
-              await countAtLeast(page, '[data-section="agents"]', 1, 'library: [data-section="agents"] present');
-              await countAtLeast(page, '[data-section="projects"]', 1, 'library: [data-section="projects"] present');
-              await countAtLeast(page, '[data-section="kbs"]', 1, 'library: [data-section="kbs"] present');
-              const pulsePresent = await page.evaluate(() => document.querySelector('[data-pulse-flows]') !== null);
-              check(pulsePresent, 'library: operator pulse panel ([data-pulse-flows]) present');
-              await countAtLeast(page, '[data-section="flows"] [data-card-type="flow"]', 1, 'library: ≥1 flow card in flows section');
-              await countAtLeast(page, '[data-section="agents"] [data-card-type="agent"]', 1, 'library: ≥1 agent card in agents section');
-              await countAtLeast(page, '[data-section="projects"] [data-card-type="project"]', 1, 'library: ≥1 project card in projects section');
-              await countAtLeast(page, '[data-section="kbs"] [data-card-type="kb"]', 1, 'library: ≥1 kb card in kbs section');
-              const sectionCounts = await page.evaluate(() => {
-                const sections = ['flows', 'agents', 'projects', 'kbs'];
-                return Object.fromEntries(sections.map((s) => [
+              await countAtLeast(page, '[data-section="projects-grid"]', 1, 'projects: [data-section="projects-grid"] present');
+              await countAtLeast(page, '[data-section="projects-grid"] [data-card-type="project"]', 1, 'projects: ≥1 project card');
+              const projGridCount = await page.evaluate(() =>
+                parseInt(document.querySelector('[data-section="projects-grid"]')?.getAttribute('data-count') ?? '0', 10));
+              check(projGridCount >= 1, `projects: data-count ≥1 (got ${projGridCount})`);
+
+              // ── A1.2: the rebuilt Library — five shelves, real registry data (W6-IA-4) ─
+              console.log('\n[A1.2] Library — five shelves, real registry data');
+              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 30000 },
+              ).catch(() => {});
+              await caption(page, 'Library — skills, hooks, connections, templates, community: the reusable building blocks every agent and flow composes from.');
+              await sleep(ACT);
+              const shelfSections = ['skills', 'hooks', 'connections', 'templates', 'community'];
+              for (const section of shelfSections) {
+                await countAtLeast(page, `[data-section="${section}"]`, 1, `library: [data-section="${section}"] present`);
+              }
+              const shelfCounts = await page.evaluate((sections) =>
+                Object.fromEntries(sections.map((s) => [
                   s, parseInt(document.querySelector(`[data-section="${s}"]`)?.getAttribute('data-count') ?? '0', 10),
-                ]));
-              });
-              check(sectionCounts.flows >= 1, `library: flows section data-count ≥1 (got ${sectionCounts.flows})`);
-              check(sectionCounts.agents >= 1, `library: agents section data-count ≥1 (got ${sectionCounts.agents})`);
-              check(sectionCounts.projects >= 1, `library: projects section data-count ≥1 (got ${sectionCounts.projects})`);
-              check(sectionCounts.kbs >= 1, `library: kbs section data-count ≥1 (got ${sectionCounts.kbs})`);
-              // The OOTB flows render as real cards (data, not a hardcoded list) — this
-              // is the "everything is data" claim, honestly scoped to what's on disk at
-              // this point in the run (the from-scratch flow is authored live in the
-              // BUILD tab later, in flows-author — it doesn't exist yet here).
-              const ootbFlowIds = ['forge-architect', 'forge-develop', 'forge-reflect'];
-              const ootbCardsPresent = await page.evaluate((ids) =>
-                ids.every((id) =>
-                  document.querySelector(`[data-card-type="flow"][data-card-id="${id}"]`) !== null ||
-                  [...document.querySelectorAll('[data-card-type="flow"]')].some((el) => (el.getAttribute('href') ?? '').includes(id))),
-                ootbFlowIds);
-              check(ootbCardsPresent, `library: the OOTB flows (${ootbFlowIds.join(', ')}) render as cards (registered as data)`);
-              // ── A1.2: cross-project attention strip (R4-11-F4) ────────────────────────
+                ])), shelfSections);
+              check(shelfCounts.skills >= 1, `library: skills shelf data-count ≥1 (got ${shelfCounts.skills})`);
+              check(shelfCounts.hooks >= 1, `library: hooks shelf data-count ≥1 (got ${shelfCounts.hooks})`);
+              // Connections/templates/community counts vary by seed catalog — presence of
+              // the shelf itself is the honest claim (checked above); no ≥1 floor asserted
+              // for kinds this checkout may legitimately ship zero of.
+              await countAtLeast(page, '[data-section="skills"] [data-card-type="skill"]', 1, 'library: ≥1 skill card in the skills shelf');
+              await countAtLeast(page, '[data-section="hooks"] [data-card-type="hook"]', 1, 'library: ≥1 hook card in the hooks shelf');
+              // Create CTAs — Skills/Hooks only (Connections/Templates have no author-here
+              // path; Community gets a browse entry, never a create CTA).
+              check(await page.locator('[data-action="new-skill"]').count() > 0, 'library: skills shelf carries a "+ New skill" create CTA');
+              check(await page.locator('[data-action="new-hook"]').count() > 0, 'library: hooks shelf carries a "+ New hook" create CTA');
+              check(await page.locator('[data-action="browse-community"]').count() > 0, 'library: community shelf carries a "Browse community" entry, not a create CTA');
+              // KB cross-link — Library no longer creates or lists knowledge bases.
+              const kbCrosslink = await page.evaluate(() =>
+                document.querySelector('[data-action="kb-crosslink"]')?.getAttribute('href') ?? '');
+              check(kbCrosslink === '/knowledge', `library: the KB cross-link points at /knowledge (got "${kbCrosslink}")`);
+
+              // ── A1.3: cross-project attention strip — now lives on Home (R4-11-F4 + W6-IA-4) ─
               // mdtoc is a standing, always-registered fixture (checked into the repo,
               // not created/cleaned by any beat) so the strip always has ≥1 item here.
-              await countAtLeast(page, '[data-section="attention-strip"]', 1, 'library: [data-section="attention-strip"] present');
-              await countAtLeast(page, '[data-attention-item]', 1, 'library: ≥1 [data-attention-item] in the attention strip');
+              console.log('\n[A1.3] Home — cross-project attention strip');
+              await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
+              await countAtLeast(page, '[data-section="attention-strip"]', 1, 'home: [data-section="attention-strip"] present');
+              await countAtLeast(page, '[data-attention-item]', 1, 'home: ≥1 [data-attention-item] in the attention strip');
               const attentionLink = await page.evaluate(() =>
                 document.querySelector('[data-attention-item]')?.getAttribute('href') ?? '');
-              check(/^\/projects\/[^/]+$/.test(attentionLink),
-                `library: attention item links through to its owning project surface (got "${attentionLink}")`);
+              check(/^\/(projects\/[^/]+|knowledge\?id=[^/]+)$/.test(attentionLink),
+                `home: attention item links through to its owning project or KB surface (got "${attentionLink}")`);
 
         },
       },
       {
         id: 'su-create-orientation',
-        title: 'First-run orientation + discoverable creation',
-        narration: 'Creating from nothing didn\'t require a URL only a developer would know — the library\'s "+ New Agent" CTA proves creating something new is always one click away, and with the library already populated the first-run welcome panel correctly stays hidden.',
+        title: 'Discoverable creation — the agents index "+ New Agent" CTA',
+        narration: 'Creating from nothing didn\'t require a URL only a developer would know — the agents index\'s "+ New Agent" CTA proves creating something new is always one click away. (W6-IA-4: this used to be the library\'s own "+ New Agent" shelf CTA, alongside a first-run welcome panel Library rendered when nothing was registered yet — Library dropped its projects/agents/flows/kb shelves down to shelves-only, and the first-run-orientation concept retired with them; each real index page — /projects, /agents, /flows — now carries its OWN zero-state CTA instead of one shared welcome panel.)',
         drive: async (ctx) => {
-              const { page, frame, check } = ctx;
-              // ── J1: first-run orientation + discoverable creation ─────────────────────
-              // Creation must be discoverable from the library (not URL-only): the
+              const { page, watch, frame, check } = ctx;
+              // ── J1: discoverable creation — the agents index CTA ──────────────────────
+              // Creation must be discoverable from a real index page (not URL-only): the
               // "+ New Agent" CTA is a real, enabled link to the builder.
+              await page.goto(watch.uiUrl + '/agents', { waitUntil: 'domcontentloaded' });
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="agents-index"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 20000 },
+              ).catch(() => {});
               const newAgentCta = await page.evaluate(() => {
                 const el = document.querySelector('[data-action="new-agent"]');
                 if (!el) return { present: false };
@@ -383,19 +406,12 @@ export const journey = defineJourney({
                   tag: el.tagName.toLowerCase(),
                 };
               });
-              check(newAgentCta.present, 'J1: library "+ New Agent" creation CTA ([data-action="new-agent"]) is present');
+              check(newAgentCta.present, 'J1: agents index "+ New Agent" creation CTA ([data-action="new-agent"]) is present');
               check(newAgentCta.present && !newAgentCta.disabled, 'J1: "+ New Agent" CTA is enabled (creation is discoverable, not a dead greyed button)');
               check(newAgentCta.href?.includes('/agents/new'), `J1: "+ New Agent" routes to the agent builder (got "${newAgentCta.href}")`);
-              // No false welcome: with a populated library the orientation panel is absent
-              // and data-first-run reflects it.
-              const firstRunAttr = await page.evaluate(() =>
-                document.querySelector('[data-page="library"]')?.getAttribute('data-first-run'));
-              check(firstRunAttr === 'false', `J1: populated library reports data-first-run="false" (got "${firstRunAttr}")`);
-              const orientationAbsent = await page.evaluate(() => document.querySelector('[data-section="orientation"]') === null);
-              check(orientationAbsent, 'J1: orientation panel correctly hidden when the library is populated (shown only on a fresh install)');
 
               await sleep(READ);
-              await frame(page, 'a1-1-library', 'A1 — Studio library: flows/agents/projects/KBs as data + operator pulse');
+              await frame(page, 'a1-1-agents-index', 'A1 — the agents index: every agent as a real data card, creation always one click away');
 
         },
       },

@@ -19,13 +19,29 @@ every route below owns its own `data-page="<name>"` root (+
 `data-page-ready` once its first fetch settles), so this is a per-route
 inventory rather than one shared page-level contract:
 
-- **Home `/`** — the operator's landing dashboard (R6-07), a PURE composition
-  of six existing surfaces (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` +
-  `fetchRuns` + `fetchProjectAttention` — the same fetches Library already
-  makes) through `lib/home-view.ts`'s pure derivation (`buildConstellation`/
-  `buildHomeAttention`); no new endpoint, no bespoke poll loop. Root:
+- **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
+  W6-IA-4). Data plumbing — the same six existing reads
+  (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +
+  `fetchProjectAttention`) plus the bridge WS `subscribe()` hookup — is
+  EXTRACTED into ONE shared hook, `lib/use-studio-home-data.ts`'s
+  `useStudioHomeData()` (W6-IA-4 sweep finding C1#5: Home and the OLD Library
+  landing page used to byte-duplicate this exact loadAll/refreshRuns/
+  subscribe() shape; the rebuilt Library page below no longer needs any of
+  these six reads at all, so the duplication was retired at the source, not
+  merely deduped). Home is the hook's only caller; `lib/home-view.ts` stays
+  the pure derivation layer (`buildConstellation`/`buildHomeAttention`) —
+  no new endpoint, no bespoke poll loop
+  (`scripts/home-no-new-polling.test.ts` now asserts these invariants against
+  the hook file rather than comparing `app/page.tsx`'s source to
+  `app/library/page.tsx`'s). Root:
   `main[data-page="home"][data-page-ready][data-live-count][data-attention-
-  count][data-hex-count]`. Three sections:
+  count][data-hex-count]`. Header actions: `[data-action="onboard-project-
+  cta"]` (`href="/projects/new"`, always) and `[data-action="watch-live-run"]`
+  — W6-IA-4 sweep finding C1#2: this USED to hardcode `href="/flows/forge-
+  develop"` unconditionally; `home-view.ts`'s `deriveWatchLiveRunHref(runs)`
+  now derives it from an ACTUAL live run (`active` beats `gated`; no
+  active/gated run at all falls back to `/flows`, never a fabricated specific
+  flow). Three sections:
   - `section[data-section="attention-strip"]` — present ONLY when
     `[...buildHomeAttention(attention), ...buildKbAttention(kbs)]` returns ≥1
     row (a real condition, never rendered on the mere existence of a project
@@ -33,15 +49,20 @@ inventory rather than one shared page-level contract:
     the two sources are told apart in the DOM. **Gate rows**
     (`buildHomeAttention`) are a real
     `a[data-attention-item][data-attention-kind="gate"][data-attention-project][data-attention-status]`
-    whose `href` is `/projects/<id>` (the owning project's own page); Home
-    mirrors R4-11-F4's FULL count vocabulary here too — the row also carries the
-    same five raw `data-attention-<planned|in-flight|gated|merged|flagged>`
-    counts Library's row carries (below), read straight off the same
-    `fetchProjectAttention()` row — so both attention surfaces speak ONE shared
-    DOM vocabulary. Home ADDS `data-attention-status` (the derived
-    `gated|flagged` condition) on top; Library's per-project roster does not
-    carry that derived field (Library shows every project, Home shows only the
-    rows that fired). **KB rows** (`buildKbAttention`, forge-2am) are
+    whose `href` is `/projects/<id>` (the owning project's own page) and whose
+    `data-attention-status` is `gated|flagged` — the row also carries the same
+    five raw `data-attention-<planned|in-flight|gated|merged|flagged>` counts,
+    read straight off the same `fetchProjectAttention()` row. The row's VISUAL
+    `.status-dot` maps that real status through `home-view.ts`'s
+    `GATE_ATTENTION_STATUS_FRAME`/`gateAttentionStatusDot()` (W6-IA-4 sweep
+    finding C1#3 — was a hardcoded `data-status="retrying"` for EVERY gate
+    row, regardless of `item.status`): `gated -> retrying` (awaiting review —
+    the routine, recoverable-in-progress case), `flagged -> failed` (review
+    actually flagged something — a real defect, not a routine wait), mirroring
+    `KB_ATTENTION_STATUS_FRAME`'s own established errors→failed/warn→retrying
+    pattern; the `data-attention-status` ATTRIBUTE always carries the real,
+    unmapped value — the frame is consulted ONLY for the dot's own
+    `data-status`. **KB rows** (`buildKbAttention`, forge-2am) are
     `a[data-attention-item][data-attention-kind="kb"][data-attention-kb][data-attention-status]`
     with `href="/knowledge?id=<id>"` (the row's React `key` is `kb-<id>`-shaped
     but a `key` is React-internal bookkeeping, never rendered to the DOM — the
@@ -69,66 +90,93 @@ inventory rather than one shared page-level contract:
     never a `.status` field the wire types don't carry (`home-view.ts`'s own
     declared-data-fails-open discipline); a KB has no live-status source at
     all and is always `idle`. Empty state:
-    `[data-component="constellation-empty"]`.
+    `[data-component="constellation-empty"]` — W6-IA-4 sweep finding C1#4: NOW
+    carries a real `[data-action="constellation-empty-cta"]`
+    (`href="/projects/new"`) alongside the "Nothing registered yet." text —
+    was terminal, dead-end text with no way forward.
   - `section[data-section="activity"]` wraps a shared `HistoryLedger`
-    (`components/studio/HistoryLedger.tsx`, below) over EVERY run, not
-    filtered to one flow.
+    (`components/studio/HistoryLedger.tsx`, below) — W6-IA-4: now the MERGED
+    everything-ledger, interleaving the flow-run rows (`deriveFlowLedgerRows`,
+    unchanged) with recent standalone/flow-node agent runs
+    (`lib/agents-index.ts`'s `fetchRecentAgentRuns`, fetched independently
+    once the roster is ready — mirrors `app/agents/page.tsx`'s own two-effect
+    precedent) via `home-view.ts`'s `buildHomeLedgerRows` (which reuses
+    `mergeRecentAgentRuns` UNCHANGED — a generic flatten/sort/dedupe-by-id/
+    bound merge, not agent-specific despite its name; a run id shared by BOTH
+    a flow row and an agent row dedupes to the FLOW row, so one run is
+    attributed once, as a flow). Rendered via `HistoryLedger`'s new
+    `showKindChip` prop (additive, `false`/omitted everywhere else — every
+    OTHER existing caller renders BYTE-IDENTICALLY): each row carries
+    `data-ledger-kind="flow"|"agent"`, derived via `ledgerRowKind(row)`
+    (`lib/history-ledger.ts`) off the row's OWN existing `linkKind` field —
+    `undefined` (every flow-ledger.ts row) -> `flow`; any agent-sourced
+    `linkKind` (`flow-node`/`standalone`/`session`) -> `agent` — plus a
+    visible `[data-ledger-kind-badge]` chip.
   Journey coverage: `scripts/journeys/home.mjs`.
-- **Library `/library`** — the landing/browse surface: `[data-page="library"][data-page-ready]`,
-  one `data-section` per pillar (`orientation`, `projects`, `agents`,
-  `flows`, `kbs`). Moved off `/` by R6-03-F3 to make room for Home (above);
-  the interim `/` → `/library` redirect that covered the gap is retired now
-  that R6-07 has landed the real Home dashboard (`scripts/redirect-
-  preservation.test.ts` pins its absence). `StudioNav`
-  (`[data-component="studio-nav"]`) now carries SIX `[data-nav]` pillars —
-  `home` (`href="/"`), `flows`, `agents`, `projects`, `library`
-  (`href="/library"`), `knowledge`. Right after the hero's Operator Pulse panel
-  sits the cross-project **attention strip** (R4-11-F4, present once ≥1 project
-  is registered) — `[data-section="attention-strip"]` wrapping one
-  `[data-attention-item][data-attention-project]` link per project (a real
-  `<a href="/projects/<id>">`, every item links through to its project's
-  roadmap) carrying `data-attention-planned`, `data-attention-in-flight`,
-  `data-attention-gated`, `data-attention-merged`, `data-attention-flagged`
-  counts — Home (above) now mirrors this same strip on its own landing
-  surface, off the identical `fetchProjectAttention()` aggregate, though with
-  a narrower attribute set (see the Home entry's own note). Each flow card
-  (`LibraryCard.tsx` `FlowCard`) carries `data-flow-status="active"|"gated"|"idle"`
-  (forge-n5r) — derived through the ONE shared `runsForFlow`/`deriveFlowStatus`
-  matcher `lib/home-view.ts` and the `/flows/[id]` monitor also use (a run
-  belongs to a flow by direct `run.flowId` OR by `run.flowLineage` — a
-  threaded-spine run must not leave the card wrongly idle). `data-flow-status`
-  is this SHARED, LIVE 3-state derivation only — it carries no `'failed'`
-  state, by design. The same `FlowCard` also carries `data-flow-failed-count`
-  and `data-flow-gated-count` (review round, GAP 3) — plain integers, ALWAYS
-  present (`"0"` when none), sourced from the SAME lineage-aware `runsForFlow`
-  set that already feeds the "N failed"/"N needs you" chips, so a failed-only
-  flow (which still reads `data-flow-status="idle"`, since "failed" is not a
-  live state) is DOM-distinguishable from a truly never-run one. Automation
-  must read these counts rather than infer a failure from `data-flow-status`
-  alone. Every card type —
-  `FlowCard`/`AgentCard`/`ProjectCard`/`KbCard` — carries
-  `data-provenance="ootb"|"operator"|"unknown"` (forge-3oq), read STRAIGHT off
-  the server's per-object `provenance` field (`fetchStudioKbs`/`Flows`/`Agents`/
-  `Projects` parse + normalise it — an absent/garbage wire value maps to
-  `"unknown"`, never a guessed default), never re-derived client-side; an OOTB
-  flow additionally renders the visible `.badge-ootb` span
-  (`<ProvenanceBadge>`). `"unknown"` is an HONEST "the server cannot attest"
-  signal, not a default — it renders no badge, same as `"operator"`. `Flow`
-  keeps its existing `origin?: string` field (still read by
-  `app/library/page.tsx`), but `ProvenanceBadge` no longer infers from it —
-  `provenanceOfFlowOrigin` is deleted. Flow cards also carry one badge per
-  declared trigger — `[data-trigger-badge]` (value is the trigger's `on` kind)
-  with a `title="<kind> → <target ref>"` tooltip (R2-04-F4).
+- **Library `/library`** — SHELVES ONLY (W6-IA-4 rebuild, 2026-08-15): the
+  reusable building blocks every agent and flow composes from, NOT a
+  dashboard. `[data-page="library"][data-page-ready]`. The OLD landing page
+  (hero, Operator Pulse mini-panel, first-run orientation, cross-project
+  attention strip, and four data shelves — projects/agents/flows/knowledge
+  bases) is GONE; every one of those object kinds now has its OWN real index
+  route (`/projects` W6-IA-1, `/flows` W6-IA-2, `/agents` W6-IA-3, `/knowledge`)
+  and Home (above) owns the one dashboard + attention strip. Library is a
+  pure, props-driven presentational component,
+  `components/studio/LibraryHub.tsx`'s `LibraryHub` (render-tested via
+  `lib/library-hub-render.test.ts`, the SAME `renderToStaticMarkup` +
+  `next/navigation` mock pattern as `ProjectsIndexBody`/`AgentsIndexView`);
+  `app/library/page.tsx` is the thin fetch-owning wrapper, running the five
+  shelves' fetches as FIVE INDEPENDENT effects (each reusing the EXACT SAME
+  fetcher its own full library page already calls — `fetchSkillLibrary`/
+  `fetchHookLibrary`/`fetchConnections`/`fetchTemplateLibrary`/
+  `fetchCommunityIndex` — so one dead bridge route never blanks the other
+  four; `data-page-ready` gates on all five having settled, success or
+  error). Five shelves, in the operator-locked order **Skills / Hooks /
+  Connections / Templates / Community**, each `section[data-section="<name>"]
+  [data-count]` with a header carrying the real count, a "browse all →" link
+  (`[data-action="browse-<name>"]`, routing to that kind's own full library
+  page), and — where the kind supports authoring — a create CTA reusing that
+  page's OWN `data-action` name (`[data-action="new-skill"]` → `/skills/new`,
+  `[data-action="new-hook"]` → `/hooks/new`). Connections and Templates carry
+  NO create CTA (curation happens by PR to `studio/catalog.yaml` for
+  Connections; Templates has no `/templates/new` route — registry-scanned,
+  not authored here); Community carries `[data-action="browse-community"]`
+  only, never a create CTA (installs route through the owning pipeline's own
+  page). Each shelf shows up to `LIBRARY_SHELF_CARD_LIMIT` (6) cards — a
+  PREVIEW, not a second copy of the full list page — reusing each source
+  page's own pure badge-derivation function (`skillBadges`/`hookBadges`/
+  `connectionBadges`/`templateBadges`) rather than re-deriving anything; a
+  card's `data-card-type` (`skill`/`hook`/`connection`/`template`/
+  `community-item`) and its detail-route `href` match that kind's own full
+  library page exactly. A final `section[data-section="kb-crosslink"]` carries
+  one small `[data-action="kb-crosslink"]` card (`href="/knowledge"`) — Library
+  no longer creates or lists knowledge bases at all (KBs moved to the
+  Knowledge pillar, sweep finding C4#1 below); `KbCard`
+  (`LibraryCard.tsx`) itself is now unused in the live product (its own
+  render-test coverage, `lib/library-card-render.test.ts`, is unaffected —
+  the component itself is unchanged, just no longer wired into any page).
+  `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
+  (IA-5's lane) — still SIX `[data-nav]` pillars: `home` (`href="/"`), `flows`,
+  `agents`, `projects`, `library` (`href="/library"`), `knowledge`.
+  Journey coverage: `scripts/journeys/stand-up-create.mjs`'s
+  `su-create-library` beat (the five shelves + the KB cross-link); every
+  OTHER journey beat that used to enter creation through a Library shelf now
+  enters through that kind's own real index (`/projects`, `/flows`,
+  `/agents`) or, for KBs, the Knowledge page's own persistent `+ New KB` /
+  its `#kb-select` discovery affordance — see each route's own journey-
+  coverage note below.
 - **`/flows` — the flows index (W6-IA-2).** The flows pillar's own browse
   surface, added alongside the pre-existing `/flows/[id]` and `/flows/new`
   routes below — until this landed there was no way to browse every flow
-  except via `/library`'s flows section. Root:
+  except via `/library`'s flows section (RETIRED by W6-IA-4 — see the Library
+  entry above; `/flows` is now the ONLY browse surface for flows). Root:
   `main[data-page="flows-index"][data-page-ready][data-flow-count]`. The body
   is a separate presentational component, `FlowsIndexBody`
   (`components/studio/FlowsIndexBody.tsx`, render-tested directly since the
   page itself fetches via `useEffect` — the same known SSR-render gap as
-  every other dynamic Studio page). "What counts as empty" mirrors
-  `/library`'s own `hasUserFlow` first-run key (review-round fix — a naive
+  every other dynamic Studio page). "What counts as empty" uses this page's
+  own `hasUserFlow` first-run key (originally mirrored from the OLD Library
+  landing page's now-retired equivalent, W6-IA-4; review-round fix — a naive
   `flows.length === 0` check is dead code on any real install, which ships
   ~5 OOTB seed flows), giving **three** states: **true-empty**
   (`flows.length === 0`, an artificial state kept honest rather than assumed
@@ -139,17 +187,21 @@ inventory rather than one shared page-level contract:
   grid alone. Both "build your first flow" CTAs (true-empty + first-run)
   carry `[data-action="new-flow-first"]` (`href="/flows/new"`) — deliberately
   DISTINCT from the page header's own always-visible
-  `[data-action="new-flow"]` CTA (same target, mirroring `/library`'s
-  per-section "+ New X" convention), so automation can tell the one-time
+  `[data-action="new-flow"]` CTA (same target — this "-first"/base-action
+  naming split is now the established convention every index page's own
+  zero-state CTA follows, e.g. Knowledge's `new-kb-empty-cta` alongside its
+  own always-present `new-kb`), so automation can tell the one-time
   onboarding nudge apart from the persistent create affordance instead of
   matching two identically-tagged actions. One or more flows renders
   `[data-component="flows-grid"]`, one **REAL, reused** `FlowCard` per flow
-  (same card as the library shelf's flows section — same
-  `data-card-type="flow"` contract, byte-identical rendering, including its
-  live `data-flow-status`/`data-flow-gated-count`/`data-flow-failed-count`).
+  (the SAME card `/library`'s old flows shelf used to render, before W6-IA-4
+  retired that shelf — same `data-card-type="flow"` contract, byte-identical
+  rendering, including its live
+  `data-flow-status`/`data-flow-gated-count`/`data-flow-failed-count`).
   The page subscribes to the bridge's `cycle-list-changed` event and
-  re-fetches runs on it (mirrors `/library`'s own `loadAll`/`refreshRuns`
-  split) so those run-derived badges stay live rather than freezing at the
+  re-fetches runs on it (the same `loadAll`/`refreshRuns` split
+  `lib/use-studio-home-data.ts` now uses for Home, W6-IA-4) so those
+  run-derived badges stay live rather than freezing at the
   page's initial load. `StudioNav`'s Flows nav item still deep-links straight
   to `/flows/forge-develop`, not here — repointing it is a later lane
   (IA-5).
@@ -190,6 +242,15 @@ inventory rather than one shared page-level contract:
     order (those keys are events-derived).
   - Both narrative attributes are **omitted entirely** when a run has nothing
     true to say — never rendered as `""`.
+  - **`showKindChip` (W6-IA-4, additive, byte-identical-when-absent).** An
+    OPTIONAL `HistoryLedgerProps` boolean, default `false`/omitted — every
+    EXISTING caller (this flow monitor, `/agents`'s recent-runs section,
+    `/agents/[id]`'s own ledger) renders byte-identically to before. Only
+    Home's (`/`) merged everything-ledger opts in: each row then also
+    carries `data-ledger-kind="flow"|"agent"` (`ledgerRowKind(row)`,
+    `lib/history-ledger.ts` — derived off the row's own `linkKind`:
+    `undefined` -> `flow`, any agent-sourced value -> `agent`) plus a
+    visible `[data-ledger-kind-badge]` chip.
   BUILD renders
   the flow-as-data canvas: `[data-component="flow-header"][data-goal-set]`
   + `[data-component="flow-builder-canvas"][data-node-count][data-edge-count]`,
@@ -457,7 +518,8 @@ inventory rather than one shared page-level contract:
   loading/empty state ever depends on the other's fetch latency):
   - `section[data-section="agent-roster"][data-count]` — the full roster as
     REAL `AgentCard`s (`components/studio/LibraryCard.tsx`, reused
-    UNCHANGED — the SAME card `/library`'s own agents pillar renders),
+    UNCHANGED — the SAME card `/library`'s old agents shelf used to render,
+    before W6-IA-4 retired that shelf in favour of this real index),
     linking to `/agents/<id>`, plus a `a[data-action="new-agent"]` CTA to
     `/agents/new`. `[data-component="agent-roster-loading"]` before the
     roster fetch resolves, `[data-component="agent-roster-empty"]` once
@@ -766,8 +828,9 @@ inventory rather than one shared page-level contract:
   persistent header `[data-action="onboard-project-cta"]` CTA (→
   `/projects/new`) and a card grid — `[data-section="projects-grid"]
   [data-count]` — reusing the SAME `ProjectCard` (`components/studio/
-  LibraryCard.tsx`) the Library page's projects section renders (one card,
-  two shelves), each linking to its own `/projects/<id>`. Zero-state
+  LibraryCard.tsx`) `/library`'s old projects shelf used to render, before
+  W6-IA-4 retired that shelf in favour of this real index, each linking to
+  its own `/projects/<id>`. Zero-state
   (`[data-section="projects-empty"]`, honestly gated on `ready &&
   projects.length === 0` — never flashed mid-fetch) offers BOTH an onboard
   CTA and a greenfield-create CTA (`[data-action="create-project-cta"]`),
@@ -1275,6 +1338,42 @@ inventory rather than one shared page-level contract:
   `knowledge-create-kb-band-scope-seed`, `knowledge-create-kb-band-scope-commit`,
   `knowledge-kb-maintain-session`, `knowledge-kb-cleanup-launch`,
   `knowledge-kb-cleanup-approve`, `knowledge-explore-tabs`).
+  - **Persistent "+ New KB" CTA + empty state (W6-IA-4, sweep findings C4#1/
+    C4#2).** This is where the OLD Library landing page's own New-KB
+    affordance moved to (Library no longer creates or lists knowledge bases
+    — see the `/library` entry above): the header bar carries an
+    ALWAYS-present `a[data-action="new-kb"]` (`href="/knowledge/new"`),
+    independent of roster size. A genuinely empty KB roster used to hang
+    `data-page-ready` false FOREVER — the "resolve active KB id" effect only
+    ever chose a `currentId` from a non-empty list, and the "load KB detail"
+    effect (the ONLY other place `ready` was set) starts `if (!currentId)
+    return;`, so it never even ran. A new, independent `kbListReady` state
+    (set once the first `fetchStudioKbs()` settles, success or failure) now
+    lets a settled-and-empty roster set `ready` too. The Explore tab then
+    renders `components/studio/knowledge/KnowledgeEmptyState.tsx`'s
+    `[data-component="knowledge-empty"]` — a "No knowledge bases yet"
+    message plus its OWN distinct `[data-action="new-kb-empty-cta"]`
+    (`href="/knowledge/new"`, DISTINCT from the header's `new-kb` so neither
+    selector is ambiguous when both render at once) — instead of the
+    generic "No KB data available." text a real-but-quiet KB graph also
+    used to share. Render-tested directly (a pure leaf component, no fetch,
+    no `next/navigation` hooks): `lib/knowledge-empty-state-render.test.ts`;
+    the page's own wiring is pinned by source-text assertions in
+    `lib/knowledge-page-empty-state-wiring.test.ts` (mirrors
+    `lib/knowledge-page-kb-maintenance.test.ts`'s established
+    brace-matching/source-text technique — `useSearchParams` +
+    effect-gated `currentId` never resolve under `renderToStaticMarkup`).
+  - **KB selector zero-state (W6-IA-4 sweep finding C4#2).**
+    `KbSelector.tsx`'s `#kb-select` used to render a genuinely empty
+    `<select>` (zero `<option>`s) whenever the roster was empty — nothing to
+    see, and the OS-native "no options" affordance is not a discoverable
+    creation path. Now: `data-kb-select-empty="true"|"false"` on the
+    `<select>` itself, and when empty, a disabled placeholder
+    (`[data-kb-select-placeholder="true"]`, "No knowledge bases yet") PLUS a
+    real, selectable `[data-action="new-kb-select-option"]` `<option>`
+    ("+ New knowledge base") that navigates to `/knowledge/new` via a
+    sentinel value (`__new__`, never collides with a real KB id).
+    Render-tested: `components/studio/knowledge/KbSelector.test.ts`.
   - **Tabs (R6-08 WI-3, RULING 5 — URL-synced via `?tab=`):**
     `[data-tab="explore"|"health"|"ingest-activity"][data-tab-active="true"|"false"]`,
     one button per tab; clicking pushes `?tab=<id>` into the URL, deep-linkable

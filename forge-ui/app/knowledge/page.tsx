@@ -16,6 +16,8 @@ import { KbHealth } from '@/components/studio/knowledge/KbHealth';
 import { GuidancePanel } from '@/components/studio/knowledge/GuidancePanel';
 import { LintResolutionPanel } from '@/components/studio/knowledge/LintResolutionPanel';
 import { KbSelector } from '@/components/studio/knowledge/KbSelector';
+import { KnowledgeEmptyState } from '@/components/studio/knowledge/KnowledgeEmptyState';
+import Link from 'next/link';
 
 // ── Tabs (R6-08 WI-3, RULING 5: URL-synced via ?tab=) ─────────────────────────
 
@@ -78,6 +80,14 @@ function KnowledgePageInner() {
   }, [searchParams, router]);
 
   const [allKbs,       setAllKbs]       = useState<Kb[]>([]);
+  // W6-IA-4 sweep finding C4#1: whether the FIRST fetchStudioKbs() call has
+  // settled — independent of `ready` (which used to be set ONLY inside the
+  // "load KB detail" effect below, an effect that never even RUNS when the
+  // roster is genuinely empty, since it starts `if (!currentId) return;`
+  // and no `currentId` is ever chosen from an empty list). A real empty
+  // install must reach an honest ready state, not hang on "Loading…"
+  // forever.
+  const [kbListReady,  setKbListReady]  = useState(false);
   const [currentId,    setCurrentId]    = useState<string>('');
   const [kbDetail,     setKbDetail]     = useState<KbDetail | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -100,7 +110,9 @@ function KnowledgePageInner() {
     fetchStudioKbs().then((kbs) => {
       if (signal.cancelled) return;
       setAllKbs(kbs);
-    }).catch(() => {/* bridge offline — empty list is fine */});
+    }).catch(() => {/* bridge offline — empty list is fine */}).finally(() => {
+      if (!signal.cancelled) setKbListReady(true);
+    });
     return () => { signal.cancelled = true; };
   }, []);
 
@@ -152,9 +164,17 @@ function KnowledgePageInner() {
     }
     if (allKbs.length > 0 && !currentId) {
       setCurrentId(allKbs[0].id);
+      return;
+    }
+    // W6-IA-4 sweep finding C4#1: a genuinely empty roster has no id to
+    // select, ever — the "load KB detail" effect below (the only OTHER
+    // place `ready` is set) never runs without one. Without this, the page
+    // hung on `data-page-ready="false"` forever whenever zero KBs existed.
+    if (kbListReady && allKbs.length === 0 && !currentId) {
+      setReady(true);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [idParam, nodeParam, themeParam, allKbs]);
+  }, [idParam, nodeParam, themeParam, allKbs, kbListReady]);
 
   // ── Load KB detail when id changes ────────────────────────────────────────
   useEffect(() => {
@@ -250,6 +270,17 @@ function KnowledgePageInner() {
       }}>
         <KbSelector kbs={allKbs} currentId={currentId} />
 
+        {/* W6-IA-4: the persistent "+ New KB" CTA — this is where the OLD
+            Library landing page's own New-KB affordance moved to (Library
+            no longer creates or lists knowledge bases). ALWAYS present,
+            independent of the roster size — never gated behind the
+            zero-state below, which carries its OWN distinct
+            data-action="new-kb-empty-cta" (KnowledgeEmptyState.tsx) so the
+            two never collide when both render at once. */}
+        <Link href="/knowledge/new" className="btn btn-sm" data-action="new-kb" style={{ textDecoration: 'none' }}>
+          + New KB
+        </Link>
+
         {currentKb && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -328,8 +359,14 @@ function KnowledgePageInner() {
       </div>
 
       {/* Explore tab: graph (left) + reader rail (right) — the pre-existing
-          body, re-anchored under this tab; node-click→article is unchanged. */}
-      {tab === 'explore' && (
+          body, re-anchored under this tab; node-click→article is unchanged.
+          W6-IA-4 sweep finding C4#1: a genuinely empty roster now renders
+          the honest KnowledgeEmptyState (name + CTA), never the generic
+          "No KB data available." text a real-but-quiet KB graph also used
+          to share. */}
+      {tab === 'explore' && ready && allKbs.length === 0 ? (
+        <KnowledgeEmptyState />
+      ) : tab === 'explore' && (
         <div style={{ display: 'flex', flex: 1, minHeight: 0, overflow: 'hidden' }}>
 
           {/* Graph area */}
