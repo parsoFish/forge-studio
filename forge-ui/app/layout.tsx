@@ -1,33 +1,34 @@
 import type { ReactNode } from 'react';
 import './globals.css';
-import { resolveBridgePortFromEnv } from '@/lib/bridge-port';
+import { DEFAULT_BRIDGE_PORT } from '@/lib/bridge-port';
 
 export const metadata = {
   title: 'forge',
   description: 'Operator UI for the forge autonomous multi-agent orchestrator.',
 };
 
-// W6-P4: LOAD-BEARING. Without this, Next.js could statically prerender the
-// root layout ONCE at build time and cache the HTML, baking in whichever
-// FORGE_BRIDGE_URL happened to be set during that build — exactly the
-// build-time-embedding fragility `lib/bridge-client.ts`'s own header comment
-// already rejected `next.config` `env` blocks for (`forge watch` restarts
-// skip the build when `.next/` is fresh, and `--bridge-port` can override the
-// default port per-invocation — see `cli/forge-watch.ts`). `force-dynamic`
-// keeps this layout rendered fresh, per request, exactly like the
-// `/api/forge-config` route it's replacing on the hot path.
-export const dynamic = 'force-dynamic';
-
 export default function RootLayout({ children }: { children: ReactNode }) {
-  // W6-P4: zero-RTT bridge URL discovery. Inlines the bridge PORT ONLY —
-  // never a host: `resolveBridgeUrl()` (lib/bridge-client.ts) still builds
-  // the host from `window.location.hostname`, exactly as before
-  // (windows-browser-to-wsl-via-window-location.md — WSL2 + a Windows
-  // browser only resolves via the browser's own origin). This is the same
-  // value `/api/forge-config` computes, just read once here instead of over
-  // a client fetch — the client falls back to that route when the global is
-  // absent (e.g. an entry point that isn't behind this layout).
-  const bridgePort = resolveBridgePortFromEnv();
+  // W6-P4 (redesigned per review): zero-RTT bridge URL discovery WITHOUT
+  // trading away static prerendering. `DEFAULT_BRIDGE_PORT` is a plain
+  // build-time literal (the fixed-port convention's default — CLAUDE.md,
+  // cli/forge-watch.ts's own `DEFAULT_BRIDGE_PORT`), NOT an env read, so
+  // this layout has no per-request data and stays fully static — Next.js
+  // prerenders it once, same as main before W6-P4 (a prior version of this
+  // change added `dynamic = 'force-dynamic'` here and dynamized all 30
+  // routes, trading away the 16 static shells main already had for a
+  // per-request fact that has a stable default — exactly the trade this
+  // redesign avoids).
+  //
+  // `lib/bridge-client.ts`'s `resolveBridgeUrl()` reads this global first
+  // and uses it OPTIMISTICALLY for the first bridge call — zero-RTT in the
+  // common case (the bridge really is on the fixed-port default). The host
+  // segment still always comes from `window.location.hostname`, never from
+  // here (windows-browser-to-wsl-via-window-location.md — WSL2 + a Windows
+  // browser only resolves via the browser's own origin). If that first real
+  // bridge call fails outright (e.g. a `--bridge-port` override moved the
+  // bridge off the default), `resolveBridgeUrl` falls back to the
+  // authoritative, env-derived `/api/forge-config` route and retries once —
+  // see that file's header for the full resolution order.
   return (
     <html lang="en">
       <body
@@ -40,10 +41,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         }}
       >
         <script
-          // eslint-disable-next-line react/no-danger -- inline global assignment,
-          // must run synchronously before any client code reads it (the
-          // established `next-themes`-style pattern for a pre-hydration global).
-          dangerouslySetInnerHTML={{ __html: `window.__FORGE_BRIDGE_PORT__=${JSON.stringify(bridgePort)};` }}
+          dangerouslySetInnerHTML={{ __html: `window.__FORGE_BRIDGE_PORT__=${DEFAULT_BRIDGE_PORT};` }}
         />
         {children}
       </body>

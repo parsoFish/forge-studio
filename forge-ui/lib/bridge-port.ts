@@ -1,19 +1,35 @@
 /**
- * Server-side derivation of the bridge PORT from `FORGE_BRIDGE_URL` — the env
- * var `cli/forge-watch.ts` sets on the Next.js process (`uiEnv`, both the
- * `next dev` and `next start` spawn paths). Never a host: WSL2 + Windows
- * browser needs the host to come from `window.location.hostname` client-side
- * (brain/cycles/themes/windows-browser-to-wsl-via-window-location.md) — this
- * helper only ever hands back the port number the client composes into a URL.
+ * Bridge PORT facts shared across the forge-ui workspace (W6-P4 redesign,
+ * reviewer fix #1 — never trade an app-wide guarantee, the 16 statically
+ * prerendered route shells, for a per-request fact that has a stable
+ * default).
  *
- * Shared by two call sites (W6-P4):
- *   - `app/api/forge-config/route.ts` — the pre-W6-P4 fetch fallback, kept
- *     for any caller that predates the inlined-global fast path.
- *   - `app/layout.tsx` — the zero-RTT path: inlines this same value as a
- *     `window.__FORGE_BRIDGE_PORT__` global in the initial HTML so
- *     `resolveBridgeUrl()` (lib/bridge-client.ts) can skip the
- *     `/api/forge-config` round trip entirely.
+ *   - `DEFAULT_BRIDGE_PORT` — the fixed-port convention's default (mirrors
+ *     `cli/forge-watch.ts`'s private `DEFAULT_BRIDGE_PORT` constant — parity
+ *     pinned by `./bridge-port-parity.test.ts` since the two live in
+ *     different npm workspaces and can't share a single TS import cleanly).
+ *     A plain build-time literal, NOT an env read — `app/layout.tsx` inlines
+ *     it into `window.__FORGE_BRIDGE_PORT__` with zero per-request work, so
+ *     the layout stays fully static.
+ *   - `resolveBridgePortFromEnv` — the AUTHORITATIVE, env-derived value
+ *     (reads `FORGE_BRIDGE_URL`, the var `cli/forge-watch.ts` sets on the
+ *     Next.js process for both `next dev`/`next start`). Used only by the
+ *     dynamic `/api/forge-config` route — the correction path
+ *     `lib/bridge-client.ts` falls back to when the optimistic default
+ *     guess turns out wrong (e.g. a `--bridge-port` override).
+ *
+ * Host never lives here: WSL2 + a Windows browser needs the host to come
+ * from `window.location.hostname` client-side
+ * (brain/cycles/themes/windows-browser-to-wsl-via-window-location.md) — both
+ * exports below only ever hand back a port number.
  */
+
+/** The fixed-port convention's default bridge port (CLAUDE.md: "fixed ports
+ *  — bridge 4123, UI 4124"). Mirrors `cli/forge-watch.ts`'s
+ *  `DEFAULT_BRIDGE_PORT`; keep the two literals in lockstep by hand — the
+ *  parity test goes red the moment either drifts. */
+export const DEFAULT_BRIDGE_PORT = 4123;
+
 export function resolveBridgePortFromEnv(env: NodeJS.ProcessEnv = process.env): number | null {
   const url = env.FORGE_BRIDGE_URL ?? '';
   if (!url) return null;

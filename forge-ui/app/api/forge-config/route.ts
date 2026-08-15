@@ -10,13 +10,16 @@
  * listening). The Next.js API route reads FORGE_BRIDGE_URL server-side
  * and extracts the port.
  *
- * W6-P4: this route is now the FALLBACK path only — `app/layout.tsx` inlines
- * the same port (via the shared `resolveBridgePortFromEnv` this route also
- * calls) as `window.__FORGE_BRIDGE_PORT__` in the initial HTML, so
- * `resolveBridgeUrl()` (lib/bridge-client.ts) resolves with zero network
- * round-trips on the common path. This route stays live for any caller that
- * reads it directly (or a future entry point that isn't behind the root
- * layout).
+ * W6-P4 (redesigned per review): this route is now the AUTHORITATIVE
+ * CORRECTION path, not the hot path — `app/layout.tsx` inlines the
+ * fixed-port convention's DEFAULT (a build-time literal, `lib/bridge-port.ts`'s
+ * `DEFAULT_BRIDGE_PORT` — never this route's env read) as
+ * `window.__FORGE_BRIDGE_PORT__`, so `resolveBridgeUrl()`
+ * (lib/bridge-client.ts) tries that optimistically first with ZERO network
+ * round-trips. This route is only hit when that first real bridge call
+ * fails outright (e.g. a `--bridge-port` override moved the bridge off the
+ * default) — `resolveBridgeUrl`'s one-shot correction falls back here for
+ * the real, env-derived answer.
  */
 import { resolveBridgePortFromEnv } from '@/lib/bridge-port';
 
