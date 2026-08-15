@@ -333,6 +333,12 @@ async function defaultKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainF
   return { ...result, costUsd };
 }
 
+/** The no-spawn stand-in for the DEFAULT fix turn under FORGE_ARCHITECT_NO_SPAWN /
+ *  dry-bridge: never touches the SDK, leaves the finding uncleared, costs 0. */
+async function noSpawnKbDrainFixTurn(input: RunBrainFixInput): Promise<RunBrainFixResult & { costUsd: number }> {
+  return { runId: input.runId, cleared: false, costUsd: 0 };
+}
+
 // ---------------------------------------------------------------------------
 // perFinding builders
 // ---------------------------------------------------------------------------
@@ -389,8 +395,18 @@ export async function runKbDrain(
 ): Promise<KbDrainStatus> {
   const lint = opts.lint ?? runBrainLintFullFresh;
   const applyAutoFixes = opts.applyAutoFixes ?? applyAutoFixesUntilStable;
+  // CI-safety seam (mirrors runBrainConsolidateNow's own noSpawn guard,
+  // cli/bridge-studio-kbs.ts:440): under FORGE_ARCHITECT_NO_SPAWN=1 or
+  // dry-bridge the DEFAULT fix-turn (a real SDK spawn) is replaced by a no-op
+  // that leaves the finding uncleared. A caller-INJECTED opts.runFixTurn is by
+  // definition not a real spawn (it is how the termination matrix is unit-
+  // tested) and is honored regardless of the env — gating the call site
+  // instead (the previous shape) made every dispatch-counting test fail under
+  // CI's global FORGE_ARCHITECT_NO_SPAWN=1 (main went red at #164 and stayed
+  // red for six merges before the tail PR's gate surfaced it).
   const noSpawn = process.env.FORGE_ARCHITECT_NO_SPAWN === '1' || isDryBridge();
-  const runFixTurn = opts.runFixTurn ?? defaultKbDrainFixTurn;
+  const runFixTurn: KbDrainRunFixTurnFn = opts.runFixTurn
+    ?? (noSpawn ? noSpawnKbDrainFixTurn : defaultKbDrainFixTurn);
   const persistStatus = opts.persistStatus ?? writeKbDrainStatus;
   const maxRounds = opts.maxRounds ?? KB_DRAIN_MAX_ROUNDS;
   const maxCostUsd = opts.maxCostUsd ?? DEFAULT_KB_DRAIN_MAX_COST_USD;
@@ -471,21 +487,7 @@ export async function runKbDrain(
         const subRunId = `${runId}__r${round}__${turnIndex}`;
         turnIndex += 1;
         let outcome: 'cleared' | 'not-cleared' = 'not-cleared';
-        if (noSpawn) {
-          // CI-safety seam (mirrors runBrainConsolidateNow's own noSpawn
-          // guard, cli/bridge-studio-kbs.ts): under FORGE_ARCHITECT_NO_SPAWN=1
-          // or dry-bridge, the CONFIGURED runFixTurn — default OR
-          // test-injected — is never actually called; the finding is left
-          // uncleared so a CI/dry-bridge run against a KB that happens to
-          // carry a genuine agent-tier residual still reaches an honest
-          // terminal instead of making (or even risking) a real SDK call.
-          // Gating the CALL SITE rather than the implementation SELECTION
-          // means this holds even for a caller-supplied opts.runFixTurn —
-          // defense in depth, and what makes the seam directly spy-able in a
-          // unit test (inject a call-counting spy + set FORGE_DRY_BRIDGE=1 →
-          // expect zero calls).
-          outcome = 'not-cleared';
-        } else {
+        {
           try {
             const result = await runFixTurn({
               runId: subRunId,
