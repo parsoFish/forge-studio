@@ -138,18 +138,27 @@ export async function runProjectBrainTurn(
     metadata: { session_id: input.sessionId, phase: status.phase, project: status.project },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId,
-    parentEventId: startEv.event_id,
-    phase: 'reflection',
-    skill: 'project-brain-builder',
-  });
+  // W6-B1: interactive sessions are operator-attended, low-volume turns —
+  // pass the same {readOnlySampleRate:1, cap:200} "unsampled" opts as every
+  // other interactive runner (the unattended dev-loop/PM/reflector phases
+  // are unchanged and keep the sampler's defaults).
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId,
+      parentEventId: startEv.event_id,
+      phase: 'reflection',
+      skill: 'project-brain-builder',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
+  const onThinking = makeThinkingSink(logger, initiativeId, input.sessionId);
 
   let result: RunProjectBrainTurnResult;
 
   if (status.phase === 'analyzing') {
-    result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, onToolUse: sink.onToolUse, onHeartbeat });
+    result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, onToolUse: sink.onToolUse, onHeartbeat, onThinking });
   } else if (status.phase === 'committing') {
     result = runCommitStep({ input, sessionDir, status, forgeRoot, logger, initiativeId });
   } else if (status.phase === 'abandoned') {
@@ -249,8 +258,10 @@ async function runAnalyzeStep(args: {
   queryFn: QueryFn;
   onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
   onHeartbeat: () => void;
+  /** Forward extended-thinking blocks to the event log (W6-B1). */
+  onThinking?: (text: string) => void;
 }): Promise<RunProjectBrainTurnResult> {
-  const { input, sessionDir, status, forgeRoot, queryFn, onToolUse, onHeartbeat } = args;
+  const { input, sessionDir, status, forgeRoot, queryFn, onToolUse, onHeartbeat, onThinking } = args;
   const staging = stagingThemesDir(sessionDir);
   mkdirSync(staging, { recursive: true });
 
@@ -268,6 +279,7 @@ async function runAnalyzeStep(args: {
     maxTurns: 30,
     onToolUse,
     onHeartbeat,
+    onThinking,
     label: `project-brain-${input.sessionId}`,
   });
 
@@ -371,6 +383,31 @@ function runCommitStep(args: {
 
   writeProjectBrainStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
   return { phase: 'committed', wrote, themes: staged };
+}
+
+const MAX_THINKING_TEXT = 700;
+
+/**
+ * W6-B1: forward extended-thinking blocks to the event log — this runner had
+ * NO reasoning/text sink at all before this change (unlike its siblings), so
+ * there is no existing `makeReasoningSink` to mirror the shape of; this
+ * follows the SAME shape those other runners' sinks use (event_type 'log',
+ * metadata.kind, session_id), just for 'thinking' only. Per-block cap of
+ * MAX_THINKING_TEXT chars; a run of consecutive IDENTICAL rows (the shape of
+ * several `redacted_thinking` blocks in a row) coalesces to one emitted row.
+ */
+function makeThinkingSink(logger: EventLogger, initiativeId: string, sessionId: string): (text: string) => void {
+  let lastEmitted: string | null = null;
+  return (text: string) => {
+    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
+    if (capped === lastEmitted) return;
+    lastEmitted = capped;
+    logger.emit({
+      initiative_id: initiativeId, phase: 'reflection', skill: 'project-brain-builder',
+      event_type: 'log', input_refs: [], output_refs: [],
+      message: capped, metadata: { session_id: sessionId, kind: 'thinking' },
+    });
+  };
 }
 
 /** SEC-04 leaf: the staged-themes readdir routed through the guard (leaf dir

@@ -12,10 +12,12 @@ import { join } from 'node:path';
 
 import {
   runStructuredTurn,
+  runAgentTurn,
   parseFencedJson,
   readSessionStatus,
   writeSessionStatus,
   makeHeartbeatWriter,
+  REDACTED_THINKING_MARKER,
   type QueryFn,
 } from './interactive-session.ts';
 
@@ -102,6 +104,117 @@ test('runStructuredTurn falls back to fenced JSON when no structured_output', as
     queryFn, prompt: 'p', schema: {}, model: MODEL, allowedTools: TOOLS,
   });
   assert.deepEqual(output, { done: false });
+});
+
+test('runStructuredTurn forwards non-empty thinking blocks to onThinking, trimmed', async () => {
+  const thoughts: string[] = [];
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: '  weighing the options  ' },
+            { type: 'thinking', thinking: '   ' }, // whitespace-only — must not fire
+          ],
+        },
+      };
+      yield { type: 'result', total_cost_usd: 0, structured_output: { ok: 1 } };
+    }
+    return gen();
+  };
+
+  await runStructuredTurn<{ ok: number }>({
+    queryFn, prompt: 'p', schema: {}, model: MODEL, allowedTools: TOOLS,
+    onThinking: (t) => thoughts.push(t),
+  });
+
+  assert.deepEqual(thoughts, ['weighing the options']);
+});
+
+test('runStructuredTurn fires onThinking with the exact redaction marker for redacted_thinking, never block content', async () => {
+  const thoughts: string[] = [];
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield {
+        type: 'assistant',
+        message: {
+          content: [{ type: 'redacted_thinking', data: 'super-secret-opaque-bytes-never-surfaced' }],
+        },
+      };
+      yield { type: 'result', total_cost_usd: 0, structured_output: { ok: 1 } };
+    }
+    return gen();
+  };
+
+  await runStructuredTurn<{ ok: number }>({
+    queryFn, prompt: 'p', schema: {}, model: MODEL, allowedTools: TOOLS,
+    onThinking: (t) => thoughts.push(t),
+  });
+
+  assert.deepEqual(thoughts, [REDACTED_THINKING_MARKER]);
+  assert.equal(REDACTED_THINKING_MARKER, '[thinking redacted]');
+  for (const t of thoughts) assert.doesNotMatch(t, /super-secret-opaque-bytes/);
+});
+
+test('runAgentTurn streams tool_use, text, and cost — the write-tools/agent-shape turn', async () => {
+  const tools: string[] = [];
+  const texts: string[] = [];
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'tool_use', name: 'Write', input: { file_path: 'x.md', content: 'y' } },
+            { type: 'text', text: '  drafting now  ' },
+          ],
+        },
+      };
+      yield { type: 'result', total_cost_usd: 0.05 };
+    }
+    return gen();
+  };
+
+  const { costUsd } = await runAgentTurn({
+    queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: TOOLS,
+    onToolUse: (d) => tools.push(d.name),
+    onText: (t) => texts.push(t),
+  });
+
+  assert.equal(costUsd, 0.05);
+  assert.ok(tools.includes('Write'));
+  assert.deepEqual(texts, ['drafting now']);
+});
+
+test('runAgentTurn forwards thinking blocks and the exact redaction marker to onThinking, independent of onText', async () => {
+  const thoughts: string[] = [];
+  const texts: string[] = [];
+  const queryFn: QueryFn = () => {
+    async function* gen(): AsyncGenerator<unknown> {
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: '  planning the edit  ' },
+            { type: 'redacted_thinking', data: 'opaque' },
+            { type: 'text', text: 'applying the edit' },
+          ],
+        },
+      };
+      yield { type: 'result', total_cost_usd: 0 };
+    }
+    return gen();
+  };
+
+  await runAgentTurn({
+    queryFn, prompt: 'p', cwd: '/tmp', model: MODEL, allowedTools: TOOLS,
+    onThinking: (t) => thoughts.push(t),
+    onText: (t) => texts.push(t),
+  });
+
+  assert.deepEqual(thoughts, ['planning the edit', REDACTED_THINKING_MARKER]);
+  assert.deepEqual(texts, ['applying the edit'], 'onText unaffected by thinking blocks');
 });
 
 test('parseFencedJson parses fenced, raw, and returns null on garbage', () => {

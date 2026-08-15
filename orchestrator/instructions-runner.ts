@@ -216,15 +216,24 @@ export async function runInstructionsTurn(
     metadata: { session_id: input.sessionId, phase: status.phase, round: status.round },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId,
-    parentEventId: startEv.event_id,
-    phase: 'architect',
-    skill: 'instructions-runner',
-  });
+  // W6-B1: interactive sessions are operator-attended, low-volume turns —
+  // pass the same {readOnlySampleRate:1, cap:200} "unsampled" opts as every
+  // other interactive runner (the unattended dev-loop/PM/reflector phases
+  // are unchanged and keep the sampler's defaults).
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId,
+      parentEventId: startEv.event_id,
+      phase: 'architect',
+      skill: 'instructions-runner',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
   const onToolUse = sink.onToolUse;
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
   const onText = makeReasoningSink(logger, initiativeId, input.sessionId);
+  const onThinking = makeThinkingSink(logger, initiativeId, input.sessionId);
 
   let result: RunInstructionsTurnResult;
   let phase = status.phase;
@@ -234,7 +243,7 @@ export async function runInstructionsTurn(
     // symlinked answers.json inside the real, contained session dir collapses to
     // [] rather than leaking out-of-root content into the interview prompt.
     const interview = readAnswerRounds(input.projectRoot, dirSegments);
-    const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText });
+    const decision = await runInterviewStep({ status, interview, queryFn, skillPromptPath: input.skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking });
     if (!decision.done && status.round < maxRounds && decision.questions.length > 0) {
       // SEC-04 leaf: questions.json WRITE routed through the guard (leaf
       // included); a symlinked/escaping leaf ⇒ null ⇒ the runner refuses.
@@ -259,7 +268,7 @@ export async function runInstructionsTurn(
   }
 
   if (phase === 'drafting') {
-    result = await runDraftStep({ input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText });
+    result = await runDraftStep({ input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking });
   } else if (phase === 'finalizing') {
     result = runFinalizeStep({ input, sessionDir, status, logger, initiativeId });
   } else if (phase === 'rejected') {
@@ -316,8 +325,9 @@ async function runInterviewStep(args: {
   onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  onThinking?: (text: string) => void;
 }): Promise<InterviewDecision> {
-  const { status, interview, queryFn, skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
+  const { status, interview, queryFn, skillPromptPath, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking } = args;
   // R4-23 round 2 (R2-AT-3): the mode branches are two SEPARATE, self-contained
   // turn sections — the runner selects exactly one, mirroring the pre-refactor
   // TypeScript ternary this replaces, instead of showing the agent both
@@ -348,7 +358,7 @@ async function runInterviewStep(args: {
   const { output } = await runStructuredTurn<{ done?: boolean; questions?: InterviewQuestion[] }>({
     queryFn, prompt, schema: INTERVIEW_SCHEMA,
     model: INSTRUCTIONS_MODEL, allowedTools: instructionsAgentSpec.allowedTools,
-    onToolUse, onHeartbeat, onText, label: 'instructions-structured',
+    onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
   });
   const questions = Array.isArray(output?.questions) ? output!.questions! : [];
   return { done: output?.done === true, questions };
@@ -380,8 +390,9 @@ async function runDraftStep(args: {
   onToolUse?: Parameters<typeof runStructuredTurn>[0]['onToolUse'];
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  onThinking?: (text: string) => void;
 }): Promise<RunInstructionsTurnResult> {
-  const { input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText } = args;
+  const { input, status, queryFn, logger, initiativeId, matchedSeeds, onToolUse, onHeartbeat, onText, onThinking } = args;
   // SEC-04 leaf: answers.json READ routed through the guard (leaf included).
   const interview = readAnswerRounds(input.projectRoot, [INSTRUCTIONS_KIND_DIR, input.sessionId]);
   const feedback = readFeedback(input.projectRoot, input.sessionId);
@@ -413,7 +424,7 @@ async function runDraftStep(args: {
   const { output } = await runStructuredTurn<{ agents_md?: string; composed_seed_ids?: string[] }>({
     queryFn, prompt, schema: DRAFT_SCHEMA,
     model: INSTRUCTIONS_MODEL, allowedTools: instructionsAgentSpec.allowedTools,
-    onToolUse, onHeartbeat, onText, label: 'instructions-structured',
+    onToolUse, onHeartbeat, onText, onThinking, label: 'instructions-structured',
   });
 
   // Strip any prior composed-seeds footer the LLM echoed back (edit-mode
@@ -571,6 +582,30 @@ function makeReasoningSink(
       initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
       event_type: 'log', input_refs: [], output_refs: [],
       message: capped, metadata: { session_id: sessionId, kind: 'reasoning' },
+    });
+  };
+}
+
+const MAX_THINKING_TEXT = 700;
+
+/** W6-B1: forward extended-thinking blocks the same way as `makeReasoningSink`,
+ *  at a wider per-block cap, and coalescing a run of consecutive IDENTICAL
+ *  rows (the shape of several `redacted_thinking` blocks in a row) into one
+ *  emitted row instead of flooding the log with repeats. */
+function makeThinkingSink(
+  logger: EventLogger,
+  initiativeId: string,
+  sessionId: string,
+): (text: string) => void {
+  let lastEmitted: string | null = null;
+  return (text: string) => {
+    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
+    if (capped === lastEmitted) return;
+    lastEmitted = capped;
+    logger.emit({
+      initiative_id: initiativeId, phase: 'architect', skill: 'instructions-runner',
+      event_type: 'log', input_refs: [], output_refs: [],
+      message: capped, metadata: { session_id: sessionId, kind: 'thinking' },
     });
   };
 }

@@ -224,14 +224,23 @@ export async function runDemoBuilderTurn(
     metadata: { session_id: input.sessionId, phase: status.phase, iteration: status.iteration },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId,
-    parentEventId: startEv.event_id,
-    phase: 'unifier',
-    skill: 'demo-builder-runner',
-  });
+  // W6-B1: interactive sessions are operator-attended, low-volume turns —
+  // pass the same {readOnlySampleRate:1, cap:200} "unsampled" opts as every
+  // other interactive runner (the unattended dev-loop/PM/reflector phases
+  // are unchanged and keep the sampler's defaults).
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId,
+      parentEventId: startEv.event_id,
+      phase: 'unifier',
+      skill: 'demo-builder-runner',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
   const onText = makeReasoningSink(logger, initiativeId, input.sessionId);
+  const onThinking = makeThinkingSink(logger, initiativeId, input.sessionId);
 
   let result: RunDemoBuilderTurnResult;
 
@@ -252,7 +261,7 @@ export async function runDemoBuilderTurn(
   // to the caller once the (still best-effort) commit has landed.
   try {
     if (status.phase === 'generating') {
-      result = await runGenerateStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onText });
+      result = await runGenerateStep({ input, sessionDir, status, forgeRoot, queryFn, logger, initiativeId, onToolUse: sink.onToolUse, onHeartbeat, onText, onThinking });
     } else if (status.phase === 'locking') {
       result = runLockStep({ input, sessionDir, status, logger, initiativeId });
     } else if (status.phase === 'abandoned') {
@@ -287,8 +296,9 @@ async function runGenerateStep(args: {
   onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
   onHeartbeat: () => void;
   onText: (text: string) => void;
+  onThinking: (text: string) => void;
 }): Promise<RunDemoBuilderTurnResult> {
-  const { input, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText } = args;
+  const { input, status, forgeRoot, queryFn, logger, initiativeId, onToolUse, onHeartbeat, onText, onThinking } = args;
   const baseCss = readBaseCss(forgeRoot);
   const feedback = readFeedback(input.projectRoot, input.sessionId);
 
@@ -344,6 +354,7 @@ async function runGenerateStep(args: {
     onToolUse,
     onHeartbeat,
     onText,
+    onThinking,
     label: `demo-builder-${input.sessionId}`,
   });
 
@@ -764,6 +775,26 @@ function makeReasoningSink(logger: EventLogger, initiativeId: string, sessionId:
       initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
       event_type: 'log', input_refs: [], output_refs: [],
       message: capped, metadata: { session_id: sessionId, kind: 'reasoning' },
+    });
+  };
+}
+
+const MAX_THINKING_TEXT = 700;
+
+/** W6-B1: forward extended-thinking blocks the same way as `makeReasoningSink`,
+ *  at a wider per-block cap, and coalescing a run of consecutive IDENTICAL
+ *  rows (the shape of several `redacted_thinking` blocks in a row) into one
+ *  emitted row instead of flooding the log with repeats. */
+function makeThinkingSink(logger: EventLogger, initiativeId: string, sessionId: string): (text: string) => void {
+  let lastEmitted: string | null = null;
+  return (text: string) => {
+    const capped = text.length > MAX_THINKING_TEXT ? `${text.slice(0, MAX_THINKING_TEXT)}…` : text;
+    if (capped === lastEmitted) return;
+    lastEmitted = capped;
+    logger.emit({
+      initiative_id: initiativeId, phase: 'unifier', skill: 'demo-builder-runner',
+      event_type: 'log', input_refs: [], output_refs: [],
+      message: capped, metadata: { session_id: sessionId, kind: 'thinking' },
     });
   };
 }

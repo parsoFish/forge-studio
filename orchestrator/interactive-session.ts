@@ -38,6 +38,16 @@ import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
 export const HEARTBEAT_THROTTLE_MS = 2000;
 
 /**
+ * W6-B1: the literal `onThinking` fires with for every `redacted_thinking`
+ * content block, NEVER the block's own (encrypted, non-human-readable) data —
+ * only that thinking happened and was redacted by the API. Exported so every
+ * sink built on top of `onThinking` (interactive-runner.ts, the four legacy
+ * runners, brain-fix-runner.ts) shares exactly this literal rather than each
+ * hand-rolling its own copy that could drift.
+ */
+export const REDACTED_THINKING_MARKER = '[thinking redacted]';
+
+/**
  * The loose async-iterable query shape architect / brain-fix / reflector all use
  * — so test stubs don't need to implement the full SDK `query` type. `options`
  * is optional so a bare stub can ignore it.
@@ -82,6 +92,10 @@ export async function runStructuredTurn<T>(args: {
   onHeartbeat?: () => void;
   /** Called for each non-empty assistant text block (reasoning). */
   onText?: (text: string) => void;
+  /** Called for each non-empty `thinking` content block (extended-thinking
+   *  trace), and — with the literal `REDACTED_THINKING_MARKER`, never the
+   *  block's own opaque data — once per `redacted_thinking` block. */
+  onThinking?: (text: string) => void;
   /** Diagnostic label for the idle-deadline guard. */
   label?: string;
 }): Promise<StructuredResult<T>> {
@@ -113,7 +127,9 @@ export async function runStructuredTurn<T>(args: {
     const m = msg as {
       type?: string;
       structured_output?: unknown;
-      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
+      message?: {
+        content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
+      };
     };
     if (m.type === 'assistant') {
       if (args.onToolUse) {
@@ -130,6 +146,13 @@ export async function runStructuredTurn<T>(args: {
           rawText += (rawText ? '\n' : '') + block.text;
           const trimmed = block.text.trim();
           if (trimmed && args.onText) args.onText(trimmed);
+        }
+        if (block?.type === 'thinking' && typeof block.thinking === 'string') {
+          const trimmed = block.thinking.trim();
+          if (trimmed && args.onThinking) args.onThinking(trimmed);
+        }
+        if (block?.type === 'redacted_thinking' && args.onThinking) {
+          args.onThinking(REDACTED_THINKING_MARKER);
         }
       }
       continue;
@@ -164,6 +187,10 @@ export async function runAgentTurn(args: {
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  /** Called for each non-empty `thinking` content block, and — with the
+   *  literal `REDACTED_THINKING_MARKER`, never the block's own opaque data —
+   *  once per `redacted_thinking` block. */
+  onThinking?: (text: string) => void;
   label?: string;
 }): Promise<{ costUsd: number }> {
   const abortController = new AbortController();
@@ -196,7 +223,9 @@ export async function runAgentTurn(args: {
     const m = msg as {
       type?: string;
       total_cost_usd?: number;
-      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
+      message?: {
+        content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
+      };
     };
     if (m.type === 'assistant') {
       if (args.onToolUse) {
@@ -204,11 +233,18 @@ export async function runAgentTurn(args: {
         for (const d of details) args.onToolUse(d);
         toolSeq += details.length;
       }
-      if (args.onText) {
+      if (args.onText || args.onThinking) {
         for (const block of m.message?.content ?? []) {
           if (block?.type === 'text' && typeof block.text === 'string') {
             const trimmed = block.text.trim();
-            if (trimmed) args.onText(trimmed);
+            if (trimmed && args.onText) args.onText(trimmed);
+          }
+          if (block?.type === 'thinking' && typeof block.thinking === 'string') {
+            const trimmed = block.thinking.trim();
+            if (trimmed && args.onThinking) args.onThinking(trimmed);
+          }
+          if (block?.type === 'redacted_thinking' && args.onThinking) {
+            args.onThinking(REDACTED_THINKING_MARKER);
           }
         }
       }

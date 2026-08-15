@@ -69,6 +69,17 @@ test('sampler: caps individual emits then coalesces the remainder', () => {
   assert.equal(coalescedCount, 10); // 60 - 50, accounted for (not silent)
 });
 
+test('sampler: readOnlySampleRate:1 emits every read-only call — the interactive-turn "unsampled" contract (W6-B1)', () => {
+  const sampler = createToolEventSampler({ cap: 200, readOnlySampleRate: 1 });
+  let emitted = 0;
+  for (let seq = 1; seq <= 8; seq++) {
+    if (sampler.consider(det('Read', seq)).emit) emitted += 1;
+  }
+  assert.equal(emitted, 8, 'rate:1 must mean "sample every 1 of 1" (unsampled), not "sample every 1 of 0"');
+  const { sampledOutCount } = sampler.flush();
+  assert.equal(sampledOutCount, 0);
+});
+
 test('sampler: seq===1 resets per-iteration budget', () => {
   const sampler = createToolEventSampler({ cap: 2, readOnlySampleRate: 1 });
   assert.equal(sampler.consider(det('Bash', 1)).emit, true);
