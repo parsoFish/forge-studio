@@ -1108,8 +1108,11 @@ export const journey = defineJourney({
                   const status = await sessionRow.first().getAttribute('data-run-status').catch(() => null);
                   const cost = await sessionRow.first().getAttribute('data-ledger-cost-usd').catch(() => null);
                   check(linkKind === 'session', `R6-06: the session row carries data-ledger-link-kind="session" (got "${linkKind}")`);
-                  check(href === `/architect/${R6_06_SESSION_ID}`,
-                    `R6-06: the session row links to /architect/<sessionId> (the legacyRoutes[0] from studio/session-kinds.yaml's architect descriptor) (got "${href}")`);
+                  // W6-IA-8 emptied the architect descriptor's legacyRoutes (the /architect/<sid>
+                  // shim page is gone; a wire redirect covers old bookmarks), so the ledger now
+                  // links STRAIGHT at the modern session shell — no redirect hop.
+                  check(typeof href === 'string' && href.startsWith(`/sessions/architect/${R6_06_SESSION_ID}`),
+                    `R6-06: the session row links straight to /sessions/architect/<sessionId> (legacyRoutes emptied in W6-IA-8) (got "${href}")`);
                   check(status === 'drafting',
                     `R6-06 (D12): the session row's status is the session's OWN status.json phase string verbatim, never mapped to a RunStatus/RunPhaseStatus literal (got "${status}")`);
                   // MEASURED (round 2) via the real sumAuthoritativeCostUsd
