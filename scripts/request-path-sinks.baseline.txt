@@ -98,7 +98,9 @@ cli/forge-watch.ts spawn 4
 cli/forge-watch.ts statSync 1
 cli/forge-watch.ts writeFileSync 2
 cli/kb-lint-summary.ts existsSync 1
+cli/kb-lint-summary.ts readdirSync 1
 cli/kb-lint-summary.ts realpathSync 1
+cli/kb-lint-summary.ts statSync 1
 cli/materials-staging.ts mkdirSync 1
 cli/materials-staging.ts writeFileSync 1
 cli/metrics.ts existsSync 1
