@@ -36,7 +36,7 @@ import { getKbBackend } from '../orchestrator/kb-backend.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir } from '../orchestrator/config.ts';
 import { KB_BINDING_KINDS, type KbBinding, type KbDescriptor } from '../orchestrator/studio/types.ts';
 import { listFlowBandIds } from './flow-band-vocab.ts';
-import { guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
+import { guardedReadSessionStatus, guardedWriteSessionStatus } from '../orchestrator/interactive-session.ts';
 import type { ProjectBrainStatus } from '../orchestrator/project-brain-builder-runner.ts';
 import { runBrainFixTurn } from '../orchestrator/brain-fix-runner.ts';
 import { ensureLinkedAt } from './brain-fix-auto.ts';
@@ -496,6 +496,122 @@ export async function runBrainConsolidateNow(forgeRoot: string, kbId: string, ru
     // instead of hanging on 'running' forever.
     writeConsolidateErrorTerminalEvent(forgeRoot, runId, err);
   }
+}
+
+// ---------------------------------------------------------------------------
+// approveKbCleanup — the kb-cleanup session's ONE approve choreography
+// (W6-B4 adversarial-review fix, closing a live-reproduced double-drain
+// race).
+//
+// BEFORE this fix, both `POST /api/studio/kbs/:id/cleanup/apply`
+// (cli/ui-bridge.ts) and the generic `POST /api/studio/sessions/kb-cleanup/
+// :sid/:affordance` (cli/bridge-studio-affordances.ts) independently ran:
+// read status -> check phase === 'awaiting-approval' -> `await
+// enqueueConsolidate(...)` -> write phase:'applied'. `enqueueConsolidate`
+// serializes the DRAIN per kbId (so two concurrent runs never corrupt the
+// SAME on-disk category-index file concurrently), but it does NOT prevent a
+// SECOND caller from being enqueued at all: two concurrent approves both
+// read `awaiting-approval` (both pass the check) BEFORE either write landed,
+// so both proceeded to `enqueueConsolidate` — reproduced live as two
+// independent `runBrainConsolidateNow` runs, two distinct `runId`s, two
+// `_logs/_brainfix-<runId>/` dirs, for what should have been ONE approved
+// action.
+//
+// THE FIX — check-then-act made atomic via a SYNCHRONOUS claim, not a lock:
+// the status read, the phase (and, when `expectedKbId` is supplied, kb_id
+// identity) check, and the phase:'applying' write below are ALL
+// synchronous — zero `await` between them. Node's single-threaded event
+// loop never preempts a synchronous span: once this function's synchronous
+// prefix starts running (after whatever awaits got it dispatched — e.g. the
+// caller's own `await readJson(req)`), it runs to completion — read,
+// check, AND the 'applying' write — before the event loop can process any
+// OTHER callback, including a second concurrent request's own continuation.
+// A second caller therefore either (a) has not started this function's
+// synchronous prefix yet, in which case it starts AFTER the first caller's
+// 'applying' write has already landed and reads 'applying' (not
+// 'awaiting-approval') itself, or (b) — impossible — interleaves mid-span,
+// which Node's execution model does not allow. Either way, the SECOND
+// caller 409s BEFORE ever calling `enqueueConsolidate` or minting a runId.
+//
+// SYNC INVARIANT (do not violate): nothing between the `guardedReadSessionStatus`
+// call and the `guardedWriteSessionStatus(..., {phase:'applying'})` call may
+// ever become `await`ed, or ever call anything that itself awaits. Doing so
+// reopens exactly the race this function exists to close — see
+// studio/session-kinds.yaml's own comment on the `applying` phase row for
+// the state-machine side of this fix, and this file's header note on
+// `enqueueConsolidate` ("Always invoked via enqueueConsolidate (never
+// directly)") for the SEPARATE, already-existing same-kbId serialization
+// this fix does not replace, only complements: serialization alone was
+// never sufficient, because it never stopped a second unapproved caller
+// from being enqueued in the first place.
+//
+// Both callers (the bespoke `/cleanup/apply` route, which additionally
+// checks `expectedKbId` against the URL's own `:id` segment — DEFECT B,
+// see that route's own header — and the generic affordance route, which
+// carries no URL-supplied kb id at all and so omits `expectedKbId`) now
+// funnel through this ONE function — the duplicated choreography that used
+// to independently exist in each is deleted, not merely mirrored.
+// ---------------------------------------------------------------------------
+
+export type ApproveKbCleanupOutcome = { ok: true; runId: string } | { ok: false; status: number; error: string };
+
+export async function approveKbCleanup(
+  forgeRoot: string,
+  projectsRoot: string,
+  dirSegs: readonly string[],
+  opts: { expectedKbId?: string } = {},
+): Promise<ApproveKbCleanupOutcome> {
+  // --- SYNC INVARIANT SPAN START — see header. No await until the
+  //     phase:'applying' write below has returned. ---
+  const status = guardedReadSessionStatus<{ phase?: unknown; kb_id?: unknown } & Record<string, unknown>>(projectsRoot, dirSegs);
+  if (!status || typeof status.phase !== 'string') {
+    return { ok: false, status: 404, error: 'session not found' };
+  }
+  if (typeof status.kb_id !== 'string') {
+    return { ok: false, status: 500, error: 'kb-cleanup apply: status.json has no string "kb_id"' };
+  }
+  // DEFECT B (preserved from the bespoke route this replaces): a well-formed
+  // but MISMATCHED expectedKbId is a 404 — no (kbId, project, sessionId)
+  // triple names this pairing — never a silent drain of whichever kb the
+  // session happens to carry. Checked BEFORE the phase gate: 409 is reserved
+  // for a CORRECTLY-identified resource in the wrong state.
+  if (opts.expectedKbId !== undefined && opts.expectedKbId !== status.kb_id) {
+    return { ok: false, status: 404, error: `session does not belong to kb "${opts.expectedKbId}"` };
+  }
+  if (status.phase !== 'awaiting-approval') {
+    return { ok: false, status: 409, error: `session is not awaiting-approval (current phase: "${status.phase}")` };
+  }
+  const kbId = status.kb_id;
+  // THE ATOMIC CLAIM — the write that makes this a claim, not merely a
+  // check: any concurrent caller reading status AFTER this line observes
+  // 'applying', never 'awaiting-approval', so at most one caller ever passes
+  // the gate above.
+  const claimed = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applying' });
+  if (claimed === null) {
+    return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applying" failed containment' };
+  }
+  // --- SYNC INVARIANT SPAN END — everything below may safely await. ---
+
+  // The drain's SOLE source of truth is `status.kb_id`, never `expectedKbId`
+  // — the equality check above makes the two identical by construction from
+  // here on, which is why a caller cannot observe a swap to `expectedKbId`.
+  const runId = `${kbId}-consolidate-${Date.now().toString(36)}`;
+  // `enqueueConsolidate` — the SAME per-kbId serialization queue the sibling
+  // maintenance op=consolidate route uses (see its own doc comment: "Always
+  // invoked via enqueueConsolidate, never directly"). Awaited so this
+  // function can still write `phase: 'applied'` and return only once the
+  // QUEUED run has actually finished, not merely been enqueued. This
+  // serialization is a SEPARATE, complementary property to the atomic claim
+  // above — it protects the on-disk category-index file from two
+  // concurrently-RUNNING drains; the claim above protects against a SECOND
+  // drain ever being enqueued in the first place for one approval.
+  await enqueueConsolidate(kbId, () => runBrainConsolidateNow(forgeRoot, kbId, runId));
+
+  const written = guardedWriteSessionStatus(projectsRoot, dirSegs, { ...status, phase: 'applied' });
+  if (written === null) {
+    return { ok: false, status: 500, error: 'kb-cleanup apply: status.json write for phase "applied" failed containment' };
+  }
+  return { ok: true, runId };
 }
 
 // ---------------------------------------------------------------------------

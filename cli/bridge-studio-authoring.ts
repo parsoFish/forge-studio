@@ -346,7 +346,15 @@ function revertToAwaitingReview(
 // D5 — the finalize sequence.
 // ---------------------------------------------------------------------------
 
-async function runFinalize(
+/** Exported (W6-B4) so cli/bridge-studio-affordances.ts's generic
+ *  session-affordance write endpoint can delegate authoring's `verdict:
+ *  'approve'` affordance WHOLESALE to this exact sequence — the
+ *  copyStagingToLibrary + skill/hook-install flow is too security-sensitive
+ *  to duplicate; the generic route validates its own body shape ({verdict,
+ *  kind, id}) and hands off, letting this function send its own response
+ *  (success and every failure path) exactly as it already does for
+ *  POST /api/studio/authoring/finalize. */
+export async function runFinalize(
   ctx: StudioContext,
   res: ServerResponse,
   origin: string,
