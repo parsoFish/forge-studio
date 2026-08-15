@@ -19,6 +19,44 @@ every route below owns its own `data-page="<name>"` root (+
 `data-page-ready` once its first fetch settles), so this is a per-route
 inventory rather than one shared page-level contract:
 
+- **Global nav — `StudioNav` (`[data-component="studio-nav"]`,
+  `components/StudioNav.tsx`, W6-IA-5).** The six-pillar top nav rendered on
+  every page. Data contract (`NAV_ITEMS`) and active-pillar rules
+  (`isNavItemActive`, a pure function exported for direct table-driven
+  testing — `components/StudioNav.test.ts`) are both plain data, not scraped
+  from markup:
+
+  | id | label | href |
+  | --- | --- | --- |
+  | `home` | Home | `/` |
+  | `projects` | Projects | `/projects` |
+  | `flows` | Flows | `/flows` |
+  | `agents` | Agents | `/agents` |
+  | `library` | Library | `/library` |
+  | `knowledge` | Knowledge | `/knowledge` |
+
+  Each link carries `data-nav="<id>"` and lights an `active` class per a
+  data-driven prefix table (replacing R6-03-F3's original per-id
+  special-cases): `home` matches the exact root `/` only; `projects`,
+  `flows`, `agents`, `knowledge` match their own href as a prefix (`p` or
+  `p/*` — boundary-checked, so `/agentsomething` does NOT light `agents`);
+  `library` matches `/library` **plus** the five-shelf "library island" —
+  `/skills`, `/hooks`, `/connections`, `/templates`, `/community` (those
+  routes are library sub-kinds, not separate pillars). Session-shell routes
+  (`/sessions/*`, `/architect/*`, `/project-brain/*`, `/instructions/*`,
+  `/demo/*`) and `/artifact` deliberately light no pillar — they're reached
+  from within a page, not the nav. Before W6-IA-5, Flows/Agents deep-linked
+  straight into a specific build/monitor surface (`/flows/forge-develop`,
+  `/agents/new`); now every pillar points at its own kind's real browse
+  index (built by IA-1/2/3), and a specific flow/agent is reached via a card
+  on that index — see the `/flows`, `/agents`, `/projects` entries below.
+  Journey coverage: `scripts/journeys/flows-onboard.mjs`'s `FOB.nav`
+  assertions (pillar count + Home/Library hrefs) and
+  `scripts/journeys/flows-run.mjs`'s `run-build-monitor` clip (a real
+  `[data-nav="flows"]` click lands on the flows index, then a real flow-card
+  click reaches the monitor — not a direct nav deep-link); `scripts/e2e-
+  deadpaths.mjs` additionally crawls every `[data-nav]` href on every route
+  and asserts it resolves to a known, live page.
 - **Home `/`** — the operator's ONE dashboard (R6-07; consolidated by
   W6-IA-4). Data plumbing — the same six existing reads
   (`fetchStudioAgents`/`Flows`/`Projects`/`Kbs` + `fetchRuns` +
@@ -156,8 +194,8 @@ inventory rather than one shared page-level contract:
   render-test coverage, `lib/library-card-render.test.ts`, is unaffected —
   the component itself is unchanged, just no longer wired into any page).
   `StudioNav` (`[data-component="studio-nav"]`) is UNCHANGED by this rebuild
-  (IA-5's lane) — still SIX `[data-nav]` pillars: `home` (`href="/"`), `flows`,
-  `agents`, `projects`, `library` (`href="/library"`), `knowledge`.
+  — see the Global nav entry above (W6-IA-5) for the current six-pillar
+  set/order/hrefs and active-state rules.
   Journey coverage: `scripts/journeys/stand-up-create.mjs`'s
   `su-create-library` beat (the five shelves + the KB cross-link); every
   OTHER journey beat that used to enter creation through a Library shelf now
@@ -202,9 +240,9 @@ inventory rather than one shared page-level contract:
   re-fetches runs on it (the same `loadAll`/`refreshRuns` split
   `lib/use-studio-home-data.ts` now uses for Home, W6-IA-4) so those
   run-derived badges stay live rather than freezing at the
-  page's initial load. `StudioNav`'s Flows nav item still deep-links straight
-  to `/flows/forge-develop`, not here — repointing it is a later lane
-  (IA-5).
+  page's initial load. `StudioNav`'s Flows nav item now points straight here
+  (W6-IA-5 — was a direct deep-link to `/flows/forge-develop`); a specific
+  flow's own monitor is reached via a card on this index, not the nav.
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
@@ -508,9 +546,9 @@ inventory rather than one shared page-level contract:
   attempt). Action errors surface as `[data-component="community-action-error"]`.
 
 - **`/agents` — the agents index (T2 lane W6-IA-3, 2026-08-15).** New route;
-  did not exist before. `StudioNav`'s "Agents" nav item still points at
-  `/agents/new` (IA-5's concern, untouched here) — this route gives agents
-  a browsable index of their own, reachable by direct navigation. Root:
+  did not exist before. `StudioNav`'s "Agents" nav item now points straight
+  here (W6-IA-5 — was a direct deep-link to `/agents/new`); the
+  agent-builder is reached via this index's own `new-agent` CTA. Root:
   `main[data-page="agents-index"][data-page-ready][data-agent-count]`. Two
   independently-ready sections (two different fetches, never one shared
   "loading" flag — a page-level `ready` gates the roster, a separate
