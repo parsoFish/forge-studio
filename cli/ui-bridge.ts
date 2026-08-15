@@ -142,7 +142,8 @@ import {
 import { readAgentInstructionsFile } from '../orchestrator/project-config.ts';
 import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEILING_USD } from '../orchestrator/config.ts';
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
-import { listRuns, buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
+import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
+import { cachedListRuns } from './run-list-cache.ts';
 import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
 
@@ -950,7 +951,8 @@ function collectFlowNodeRows(forgeRoot: string, slug: string): AgentHistoryRow[]
   const nodeId = buildAgentSlugToNodeId(forgeRoot).get(slug);
   if (!nodeId) return [];
   const rows: AgentHistoryRow[] = [];
-  for (const run of listRuns(forgeRoot, Date.now())) {
+  // ADR-044 P1: cached per-manifest derivation — see cli/run-list-cache.ts.
+  for (const run of cachedListRuns(forgeRoot, Date.now())) {
     const status = run.phases[nodeId];
     if (status === undefined) continue; // this run's flow never reached the node — no row, never fabricated
     rows.push({

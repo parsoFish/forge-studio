@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtempSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, existsSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -9,7 +9,7 @@ import {
   projectBrainSessionDir,
   type ProjectBrainStatus,
 } from './project-brain-builder-runner.ts';
-import { writeSessionStatus, type QueryFn } from './interactive-session.ts';
+import { writeSessionStatus, REDACTED_THINKING_MARKER, type QueryFn } from './interactive-session.ts';
 import { loadKbDescriptor } from './studio/registry.ts';
 
 function setup(phase: ProjectBrainStatus['phase']): { forgeRoot: string; projectRoot: string; sessionDir: string; sessionId: string } {
@@ -59,6 +59,53 @@ test('analyzing → awaiting-review when the agent stages themes', async () => {
     });
     assert.equal(r.phase, 'awaiting-review');
     assert.deepEqual(r.themes, ['conventions.md', 'profile.md', 'structure.md']);
+  } finally {
+    rmSync(forgeRoot, { recursive: true, force: true });
+  }
+});
+
+test('W6-B1: analyzing turn forwards thinking + coalesced redacted_thinking to the event log, and Read tool_use events are unsampled', async () => {
+  const { forgeRoot, sessionDir, sessionId, projectRoot } = setup('analyzing');
+  try {
+    const staging = join(sessionDir, 'themes');
+    const READ_CALLS = 6;
+    const queryFn: QueryFn = () => {
+      async function* gen(): AsyncGenerator<unknown> {
+        const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+          type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
+        }));
+        yield {
+          type: 'assistant',
+          message: {
+            content: [
+              { type: 'thinking', thinking: '  weighing the theme structure  ' },
+              { type: 'redacted_thinking', data: 'opaque-1' },
+              { type: 'redacted_thinking', data: 'opaque-2' }, // consecutive — must coalesce
+              ...reads,
+            ],
+          },
+        };
+        mkdirSync(staging, { recursive: true });
+        writeFileSync(join(staging, 'structure.md'), '---\nname: structure\n---\n# Structure\n');
+        yield { type: 'result', total_cost_usd: 0 };
+      }
+      return gen();
+    };
+
+    await runProjectBrainTurn({ sessionId, projectRoot, forgeRoot, logsRoot: join(forgeRoot, '_logs'), queryFn });
+
+    const events = readFileSync(join(forgeRoot, '_logs', `_project-brain-${sessionId}`, 'events.jsonl'), 'utf8')
+      .trim()
+      .split('\n')
+      .map((l) => JSON.parse(l));
+
+    const thinkingEvents = events.filter((e) => e.metadata?.kind === 'thinking');
+    assert.equal(thinkingEvents.length, 2, 'one real thinking row + ONE coalesced row for the two consecutive redacted markers');
+    assert.equal(thinkingEvents[0].message, 'weighing the theme structure');
+    assert.equal(thinkingEvents[1].message, REDACTED_THINKING_MARKER);
+
+    const readToolUses = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
+    assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
   } finally {
     rmSync(forgeRoot, { recursive: true, force: true });
   }

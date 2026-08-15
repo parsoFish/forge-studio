@@ -98,7 +98,9 @@ cli/forge-watch.ts spawn 4
 cli/forge-watch.ts statSync 1
 cli/forge-watch.ts writeFileSync 2
 cli/kb-lint-summary.ts existsSync 1
+cli/kb-lint-summary.ts readdirSync 1
 cli/kb-lint-summary.ts realpathSync 1
+cli/kb-lint-summary.ts statSync 1
 cli/materials-staging.ts mkdirSync 1
 cli/materials-staging.ts writeFileSync 1
 cli/metrics.ts existsSync 1
@@ -116,6 +118,10 @@ cli/reflect-reconcile.ts existsSync 4
 cli/reflect-reconcile.ts readdirSync 1
 cli/reflect-reconcile.ts readFileSync 2
 cli/reflect-reconcile.ts statSync 1
+cli/run-list-cache.ts existsSync 2
+cli/run-list-cache.ts readdirSync 2
+cli/run-list-cache.ts readFileSync 2
+cli/run-list-cache.ts statSync 2
 cli/skill-staging.ts mkdirSync 1
 cli/skill-staging.ts writeFileSync 1
 cli/studio-path-guard.ts lstatSync 3

@@ -172,19 +172,22 @@ export const journey = defineJourney({
       {
         id: 'flows-author-new-flow',
         title: 'String plan/dev/review into a flow (new-flow builder)',
-        narration: 'From the library\'s "+ New Flow" CTA, the canvas seeds itself from the basic starter (plan → dev → review, one verdict gate); the operator names and saves it, drags a node to a new position, and reloads — proving the authored flow, and its hand-arranged layout, both persist and pass `studio lint`.',
+        narration: 'From the flows index\'s "+ New Flow" CTA, the canvas seeds itself from the basic starter (plan → dev → review, one verdict gate); the operator names and saves it, drags a node to a new position, and reloads — proving the authored flow, and its hand-arranged layout, both persist and pass `studio lint`.',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // ── J3: STRING THE THREE AGENTS INTO A FLOW (new-flow builder) ────────────
-              // From the library "+ New Flow" → canvas seeded from the basic starter
+              // From the flows index "+ New Flow" → canvas seeded from the basic starter
               // (plan → dev → review + verdict gate). Name it, save (slug derived), and
               // prove: lint-green, runnable, and node positions PERSIST across reload.
+              // W6-IA-4: was the library "+ New Flow" shelf CTA — /flows (W6-IA-2) is now
+              // the real entry point (Library dropped its projects/agents/flows/kb
+              // shelves down to shelves-only: skills/hooks/connections/templates/community).
               console.log('\n[J3] String plan/dev/review into a flow (new-flow builder)');
               cleanFirstFlow();
-              // discoverable creation: the library "+ New Flow" CTA is a real enabled link
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              // discoverable creation: the flows index "+ New Flow" CTA is a real enabled link
+              await page.goto(watch.uiUrl + '/flows', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="flows-index"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
               const newFlowCta = await page.evaluate(() => {
@@ -192,7 +195,7 @@ export const journey = defineJourney({
                 return el ? { href: el.getAttribute('href'), disabled: el.hasAttribute('disabled') } : null;
               });
               check(newFlowCta !== null && !newFlowCta.disabled && (newFlowCta.href ?? '').includes('/flows/new'),
-                'J3: library "+ New Flow" CTA is enabled and routes to the flow builder');
+                'J3: flows index "+ New Flow" CTA is enabled and routes to the flow builder');
 
               await page.goto(watch.uiUrl + '/flows/new', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
@@ -600,14 +603,15 @@ export const journey = defineJourney({
               // Re-authors the SAME-named flow in a fresh context: an idempotent
               // re-save of the same slug (not a collision), purely so the clip shows
               // the complete from-nothing arc rather than a partial replay. Entry
-              // point is the library's real "+ New Flow" CTA (not a direct goto) —
-              // the same trigger surface an operator actually clicks.
-              await recordClip(browser, watch, 'flow-scratch-build', '/library', async (p) => {
+              // point is the flows index's real "+ New Flow" CTA (not a direct goto) —
+              // the same trigger surface an operator actually clicks (W6-IA-4: was the
+              // library's own "+ New Flow" shelf CTA).
+              await recordClip(browser, watch, 'flow-scratch-build', '/flows', async (p) => {
                 await p.waitForFunction(
-                  () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                  () => document.querySelector('[data-page="flows-index"]')?.getAttribute('data-page-ready') === 'true',
                   null, { timeout: 8000 },
                 ).catch(() => {});
-                await caption(p, 'Starting from the library — the "+ New Flow" CTA is how an operator actually gets here.');
+                await caption(p, 'Starting from the flows index — the "+ New Flow" CTA is how an operator actually gets here.');
                 await sleep(THINK);
                 await p.locator('[data-action="new-flow"]').click().catch(() => {});
                 await p.waitForFunction(
@@ -704,7 +708,7 @@ export const journey = defineJourney({
                   await p.waitForURL(new RegExp(`/flows/${SCRATCH_FLOW}`), { timeout: 12000 }).catch(() => {});
                   await sleep(1000);
                 }
-              }, { readySel: '[data-page="library"]', caption: 'From the library "+ New Flow" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate', holdTailMs: 1500 });
+              }, { readySel: '[data-page="flows-index"]', caption: 'From the flows index "+ New Flow" CTA to a saved, edge-proven flow — dev → demo → adversarial-review → gate', holdTailMs: 1500 });
 
         },
       },
@@ -782,8 +786,8 @@ export const journey = defineJourney({
       },
       {
         id: 'flows-author-shelf-return',
-        title: 'The from-scratch flow joins the shelf beside forge-develop',
-        narration: 'Back on the library home page, the flow just rebuilt from scratch (A2, above) renders as an ordinary flow card in the SAME "flows" section as the OOTB forge-develop flow — same card type, same builder/monitor route reached the same way — proving a user-authored flow is a first-class shelf citizen, not a demo-only shell.',
+        title: 'The from-scratch flow joins the index beside forge-develop',
+        narration: 'Back on the flows index, the flow just rebuilt from scratch (A2, above) renders as an ordinary flow card in the SAME grid as the OOTB forge-develop flow — same card type, same builder/monitor route reached the same way — proving a user-authored flow is a first-class citizen, not a demo-only shell. (W6-IA-4: was the library\'s own "flows" shelf section — /flows, W6-IA-2, is now the real index.)',
         drive: async (ctx) => {
               const { page, watch, check, frame } = ctx;
               // create-flow mockup step 11 ("It joins the shelf beside forge-
@@ -792,23 +796,23 @@ export const journey = defineJourney({
               // only runs in the top-level pre-run sweep and finally block
               // (scripts/e2e-journey.mjs), never at the end of that beat's own
               // drive — see index.mjs's RUN_ORDER header comment.
-              console.log('\n[A2] The from-scratch flow joins the shelf (return to library)');
-              await page.goto(watch.uiUrl + '/library', { waitUntil: 'domcontentloaded' });
+              console.log('\n[A2] The from-scratch flow joins the index (return to /flows)');
+              await page.goto(watch.uiUrl + '/flows', { waitUntil: 'domcontentloaded' });
               await page.waitForFunction(
-                () => document.querySelector('[data-page="library"]')?.getAttribute('data-page-ready') === 'true',
+                () => document.querySelector('[data-page="flows-index"]')?.getAttribute('data-page-ready') === 'true',
                 null, { timeout: 15000 },
               ).catch(() => {});
               const authoredCard = page.locator(`[data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"]`);
               await authoredCard.waitFor({ timeout: 8000 }).catch(() => {});
               const authoredCount = await authoredCard.count();
               check(authoredCount === 1,
-                `flows-author-shelf-return: the from-scratch flow ("${SCRATCH_FLOW}") renders as a real card in the library's flows section ([data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"])`);
+                `flows-author-shelf-return: the from-scratch flow ("${SCRATCH_FLOW}") renders as a real card in the flows index ([data-card-type="flow"][data-card-id="${SCRATCH_FLOW}"])`);
               const seedCount = await page.locator('[data-card-type="flow"][data-card-id="forge-develop"]').count();
-              check(seedCount === 1, 'flows-author-shelf-return: the OOTB forge-develop flow renders in the SAME flows section, beside the authored one');
+              check(seedCount === 1, 'flows-author-shelf-return: the OOTB forge-develop flow renders in the SAME index grid, beside the authored one');
               const href = await authoredCard.getAttribute('href').catch(() => null);
               check(href === `/flows/${SCRATCH_FLOW}`,
                 `flows-author-shelf-return: the card links to the SAME builder/monitor route every flow uses (href="${href}")`);
-              await frame(page, 'flows-shelf-return', 'flows-author — the from-scratch flow on the shelf, beside forge-develop, in the SAME library flows section');
+              await frame(page, 'flows-shelf-return', 'flows-author — the from-scratch flow on the flows index, beside forge-develop, in the SAME grid');
         },
       },
     ],

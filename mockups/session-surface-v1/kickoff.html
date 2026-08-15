@@ -1,0 +1,331 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Surface v1 — kickoff</title>
+<style>
+  :root{
+    --bg:#0b0e14; --bg-2:#10151f; --panel:#141a26; --panel-2:#1a2230; --panel-3:#202a3c;
+    --line:#28324a; --line-2:#39455f;
+    --text:#e9eef6; --dim:#93a0b4; --faint:#5b6779;
+    --ember:#ff9e4a; --ember-hot:#ff6b35; --steel:#5cc8ff; --violet:#b78cff;
+    --green:#4ade80; --amber:#fbbf24; --red:#f87171;
+    --font-display:'Space Grotesk',ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --font-mono:'JetBrains Mono',ui-monospace,Menlo,'Cascadia Code',monospace;
+    --radius:10px; --radius-sm:6px;
+    --hex:polygon(25% 3%,75% 3%,98% 50%,75% 97%,25% 97%,2% 50%);
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-size:14px;line-height:1.55}
+  a{color:var(--steel);text-decoration:none} a:hover{text-decoration:underline}
+  .banner{background:linear-gradient(90deg,#2a1608,#1a1208);border-bottom:1px solid #5a3a1a;
+    color:var(--ember);font:600 11px/1 var(--font-mono);letter-spacing:.08em;text-transform:uppercase;
+    padding:9px 20px;text-align:center}
+  .mocknav{display:flex;gap:16px;justify-content:center;padding:8px 0;background:var(--bg-2);
+    border-bottom:1px solid var(--line);font:500 11.5px/1 var(--font-mono)}
+  .mocknav a{color:var(--faint)} .mocknav a.active{color:var(--ember)}
+  /* studio chrome */
+  .topbar{display:flex;align-items:center;gap:10px;padding:12px 26px;border-bottom:1px solid var(--line);
+    background:var(--bg-2)}
+  .hexmark{width:22px;height:24px;clip-path:var(--hex);background:var(--ember);flex:none}
+  .brand{font-family:var(--font-display);font-weight:600;font-size:14px;letter-spacing:.02em}
+  .crumbs{color:var(--faint);font:500 12px/1 var(--font-mono);margin-left:14px}
+  .crumbs b{color:var(--dim);font-weight:500}
+  .wrap{max-width:820px;margin:0 auto;padding:30px 24px 90px}
+  h1{font-family:var(--font-display);font-size:26px;font-weight:600;letter-spacing:-.01em;margin:0 0 4px}
+  .mono{font-family:var(--font-mono);font-size:.92em}
+  .sub{color:var(--dim);margin:0 0 22px;font-size:13px}
+  .cm{display:inline-flex;align-items:center;justify-content:center;width:21px;height:23px;
+    clip-path:var(--hex);background:var(--ember);color:#0b0e14;font:700 11px/1 var(--font-mono);
+    cursor:help;vertical-align:middle;margin:0 5px;flex:none}
+  /* kind chip row (mockup-only switcher) */
+  .kindsrow{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 6px}
+  .kindchip{display:inline-flex;align-items:center;gap:7px;background:var(--panel);border:1px solid var(--line);
+    border-radius:999px;padding:6px 13px 6px 8px;color:var(--dim);font:500 12px/1 var(--font-mono);cursor:pointer}
+  .kindchip .g{width:15px;height:17px;clip-path:var(--hex);background:var(--panel-3)}
+  .kindchip.active{border-color:var(--ember);color:var(--text)}
+  .kindchip.active .g{background:var(--ember)}
+  .switchnote{font:500 10.5px/1.4 var(--font-mono);color:var(--faint);margin:0 0 22px}
+  /* cards */
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:18px 20px;margin-bottom:16px}
+  .card h2{font-family:var(--font-display);font-size:14px;font-weight:600;margin:0 0 12px;display:flex;align-items:center}
+  .lbl{font:600 10.5px/1 var(--font-mono);letter-spacing:.1em;text-transform:uppercase;color:var(--faint);
+    display:block;margin:0 0 6px}
+  /* kind context card */
+  .ctx{display:grid;grid-template-columns:1fr 1fr;gap:14px 26px}
+  .ctx .full{grid-column:1 / -1}
+  .ctx .v{font-size:13px;color:var(--text)}
+  .ctx .v .mono{color:var(--dim)}
+  .stage{display:inline-block;background:var(--panel-3);border:1px solid var(--line-2);border-radius:4px;
+    padding:2px 8px;font:500 11px/1.5 var(--font-mono);color:var(--dim);margin-right:5px}
+  .stage.def{border-color:var(--steel);color:var(--steel)}
+  .pill{display:inline-block;border-radius:4px;padding:2px 8px;font:600 10.5px/1.5 var(--font-mono);letter-spacing:.04em}
+  .pill.brain-mandatory{background:#122b1c;border:1px solid #2b6a40;color:var(--green)}
+  .pill.brain-advisory{background:#2b2410;border:1px solid #6a5a2b;color:var(--amber)}
+  .pill.brain-none{background:var(--panel-3);border:1px solid var(--line-2);color:var(--faint)}
+  .interact{color:var(--dim);font-size:12.5px;font-style:italic}
+  /* form */
+  select,textarea{width:100%;background:var(--bg-2);border:1px solid var(--line-2);border-radius:var(--radius-sm);
+    color:var(--text);font:inherit;padding:9px 12px}
+  textarea{min-height:96px;resize:vertical;line-height:1.5}
+  select:focus,textarea:focus{outline:2px solid var(--steel);outline-offset:-1px}
+  .hint{font-size:11.5px;color:var(--faint);margin-top:6px}
+  /* tier picker */
+  .tiers{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+  .tier{position:relative;display:block;background:var(--bg-2);border:1px solid var(--line-2);
+    border-radius:var(--radius-sm);padding:12px 14px;cursor:pointer}
+  .tier input{position:absolute;opacity:0;pointer-events:none}
+  .tier .tname{font-family:var(--font-display);font-weight:600;font-size:14px;display:flex;align-items:center;gap:8px}
+  .tier .dot{width:8px;height:8px;border-radius:50%;border:2px solid var(--faint);flex:none}
+  .tier .thint{font:500 11px/1.5 var(--font-mono);color:var(--faint);margin-top:4px}
+  .tier:has(input:checked){border-color:var(--ember);background:#1c1610}
+  .tier:has(input:checked) .dot{border-color:var(--ember);background:var(--ember)}
+  .tier:has(input:checked) .thint{color:var(--ember)}
+  .tier.off{cursor:not-allowed}
+  .tier.off .tname,.tier.off .thint{opacity:.4}
+  .tier.off .tname{text-decoration:line-through;text-decoration-color:var(--faint);text-decoration-thickness:1px}
+  .tier .why{display:none;position:absolute;left:50%;bottom:calc(100% + 8px);transform:translateX(-50%);
+    background:var(--panel-3);border:1px solid var(--line-2);border-radius:var(--radius-sm);
+    padding:8px 11px;width:240px;font-size:11.5px;color:var(--dim);z-index:5;box-shadow:0 8px 30px rgba(0,0,0,.45)}
+  .tier.off:hover .why{display:block}
+  .rangefoot{font:500 11px/1.6 var(--font-mono);color:var(--faint);margin-top:10px}
+  .rangefoot b{color:var(--dim);font-weight:500}
+  /* fixed chip */
+  .fixedchip{display:inline-flex;align-items:center;gap:9px;background:var(--bg-2);border:1px solid var(--line-2);
+    border-radius:var(--radius-sm);padding:10px 14px;font:500 12.5px/1 var(--font-mono);color:var(--dim)}
+  .fixedchip .lock{width:12px;height:14px;clip-path:var(--hex);background:var(--faint);flex:none}
+  .fixedchip b{color:var(--text);font-weight:600}
+  /* start row */
+  .startrow{display:flex;align-items:center;gap:16px;margin-top:22px}
+  .btn-start{background:var(--ember);border:0;border-radius:var(--radius-sm);color:#0b0e14;
+    font:600 14px/1 var(--font-display);padding:12px 26px;cursor:pointer;letter-spacing:.01em}
+  .btn-start:hover{background:var(--ember-hot)}
+  .startnote{color:var(--faint);font-size:12px}
+  /* legend */
+  .legend{max-width:820px;margin:34px auto 0;padding:0 24px}
+  .legend h3{font:600 11px/1 var(--font-mono);letter-spacing:.12em;text-transform:uppercase;color:var(--faint);margin:0 0 10px}
+  .legend p{color:var(--dim);font-size:12.5px;margin:0 0 10px}
+  .legend p .cm{margin:0 8px 0 0;vertical-align:-6px}
+  @media (max-width:700px){ .tiers{grid-template-columns:1fr} .ctx{grid-template-columns:1fr} }
+</style>
+</head>
+<body data-mock-page="kickoff">
+<div class="banner">Session-surface mockup v1 · kickoff — /sessions/[kind]/new</div>
+<nav class="mocknav">
+  <a href="index.html">cover</a><a href="kickoff.html" class="active">kickoff</a><a href="session-live.html">session-live</a><a href="session-demo.html">session-demo</a><a href="sessions-index.html">sessions-index</a>
+</nav>
+<div class="topbar">
+  <div class="hexmark"></div><div class="brand">Forge Studio</div>
+  <div class="crumbs">sessions / <b id="crumb-kind">instructions</b> / new</div>
+</div>
+
+<div class="wrap">
+  <h1 id="page-title">New Instructions session</h1>
+  <p class="sub">One kickoff screen for every kind (<b>L4</b>) — everything below the chip row is rendered from the kind's descriptor + its agent's <span class="mono">SKILL.md</span>.</p>
+
+  <div class="kindsrow" id="kindsrow" data-section="kind-switch"></div>
+  <p class="switchnote">▲ mockup-only switcher — in Studio the kind is fixed by the route; entry points elsewhere link straight to <span class="mono">/sessions/&lt;kind&gt;/new</span></p>
+
+  <div class="card" data-section="kind-context">
+    <h2>Kind context<span class="cm" title="№1 — kickoff context density: full contract card vs title + one line">1</span></h2>
+    <div class="ctx">
+      <div><span class="lbl">Agent</span><div class="v mono" id="ctx-agent">instructions-creator · <span class="mono">skills/instructions-creator/SKILL.md</span></div></div>
+      <div><span class="lbl">Produces</span><div class="v" id="ctx-artifact">AGENTS.md draft <span class="mono">(markdown-draft)</span></div></div>
+      <div><span class="lbl">Stages</span><div class="v" id="ctx-stages"></div></div>
+      <div><span class="lbl">Brain access · tools</span><div class="v" id="ctx-brain"></div></div>
+      <div class="full"><span class="lbl">Interaction shape</span><div class="interact" id="ctx-interact"></div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2 id="proj-label">Project</h2>
+    <select id="proj-select" aria-label="Project">
+      <option>gitpulse</option>
+      <option>betterado</option>
+      <option>mdtoc</option>
+      <option>trafficGame</option>
+    </select>
+    <div class="hint" id="proj-hint">Session directory: <span class="mono" id="ctx-dir">projects/gitpulse/_instructions/&lt;sessionId&gt;</span></div>
+  </div>
+
+  <div class="card">
+    <h2 id="prompt-label">What should this session do?</h2>
+    <textarea id="prompt-input" placeholder=""></textarea>
+    <div class="hint">Sent as the opening operator turn — the agent asks before it acts where its interaction shape says so.</div>
+  </div>
+
+  <div class="card" data-section="model-tier">
+    <h2>Model<span class="cm" title="№2 — tier picker presentation: radio cards vs segmented; disabled-with-tooltip vs hidden">2</span><span class="cm" title="№3 — fixed-strategy kinds render a read-only chip; all 7 current skills are fixed today">3</span></h2>
+    <div id="model-area"></div>
+  </div>
+
+  <div class="startrow">
+    <button class="btn-start" id="btn-start">Start session</button>
+    <div class="startnote" id="start-note">Writes <span class="mono">modelTier</span> into the session's <span class="mono">status.json</span>; out-of-range tiers are rejected server-side by <span class="mono">resolveSessionModel</span> naming the allowed set.</div>
+  </div>
+</div>
+
+<div class="legend" data-section="page-legend">
+  <h3>Decision points on this page</h3>
+  <p><span class="cm">1</span> Kickoff context density — the full contract card (agent, stages, artifact, brain access, tools, interaction shape) vs just the kind title + one line. Anything here you'd never read? Anything missing (budgets? cost ceiling)?</p>
+  <p><span class="cm">2</span> Tier picker presentation — radio cards with speed/cost hints vs a compact segmented control; out-of-range tier shown disabled with the "outside skill range" tooltip vs hidden entirely. (Switch to <b>architect</b> or <b>authoring</b> to see different ranges.)</p>
+  <p><span class="cm">3</span> Fixed-strategy chip — switch to <b>demo</b>, <b>project-brain</b>, <b>onboarding</b> or <b>kb-cleanup</b>: no picker, a read-only chip. Is the chip worth the row, or should fixed kinds drop the model section?</p>
+</div>
+
+<script>
+  var TIERS = [
+    { id:'haiku',  hint:'fastest · $' },
+    { id:'sonnet', hint:'balanced · $$' },
+    { id:'opus',   hint:'deepest · $$$' }
+  ];
+  // strategy:'range' values are ILLUSTRATIVE (see cover note + №3):
+  // every current SKILL.md declares strategy: fixed / claude-sonnet-4-6.
+  var KINDS = {
+    architect: {
+      title:'Planning session', agent:'architect', skill:'skills/architect/SKILL.md',
+      stages:['roadmap'], def:'roadmap', artifact:'Roadmap draft', akind:'roadmap-draft',
+      brain:'mandatory', tools:'Read · Grep · Glob · Bash',
+      interact:'Operator-driven; blocks on interview answers and the PLAN-gate verdict.',
+      dir:'_architect',
+      model:{strategy:'range', range:['sonnet','opus'], pick:'sonnet'},
+      promptLabel:'What should forge plan?',
+      placeholder:'e.g. Take gitpulse from weekly digests to a full release-notes pipeline — roadmap-scale, tests included.'
+    },
+    instructions: {
+      title:'Instructions session', agent:'instructions-creator', skill:'skills/instructions-creator/SKILL.md',
+      stages:['instructions'], def:'instructions', artifact:'AGENTS.md draft', akind:'markdown-draft',
+      brain:'none', tools:'Read · Grep · Glob · Bash',
+      interact:'Operator-driven; asks clarifying questions one round at a time and writes only after the operator approves.',
+      dir:'_instructions',
+      model:{strategy:'range', range:['haiku','sonnet'], pick:'haiku'},
+      promptLabel:'What should the instructions cover?',
+      placeholder:'e.g. gitpulse needs an AGENTS.md so dev-loops stop guessing the test runner and lint rules.'
+    },
+    'project-brain': {
+      title:'Brain creation session', agent:'project-brain-builder', skill:'skills/project-brain-builder/SKILL.md',
+      stages:['brain'], def:'brain', artifact:'Seeded structure', akind:'brain-structure',
+      brain:'advisory', tools:'Read · Grep · Glob · Write',
+      interact:'Authors a draft set of themes for operator review; never blocks mid-turn.',
+      dir:'_project-brain',
+      model:{strategy:'fixed', fixed:'claude-sonnet-4-6'},
+      promptLabel:'What should the seeded brain capture?',
+      placeholder:'e.g. Seed themes for trafficGame — checkpoint spacing conventions, the speed-limit idea, test layout.'
+    },
+    demo: {
+      title:'Demo capability session', agent:'demo-builder', skill:'skills/demo-builder/SKILL.md',
+      stages:['demo'], def:'demo', artifact:'Demo generations', akind:'generation-gallery',
+      brain:'none', tools:'Read · Grep · Glob · Bash · Write · Edit',
+      interact:'Operator-driven; builds the demo skill, renders a sample, and revises on direct feedback until the operator locks it.',
+      dir:'_demo',
+      model:{strategy:'fixed', fixed:'claude-sonnet-4-6'},
+      promptLabel:'What should the demo show?',
+      placeholder:'e.g. The weekly pulse view is the money shot — real endpoint data, not fixtures.'
+    },
+    onboarding: {
+      title:'Onboarding session', agent:'onboarding-agent', skill:'skills/onboarding-agent/SKILL.md',
+      stages:['contract','instructions','secrets','demo','roadmap'], def:'contract', artifact:'Contract build-out', akind:'contract-buildout',
+      brain:'none', tools:'Read · Grep · Glob · Edit · Write · Bash',
+      interact:'Walks the forge↔project contract stage by stage; pauses where an invariant needs the operator.',
+      dir:'_onboarding',
+      model:{strategy:'fixed', fixed:'claude-sonnet-4-6'},
+      promptLabel:'What are we onboarding?',
+      placeholder:'e.g. Bring trafficGame up to the contract — it has tests but no demo skill and no AGENTS.md.'
+    },
+    authoring: {
+      title:'Authoring session', agent:'creation-agent', skill:'skills/creation-agent/SKILL.md',
+      stages:['authoring'], def:'authoring', artifact:'Package', akind:'file-package',
+      brain:'none', tools:'Read · Grep · Glob · Bash · Write · Edit',
+      interact:'Operator-driven; asks what the package should do, drafts it, and revises on direct feedback until the operator saves.',
+      dir:'_authoring',
+      model:{strategy:'range', range:['haiku','sonnet'], pick:'sonnet'},
+      promptLabel:'What should the new skill or hook do?',
+      placeholder:'e.g. A post-merge hook that regenerates the demo gallery whenever a journey beat renames.'
+    },
+    'kb-cleanup': {
+      title:'KB cleanup session', agent:'brain-maintenance', skill:'skills/brain-maintenance/SKILL.md',
+      stages:['brain'], def:'brain', artifact:'Cleanup plan', akind:'cleanup-plan',
+      brain:'advisory', tools:'Read · Grep · Glob · Write',
+      interact:'Operator-driven; drafts a cleanup plan from the findings it is given and stops for operator review — never asks free-form questions.',
+      dir:'_kb-cleanup',
+      model:{strategy:'fixed', fixed:'claude-sonnet-4-6'},
+      promptLabel:'Which lint findings should the plan cover?',
+      placeholder:'e.g. The 6 agent-tier residuals from last night\'s betterado-brain lint run.',
+      projLabel:'Knowledge base', projects:['betterado brain (kb-betterado)','gitpulse brain (kb-gitpulse)','forge cycles (kb-cycles)']
+    }
+  };
+
+  var current = 'instructions';
+  var row = document.getElementById('kindsrow');
+  Object.keys(KINDS).forEach(function(id){
+    var b = document.createElement('button');
+    b.className = 'kindchip' + (id===current?' active':'');
+    b.setAttribute('data-kind', id);
+    b.innerHTML = '<span class="g"></span>' + id;
+    b.onclick = function(){ current = id; render(); };
+    row.appendChild(b);
+  });
+
+  function render(){
+    var k = KINDS[current];
+    document.body.setAttribute('data-session-kind', current);
+    document.querySelectorAll('.kindchip').forEach(function(c){
+      c.className = 'kindchip' + (c.getAttribute('data-kind')===current?' active':'');
+    });
+    document.getElementById('crumb-kind').textContent = current;
+    document.getElementById('page-title').textContent = 'New ' + k.title.replace(/ session$/,'') + ' session';
+    document.getElementById('ctx-agent').innerHTML = k.agent + ' · <span class="mono">' + k.skill + '</span>';
+    document.getElementById('ctx-artifact').innerHTML = k.artifact + ' <span class="mono">(' + k.akind + ')</span>';
+    document.getElementById('ctx-stages').innerHTML = k.stages.map(function(s){
+      return '<span class="stage' + (s===k.def?' def':'') + '">' + s + '</span>';
+    }).join('') + (k.stages.length>1 ? ' <span class="hint" style="display:inline">· ' + k.def + ' first</span>' : '');
+    document.getElementById('ctx-brain').innerHTML =
+      '<span class="pill brain-' + k.brain + '">brain: ' + k.brain + '</span> &nbsp;<span class="mono" style="color:var(--dim)">' + k.tools + '</span>';
+    document.getElementById('ctx-interact').textContent = k.interact;
+    document.getElementById('proj-label').textContent = k.projLabel || 'Project';
+    var sel = document.getElementById('proj-select');
+    sel.innerHTML = (k.projects || ['gitpulse','betterado','mdtoc','trafficGame']).map(function(p){return '<option>'+p+'</option>';}).join('');
+    document.getElementById('ctx-dir').textContent = k.projLabel
+      ? 'projects/betterado/' + k.dir + '/<sessionId>'
+      : 'projects/' + sel.value + '/' + k.dir + '/<sessionId>';
+    document.getElementById('prompt-label').textContent = k.promptLabel;
+    document.getElementById('prompt-input').placeholder = k.placeholder;
+    renderModel(k);
+  }
+
+  function renderModel(k){
+    var area = document.getElementById('model-area');
+    if (k.model.strategy === 'fixed'){
+      area.innerHTML =
+        '<div class="fixedchip"><span class="lock"></span><span><b>' + k.model.fixed + '</b> · strategy: fixed · read-only</span></div>' +
+        '<div class="rangefoot">This skill pins its model — no spawn-time choice. Declared in <b>' + k.skill + '</b>.</div>';
+      return;
+    }
+    var html = '<div class="tiers" role="radiogroup" aria-label="Model tier">';
+    TIERS.forEach(function(t){
+      var inRange = k.model.range.indexOf(t.id) !== -1;
+      if (inRange){
+        html += '<label class="tier"><input type="radio" name="tier" value="' + t.id + '"' +
+          (t.id===k.model.pick?' checked':'') + '><span class="tname"><span class="dot"></span>' + t.id +
+          '</span><span class="thint">' + t.hint + '</span></label>';
+      } else {
+        html += '<div class="tier off" aria-disabled="true" title="outside skill range">' +
+          '<span class="tname"><span class="dot"></span>' + t.id + '</span><span class="thint">' + t.hint + '</span>' +
+          '<span class="why">Outside skill range — <span class="mono">' + k.skill + '</span> declares <span class="mono">range: [' +
+          k.model.range.join(', ') + ']</span>. Picking it server-side throws naming this allowed set.</span></div>';
+      }
+    });
+    html += '</div><div class="rangefoot">Declared range: <b>[' + k.model.range.join(' → ') +
+      ']</b> · default = cheapest in range · your pick is written to <b>status.json</b> as <b>modelTier</b></div>';
+    area.innerHTML = html;
+  }
+
+  document.getElementById('proj-select').addEventListener('change', render);
+  document.getElementById('btn-start').addEventListener('click', function(){
+    alert('Mockup — would POST the kickoff and route to /sessions/' + current + '/<new-session-id>');
+  });
+  render();
+</script>
+</body>
+</html>
