@@ -517,9 +517,13 @@ async function startWatch() {
     // this was authored on took 18.06s wall-clock (`/usr/bin/time -v`, 200%
     // CPU); +50% margin rounds to 30s. First run (or any run after forge-ui
     // source changes) pays this; a warm/fresh `.next/` skips the build
-    // entirely and is fast. On timeout, kill what we spawned — the
-    // half-booted studio HOLDS the port, and rejecting without killing it
-    // strands a zombie that blocks every subsequent run (2026-07-11 R3).
+    // entirely and is fast. NOTE: the 30s margin is a SINGLE-SAMPLE
+    // measurement from one machine, not a calibrated distribution —
+    // re-measure (and re-derive the margin) if forge-ui's source tree/
+    // dependency graph grows enough to meaningfully slow `next build`. On
+    // timeout, kill what we spawned — the half-booted studio HOLDS the
+    // port, and rejecting without killing it strands a zombie that blocks
+    // every subsequent run (2026-07-11 R3).
     setTimeout(() => {
       if (settled) return;
       try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* */ } }

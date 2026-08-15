@@ -114,8 +114,24 @@ async function startWatch() {
     // forge-ui` on the machine this was authored on took 18.06s wall-clock
     // (`/usr/bin/time -v`, 200% CPU); +50% margin rounds to 30s. First run
     // (or any run after forge-ui source changes) pays this; a warm/fresh
-    // `.next/` skips the build entirely and is fast.
-    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready in 120s')); }, 120000);
+    // `.next/` skips the build entirely and is fast. NOTE: the 30s margin is
+    // a SINGLE-SAMPLE measurement from one machine, not a calibrated
+    // distribution — re-measure (and re-derive the margin) if forge-ui's
+    // source tree/dependency graph grows enough to meaningfully slow `next
+    // build`.
+    setTimeout(() => {
+      if (settled) return;
+      // Kill the whole process group (negative pid — `proc` was spawned
+      // `detached: true`, making it its own group leader), mirroring
+      // verify-cycle.mjs's boot-timeout handler. A build-overrun rejection
+      // here previously left the half-booted, detached `forge studio`
+      // running with nothing to reap it — the exact zombie-on-4123/4124
+      // failure verify-cycle.mjs's own comment cites from 2026-07-11,
+      // now more likely to trip since this harness's timeout absorbs a
+      // cold production build.
+      try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* already dead */ } }
+      rej(new Error('forge studio not ready in 120s; spawned watch killed'));
+    }, 120000);
   });
 }
 
