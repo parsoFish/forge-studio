@@ -30,12 +30,182 @@ import { join, dirname } from 'node:path';
 import { guardedFile } from '../cli/studio-path-guard.ts';
 import { withIdleDeadline } from './stream-deadline.ts';
 import { extractLiveToolDetails } from './tool-event-emit.ts';
+import type { EventLogger, Phase } from './logging.ts';
 import type { ToolUseLiveDetail } from '../loops/ralph/claude-agent.ts';
 
 /** Heartbeat cadence — the runner touches its `.heartbeat` file at most this
  *  often during an SDK stream, so the UI staleness checker has a liveness pulse
  *  without flooding the filesystem. */
 export const HEARTBEAT_THROTTLE_MS = 2000;
+
+/**
+ * W6-B1: the literal `onThinking` fires with for every `redacted_thinking`
+ * content block, NEVER the block's own (encrypted, non-human-readable) data —
+ * only that thinking happened and was redacted by the API. Exported so every
+ * sink built on top of `onThinking` (interactive-runner.ts, the four legacy
+ * runners, brain-fix-runner.ts) shares exactly this literal rather than each
+ * hand-rolling its own copy that could drift.
+ */
+export const REDACTED_THINKING_MARKER = '[thinking redacted]';
+
+// ---------------------------------------------------------------------------
+// W6-B1 review round 2 — the ONE shared thinking + reasoning sink pair.
+//
+// Both sinks were duplicated across 7 runner files (interactive-runner.ts,
+// architect-runner.ts, instructions-runner.ts, demo-builder-runner.ts,
+// project-brain-builder-runner.ts, brain-fix-runner.ts,
+// preflight-fix-runner.ts) — 7 copies of the same per-block-cap logic is 7
+// future desyncs, so it moves here, next to the REDACTED_THINKING_MARKER
+// literal it already needs to stay in sync with. Two bugs fixed in this one
+// place rather than in 7:
+//
+//   1. HIGH — neither sink had a per-TURN row ceiling. `makeToolEventSink`'s
+//      sampler bounds tool_use rows via {cap:200}, but that cap does not
+//      touch onThinking/onText, which write straight through `logger.emit`
+//      on every block — and `runStructuredTurn` has no `maxTurns` to bound
+//      how many thinking/text blocks a heavy-reasoning model streams before
+//      its final `result`. A single turn could therefore write an unbounded
+//      number of rows. Fixed with SINK_ROW_CAP: once a sink instance (one
+//      per turn — each runner creates it fresh at the top of its `run*Turn`)
+//      has emitted this many rows, it writes exactly ONE terminal marker row
+//      and silently drops everything after — never a second marker, never
+//      an unbounded write.
+//   2. MEDIUM — the thinking sink's consecutive-duplicate coalescing
+//      compared the TRUNCATED (capped-at-700-chars) string, so two genuinely
+//      DISTINCT thinking blocks that merely share a 700-char prefix would
+//      wrongly collapse into one row. Fixed: coalescing now compares the raw,
+//      untruncated text; only the EMITTED message is truncated.
+// ---------------------------------------------------------------------------
+
+/** Per-block char cap for forwarded reasoning ('text' block) content — the
+ *  long-standing default every runner's reasoning sink used before this was
+ *  centralized. */
+export const MAX_REASONING_TEXT = 400;
+
+/** Per-block char cap for forwarded thinking ('thinking' block) content —
+ *  wider than MAX_REASONING_TEXT (operator-approved default): a thinking
+ *  trace is denser and less redundant with the turn's other logged output. */
+export const MAX_THINKING_TEXT = 700;
+
+/**
+ * Per-turn row ceiling shared by both sinks (bug 1 above). 300 is the
+ * operator-approved default — generous for a real turn's reasoning volume,
+ * but a hard backstop against an unbounded write.
+ */
+export const SINK_ROW_CAP = 300;
+
+/** The one terminal row a thinking sink writes once SINK_ROW_CAP is hit. */
+export const THINKING_CAPPED_MARKER = `[thinking capped after ${SINK_ROW_CAP} rows]`;
+
+/** The one terminal row a reasoning sink writes once SINK_ROW_CAP is hit. */
+export const REASONING_CAPPED_MARKER = `[reasoning capped after ${SINK_ROW_CAP} rows]`;
+
+/**
+ * Shared context a capped text sink needs to build its emitted rows —
+ * mirrors `ToolEventContext` (tool-event-emit.ts)'s shape so the two sink
+ * families stay stylistically consistent. `idMeta` is spread into every
+ * emitted row's `metadata` VERBATIM: it is how each runner keeps its own id
+ * convention (`{session_id: ...}` vs `{runId: ...}`) without this shared
+ * module hardcoding one.
+ */
+export type TextSinkContext = {
+  initiativeId: string;
+  phase: Phase;
+  skill: string;
+  idMeta: Record<string, string>;
+};
+
+/** Internal factory both exported sinks below share — the row-cap + optional
+ *  raw-text-coalescing logic lives exactly once. Not exported: callers use
+ *  `makeThinkingSink` / `makeReasoningSink`, which pin the per-kind knobs. */
+function makeCappedTextSink(
+  logger: EventLogger,
+  ctx: TextSinkContext,
+  opts: {
+    kind: 'thinking' | 'reasoning';
+    maxChars: number;
+    cappedMarker: string;
+    /** Thinking blocks can repeat verbatim (several `redacted_thinking`
+     *  blocks in a row); reasoning blocks are always distinct prose, so only
+     *  the thinking sink coalesces. */
+    coalesceOnRaw: boolean;
+  },
+): (text: string) => void {
+  let lastRaw: string | null = null;
+  let emittedCount = 0;
+  let cappedEmitted = false;
+  return (text: string) => {
+    if (cappedEmitted) return;
+    if (opts.coalesceOnRaw) {
+      // Bug 2 fix: compare the RAW text, not the truncated form below — two
+      // distinct blocks sharing only a maxChars-length prefix must NOT
+      // collapse into one row.
+      if (text === lastRaw) return;
+      lastRaw = text;
+    }
+    if (emittedCount >= SINK_ROW_CAP) {
+      cappedEmitted = true;
+      logger.emit({
+        initiative_id: ctx.initiativeId,
+        phase: ctx.phase,
+        skill: ctx.skill,
+        event_type: 'log',
+        input_refs: [],
+        output_refs: [],
+        message: opts.cappedMarker,
+        metadata: { ...ctx.idMeta, kind: opts.kind, capped: true },
+      });
+      return;
+    }
+    emittedCount += 1;
+    // Straight `.slice` on the JS UTF-16 code-unit index — can bisect a
+    // surrogate pair at the exact boundary. Inherited from the original
+    // 400-char reasoning pattern this centralizes; disclosed, not fixed here.
+    const capped = text.length > opts.maxChars ? `${text.slice(0, opts.maxChars)}…` : text;
+    logger.emit({
+      initiative_id: ctx.initiativeId,
+      phase: ctx.phase,
+      skill: ctx.skill,
+      event_type: 'log',
+      input_refs: [],
+      output_refs: [],
+      message: capped,
+      metadata: { ...ctx.idMeta, kind: opts.kind },
+    });
+  };
+}
+
+/**
+ * The ONE thinking sink every interactive-shaped runner uses — forwards
+ * non-empty `thinking` blocks and the `REDACTED_THINKING_MARKER` (see
+ * `onThinking` on `runStructuredTurn`/`runAgentTurn` below) to the event log,
+ * per-block capped at MAX_THINKING_TEXT chars, coalescing a run of
+ * consecutive IDENTICAL raw blocks into one emitted row, and capped at
+ * SINK_ROW_CAP emitted rows per sink instance (== per turn).
+ */
+export function makeThinkingSink(logger: EventLogger, ctx: TextSinkContext): (text: string) => void {
+  return makeCappedTextSink(logger, ctx, {
+    kind: 'thinking',
+    maxChars: MAX_THINKING_TEXT,
+    cappedMarker: THINKING_CAPPED_MARKER,
+    coalesceOnRaw: true,
+  });
+}
+
+/**
+ * The ONE reasoning sink every interactive-shaped runner uses — forwards
+ * non-empty assistant `text` blocks to the event log, per-block capped at
+ * MAX_REASONING_TEXT chars, and (same unbounded-row gap as the thinking sink)
+ * capped at SINK_ROW_CAP emitted rows per sink instance (== per turn).
+ */
+export function makeReasoningSink(logger: EventLogger, ctx: TextSinkContext): (text: string) => void {
+  return makeCappedTextSink(logger, ctx, {
+    kind: 'reasoning',
+    maxChars: MAX_REASONING_TEXT,
+    cappedMarker: REASONING_CAPPED_MARKER,
+    coalesceOnRaw: false,
+  });
+}
 
 /**
  * The loose async-iterable query shape architect / brain-fix / reflector all use
@@ -82,6 +252,10 @@ export async function runStructuredTurn<T>(args: {
   onHeartbeat?: () => void;
   /** Called for each non-empty assistant text block (reasoning). */
   onText?: (text: string) => void;
+  /** Called for each non-empty `thinking` content block (extended-thinking
+   *  trace), and — with the literal `REDACTED_THINKING_MARKER`, never the
+   *  block's own opaque data — once per `redacted_thinking` block. */
+  onThinking?: (text: string) => void;
   /** Diagnostic label for the idle-deadline guard. */
   label?: string;
 }): Promise<StructuredResult<T>> {
@@ -113,7 +287,9 @@ export async function runStructuredTurn<T>(args: {
     const m = msg as {
       type?: string;
       structured_output?: unknown;
-      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
+      message?: {
+        content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
+      };
     };
     if (m.type === 'assistant') {
       if (args.onToolUse) {
@@ -130,6 +306,13 @@ export async function runStructuredTurn<T>(args: {
           rawText += (rawText ? '\n' : '') + block.text;
           const trimmed = block.text.trim();
           if (trimmed && args.onText) args.onText(trimmed);
+        }
+        if (block?.type === 'thinking' && typeof block.thinking === 'string') {
+          const trimmed = block.thinking.trim();
+          if (trimmed && args.onThinking) args.onThinking(trimmed);
+        }
+        if (block?.type === 'redacted_thinking' && args.onThinking) {
+          args.onThinking(REDACTED_THINKING_MARKER);
         }
       }
       continue;
@@ -164,6 +347,10 @@ export async function runAgentTurn(args: {
   onToolUse?: (d: ToolUseLiveDetail) => void;
   onHeartbeat?: () => void;
   onText?: (text: string) => void;
+  /** Called for each non-empty `thinking` content block, and — with the
+   *  literal `REDACTED_THINKING_MARKER`, never the block's own opaque data —
+   *  once per `redacted_thinking` block. */
+  onThinking?: (text: string) => void;
   label?: string;
 }): Promise<{ costUsd: number }> {
   const abortController = new AbortController();
@@ -196,7 +383,9 @@ export async function runAgentTurn(args: {
     const m = msg as {
       type?: string;
       total_cost_usd?: number;
-      message?: { content?: Array<{ type?: string; name?: string; input?: unknown; text?: string }> };
+      message?: {
+        content?: Array<{ type?: string; name?: string; input?: unknown; text?: string; thinking?: string }>;
+      };
     };
     if (m.type === 'assistant') {
       if (args.onToolUse) {
@@ -204,11 +393,18 @@ export async function runAgentTurn(args: {
         for (const d of details) args.onToolUse(d);
         toolSeq += details.length;
       }
-      if (args.onText) {
+      if (args.onText || args.onThinking) {
         for (const block of m.message?.content ?? []) {
           if (block?.type === 'text' && typeof block.text === 'string') {
             const trimmed = block.text.trim();
-            if (trimmed) args.onText(trimmed);
+            if (trimmed && args.onText) args.onText(trimmed);
+          }
+          if (block?.type === 'thinking' && typeof block.thinking === 'string') {
+            const trimmed = block.thinking.trim();
+            if (trimmed && args.onThinking) args.onThinking(trimmed);
+          }
+          if (block?.type === 'redacted_thinking' && args.onThinking) {
+            args.onThinking(REDACTED_THINKING_MARKER);
           }
         }
       }

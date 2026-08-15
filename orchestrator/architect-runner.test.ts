@@ -34,6 +34,7 @@ import {
 } from './architect-runner.ts';
 import { createLogger } from './logging.ts';
 import { parseManifest } from './manifest.ts';
+import { REDACTED_THINKING_MARKER } from './interactive-session.ts';
 
 // ---------------------------------------------------------------------------
 // Fakes — async generators yielding SDK-shaped `result` messages.
@@ -877,6 +878,78 @@ test('runner streams tool_use events from the agent stream (drives the architect
   assert.ok(toolUses.length >= 2, `expected tool_use events, got ${toolUses.length}`);
   assert.ok(toolUses.every((e) => e.phase === 'architect'));
   assert.ok(toolUses.some((e) => e.metadata.tool === 'Grep'));
+});
+
+// W6-B1: thinking forwarding + unsampled tool events. The architect turn makes
+// THREE queryFn calls per turn (interview → explore → draft) sharing one
+// onThinking sink, so the thinking/redacted/Read blocks are attached to the
+// DRAFT call only (via the same prompt-content discriminator `makeQueryFn`
+// uses) — the interview/explore calls stay plain so the assertions below
+// count exactly the draft call's own emissions, not three calls' worth.
+test('W6-B1: runner forwards thinking + coalesced redacted_thinking to the event log, and Read tool_use events are unsampled', async () => {
+  const { projectRoot, logsRoot, queueRoot, sessionId, sessionDir } = setupSession();
+  writeFileSync(
+    join(sessionDir, 'answers.json'),
+    JSON.stringify([{ round: 1, answers: [{ question: 'Follow OS?', answer: 'Follow OS' }] }]),
+  );
+  const READ_CALLS = 6;
+  const draftInitiatives = [
+    {
+      slug: 'dark-mode',
+      title: 'Dark mode',
+      iteration_budget: 3,
+      cost_budget_usd: 5,
+      body: '## x\n\nGiven a precondition, when b action occurs, then c is observable.',
+    },
+  ];
+  const queryFn: QueryFn = ({ prompt }) => {
+    if (prompt.includes('the interview step')) {
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', total_cost_usd: 0, structured_output: { done: true } };
+      }
+      return gen();
+    }
+    if (prompt.includes('the exploration step')) {
+      async function* gen(): AsyncGenerator<unknown> {
+        yield { type: 'result', total_cost_usd: 0, structured_output: null };
+      }
+      return gen();
+    }
+    // draft the initiative — the call carrying the blocks under test.
+    async function* gen(): AsyncGenerator<unknown> {
+      const reads = Array.from({ length: READ_CALLS }, (_, i) => ({
+        type: 'tool_use', name: 'Read', input: { file_path: `f${i}.md` },
+      }));
+      yield {
+        type: 'assistant',
+        message: {
+          content: [
+            { type: 'thinking', thinking: '  weighing the initiative body  ' },
+            { type: 'redacted_thinking', data: 'opaque-1' },
+            { type: 'redacted_thinking', data: 'opaque-2' }, // consecutive — must coalesce
+            ...reads,
+          ],
+        },
+      };
+      yield { type: 'result', total_cost_usd: 0, structured_output: { vision: 'v', initiatives: draftInitiatives } };
+    }
+    return gen();
+  };
+
+  await runArchitectTurn({
+    sessionId, projectRoot, logsRoot, queueRoot, queryFn, logger: logger(logsRoot, sessionId),
+  });
+
+  const log = readFileSync(join(logsRoot, `_architect-${sessionId}`, 'events.jsonl'), 'utf8');
+  const events = log.trim().split('\n').map((l) => JSON.parse(l));
+
+  const thinkingEvents = events.filter((e) => e.metadata?.kind === 'thinking');
+  assert.equal(thinkingEvents.length, 2, 'one real thinking row + ONE coalesced row for the two consecutive redacted markers');
+  assert.equal(thinkingEvents[0].message, 'weighing the initiative body');
+  assert.equal(thinkingEvents[1].message, REDACTED_THINKING_MARKER);
+
+  const readToolUses = events.filter((e) => e.event_type === 'tool_use' && e.metadata?.tool === 'Read');
+  assert.equal(readToolUses.length, READ_CALLS, 'sampler opts {readOnlySampleRate:1, cap:200} — every Read emitted, none sampled out');
 });
 
 test('listArchitectSessions discovers sessions across projects, skipping _archived', async () => {

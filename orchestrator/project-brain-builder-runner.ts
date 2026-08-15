@@ -20,6 +20,7 @@ import {
   guardedReadSessionStatus,
   guardedWriteSessionStatus,
   makeHeartbeatWriter,
+  makeThinkingSink,
   type QueryFn,
 } from './interactive-session.ts';
 import { createLogger, type EventLogger } from './logging.ts';
@@ -138,18 +139,29 @@ export async function runProjectBrainTurn(
     metadata: { session_id: input.sessionId, phase: status.phase, project: status.project },
   });
 
-  const sink = makeToolEventSink(logger, {
-    initiativeId,
-    parentEventId: startEv.event_id,
-    phase: 'reflection',
-    skill: 'project-brain-builder',
-  });
+  // W6-B1: interactive sessions are operator-attended, low-volume turns —
+  // pass the same {readOnlySampleRate:1, cap:200} "unsampled" opts as every
+  // other interactive runner (the unattended dev-loop/PM/reflector phases
+  // are unchanged and keep the sampler's defaults).
+  const sink = makeToolEventSink(
+    logger,
+    {
+      initiativeId,
+      parentEventId: startEv.event_id,
+      phase: 'reflection',
+      skill: 'project-brain-builder',
+    },
+    { readOnlySampleRate: 1, cap: 200 },
+  );
   const onHeartbeat = makeHeartbeatWriter(join(logsRoot, cycleId));
+  const onThinking = makeThinkingSink(logger, {
+    initiativeId, phase: 'reflection', skill: 'project-brain-builder', idMeta: { session_id: input.sessionId },
+  });
 
   let result: RunProjectBrainTurnResult;
 
   if (status.phase === 'analyzing') {
-    result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, onToolUse: sink.onToolUse, onHeartbeat });
+    result = await runAnalyzeStep({ input, sessionDir, status, forgeRoot, queryFn, onToolUse: sink.onToolUse, onHeartbeat, onThinking });
   } else if (status.phase === 'committing') {
     result = runCommitStep({ input, sessionDir, status, forgeRoot, logger, initiativeId });
   } else if (status.phase === 'abandoned') {
@@ -249,8 +261,10 @@ async function runAnalyzeStep(args: {
   queryFn: QueryFn;
   onToolUse: (d: Parameters<NonNullable<Parameters<typeof runAgentTurn>[0]['onToolUse']>>[0]) => void;
   onHeartbeat: () => void;
+  /** Forward extended-thinking blocks to the event log (W6-B1). */
+  onThinking?: (text: string) => void;
 }): Promise<RunProjectBrainTurnResult> {
-  const { input, sessionDir, status, forgeRoot, queryFn, onToolUse, onHeartbeat } = args;
+  const { input, sessionDir, status, forgeRoot, queryFn, onToolUse, onHeartbeat, onThinking } = args;
   const staging = stagingThemesDir(sessionDir);
   mkdirSync(staging, { recursive: true });
 
@@ -268,6 +282,7 @@ async function runAnalyzeStep(args: {
     maxTurns: 30,
     onToolUse,
     onHeartbeat,
+    onThinking,
     label: `project-brain-${input.sessionId}`,
   });
 
@@ -372,6 +387,11 @@ function runCommitStep(args: {
   writeProjectBrainStatus(input.projectRoot, input.sessionId, { ...status, phase: 'committed' });
   return { phase: 'committed', wrote, themes: staged };
 }
+
+// W6-B1 review round 2: the local makeThinkingSink duplicate was removed —
+// this file now consumes the ONE shared sink exported from
+// interactive-session.ts (imported above). This runner still has no
+// reasoning sink (it never had one before W6-B1; unchanged scope).
 
 /** SEC-04 leaf: the staged-themes readdir routed through the guard (leaf dir
  *  included) — a symlinked `themes/` collapses to null → []. */
