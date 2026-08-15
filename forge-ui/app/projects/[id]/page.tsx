@@ -5,11 +5,12 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import {
   fetchStudioProjects, fetchStudioKbs, fetchStudioFlows, fetchStudioCatalog,
-  saveProject, createProject, fetchPreflight, startOnboardingSession, getAgentRunStatus,
+  saveProject, createProject, fetchPreflight, startOnboardingSession,
   fetchProjectStarters, createGreenfieldProject, fetchStudioAgentsWithMeta,
   type Project, type DemoStep, type Kb, type Flow, type Catalog, type PreflightResult,
-  type FailingClause, type AgentRunStatus,
+  type FailingClause,
 } from '@/lib/studio-client';
+import { pollAgentRun, type PolledAgentRunStatus } from '@/lib/agent-dispatch';
 import { resolveCeilingFieldValue } from '@/lib/run-panel-view';
 import { resolveDevelopStartCeilingToSend } from '@/lib/roadmap-develop-start-ceiling';
 import {
@@ -482,6 +483,10 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
               <ContractResolutionPanel
                 projectId={id}
                 clauses={preflight.clauses}
+                // The REAL binding (KbBind's own `kb` state, just above) —
+                // never re-derived from the project id (a project's KB is
+                // operator-rebindable to any KB, or unbound entirely).
+                boundKbId={kb}
                 onChanged={() => void loadPreflight({ cancelled: false })}
                 onDemoSessionStarted={handleDemoSessionStarted}
               />
@@ -566,27 +571,17 @@ function ContractPanelMount(props: {
 function OnboardWithAgent({ projectId }: { projectId: string }) {
   const [runId, setRunId] = useState<string | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  const [status, setStatus] = useState<AgentRunStatus | null>(null);
+  const [status, setStatus] = useState<PolledAgentRunStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
   // Poll the dispatched run inline so events/cost are visible from the /projects
-  // entry point too (F1 AC), not only the agent page. Bounded like RunPanel.
+  // entry point too (F1 AC), not only the agent page. Bounded, shared with
+  // RunPanel via lib/agent-dispatch.ts's pollAgentRun (never a silent freeze
+  // once the poll ceiling trips — see that module's header).
   useEffect(() => {
     if (!runId) return;
-    let active = true;
-    let attempts = 0;
-    const poll = async (): Promise<string> => {
-      const s = await getAgentRunStatus(runId);
-      if (active) setStatus(s);
-      return s.state;
-    };
-    void poll();
-    const id = setInterval(() => {
-      attempts += 1;
-      void poll().then((st) => { if (st !== 'running' || attempts >= 90) clearInterval(id); });
-    }, 2000);
-    return () => { active = false; clearInterval(id); };
+    return pollAgentRun(runId, { onUpdate: setStatus });
   }, [runId]);
 
   const onRun = async () => {
@@ -632,19 +627,19 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
       {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
       {runId && (
         <div style={{ marginTop: 8, fontSize: 12 }}>
-          <div>run <code>{runId}</code> — <a href="/agents/onboarding-agent">agent page</a></div>
+          <div>run <code>{runId}</code> — <Link href="/agents/onboarding-agent">agent page</Link></div>
           <div>
             status: <strong>{runState}</strong>
             {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
           </div>
           {sessionId && (
             <div style={{ marginTop: 4 }}>
-              <a
+              <Link
                 data-action="view-onboarding-session"
                 href={`/sessions/onboarding/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(projectId)}`}
               >
                 View onboarding session →
-              </a>
+              </Link>
             </div>
           )}
         </div>
@@ -873,10 +868,10 @@ function ProjectOnboardForm() {
                 ))}
               </ul>
               {pendingId && (
-                <a className="btn" data-action="open-onboarded-project" href={`/projects/${encodeURIComponent(pendingId)}`}
+                <Link className="btn" data-action="open-onboarded-project" href={`/projects/${encodeURIComponent(pendingId)}`}
                   style={{ marginTop: 12, display: 'inline-block', textDecoration: 'none' }}>
                   Open the project editor anyway →
-                </a>
+                </Link>
               )}
             </div>
           )}

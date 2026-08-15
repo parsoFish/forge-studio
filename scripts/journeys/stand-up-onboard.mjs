@@ -275,7 +275,7 @@ export const journey = defineJourney({
       {
         id: 'su-onboard-preflight',
         title: 'onboard existing → deterministically resolve a failing clause',
-        narration: 'Onboarding a second, existing-style repo trips real contract clauses. Before anything is resolved, the project page\'s permanent contract panel (R4-12-F1) renders honest degradation: this half-onboarded repo has no AGENTS.md/CLAUDE.md yet, no demo, and no declared secrets, so those stages show as [data-checklist-status="absent"] — the panel root still renders, an absent artifact is a row, never a dropped row. The operator then clicks the one auto-fix action for the deterministic gap, and routes the agent-resolvable AGENTS.md clause through the real "Resolve with agent" button — the click, the routing to the instructions builder, and the final re-scan are all real (generation itself is emulated, no live LLM turn) — until the project reports flow-ready.',
+        narration: 'Onboarding a second, existing-style repo trips real contract clauses. Before anything is resolved, the project page\'s permanent contract panel (R4-12-F1) renders honest degradation: this half-onboarded repo has no AGENTS.md/CLAUDE.md yet, no demo, and no declared secrets, so those stages show as [data-checklist-status="absent"] — the panel root still renders, an absent artifact is a row, never a dropped row. The operator then clicks the one auto-fix action for the deterministic gap, and routes the agent-resolvable AGENTS.md clause through the real "Open in instructions builder…" button — the click, the routing to the instructions builder, and the final re-scan are all real (generation itself is emulated, no live LLM turn) — until the project reports flow-ready.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SU: onboard existing → align to the contract (preflight resolution) ────
@@ -442,7 +442,7 @@ export const journey = defineJourney({
                   // substring still matches that URL, so the wait regex is unchanged.
                   await page.waitForURL(/\/instructions\//, { timeout: 10000 }).catch(() => {});
                   const instrLanded = await page.waitForSelector('main[data-page="session"][data-session-kind="instructions"]', { timeout: 10000 }).then(() => true).catch(() => false);
-                  check(instrLanded, 'SU: "Resolve with agent" routes to a real instructions session on the shared shell ([data-page="session"][data-session-kind="instructions"])');
+                  check(instrLanded, 'SU: "Open in instructions builder…" routes to a real instructions session on the shared shell ([data-page="session"][data-session-kind="instructions"])');
                   if (instrLanded) {
                     // The shell publishes data-session-phase only once its fetch
                     // settles — data-page-ready is the readiness discriminator
@@ -477,7 +477,7 @@ export const journey = defineJourney({
                   ).catch(() => {});
                   const preflightNow = await page.evaluate(() => document.querySelector('[data-preflight-status]')?.getAttribute('data-preflight-status') ?? '');
                   check(preflightNow === 'ok', `SU: hard + agent clauses resolved — preflight reports ok (got "${preflightNow}")`);
-                  await frame(page, 'onb-2-agent-resolved', 'Part 1 — the agent-resolvable clause resolved via the real "Resolve with agent" button; flow-ready');
+                  await frame(page, 'onb-2-agent-resolved', 'Part 1 — the agent-resolvable clause resolved via the real "Open in instructions builder…" button; flow-ready');
                 }
               }
 

@@ -281,7 +281,7 @@ export const journey = defineJourney({
       {
         id: 'skills-create',
         title: 'Author a new skill',
-        narration: 'From a blank builder the operator names a brand-new skill, describes it in one line, and writes its instructions; clicking Create writes a fresh SKILL.md to the library and Studio lands in the agent builder to compose it — this created skill then threads through the rest of the walkthrough.',
+        narration: 'From a blank builder the operator names a brand-new skill, describes it in one line, and writes its instructions; clicking Create writes a fresh SKILL.md to the library and Studio returns to the library, where the new skill is now listed — this created skill then threads through the rest of the walkthrough.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SK-3: author a NEW skill ──────────────────────────────────────────────
@@ -336,9 +336,9 @@ export const journey = defineJourney({
               // CLIP 2 — sk-create: the operator's real discovery path — the "+ author
               // a skill" CTA in a project's Relevant Skills panel (the only real UI entry
               // to /skills/new) — dwell, CLICK, then fill the form and CLICK Create; the
-              // hold is the product's real created-confirmation (the redirect into the
-              // agent builder to compose the new skill). A fresh context creates its OWN
-              // slug (SK_CLIP_SLUG) so it never collides with the main beat's artifact.
+              // hold is the product's real created-confirmation (the redirect back to the
+              // library, where the new skill is now listed). A fresh context creates its
+              // OWN slug (SK_CLIP_SLUG) so it never collides with the main beat's artifact.
               await recordClip(browser, watch, 'sk-create', `/projects/${PROJECT}`, async (p) => {
                 await p.waitForFunction(() => document.querySelector('[data-page="projects"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
                 await sleep(1400); // dwell — discovering "+ author a skill" in the Relevant Skills panel
@@ -360,10 +360,10 @@ export const journey = defineJourney({
                   await p.locator('[data-field="skill-description"]').fill(CLIP_SK_DESC).catch(() => {});
                 }
                 await p.locator('[data-action="create-skill"]').click().catch(() => {});
-                await p.waitForURL('**/agents/new', { timeout: 12000 }).catch(() => {});
-                await p.waitForSelector('[data-page="agents"]', { timeout: 12000 }).catch(() => {});
+                await p.waitForURL('**/skills', { timeout: 12000 }).catch(() => {});
+                await p.waitForFunction(() => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 12000 }).catch(() => {});
                 await sleep(600); // settle on the confirmation before the loop-tail hold
-              }, { readySel: 'main[data-page="projects"]', caption: 'discovering "+ author a skill" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and lands in the agent builder' });
+              }, { readySel: 'main[data-page="projects"]', caption: 'discovering "+ author a skill" on a project page — authoring a new skill from scratch, Create writes its SKILL.md and returns to the library' });
               const clipLanded = await waitForFile(join(FORGE_ROOT, 'skills', SK_CLIP_SLUG, 'SKILL.md'), 8000);
               check(clipLanded, `SK-3: the clip's Create click writes skills/${SK_CLIP_SLUG}/SKILL.md`);
               try { rmSync(join(FORGE_ROOT, 'skills', SK_CLIP_SLUG), { recursive: true, force: true }); } catch { /* */ }
@@ -374,8 +374,17 @@ export const journey = defineJourney({
               await page.locator('[data-action="create-skill"]').click().catch(() => {});
               const skLanded = await waitForFile(join(FORGE_ROOT, 'skills', SK_NEW_SLUG, 'SKILL.md'), 12000);
               check(skLanded, `SK-3: creating writes skills/${SK_NEW_SLUG}/SKILL.md`);
-              await sleep(ACT); // let the post-create redirect into the agent builder settle
-              await frame(page, 'sk-3-created', 'Part 2 (skills) — new skill authored → SKILL.md on disk → Studio lands in the agent builder to compose it', { key: true });
+              // Create returns to the library — NOT the agent builder (there is no
+              // agent build in progress to compose it into; the operator picks the
+              // new skill from the library into whichever agent build comes next).
+              await page.waitForURL('**/skills', { timeout: 12000 }).catch(() => {});
+              await page.waitForFunction(
+                () => document.querySelector('[data-page="skill-library"]')?.getAttribute('data-page-ready') === 'true',
+                null, { timeout: 12000 }).catch(() => {});
+              check(await page.locator('main[data-page="skill-library"]').count() > 0,
+                'SK-3: creating returns to the skill library ([data-page="skill-library"])');
+              await sleep(ACT); // let the post-create redirect settle
+              await frame(page, 'sk-3-created', 'Part 2 (skills) — new skill authored → SKILL.md on disk → back in the library, ready to compose into an agent', { key: true });
 
         },
       },
@@ -530,7 +539,7 @@ export const journey = defineJourney({
       {
         id: 'skills-agentic-author',
         title: 'Agentic skill authoring (contract gap → agent)',
-        narration: 'Skills don\'t only come from the library or the blank builder — forge\'s own agents author them. On the mdtoc project page the real contract preflight flags a genuine gap (a demoProcess is declared but the generated demo-design skill is missing) at the agent tier; one click on "Resolve with agent" routes it to the demo-builder. The generation itself is staged for this walkthrough (the same no-spawn seam every emulated agent turn uses): the harness hand-writes the exact SKILL.md the real agent produces, and the clause flips to resolved on the next preflight.',
+        narration: 'Skills don\'t only come from the library or the blank builder — forge\'s own agents author them. On the mdtoc project page the real contract preflight flags a genuine gap (a demoProcess is declared but the generated demo-design skill is missing) at the agent tier; one click on "Open in demo builder…" opens the demo-builder session where the operator briefs it. The generation itself is staged for this walkthrough (the same no-spawn seam every emulated agent turn uses): the harness hand-writes the exact SKILL.md the real agent produces, and the clause flips to resolved on the next preflight.',
         drive: async (ctx) => {
               const { page, watch, browser, frame, recordClip, check } = ctx;
               // ── SK-4: agentic skill authoring (the demo-design contract clause) ───────
@@ -551,8 +560,8 @@ export const journey = defineJourney({
               const clauseSel = '[data-resolution-clause][data-clause-id="DEMO-SKILL"]';
               check(await page.locator(`${clauseSel}[data-clause-resolution="agent"]`).count() > 0, 'SK-4: the DEMO-SKILL clause fails at the agent tier (real preflight, real gap)');
               const resolveBtn = '[data-action="resolve-clause-agent"][data-resolve-clause-id="DEMO-SKILL"]';
-              check(await page.locator(resolveBtn).count() > 0, 'SK-4: "Resolve with agent" offered on the clause');
-              await caption(page, 'A real contract gap — the project declares a demoProcess but has no generated demo-design skill. One click hands it to an agent.');
+              check(await page.locator(resolveBtn).count() > 0, 'SK-4: "Open in demo builder…" offered on the clause');
+              await caption(page, 'A real contract gap — the project declares a demoProcess but has no generated demo-design skill. One click opens the demo builder to brief the agent.');
               await frame(page, 'sk-4-clause', 'Part 2 (skills) — a real preflight gap offered for agentic resolution', { key: true });
 
               // The REAL click: fix-agent dispatch → demo-builder session → navigation.
@@ -593,7 +602,7 @@ export const journey = defineJourney({
               try { rmSync(DEMO_DESIGN_SKILL_DIR, { recursive: true, force: true }); } catch { /* */ }
               cleanDemoBuilderSession(sid);
 
-              // CLIP 3 — skill-agentic: failing clause → Resolve with agent → pending
+              // CLIP 3 — skill-agentic: failing clause → Open in demo builder… → pending
               // dwell on the (staged) generation → back on the project page with the
               // clause resolved. Runs its own fresh session; cleaned below.
               let clipSid = null;

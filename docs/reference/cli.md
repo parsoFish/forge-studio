@@ -12,12 +12,14 @@ forge — autonomous multi-agent orchestrator
 
 Usage:
   forge init                              Scaffold a runnable install (forge.config.json + _queue/ layout) and check the environment
-  forge studio [--bridge-only] [--no-open] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
+  forge studio [--bridge-only] [--no-open] [--dev] [--bridge-port <n>] [--ui-port <n>] [--ready-file <path>]
                                           Bring up the forge operator UI — the SOLE operator surface (DEC-6).
                                           Run a cycle, review/approve, recover a stuck initiative, inspect cost +
                                           events + artifacts: all in the browser. Foreground (Ctrl-C quits).
                                           Defaults: bridge=4123, ui=4124 (fixed ports — re-runs take over any
                                           previous forge process so a pinned browser tab auto-reconnects).
+                                          Serves a production build by default (`next build` once, then
+                                          `next start`); pass --dev to keep the `next dev` dev-server path.
   forge studio lint                       Validate studio definitions (agents/flows/catalog/kb); exit non-zero on errors
 
 S9/DEC-6: the CLI is retired as the operator surface. Cycle management, review, and
