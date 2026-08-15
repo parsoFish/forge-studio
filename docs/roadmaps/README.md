@@ -473,6 +473,25 @@ before wave close) · pages ~3× faster (prod build + fewer round-trips; e.g.
   six red runs rode through undetected until a later PR's own gate
   happened to reproduce the failure locally.
 
+- **The full journey gate is the wave's real exit criterion — per-batch
+  waivers only defer it.** The closing `ui:journey` run (17 journeys, 150
+  beats) found FIVE regressions that 35 reviewed PRs, ~5,000 unit tests and
+  per-PR gates did not, all in the closeout PR: the fixed bottom ActivityLog
+  drawer overlaid the agent builder's Save button (layout overlap — no unit
+  pin can see it); IA-8's `/architect/:sessionId` wire redirect swallowed the
+  LIVE `/architect/new` kickoff (a cross-batch route-param collision); B9's
+  transcript `[data-question-index]` collided with the architect form's own
+  `[data-question-index][data-question-resolved]` (querySelector picked the
+  wrong element); the kickoff model-tier picker was DEAD for every kind
+  (all five kickoff agents are `library:false`, so the roster route never
+  returned their capability — new unfiltered
+  `GET /api/studio/agents/:slug/capability`); and two cross-execution fixture
+  leaks (a stale `_kb-drain-*` run satisfied the drain beat's terminal wait
+  instantly; a stale `_demo/<sid>` made the roadmap's demo link honestly
+  RESUME instead of kick off). Six gate runs to green. Every future wave's
+  exit gate is the full run, and each beat owns ALL of its state including
+  server-side run dirs (fixture rule 3).
+
 #### Follow-up beads (not wave-6 blocking)
 
 - `forge-4ei` — demo/instructions "revise verdict" / feedback-loop
