@@ -94,6 +94,15 @@ export type Run = {
   flowId: string;                    // the manifest's flow_id (e.g. forge-develop); 'unknown' for pre-S8 manifests
   initiativeId: string;
   initiative: string;                // manifest title
+  /**
+   * W6-SW-3 (sweep C8#1): the manifest's own `project` slug, carried through
+   * so a plan gate's Approve/Send-back control (GateBar) can thread it into
+   * `postGate` — the bridge's `gateId==='plan'` route 400s without it
+   * (`applyPlanVerdict` requires `project`). Optional because
+   * `makeDegradedRun`'s corrupt-manifest fallback has no manifest to read it
+   * from.
+   */
+  project?: string;
   status: RunStatus;
   origin: 'architect' | 'human-directed' | 'triggered';
   costUsd: number;
@@ -634,6 +643,7 @@ function buildRun(args: {
     flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative,
+    project: manifest.project,
     status: reconciledStatus,
     origin: validatedOrigin,
     costUsd,
@@ -817,6 +827,7 @@ function makePlannedRun(manifest: ReturnType<typeof parseManifest>): Run {
     flowId: manifest.flow_id ?? FALLBACK_FLOW_ID,
     initiativeId: manifest.initiative_id,
     initiative: extractTitle(manifest.body, manifest.initiative_id),
+    project: manifest.project,
     status: 'planned',
     origin,
     costUsd: 0,

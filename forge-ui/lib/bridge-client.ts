@@ -1012,7 +1012,12 @@ export async function postGate(
   runId: string,
   gateId: string,
   verdict: 'approve' | 'send-back',
-  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[] },
+  /**
+   * W6-SW-3 (sweep C8#1): `project` is required by the bridge for
+   * gateId==='plan' (applyPlanVerdict 400s without it) — GateBar passes it
+   * whenever it has one resolved for a plan gate.
+   */
+  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[]; project?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/runs/${encodeURIComponent(runId)}/gates/${encodeURIComponent(gateId)}`, {
     verdict,

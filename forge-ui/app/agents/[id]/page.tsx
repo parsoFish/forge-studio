@@ -699,6 +699,7 @@ export default function AgentBuilderPage() {
               value={state.process}
               isDraft={instructionsIsDraft}
               pending={draftPending}
+              canGenerate={Boolean(state.slug)}
               onGenerate={() => void handleGenerateInstructions()}
               onChange={handleInstructionsEdit}
             />

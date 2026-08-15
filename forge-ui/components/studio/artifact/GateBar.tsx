@@ -20,6 +20,7 @@ export function GateBar({
   decisionsResolved,
   label,
   hint,
+  project,
   onStateChange,
 }: {
   runId: string;
@@ -29,6 +30,14 @@ export function GateBar({
   decisionsResolved: boolean;
   label: string;
   hint: string;
+  /**
+   * W6-SW-3 (sweep C8#1): the run's project slug. Required by the bridge for
+   * gateId==='plan' (applyPlanVerdict 400s without it) — the caller resolves
+   * it from `run.project`, falling back to the architect session's project
+   * for a plan gate reached before a manifest/cycle exists. Unused for
+   * gateId==='verdict' (demo gates).
+   */
+  project?: string;
   onStateChange?: (state: GateState) => void;
 }) {
   const [gateState, setGateState] = useState<GateState>('idle');
@@ -47,7 +56,7 @@ export function GateBar({
     setError(null);
     setSubmitting(true);
     try {
-      const res = await postGate(runId, gateId, 'approve', {});
+      const res = await postGate(runId, gateId, 'approve', gateId === 'plan' ? { project } : {});
       if (!res.ok) { setError(res.error ?? 'approve failed'); return; }
       transition('approved');
     } finally {
@@ -60,7 +69,12 @@ export function GateBar({
     setError(null);
     setSubmitting(true);
     try {
-      const res = await postGate(runId, gateId, 'send-back', { notes: notes.trim() });
+      const res = await postGate(
+        runId,
+        gateId,
+        'send-back',
+        gateId === 'plan' ? { notes: notes.trim(), project } : { notes: notes.trim() },
+      );
       if (!res.ok) { setError(res.error ?? 'send-back failed'); return; }
       transition('sent-back');
       setShowSendBack(false);
