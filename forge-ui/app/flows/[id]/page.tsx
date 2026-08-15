@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { subscribe, type EventLogEntry, startRun, resumeRun } from '@/lib/bridge-client';
+import { subscribe, type EventLogEntry, type ConnectionState, startRun, resumeRun } from '@/lib/bridge-client';
 import { fetchRuns, fetchRun, fetchStudioFlows, fetchFlow, fetchStudioAgents, fetchStarterFlow, saveFlow } from '@/lib/studio-client';
 import type { Run, Flow, Agent } from '@/lib/studio-client';
 import { resolveFlowViewState } from '@/lib/flow-view-state';
@@ -44,6 +44,31 @@ function pickDefaultRun(runs: Run[]): Run | null {
   return gated ?? active ?? complete ?? planned ?? runs[0] ?? null;
 }
 
+// W6-SW-3 (sweep C3#6): ConnectionState → the shared status-dot vocabulary
+// (globals.css only styles pending/active/complete/retrying/failed). Both
+// maps are exhaustive `Record<ConnectionState, ...>` — 'daemon-stalled' is
+// carried for completeness even though this page's own `subscribe()` call
+// never emits it today (bridge-client.ts's WS onState setState() calls only
+// ever pass 'connecting'|'open'|'reconnecting'|'no-bridge'; 'daemon-stalled'
+// is declared on the shared ConnectionState type for "Feature #8" — a
+// separate scheduler-heartbeat health signal, not yet wired to this
+// component's subscribe() — see bridge-client.ts:62-65's own comment).
+const CONNECTION_DOT_STATUS: Record<ConnectionState, 'pending' | 'active' | 'complete' | 'retrying' | 'failed'> = {
+  connecting: 'pending',
+  open: 'complete',
+  reconnecting: 'retrying',
+  'no-bridge': 'failed',
+  'daemon-stalled': 'failed',
+};
+
+const CONNECTION_LABEL: Record<ConnectionState, string> = {
+  connecting: 'Connecting…',
+  open: 'Live',
+  reconnecting: 'Reconnecting…',
+  'no-bridge': 'No bridge — events may be stale',
+  'daemon-stalled': 'Daemon stalled — events may be stale',
+};
+
 type PageTab = 'monitor' | 'build';
 
 export default function FlowMonitorPage({ params }: { params: { id: string } }) {
@@ -61,6 +86,11 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
   const [activeRun,   setActiveRun]   = useState<Run | null>(null);
   const [ready,       setReady]       = useState(false);
   const [tailEvents,  setTailEvents]  = useState<EventLogEntry[]>([]);
+  // W6-SW-3 (sweep C3#6): subscribe()'s ConnectionState used to be discarded
+  // — on a dropped socket the tail kept showing stale events with zero
+  // indication the connection itself failed (indistinguishable from a
+  // genuinely stalled run). Surfaced as a status-dot near the summary strip.
+  const [connState,   setConnState]   = useState<ConnectionState>('connecting');
   // Drawer selection is a single state object so the toggle updater reads its
   // own fresh `prev` (no cross-state read of a closed-over value).
   const [drawer, setDrawer] = useState<{
@@ -167,7 +197,7 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
     void loadData(signal);
 
     const sub = subscribe({
-      onState: () => { /* page does not show connection state */ },
+      onState: (s) => { if (!signal.cancelled) setConnState(s); },
       onMessage: (msg) => {
         if (signal.cancelled) return;
 
@@ -388,7 +418,15 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
           />
           {/* Tabs bar — BUILD active */}
           <div className="tabs" style={{ background: 'var(--panel)', padding: '0 24px', borderBottom: '1px solid var(--line)', flexShrink: 0 }}>
-            <button className="tab" onClick={() => setTab('monitor')}>MONITOR</button>
+            <button
+              className="tab"
+              onClick={() => setTab('monitor')}
+              disabled={isNew}
+              title={isNew ? 'Save this flow first — there is nothing to monitor yet.' : undefined}
+              style={isNew ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+            >
+              MONITOR
+            </button>
             <button className="tab active">BUILD</button>
           </div>
           {/* BUILD canvas */}
@@ -447,6 +485,18 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                   {view.flow.goal}
                 </span>
               )}
+              {/* W6-SW-3 (sweep C3#6): live-connection indicator — without
+                  this a dropped WS socket looked identical to a genuinely
+                  quiet run. */}
+              <span
+                data-component="ws-connection-status"
+                data-connection-state={connState}
+                title={CONNECTION_LABEL[connState]}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: 'var(--faint)' }}
+              >
+                <span className="status-dot" data-status={CONNECTION_DOT_STATUS[connState]} />
+                {CONNECTION_LABEL[connState]}
+              </span>
             </div>
 
             {/* Tabs bar — MONITOR active */}
@@ -476,13 +526,18 @@ export default function FlowMonitorPage({ params }: { params: { id: string } }) 
                 style={{
                   flex: 1,
                   display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  gap: 10,
                   color: 'var(--faint)',
                   fontSize: 14,
                 }}
               >
                 Flow &ldquo;{id}&rdquo; not found.
+                {/* W6-SW-3 (sweep C3#2): the only prior escape was the
+                    persistent top StudioNav bar — no local CTA. */}
+                <Link href="/flows" style={{ color: 'var(--accent)', fontSize: 13 }}>← Back to flows</Link>
               </div>
             ) : (
           <>

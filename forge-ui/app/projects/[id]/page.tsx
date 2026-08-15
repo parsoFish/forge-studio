@@ -292,6 +292,28 @@ function ProjectBuilderPageInner({ params }: { params: { id: string } }) {
     );
   }
 
+  // W6-SW-3 (sweep C2#3): loadData leaves `project` null when the URL `id`
+  // isn't in fetchStudioProjects() (a stale/bad :id route param) — without
+  // this branch the return below rendered the full editable editor with a
+  // blank name/northStar/etc, no honest "not found" state.
+  if (ready && !project) {
+    return (
+      <main
+        data-page="projects"
+        data-project-id={id}
+        data-page-ready="true"
+        data-project-not-found="true"
+        style={{ minHeight: '100vh', background: 'var(--bg)', display: 'flex', flexDirection: 'column' }}
+      >
+        <StudioNav />
+        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12, color: 'var(--faint)', fontSize: 14 }}>
+          Project &ldquo;{id}&rdquo; not found.
+          <Link href="/projects" style={{ color: 'var(--accent)' }}>← Back to projects</Link>
+        </div>
+      </main>
+    );
+  }
+
   return (
     <main
       data-page="projects"
@@ -1083,9 +1105,13 @@ function RoadmapView({
         data-section="project-roadmap"
         data-project-id={projectId}
         data-dep-count="0"
-        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13 }}
+        style={{ padding: '32px 28px', color: 'var(--faint)', fontSize: 13, display: 'flex', flexDirection: 'column', gap: 14, alignItems: 'flex-start' }}
       >
         No initiatives found for this project.
+        {/* W6-SW-3 (sweep C2#2): the sibling !roadmap branch above already
+            renders this CTA — a roadmap that resolved with zero initiatives
+            is just as much a dead end without it. */}
+        <ProjectArchitectEntry projectId={projectId} />
       </div>
     );
   }

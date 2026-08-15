@@ -1021,7 +1021,17 @@ export async function postGate(
   runId: string,
   gateId: string,
   verdict: 'approve' | 'send-back',
-  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[] },
+  /**
+   * W6-SW-3 (sweep C8#1): `project` is required by the bridge for
+   * gateId==='plan' (applyPlanVerdict 400s without it) — GateBar passes it
+   * whenever it has one resolved for a plan gate.
+   *
+   * W6-SW-3 (reviewer HIGH): `kind` is required alongside `verdict:'send-back'`
+   * for gateId==='plan' — the route maps `kind` from `verdict` only for
+   * 'approve'|'revise'|'reject', so a bare send-back falls through to
+   * `kind:''` and 400s. See lib/gate-verdict-body.ts's `buildGateVerdictBody`.
+   */
+  options?: { notes?: string; rationale?: string; acceptanceCriteria?: unknown[]; project?: string; kind?: string },
 ): Promise<{ ok: boolean; error?: string }> {
   return bridgePost(`/api/runs/${encodeURIComponent(runId)}/gates/${encodeURIComponent(gateId)}`, {
     verdict,

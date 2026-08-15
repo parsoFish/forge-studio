@@ -73,6 +73,16 @@ export default function TemplateLibraryPage() {
           graph, not guessed.
         </>
       }
+      actions={
+        // W6-SW-3 (sweep C5#2): the page had no `actions` prop at all — a
+        // zero-result page was a total dead end (not even the community
+        // browser, since 'template' isn't a CommunityKind). Templates are
+        // declared inside a flow definition, so point at the surface that
+        // actually creates one.
+        <Link href="/flows" data-action="declare-a-template" className="btn" style={{ whiteSpace: 'nowrap' }}>
+          Declare one in a flow →
+        </Link>
+      }
     >
 
         <input

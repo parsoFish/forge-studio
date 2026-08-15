@@ -37,7 +37,7 @@
  * props-driven renderer (its own header).
  */
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
 
 import { StudioNav } from '@/components/StudioNav';
@@ -71,22 +71,26 @@ export default function FlowRunPage() {
   const [expandedNodeId, setExpandedNodeId] = useState<string | null>(null);
   const [nodeLogLines, setNodeLogLines] = useState<Record<string, RunLogLine[]>>({});
 
-  useEffect(() => {
-    let cancelled = false;
+  // W6-SW-3 (sweep C3#5): pulled out of the effect so the unresolved-run
+  // body's Retry button can re-invoke the exact same load, not just the
+  // browser reload the operator previously had to know to do manually.
+  const load = useCallback(async (signal: { cancelled: boolean }) => {
     setLoaded(false);
-    async function load() {
-      const [res, flowDef] = await Promise.all([fetchFlowRunDetail(runId), fetchFlow(flowId)]);
-      if (cancelled) return;
-      const findingsDoc = res.kind === 'found' ? await fetchReviewFindings(res.run.id) : null;
-      if (cancelled) return;
-      setResolution(res);
-      setFlow(flowDef);
-      setFindings(findingsDoc);
-      setLoaded(true);
-    }
-    void load();
-    return () => { cancelled = true; };
+    const [res, flowDef] = await Promise.all([fetchFlowRunDetail(runId), fetchFlow(flowId)]);
+    if (signal.cancelled) return;
+    const findingsDoc = res.kind === 'found' ? await fetchReviewFindings(res.run.id) : null;
+    if (signal.cancelled) return;
+    setResolution(res);
+    setFlow(flowDef);
+    setFindings(findingsDoc);
+    setLoaded(true);
   }, [flowId, runId]);
+
+  useEffect(() => {
+    const signal = { cancelled: false };
+    void load(signal);
+    return () => { signal.cancelled = true; };
+  }, [load]);
 
   // Toggle a row's expand state; fetch that node's own raw log on first
   // expand only — a node already cached in `nodeLogLines` is never
@@ -128,9 +132,18 @@ export default function FlowRunPage() {
           data-flow-id={flowId}
           data-run-resolution="unresolved"
           className="muted"
-          style={{ padding: 20, fontSize: 13 }}
+          style={{ padding: 20, fontSize: 13, display: 'flex', flexDirection: 'column', gap: 10, alignItems: 'flex-start' }}
         >
           Could not reach the bridge to resolve this run right now — try again shortly.
+          <button
+            type="button"
+            className="btn btn-ghost"
+            data-action="retry-run-load"
+            onClick={() => void load({ cancelled: false })}
+            style={{ fontSize: 12.5 }}
+          >
+            Retry
+          </button>
         </main>
       </div>
     );

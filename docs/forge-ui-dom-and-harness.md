@@ -808,7 +808,9 @@ inventory rather than one shared page-level contract:
     timeline NOR the not-found body. This state exists because collapsing it
     into "not found" would render a transient network error as an
     authoritative claim about the run ("this run never existed"). `found` is
-    decided by HTTP **status**, before the body is ever inspected;
+    decided by HTTP **status**, before the body is ever inspected. Carries
+    `[data-action="retry-run-load"]` (W6-SW-3 sweep C3#5) — re-invokes the same
+    load instead of requiring a manual browser reload;
   - resolved — `[data-page="flow-run"][data-run-id][data-flow-id]
     [data-run-found="true"|"false"][data-run-status]`. `found:false` (the
     server's honest 404 for a runId that never existed) renders only
@@ -904,6 +906,10 @@ inventory rather than one shared page-level contract:
 - **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
+  A stale/bad `:id` (not `new`, not in `fetchStudioProjects()`) renders a
+  dedicated not-found body instead of a blank editor:
+  `[data-page="projects"][data-project-not-found="true"]` with a link back to
+  `/projects` (W6-SW-3 sweep C2#3).
   Roadmap renders `RoadmapCanvas.tsx` (**W6-RV-2**, replacing `RoadmapDag.tsx`
   — R4-13's dependency-depth **column** layout, itself the replacement for
   the retired `SerpentineTimeline` time-ordered spine): a **completion-time
@@ -1221,7 +1227,10 @@ inventory rather than one shared page-level contract:
   `[data-section="brain-briefing"|"brain-analyzing"|"brain-review"|"brain-committing"|"brain-committed"|"brain-abandoned"]`
   (`brain-review` carries `data-theme-count`, each theme `data-theme-name`),
   `[data-component="brain-brief-input"]`, and
-  `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"bind-and-return"]`;
+  `[data-action="start-brain-analysis"|"approve-brain"|"abandon-brain"|"return-to-project"]`
+  (W6-SW-3 sweep C6#1: renamed from `bind-and-return` — the click only ever
+  navigates back to the project; the per-project brain is bound at
+  onboarding, not by this step);
   and — **R4-21 phase 2** — the authoring kind's `SessionAuthoringPanel`
   (`components/studio/session/SessionAuthoringPanel.tsx`), the creation-agent
   session's live affordance. Unlike the other four kinds it fetches NO
