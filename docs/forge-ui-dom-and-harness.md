@@ -1231,35 +1231,17 @@ inventory rather than one shared page-level contract:
   (W6-SW-3 sweep C6#1: renamed from `bind-and-return` — the click only ever
   navigates back to the project; the per-project brain is bound at
   onboarding, not by this step);
-  and — **R4-21 phase 2** — the authoring kind's `SessionAuthoringPanel`
-  (`components/studio/session/SessionAuthoringPanel.tsx`), the creation-agent
-  session's live affordance. Unlike the other four kinds it fetches NO
-  per-kind summary; it works entirely off the shell's own `file-package`
-  artifact.
-  `[data-component="authoring-panel"][data-section="authoring-status"][data-authoring-shape="unknown"|"skill"|"hook"]`
-  — the shape is detected purely by file PRESENCE in the artifact (`SKILL.md`
-  at the package root ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒ still drafting).
-  Once a shape is known, `[data-section="authoring-finalize"]` renders the
-  Save form: `[data-field="authoring-id"]` ONLY, for both shapes — the
-  phase-1 hook-specific fields (`authoring-hook-name` /
-  `authoring-hook-description` / `authoring-hook-on` / `authoring-hook-matcher`)
-  are GONE (R4-21 phase 2, T3 correction A/C): hook metadata now comes from
-  the DRAFTED `hook.yaml` the operator already reviews in the artifact pane,
-  never a parallel form that could diverge from what actually ships.
-  `[data-action="finalize-authoring"]` POSTs `POST /api/studio/authoring/finalize
-  {project, sessionId, kind, id}` (D5, `_wave5/unit-specs/R4-21-phase2.md` —
-  the ONE explicit operator COMMIT act, never auto-saved): the route drives
-  the session's own `committing` turn server-side (the generic
-  `runInteractiveTurn` spine, ADR-043 §2) and installs the LANDED package —
-  no package bytes or hook metadata ride on the request. On success the panel
-  navigates to `/skills/<id>` or `/hooks/<id>` — palette-visibility / binding
-  stay the operator's own SEPARATE, later act at that destination page. The
-  launcher that starts this session lives on `/skills/new` and `/hooks/new`
-  (see those pages' entries, above) — `AuthoringLauncher`, POSTing
-  `POST /api/studio/authoring/start`, which now spawns
-  `forge agent run authoring <sid> --project <p>` (the generic dispatch fork,
-  `cli/agent-run.ts`'s `cmdAgentRun`) rather than the generic one-shot
-  dispatch host.
+  and — **R4-21 phase 2, retired W6-B8** — the authoring kind. Its bespoke
+  `SessionAuthoringPanel` (a status block detecting the drafted shape by file
+  PRESENCE + a Save form) is DELETED — `authoring` now renders the generic
+  `SessionInteractivePanel` (see its own entry below for the full contract,
+  including the `[data-field="session-package-id"]` field that carries the
+  Save form's one surviving input forward). The launcher that starts this
+  session lives on `/skills/new` and `/hooks/new` (see those pages' entries,
+  above) — `AuthoringLauncher`, POSTing `POST /api/studio/authoring/start`,
+  which spawns `forge agent run authoring <sid> --project <p>` (the generic
+  dispatch fork, `cli/agent-run.ts`'s `cmdAgentRun`) rather than the generic
+  one-shot dispatch host.
   The two question forms are now ONE component parameterised on its submit fn
   and section name — both `data-section` values are unchanged.
   **`/architect/new` stays** as the native "start a run" entry that replaced
@@ -1267,52 +1249,21 @@ inventory rather than one shared page-level contract:
   `[data-page="architect-new"][data-page-ready]` wrapping
   `[data-section="new-idea"][data-new-idea-ready]` — and now pushes into
   `/sessions/architect/<sid>`.
-  **R4-19-F2 — the kb-cleanup kind's `SessionCleanupPanel`**
-  (`components/studio/session/SessionCleanupPanel.tsx`), the brain-maintenance
-  session's live affordance — mirrors `SessionAuthoringPanel`'s shape (a
-  status block + one explicit operator commit act) rather than the
-  artifact-rendering pane's job; it works off the shell's own `cleanup-plan`
-  artifact plus the shell's `phase`. This is the THIRD layer
-  `brain/cycles/themes/new-session-kind-needs-ui-wiring.md` names — without
-  it the kind was backend- and view-complete yet had no control anywhere
-  that could ever call the apply route (R4-21's prior instance of the exact
-  same gap). Root: `[data-component="cleanup-panel"]`, status block
-  `[data-section="cleanup-status"][data-cleanup-panel-phase=<phase>]`. The
-  approve control is gated on the session's OWN phase AND a resolvable
-  `kbId` (R4-19-F2 WI-4c BLOCKER fix) — the apply route (`cli/ui-bridge.ts`'s
-  `kbCleanupApplyMatch` handler) 409s unless phase is EXACTLY
-  `"awaiting-approval"`, and separately 400s "invalid kb id" if the URL's
-  `:id` segment isn't a real KB slug — never on the artifact's own
-  `state`/`settled` (those describe the plan's content, not the session's
-  approval window): `[data-section="cleanup-approve"]` with
-  `[data-action="approve-cleanup-plan"]` renders ONLY while
-  `phase === "awaiting-approval"` AND `kbId !== undefined`; every other case
-  renders `[data-section="cleanup-not-approvable"]` instead — an explanatory
-  line (a dedicated "no resolvable KB id on record" reason when `kbId` is
-  `undefined`, distinct from the phase-mismatch/already-applied reasons),
-  never a disabled-but-clickable button that would still invite a 400/409.
-  `kbId` is forwarded from the session-shell read route's own `kbId` field
-  (`SessionShellPayload.kbId`, sourced from `status.kb_id`, present only
-  when the status genuinely carries one — see the read-contract entry
-  below). Approving calls `applyKbCleanup(kbId, {project, sessionId})` —
-  `kbId` is the URL's `:id` segment, `sessionId`/`project` are body-only;
-  because that route itself AWAITS the drain before responding 200, the fetch
-  resolving IS the terminal event — no separate poll-to-terminal loop is
-  needed (unlike `KbMaintenance`'s Consolidate). On success the panel settles
-  into `[data-section="cleanup-applied"]` and stamps
-  `[data-cleanup-apply-state="applied"]` on the panel root (mirrors
-  `KbMaintenance`'s own `[data-consolidate-state]` convention: a plain string
-  state set ONLY once the async act has genuinely finished, present so a
-  journey can assert the settled terminal instead of racing an async
-  display); a failure — including the 409 approval-gate refusal, passed
-  through verbatim — sets `[data-cleanup-apply-state="error"]` and renders
-  the server's own message, never swallowed. The launcher that starts this
-  session lives on `/knowledge` (see the KB maintenance panel entry, below)
-  — `[data-action="start-kb-cleanup"]`, POSTing
+  **R4-19-F2, retired W6-B8** — the kb-cleanup kind. Its bespoke
+  `SessionCleanupPanel` (a status block + one explicit approve act, gated on
+  phase AND a resolvable `kbId`) is DELETED — `kb-cleanup` now renders the
+  generic `SessionInteractivePanel` too (see its own entry below). The
+  `cleanup-plan` artifact pane (`CleanupPlanBody`, unchanged by this
+  retirement — see "Cleanup plan" below) already carried every bit of the
+  plan's own content (status banner, per-action state, raw text); the panel
+  only ever owned the approve control and the phase-gated status line, both
+  now generic. The launcher that starts this session lives on `/knowledge`
+  (see the KB maintenance panel entry, below) —
+  `[data-action="start-kb-cleanup"]`, POSTing
   `POST /api/studio/kbs/:id/cleanup/start`.
-  **`demo` and `onboarding` (W6-B6)** render the generic
+  **`demo`, `onboarding`, `kb-cleanup`, and `authoring`** render the generic
   `SessionInteractivePanel` in this same ladder slot — see its own entry
-  below for the full contract; they previously rendered `null` here.
+  below for the full contract.
 - **`ActivityLog` — the shared live thinking/working drawer (W6-B7,
   2026-08-15).** `components/studio/ActivityLog.tsx`, generalized off the
   retired `ArchitectActivityLog.tsx` inline panel (deleted once every
@@ -1363,27 +1314,36 @@ inventory rather than one shared page-level contract:
   events.jsonl`, the exact path `GET /api/events/<cycleId>` reads), so
   `RunPanel` opens its own `useCycleEvents(runId)` socket with no extra id
   derivation.
-- **Session-shell read contract (R2-10-F1/F2, 2026-08-05; W6-B3/B6 additions,
-  2026-08-15) — the API side.**
+- **Session-shell read contract (R2-10-F1/F2, 2026-08-05; W6-B3/B6/B8
+  additions, 2026-08-15) — the API side.**
   The session routes above converge on one shared shell. Its data comes
   from a single read route, `GET /api/studio/sessions/:kind/:sessionId?project=<p>`
   (`cli/bridge-studio-sessions.ts`), which returns
   `{ok, kind, title, sessionId, project, phase, stages, defaultStage, turns,
-  artifact, affordances, modelTier, [kbId]}`. Session kinds are declared as
-  data in `studio/session-kinds.yaml` and validated by `forge studio lint`
-  (`validateSessionKinds`, ADR-027's R2-10 amendment). `turns` are DERIVED
-  from the runners' existing checkpoint files — each turn carries the
-  `source` it came from (`idea.md`, `prompt.md`, `answers.json#round-N`,
-  `questions.json`, `feedback.md`) — never invented. A checkpoint stage
-  outside the kind's declared `stages` is a **409**, never a defaulted 200.
-  `affordances` (W6-B3, ADR-043 §1) is `deriveSessionAffordances(descriptor,
-  phase)` — computed server-side from whichever phase table the descriptor
-  carries (`turnSpec` for a real dispatchable kind, `panel` for a legacy
-  kind's read-only twin), ALWAYS present (`[]` for architect, which carries
-  neither table), never re-derived client-side. `modelTier` (W6-B5's write
-  side + W6-B6's read side) is the session's own kickoff-selected tier, read
-  live off `status.json.modelTier` — `null` when none was ever recorded, the
-  key always present either way. The `data-*` vocabulary the consuming shell
+  artifact, affordances, modelTier, terminal, [kbId]}`. Session kinds are
+  declared as data in `studio/session-kinds.yaml` and validated by
+  `forge studio lint` (`validateSessionKinds`, ADR-027's R2-10 amendment).
+  `turns` are DERIVED from the runners' existing checkpoint files — each turn
+  carries the `source` it came from (`idea.md`, `prompt.md`,
+  `answers.json#round-N`, `questions.json`, `feedback.md`) — never invented.
+  A checkpoint stage outside the kind's declared `stages` is a **409**, never
+  a defaulted 200. `affordances` (W6-B3, ADR-043 §1) is
+  `deriveSessionAffordances(descriptor, phase)` — computed server-side from
+  whichever phase table the descriptor carries (`turnSpec` for a real
+  dispatchable kind, `panel` for a legacy kind's read-only twin), ALWAYS
+  present (`[]` for architect, which carries neither table), never re-derived
+  client-side. `modelTier` (W6-B5's write side + W6-B6's read side) is the
+  session's own kickoff-selected tier, read live off `status.json.modelTier`
+  — `null` when none was ever recorded, the key always present either way.
+  `terminal` (W6-B8) is `isTerminalPhase(descriptor, phase)` — the SAME
+  derivation the route already used internally to gate its event-tail
+  (`ensureSessionTail`), threaded onto the wire so `SessionInteractivePanel`
+  can gate its ActivityLog drawer without a second, hand-kept terminal-phase
+  table client-side; ALWAYS present, boolean, computed from whichever table
+  the descriptor carries (`turnSpec` or `panel`, mirroring `affordances`'
+  own derivation exactly) before falling back to
+  `LEGACY_SESSION_TERMINAL_PHASES` for the two kinds (architect,
+  project-brain) with neither. The `data-*` vocabulary the consuming shell
   attaches to this payload — `data-session-kind`, `data-session-stage`,
   `data-session-phase`, `data-turn-index`, `data-turn-role`,
   `data-turn-stage`, `data-artifact-kind` — is named here as the contract;
@@ -1409,20 +1369,21 @@ inventory rather than one shared page-level contract:
   `runFinalize`) — this route validates the body shape and hands off, it
   never reimplements a finalizer.
 - **`SessionInteractivePanel` — the generic interaction panel (W6-B6,
-  2026-08-15).** `components/studio/session/SessionInteractivePanel.tsx`.
+  2026-08-15; W6-B8 extends it).** `components/studio/session/SessionInteractivePanel.tsx`.
   Renders EXCLUSIVELY from the read route's own `affordances[]` — never
   re-derives an affordance from `phase`. Wired into the session shell for
-  **`demo` and `onboarding` only** this batch — architect/instructions/
-  kb-cleanup/authoring keep their bespoke panels (`SessionArchitectPanel` /
-  `SessionInstructionsPanel` / `SessionCleanupPanel` / `SessionAuthoringPanel`,
-  documented above) until B8/B9 migrate them onto this generic surface;
-  architect never migrates (ADR-043 amendment §4 — permanently bespoke).
+  **`demo`, `onboarding`, `kb-cleanup`, and `authoring`** — architect/
+  instructions keep their own bespoke panels (`SessionArchitectPanel` /
+  `SessionInstructionsPanel`, documented above; instructions is a future
+  migration); architect never migrates (ADR-043 amendment §4 — permanently
+  bespoke). `SessionCleanupPanel`/`SessionAuthoringPanel` (W6-B8) are DELETED
+  — no dual paths.
   Root: `[data-component="session-interactive-panel"][data-affordance-count=<N>]`.
   An empty `affordances[]` (onboarding, at every one of its three phases)
   renders `[data-section="session-no-affordances"]` — an honest "no operator
-  action available" message, **never a silent `null`** (the gap this batch
-  closes: the page's ladder previously rendered `null` for both `demo` and
-  `onboarding`). A visible provenance strip, `[data-section="session-provenance"]`,
+  action available" message, **never a silent `null`** (the W6-B6 gap: the
+  page's ladder previously rendered `null` for both `demo` and `onboarding`).
+  A visible provenance strip, `[data-section="session-provenance"]`,
   reads *"derived from phase "* followed by the session's own current phase,
   verbatim (mock
   `session-surface-v1/session-live.html` №7), alongside a READ-ONLY model
@@ -1430,32 +1391,57 @@ inventory rather than one shared page-level contract:
   showing the session's own `modelTier` or `"default"`. Per affordance,
   rendered inside `[data-section="session-affordance"][data-affordance-kind=…]`:
   `question-form` → a free-text answer field (`[data-field="session-answer"]`)
-  and `[data-action="submit-answers"]` (this batch has no per-question
-  granularity on the wire — the operator reads the real question text in the
-  transcript pane to the left and replies here; unreachable in practice this
-  batch, since neither `demo` nor `onboarding` ever derives a `question-form`
-  row — kept generically correct for when `instructions` migrates its panel
-  later); `verdict` → `[data-action="verdict-approve"]` +
-  `[data-action="verdict-reject"]` (approve-only for `kb-cleanup`/`authoring`
-  — B4's own table declares no rejection path for either, so the reject
-  button is never offered where it is known in advance to 422), plus, for
-  `demo` only, a generation picker (`[data-field="session-generation-pick"]`)
-  sourced from the real `generation-gallery` artifact when at least one
-  generation exists; `staged-review`/`next-turn` render DISABLED, labelled
-  "not yet wired" (B4 returns 501 for both). Every endpoint error — 409
-  wrong-phase (naming the offending affordance id + the currently-available
-  set), 422, 501 `UnhandledAffordanceBody` — surfaces verbatim via
-  `[data-affordance-error]`, never swallowed. `postSessionAffordance`
-  (`forge-ui/lib/session-client.ts`) is the client POST helper; `[data-page="session"]`'s
-  `refreshSummary` gained a real `demo` branch (`listDemoSessions()`, the
-  SAME per-kind list endpoint `DemoBuilderPanel`/the legacy `/demo/[sid]`
-  redirect already use) — previously `demo` fell into the generic
-  "unrecognised kind" else-branch alongside every kind with no per-kind
-  summary fetch at all, so a session-shell deep link carrying no `?project=`
-  query param (this batch's own kickoff `Start` button included) left
-  `project` stuck at `null` forever, permanently tripping the page's
-  `noProjectKnown` fail-closed gate into "Session not found" (the demo
-  "Session not found" bug).
+  and `[data-action="submit-answers"]` (no per-question granularity on the
+  wire — the operator reads the real question text in the transcript pane to
+  the left and replies here; unreachable in practice today, since none of
+  the four wired kinds ever derives a `question-form` row — kept generically
+  correct for when `instructions` migrates its panel later); `verdict` →
+  `[data-action="verdict-approve"]` + `[data-action="verdict-reject"]`
+  (approve-only for `kb-cleanup`/`authoring` — B4's own table declares no
+  rejection path for either, so the reject button is never offered where it
+  is known in advance to 422), plus TWO artifact-driven additions, both
+  keyed off `artifact.kind` (never `kind`): for `demo` (a real
+  `generation-gallery` with at least one generation), a generation picker
+  (`[data-field="session-generation-pick"]`); for `authoring` (a real
+  `file-package`, W6-B8), a package-id field
+  (`[data-field="session-package-id"]`, labelled "Skill id (directory name)"
+  or "Hook id (directory name)" per the draft's shape — detected purely by
+  file PRESENCE, `SKILL.md` ⇒ skill, `hook.yaml` ⇒ hook, neither ⇒ still
+  drafting) — `handleAuthoringVerdict` (cli/bridge-studio-affordances.ts)
+  requires `{kind:'skill'|'hook', id}` in the approve body (D4: the library
+  directory name is an operator decision the drafted package cannot make for
+  itself), so Approve stays disabled until the field is non-empty AND the
+  shape has resolved — honestly, never a button known in advance to 400. On
+  a successful package-shaped approve the panel's `onPackageFinalized`
+  callback fires with the server's own `{kind, id}` echo, and the PAGE (not
+  the panel — `useRouter()` throws under the `renderToStaticMarkup` harness
+  this file's DOM regression suite uses) navigates to `/skills/<id>` or
+  `/hooks/<id>`, mirroring the retired `SessionAuthoringPanel`'s own
+  `onFinalized` behaviour. `staged-review`/`next-turn` render DISABLED,
+  labelled "not yet wired" (B4 returns 501 for both). Every endpoint error —
+  409 wrong-phase (naming the offending affordance id + the
+  currently-available set), 422, 501 `UnhandledAffordanceBody` — surfaces
+  verbatim via `[data-affordance-error]`, never swallowed.
+  `postSessionAffordance` (`forge-ui/lib/session-client.ts`) is the client
+  POST helper; `[data-page="session"]`'s `refreshSummary` gained a real
+  `demo` branch (`listDemoSessions()`, the SAME per-kind list endpoint
+  `DemoBuilderPanel`/the legacy `/demo/[sid]` redirect already use) —
+  previously `demo` fell into the generic "unrecognised kind" else-branch
+  alongside every kind with no per-kind summary fetch at all, so a
+  session-shell deep link carrying no `?project=` query param (this batch's
+  own kickoff `Start` button included) left `project` stuck at `null`
+  forever, permanently tripping the page's `noProjectKnown` fail-closed gate
+  into "Session not found" (the demo "Session not found" bug); `kb-cleanup`/
+  `authoring` have no per-kind summary branch either, so their `project`
+  resolves from `?project=` alone, same as before their W6-B8 migration.
+  **The shared `ActivityLog` bottom drawer (W6-B7) now renders here too
+  (W6-B8),** gated on `!terminal` (the read contract's own `terminal` field,
+  above) — a session-level fact, never derived from `affordances.length`
+  (onboarding's `running` phase legitimately has zero affordances while
+  genuinely working — exactly the case this gate must show the drawer for).
+  `events` is the SAME `useCycleEvents(cycleId)` feed the page already
+  computes for the StageHex burst chips on the bespoke panels, now also
+  handed to this one.
 - **`/sessions/[kind]/new` — the ONE kickoff screen for every session kind
   (W6-B6, 2026-08-15).** `app/sessions/[kind]/new/page.tsx`. Kind context
   card (agent slug + `SKILL.md` path, produced artifact label, session

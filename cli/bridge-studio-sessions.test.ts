@@ -127,6 +127,11 @@ const KB_CLEANUP_UNRESOLVABLE_SESSION = '2026-08-14T10-00-00';
 // applyKbCleanup call-site defect — see AT-KBID-1 below).
 const KB_CLEANUP_RESOLVABLE_SESSION = '2026-08-14T10-02-00';
 const KB_CLEANUP_RESOLVABLE_KB_ID = 'kb-cleanup-wire-kb';
+// W6-B8 — the `terminal` wire-field pins: a kb-cleanup session already at its
+// turnSpec's terminal phase ('applied'), and an onboarding session at its
+// panel's terminal phase ('complete').
+const KB_CLEANUP_APPLIED_SESSION = '2026-08-14T10-03-00';
+const ONBOARDING_COMPLETE_SESSION = '2026-08-10T09-02-00';
 // W6-B6 — a session whose status.json genuinely carries a kickoff-selected
 // `modelTier` (W6-B5's write side), proving the read route threads it
 // through rather than the stale `null` placeholder.
@@ -202,6 +207,16 @@ function writeSessionKindsYaml(root: string): void {
       },
       // R4-17: the new "onboarding" session kind — D2's five-stage
       // vocabulary, D9's artifact.label the project page renders.
+      // W6-B8: carries the REAL `panel.phases` table (studio/session-kinds.
+      // yaml's own onboarding row) — needed so this file's own terminal-phase
+      // tests (below) can prove `isTerminalPhase` derives onboarding's
+      // terminal set from its `panel`, not the LEGACY_SESSION_TERMINAL_PHASES
+      // table (which carries no 'onboarding' entry at all — see that
+      // function's own doc comment on the gap this closes). Adding this
+      // block does not change any EXISTING assertion in this file: no test
+      // here checks `affordances` for onboarding, and 'running' (the phase
+      // every pre-existing onboarding fixture uses) derives no affordances
+      // either way (no writes/next declared on that row).
       {
         id: 'onboarding',
         agent: 'onboarding-agent',
@@ -210,6 +225,13 @@ function writeSessionKindsYaml(root: string): void {
         stages: ['contract', 'instructions', 'secrets', 'demo', 'roadmap'],
         defaultStage: 'contract',
         artifact: { kind: 'contract-buildout', label: 'Contract build-out' },
+        panel: {
+          phases: [
+            { phase: 'running', step: 'agent' },
+            { phase: 'complete', step: 'terminal' },
+            { phase: 'failed', step: 'terminal' },
+          ],
+        },
       },
       // R4-19-F2: the new "kb-cleanup" session kind — the ADR-043-shaped
       // turnSpec table verbatim (see orchestrator/studio/session-kinds.test.ts's
@@ -308,6 +330,45 @@ function writeCleanupSessionWithResolvableKb(projectsRoot: string, project: stri
     }),
     'utf8',
   );
+}
+
+/** W6-B8 — companion to `writeCleanupSessionWithResolvableKb`, but at the
+ *  turnSpec's TERMINAL phase ('applied', `{step:'terminal'}`) rather than
+ *  'awaiting-approval' — the fixture the `terminal:true` wire-field pin
+ *  needs. Still carries a RESOLVABLE kb_id: `deriveSessionArtifact`'s
+ *  cleanup-plan branch always calls `computeAgentCleanupFindings` regardless
+ *  of phase, so an unresolvable kb_id would 409 before the terminal-field
+ *  assertion is ever reached. */
+function writeCleanupSessionApplied(projectsRoot: string, project: string, sessionId: string, kbId: string): void {
+  const dir = join(projectsRoot, project, '_kb-cleanup', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(
+    join(dir, 'status.json'),
+    JSON.stringify({
+      session_id: sessionId,
+      project,
+      phase: 'applied',
+      kb_id: kbId,
+      kb_binding: { kind: 'unique' },
+      findings: [],
+      updated_at: new Date().toISOString(),
+    }),
+    'utf8',
+  );
+}
+
+/** W6-B8 — an onboarding session already at its terminal 'complete' phase
+ *  (the panel row this file's `writeSessionKindsYaml` fixture now declares,
+ *  mirroring the real studio/session-kinds.yaml). Needed to prove
+ *  `isTerminalPhase` derives onboarding's terminal set from its OWN `panel`
+ *  table, not the LEGACY_SESSION_TERMINAL_PHASES table (which has no
+ *  'onboarding' entry — see that function's doc comment on the gap this
+ *  closes). */
+function writeOnboardingCompleteSession(projectsRoot: string, project: string, sessionId: string): void {
+  const dir = join(projectsRoot, project, '_onboarding', sessionId);
+  mkdirSync(dir, { recursive: true });
+  writeFileSync(join(dir, 'prompt.md'), 'Onboard this project.\n', 'utf8');
+  writeFileSync(join(dir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'complete' }), 'utf8');
 }
 
 function writeArchitectSession(projectsRoot: string, project: string, sessionId: string): void {
@@ -520,6 +581,11 @@ before(async () => {
   writeResolvableKb(forgeRoot, KB_CLEANUP_RESOLVABLE_KB_ID);
   writeCleanupSessionWithResolvableKb(projectsRoot, 'demoproj', KB_CLEANUP_RESOLVABLE_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
 
+  // W6-B8 — the `terminal` wire-field pins (see the two fixture writers'
+  // own doc comments above).
+  writeCleanupSessionApplied(projectsRoot, 'demoproj', KB_CLEANUP_APPLIED_SESSION, KB_CLEANUP_RESOLVABLE_KB_ID);
+  writeOnboardingCompleteSession(projectsRoot, 'onboardedproj', ONBOARDING_COMPLETE_SESSION);
+
   // Fail-closed fixture: a round carrying a stage marker outside the
   // architect descriptor's declared stages (['roadmap']).
   const badStageDir = join(projectsRoot, 'badstageproj', '_architect', BADSTAGE_SESSION);
@@ -630,6 +696,13 @@ type SessionShellBody = {
   // still typed loosely here since most fixtures below carry no modelTier.
   affordances: { id: string; kind: string; phase: string; meta?: { writes?: string[]; next?: string } }[];
   modelTier: string | null;
+  // W6-B8 — always present (never omitted), true iff the descriptor's OWN
+  // phase table (turnSpec.phases, or panel.phases for a legacy kind) marks
+  // this phase `step: 'terminal'` — the SAME derivation `isTerminalPhase`
+  // already used server-side to gate event-tailing, now also threaded onto
+  // the wire so the generic panel can gate its ActivityLog drawer without a
+  // second, client-side terminal-phase table.
+  terminal: boolean;
 };
 
 test('AT-38: GET /api/studio/sessions/architect/<id>?project=<p> returns the full shell payload', async () => {
@@ -1286,4 +1359,68 @@ test('R4-19-F2 WI-4c AT-KBID-2 (companion guard, not independently red — see c
     false,
     `a session kind with no real "kb_id" in status.json must never gain an invented "kbId" key (not even "" or null) — got: ${JSON.stringify(body['kbId'])}`,
   );
+});
+
+// ===========================================================================
+// W6-B8 — `terminal` on the session-shell read route's 200 payload. Threads
+// the SAME `isTerminalPhase` derivation the route already used internally to
+// gate `ensureSessionTail` (this file's header, W6-B2 review fix) onto the
+// wire, so the generic `SessionInteractivePanel` can gate its ActivityLog
+// drawer without a second, hand-kept terminal-phase table client-side.
+//
+// The panel-fallback fix this pins: `isTerminalPhase` previously checked
+// ONLY `descriptor.turnSpec` before falling back to
+// `LEGACY_SESSION_TERMINAL_PHASES` — a descriptor carrying `panel` instead
+// (onboarding, demo, instructions) fell straight to the legacy table, which
+// has NO 'onboarding' entry at all (see that table, cli/bridge-studio.ts),
+// so onboarding was *always* reported non-terminal, at every phase including
+// its own declared-terminal 'complete'/'failed' rows. The fix derives from
+// `descriptor.turnSpec?.phases ?? descriptor.panel?.phases` first, exactly
+// mirroring `deriveSessionAffordances`'s own precedent — the demo/
+// instructions tests below prove this is a no-op for those two kinds (their
+// panel-derived terminal set already matches the legacy table verbatim).
+// ===========================================================================
+
+test('W6-B8: GET /api/studio/sessions/kb-cleanup/<id> — terminal:false at a non-terminal turnSpec phase ("awaiting-approval")', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_RESOLVABLE_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.terminal, false, `phase "awaiting-approval" (step: noop) is not terminal — got terminal=${JSON.stringify(body.terminal)}`);
+});
+
+test('W6-B8: GET /api/studio/sessions/kb-cleanup/<id> — terminal:true at the turnSpec\'s own terminal phase ("applied")', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/kb-cleanup/${KB_CLEANUP_APPLIED_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.phase, 'applied');
+  assert.equal(body.terminal, true, `phase "applied" (step: terminal) must report terminal=true — got ${JSON.stringify(body.terminal)}`);
+});
+
+test('W6-B8 (the panel-fallback fix): GET /api/studio/sessions/onboarding/<id> — terminal:false at a non-terminal PANEL phase ("running")', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/onboarding/${ONBOARDING_SESSION}?project=onboardedproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.phase, 'running');
+  assert.equal(body.terminal, false, `phase "running" (step: agent) is not terminal — got terminal=${JSON.stringify(body.terminal)}`);
+});
+
+test('W6-B8 (the panel-fallback fix): GET /api/studio/sessions/onboarding/<id> — terminal:true at the panel\'s own terminal phase ("complete") — REGRESSION LOCK: onboarding has no LEGACY_SESSION_TERMINAL_PHASES entry, so before the fix this always read terminal:false, even here', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/onboarding/${ONBOARDING_COMPLETE_SESSION}?project=onboardedproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.phase, 'complete');
+  assert.equal(body.terminal, true, `phase "complete" (the panel's own step:'terminal' row) must report terminal=true — got ${JSON.stringify(body.terminal)}`);
+});
+
+test('W6-B8: GET /api/studio/sessions/instructions/<id> — terminal:false at "drafting" (a panel-derived kind whose legacy-table set already agreed — proves the fix is a no-op here)', async () => {
+  const res = await fetch(`${bridgeUrl}/api/studio/sessions/instructions/${REAL_INSTRUCTIONS_SESSION}?project=demoproj`);
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as SessionShellBody;
+  assert.equal(body.phase, 'drafting');
+  assert.equal(body.terminal, false);
 });

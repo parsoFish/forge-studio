@@ -248,29 +248,38 @@ function resolveSafeSessionDir(projectsRoot: string, project: string, kindDirNam
  * not a re-invented one.
  *
  * Derives, never hand-writes a new list:
- *   - A descriptor WITH a `turnSpec` (kb-cleanup, authoring) derives its
- *     terminal set from the turnSpec's own phase table — any phase whose row
- *     declares `step: 'terminal'` (the ADR-043 state-machine's own "this is
- *     where it stops" marker, already validated by validateSessionKinds to
- *     have at least one such row — CHECK_TURNSPEC_NO_TERMINAL_PHASE). A
- *     rename/addition of a terminal phase in studio/session-kinds.yaml is
- *     picked up automatically, with no code change here.
- *   - A descriptor with NO `turnSpec` (architect/instructions/demo/
- *     project-brain — the four kinds that predate the turnSpec table) falls
- *     back to `LEGACY_SESSION_TERMINAL_PHASES` (cli/bridge-studio.ts) — the
- *     SAME constant the four legacy list routes now import instead of
- *     hand-writing their own inline literals.
- *   - Any OTHER kind (e.g. 'onboarding': no turnSpec, no
- *     LEGACY_SESSION_TERMINAL_PHASES row) has no terminal-phase source at
- *     all — treated as never-terminal (returns false), so its tail activates
- *     on every GET exactly as before this fix (ensureSessionTail's own
- *     no-op-on-missing-log-dir guard is what actually keeps its cost at
- *     zero, since 'onboarding' never writes to this naming convention's log
- *     dir in the first place — see ensureSessionTail's doc comment).
+ *   - A descriptor carrying EITHER a `turnSpec` (kb-cleanup, authoring) OR a
+ *     `panel` (demo, instructions, onboarding — the legacy kinds' read-only
+ *     twin, ADR-043 2026-08-15 amendment §2) derives its terminal set from
+ *     THAT table — any phase whose row declares `step: 'terminal'` (the
+ *     ADR-043 state-machine's own "this is where it stops" marker, already
+ *     validated by validateSessionKinds to have at least one such row —
+ *     CHECK_TURNSPEC_NO_TERMINAL_PHASE / CHECK_PANEL_NO_TERMINAL_PHASE).
+ *     Mirrors `deriveSessionAffordances`'s own `turnSpec?.phases ??
+ *     panel?.phases` precedent exactly (orchestrator/studio/session-kinds.
+ *     ts) — a rename/addition of a terminal phase in studio/session-
+ *     kinds.yaml is picked up automatically, with no code change here.
+ *   - A descriptor with NEITHER (architect, project-brain — the two kinds
+ *     that predate BOTH tables) falls back to `LEGACY_SESSION_TERMINAL_PHASES`
+ *     (cli/bridge-studio.ts) — the SAME constant the legacy list routes
+ *     import instead of hand-writing their own inline literals.
+ *
+ * W6-B8 fix: this function previously checked ONLY `descriptor.turnSpec`
+ * before falling to the legacy table — a `panel`-carrying descriptor
+ * (demo/instructions/onboarding, all three added by W6-B3 after this
+ * function was first written) fell straight through to
+ * `LEGACY_SESSION_TERMINAL_PHASES`, which has entries for demo/instructions
+ * (and happens to agree with their panel's own terminal set, so those two
+ * kinds' behaviour is UNCHANGED by this fix) but has NO 'onboarding' row at
+ * all — onboarding was therefore reported non-terminal at every phase,
+ * including its own declared-terminal 'complete'/'failed' rows. Checking
+ * `panel` here closes that gap the same way `deriveSessionAffordances`
+ * already treats `panel` as a first-class phase-table source.
  */
 function isTerminalPhase(descriptor: SessionKindDescriptor, phase: string): boolean {
-  if (descriptor.turnSpec) {
-    return descriptor.turnSpec.phases.some((p) => p.step === 'terminal' && p.phase === phase);
+  const phases = descriptor.turnSpec?.phases ?? descriptor.panel?.phases;
+  if (phases) {
+    return phases.some((p) => p.step === 'terminal' && p.phase === phase);
   }
   return LEGACY_SESSION_TERMINAL_PHASES[descriptor.id]?.has(phase) ?? false;
 }
@@ -491,15 +500,25 @@ export async function handleStudioSessionsRoutes(
         // SAME realpath-guarded read every other field on this envelope
         // comes from; never a second, unguarded status read.
         modelTier: typeof statusParsed.modelTier === 'string' ? statusParsed.modelTier : null,
+        // W6-B8 — the SAME `isTerminalPhase` derivation this route already
+        // used internally to gate `ensureSessionTail` (this file's header),
+        // now also threaded onto the wire (ALWAYS present, never omitted —
+        // mirrors `affordances`' own unconditional presence) so the generic
+        // `SessionInteractivePanel` can gate its ActivityLog drawer without a
+        // second, hand-kept terminal-phase table client-side.
+        terminal: isTerminalPhase(descriptor, phase),
         // R4-19-F2 WI-4c BLOCKER fix — `kbId`, sourced from the already-read
         // `statusParsed.kb_id`, threaded the same way `title` is threaded
         // above: present ONLY when the status genuinely carries a string
         // kb_id, spread in rather than assigned, so kinds with no kb_id
         // (e.g. architect) get no `kbId` key at all — not `''`, not `null`.
-        // This is the field SessionCleanupPanel needs as `applyKbCleanup`'s
-        // FIRST argument; broadcasting a fabricated default here would be
-        // the exact declared-data-fails-open shape this campaign guards
-        // against, just for a new field (AT-KBID-2 pins the omission).
+        // This is the field the bespoke `applyKbCleanup` route's `:id` URL
+        // segment needs (W6-B8 retired the panel that consumed it directly —
+        // the generic write route, cli/bridge-studio-affordances.ts, reads
+        // `status.kb_id` server-side instead); broadcasting a fabricated
+        // default here would be the exact declared-data-fails-open shape
+        // this campaign guards against, just for a new field (AT-KBID-2 pins
+        // the omission).
         ...(typeof statusParsed.kb_id === 'string' ? { kbId: statusParsed.kb_id } : {}),
       },
       origin,

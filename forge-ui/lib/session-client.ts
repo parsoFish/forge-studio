@@ -705,9 +705,8 @@ export type SessionShellPayload = {
   turns: SessionTurn[];
   artifact: SessionArtifactPayload;
   /**
-   * R4-19-F2 WI-4c BLOCKER fix — the KB id `SessionCleanupPanel` needs as
-   * `applyKbCleanup`'s FIRST argument (cli/bridge-studio-sessions.ts's
-   * `statusParsed.kb_id` forward). Mirrors `dependsOn`'s ABSENCE-TOLERANT
+   * R4-19-F2 WI-4c BLOCKER fix — the kb-cleanup session's own KB id
+   * (cli/bridge-studio-sessions.ts's `statusParsed.kb_id` forward). Mirrors `dependsOn`'s ABSENCE-TOLERANT
    * attitude, not its empty-array DEFAULT: `dependsOn` has a sensible "no
    * deps" default (`[]`), but there is no sentinel "no KB" string, so a
    * session kind with no real kb_id (e.g. architect) must parse to
@@ -734,6 +733,15 @@ export type SessionShellPayload = {
    * IS the honest value here, not an absence to model as `undefined`.
    */
   modelTier: string | null;
+  /**
+   * W6-B8 — mirrors the server's own `isTerminalPhase` derivation
+   * (`cli/bridge-studio-sessions.ts`), threaded onto the wire so the generic
+   * `SessionInteractivePanel` can gate its ActivityLog drawer without a
+   * second, hand-kept terminal-phase table client-side. REQUIRED and
+   * hard-parsed like every sibling field above — never omitted, never
+   * defaulted to `false`.
+   */
+  terminal: boolean;
 };
 
 /** Every field is required and structurally checked; nothing is coerced to a
@@ -806,11 +814,20 @@ export function parseSessionShellPayload(raw: unknown): SessionShellPayload {
   }
   const modelTier = modelTierRaw;
 
+  // W6-B8 — REQUIRED like "affordances"/"modelTier" above: a missing or
+  // non-boolean "terminal" throws, never defaulted to false.
+  const terminalRaw = raw['terminal'];
+  if (typeof terminalRaw !== 'boolean') {
+    throw new Error(`missing or invalid "terminal": expected a boolean, got ${JSON.stringify(terminalRaw)}`);
+  }
+  const terminal = terminalRaw;
+
   return {
     ok: true, kind, title, sessionId, project, phase, stages, defaultStage, turns, artifact,
     ...(kbId !== undefined ? { kbId } : {}),
     affordances,
     modelTier,
+    terminal,
   };
 }
 
