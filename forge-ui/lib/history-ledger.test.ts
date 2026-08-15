@@ -187,6 +187,7 @@ import {
   renderNarrative,
   sortLedgerRowsNewestFirst,
   formatWhen,
+  ledgerRowKind,
   type LedgerSegment,
   type LedgerRow,
 } from './history-ledger.ts';
@@ -827,4 +828,18 @@ test('ROUND 5: formatWhen — a WHITESPACE-ONLY `iso` is a THIRD instance of the
   // same fabricated "NaNd ago". Verified directly before writing this test.
   const now = Date.now();
   expect(formatWhen('   ', now)).toBe('—');
+});
+
+// ---------------------------------------------------------------------------
+// W6-IA-4: ledgerRowKind — the Home merged-ledger "kind chip" (flow|agent)
+// ---------------------------------------------------------------------------
+
+test('ledgerRowKind: linkKind undefined (every flow-ledger.ts row) is "flow"', () => {
+  expect(ledgerRowKind({ linkKind: undefined })).toBe('flow');
+});
+
+test('ledgerRowKind: every agent-sourced linkKind ("flow-node", "standalone", "session") is "agent" — none of them a flow-level row', () => {
+  expect(ledgerRowKind({ linkKind: 'flow-node' })).toBe('agent');
+  expect(ledgerRowKind({ linkKind: 'standalone' })).toBe('agent');
+  expect(ledgerRowKind({ linkKind: 'session' })).toBe('agent');
 });

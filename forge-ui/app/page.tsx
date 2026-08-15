@@ -2,19 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { subscribe, fetchProjectAttention, type ProjectAttentionItem } from '@/lib/bridge-client';
-import {
-  fetchRuns,
-  fetchStudioAgents,
-  fetchStudioFlows,
-  fetchStudioKbs,
-  fetchStudioProjects,
-  type Agent,
-  type Flow,
-  type Kb,
-  type Project,
-  type Run,
-} from '@/lib/studio-client';
+import { useStudioHomeData } from '@/lib/use-studio-home-data';
+import { fetchRecentAgentRuns } from '@/lib/agents-index';
+import type { LedgerRow } from '@/lib/history-ledger';
 import { StudioPage } from '@/components/StudioPage';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
@@ -22,21 +12,32 @@ import {
   buildConstellation,
   buildHomeAttention,
   buildKbAttention,
+  buildHomeLedgerRows,
+  deriveWatchLiveRunHref,
+  gateAttentionStatusDot,
   type HomeAttentionItem,
   type HomeHex,
   type HomeStatus,
 } from '@/lib/home-view';
 import { useNowTicker } from '@/lib/use-now-ticker';
-import { debounceLeadingTrailing } from '@/lib/debounce';
 
 // ---------------------------------------------------------------------------
 // Home — the operator dashboard at `/` (R6-07).
 //
-// Reads the SAME six existing surfaces Library already reads (fetchStudio* +
-// fetchRuns + fetchProjectAttention) and composes them through the pure
-// `home-view.ts` derivation module — no new endpoint, no bespoke poll loop.
-// Live refresh reuses the one bridge WebSocket (subscribe()) exactly as
-// Library does: a `cycle-list-changed` message re-fetches runs.
+// Data plumbing (the six cross-object reads + the bridge WS subscribe()) is
+// EXTRACTED into `lib/use-studio-home-data.ts` (W6-IA-4, sweep finding
+// C1#5) — this file no longer byte-duplicates that shape with the old
+// Library landing page (which itself was rebuilt into five shelves reading
+// entirely different sources, so the two pages' fetch sets are no longer
+// even related). Home is the hook's only caller.
+//
+// The MERGED everything-ledger (flow runs + standalone agent runs, W6-IA-4
+// item 2) is Home-only, layered on top of the shared hook: once the shared
+// roster (`agents`) is ready, a second, independent effect fans out
+// `lib/agents-index.ts`'s `fetchRecentAgentRuns` — mirroring
+// `app/agents/page.tsx`'s own two-effect precedent exactly (the roster must
+// resolve first; the runs ledger is a SEPARATE readiness fact so it never
+// blocks the rest of the page).
 // ---------------------------------------------------------------------------
 
 // Maps HomeStatus (home-view.ts's own 3-state vocab: active/gated/idle) onto
@@ -61,85 +62,53 @@ const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' 
 };
 
 export default function HomePage() {
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [flows, setFlows] = useState<Flow[]>([]);
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [kbs, setKbs] = useState<Kb[]>([]);
-  const [runs, setRuns] = useState<Run[]>([]);
-  const [attention, setAttention] = useState<ProjectAttentionItem[]>([]);
-  const [ready, setReady] = useState(false);
+  const { agents, flows, projects, kbs, runs, attention, ready } = useStudioHomeData();
   const nowMs = useNowTicker();
 
-  // ---- data loading (mirrors app/library/page.tsx exactly) ----
-  async function loadAll(signal: { cancelled: boolean }): Promise<void> {
-    try {
-      const [a, f, p, k, r, at] = await Promise.all([
-        fetchStudioAgents(),
-        fetchStudioFlows(),
-        fetchStudioProjects(),
-        fetchStudioKbs(),
-        fetchRuns(),
-        fetchProjectAttention(),
-      ]);
-      if (signal.cancelled) return;
-      setAgents(a);
-      setFlows(f);
-      setProjects(p);
-      setKbs(k);
-      setRuns(r);
-      setAttention(at);
-    } finally {
-      if (!signal.cancelled) setReady(true);
-    }
-  }
-
-  async function refreshRuns(signal: { cancelled: boolean }): Promise<void> {
-    const r = await fetchRuns();
-    if (signal.cancelled) return;
-    setRuns(r);
-  }
+  // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
+  const [recentAgentRuns, setRecentAgentRuns] = useState<LedgerRow[]>([]);
+  const [recentAgentRunsReady, setRecentAgentRunsReady] = useState(false);
 
   useEffect(() => {
-    // intentional mount-only — loadAll/refreshRuns are stable fetch helpers
+    if (!ready) return;
+    let cancelled = false;
+    async function loadRecentAgentRuns(): Promise<void> {
+      const rows = await fetchRecentAgentRuns(agents);
+      if (cancelled) return;
+      setRecentAgentRuns(rows);
+      setRecentAgentRunsReady(true);
+    }
+    void loadRecentAgentRuns();
+    return () => { cancelled = true; };
+    // `agents` intentionally omitted: this effect should fire ONCE the
+    // shared roster first becomes ready, not re-fire on every roster
+    // identity change (useStudioHomeData's own load effect only ever runs
+    // once, on mount) — mirrors app/agents/page.tsx's own precedent exactly.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    const signal = { cancelled: false };
-
-    void loadAll(signal);
-
-    // Subscribe to bridge WS to re-fetch runs on cycle-list-changed — the one
-    // live-refresh transport Studio has; Home adds no second poll loop.
-    // ADR-044 P1: debounce leading+trailing 500ms (forge-ui/lib/debounce.ts)
-    // so a burst of cycle-list-changed messages collapses into at most two
-    // /api/runs round-trips instead of one per message.
-    const debouncedRefreshRuns = debounceLeadingTrailing(() => {
-      void refreshRuns(signal);
-    }, 500);
-    const sub = subscribe({
-      onState: () => { /* page does not show connection state */ },
-      onMessage: (msg) => {
-        if (signal.cancelled) return;
-        if (msg.type === 'cycle-list-changed') {
-          debouncedRefreshRuns();
-        }
-      },
-    });
-
-    return () => {
-      signal.cancelled = true;
-      debouncedRefreshRuns.cancel();
-      sub.close();
-    };
-  }, []);
+  }, [ready]);
 
   // ---- derivation (pure — all done via lib/home-view.ts) ----
   const constellation = buildConstellation({ flows, agents, projects, kbs, runs, attention });
   // forge-2am: the attention strip folds the pre-existing project-gate rows
   // and the KB-lint rows into ONE list. Both read the SAME already-fetched
-  // fetchStudioKbs() result Home already loads (no new fetch, no new poll —
+  // KB roster useStudioHomeData() already loads (no new fetch, no new poll —
   // see this file's header + scripts/home-no-new-polling.test.ts).
   const attentionItems: HomeAttentionItem[] = [...buildHomeAttention(attention), ...buildKbAttention(kbs)];
-  const ledgerRows = deriveFlowLedgerRows(runs);
+  const flowLedgerRows = deriveFlowLedgerRows(runs);
+  // W6-IA-4: the flow-run rows render immediately (they come from `ready`,
+  // the same gate the rest of the page uses); the agent rows fold in once
+  // their own independent fetch resolves — never a fabricated wait, and
+  // never a blank ledger while the (typically fast) flow-run rows are
+  // already known.
+  const ledgerRows = recentAgentRunsReady
+    ? buildHomeLedgerRows(flowLedgerRows, recentAgentRuns)
+    : flowLedgerRows;
   const liveCount = constellation.filter((h) => h.status === 'active').length;
+  // W6-IA-4 sweep finding C1#2: was a hardcoded '/flows/forge-develop',
+  // rendered unconditionally regardless of whether anything was actually
+  // running there. Now gated on an ACTUAL live run, pointed at that run's
+  // own flow — falls back to the flows index when nothing is live.
+  const watchLiveRunHref = deriveWatchLiveRunHref(runs);
 
   return (
     <StudioPage
@@ -164,12 +133,15 @@ export default function HomePage() {
           <Link className="btn" href="/projects/new" data-action="onboard-project-cta" style={{ textDecoration: 'none' }}>
             Onboard a project
           </Link>
-          <Link className="btn btn-primary" href="/flows/forge-develop" data-action="watch-live-run" style={{ textDecoration: 'none' }}>
+          <Link className="btn btn-primary" href={watchLiveRunHref} data-action="watch-live-run" style={{ textDecoration: 'none' }}>
             Watch live run
           </Link>
         </>
       }
     >
+      {/* ===== ACTIVE SESSIONS — deferred to B11 (the sessions aggregate API
+          doesn't exist yet). Slot marked, not built (W6-IA-4 scope). ===== */}
+
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
       {attentionItems.length > 0 && (
         <section
@@ -221,7 +193,7 @@ export default function HomePage() {
             // vocabulary the Library strip carries) so both attention surfaces
             // speak ONE shared vocabulary, plus data-attention-status for the
             // derived condition. Counts come straight from the same
-            // fetchProjectAttention() row, never re-derived. Every attribute
+            // attention-aggregate row, never re-derived. Every attribute
             // this row rendered before forge-2am is unchanged; it only gains
             // data-attention-kind alongside them.
             const raw = attention.find((a) => a.projectId === item.projectId);
@@ -252,7 +224,12 @@ export default function HomePage() {
                 color: 'var(--text)',
               }}
             >
-              <span className="status-dot" data-status="retrying" />
+              {/* W6-IA-4 sweep finding C1#3: was a hardcoded data-status=
+                  "retrying" for EVERY gate row regardless of item.status
+                  ('gated' | 'flagged'). Now mapped through
+                  GATE_ATTENTION_STATUS_FRAME, mirroring
+                  KB_ATTENTION_STATUS_FRAME's own established pattern. */}
+              <span className="status-dot" data-status={gateAttentionStatusDot(item.status)} />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ fontSize: 13, fontWeight: 600, display: 'block' }}>{item.text}</span>
                 <span style={{ fontSize: 11, color: 'var(--faint)', fontFamily: 'var(--font-mono)' }}>{item.sub}</span>
@@ -281,8 +258,23 @@ export default function HomePage() {
         </div>
         <div className="home-constellation" style={{ background: 'var(--panel)', border: '1px solid var(--line)', borderRadius: 'var(--radius)' }}>
           {constellation.length === 0 ? (
-            <div data-component="constellation-empty" className="muted" style={{ fontStyle: 'italic', fontSize: 12, padding: '10px 4px' }}>
-              Nothing registered yet.
+            <div
+              data-component="constellation-empty"
+              style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '10px 4px', flexWrap: 'wrap' }}
+            >
+              <span className="muted" style={{ fontStyle: 'italic', fontSize: 12 }}>
+                Nothing registered yet.
+              </span>
+              {/* W6-IA-4 sweep finding C1#4: the empty branch used to be
+                  terminal text with no way forward. */}
+              <Link
+                href="/projects/new"
+                className="btn btn-primary"
+                data-action="constellation-empty-cta"
+                style={{ textDecoration: 'none', fontSize: 12 }}
+              >
+                Onboard your first project →
+              </Link>
             </div>
           ) : (
             constellation.map((hex) => <HomeHexCell key={`${hex.kind}-${hex.id}`} hex={hex} />)
@@ -290,12 +282,17 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ===== RECENT ACTIVITY — cross-object run ledger (total reuse) ===== */}
+      {/* ===== RECENT ACTIVITY — the merged everything-ledger (W6-IA-4) =====
+          Interleaves the flow-run ledger with recent standalone agent runs
+          (lib/agents-index.ts's fetchRecentAgentRuns + home-view.ts's
+          buildHomeLedgerRows, which reuses mergeRecentAgentRuns unchanged)
+          into ONE newest-first list — each row carrying a "flow"/"agent"
+          kind chip (HistoryLedger's own showKindChip, additive). */}
       <section data-section="activity" aria-label="Recent activity">
         <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '0 0 4px' }}>
           Recent activity
         </h2>
-        <HistoryLedger rows={ledgerRows} nowMs={nowMs} />
+        <HistoryLedger rows={ledgerRows} nowMs={nowMs} showKindChip />
       </section>
     </StudioPage>
   );

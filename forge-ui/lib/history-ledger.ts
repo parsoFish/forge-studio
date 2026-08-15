@@ -289,3 +289,22 @@ export function formatWhen(iso: string | undefined, nowMs: number): string {
   const diffDays = Math.floor(diffMs / DAY_MS);
   return `${diffDays}d ago`;
 }
+
+// ---------------------------------------------------------------------------
+// ledgerRowKind — W6-IA-4 Home merged-ledger "kind chip" (flow|agent)
+// ---------------------------------------------------------------------------
+
+/** The two-way split `HistoryLedger`'s optional `showKindChip` renders,
+ *  DERIVED from the row's own existing `linkKind` field — never a new
+ *  stored fact. `linkKind === undefined` is exactly `flow-ledger.ts`'s own
+ *  convention (D8: "that caller's rows are already scoped to 'inside a
+ *  flow run' by construction" — flow-ledger.ts NEVER sets it), so an
+ *  absent `linkKind` means "this row came from a flow-run derivation" ->
+ *  'flow'. Every agent-sourced `linkKind` value (`'flow-node'` — an
+ *  agent's own participation in a flow node, `'standalone'`, `'session'`)
+ *  is bucketed 'agent' — none of them are a flow-level row. */
+export type LedgerRowKind = 'flow' | 'agent';
+
+export function ledgerRowKind(row: Pick<LedgerRow, 'linkKind'>): LedgerRowKind {
+  return row.linkKind === undefined ? 'flow' : 'agent';
+}
