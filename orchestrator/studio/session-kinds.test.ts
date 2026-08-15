@@ -1202,10 +1202,16 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
         phases: [
           { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
           { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
+          // W6-B4 adversarial-review fix: `applying` is the atomic-claim
+          // marker `approveKbCleanup` (cli/bridge-studio-kbs.ts) writes
+          // SYNCHRONOUSLY before its one await, closing a live-reproduced
+          // double-drain race. Unreachable via `next` (same as `applied`
+          // always has been) — `approveKbCleanup` is its only writer.
+          { phase: 'applying', step: 'terminal' },
           { phase: 'applied', step: 'terminal' },
         ],
       },
-      `kb-cleanup's real turnSpec must deep-equal its ratified 3-phase table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applied, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
+      `kb-cleanup's real turnSpec must deep-equal its ratified 4-phase table (kindDir:_kb-cleanup, style:agent, drafting→awaiting-approval→applying→applied, with NO "next" on awaiting-approval — that absence is the approval gate), got: ${JSON.stringify(kbCleanup.turnSpec)}`,
     );
 
     const kbCleanupFindings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:kb-cleanup');
@@ -1553,6 +1559,10 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
     phases: [
       { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
       { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
+      // W6-B4 adversarial-review fix: the atomic-claim marker
+      // `approveKbCleanup` writes synchronously before its one await —
+      // see session-kinds.yaml's own comment on this row.
+      { phase: 'applying', step: 'terminal' },
       { phase: 'applied', step: 'terminal' },
     ],
   };

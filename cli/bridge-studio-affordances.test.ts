@@ -18,6 +18,14 @@
  *   - wrong-phase affordance (a real id from a DIFFERENT phase) -> 409
  *   - oversized / malformed body -> 400
  *   - onboarding / architect derive NO writable affordances -> 409 on any affordance id
+ *   - (adversarial-review round) a symlinked session dir (the [project,
+ *     kindDir, sessionId] leaf itself) -> 404, no write, no leak
+ *   - (adversarial-review round) two CONCURRENT verdict-approve POSTs
+ *     against the SAME kb-cleanup session -> exactly one 200 + one 409,
+ *     exactly one _brainfix-<runId> log dir (the atomic-claim fix)
+ *   - (adversarial-review round) answers[] count/size caps -> 400
+ *   - (adversarial-review round) a structural pin that this file makes zero
+ *     raw fs sink calls (kind/affordanceId never reach one directly)
  *   - per-kind table: instructions (answer + verdict), demo (verdict), kb-cleanup
  *     (verdict approve), authoring (verdict approve -> finalize)
  *   - parity: the generic verdict write reaches the IDENTICAL phase the bespoke
@@ -28,7 +36,7 @@
 
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -605,4 +613,181 @@ test('NOOP-1: a session at a noop phase (awaiting-approval) stays there under re
   const res = await postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), { project, verdict: 'approve' });
   assert.equal(res.status, 200);
   assert.equal(readPhase(sessionDir), 'applied', 'only the accepted verdict write advances a noop phase');
+});
+
+// ===========================================================================
+// ADVERSARIAL-REVIEW ROUND (W6-B4) — live symlink escape, concurrency race,
+// answers[] hardening cap, and a structural sink-freedom pin.
+// ===========================================================================
+
+test('SEC-SYMLINK: the session dir itself is a SYMLINK (not a real directory) pointing at a victim session outside the project -> 404, no path/content echoed, victim byte-unchanged (no write, no spawn)', async () => {
+  const project = 'symlinkescapeproj';
+  const sessionId = freshSessionId();
+  const SECRET = 'W6B4-SYMLINK-ESCAPE-SECRET-9911';
+
+  // The victim: a REAL session, entirely outside this project's own
+  // containment root, carrying a secret in a field this route could only
+  // ever echo if the guard were bypassed.
+  const victimDir = join(forgeRoot, '_symlink-escape-outside', sessionId);
+  mkdirSync(victimDir, { recursive: true });
+  writeFileSync(
+    join(victimDir, 'status.json'),
+    JSON.stringify({ session_id: sessionId, project: 'victim-project', phase: 'awaiting-verdict', round: 1, prompt: SECRET }, null, 2),
+    'utf8',
+  );
+
+  // The attack: `<projectsRoot>/<project>/_instructions/<sessionId>` is
+  // ITSELF a symlink to the victim dir — the exact AT-47 shape
+  // cli/bridge-studio-sessions.ts's own header documents (a symlink whose
+  // OWN path is safely inside the requested parent but which resolves to a
+  // DIFFERENT session entirely). `resolveGuardedPath`'s per-segment identity
+  // walk must catch this at the `sessionId` segment.
+  const kindDir = join(forgeRoot, 'projects', project, '_instructions');
+  mkdirSync(kindDir, { recursive: true });
+  symlinkSync(victimDir, join(kindDir, sessionId));
+
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), { project, verdict: 'approve' });
+  const text = await res.text();
+  assert.equal(res.status, 404, `expected 404 for a symlinked session dir, got ${res.status}: ${text}`);
+  assert.doesNotMatch(text, new RegExp(SECRET), 'response must never leak content read through an escaping symlink');
+  assert.doesNotMatch(text, /_symlink-escape-outside/, 'response must never echo the escaped filesystem path');
+
+  // No write: the victim's OWN status.json — read/written THROUGH the
+  // symlink target if the guard were bypassed — must be byte-unchanged. A
+  // bypassed guard would have advanced its phase to "finalizing"/"rejected".
+  const victimStatus = JSON.parse(readFileSync(join(victimDir, 'status.json'), 'utf8')) as { phase: string; prompt: string };
+  assert.equal(victimStatus.phase, 'awaiting-verdict', 'a blocked symlink escape must never write through to the victim session');
+  assert.equal(victimStatus.prompt, SECRET, 'the victim session content must be byte-unchanged');
+});
+
+test('RACE-1 (W6-B4 adversarial-review fix): two CONCURRENT verdict-approve POSTs against the SAME kb-cleanup session -> exactly one 200 + one 409, exactly one _brainfix-<runId> log dir, phase ends at "applied" (never stuck at "applying")', async () => {
+  const kbId = 'w6b4-race-kb';
+  writeKb(kbId, '{ kind: unique }');
+  const project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_kb-cleanup', sessionId, {
+    session_id: sessionId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [],
+  });
+
+  const [resA, resB] = await Promise.all([
+    postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), { project, verdict: 'approve' }),
+    postJson(affordanceUrl('kb-cleanup', sessionId, 'awaiting-approval-verdict'), { project, verdict: 'approve' }),
+  ]);
+  const [textA, textB] = await Promise.all([resA.text(), resB.text()]);
+  const statuses = [resA.status, resB.status].sort((a, b) => a - b);
+  assert.deepEqual(
+    statuses,
+    [200, 409],
+    `expected exactly ONE 200 and ONE 409 for two concurrent approves against the SAME session, got ${JSON.stringify([resA.status, resB.status])} (bodies: ${textA} / ${textB})`,
+  );
+  assert.equal(readPhase(sessionDir), 'applied', 'the session must end at "applied" — never left stuck at the transient "applying" claim phase');
+
+  // Exactly ONE drain actually ran — the pre-fix repro produced two
+  // independent runBrainConsolidateNow runs (two distinct runIds, two
+  // _brainfix-<runId> log dirs) for what should be ONE approved action.
+  const logsDir = join(forgeRoot, '_logs');
+  const brainfixDirs = existsSync(logsDir)
+    ? readdirSync(logsDir).filter((d) => d.startsWith(`_brainfix-${kbId}-consolidate-`))
+    : [];
+  assert.equal(
+    brainfixDirs.length,
+    1,
+    `expected exactly ONE _brainfix-<runId> log dir for two concurrent approves against the same session, got ${brainfixDirs.length}: ${JSON.stringify(brainfixDirs)}`,
+  );
+});
+
+test('RACE-2 (parity — the legacy bespoke route gets the SAME atomic fix): two CONCURRENT POSTs to the bespoke /api/studio/kbs/:id/cleanup/apply against the SAME session -> exactly one 200 + one 409', async () => {
+  const kbId = 'w6b4-race-legacy-kb';
+  writeKb(kbId, '{ kind: unique }');
+  const project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_kb-cleanup', sessionId, {
+    session_id: sessionId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [],
+  });
+
+  const applyUrl = `${bridgeUrl}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/apply`;
+  const [resA, resB] = await Promise.all([
+    postJson(applyUrl, { project, sessionId }),
+    postJson(applyUrl, { project, sessionId }),
+  ]);
+  const statuses = [resA.status, resB.status].sort((a, b) => a - b);
+  assert.deepEqual(
+    statuses,
+    [200, 409],
+    `expected exactly ONE 200 and ONE 409 for two concurrent legacy applies against the SAME session, got ${JSON.stringify([resA.status, resB.status])}`,
+  );
+  assert.equal(readPhase(sessionDir), 'applied');
+});
+
+test('HARDEN-1: answers[] with more than 64 entries -> 400 naming the cap, nothing written', async () => {
+  const project = 'hardenanswers1';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-answers', round: 1, prompt: '' });
+  const answers = Array.from({ length: 65 }, (_, i) => ({ question: `Q${i}?`, answer: 'A.' }));
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form'), { project, answers });
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 400);
+  assert.match(body.error, /64/);
+  assert.equal(existsSync(join(sessionDir, 'answers.json')), false);
+  assert.equal(readPhase(sessionDir), 'awaiting-answers');
+});
+
+test('HARDEN-2: an answers[] entry with a question/answer over 8KB -> 400 naming the cap, nothing written', async () => {
+  const project = 'hardenanswers2';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-answers', round: 1, prompt: '' });
+  const huge = 'x'.repeat(9 * 1024);
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form'), {
+    project,
+    answers: [{ question: 'Q?', answer: huge }],
+  });
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 400);
+  assert.match(body.error, /8192|8\s*KB|byte/i);
+  assert.equal(existsSync(join(sessionDir, 'answers.json')), false);
+  assert.equal(readPhase(sessionDir), 'awaiting-answers');
+});
+
+test('HARDEN-3: exactly at the caps (64 entries, 8KB fields) still succeeds — the cap must not false-reject a legitimate boundary value', async () => {
+  const project = 'hardenanswers3';
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-answers', round: 1, prompt: '' });
+  const exactly8kb = 'x'.repeat(8 * 1024);
+  const answers = Array.from({ length: 64 }, (_, i) => ({ question: `Q${i}?`, answer: i === 0 ? exactly8kb : 'A.' }));
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form'), { project, answers });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200 at the exact cap boundary, got ${res.status}: ${text}`);
+  assert.equal(readPhase(sessionDir), 'interviewing');
+});
+
+test('STRUCT-1: cli/bridge-studio-affordances.ts makes ZERO raw fs sink calls, and no such call (if one is ever added) may take "kind" or "affordanceId" directly — every read/write must go through a guarded primitive', () => {
+  const src = readFileSync(join(REPO_ROOT, 'cli', 'bridge-studio-affordances.ts'), 'utf8');
+  const RAW_FS_SINKS = [
+    'writeFileSync', 'appendFileSync', 'mkdirSync', 'rmSync', 'rmdirSync', 'unlinkSync',
+    'renameSync', 'copyFileSync', 'cpSync', 'openSync', 'readFileSync', 'readdirSync',
+    'existsSync', 'statSync', 'lstatSync', 'realpathSync', 'symlinkSync',
+  ];
+  const sinkRe = new RegExp(`(?<![.\\w$])(${RAW_FS_SINKS.join('|')})\\s*\\(([^)]*)\\)`, 'g');
+  const lines = src.split('\n').filter((l) => {
+    const t = l.trimStart();
+    return !(t.startsWith('//') || t.startsWith('*') || t.startsWith('/*'));
+  });
+  const code = lines.join('\n');
+  let m: RegExpExecArray | null;
+  let sinkCallCount = 0;
+  while ((m = sinkRe.exec(code))) {
+    sinkCallCount += 1;
+    const args = m[2];
+    assert.doesNotMatch(args, /\bkind\b/, `raw fs sink "${m[1]}" call must never take "kind" directly as an argument: ${m[0]}`);
+    assert.doesNotMatch(args, /\baffordanceId\b/, `raw fs sink "${m[1]}" call must never take "affordanceId" directly as an argument: ${m[0]}`);
+  }
+  // The real backstop (robust to the regex's own naive paren-balancing,
+  // which would truncate a nested-paren argument list like `join(...)`):
+  // this file makes NO raw fs sink calls at all today — every read/write
+  // goes through guardedReadSessionStatus/guardedWriteSessionStatus
+  // (orchestrator/interactive-session.ts) or guardedReadFile/guardedWriteFile/
+  // resolveGuardedPath (cli/studio-path-guard.ts). A future raw sink
+  // addition must be a deliberate, reviewed decision — this assertion makes
+  // it one by forcing this test to be touched.
+  assert.equal(sinkCallCount, 0, `cli/bridge-studio-affordances.ts must make zero raw fs sink calls — every read/write must go through a guarded primitive; found ${sinkCallCount}`);
 });
