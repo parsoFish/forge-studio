@@ -55,16 +55,20 @@ function writeRegistry(root: string, body: string): void {
   writeFileSync(join(dir, 'registry.yaml'), body, 'utf8');
 }
 
-test('forge studio lint: NO studio/community/registry.yaml at all is NOT an error (fresh/half-onboarded root)', () => {
+test('forge studio lint: NO studio/community/registry.yaml at all IS a lint error (seed-present, mirrors catalog.yaml) — reviewer fix: this content was previously mandatory inside catalog.yaml', () => {
   let root: string | undefined;
   try {
     root = buildBaseRoot();
     const result = runStudioLint(root);
-    assert.equal(
-      result.findings.filter((f) => f.object === 'studio:community-registry').length,
-      0,
-      'a missing registry.yaml must never surface a load/error finding — mirrors hubs.yaml\'s own fresh-root tolerance',
+    const hits = result.findings.filter(
+      (f) => f.level === 'error' && f.object === 'studio:community-registry' && f.check === 'seed-present',
     );
+    assert.equal(
+      hits.length,
+      1,
+      `expected exactly 1 seed-present error for a missing registry.yaml, got: ${JSON.stringify(result.findings)}`,
+    );
+    assert.match(hits[0].message, /registry\.yaml/);
   } finally {
     if (root) rmSync(root, { recursive: true, force: true });
   }

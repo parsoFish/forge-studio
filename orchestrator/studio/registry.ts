@@ -845,7 +845,16 @@ export function loadCommunityRegistry(registryYamlPath: string): CommunityRegist
  *  existing consumer already depends on (skill-library.ts, validate.ts,
  *  community-index.ts, community-install.ts, the bridge routes) — `stars`
  *  here is always the curated DISPLAY string, never the parsed numeric
- *  `signals.stars` (types.ts's CommunitySkill doc). */
+ *  `signals.stars` (types.ts's CommunitySkill doc).
+ *
+ *  DELIBERATE, NOT FORGOTTEN: `item.fetchedAt`/`item.fetchedBy` dead-end
+ *  right here — the legacy `CommunitySkill` shape has no fields for them, so
+ *  they never reach community-index.ts's `CommunityItem`, the bridge wire
+ *  response, or forge-ui. That's CR-2's scope (a real refresh pass +
+ *  staleness sort/display in the community browser), not W6-CR-1's — this
+ *  migration only had to seed the data and make it loadable/validatable.
+ *  When CR-2 lands, it plumbs a NEW projection (or widens this one) rather
+ *  than assuming these fields already flow anywhere. */
 function toCommunitySkill(item: CommunityRegistryItem): CommunitySkill {
   return {
     id: item.id,

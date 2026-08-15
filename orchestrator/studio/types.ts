@@ -638,7 +638,10 @@ export type Catalog = {
   tools: CatalogConnectionEntry[];
   mcps: CatalogConnectionEntry[];
   guards: CatalogGuardEntry[];
-  communitySkills?: CommunitySkill[];
+  // communitySkills REMOVED (W6-CR-1 reviewer fix): catalog.yaml's
+  // `community-skills:` section moved to studio/community/registry.yaml —
+  // see CommunityRegistry/CommunityRegistryItem above and
+  // registry.ts's communitySkillsFromRegistry, the field's replacement.
   path: string;
 };
 

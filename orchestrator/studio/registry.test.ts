@@ -10,6 +10,7 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import matter from 'gray-matter';
+import yaml from 'js-yaml';
 
 import {
   isStudioAgent,
@@ -1556,27 +1557,120 @@ describe('communitySkillsFromRegistry', () => {
 describe('W6-CR-1 migration parity — the real studio/community/registry.yaml', () => {
   const REPO_ROOT_FOR_MIGRATION = join(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
-  const EXPECTED = [
-    { id: 'handoff', name: 'Handoff', category: 'memory', source: 'https://github.com/obra/superpowers' },
-    { id: 'pre-impl-interview', name: 'Pre-implementation Interview', category: 'planning', source: 'https://www.firecrawl.dev/blog/best-claude-code-skills' },
-    { id: 'superpowers-tdd', name: 'Test-Driven Development', category: 'testing', source: 'https://github.com/obra/superpowers' },
-    { id: 'systematic-debugging', name: 'Systematic Debugging', category: 'debugging', source: 'https://github.com/obra/superpowers' },
-    { id: 'webapp-testing', name: 'Webapp Testing', category: 'testing', source: 'https://github.com/anthropics/skills' },
-    { id: 'security-review', name: 'Security Review', category: 'review', source: 'https://github.com/travisvn/awesome-claude-skills' },
-    { id: 'skill-creator', name: 'Skill Creator', category: 'meta', source: 'https://github.com/anthropics/skills' },
-    { id: 'agent-browser', name: 'Agent Browser', category: 'browser', source: 'https://github.com/vercel-labs/agent-browser' },
-    { id: 'output-compress', name: 'Output Compression', category: 'meta', source: 'https://github.com/travisvn/awesome-claude-skills' },
-  ];
+  // Reviewer fix: the original version of this test only diffed name/
+  // category/source across a hand-copied EXPECTED array — exactly the shape
+  // that let a single dropped field (security-review's `tier: sonnet`) go
+  // unnoticed, since nothing here checked `tier` or `stars` at all. A
+  // count-level or partial-field check can never catch a single dropped
+  // field on one item; only a FULL field-by-field diff, across EVERY item,
+  // against a frozen snapshot of the real pre-migration source can. This is
+  // the literal `community-skills:` section of studio/catalog.yaml as it
+  // stood on main immediately before this migration (`git show
+  // main:studio/catalog.yaml`), embedded verbatim rather than re-read live —
+  // main can (and will) drift after this branch merges, and the point is a
+  // snapshot of the PRE-migration source, not whatever main happens to say
+  // when the test runs.
+  const PRE_MIGRATION_CATALOG_COMMUNITY_SKILLS_YAML = `
+community-skills:
+  - id: handoff
+    name: Handoff
+    provenance: obra/superpowers + Matt Pocock
+    source: https://github.com/obra/superpowers
+    category: memory
+    tier: haiku
+    stars: "228k"
+    desc: Compress the current session into a markdown transfer doc (open threads, decisions) for delegation.
+  - id: pre-impl-interview
+    name: Pre-implementation Interview
+    provenance: Matt Pocock (Grill Me)
+    source: https://www.firecrawl.dev/blog/best-claude-code-skills
+    category: planning
+    tier: haiku
+    stars: "156k installs"
+    desc: Interview the developer on a WI spec before any code — surfaces gaps and false assumptions early.
+  - id: superpowers-tdd
+    name: Test-Driven Development
+    provenance: obra/superpowers
+    source: https://github.com/obra/superpowers
+    category: testing
+    tier: sonnet
+    stars: "228k"
+    desc: Strict red-green-refactor loop with an explicit failing-test-first gate.
+  - id: systematic-debugging
+    name: Systematic Debugging
+    provenance: obra/superpowers
+    source: https://github.com/obra/superpowers
+    category: debugging
+    tier: sonnet
+    stars: "228k"
+    desc: Hypothesis-list approach to bugs; never brute-force.
+  - id: webapp-testing
+    name: Webapp Testing
+    provenance: anthropics/skills
+    source: https://github.com/anthropics/skills
+    category: testing
+    tier: sonnet
+    stars: "151k"
+    desc: Playwright-based browser testing of a local app — spec to test to run to report.
+  - id: security-review
+    name: Security Review
+    provenance: Trail of Bits
+    source: https://github.com/travisvn/awesome-claude-skills
+    category: review
+    tier: sonnet
+    desc: Static-analysis security audit (CodeQL/Semgrep patterns).
+  - id: skill-creator
+    name: Skill Creator
+    provenance: anthropics/skills
+    source: https://github.com/anthropics/skills
+    category: meta
+    tier: sonnet
+    stars: "151k"
+    desc: Q&A that produces a new SKILL.md with full frontmatter.
+  - id: agent-browser
+    name: Agent Browser
+    provenance: vercel-labs
+    source: https://github.com/vercel-labs/agent-browser
+    category: browser
+    tier: sonnet
+    stars: "14k"
+    desc: Headless browser CLI with ref-based element targeting and parallel sessions.
+  - id: output-compress
+    name: Output Compression
+    provenance: Julius Brussee (Caveman)
+    source: https://github.com/travisvn/awesome-claude-skills
+    category: meta
+    tier: haiku
+    desc: Encode a terse output contract — cuts output tokens (median ~65%); works for SDK-spawned agents.
+`;
 
-  it('all 9 pre-existing community-skill ids are present with the same name/category/source', () => {
+  it('EVERY field of EVERY pre-migration item survives byte-faithfully (frozen-fixture diff, not counts/names)', () => {
+    const frozen = (
+      yaml.load(PRE_MIGRATION_CATALOG_COMMUNITY_SKILLS_YAML) as { 'community-skills': Array<Record<string, unknown>> }
+    )['community-skills'];
+    assert.equal(frozen.length, 9, 'frozen-fixture sanity: 9 pre-migration community-skill entries');
+
     const skills = communitySkillsFromRegistry(REPO_ROOT_FOR_MIGRATION);
-    assert.equal(skills.length, 9, `expected exactly the 9 migrated community-skill entries, got: ${skills.map((s) => s.id).join(', ')}`);
-    for (const exp of EXPECTED) {
-      const actual = skills.find((s) => s.id === exp.id);
-      assert.ok(actual, `expected migrated entry "${exp.id}" to still be present`);
-      assert.equal(actual!.name, exp.name, `"${exp.id}" name must survive migration byte-faithfully`);
-      assert.equal(actual!.category, exp.category, `"${exp.id}" category must survive migration byte-faithfully`);
-      assert.equal(actual!.source, exp.source, `"${exp.id}" source (registry sourceUrl) must survive migration byte-faithfully`);
+    assert.equal(
+      skills.length,
+      frozen.length,
+      `migrated registry must carry exactly the ${frozen.length} frozen entries, no more/fewer — got ${skills.map((s) => s.id).join(', ')}`,
+    );
+
+    for (const old of frozen) {
+      const id = old['id'] as string;
+      const actual = skills.find((s) => s.id === id);
+      assert.ok(actual, `frozen id "${id}" must still be present after migration`);
+      // Every field the legacy CommunitySkill shape carries, checked — not a
+      // hand-picked subset. This is what would have caught security-review's
+      // dropped `tier`.
+      assert.equal(actual!.name, old['name'], `"${id}".name dropped/changed vs pre-migration`);
+      assert.equal(actual!.provenance, old['provenance'], `"${id}".provenance dropped/changed vs pre-migration`);
+      assert.equal(actual!.source, old['source'], `"${id}".source dropped/changed vs pre-migration`);
+      assert.equal(actual!.category, old['category'], `"${id}".category dropped/changed vs pre-migration`);
+      assert.equal(actual!.tier, old['tier'], `"${id}".tier dropped/changed vs pre-migration`);
+      assert.equal(actual!.stars, old['stars'], `"${id}".stars dropped/changed vs pre-migration`);
+      assert.equal(actual!.desc, old['desc'], `"${id}".desc dropped/changed vs pre-migration`);
     }
   });
 

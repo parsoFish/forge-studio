@@ -114,6 +114,7 @@ items:
     category: review
     sourceUrl: "https://github.com/travisvn/awesome-claude-skills"
     provenance: "Trail of Bits"
+    tier: sonnet
     signals:
       stars: null
       starsDisplay: null

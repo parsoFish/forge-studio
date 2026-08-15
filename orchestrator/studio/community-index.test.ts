@@ -546,6 +546,30 @@ describe('listCommunityIndex — MAJOR 2: missing vs malformed studio/catalog.ya
     assert.ok(!items.some((i) => i.kind === 'tool' || i.kind === 'mcp'), 'with no catalog there is nothing to source a tool/mcp item from — none may be fabricated');
   });
 
+  // Reviewer fix (LOW): registrySource's degrade-on-missing path was
+  // previously untested — nothing asserted the console.warn actually fires,
+  // or what it says. console.warn (not createLogger's structured JSONL
+  // event log) is the right choke point here and matches this repo's own
+  // house precedent for a warn with no cycle/run context to log through
+  // (see cli/bridge-hooks.ts's own "no cycle context exists" console.warn
+  // family) — this is a synchronous read helper, not a phase or agent run.
+  it('a MISSING studio/community/registry.yaml warns loud via console.warn, naming the file (registrySource, community-index.ts)', (t) => {
+    const root = makeForgeRoot();
+    // Deliberately: no writeRegistry call — registry.yaml absent, the
+    // fresh/half-onboarded-root shape registrySource degrades on.
+    const warnCalls: unknown[][] = [];
+    t.mock.method(console, 'warn', (...args: unknown[]) => {
+      warnCalls.push(args);
+    });
+
+    listCommunityIndex(root);
+
+    assert.ok(
+      warnCalls.some((args) => typeof args[0] === 'string' && /studio[/\\]community[/\\]registry\.yaml/.test(args[0])),
+      `expected a console.warn call naming studio/community/registry.yaml — got: ${JSON.stringify(warnCalls)}`,
+    );
+  });
+
   it('a MALFORMED studio/catalog.yaml THROWS LOUDLY, carrying the real underlying parse detail, never a generic string', () => {
     const root = makeForgeRoot();
     mkdirSync(join(root, 'studio'), { recursive: true });

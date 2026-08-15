@@ -814,23 +814,12 @@ export function validateCatalog(c: Catalog): Finding[] {
     }
   }
 
-  // community-skills: curated OOTB showcase entries. Unique slug ids; recommended
-  // tier (if present) must be a real model tier.
-  const TIERS = new Set(['haiku', 'sonnet', 'opus']);
-  const communitySkills = c.communitySkills ?? [];
-  for (const dup of findDuplicates(communitySkills.map((s) => s.id))) {
-    findings.push(err(obj, 'unique-ids', `Duplicate id "${dup}" in catalog.communitySkills`));
-  }
-  for (const s of communitySkills) {
-    if (!SLUG_RE.test(s.id)) {
-      findings.push(err(obj, 'community-skill/slug', `Community skill id "${s.id}" does not match ${SLUG_RE}`));
-    }
-    if (s.tier !== undefined && !TIERS.has(s.tier)) {
-      findings.push(
-        err(obj, 'community-skill/tier', `Community skill "${s.id}" tier "${s.tier}" must be one of haiku|sonnet|opus`),
-      );
-    }
-  }
+  // community-skills validation REMOVED (W6-CR-1 reviewer fix): catalog.yaml's
+  // `community-skills:` section is gone (moved to
+  // studio/community/registry.yaml — see validateCommunityRegistry below) and
+  // `loadCatalog` never populates `Catalog.communitySkills` from anything —
+  // this block tested a shape no caller can produce. Keeping it would be dead
+  // validation for a field nothing on the load path sets.
 
   return findings;
 }
