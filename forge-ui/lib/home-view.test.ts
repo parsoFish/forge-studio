@@ -40,10 +40,13 @@ import {
   gateAttentionStatusDot,
   deriveWatchLiveRunHref,
   buildHomeLedgerRows,
+  // W6-B11 additions
+  buildHomeSessionsStrip,
+  HOME_SESSIONS_STRIP_LIMIT,
   type HomeHex,
   type HomeAttentionItem,
 } from './home-view.ts';
-import type { Flow, Agent, Project, Kb, Run, FlowNode, KbLintSummary } from './studio-client.ts';
+import type { Flow, Agent, Project, Kb, Run, FlowNode, KbLintSummary, SessionIndexRow } from './studio-client.ts';
 import type { ProjectAttentionItem } from './bridge-client.ts';
 import type { LedgerRow } from './history-ledger.ts';
 
@@ -671,4 +674,66 @@ test('buildHomeLedgerRows: an empty agentRows list still returns the flow rows, 
     makeLedgerRow({ id: 'f-old', when: '2026-01-01T00:00:00Z' }),
   ];
   expect(buildHomeLedgerRows(flowRows, []).map((r) => r.id)).toEqual(['f-new', 'f-old']);
+});
+
+// ---------------------------------------------------------------------------
+// W6-B11 — buildHomeSessionsStrip
+// ---------------------------------------------------------------------------
+
+function makeSessionRow(overrides: Partial<SessionIndexRow> = {}): SessionIndexRow {
+  return {
+    kind: 'instructions',
+    sessionId: 'fixture',
+    project: 'p',
+    phase: 'drafting',
+    terminal: false,
+    needsYou: false,
+    modelTier: null,
+    updatedAt: '2026-01-01T00:00:00.000Z',
+    href: '/sessions/instructions/fixture?project=p',
+    ...overrides,
+  };
+}
+
+test('buildHomeSessionsStrip: cards is a straight slice to the limit — never re-sorted (trusts the already-sorted input)', () => {
+  const sessions = [
+    makeSessionRow({ sessionId: 'a' }),
+    makeSessionRow({ sessionId: 'b' }),
+    makeSessionRow({ sessionId: 'c' }),
+  ];
+  const strip = buildHomeSessionsStrip(sessions, 2);
+  expect(strip.cards.map((s) => s.sessionId)).toEqual(['a', 'b']);
+});
+
+test('buildHomeSessionsStrip: defaults to HOME_SESSIONS_STRIP_LIMIT (4) cards', () => {
+  const sessions = Array.from({ length: 6 }, (_, i) => makeSessionRow({ sessionId: `s${i}` }));
+  const strip = buildHomeSessionsStrip(sessions);
+  expect(strip.cards).toHaveLength(HOME_SESSIONS_STRIP_LIMIT);
+});
+
+test('buildHomeSessionsStrip: needsYouCount counts ALL needs-you sessions, not just the ones inside the card budget', () => {
+  const sessions = [
+    makeSessionRow({ sessionId: 'a', needsYou: true }),
+    makeSessionRow({ sessionId: 'b', needsYou: true }),
+    makeSessionRow({ sessionId: 'c', needsYou: true }),
+    makeSessionRow({ sessionId: 'd', needsYou: true }),
+    makeSessionRow({ sessionId: 'e', needsYou: true }), // 5th needs-you row, past the 4-card budget
+  ];
+  const strip = buildHomeSessionsStrip(sessions, 4);
+  expect(strip.cards).toHaveLength(4);
+  expect(strip.needsYouCount).toBe(5);
+});
+
+test('buildHomeSessionsStrip: totalCount is the full in-flight count, not cards.length', () => {
+  const sessions = Array.from({ length: 7 }, (_, i) => makeSessionRow({ sessionId: `s${i}` }));
+  const strip = buildHomeSessionsStrip(sessions, 4);
+  expect(strip.totalCount).toBe(7);
+  expect(strip.cards).toHaveLength(4);
+});
+
+test('buildHomeSessionsStrip: an empty sessions list -> empty cards, zero counts (honest absence, never fabricated)', () => {
+  const strip = buildHomeSessionsStrip([]);
+  expect(strip.cards).toEqual([]);
+  expect(strip.needsYouCount).toBe(0);
+  expect(strip.totalCount).toBe(0);
 });

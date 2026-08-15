@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 
 import { StudioArchitectShell } from '@/components/StudioArchitectShell';
-import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring } from '@/lib/bridge-client';
+import { startInstructions, startDemoBuilder, startProjectBrain, startAuthoring, startCommunityRefresh } from '@/lib/bridge-client';
 import { fetchStudioProjects, fetchStudioAgents, fetchStudioKbs, startKbCleanup, type Agent, type Kb, type ModelTier } from '@/lib/studio-client';
 
 // ---------------------------------------------------------------------------
@@ -18,13 +18,17 @@ import { fetchStudioProjects, fetchStudioAgents, fetchStudioKbs, startKbCleanup,
 //
 // Kinds: instructions, demo, kb-cleanup (KB select, not project), authoring
 // (the only one that takes a free-text prompt — its `/start` body REQUIRES
-// one), project-brain. `architect` is explicitly OUT — it keeps its own
-// native entry, `/architect/new` (`NewIdeaBox`) — this page links to it
-// rather than duplicating it (ADR-043 amendment §4: architect stays bespoke
-// end to end, panel AND kickoff alike).
+// one), project-brain, community-refresh (W6-CR-3 — the ONLY kind with
+// `selector: 'none'`: the community registry is forge's own single,
+// forge-wide file, not a per-project artifact, so there is nothing for the
+// operator to select — just Start + a model-tier picker). `architect` is
+// explicitly OUT — it keeps its own native entry, `/architect/new`
+// (`NewIdeaBox`) — this page links to it rather than duplicating it
+// (ADR-043 amendment §4: architect stays bespoke end to end, panel AND
+// kickoff alike).
 // ---------------------------------------------------------------------------
 
-type KickoffKindId = 'instructions' | 'demo' | 'kb-cleanup' | 'authoring' | 'project-brain';
+type KickoffKindId = 'instructions' | 'demo' | 'kb-cleanup' | 'authoring' | 'project-brain' | 'community-refresh';
 
 type KickoffKindSpec = {
   title: string;
@@ -32,7 +36,10 @@ type KickoffKindSpec = {
    *  model envelope via `fetchStudioAgents()`. */
   agentSlug: string;
   artifactLabel: string;
-  selector: 'project' | 'kb';
+  /** 'none' (W6-CR-3): no project/KB selector at all — the kind's `/start`
+   *  route takes neither, and the context card renders the fixed session
+   *  home directly rather than an operator-filled path. */
+  selector: 'project' | 'kb' | 'none';
   /** Only 'authoring' takes a free-text prompt — its `/start` body requires
    *  one (every other kind's `/start` route needs no operator prose at
    *  kickoff; instructions/demo take their brief on a LATER turn, via their
@@ -47,6 +54,7 @@ const KICKOFF_KINDS: Record<KickoffKindId, KickoffKindSpec> = {
   'kb-cleanup': { title: 'KB cleanup session', agentSlug: 'brain-maintenance', artifactLabel: 'Cleanup plan', selector: 'kb' },
   authoring: { title: 'Authoring session', agentSlug: 'creation-agent', artifactLabel: 'Package', selector: 'project', promptLabel: 'Describe what to build', promptPlaceholder: 'Describe what it should do…' },
   'project-brain': { title: 'Brain creation session', agentSlug: 'project-brain-builder', artifactLabel: 'Seeded structure', selector: 'project' },
+  'community-refresh': { title: 'Community refresh session', agentSlug: 'community-refresh', artifactLabel: 'Registry draft', selector: 'none' },
 };
 
 function isKickoffKind(kind: string): kind is KickoffKindId {
@@ -126,7 +134,7 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
       : [];
   const isRangeTier = allowedTiers.length > 0;
 
-  const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : project.trim().length > 0;
+  const selectorFilled = spec?.selector === 'kb' ? kbId.trim().length > 0 : spec?.selector === 'none' ? true : project.trim().length > 0;
   const promptFilled = spec?.promptLabel ? prompt.trim().length > 0 : true;
   const canSubmit = Boolean(spec) && selectorFilled && promptFilled && !submitting;
 
@@ -149,6 +157,9 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
           break;
         case 'project-brain':
           result = await startProjectBrain({ project: project.trim(), modelTier: tier });
+          break;
+        case 'community-refresh':
+          result = await startCommunityRefresh({ modelTier: tier });
           break;
         case 'kb-cleanup': {
           const r = await startKbCleanup(kbId.trim(), tier);
@@ -208,7 +219,9 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         <div style={rowValue}>{spec.artifactLabel}</div>
         <div style={rowLabel}>Session directory</div>
         <div style={{ ...rowValue, ...mono }}>
-          projects/{spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_{kind}/&lt;sessionId&gt;
+          {spec.selector === 'none'
+            ? `projects/<forge-anchor>/_${kind}/<sessionId>`
+            : `projects/${spec.selector === 'kb' ? '<kb-project>' : project.trim() || '<project>'}/_${kind}/<sessionId>`}
         </div>
         {prefillInitiative && (
           <div data-section="kickoff-initiative-context" style={{ fontSize: 11.5, color: 'var(--dim)' }}>
@@ -218,38 +231,40 @@ function SessionKickoffPageInner({ params }: { params: { kind: string } }): JSX.
         )}
       </div>
 
-      <div data-section="kickoff-selector" style={{ ...cardStyle, marginBottom: 14 }}>
-        {spec.selector === 'kb' ? (
-          <>
-            <div style={rowLabel}>Knowledge base</div>
-            <select value={kbId} onChange={(e) => setKbId(e.target.value)} data-field="kickoff-kb" style={inputStyle}>
-              <option value="">select a KB…</option>
-              {kbs.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.name} ({k.id})
-                </option>
-              ))}
-            </select>
-          </>
-        ) : (
-          <>
-            <div style={rowLabel}>Project</div>
-            <input
-              list="forge-kickoff-known-projects"
-              value={project}
-              onChange={(e) => setProject(e.target.value)}
-              placeholder="a project"
-              data-field="kickoff-project"
-              style={inputStyle}
-            />
-            <datalist id="forge-kickoff-known-projects">
-              {knownProjects.map((p) => (
-                <option key={p} value={p} />
-              ))}
-            </datalist>
-          </>
-        )}
-      </div>
+      {spec.selector !== 'none' && (
+        <div data-section="kickoff-selector" style={{ ...cardStyle, marginBottom: 14 }}>
+          {spec.selector === 'kb' ? (
+            <>
+              <div style={rowLabel}>Knowledge base</div>
+              <select value={kbId} onChange={(e) => setKbId(e.target.value)} data-field="kickoff-kb" style={inputStyle}>
+                <option value="">select a KB…</option>
+                {kbs.map((k) => (
+                  <option key={k.id} value={k.id}>
+                    {k.name} ({k.id})
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : (
+            <>
+              <div style={rowLabel}>Project</div>
+              <input
+                list="forge-kickoff-known-projects"
+                value={project}
+                onChange={(e) => setProject(e.target.value)}
+                placeholder="a project"
+                data-field="kickoff-project"
+                style={inputStyle}
+              />
+              <datalist id="forge-kickoff-known-projects">
+                {knownProjects.map((p) => (
+                  <option key={p} value={p} />
+                ))}
+              </datalist>
+            </>
+          )}
+        </div>
+      )}
 
       {spec.promptLabel && (
         <div data-section="kickoff-prompt" style={{ ...cardStyle, marginBottom: 14 }}>

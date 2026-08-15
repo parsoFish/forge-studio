@@ -664,8 +664,19 @@ export const journey = defineJourney({
               await page.waitForFunction(
                 () => document.querySelector('main[data-page="session"]')?.getAttribute('data-session-phase') === 'awaiting-review',
                 null, { timeout: 10000 }).catch(() => {});
-              check(await page.evaluate(() => document.querySelector('[data-section="authoring-status"]')?.getAttribute('data-authoring-shape')) === 'hook',
-                'HK-5: the panel detects a HOOK draft by file PRESENCE (hook.yaml at the package root)');
+              // W6-B8 — authoring now renders the GENERIC SessionInteractivePanel
+              // (its bespoke SessionAuthoringPanel/[data-authoring-shape] is
+              // deleted); the drafted shape is detected the SAME way — file
+              // PRESENCE, hook.yaml at the package root — but surfaces as the
+              // package-id field's own label text, since the generic panel
+              // carries no per-kind status section.
+              check(await page.locator('[data-affordance-kind="verdict"]').count() > 0,
+                'HK-5: awaiting-review derives a verdict affordance');
+              check(await page.locator('[data-field="session-package-id"]').count() > 0,
+                'HK-5: the package-id field renders (artifact.kind === "file-package")');
+              const idFieldLabel = await page.evaluate(() => document.querySelector('[data-field="session-package-id"]')?.previousElementSibling?.textContent ?? '');
+              check(idFieldLabel === 'Hook id (directory name)',
+                `HK-5: the panel detects a HOOK draft by file PRESENCE (hook.yaml at the package root) — got label "${idFieldLabel}"`);
               check(await page.locator('[data-section="session-artifact"] [data-component="file-package"]').count() > 0,
                 'HK-5: the real file-package artifact pane renders the drafted package');
               const fileCount = await page.evaluate(() =>
@@ -689,8 +700,8 @@ export const journey = defineJourney({
                 `HK-5: the pane exposes two distinct real files, both clicked through (${firstPath}, ${secondPath})`);
               await frame(page, 'hk-11-drafted', 'Part 2 (hooks) — the drafted hook.yaml + script, both real files in the pane', { key: true });
 
-              await page.locator('[data-field="authoring-id"]').fill(AUTH_HOOK_ID).catch(() => {});
-              await page.locator('[data-action="finalize-authoring"]').click().catch(() => {});
+              await page.locator('[data-field="session-package-id"]').fill(AUTH_HOOK_ID).catch(() => {});
+              await page.locator('[data-action="verdict-approve"]').click().catch(() => {});
               await page.waitForURL(new RegExp(`/hooks/${AUTH_HOOK_ID}`), { timeout: 15000 }).catch(() => {});
               await page.waitForFunction(() => document.querySelector('[data-page="hook-detail"]')?.getAttribute('data-page-ready') === 'true', null, { timeout: 15000 }).catch(() => {});
               check(existsSync(join(AUTH_HOOK_DIR, 'hook.yaml')), `HK-5: finalize lands the real studio/hooks/${AUTH_HOOK_ID}/hook.yaml`);

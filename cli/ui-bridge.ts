@@ -63,13 +63,14 @@ import {
   CSRF_HEADER,
   SAFE_ID_RE,
   LEGACY_SESSION_TERMINAL_PHASES,
+  pathOnly,
+  parseQuery,
 } from './bridge-studio.ts';
 import { SLUG_RE } from '../orchestrator/studio/validate.ts';
 import {
   handleStudioKbRoutes,
   loadKbDescriptors,
   computeAgentCleanupFindings,
-  approveKbCleanup,
   KB_SEEDING_ANCHOR_PREFIX,
 } from './bridge-studio-kbs.ts';
 import { handleStudioKbDrainRoutes } from './bridge-studio-kb-drain.ts';
@@ -77,7 +78,7 @@ import { handleStudioSkillsRoutes } from './bridge-studio-skills.ts';
 import { handleStudioHooksRoutes } from './bridge-studio-hooks.ts';
 import { handleStudioAuthoringRoutes } from './bridge-studio-authoring.ts';
 import { handleStudioTemplatesRoutes } from './bridge-studio-templates.ts';
-import { handleStudioSessionsRoutes, invalidProjectReason, invalidSessionIdReason } from './bridge-studio-sessions.ts';
+import { handleStudioSessionsRoutes, isTerminalPhase, COMMUNITY_REFRESH_PROJECT_ANCHOR } from './bridge-studio-sessions.ts';
 import { handleStudioAffordanceRoutes } from './bridge-studio-affordances.ts';
 import { handleStudioInstructionsRoutes } from './bridge-studio-instructions.ts';
 import { handleStudioConnectionsRoutes } from './bridge-studio-connections.ts';
@@ -123,7 +124,7 @@ import {
 } from '../orchestrator/project-brain-builder-runner.ts';
 import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { resolveDispatchableAgent } from '../orchestrator/agent-dispatch.ts';
-import { listAgentDefinitions } from '../orchestrator/studio/registry.ts';
+import { listAgentDefinitions, communityRegistryPath } from '../orchestrator/studio/registry.ts';
 import {
   agentAcceptsMaterial,
   materialKindForFilename,
@@ -147,7 +148,7 @@ import { defaultConfigPath, loadConfig, resolveProjectsDir, MAX_KICKOFF_COST_CEI
 import { isContainedProjectRepoPath } from './manifest-path-guard.ts';
 import { buildAgentSlugToNodeId, type Run } from '../orchestrator/run-model.ts';
 import { cachedListRuns } from './run-list-cache.ts';
-import { loadSessionKinds } from '../orchestrator/studio/session-kinds.ts';
+import { loadSessionKinds, deriveSessionAffordances, type SessionKindDescriptor } from '../orchestrator/studio/session-kinds.ts';
 import { resolveGuardedPath, guardedFile, guardedReadFile, guardedWriteFile, guardedReadDir } from './studio-path-guard.ts';
 
 const TAIL_POLL_MS = 200;
@@ -1170,6 +1171,250 @@ function collectSessionRows(ctx: { forgeRoot: string; projectsRoot: string; logs
   return rows;
 }
 
+// ---------------------------------------------------------------------------
+// W6-B11 — GET /api/studio/sessions, the aggregate in-flight sessions index
+// backing the /sessions page + Home's active-sessions strip.
+// ---------------------------------------------------------------------------
+
+/** One row of the aggregate `GET /api/studio/sessions` index: every in-flight
+ *  (or, without `?active=1`, every) interactive session across ALL registry
+ *  kinds and every project, flattened to the fields the /sessions index page
+ *  + Home's active-sessions strip both need. */
+export type SessionIndexRow = {
+  kind: string;
+  sessionId: string;
+  project: string;
+  phase: string;
+  /** Derived via `isTerminalPhase` (cli/bridge-studio-sessions.ts) — the
+   *  SAME derivation the single-session route's tail-gating already uses,
+   *  never a second, hand-kept terminal-phase notion. */
+  terminal: boolean;
+  /** True iff `deriveSessionAffordances(descriptor, phase).length > 0` — a
+   *  derivable operator affordance exists at this phase, never re-derived a
+   *  second way. Architect (no turnSpec/panel table at all) is always
+   *  `false` here, matching the single-session route's own `affordances: []`
+   *  for that kind (ADR-043 amendment §4, "permanently bespoke"). */
+  needsYou: boolean;
+  modelTier: string | null;
+  /** ISO timestamp of the session's last known write, or `''` — honest-absent,
+   *  never fabricated — when the kind's status.json carries no timestamp
+   *  field at all (kb-cleanup's shape today). */
+  updatedAt: string;
+  href: string;
+};
+
+/** Bound on `GET /api/studio/sessions`' response — an unbounded number of
+ *  on-disk sessions (every project x every kind, for the lifetime of the
+ *  forge instance) must never balloon the response; 200 comfortably covers
+ *  any realistic in-flight count for the "one operator, many side projects"
+ *  shape this platform is built around. Rows are sorted needs-you-first-
+ *  then-newest (`sortAndCapSessionIndexRows`) BEFORE this cap is applied, so
+ *  a capped response favours keeping needs-you rows over stale passive ones. */
+export const SESSION_INDEX_MAX_ROWS = 200;
+
+/** Generic phase/model/timestamp read for a session-kind with no dedicated
+ *  per-kind list route (onboarding, authoring, kb-cleanup, and any future
+ *  kind registered the same way) — the SAME guarded choke point
+ *  (`resolveGuardedPath`) `readGuardedSessionStatus` (above) uses, just
+ *  widened to the extra fields the aggregate index needs; not a second,
+ *  independently-invented containment mechanism. `updatedAt` prefers
+ *  `updated_at` (the four legacy kinds' own field name, in case a future
+ *  kind reuses it), falls back to `startedAt` (onboarding's/authoring's own
+ *  field — `writeOnboardingSession`/`writeAuthoringSession`, this file), and
+ *  is `''` — honest-absent, never fabricated — when neither exists
+ *  (kb-cleanup's status.json carries no timestamp field at all today). */
+function readGuardedSessionIndexSummary(
+  projectsRoot: string,
+  project: string,
+  kindDirName: string,
+  sessionId: string,
+): { phase: string; modelTier: string | null; updatedAt: string } | null {
+  const guarded = resolveGuardedPath(projectsRoot, [project, kindDirName, sessionId, 'status.json']);
+  if (!guarded.ok || !guarded.exists) return null;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(readFileSync(guarded.realPath, 'utf8'));
+  } catch {
+    return null;
+  }
+  if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+  const obj = parsed as Record<string, unknown>;
+  if (typeof obj.phase !== 'string') return null;
+  return {
+    phase: obj.phase,
+    modelTier: typeof obj.modelTier === 'string' ? obj.modelTier : null,
+    updatedAt: typeof obj.updated_at === 'string' ? obj.updated_at : typeof obj.startedAt === 'string' ? obj.startedAt : '',
+  };
+}
+
+/**
+ * `GET /api/studio/sessions`' row collector: flattens EVERY registered
+ * session kind (`studio/session-kinds.yaml` via `loadSessionKinds` — never a
+ * hardcoded kind list, so a new registry kind needs no code change here)
+ * across every on-disk project into one row set.
+ *
+ * The four kinds with their OWN per-kind list route/reader
+ * (architect/instructions/demo/project-brain) reuse THAT reader verbatim —
+ * `listArchitectSessions` / `listInstructionsSessions` / `listDemoSessions` /
+ * `listProjectBrainSessions`, the exact functions `GET /api/architect/
+ * sessions` etc. already call — never a second, independently-written scan
+ * of the same on-disk shape. Every OTHER kind (onboarding, authoring,
+ * kb-cleanup today; any future kind added the same way) has no bespoke list
+ * route (bridge-studio-sessions.ts's own header note: the generic
+ * session-detail GET is authoring/kb-cleanup's ONLY read route) — those fall
+ * through to the generic per-segment-guarded directory scan below, which
+ * mirrors `collectSessionRows`'s own directory-enumeration shape immediately
+ * above in this file (readdirSync of REAL, on-disk project names — never
+ * request-derived — with the per-session STATUS READ routed through the SAME
+ * `resolveGuardedPath` choke point every other guarded session read in this
+ * file uses).
+ *
+ * `kind` never comes from a request — every row's `kind` is a registry
+ * descriptor id from `loadSessionKinds`, so this route has no kind-id
+ * traversal surface at all (unlike the single-session GET, whose `kind` path
+ * segment IS request-derived and validated against the registry).
+ */
+function collectStudioSessionIndexRows(ctx: { forgeRoot: string; projectsRoot: string }): SessionIndexRow[] {
+  const descriptors = loadSessionKinds(ctx.forgeRoot);
+  const rows: SessionIndexRow[] = [];
+
+  const pushRow = (
+    descriptor: SessionKindDescriptor,
+    sessionId: string,
+    project: string,
+    phase: string,
+    modelTier: string | null,
+    updatedAt: string,
+  ): void => {
+    // Review fix: `terminal` is derived FIRST, and short-circuits `needsYou`
+    // to `false` without even calling `deriveSessionAffordances` — cheap (a
+    // terminal phase never has an affordance-table row anyway, since
+    // `deriveSessionAffordances` itself returns `[]` for any `step:
+    // 'terminal'` row), but it also honors the STATED intent verbatim
+    // (`SessionIndexRow.needsYou`'s own header: "a derivable operator
+    // affordance exists at this phase") — a terminal session, by
+    // definition, needs nothing further from the operator, so this ordering
+    // makes that true structurally rather than merely as an observed
+    // consequence of the affordance table's own shape.
+    const terminal = isTerminalPhase(descriptor, phase);
+    rows.push({
+      kind: descriptor.id,
+      sessionId,
+      project,
+      phase,
+      terminal,
+      needsYou: !terminal && deriveSessionAffordances(descriptor, phase).length > 0,
+      modelTier,
+      updatedAt,
+      href: `/sessions/${encodeURIComponent(descriptor.id)}/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(project)}`,
+    });
+  };
+
+  for (const descriptor of descriptors) {
+    if (descriptor.id === 'architect') {
+      for (const s of listArchitectSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else if (descriptor.id === 'instructions') {
+      for (const s of listInstructionsSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else if (descriptor.id === 'demo') {
+      for (const s of listDemoSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else if (descriptor.id === 'project-brain') {
+      for (const s of listProjectBrainSessions(ctx.projectsRoot)) {
+        pushRow(descriptor, s.session_id, s.project, s.phase, s.modelTier ?? null, s.updated_at);
+      }
+    } else {
+      const kindDirName = `_${descriptor.id}`;
+      let projects: string[];
+      try {
+        projects = existsSync(ctx.projectsRoot) ? readdirSync(ctx.projectsRoot) : [];
+      } catch {
+        projects = [];
+      }
+      for (const project of projects) {
+        const kindDir = join(ctx.projectsRoot, project, kindDirName);
+        if (!existsSync(kindDir)) continue;
+        let sessionIds: string[];
+        try {
+          sessionIds = readdirSync(kindDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name);
+        } catch {
+          continue;
+        }
+        for (const sessionId of sessionIds) {
+          if (sessionId.startsWith('_')) continue; // skip _archived/, mirrors collectSessionRows
+          const summary = readGuardedSessionIndexSummary(ctx.projectsRoot, project, kindDirName, sessionId);
+          if (summary === null) continue; // unreadable/missing/escaping/hardlinked -> not a real session row
+          pushRow(descriptor, sessionId, project, summary.phase, summary.modelTier, summary.updatedAt);
+        }
+      }
+    }
+  }
+  return rows;
+}
+
+/** Deterministic ordering + bound for the aggregate sessions index —
+ *  needs-you rows first, then newest-`updatedAt` first within each group;
+ *  capped to the newest `cap` rows. Pure (no I/O), so it is unit-testable in
+ *  isolation from the filesystem (ADR 042's "a pure function with an
+ *  explicit error contract may be exported for direct tests" boundary).
+ *  ISO-8601 timestamps compare correctly as plain strings; a `''`
+ *  honest-absent `updatedAt` (kb-cleanup's shape today) sorts LAST within its
+ *  needsYou group — an empty string is always lexically smaller than any real
+ *  timestamp — never mistaken for "newest". */
+export function sortAndCapSessionIndexRows(
+  rows: readonly SessionIndexRow[],
+  cap: number = SESSION_INDEX_MAX_ROWS,
+): SessionIndexRow[] {
+  return [...rows]
+    .sort((a, b) => {
+      if (a.needsYou !== b.needsYou) return a.needsYou ? -1 : 1;
+      if (a.updatedAt !== b.updatedAt) return a.updatedAt > b.updatedAt ? -1 : 1;
+      return 0;
+    })
+    .slice(0, cap);
+}
+
+/**
+ * GET /api/studio/sessions[?active=1] — the aggregate sessions index backing
+ * the /sessions page + Home's active-sessions strip. No path segments
+ * (distinguishes it from `GET /api/studio/sessions/:kind/:id`,
+ * bridge-studio-sessions.ts's single-session route — that regex requires
+ * exactly two further path segments, this route requires none). Read-only —
+ * covered by BRIDGE_ROUTE_CLASSIFICATION's blanket `{method:'GET',
+ * route:'*'}` row (cli/dry-bridge.ts); no per-route table entry is needed
+ * for a GET.
+ *
+ * `?active=1` filters to non-terminal rows only — the shape the /sessions
+ * page and Home strip both request (operator-locked: in-flight sessions
+ * ONLY, never terminal history). Omitting the query param returns every row
+ * (terminal included), kept for testability and any future consumer that
+ * genuinely wants the unfiltered set.
+ */
+async function handleStudioSessionsIndex(
+  req: IncomingMessage,
+  res: ServerResponse,
+  ctx: HttpContext,
+  url: string,
+  method: string,
+): Promise<boolean> {
+  if (method !== 'GET' || pathOnly(url) !== '/api/studio/sessions') return false;
+  const origin = allowedOrigin(req);
+  try {
+    const activeOnly = parseQuery(url).get('active') === '1';
+    const allRows = collectStudioSessionIndexRows({ forgeRoot: ctx.forgeRoot, projectsRoot: ctx.projectsRoot });
+    const filtered = activeOnly ? allRows.filter((r) => !r.terminal) : allRows;
+    const sessions = sortAndCapSessionIndexRows(filtered);
+    sendJson(res, 200, { sessions, cap: SESSION_INDEX_MAX_ROWS }, origin);
+  } catch (err) {
+    sendJson(res, 500, { error: sanitizeError(err) }, origin);
+  }
+  return true;
+}
+
 async function handleHttp(
   req: IncomingMessage,
   res: ServerResponse,
@@ -1438,6 +1683,11 @@ async function handleHttp(
   // instructions/demo-builder/project-brain); ensureSessionTail must be
   // threaded through here to close bd forge-2ee's "no consumer reads the
   // authoring spine's events dir" half.
+  // W6-B11 — the aggregate sessions-index GET. Checked before the
+  // single-session route immediately below: distinct URL shapes (no path
+  // segments vs exactly two), so ordering doesn't affect matching, but this
+  // keeps the two GET /api/studio/sessions... routes textually adjacent.
+  if (await handleStudioSessionsIndex(req, res, ctx, url, method)) return;
   if (await handleStudioSessionsRoutes(req, res, { forgeRoot: ctx.forgeRoot, logsRoot: ctx.logsRoot, ensureSessionTail: ctx.ensureSessionTail }, url, method)) return;
   // W6-B4 (ADR-043 2026-08-15 amendment §1) — the generic session-affordance
   // WRITE endpoint. `spawnAgentTurn` is INJECTED (passed by reference, this
@@ -2077,7 +2327,7 @@ async function handleHttp(
  *  future rename of either side drifts silently: ensureSessionTail just
  *  no-ops (ensureTailFor's existsSync guard swallows the miss), so a
  *  session's WS tail would quietly stop activating with no error anywhere. */
-export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup';
+export type SpawnableAgentId = 'architect' | 'instructions' | 'demo-builder' | 'project-brain' | 'authoring' | 'kb-cleanup' | 'community-refresh';
 
 export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly string[]; logPrefix: string }> = {
   architect: { argvPrefix: ['architect', 'run'], logPrefix: 'architect' },
@@ -2089,6 +2339,10 @@ export const SPAWN_AGENT_SPECS: Record<SpawnableAgentId, { argvPrefix: readonly 
   // runInteractiveTurn spine as authoring (ADR-043 §3): `forge agent run
   // kb-cleanup <sid> --project <p>`.
   'kb-cleanup': { argvPrefix: ['agent', 'run', 'kb-cleanup'], logPrefix: 'kb-cleanup' },
+  // W6-CR-3 — the community-refresh session, riding the SAME generic
+  // runInteractiveTurn spine (ADR-043 §3): `forge agent run
+  // community-refresh <sid> --project <p>`.
+  'community-refresh': { argvPrefix: ['agent', 'run', 'community-refresh'], logPrefix: 'community-refresh' },
 };
 
 /** Spawn one `<agentId>`-runner turn as a detached child (the scheduler-daemon
@@ -2639,8 +2893,9 @@ function invalidProjectRepoPath(candidate: unknown, roots: { forgeRoot: string; 
  * COMPLETE set of `/start`-family routes that accept an optional
  * caller-supplied `modelTier`: `/api/architect/start`,
  * `/api/instructions/start`, `/api/project-brain/start`,
- * `/api/demo-builder/start`, `/api/studio/authoring/start`, and
- * `POST /api/studio/kbs/:id/cleanup/start`. Each MUST validate it through
+ * `/api/demo-builder/start`, `/api/studio/authoring/start`,
+ * `POST /api/studio/kbs/:id/cleanup/start`, and (W6-CR-3)
+ * `POST /api/studio/community-refresh/start`. Each MUST validate it through
  * this helper BEFORE any mkdir/status write, and persist the returned
  * `tier` (when present) verbatim into the session's initial `status.json`
  * as `modelTier` — every turn runner (the four legacy runners +
@@ -4512,86 +4767,78 @@ async function handleDemoBuilder(
     return true;
   }
 
-  // POST /api/studio/kbs/:id/cleanup/apply {project, sessionId} — R4-19-F2,
-  // the kb-cleanup session's approval-gated apply route. The gate itself
-  // (`awaiting-approval` carries no `next` in the turnSpec table,
-  // studio/session-kinds.yaml) means the ORDINARY turn-dispatch path can
-  // never write `phase: 'applied'` — this route is the ONLY writer, and it
-  // enforces the SAME gate independently by checking `phase ===
-  // 'awaiting-approval'` itself before doing anything real-acting (409
-  // otherwise — belt-and-suspenders on top of the turn spine's own refusal,
-  // never trusting a single enforcement point for an approval boundary).
+  // POST /api/studio/community-refresh/start {modelTier?} — W6-CR-3, the
+  // community-refresh session's kickoff route. Unlike EVERY other
+  // interactive kind's `/start` route, this one takes NO project/prompt at
+  // all: the community registry is forge's own single, forge-wide file, not
+  // a per-project artifact, so there is nothing for the operator to select.
+  // The session anchors under the ONE fixed pseudo-project
+  // `COMMUNITY_REFRESH_PROJECT_ANCHOR` (mirrors kb-cleanup's own non-project
+  // `.kb-<id>` anchor precedent — `cli/bridge-studio-sessions.ts`'s
+  // `invalidProjectReason` carve-out — but unparameterized, since there is
+  // exactly one community registry, not N per-id KBs).
   //
-  // SECURITY INVARIANT (do not regress — AT-13): the KB to drain is read
-  // from the session's OWN recorded `kb_id` (status.json), never the URL's
-  // `:id` segment — the session is the authoritative record of which KB its
-  // approved plan is for; trusting the URL instead would let a caller with
-  // a legitimate {project, sessionId} point the drain at an unrelated KB by
-  // varying the path alone. The `:id` == `status.kb_id` equality check
-  // below (DEFECT B) makes the two identical by construction from this
-  // point on — that does NOT make it safe to swap the drain's source to
-  // `:id`; see the comment at the actual drain call site.
-  const kbCleanupApplyMatch = url.match(/^\/api\/studio\/kbs\/([^/]+)\/cleanup\/apply$/);
-  if (method === 'POST' && kbCleanupApplyMatch) {
+  // No `resolveContainedProjectDir`/mkdir-then-realpath-verify-parent shape
+  // here (same reasoning as kb-cleanup/start immediately above):
+  // `guardedWriteSessionStatus` (orchestrator/interactive-session.ts) already
+  // realpath-guards the whole `[COMMUNITY_REFRESH_PROJECT_ANCHOR,
+  // '_community-refresh', sessionId, 'status.json']` path AND creates the
+  // session dir as part of the SAME guarded write — the anchor pseudo-project
+  // need not pre-exist.
+  //
+  // `registryPath`/`hubsPath` — the generic `runInteractiveTurn` spine's
+  // `buildTurnPrompt` inlines the WHOLE session status as read-only context
+  // (orchestrator/interactive-runner.ts), so these two absolute, server-
+  // resolved paths are how `skills/community-refresh/SKILL.md`'s agent finds
+  // the real registry + hub list to read from — it never guesses a relative
+  // path against its own session-scoped `cwd`.
+  if (method === 'POST' && url === '/api/studio/community-refresh/start') {
     try {
-      // DEFECT B (adversarial-review fix): the URL's ":id" was parsed and
-      // never referenced anywhere in this handler — ANY value, including a
-      // bogus or traversal-shaped one, reached the session lookup below and
-      // silently 200'd. Validated FIRST — a cheap format check (SLUG_RE, no
-      // I/O), before the request body is even read — mirroring the sibling
-      // /cleanup/start route's own first check, ~40 lines above.
-      const urlKbId = decodeURIComponent(kbCleanupApplyMatch[1]);
-      if (!SLUG_RE.test(urlKbId)) {
-        sendJson(res, 400, { error: 'invalid kb id' }, origin);
+      const body = (await readJson(req)) as { modelTier?: unknown };
+
+      // ADR-043 §3 amendment (wave-6) — validated EARLY, against the real
+      // community-refresh SKILL.md envelope.
+      const modelTierResult = resolveKickoffModelTier('community-refresh', body.modelTier);
+      if (!modelTierResult.ok) {
+        sendJson(res, 400, { error: modelTierResult.error }, origin);
         return true;
       }
 
-      const body = (await readJson(req)) as { project?: unknown; sessionId?: unknown };
-      if (typeof body.project !== 'string' || typeof body.sessionId !== 'string') {
-        sendJson(res, 400, { error: 'project and sessionId are required' }, origin);
-        return true;
-      }
-      // DEFECT B: `project`/`sessionId` gain the SAME charset+length
-      // validation cli/bridge-studio-sessions.ts's stated convention
-      // applies to its own session-shell route — BOTH checked before any fs
-      // call. Reused verbatim (not re-implemented) via that file's own
-      // exported helpers, so the KB-seeding dot-anchor carve-out
-      // (`.kb-<id>` project values — every non-project-bound kb-cleanup
-      // session in this file anchors under one) stays defined in exactly
-      // one place.
-      const projectReason = invalidProjectReason(body.project);
-      if (projectReason !== null) {
-        sendJson(res, 400, { error: projectReason }, origin);
-        return true;
-      }
-      const sessionIdReason = invalidSessionIdReason(body.sessionId);
-      if (sessionIdReason !== null) {
-        sendJson(res, 400, { error: sessionIdReason }, origin);
-        return true;
-      }
-      const { project, sessionId } = body;
-
-      // W6-B4 adversarial-review fix: the ENTIRE choreography below (read
-      // status -> check phase/kb_id -> claim phase:'applying' -> drain ->
-      // write phase:'applied') used to live inline here, duplicated
-      // byte-for-byte in cli/bridge-studio-affordances.ts's generic sibling
-      // — a check-then-await-then-write race, live-reproduced (two
-      // concurrent approves ran two independent runBrainConsolidateNow
-      // drains). Both routes now delegate to the ONE shared, atomically-
-      // correct `approveKbCleanup` (cli/bridge-studio-kbs.ts) — the
-      // duplicated choreography is deleted, not merely mirrored. `urlKbId`
-      // rides as `expectedKbId`, preserving DEFECT B's URL/status.kb_id
-      // identity check; the SECURITY INVARIANT it protects (the drain's
-      // sole source of truth is `status.kb_id`, never the URL) is enforced
-      // inside `approveKbCleanup` itself now.
+      const sessionId = newArchitectSessionId();
       const projectsRoot = resolveProjectsDir(resolve(ctx.forgeRoot), loadConfig(defaultConfigPath(ctx.forgeRoot)));
-      const dirSegs = [project, '_kb-cleanup', sessionId];
-      const outcome = await approveKbCleanup(ctx.forgeRoot, projectsRoot, dirSegs, { expectedKbId: urlKbId });
-      if (!outcome.ok) {
-        sendJson(res, outcome.status, { error: outcome.error, sessionId, project }, origin);
+      const written = guardedWriteSessionStatus(
+        projectsRoot,
+        [COMMUNITY_REFRESH_PROJECT_ANCHOR, '_community-refresh', sessionId],
+        {
+          session_id: sessionId,
+          project: COMMUNITY_REFRESH_PROJECT_ANCHOR,
+          phase: 'gathering',
+          // A fixed, SLUG_RE-valid packageId — this session commits to ONE
+          // forge-wide file, never a per-package library entry, so the
+          // generic runner's packageId/libraryRoot machinery
+          // (orchestrator/interactive-runner.ts's runFinalizeStep) is inert
+          // plumbing here; `commitRegistryDraft` itself ignores both fields
+          // (see that finalizer's own header). This constant only exists to
+          // satisfy that machinery's SLUG_RE check — the real session
+          // identity `commitRegistryDraft` actually uses is derived from
+          // `basename(sessionDir)`, independent of this value.
+          package_id: 'community-registry',
+          registryPath: communityRegistryPath(ctx.forgeRoot),
+          hubsPath: join(ctx.forgeRoot, 'studio', 'community', 'hubs.yaml'),
+          ...(modelTierResult.tier ? { modelTier: modelTierResult.tier } : {}),
+        },
+      );
+      if (written === null) {
+        sendJson(res, 500, { error: 'community-refresh start: session status.json failed containment' }, origin);
         return true;
       }
-      sendJson(res, 200, { ok: true, runId: outcome.runId }, origin);
+
+      spawnAgentTurn(ctx.forgeRoot, 'community-refresh', COMMUNITY_REFRESH_PROJECT_ANCHOR, sessionId);
+      sendJson(
+        res, 200,
+        { ok: true, sessionId, project: COMMUNITY_REFRESH_PROJECT_ANCHOR, ...dryBridgeAgentTurnMarker(ctx.logsRoot, '/api/studio/community-refresh/start', sessionId) },
+        origin,
+      );
     } catch (err) {
       sendJson(res, 500, { error: sanitizeError(err) }, origin);
     }

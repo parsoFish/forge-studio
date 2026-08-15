@@ -7,12 +7,14 @@ import { fetchRecentAgentRuns } from '@/lib/agents-index';
 import type { LedgerRow } from '@/lib/history-ledger';
 import { StudioPage } from '@/components/StudioPage';
 import { HistoryLedger } from '@/components/studio/HistoryLedger';
+import { HomeSessionsStrip } from '@/components/studio/HomeSessionsStrip';
 import { deriveFlowLedgerRows } from '@/lib/flow-ledger';
 import {
   buildConstellation,
   buildHomeAttention,
   buildKbAttention,
   buildHomeLedgerRows,
+  buildHomeSessionsStrip,
   deriveWatchLiveRunHref,
   gateAttentionStatusDot,
   type HomeAttentionItem,
@@ -62,7 +64,7 @@ const KB_ATTENTION_STATUS_FRAME: Record<Extract<HomeAttentionItem, { kind: 'kb' 
 };
 
 export default function HomePage() {
-  const { agents, flows, projects, kbs, runs, attention, ready } = useStudioHomeData();
+  const { agents, flows, projects, kbs, runs, attention, sessions, ready } = useStudioHomeData();
   const nowMs = useNowTicker();
 
   // ---- Home-only: merged everything-ledger (W6-IA-4 item 2) ----
@@ -94,6 +96,10 @@ export default function HomePage() {
   // KB roster useStudioHomeData() already loads (no new fetch, no new poll —
   // see this file's header + scripts/home-no-new-polling.test.ts).
   const attentionItems: HomeAttentionItem[] = [...buildHomeAttention(attention), ...buildKbAttention(kbs)];
+  // W6-B11 — the active-sessions strip: ≤4 cards, needs-you first (the
+  // fetched `sessions` array already arrives needs-you-first-then-newest,
+  // straight off the bridge's own sort — see buildHomeSessionsStrip's header).
+  const sessionsStrip = buildHomeSessionsStrip(sessions);
   const flowLedgerRows = deriveFlowLedgerRows(runs);
   // W6-IA-4: the flow-run rows render immediately (they come from `ready`,
   // the same gate the rest of the page uses); the agent rows fold in once
@@ -139,8 +145,12 @@ export default function HomePage() {
         </>
       }
     >
-      {/* ===== ACTIVE SESSIONS — deferred to B11 (the sessions aggregate API
-          doesn't exist yet). Slot marked, not built (W6-IA-4 scope). ===== */}
+      {/* ===== ACTIVE SESSIONS — the in-flight interactive-session strip
+          (W6-B11, IA-4's marked slot). Extracted into HomeSessionsStrip
+          (review fix) so its data-* contract gets a renderToStaticMarkup
+          pin — see components/studio/HomeSessionsStrip.tsx for the full
+          contract description. ===== */}
+      <HomeSessionsStrip strip={sessionsStrip} />
 
       {/* ===== ATTENTION STRIP — what needs the operator right now ===== */}
       {attentionItems.length > 0 && (

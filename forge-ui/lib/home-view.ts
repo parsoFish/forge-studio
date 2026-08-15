@@ -17,7 +17,7 @@
  * the page (app/page.tsx).
  */
 
-import type { Run, Flow, Agent, Project, Kb, KbLintSummary } from './studio-client';
+import type { Run, Flow, Agent, Project, Kb, KbLintSummary, SessionIndexRow } from './studio-client';
 import type { ProjectAttentionItem } from './bridge-client';
 import type { LedgerRow } from './history-ledger';
 import { mergeRecentAgentRuns } from './agents-index';
@@ -370,4 +370,53 @@ export function buildHomeLedgerRows(
   limit: number = HOME_LEDGER_LIMIT,
 ): LedgerRow[] {
   return mergeRecentAgentRuns([flowRows, agentRows], limit);
+}
+
+// ---------------------------------------------------------------------------
+// W6-B11 — the Home active-sessions strip (mockups/session-surface-v1/
+// sessions-index.html's "Home active-sessions strip" variant)
+// ---------------------------------------------------------------------------
+
+/** The strip's card budget before overflow — mirrors the mock's own "4-card
+ *  budget, needs-you first, overflow to /sessions" decision (mockup decision
+ *  point №11). */
+export const HOME_SESSIONS_STRIP_LIMIT = 4;
+
+export type HomeSessionsStrip = {
+  /** At most `limit` rows, needs-you first — a straight `.slice`, never
+   *  re-sorted here: the bridge's aggregate sessions-index route already
+   *  returns rows needs-you-first-then-newest
+   *  (`sortAndCapSessionIndexRows`, cli/ui-bridge.ts), and this derivation
+   *  stays pure by trusting that server-side order rather than re-deriving
+   *  it (declared-data-fails-open discipline: don't re-sort by a field this
+   *  module would have to re-implement the SAME derivation for). */
+  cards: SessionIndexRow[];
+  /** Count of ALL in-flight sessions whose phase carries a derivable
+   *  operator affordance (`needsYou`) — NOT just the ones that made the
+   *  card budget, so the strip header's "N need you" stays honest even when
+   *  needs-you sessions exceed the 4-card slice. */
+  needsYouCount: number;
+  /** Total in-flight session count — the strip's "all sessions (N)" overflow
+   *  link reads this, never `cards.length` (which is capped at `limit`). */
+  totalCount: number;
+};
+
+/**
+ * Home's active-sessions strip derivation — takes the already-fetched,
+ * already-sorted `sessions` (the SAME `SessionIndexRow[]`
+ * `useStudioHomeData()` fetches via `fetchStudioSessions()`, `?active=1`
+ * default — in-flight only, per the operator-locked "never terminal
+ * history" rule) and slices it to the card budget, alongside the two counts
+ * the strip header needs. Pure — no I/O, no re-fetch, no re-sort — matching
+ * every other builder in this module.
+ */
+export function buildHomeSessionsStrip(
+  sessions: SessionIndexRow[],
+  limit: number = HOME_SESSIONS_STRIP_LIMIT,
+): HomeSessionsStrip {
+  return {
+    cards: sessions.slice(0, limit),
+    needsYouCount: sessions.filter((s) => s.needsYou).length,
+    totalCount: sessions.length,
+  };
 }

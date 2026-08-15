@@ -26,14 +26,14 @@ import { SessionArtifactPane } from '@/components/studio/session/SessionArtifact
 import { SessionArchitectPanel } from '@/components/studio/session/SessionArchitectPanel';
 import { SessionInstructionsPanel } from '@/components/studio/session/SessionInstructionsPanel';
 import { SessionProjectBrainPanel } from '@/components/studio/session/SessionProjectBrainPanel';
-import { SessionAuthoringPanel } from '@/components/studio/session/SessionAuthoringPanel';
-import { SessionCleanupPanel } from '@/components/studio/session/SessionCleanupPanel';
 import { SessionInteractivePanel } from '@/components/studio/session/SessionInteractivePanel';
 
-/** W6-B6 — kinds that render the GENERIC interaction panel this batch.
- *  architect/instructions/kb-cleanup/authoring keep their bespoke panels
- *  (B8/B9 migrate them); architect never migrates (ADR-043 amendment §4). */
-const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding']);
+/** W6-B6 wired `demo`/`onboarding` onto the GENERIC interaction panel; W6-B8
+ *  adds `kb-cleanup` and `authoring`, deleting their bespoke
+ *  `SessionCleanupPanel`/`SessionAuthoringPanel` (no dual paths). architect/
+ *  instructions keep their own panels — instructions is a future migration;
+ *  architect never migrates (ADR-043 amendment §4). */
+const GENERIC_PANEL_KINDS: ReadonlySet<string> = new Set(['demo', 'onboarding', 'kb-cleanup', 'authoring']);
 
 /**
  * The shared interactive-session shell (R2-10 PR2, WI-7). Replaces
@@ -176,14 +176,6 @@ export default function SessionShellPage({
 
   const viewState = useMemo(() => deriveSessionShellViewState(shellResult), [shellResult]);
 
-  // R4-19-F2 WI-4c BLOCKER fix — sourced from the raw fetch result (not
-  // `viewState`, which has no `kbId` field of its own) because
-  // `SessionCleanupPanel` is the only consumer today; `shellResult.payload.
-  // kbId` is `undefined` for a malformed/unresolved wire payload OR a
-  // session kind with no real kb_id — both must degrade the panel to its
-  // honest not-approvable branch, never fabricate a value.
-  const kbId = shellResult?.ok === true ? shellResult.payload.kbId : undefined;
-
   // Fail-closed: no session found in the per-kind list AND no ?project= to
   // even attempt the shell route — never leave the page spinning forever.
   const noProjectKnown = project === null && summaryAttempted;
@@ -226,21 +218,6 @@ export default function SessionShellPage({
               <SessionInstructionsPanel session={summary.data} events={events} nowMs={nowMs} onRefresh={refreshSummary} />
             ) : summary && summary.kind === 'project-brain' ? (
               <SessionProjectBrainPanel session={summary.data} themes={themes} onRefresh={refreshSummary} />
-            ) : kind === 'authoring' ? (
-              <SessionAuthoringPanel
-                sessionId={sessionId}
-                project={project}
-                artifact={viewState.artifact}
-                onFinalized={(savedKind, id) => router.push(savedKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
-              />
-            ) : kind === 'kb-cleanup' ? (
-              <SessionCleanupPanel
-                sessionId={sessionId}
-                project={project}
-                phase={viewState.phase}
-                kbId={kbId}
-                artifact={viewState.artifact}
-              />
             ) : GENERIC_PANEL_KINDS.has(kind) ? (
               <SessionInteractivePanel
                 kind={kind}
@@ -251,7 +228,9 @@ export default function SessionShellPage({
                 artifact={viewState.artifact}
                 modelTier={viewState.modelTier}
                 events={events}
+                terminal={viewState.terminal}
                 onChanged={refreshShell}
+                onPackageFinalized={(pkgKind, id) => router.push(pkgKind === 'hook' ? `/hooks/${encodeURIComponent(id)}` : `/skills/${encodeURIComponent(id)}`)}
               />
             ) : null}
           </SessionTranscript>

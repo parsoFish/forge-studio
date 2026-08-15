@@ -545,24 +545,13 @@ test('R4-19-F2: BRIDGE_ROUTE_CLASSIFICATION has a stub-actions/spawn-helper row 
   assert.equal(row!.guard, 'spawn-helper', 'expected guard:"spawn-helper", mirroring the other turnSpec-spine spawn routes (authoring/start, onboarding/start)');
 });
 
-// Kills: an implementation that ships POST /api/studio/kbs/:id/cleanup/apply
-// (which drains approved findings into the brain — a real, brain-mutating
-// action) without adding ANY classification row for it — leaving a
-// brain-mutating route completely unclassified. This test deliberately does
-// NOT pin a specific classification value (the task brief leaves the exact
-// real-acting shape of "runs the existing consolidate drain" ambiguous
-// between exempt-local/stub-actions/refuse — see this WI's report) — it
-// pins only that the route is classified as SOMETHING, never silently
-// absent from the table.
-test('R4-19-F2: BRIDGE_ROUTE_CLASSIFICATION has a row for POST /api/studio/kbs/:id/cleanup/apply (drains the approved plan into the brain — a real, brain-mutating action that must never be silently unclassified)', () => {
-  const row = BRIDGE_ROUTE_CLASSIFICATION.find((r) => r.method === 'POST' && r.route === '/api/studio/kbs/:id/cleanup/apply');
-  assert.ok(
-    row,
-    `expected a BRIDGE_ROUTE_CLASSIFICATION row for POST /api/studio/kbs/:id/cleanup/apply — not present yet (this IS the RED this test pins). Known rows: ${BRIDGE_ROUTE_CLASSIFICATION.map((r) => `${r.method} ${r.route}`).join(', ')}`,
-  );
-  const validClassifications: RouteClassification['classification'][] = ['refuse', 'stub-actions', 'exempt-local', 'read-only'];
-  assert.ok(
-    validClassifications.includes(row!.classification),
-    `classification must be one of ${validClassifications.join('|')}, got "${row!.classification}"`,
-  );
-});
+// W6-B9 (reviewer finding on W6-B8): this test used to pin
+// "BRIDGE_ROUTE_CLASSIFICATION has a row for POST /api/studio/kbs/:id/
+// cleanup/apply". That route is now DELETED — kb-cleanup migrated onto the
+// generic session shell (W6-B8), and the bespoke apply route had no
+// production caller left once its one caller (SessionCleanupPanel.tsx) was
+// deleted. Its BRIDGE_ROUTE_CLASSIFICATION row is deleted with it
+// (cli/dry-bridge.ts) — no companion "must be ABSENT" guard is needed: this
+// file's own two-way route-derivation check (see its header) already fails
+// loud if a stale table row survives with no matching dispatch line, which
+// is the real backstop against a row lingering after its route is gone.

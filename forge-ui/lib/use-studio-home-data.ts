@@ -8,11 +8,13 @@ import {
   fetchStudioFlows,
   fetchStudioKbs,
   fetchStudioProjects,
+  fetchStudioSessions,
   type Agent,
   type Flow,
   type Kb,
   type Project,
   type Run,
+  type SessionIndexRow,
 } from './studio-client';
 import { debounceLeadingTrailing } from './debounce';
 
@@ -42,12 +44,23 @@ import { debounceLeadingTrailing } from './debounce';
  * as `feat/w6-p1-run-list-cache` AFTER this hook's own extraction landed —
  * re-targeted here on merge): the `cycle-list-changed` refetch is wrapped in
  * `debounceLeadingTrailing` (`./debounce.ts`, 500ms leading+trailing) so a
- * burst of WS messages collapses into at most two `fetchRuns()` round-trips
- * instead of one per message; `.cancel()` runs in the effect cleanup so no
- * stray trailing call fires after unmount. This is the SAME wiring
- * `app/page.tsx` carried directly before this hook existed — moved here
- * unchanged, not re-derived, since this hook is now the one place that
- * subscription lives.
+ * burst of WS messages collapses into at most two round-trips instead of one
+ * per message; `.cancel()` runs in the effect cleanup so no stray trailing
+ * call fires after unmount. This is the SAME wiring `app/page.tsx` carried
+ * directly before this hook existed — moved here unchanged, not re-derived,
+ * since this hook is now the one place that subscription lives.
+ *
+ * W6-B11 — `sessions` (the aggregate in-flight sessions index,
+ * `fetchStudioSessions()`, `?active=1` default) is a SEVENTH read folded into
+ * the same `loadAll` `Promise.all` and the SAME `cycle-list-changed` refetch
+ * as `runs` (a session-kickoff or session-completion is exactly the kind of
+ * event that changes both the cycle list AND the in-flight session set, so
+ * one shared debounced refetch covers both — no second WS handler, no second
+ * debounce timer). `scripts/home-no-new-polling.test.ts`'s closed
+ * `ALLOWED_FETCH_IDENTIFIERS` list was extended to include
+ * `fetchStudioSessions` for this addition specifically — it is not a new,
+ * bespoke endpoint invented for Home; it is the existing W6-B11 bridge route
+ * this hook composes exactly like the other six reads.
  */
 export type StudioHomeData = {
   agents: Agent[];
@@ -56,18 +69,21 @@ export type StudioHomeData = {
   kbs: Kb[];
   runs: Run[];
   attention: ProjectAttentionItem[];
+  sessions: SessionIndexRow[];
   /** True once the first `loadAll` Promise.all has settled. */
   ready: boolean;
 };
 
 /**
  * Extracted so the ADR-044 P1 debounce wiring is a plain, directly-testable
- * unit — a `Debounced<[]>` (`./debounce.ts`) wrapping `refreshRuns`, with NO
- * React/effect involvement — rather than only provable by reading the
- * hook's source text. `use-studio-home-data.test.ts` exercises this with
+ * unit — a `Debounced<[]>` (`./debounce.ts`) wrapping a refetch callback,
+ * with NO React/effect involvement — rather than only provable by reading
+ * the hook's source text. `use-studio-home-data.test.ts` exercises this with
  * `vi.useFakeTimers()`, mirroring `debounce.test.ts`'s own style, to pin
  * that a burst of `cycle-list-changed` messages collapses into at most two
- * `refreshRuns` calls. The hook itself (below) is the only real caller.
+ * calls. The hook itself (below) is the only real caller — it now wraps a
+ * combined runs+sessions refetch (W6-B11), unchanged as far as this function
+ * itself is concerned (it takes any `() => void`).
  */
 export function createDebouncedRefreshRuns(refreshRuns: () => void, waitMs = 500) {
   return debounceLeadingTrailing(refreshRuns, waitMs);
@@ -80,6 +96,7 @@ export function useStudioHomeData(): StudioHomeData {
   const [kbs, setKbs] = useState<Kb[]>([]);
   const [runs, setRuns] = useState<Run[]>([]);
   const [attention, setAttention] = useState<ProjectAttentionItem[]>([]);
+  const [sessions, setSessions] = useState<SessionIndexRow[]>([]);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -87,13 +104,14 @@ export function useStudioHomeData(): StudioHomeData {
 
     async function loadAll(): Promise<void> {
       try {
-        const [a, f, p, k, r, at] = await Promise.all([
+        const [a, f, p, k, r, at, s] = await Promise.all([
           fetchStudioAgents(),
           fetchStudioFlows(),
           fetchStudioProjects(),
           fetchStudioKbs(),
           fetchRuns(),
           fetchProjectAttention(),
+          fetchStudioSessions(),
         ]);
         if (signal.cancelled) return;
         setAgents(a);
@@ -102,45 +120,50 @@ export function useStudioHomeData(): StudioHomeData {
         setKbs(k);
         setRuns(r);
         setAttention(at);
+        setSessions(s);
       } finally {
         if (!signal.cancelled) setReady(true);
       }
     }
 
-    async function refreshRuns(): Promise<void> {
-      const r = await fetchRuns();
+    // W6-B11: refreshes BOTH runs and the sessions index off the same
+    // cycle-list-changed signal — see this file's header for why one shared
+    // debounced refetch covers both rather than a second WS handler.
+    async function refreshRunsAndSessions(): Promise<void> {
+      const [r, s] = await Promise.all([fetchRuns(), fetchStudioSessions()]);
       if (signal.cancelled) return;
       setRuns(r);
+      setSessions(s);
     }
 
     void loadAll();
 
-    // Subscribe to bridge WS to re-fetch runs on cycle-list-changed — the
-    // ONE live-refresh transport Studio has.
+    // Subscribe to bridge WS to re-fetch runs (+ sessions, W6-B11) on
+    // cycle-list-changed — the ONE live-refresh transport Studio has.
     // ADR-044 P1: debounce leading+trailing 500ms (createDebouncedRefreshRuns,
     // above) so a burst of cycle-list-changed messages collapses into at
-    // most two /api/runs round-trips instead of one per message.
-    const debouncedRefreshRuns = createDebouncedRefreshRuns(() => {
-      void refreshRuns();
+    // most two round-trips instead of one per message.
+    const debouncedRefresh = createDebouncedRefreshRuns(() => {
+      void refreshRunsAndSessions();
     });
     const sub = subscribe({
       onState: () => { /* this hook does not surface connection state */ },
       onMessage: (msg) => {
         if (signal.cancelled) return;
         if (msg.type === 'cycle-list-changed') {
-          debouncedRefreshRuns();
+          debouncedRefresh();
         }
       },
     });
 
     return () => {
       signal.cancelled = true;
-      debouncedRefreshRuns.cancel();
+      debouncedRefresh.cancel();
       sub.close();
     };
-    // intentional mount-only — loadAll/refreshRuns are stable fetch helpers
+    // intentional mount-only — loadAll/refreshRunsAndSessions are stable fetch helpers
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return { agents, flows, projects, kbs, runs, attention, ready };
+  return { agents, flows, projects, kbs, runs, attention, sessions, ready };
 }

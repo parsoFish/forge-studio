@@ -31,11 +31,20 @@ function render(props: {
   artifact?: SessionArtifactPayload | null;
   modelTier?: string | null;
   events?: EventLogEntry[];
+  terminal?: boolean;
 }): string {
   return renderToStaticMarkup(
     React.createElement(SessionInteractivePanel, {
       sessionId: 'sid-1',
       project: 'demoproj',
+      // W6-B8 — every existing call site below predates `events`/`terminal`;
+      // defaulted here (not in the component, which keeps both required —
+      // mirrors `phase`) so this file's pre-existing tests need no mechanical
+      // per-call-site update. `terminal: false` matches the ADR-043 default
+      // reading of an affordance-bearing/working session; individual tests
+      // below override it to exercise the ActivityLog gate itself.
+      events: [],
+      terminal: false,
       ...props,
     }),
   );
@@ -244,8 +253,17 @@ test('ActivityLog does NOT render when a verdict affordance is present (somethin
   expect(html).not.toContain('data-component="activity-drawer"');
 });
 
-test('ActivityLog does NOT render on zero affordances (a terminal phase, or a kind with no working-phase signal)', () => {
-  const html = render({ kind: 'demo', phase: 'locked', affordances: [] });
+test('ActivityLog does NOT render on zero affordances at a genuinely TERMINAL phase (demo "locked")', () => {
+  // Merge-reconciled (W6-B8 x W6-B10): the zero-affordances branch renders
+  // `!terminal && <ActivityLog/>` (B8) — 'locked' is demo's real terminal
+  // phase, so this must pass `terminal: true` explicitly (the wire's own
+  // honest value for this phase) to keep asserting what it always meant to:
+  // a SETTLED session shows no drawer. The companion case this test used to
+  // conflate — a NON-terminal, zero-affordance phase (onboarding's
+  // 'running') — is covered separately below ("terminal:false renders the
+  // ActivityLog drawer"), which is the real gap B8 closed: W6-B10's own
+  // `affordances.length > 0` guard would have hidden the drawer there too.
+  const html = render({ kind: 'demo', phase: 'locked', affordances: [], terminal: true });
   expect(html).not.toContain('data-component="activity-drawer"');
 });
 
@@ -278,4 +296,141 @@ test('a phase yielding multiple affordances (question-form + next-turn) renders 
   expect(html).toContain('data-affordance-kind="question-form"');
   expect(html).toContain('data-affordance-kind="next-turn"');
   expect(html).toContain('data-affordance-count="2"');
+});
+
+// ---------------------------------------------------------------------------
+// W6-B8 — the file-package id field. Driven by `artifact.kind ===
+// 'file-package'`, never by `kind === 'authoring'` (the panel is generic
+// over every session kind — a future kind whose artifact happens to be a
+// file-package gets the SAME id field, for free). `handleAuthoringVerdict`
+// (cli/bridge-studio-affordances.ts) needs a non-empty `body.id` — this is
+// the ONLY affordance-kind shape whose verdict submit needs more than
+// `{verdict}`. `kind` is NEVER sent (W6-B9): the write route derives it
+// server-side from the real staged files.
+//
+// W6-B9 (reviewer finding on W6-B8): the Approve gate is now driven by
+// `affordance.meta.requires` (server-derived, wire data) — NOT by a
+// client-side "file-package implies an id is needed" assumption. Two
+// verdict fixtures below make this explicit: `APPROVE_ONLY_VERDICT` (no
+// `requires`, kb-cleanup's real shape) vs
+// `APPROVE_ONLY_VERDICT_REQUIRES_ID` (authoring's real shape) — the SAME
+// `file-package` artifact under the FORMER would leave Approve enabled with
+// no id typed (nothing is required), proving the gate reads the wire
+// field, never the artifact kind directly.
+// ---------------------------------------------------------------------------
+
+function filePackage(files: { path: string; body: string }[]): SessionArtifactPayload {
+  return { kind: 'file-package', label: 'Package', files };
+}
+
+const APPROVE_ONLY_VERDICT: SessionAffordance = {
+  id: 'awaiting-review-verdict',
+  kind: 'verdict',
+  phase: 'awaiting-review',
+  meta: { verdicts: ['approve'] },
+};
+
+const APPROVE_ONLY_VERDICT_REQUIRES_ID: SessionAffordance = {
+  id: 'awaiting-review-verdict',
+  kind: 'verdict',
+  phase: 'awaiting-review',
+  meta: { verdicts: ['approve'], requires: ['id'] },
+};
+
+test('a file-package artifact with a SKILL.md renders the package-id field labelled for a skill, and Approve stays disabled (meta.requires:["id"]) until an id is entered', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    affordances: [APPROVE_ONLY_VERDICT_REQUIRES_ID],
+    artifact: filePackage([{ path: 'SKILL.md', body: '# A skill' }]),
+  });
+  expect(html).toContain('data-field="session-package-id"');
+  expect(html).toContain('Skill id (directory name)');
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).toContain('disabled=""');
+});
+
+test('the SAME file-package artifact under a verdict affordance with NO meta.requires leaves Approve ENABLED with no id typed — the gate reads the wire field, never a client-side "file-package needs an id" assumption', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    affordances: [APPROVE_ONLY_VERDICT],
+    artifact: filePackage([{ path: 'SKILL.md', body: '# A skill' }]),
+  });
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).not.toContain('disabled=""');
+});
+
+test('a file-package artifact with a hook.yaml renders the package-id field labelled for a hook (never a kind==="authoring" compare)', () => {
+  const html = render({
+    kind: 'not-actually-authoring',
+    phase: 'awaiting-review',
+    affordances: [APPROVE_ONLY_VERDICT_REQUIRES_ID],
+    artifact: filePackage([{ path: 'hook.yaml', body: 'on: pre-commit' }]),
+  });
+  expect(html).toContain('data-field="session-package-id"');
+  expect(html).toContain('Hook id (directory name)');
+});
+
+test('a file-package artifact with NEITHER SKILL.md nor hook.yaml yet (shape "unknown") still renders the id field, honestly disabled — never a button known in advance to 400', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'awaiting-review',
+    affordances: [APPROVE_ONLY_VERDICT_REQUIRES_ID],
+    artifact: filePackage([{ path: 'README.md', body: 'not a package marker file' }]),
+  });
+  expect(html).toContain('data-field="session-package-id"');
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).toContain('disabled=""');
+  expect(html).toContain('Waiting for the draft to include');
+});
+
+test('a NON-file-package artifact (cleanup-plan) never renders the package-id field — the approve button is enabled by the ordinary busy-only gate', () => {
+  const html = render({
+    kind: 'kb-cleanup',
+    phase: 'awaiting-approval',
+    affordances: [APPROVE_ONLY_VERDICT],
+    artifact: { kind: 'cleanup-plan', label: 'Cleanup plan', plan: null, actions: [], openFindingCount: 0 },
+  });
+  expect(html).not.toContain('data-field="session-package-id"');
+  const tag = actionTag(html, 'verdict-approve');
+  expect(tag).not.toContain('disabled=""');
+});
+
+// ---------------------------------------------------------------------------
+// W6-B8 — the ActivityLog drawer, gated on `!terminal`. Wired generically
+// (every GENERIC_PANEL_KINDS kind gets it, driven by the `terminal` prop —
+// never a per-kind compare).
+// ---------------------------------------------------------------------------
+
+const FIXTURE_EVENT: EventLogEntry = {
+  event_id: 'e1',
+  initiative_id: 'sid-1',
+  started_at: '2026-08-15T00:00:00Z',
+  phase: 'analyzing',
+  skill: 'creation-agent',
+  event_type: 'log',
+  message: 'working…',
+};
+
+test('terminal:false renders the ActivityLog drawer', () => {
+  const html = render({
+    kind: 'authoring',
+    phase: 'analyzing',
+    affordances: [],
+    events: [FIXTURE_EVENT],
+    terminal: false,
+  });
+  expect(html).toContain('data-component="activity-drawer"');
+});
+
+test('terminal:true hides the ActivityLog drawer — a settled session is not "working"', () => {
+  const html = render({
+    kind: 'kb-cleanup',
+    phase: 'applied',
+    affordances: [],
+    events: [FIXTURE_EVENT],
+    terminal: true,
+  });
+  expect(html).not.toContain('data-component="activity-drawer"');
 });

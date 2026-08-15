@@ -61,7 +61,12 @@ import type { Finding } from './validate.ts';
  *  token, appended at the end, backing the new single-stage `authoring`
  *  session kind (creation-agent). It is unrelated to the ordered onboarding
  *  sequence (contract→instructions→secrets→demo→roadmap→brain) the other six
- *  tokens encode. */
+ *  tokens encode.
+ *
+ *  W6-CR-3: 'community' is the SECOND extension, an 8th token, mirroring
+ *  'authoring's own precedent exactly — a single-stage session kind
+ *  (community-refresh) with no natural fit among the ordered onboarding
+ *  sequence, appended at the end rather than squeezed into that ordering. */
 export const SESSION_STAGES = Object.freeze([
   'contract',
   'instructions',
@@ -70,6 +75,7 @@ export const SESSION_STAGES = Object.freeze([
   'roadmap',
   'brain',
   'authoring',
+  'community',
 ] as const);
 export type SessionStage = (typeof SESSION_STAGES)[number];
 
@@ -177,12 +183,19 @@ export type TurnStep = (typeof TURN_STEPS)[number]['id'];
  *  (orchestrator/interactive-runner.ts) never has to implement them; adding
  *  them here does not reopen the "gains no new row for kb-cleanup" ratchet's
  *  intent (that test pinned kb-cleanup's OWN phase table needing none, not a
- *  blanket freeze on this registry's size — see its updated comment). Typed
- *  `readonly`, as TURN_STYLES. */
+ *  blanket freeze on this registry's size — see its updated comment).
+ *
+ *  W6-CR-3: `commitRegistryDraft` is added alongside — it IS dispatched via
+ *  `turnSpec` (the `community-refresh` kind's `committing` phase), so it
+ *  lives in `FINALIZERS` too (`orchestrator/interactive-finalizers.ts`) and
+ *  therefore also in `DISPATCHABLE_FINALIZER_IDS` below, unlike
+ *  `writeToRepoRoot`/`recordLockedDemo` immediately above. Typed `readonly`,
+ *  as TURN_STYLES. */
 export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
   Object.freeze({ id: 'copyStagingToLibrary' }),
   Object.freeze({ id: 'writeToRepoRoot' }),
   Object.freeze({ id: 'recordLockedDemo' }),
+  Object.freeze({ id: 'commitRegistryDraft' }),
 ]);
 export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 
@@ -340,6 +353,24 @@ export type TurnSpecPhase = {
    *  `deriveSessionAffordances`, never baked in here, mirroring `writes`'s
    *  own omit-don't-default discipline. */
   readonly verdicts?: readonly string[];
+  /** Reviewer finding (W6-B9, on W6-B8) — the names of extra POST body
+   *  fields a `verdict`-kind affordance's write handler needs BEYOND
+   *  `verdict` itself (e.g. authoring's `awaiting-review` row needs an
+   *  operator-supplied library `id` — D4, the drafted package cannot name
+   *  itself). AUTHORED data, like `verdicts:`/`awaits:` — the closes the
+   *  class of defect where a CLIENT guesses at a server-side requirement
+   *  with no wire signal (the file-package id-required rule used to be
+   *  hardcoded in `SessionInteractivePanel.tsx`, duplicating
+   *  `handleAuthoringVerdict`'s own `{kind,id}` check with nothing tying the
+   *  two together). Meaningful ONLY on a `noop`+`awaits:'verdict'` row —
+   *  `validateSessionKinds` rejects it declared anywhere else, mirroring
+   *  `verdicts`' own misplaced-check shape. Structural only here (like
+   *  `writes`): there is no closed vocabulary of legal body-field NAMES to
+   *  validate entries against — these are arbitrary field names, not a
+   *  fixed semantic enum. Omitted (not defaulted) when absent — a row with
+   *  no `requires` needs nothing beyond `verdict` itself, so the write
+   *  route's generic check simply has nothing to enforce. */
+  readonly requires?: readonly string[];
 };
 
 /** The additive-optional producer/state-machine half of a session-kind
@@ -448,6 +479,7 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
   const finalizer = optString(p, 'finalizer');
   const awaits = optString(p, 'awaits');
   const verdicts = p.verdicts !== undefined ? stringArray(p, 'verdicts', file) : undefined;
+  const requires = p.requires !== undefined ? stringArray(p, 'requires', file) : undefined;
   return {
     phase,
     step,
@@ -456,6 +488,7 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
     ...(finalizer !== undefined ? { finalizer } : {}),
     ...(awaits !== undefined ? { awaits } : {}),
     ...(verdicts !== undefined ? { verdicts } : {}),
+    ...(requires !== undefined ? { requires } : {}),
   };
 }
 
@@ -639,6 +672,14 @@ const CHECK_TURNSPEC_UNKNOWN_VERDICT = 'session-kinds/turnspec-unknown-verdict';
 const CHECK_TURNSPEC_VERDICTS_MISPLACED = 'session-kinds/turnspec-verdicts-misplaced';
 const CHECK_PANEL_UNKNOWN_VERDICT = 'session-kinds/panel-unknown-verdict';
 const CHECK_PANEL_VERDICTS_MISPLACED = 'session-kinds/panel-verdicts-misplaced';
+// W6-B9 (reviewer finding on W6-B8) — `requires` (a `noop`+`awaits:'verdict'`
+// row's OPTIONAL, AUTHORED "which extra POST body fields this verdict needs"
+// field) mirrors `verdicts`' OWN misplaced-check half only — there is no
+// "unknown value" counterpart (no closed vocabulary of legal body-field
+// NAMES exists, mirroring `writes`' own structural-only, unchecked-value
+// discipline; see TurnSpecPhase.requires's own doc comment).
+const CHECK_TURNSPEC_REQUIRES_MISPLACED = 'session-kinds/turnspec-requires-misplaced';
+const CHECK_PANEL_REQUIRES_MISPLACED = 'session-kinds/panel-requires-misplaced';
 // The turnSpec⊕panel mutual-exclusion check (ADR-043 2026-08-15 amendment
 // §2): a descriptor carrying BOTH is rejected with exactly one finding
 // naming the kind and both fields — see the exclusivity guard in the main
@@ -703,6 +744,7 @@ type PhaseTableCheckIds = {
   readonly noopMissingAwaits: string;
   readonly unknownVerdict: string;
   readonly verdictsMisplaced: string;
+  readonly requiresMisplaced: string;
 };
 
 const TURNSPEC_PHASE_CHECK_IDS: PhaseTableCheckIds = {
@@ -717,6 +759,7 @@ const TURNSPEC_PHASE_CHECK_IDS: PhaseTableCheckIds = {
   noopMissingAwaits: CHECK_TURNSPEC_NOOP_MISSING_AWAITS,
   unknownVerdict: CHECK_TURNSPEC_UNKNOWN_VERDICT,
   verdictsMisplaced: CHECK_TURNSPEC_VERDICTS_MISPLACED,
+  requiresMisplaced: CHECK_TURNSPEC_REQUIRES_MISPLACED,
 };
 
 const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
@@ -731,6 +774,7 @@ const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
   noopMissingAwaits: CHECK_PANEL_NOOP_MISSING_AWAITS,
   unknownVerdict: CHECK_PANEL_UNKNOWN_VERDICT,
   verdictsMisplaced: CHECK_PANEL_VERDICTS_MISPLACED,
+  requiresMisplaced: CHECK_PANEL_REQUIRES_MISPLACED,
 };
 
 /**
@@ -869,6 +913,24 @@ function validatePhaseTable(
           );
         }
       }
+    }
+
+    // W6-B9 (reviewer finding on W6-B8) — requires-misplaced: mirrors
+    // verdicts-misplaced's exact shape. `requires` is meaningful ONLY on a
+    // `noop` row whose `awaits` is `'verdict'` — declared anywhere else it
+    // can never be read (deriveSessionAffordances only ever attaches
+    // `meta.requires` off a verdict-kind row), so it is rejected as dead,
+    // confusing authored data rather than silently ignored. No
+    // unknown-value counterpart exists (see TurnSpecPhase.requires's own
+    // doc comment — structural only, like `writes`).
+    if (phase.requires !== undefined && !(phase.step === 'noop' && phase.awaits === 'verdict')) {
+      findings.push(
+        err(
+          obj,
+          checkIds.requiresMisplaced,
+          `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" declares "requires" but is not a "noop" step with awaits "verdict" — "requires" is only meaningful there`,
+        ),
+      );
     }
 
     // dangling-next (AT-R422-13): mirrors CHECK_DEFAULT_STAGE_NOT_IN_STAGES's
@@ -1165,17 +1227,26 @@ export type SessionAffordance = {
    *  affordance back to its source row without re-deriving it. */
   readonly phase: string;
   /** Present only when the source row carries the corresponding field
-   *  (`writes` for `staged-review`, `next` for `next-turn`) — omitted, never
-   *  defaulted, mirroring this file's own `writes`/`next`/`finalizer`
-   *  omit-don't-default discipline in `parseTurnSpecPhase`. `verdicts`
-   *  (W6-B6 post-merge review) is the ONE exception to "never defaulted": a
-   *  `verdict`-kind affordance ALWAYS carries it — `row.verdicts` when the
-   *  row declares one, else the ADR default `['approve', 'reject']` — so a
-   *  consumer (the write route, the panel) never has to re-implement that
-   *  default itself; this is the single, derived source of the business
-   *  rule "which verdict values are legal for THIS phase", never a second,
-   *  hand-kept copy. */
-  readonly meta?: { readonly writes?: readonly string[]; readonly next?: string; readonly verdicts?: readonly string[] };
+   *  (`writes` for `staged-review`, `next` for `next-turn`, `requires` for
+   *  `verdict` — W6-B9) — omitted, never defaulted, mirroring this file's
+   *  own `writes`/`next`/`finalizer`/`requires` omit-don't-default
+   *  discipline in `parseTurnSpecPhase`. `verdicts` (W6-B6 post-merge
+   *  review) is the ONE exception to "never defaulted": a `verdict`-kind
+   *  affordance ALWAYS carries it — `row.verdicts` when the row declares
+   *  one, else the ADR default `['approve', 'reject']` — so a consumer (the
+   *  write route, the panel) never has to re-implement that default itself;
+   *  this is the single, derived source of the business rule "which verdict
+   *  values are legal for THIS phase", never a second, hand-kept copy.
+   *  `requires` (W6-B9, reviewer finding on W6-B8) is the equally single
+   *  source of "which extra POST body fields this verdict needs beyond
+   *  `verdict` itself" — a `verdict`-kind affordance carries it only when
+   *  `row.requires` declares one (e.g. authoring's `awaiting-review` row
+   *  needs `['id']`); a row declaring none needs nothing beyond `verdict`,
+   *  so the key is simply absent, never a fabricated `[]`. The write route's
+   *  generic body-shape check and the panel's approve-gate BOTH read this
+   *  SAME field — closes the class of defect where the client guessed at a
+   *  server-side requirement with no wire signal tying the two together. */
+  readonly meta?: { readonly writes?: readonly string[]; readonly next?: string; readonly verdicts?: readonly string[]; readonly requires?: readonly string[] };
 };
 
 /**
@@ -1244,7 +1315,15 @@ export function deriveSessionAffordances(descriptor: SessionKindDescriptor, curr
       // and `SessionInteractivePanel` both consume this SAME derived value,
       // never a second, hand-kept copy of "which kinds are approve-only".
       const verdicts = row.verdicts ?? ['approve', 'reject'];
-      affordances.push({ id: `${row.phase}-${kind}`, kind, phase: row.phase, meta: { verdicts } });
+      // W6-B9 (reviewer finding on W6-B8) — `requires` has NO default (unlike
+      // `verdicts`): a row declaring none needs nothing beyond `verdict`
+      // itself, so the key is simply omitted, never a fabricated `[]`.
+      affordances.push({
+        id: `${row.phase}-${kind}`,
+        kind,
+        phase: row.phase,
+        meta: { verdicts, ...(row.requires !== undefined ? { requires: row.requires } : {}) },
+      });
     } else {
       affordances.push({ id: `${row.phase}-${kind}`, kind, phase: row.phase });
     }

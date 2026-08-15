@@ -547,6 +547,191 @@ test('TBL-authoring-3: verdict approve with missing "id" -> 400, nothing landed/
   assert.equal(readPhase(sessionDir), 'awaiting-review');
 });
 
+test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-4: the GENERIC meta.requires check names the missing field — body.id absent entirely (not just empty) still 400s naming "id", nothing landed/installed', async () => {
+  const project = 'tblauthoring4';
+  const sessionId = freshSessionId();
+  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: Untitled\ndescription: fixture\n---\n\nBody.\n', 'utf8');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
+
+  // No "id" key at all in the body — the generic requires check (studio/
+  // session-kinds.yaml's authoring row: requires: [id]) must still 400,
+  // BEFORE handleAuthoringVerdict is ever reached.
+  const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), { project, verdict: 'approve' });
+  const text = await res.text();
+  assert.equal(res.status, 400, text);
+  const body = JSON.parse(text) as { error: string };
+  assert.match(body.error, /\bid\b/, `expected the 400 to NAME the missing field "id", got: ${body.error}`);
+  assert.equal(readPhase(sessionDir), 'awaiting-review');
+});
+
+test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-5: "kind" is DERIVED from the REAL staged files, never trusted from the request body — a body claiming kind:"hook" over a staged SKILL.md still installs as a skill', async () => {
+  const project = 'tblauthoring5';
+  const sessionId = freshSessionId();
+  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'SKILL.md'), '---\nname: W6B9 Kind Derivation\ndescription: fixture\n---\n\nBody.\n', 'utf8');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
+
+  // The body LIES about kind — the route must ignore it and derive 'skill'
+  // from the real staged file instead.
+  const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), {
+    project, verdict: 'approve', kind: 'hook', id: 'w6b9-kind-derivation',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, text);
+  const body = JSON.parse(text) as { ok: boolean; kind: string; id: string };
+  assert.equal(body.kind, 'skill', `expected the DERIVED kind "skill" (from the real staged SKILL.md), never the body's claimed "hook", got: ${body.kind}`);
+  assert.equal(readPhase(sessionDir), 'committed');
+  assert.ok(existsSync(join(forgeRoot, 'skills', 'w6b9-kind-derivation', 'SKILL.md')), 'the finalized package must land in the SKILL library, not the hook one');
+  assert.equal(existsSync(join(forgeRoot, 'studio', 'hooks', 'w6b9-kind-derivation')), false, 'must NOT land in the hook library — the body\'s claimed kind is ignored entirely');
+});
+
+test('W6-B9 (reviewer finding on W6-B8) TBL-authoring-6: neither SKILL.md nor hook.yaml staged yet -> 409, honest ("still drafting"), never a guessed kind', async () => {
+  const project = 'tblauthoring6';
+  const sessionId = freshSessionId();
+  const sessionDir = join(forgeRoot, 'projects', project, '_authoring', sessionId);
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'README.md'), 'not a package marker file', 'utf8');
+  writeFileSync(join(sessionDir, 'status.json'), JSON.stringify({ session_id: sessionId, project, phase: 'awaiting-review' }, null, 2), 'utf8');
+
+  const res = await postJson(affordanceUrl('authoring', sessionId, 'awaiting-review-verdict'), { project, verdict: 'approve', id: 'w6b9-unknown-shape' });
+  const text = await res.text();
+  assert.equal(res.status, 409, text);
+  assert.equal(readPhase(sessionDir), 'awaiting-review');
+});
+
+// ===========================================================================
+// TABLE TEST — community-refresh (W6-CR-3; verdict: approve -> commit,
+// reject -> rejected — UNLIKE kb-cleanup/authoring, BOTH verdicts are
+// supported here per `studio/session-kinds.yaml`'s own `verdicts: [approve,
+// reject]` declaration on this kind's `awaiting-review` row)
+// ===========================================================================
+
+const COMMUNITY_REFRESH_PROJECT = '.community-registry';
+
+function communityRegistryPath(): string {
+  return join(forgeRoot, 'studio', 'community', 'registry.yaml');
+}
+
+function writeCommunityRegistry(itemsYaml: string): void {
+  mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
+  writeFileSync(communityRegistryPath(), `meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems:\n${itemsYaml}`, 'utf8');
+}
+
+const ALPHA_LIVE_YAML = [
+  '  - id: alpha',
+  '    kind: skill',
+  '    name: Alpha',
+  '    category: testing',
+  '    sourceUrl: "https://github.com/example/alpha"',
+  '    provenance: "example/alpha"',
+  '    signals:',
+  '      stars: 100',
+  '      starsDisplay: "100"',
+  '      attributedTo: "example/alpha"',
+  '    upstreamUpdatedAt: null',
+  '    fetchedAt: null',
+  '    fetchedBy: seed',
+  '',
+].join('\n');
+
+test('TBL-communityrefresh-1: verdict approve at awaiting-review -> 200, delegates to commitRegistryDraft (real registry.yaml updated), phase -> committed', async () => {
+  writeCommunityRegistry(ALPHA_LIVE_YAML);
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(COMMUNITY_REFRESH_PROJECT, '_community-refresh', sessionId, {
+    session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
+  });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(
+    join(sessionDir, 'staging', 'registry.yaml'),
+    [
+      'meta:',
+      '  schemaVersion: 1',
+      '  lastRefresh: null',
+      'items:',
+      '  - id: alpha',
+      '    kind: skill',
+      '    name: Alpha',
+      '    category: testing',
+      '    sourceUrl: "https://github.com/example/alpha"',
+      '    provenance: "example/alpha"',
+      '    signals:',
+      '      stars: 250',
+      '      starsDisplay: "250"',
+      '      attributedTo: "example/alpha"',
+      '    upstreamUpdatedAt: "2026-08-01T00:00:00.000Z"',
+      '    fetchedAt: null',
+      '    fetchedBy: seed',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(sessionDir, 'staging', 'evidence.md'), '# Evidence\n\nalpha: verified via WebFetch of the GitHub API.\n', 'utf8');
+  writeFileSync(
+    join(sessionDir, 'staging', 'evidence.json'),
+    JSON.stringify({ alpha: { status: 'verified', source: 'https://api.github.com/repos/example/alpha', note: 'stargazers_count=250' } }, null, 2),
+    'utf8',
+  );
+
+  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
+    project: COMMUNITY_REFRESH_PROJECT, verdict: 'approve',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; phase: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.phase, 'committed');
+  assert.equal(readPhase(sessionDir), 'committed');
+
+  const outRaw = readFileSync(communityRegistryPath(), 'utf8');
+  assert.match(outRaw, /stars: 250/, 'the real registry.yaml must reflect the committed diff');
+  assert.match(outRaw, new RegExp(`fetchedBy: community-refresh/${sessionId}`), 'the stamp must name the real session id');
+});
+
+test('TBL-communityrefresh-2: verdict reject at awaiting-review -> 200, phase -> rejected, real registry.yaml untouched', async () => {
+  writeCommunityRegistry(ALPHA_LIVE_YAML);
+  const before = readFileSync(communityRegistryPath(), 'utf8');
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(COMMUNITY_REFRESH_PROJECT, '_community-refresh', sessionId, {
+    session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
+  });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), `meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems:\n${ALPHA_LIVE_YAML}`, 'utf8');
+
+  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
+    project: COMMUNITY_REFRESH_PROJECT, verdict: 'reject',
+  });
+  const body = (await res.json()) as { ok: boolean; phase: string };
+  assert.equal(res.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.phase, 'rejected');
+  assert.equal(readPhase(sessionDir), 'rejected');
+  assert.equal(readFileSync(communityRegistryPath(), 'utf8'), before, 'a reject must never touch the real registry');
+});
+
+test('TBL-communityrefresh-3: verdict approve with a malformed staged draft -> 500, phase reverts to awaiting-review, real registry.yaml untouched', async () => {
+  writeCommunityRegistry(ALPHA_LIVE_YAML);
+  const before = readFileSync(communityRegistryPath(), 'utf8');
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(COMMUNITY_REFRESH_PROJECT, '_community-refresh', sessionId, {
+    session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
+  });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  // Malformed: "items" is a scalar, not an array — loadCommunityRegistry throws.
+  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), 'meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems: not-an-array\n', 'utf8');
+
+  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
+    project: COMMUNITY_REFRESH_PROJECT, verdict: 'approve',
+  });
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 500);
+  assert.match(body.error, /items/i);
+  assert.equal(readPhase(sessionDir), 'awaiting-review', 'a refused commit must revert to awaiting-review, never brick the session at "committing"');
+  assert.equal(readFileSync(communityRegistryPath(), 'utf8'), before, 'the real registry.yaml must be untouched by a refused commit');
+});
+
 // ===========================================================================
 // staged-review / next-turn — display-only, no write handler wired
 // ===========================================================================
@@ -638,24 +823,6 @@ test('PARITY-demo: generic verdict-approve and the bespoke /api/demo-builder/loc
 
   assert.equal(readPhase(bespokeDir), readPhase(genericDir));
   assert.equal(readPhase(genericDir), 'locking');
-});
-
-test('PARITY-kbcleanup: generic verdict-approve and the bespoke /api/studio/kbs/:id/cleanup/apply route reach the SAME phase', async () => {
-  const kbId = 'w6b4-parity-kb';
-  writeKb(kbId, '{ kind: unique }');
-  const project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  const bespokeId = freshSessionId();
-  const genericId = freshSessionId();
-  const bespokeDir = seedSession(project, '_kb-cleanup', bespokeId, { session_id: bespokeId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [] });
-  const genericDir = seedSession(project, '_kb-cleanup', genericId, { session_id: genericId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [] });
-
-  const bespokeRes = await postJson(`${bridgeUrl}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/apply`, { project, sessionId: bespokeId });
-  assert.equal(bespokeRes.status, 200, `bespoke apply expected 200, got ${bespokeRes.status}: ${await bespokeRes.text()}`);
-  const genericRes = await postJson(affordanceUrl('kb-cleanup', genericId, 'awaiting-approval-verdict'), { project, verdict: 'approve' });
-  assert.equal(genericRes.status, 200, `generic verdict expected 200, got ${genericRes.status}: ${await genericRes.text()}`);
-
-  assert.equal(readPhase(bespokeDir), readPhase(genericDir));
-  assert.equal(readPhase(genericDir), 'applied');
 });
 
 // ===========================================================================
@@ -760,29 +927,6 @@ test('RACE-1 (W6-B4 adversarial-review fix): two CONCURRENT verdict-approve POST
     1,
     `expected exactly ONE _brainfix-<runId> log dir for two concurrent approves against the same session, got ${brainfixDirs.length}: ${JSON.stringify(brainfixDirs)}`,
   );
-});
-
-test('RACE-2 (parity — the legacy bespoke route gets the SAME atomic fix): two CONCURRENT POSTs to the bespoke /api/studio/kbs/:id/cleanup/apply against the SAME session -> exactly one 200 + one 409', async () => {
-  const kbId = 'w6b4-race-legacy-kb';
-  writeKb(kbId, '{ kind: unique }');
-  const project = `${KB_SEEDING_ANCHOR_PREFIX}${kbId}`;
-  const sessionId = freshSessionId();
-  const sessionDir = seedSession(project, '_kb-cleanup', sessionId, {
-    session_id: sessionId, project, phase: 'awaiting-approval', kb_id: kbId, kb_binding: { kind: 'unique' }, findings: [],
-  });
-
-  const applyUrl = `${bridgeUrl}/api/studio/kbs/${encodeURIComponent(kbId)}/cleanup/apply`;
-  const [resA, resB] = await Promise.all([
-    postJson(applyUrl, { project, sessionId }),
-    postJson(applyUrl, { project, sessionId }),
-  ]);
-  const statuses = [resA.status, resB.status].sort((a, b) => a - b);
-  assert.deepEqual(
-    statuses,
-    [200, 409],
-    `expected exactly ONE 200 and ONE 409 for two concurrent legacy applies against the SAME session, got ${JSON.stringify([resA.status, resB.status])}`,
-  );
-  assert.equal(readPhase(sessionDir), 'applied');
 });
 
 test('HARDEN-1: answers[] with more than 64 entries -> 400 naming the cap, nothing written', async () => {

@@ -1,0 +1,172 @@
+/**
+ * sessions-index — W6-B11: the aggregate in-flight sessions surface.
+ *
+ * "Every session that needs me, in one place" — the operator lands on Home,
+ * sees the active-sessions strip (a real seeded in-flight session, needs-you
+ * flagged), follows the strip's overflow link to the full `/sessions`
+ * index, and resumes straight into the session shell from there. Entry-point
+ * rule: the clip starts at `/` (Home), not mid-flow on `/sessions` itself —
+ * the strip's "all sessions" link IS the trigger this journey proves.
+ *
+ * FIXTURE: reuses the harness's EXISTING instructions-session seeding
+ * helpers (`scripts/lib/journey-fixtures.mjs`'s `writeInstrStatus`/
+ * `cleanInstructionsSession` — the same ones knowledge.mjs/agents.mjs and
+ * others already use to seed a real instructions session) rather than
+ * inventing a new one. `SESSIONS_INDEX_SID` is disjoint from every other
+ * journey's own instructions-session ids (never home.mjs's own scratch
+ * projects, never J4, never any SHOWCASE fixture id) — seeded under the
+ * SAME `mdtoc` reference project
+ * every instructions-touching journey already writes into, at phase
+ * `awaiting-verdict` (a REAL `deriveSessionAffordances` verdict affordance —
+ * mirrors cli/ui-bridge-sessions-index.test.ts's own AT fixture shape) so
+ * both the strip's needs-you dot AND the index's `data-needs-you="true"` are
+ * driven by an honest, derivable condition, never a hand-poked flag.
+ */
+import { defineJourney } from '../lib/journey-runtime.mjs';
+import { caption, ACT, READ } from '../lib/journey-fixtures.mjs';
+import { sleep } from '../lib/journey-assertions.mjs';
+import { writeInstrStatus, cleanInstructionsSession } from '../lib/journey-fixtures.mjs';
+
+// Disjoint from home.mjs's HOME_* fixtures and every other journey's own
+// instructions-session ids.
+export const SESSIONS_INDEX_SID = 'journey-sessions-index-fixture';
+
+function seedSessionsIndexFixture() {
+  writeInstrStatus(SESSIONS_INDEX_SID, { phase: 'awaiting-verdict', round: 2 });
+}
+
+function cleanSessionsIndexFixture() {
+  cleanInstructionsSession(SESSIONS_INDEX_SID);
+}
+
+/** goto `/` and wait for Home's real readiness signal — never a fixed sleep. */
+async function gotoHomeReady(page, watch) {
+  await page.goto(watch.uiUrl + '/', { waitUntil: 'domcontentloaded' });
+  await page.waitForFunction(
+    () => document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') === 'true',
+    null, { timeout: 20000 },
+  ).catch(() => {});
+}
+
+export const journey = defineJourney({
+  id: 'sessions-index',
+  title: 'Sessions index — every in-flight session, one place',
+  story: 'As the operator, I land on Home, see a real in-flight session that needs my attention in the active-sessions strip, follow its overflow link to the full /sessions index, and resume straight into the session shell — never a dead end.',
+  beats: [
+    {
+      id: 'sessions-index-home-strip',
+      title: 'Home\'s active-sessions strip — a real needs-you session',
+      narration: 'Home\'s active-sessions strip (W6-B11, the IA-4 marked slot) renders a real in-flight session — a genuine instructions session sitting at awaiting-verdict, the same phase that drives a REAL deriveSessionAffordances verdict affordance, never a fabricated needs-you flag.',
+      drive: async (ctx) => {
+        const { page, watch, check, frame } = ctx;
+        console.log('\n[SESSIONS-IDX.1] Home — the active-sessions strip');
+        cleanSessionsIndexFixture(); // crash-safe leading sweep
+        seedSessionsIndexFixture();
+
+        // Review fix (same class as home.mjs's home-landing beat): the
+        // fixture lives under mdtoc's SHARED `_instructions/` dir, so a
+        // thrown exception anywhere below would leak it there until this
+        // journey's next run — polluting a project other journeys also
+        // depend on. Wraps the whole beat body so the seed is always swept
+        // before the error propagates.
+        try {
+          await gotoHomeReady(page, watch);
+          await caption(page, 'The active-sessions strip: a real in-flight session that needs the operator, surfaced right on Home.');
+          await sleep(READ);
+
+          const stripCount = await page.locator('section[data-section="active-sessions"]').count();
+          check(stripCount === 1, `SESSIONS-IDX.1: section[data-section="active-sessions"] renders — the seeded in-flight session fired it (got ${stripCount})`);
+
+          const stripAttrs = await page.evaluate(() => {
+            const el = document.querySelector('[data-section="active-sessions"]');
+            return el ? {
+              count: el.getAttribute('data-active-session-count'),
+              needsYou: el.getAttribute('data-needs-you-count'),
+            } : null;
+          });
+          check(stripAttrs !== null, 'SESSIONS-IDX.1: the strip carries data-active-session-count and data-needs-you-count');
+          check(parseInt(stripAttrs?.count ?? '0', 10) >= 1, `SESSIONS-IDX.1: data-active-session-count >= 1 (got "${stripAttrs?.count}")`);
+          check(parseInt(stripAttrs?.needsYou ?? '0', 10) >= 1, `SESSIONS-IDX.1: data-needs-you-count >= 1 — the seeded awaiting-verdict session (got "${stripAttrs?.needsYou}")`);
+
+          const seededCard = await page.evaluate((sid) => {
+            const el = document.querySelector(`[data-session-card][href*="${sid}"]`);
+            return el ? {
+              kind: el.getAttribute('data-session-kind'),
+              phase: el.getAttribute('data-session-phase'),
+              needsYou: el.getAttribute('data-needs-you'),
+            } : null;
+          }, SESSIONS_INDEX_SID);
+          check(seededCard !== null, 'SESSIONS-IDX.1: the seeded session renders its own card in the strip');
+          check(seededCard?.kind === 'instructions', `SESSIONS-IDX.1: the seeded card is the real instructions kind (got "${seededCard?.kind}")`);
+          check(seededCard?.needsYou === 'true', `SESSIONS-IDX.1: the seeded card is flagged needs-you — a REAL derived affordance, not fabricated (got "${seededCard?.needsYou}")`);
+
+          await frame(page, 'sessions-idx-0-home-strip', 'Home — the active-sessions strip: a real needs-you session, surfaced without hunting for it', { key: true });
+        } catch (err) {
+          cleanSessionsIndexFixture(); // shared-mdtoc fixture — never leak it on a throw
+          throw err;
+        }
+      },
+    },
+    {
+      id: 'sessions-index-overflow',
+      title: 'Following the strip to the full /sessions index',
+      narration: 'The strip\'s "all sessions" overflow link is the trigger this journey proves: clicking it lands on the real /sessions index, where the SAME seeded session appears as its own table row, sorted needs-you first — never re-derived, the SAME bridge-computed needsYou/phase the strip already showed.',
+      drive: async (ctx) => {
+        const { page, watch, check, frame } = ctx;
+        console.log('\n[SESSIONS-IDX.2] Home -> /sessions via the overflow link');
+        try {
+          await gotoHomeReady(page, watch);
+          await sleep(ACT);
+
+          await page.locator('[data-action="view-all-sessions"]').click();
+          await page.waitForFunction(
+            () => document.querySelector('[data-page="sessions-index"]')?.getAttribute('data-page-ready') === 'true',
+            null, { timeout: 15000 },
+          ).catch(() => {});
+          await caption(page, 'The full /sessions index — every in-flight session, across kinds and projects, needs-you first.');
+          await sleep(READ);
+
+          const pageAttrs = await page.evaluate(() => {
+            const m = document.querySelector('[data-page="sessions-index"]');
+            return m ? { ready: m.getAttribute('data-page-ready'), count: m.getAttribute('data-session-count') } : null;
+          });
+          check(pageAttrs !== null, 'SESSIONS-IDX.2: [data-page="sessions-index"] renders at /sessions');
+          check(pageAttrs?.ready === 'true', `SESSIONS-IDX.2: [data-page-ready="true"] once the fetch settles (got "${pageAttrs?.ready}")`);
+          check(parseInt(pageAttrs?.count ?? '0', 10) >= 1, `SESSIONS-IDX.2: data-session-count >= 1 — the seeded session is present (got "${pageAttrs?.count}")`);
+
+          const row = await page.evaluate((sid) => {
+            const el = document.querySelector(`tr[data-session-kind][href*="${sid}"], a[data-action="resume-session"][href*="${sid}"]`);
+            const tr = el ? el.closest('tr') ?? el : el;
+            return tr ? {
+              kind: tr.getAttribute('data-session-kind'),
+              phase: tr.getAttribute('data-session-phase'),
+              needsYou: tr.getAttribute('data-needs-you'),
+            } : null;
+          }, SESSIONS_INDEX_SID);
+          check(row !== null, 'SESSIONS-IDX.2: the seeded session renders its own table row');
+          check(row?.kind === 'instructions', `SESSIONS-IDX.2: the row carries the real kind (got "${row?.kind}")`);
+          check(row?.needsYou === 'true', `SESSIONS-IDX.2: the row carries the real needsYou (got "${row?.needsYou}")`);
+
+          await frame(page, 'sessions-idx-1-full-index', '/sessions — the full in-flight index, needs-you first, every kind and project in one table', { key: true });
+
+          // Resume straight into the session shell — never a dead end.
+          await page.locator(`a[data-action="resume-session"][href*="${SESSIONS_INDEX_SID}"]`).first().click();
+          await page.waitForFunction(
+            () => document.querySelector('[data-page="session"]')?.getAttribute('data-session-id') != null,
+            null, { timeout: 15000 },
+          ).catch(() => {});
+          const shell = await page.evaluate(() => {
+            const m = document.querySelector('[data-page="session"]');
+            return m ? { kind: m.getAttribute('data-session-kind'), id: m.getAttribute('data-session-id') } : null;
+          });
+          check(shell?.id === SESSIONS_INDEX_SID, `SESSIONS-IDX.2: the Resume link lands on the seeded session's own shell (data-session-id="${shell?.id}")`);
+          check(shell?.kind === 'instructions', `SESSIONS-IDX.2: the shell resolves the real kind (got "${shell?.kind}")`);
+
+          await frame(page, 'sessions-idx-2-resume', '/sessions — Resume lands straight in the real session shell, phase intact', { key: true });
+        } finally {
+          cleanSessionsIndexFixture(); // the last beat that needs the fixture
+        }
+      },
+    },
+  ],
+});

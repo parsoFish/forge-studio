@@ -945,7 +945,7 @@ export const STORY_REGISTRY = [
         { excluded: '\'Where does it attach? Nowhere, from here\' — already demonstrated by the SAME beat cited at step 4, whose closing assertion is exactly this: the finalized hook lands with data-carried-by-count="0" and the literal "Unbound — bind it from an agent\'s builder" text', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'hfile-tab-1 click (\'A hook is a PACKAGE: hook.yaml plus the guard script it runs.\') — already demonstrated by the SAME beat cited at step 4, which clicks the first of the two real [data-file-tab] elements', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'hfile-tab-2 click (\'And the replay evidence rides along.\') — already demonstrated by the SAME beat cited at step 4, which clicks the second real [data-file-tab] and asserts the two paths are distinct', decision: DECISION_ONE_REF_PER_STORY },
-        { excluded: 'accept-btn click — already demonstrated by the SAME beat cited at step 4, whose real [data-action="finalize-authoring"] click runs the actual finalize route end to end', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'accept-btn click — already demonstrated by the SAME beat cited at step 4, whose real [data-action="verdict-approve"] click (the generic SessionInteractivePanel, W6-B8) runs the actual finalize route end to end', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: '\'On the shelf: event shown, "unbound — add from Agent Builder"\' — already demonstrated by the SAME beat cited at step 4, whose closing frame is the landed hook\'s own detail page, unbound, with a clean security scan', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'goto #/agents/builder/developer — already demonstrated by the SAME beat cited at step 13 (hooks-bind), which opens developer-ralph\'s real builder', decision: DECISION_ONE_REF_PER_STORY },
         'hooks-bind',
@@ -959,8 +959,9 @@ export const STORY_REGISTRY = [
       'blocker the original note named precisely: "the remaining work is one ' +
       'OOTB authoring agent plus its runner." That agent (creation-agent) and ' +
       'its runner now exist for real: `POST /api/studio/authoring/start` opens ' +
-      'a genuine session at /sessions/authoring/<sid> (SessionAuthoringPanel, ' +
-      'the `file-package` artifact row flipped LIVE), and ' +
+      'a genuine session at /sessions/authoring/<sid> (the generic ' +
+      'SessionInteractivePanel, W6-B8 — the `file-package` artifact row ' +
+      'flipped LIVE), and ' +
       '`POST /api/studio/authoring/finalize` runs the REAL copyStagingToLibrary ' +
       'commit turn end to end, installing the landed package exactly like the ' +
       'manual /hooks/new form does. Since the drafting SDK turn itself still ' +
@@ -998,7 +999,7 @@ export const STORY_REGISTRY = [
         { excluded: 'file-tab-1 click (\'The collector script, in full\') — already demonstrated by the SAME beat cited at step 2, which asserts the real file-package pane renders the drafted content', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'file-tab-2 click (\'And the output template that keeps the operator voice.\') — the real, captured creation-agent turn this port seeds drafted exactly ONE file (SKILL.md, no scripts/templates directory) — there is no second tab to click, a genuine capture-shape fact, not a fixture choice', decision: DECISION_BUILD_SKILL_SINGLE_FILE_PACKAGE },
         { excluded: '\'File it — unbound, like every fresh definition.\' — not a distinct UI action; already demonstrated by the SAME beat cited at step 2, whose finalize click lands the package as an unapproved draft', decision: DECISION_ONE_REF_PER_STORY },
-        { excluded: 'accept-btn click — already demonstrated by the SAME beat cited at step 2, whose real [data-action="finalize-authoring"] click runs the actual finalize route end to end', decision: DECISION_ONE_REF_PER_STORY },
+        { excluded: 'accept-btn click — already demonstrated by the SAME beat cited at step 2, whose real [data-action="verdict-approve"] click (the generic SessionInteractivePanel, W6-B8) runs the actual finalize route end to end', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: '\'On the shelf, marked unbound.\' — already demonstrated by the SAME beat cited at step 2, whose closing assertions go further than the mockup depicts here: the landed draft, a real approve click, and palette-visibility checked against the REAL agent-builder catalog', decision: DECISION_ONE_REF_PER_STORY },
         { excluded: 'goto #/agents/builder/reflector — ordinary agent-builder skill composition (drag/click a catalog skill chip into Skills + save), already real and journey-proved on a different journey/agent pairing', decision: DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY },
         { excluded: 'click release-notes into the catalog — same cross-journey mechanism as the prior step', decision: DECISION_BUILD_SKILL_BINDING_CROSS_JOURNEY },
