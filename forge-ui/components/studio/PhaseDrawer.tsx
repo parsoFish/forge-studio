@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import { fetchPhaseLog } from '@/lib/studio-client';
 import type { Run, Flow, PhaseLogLine } from '@/lib/studio-client';
 import { phaseLogRefreshSignal } from '@/lib/phase-log-refresh';
@@ -749,7 +750,7 @@ function ArtifactChip({
 
   if (isGate) {
     return (
-      <a
+      <Link
         href={href}
         style={{
           ...sharedStyle,
@@ -761,15 +762,15 @@ function ArtifactChip({
         }}
       >
         ⚑ {type} — needs you
-      </a>
+      </Link>
     );
   }
 
+  // Same destination shape as the gate chip above (/artifact?run=…&type=…) —
+  // same-tab client-side routing, not a new-tab hard navigation (W6-IA-6).
   return (
-    <a
+    <Link
       href={href}
-      target="_blank"
-      rel="noreferrer"
       style={{
         ...sharedStyle,
         color: 'var(--c-artifact)',
@@ -778,7 +779,7 @@ function ArtifactChip({
       }}
     >
       {type}
-    </a>
+    </Link>
   );
 }
 

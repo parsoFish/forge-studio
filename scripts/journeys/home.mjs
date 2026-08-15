@@ -282,6 +282,22 @@ export const journey = defineJourney({
         const ready = await page.evaluate(() =>
           document.querySelector('[data-page="home"]')?.getAttribute('data-page-ready') ?? '(absent)');
         check(ready === 'true', `HOME.1: [data-page="home"][data-page-ready="true"] (got "${ready}")`);
+
+        // W6-IA-1: the header "Onboard a project" CTA is the operator's ONE
+        // onboarding entry point from Home — it must land on the real
+        // onboarding form (/projects/new), never the bare /projects index
+        // (the retired shim used to redirect there to an arbitrary
+        // already-onboarded project). `data-action="onboard-project-cta"`
+        // (not "onboard-project") — that id is reserved for
+        // ProjectOnboardForm's own submit button on /projects/new, so a
+        // page-scoped selector can never match both at once.
+        const onboardCta = await page.evaluate(() => {
+          const el = document.querySelector('[data-action="onboard-project-cta"]');
+          return el ? { href: el.getAttribute('href') } : null;
+        });
+        check(onboardCta?.href === '/projects/new',
+          `HOME.1: the "Onboard a project" CTA targets the real onboarding form, /projects/new (got "${onboardCta?.href}")`);
+
         await caption(page, 'Home — everything running, at a glance: live flows/agents, the portfolio, and what needs the operator now.');
         await sleep(READ);
 
@@ -318,6 +334,70 @@ export const journey = defineJourney({
         check(ledgerCount >= 2, `HOME.1: the ledger carries ≥2 rows — both seeded runs (got ${ledgerCount})`);
 
         await frame(page, 'home-0-landing', 'Home — the constellation: live flow + agent + project hexes, all derived from the real run-model', { key: true });
+      },
+    },
+    {
+      id: 'home-projects-index',
+      title: 'The real projects index — every project, one honest CTA',
+      narration: 'Home\'s "Onboard a project" CTA (asserted above) only proves the POINTER — it must also land somewhere real. `/projects` used to be a 23-line shim that redirected to the first registered project and dead-ended into "No projects registered." when empty; it is now a real index. Both of this journey\'s own seeded scratch projects render their own card (never just the first, the retired shim\'s bug), the grid count is verified against the REAL server-side roster (a direct `GET /api/studio/projects`, never a re-derived client guess), and the persistent onboard CTA survives onto the index itself.',
+      drive: async (ctx) => {
+        const { page, watch, check, frame } = ctx;
+        console.log('\n[HOME.1b] The real /projects index (W6-IA-1)');
+
+        // Ground truth: the REAL server-side roster, read independently of
+        // the page under test — never re-derived from the same DOM the
+        // assertions below check against (this journey's own two scratch
+        // projects, seeded by home-landing and still live, are included in
+        // it by construction — discoverProjects() walks projects/ live).
+        const projectsRes = await fetch(`${watch.bridgeUrl}/api/studio/projects`);
+        const projectsPayload = await projectsRes.json().catch(() => ({ projects: [] }));
+        const realCount = Array.isArray(projectsPayload.projects) ? projectsPayload.projects.length : -1;
+        check(realCount >= 2, `HOME.1b: sanity — the real roster includes at least this journey's own 2 seeded projects (got ${realCount})`);
+
+        await page.goto(watch.uiUrl + '/projects', { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="projects-index"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 15000 },
+        ).catch(() => {});
+        await caption(page, 'The real /projects index — every registered project, not just the first one a stale redirect used to pick.');
+        await sleep(ACT);
+
+        const pageAttrs = await page.evaluate(() => {
+          const m = document.querySelector('[data-page="projects-index"]');
+          return m ? { ready: m.getAttribute('data-page-ready'), count: m.getAttribute('data-project-count') } : null;
+        });
+        check(pageAttrs !== null, 'HOME.1b: [data-page="projects-index"] renders at /projects — the retired shim no longer redirects away from it');
+        check(pageAttrs?.ready === 'true', `HOME.1b: [data-page-ready="true"] once the fetch settles (got "${pageAttrs?.ready}")`);
+        check(parseInt(pageAttrs?.count ?? '-1', 10) === realCount,
+          `HOME.1b: data-project-count matches the REAL server-side roster, not a re-derived client guess (dom=${pageAttrs?.count}, real=${realCount})`);
+
+        const gridCount = await page.evaluate(() =>
+          parseInt(document.querySelector('[data-section="projects-grid"]')?.getAttribute('data-count') ?? '-1', 10));
+        check(gridCount === realCount,
+          `HOME.1b: the grid section's own data-count matches the same real roster (got ${gridCount}, want ${realCount})`);
+
+        // Both of THIS journey's seeded scratch projects render their own
+        // card — never just the first one on the roster (the retired shim's
+        // redirect bug this index replaces).
+        const gatedCardPresent = await page.evaluate((id) =>
+          document.querySelector(`[data-section="projects-grid"] [data-card-type="project"][data-card-id="${id}"]`) !== null,
+        HOME_GATED_PROJECT);
+        const activeCardPresent = await page.evaluate((id) =>
+          document.querySelector(`[data-section="projects-grid"] [data-card-type="project"][data-card-id="${id}"]`) !== null,
+        HOME_ACTIVE_PROJECT);
+        check(gatedCardPresent && activeCardPresent,
+          `HOME.1b: BOTH seeded projects render their own card on the index (gated=${gatedCardPresent}, active=${activeCardPresent})`);
+
+        // The persistent header CTA survives onto the index page itself —
+        // present regardless of roster size, always the real onboarding form.
+        const cta = await page.evaluate(() => {
+          const el = document.querySelector('[data-action="onboard-project-cta"]');
+          return el ? { href: el.getAttribute('href') } : null;
+        });
+        check(cta?.href === '/projects/new',
+          `HOME.1b: the persistent "Onboard a project" CTA is present on the index and targets /projects/new (got "${cta?.href}")`);
+
+        await frame(page, 'home-0b-projects-index', 'Home — the real /projects index: every registered project its own card, never just the first', { key: true });
       },
     },
     {

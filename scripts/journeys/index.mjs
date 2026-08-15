@@ -228,6 +228,7 @@ export const JOURNEYS = [
 
 export const RUN_ORDER = [
   ['home', 'home-landing'],
+  ['home', 'home-projects-index'],
   ['home', 'home-attention'],
   ['home', 'home-clickthrough'],
 
@@ -282,6 +283,7 @@ export const RUN_ORDER = [
   ['knowledge', 'knowledge-kb-cleanup-approve'],
   ['knowledge', 'knowledge-explore-tabs'],
 
+  ['agents', 'agents-index-roster'],
   ['agents', 'agents-starters'],
   ['agents', 'agents-scratch-build'],
   ['agents', 'agents-builder'],

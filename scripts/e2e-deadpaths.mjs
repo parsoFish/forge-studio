@@ -38,6 +38,13 @@ const ROUTES = [
   { path: '/agents/developer-ralph/run/nonexistent-run-e2e-deadpath', name: 'agent run view (unknown runId — 404/not-found)' },
   { path: '/projects', name: 'projects index' },
   { path: '/projects/new', name: 'project onboarding' },
+  // W6-IA-2: the flows pillar's own browse index (card grid, reuses
+  // FlowCard) — new alongside the pre-existing /flows/[id] monitor+build and
+  // /flows/new routes below. `StudioNav`'s Flows nav item still deep-links
+  // straight to /flows/forge-develop (repointed in a later lane, IA-5), so
+  // this route isn't reachable from the nav yet, but it renders a real
+  // [data-page] and must not read as a dead path.
+  { path: '/flows', name: 'flows index (W6-IA-2)' },
   { path: '/flows/forge-develop', name: 'flow monitor (seed)' },
   // R6-01 WI-2 (F4): the flow-run analogue of the agent-run entry above — an
   // UNKNOWN runId on a REAL seed flow (forge-develop) must render the honest
@@ -104,7 +111,34 @@ async function startWatch() {
     proc.stdout.on('data', onData);
     proc.stderr.on('data', onData);
     proc.on('error', rej);
-    setTimeout(() => { if (!settled) rej(new Error('forge studio not ready in 90s')); }, 90000);
+    // W6-P3 review finding #4: `forge studio` now serves a PRODUCTION build
+    // by default (no --dev here, deliberately — this harness exercises what
+    // the operator actually runs), so readiness now includes a one-time
+    // `next build` before `next start` can bind. Budget = the pre-existing
+    // 90s (bridge start + port takeover + `next start` bind + first-request
+    // probe — unchanged from the old next-dev budget) PLUS a build-specific
+    // allowance measured directly: a cold `npm run build --workspace
+    // forge-ui` on the machine this was authored on took 18.06s wall-clock
+    // (`/usr/bin/time -v`, 200% CPU); +50% margin rounds to 30s. First run
+    // (or any run after forge-ui source changes) pays this; a warm/fresh
+    // `.next/` skips the build entirely and is fast. NOTE: the 30s margin is
+    // a SINGLE-SAMPLE measurement from one machine, not a calibrated
+    // distribution — re-measure (and re-derive the margin) if forge-ui's
+    // source tree/dependency graph grows enough to meaningfully slow `next
+    // build`.
+    setTimeout(() => {
+      if (settled) return;
+      // Kill the whole process group (negative pid — `proc` was spawned
+      // `detached: true`, making it its own group leader), mirroring
+      // verify-cycle.mjs's boot-timeout handler. A build-overrun rejection
+      // here previously left the half-booted, detached `forge studio`
+      // running with nothing to reap it — the exact zombie-on-4123/4124
+      // failure verify-cycle.mjs's own comment cites from 2026-07-11,
+      // now more likely to trip since this harness's timeout absorbs a
+      // cold production build.
+      try { process.kill(-proc.pid, 'SIGKILL'); } catch { try { proc.kill('SIGKILL'); } catch { /* already dead */ } }
+      rej(new Error('forge studio not ready in 120s; spawned watch killed'));
+    }, 120000);
   });
 }
 
@@ -153,7 +187,11 @@ async function sweepOnce(page, baseUrl, check, pass) {
 }
 
 async function main() {
-  console.log('[deadpaths] booting forge studio (cold compile ~20-40s)…');
+  // W6-P3: forge studio serves a production build by default now — the FIRST
+  // cold run (or any run after forge-ui source changed) pays a one-time
+  // `next build` (measured ~18s on the authoring machine) before `next
+  // start` binds; a fresh `.next/` skips straight to `next start`.
+  console.log('[deadpaths] booting forge studio (cold run pays a one-time production build, ~20-40s; warm re-runs skip it)…');
   const watch = await startWatch();
   console.log(`[deadpaths] ready: ${watch.uiUrl}`);
   try { execSync(`curl -s -m 60 ${watch.uiUrl}/ -o /dev/null`); } catch { /* warm */ }

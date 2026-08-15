@@ -43,6 +43,7 @@
  */
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import Link from 'next/link';
 import {
   dispatchAgentRun,
   parseRunInputs,
@@ -168,9 +169,9 @@ export function RunPanel({
       <section data-component="run-panel" data-section="agent-run" data-run-dispatchable="false" style={RUN_PANEL_STYLE}>
         <h3 style={{ margin: '0 0 6px', fontSize: 13 }}>Run</h3>
         {sessionEntryHref ? (
-          <a data-action="go-to-session" href={sessionEntryHref} className="btn btn-primary">
+          <Link data-action="go-to-session" href={sessionEntryHref} className="btn btn-primary">
             Go to session
-          </a>
+          </Link>
         ) : (
           <p data-component="session-entry-missing" className="muted" style={{ fontSize: 12, margin: 0 }}>
             Interactive agent — no reachable session entry point yet.

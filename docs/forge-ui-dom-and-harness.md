@@ -119,6 +119,40 @@ inventory rather than one shared page-level contract:
   `provenanceOfFlowOrigin` is deleted. Flow cards also carry one badge per
   declared trigger — `[data-trigger-badge]` (value is the trigger's `on` kind)
   with a `title="<kind> → <target ref>"` tooltip (R2-04-F4).
+- **`/flows` — the flows index (W6-IA-2).** The flows pillar's own browse
+  surface, added alongside the pre-existing `/flows/[id]` and `/flows/new`
+  routes below — until this landed there was no way to browse every flow
+  except via `/library`'s flows section. Root:
+  `main[data-page="flows-index"][data-page-ready][data-flow-count]`. The body
+  is a separate presentational component, `FlowsIndexBody`
+  (`components/studio/FlowsIndexBody.tsx`, render-tested directly since the
+  page itself fetches via `useEffect` — the same known SSR-render gap as
+  every other dynamic Studio page). "What counts as empty" mirrors
+  `/library`'s own `hasUserFlow` first-run key (review-round fix — a naive
+  `flows.length === 0` check is dead code on any real install, which ships
+  ~5 OOTB seed flows), giving **three** states: **true-empty**
+  (`flows.length === 0`, an artificial state kept honest rather than assumed
+  unreachable) renders `[data-component="flows-zero-state"]`; **first-run**
+  (OOTB flows exist but none carry `origin: "studio"`) renders
+  `[data-component="flows-first-run"]` **above** the still-visible grid, not
+  instead of it; **steady-state** (a user-authored flow exists) renders the
+  grid alone. Both "build your first flow" CTAs (true-empty + first-run)
+  carry `[data-action="new-flow-first"]` (`href="/flows/new"`) — deliberately
+  DISTINCT from the page header's own always-visible
+  `[data-action="new-flow"]` CTA (same target, mirroring `/library`'s
+  per-section "+ New X" convention), so automation can tell the one-time
+  onboarding nudge apart from the persistent create affordance instead of
+  matching two identically-tagged actions. One or more flows renders
+  `[data-component="flows-grid"]`, one **REAL, reused** `FlowCard` per flow
+  (same card as the library shelf's flows section — same
+  `data-card-type="flow"` contract, byte-identical rendering, including its
+  live `data-flow-status`/`data-flow-gated-count`/`data-flow-failed-count`).
+  The page subscribes to the bridge's `cycle-list-changed` event and
+  re-fetches runs on it (mirrors `/library`'s own `loadAll`/`refreshRuns`
+  split) so those run-derived badges stay live rather than freezing at the
+  page's initial load. `StudioNav`'s Flows nav item still deep-links straight
+  to `/flows/forge-develop`, not here — repointing it is a later lane
+  (IA-5).
 - **`/flows/[id]` — monitor + build.** `[data-page="flow-monitor"][data-flow-id][data-page-ready][data-run-count][data-can-start][data-active-tab]`
   (`data-active-tab` is `monitor | build`). MONITOR renders the run's hex
   topology (`FlowTopology.tsx`): each node is
@@ -205,9 +239,10 @@ inventory rather than one shared page-level contract:
   id; kind is the trigger's `on`).
 - **`/artifact` — the unified gate/artifact viewer + the review/reflect
   redirect stubs.** `?run=<id>&type=plan|workitems|pr|demo|verdict|reflection&mode=gate|view`;
-  root carries `[data-page="flows"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
-  (that `data-page="flows"` value is the page's own literal, not a typo —
-  every gate/artifact moment folded into this one route). `type=verdict&mode=gate`
+  root carries `[data-page="artifact"][data-page-ready][data-run][data-artifact-type][data-mode][data-gate-state]`
+  (W6-IA-6: fixed from a stale `data-page="flows"` literal — a page-identity
+  mismatch, not a deliberate shared-surface value; every gate/artifact moment
+  is still folded into this one route). `type=verdict&mode=gate`
   is the sole review gate: the adversarial-review findings panel (R4-08-F3,
   rendered in BOTH verdict modes when the artifact exists; absent ⇒ nothing) —
   `[data-section="review-findings"][data-findings-count]` with per-row
@@ -411,6 +446,55 @@ inventory rather than one shared page-level contract:
   independently confirms by staying `"not-installed"` after a suppressed
   attempt). Action errors surface as `[data-component="community-action-error"]`.
 
+- **`/agents` — the agents index (T2 lane W6-IA-3, 2026-08-15).** New route;
+  did not exist before. `StudioNav`'s "Agents" nav item still points at
+  `/agents/new` (IA-5's concern, untouched here) — this route gives agents
+  a browsable index of their own, reachable by direct navigation. Root:
+  `main[data-page="agents-index"][data-page-ready][data-agent-count]`. Two
+  independently-ready sections (two different fetches, never one shared
+  "loading" flag — a page-level `ready` gates the roster, a separate
+  `recentRunsReady` gates the runs section, so neither section's honest
+  loading/empty state ever depends on the other's fetch latency):
+  - `section[data-section="agent-roster"][data-count]` — the full roster as
+    REAL `AgentCard`s (`components/studio/LibraryCard.tsx`, reused
+    UNCHANGED — the SAME card `/library`'s own agents pillar renders),
+    linking to `/agents/<id>`, plus a `a[data-action="new-agent"]` CTA to
+    `/agents/new`. `[data-component="agent-roster-loading"]` before the
+    roster fetch resolves, `[data-component="agent-roster-empty"]` once
+    resolved with zero agents — honest-empty, never a fabricated card.
+  - `section[data-section="recent-agent-runs"]` — a cross-agent "recent
+    runs" ledger, rendered by the SAME shared `HistoryLedger.tsx` the flow
+    monitor and `/agents/[id]`'s own per-agent ledger use (reused
+    UNCHANGED, D2 — so the row contract documented once under `/flows/[id]`
+    and restated for `/agents/[id]` below is **not restated a third time
+    here**). `[data-component="recent-agent-runs-loading"]` before this
+    fetch resolves. **There is no aggregate "all agents" bridge route** —
+    `lib/agents-index.ts`'s `fetchRecentAgentRuns` fans the existing
+    per-agent `GET /api/agents/:slug/history` out across the whole roster
+    in bounded-concurrency batches of `AGENT_HISTORY_FAN_OUT_BATCH_SIZE` (6,
+    plain chunking, no new dependency — a roster of dozens of agents must
+    not fire one simultaneous bridge request per agent), merges the "found"
+    rows, **dedupes by `row.id`**, and re-sorts the WHOLE merged set
+    newest-first (`sortLedgerRowsNewestFirst`, reused unchanged) before
+    bounding to `RECENT_AGENT_RUNS_LIMIT` (20). The dedupe step is
+    **required, not cosmetic**: `HistoryLedger.tsx` keys each rendered row
+    on `row.id` (`key={row.id}`) — an implicit contract every consumer of
+    that shared component must uphold. A single flow run with two nodes
+    owned by two different agents resolves to two rows sharing the SAME
+    `row.id` (different `row.href`/node) once both agents' histories are
+    merged here; without the dedupe step in `mergeRecentAgentRuns` (BEFORE
+    the merged rows ever reach `HistoryLedger`), that is a duplicate React
+    key, not merely a double-listing. KNOWN LIMITATION (documented in that
+    module's header, not closed here): which specific node's `href`
+    survives for a deduped id is whichever agent's fetch happened to
+    flatten first — arbitrary from the caller's perspective. A server-side
+    aggregate route could dedupe by (run, node) with real knowledge of the
+    flow topology instead of this incidental ordering; this client-side
+    join cannot. Journey coverage:
+    `scripts/journeys/agents.mjs`'s `agents-index-roster` beat (roster +
+    CTA + ledger-mount + roster-card-navigates-to-builder only — the ledger
+    row contract itself is pinned elsewhere, this beat only proves the
+    route reuses it).
 - **`/agents/[id]`** — the agent builder: `[data-page="agents"][data-page-ready][data-agent-id][data-dirty]`;
   the catalog palette renders `[data-id]` chips; Advanced is collapsed by
   default (`[data-section="advanced"][data-advanced-open]`) behind which sit
@@ -673,9 +757,47 @@ inventory rather than one shared page-level contract:
   `0`** with `[data-component="node-outputs-empty"]`: no per-node artifact
   source exists (`artifactsReady` is run-level and keyed by artifact TYPE),
   and attributing it to a node would be run-level data worn as per-node fact.
-- **`/projects` + `/projects/[id]` — editor + roadmap.** Bare `/projects`
-  just redirects to the first registered project
-  (`[data-page="projects-index"]` while empty/loading). The project page is
+- **`/projects` — the real projects index (W6-IA-1, 2026-08-15).** Was a
+  23-line shim that fetched the roster only to redirect straight to the FIRST
+  registered project (an operator-initiated onboard from Home landed on an
+  arbitrary already-onboarded project's editor) and rendered dead-end "No
+  projects registered." text with no CTA once empty. Now a real index:
+  `[data-page="projects-index"][data-page-ready][data-project-count]` with a
+  persistent header `[data-action="onboard-project-cta"]` CTA (→
+  `/projects/new`) and a card grid — `[data-section="projects-grid"]
+  [data-count]` — reusing the SAME `ProjectCard` (`components/studio/
+  LibraryCard.tsx`) the Library page's projects section renders (one card,
+  two shelves), each linking to its own `/projects/<id>`. Zero-state
+  (`[data-section="projects-empty"]`, honestly gated on `ready &&
+  projects.length === 0` — never flashed mid-fetch) offers BOTH an onboard
+  CTA and a greenfield-create CTA (`[data-action="create-project-cta"]`),
+  both routing to `/projects/new` (the one form hosts both paths); never
+  terminal text. The presentational piece
+  (`components/studio/ProjectsIndex.tsx`'s `ProjectsIndexBody`) is
+  pure/props-driven — no fetch, no `useEffect` — so it is unit-render-tested
+  directly (`lib/projects-index-render.test.ts`, the no-jsdom
+  `renderToStaticMarkup` pattern `lib/library-card-render.test.ts`
+  established); `app/projects/page.tsx` is only the fetch-and-`useState`
+  shell (mirrors Library's own `loadAll` shape). Home's (`/`) own "Onboard a
+  project" header CTA now targets `/projects/new` directly rather than this
+  index (previously `/projects`, which the redirect made a random-project
+  trap) and was renamed `[data-action="onboard-project-cta"]` — distinct
+  from `ProjectOnboardForm`'s own submit button on `/projects/new`, which
+  keeps `[data-action="onboard-project"]` (the two ids never collided on the
+  same page, but shared one name for two different operations — link-navigate
+  vs. form-submit — which this index's own CTAs also now follow). Journey
+  coverage: `scripts/journeys/home.mjs`'s `home-landing` beat asserts the
+  Home CTA's own href; its `home-projects-index` beat (the very next beat,
+  while `home-landing`'s two seeded scratch projects are still live) is the
+  one that actually NAVIGATES to `/projects` and asserts the index's own
+  contract — `data-page="projects-index"`, `data-page-ready`, both seeded
+  projects' own cards present, `data-project-count`/the grid's `data-count`
+  matching a REAL `GET /api/studio/projects` read (never a re-derived client
+  guess), and the persistent onboard CTA surviving onto the index page
+  itself. An upstream link's href is not the same claim as the destination's
+  own DOM contract — this beat exists to cover the latter, not duplicate the
+  former.
+- **`/projects/[id]` — editor + roadmap.** The project page is
   `[data-page="projects"][data-project-id][data-dirty][data-page-ready][data-demo-design-state]`
   with an Editor/Roadmap tab bar (`[data-tab="editor"|"roadmap"][data-tab-active]`).
   Roadmap renders `RoadmapDag.tsx` (R4-13, replacing the retired

@@ -15,7 +15,7 @@
  *   workitems / pr / reflection → view only (no gate bar)
  *
  * data-* contract (main):
- *   data-page="flows", data-page-ready, data-run, data-artifact-type,
+ *   data-page="artifact", data-page-ready, data-run, data-artifact-type,
  *   data-mode, data-gate-state
  *
  * Preserved from existing components:
@@ -571,7 +571,7 @@ function ArtifactPageInner() {
 
   return (
     <div
-      data-page="flows"
+      data-page="artifact"
       data-page-ready={ready ? 'true' : 'false'}
       data-run={runId}
       data-artifact-type={type}
@@ -605,7 +605,7 @@ function ArtifactPageInner() {
           <span>{runId || '—'}</span>
           <span style={{ color: 'var(--line-2)' }}>/</span>
           <span style={{ color: 'var(--c-artifact)' }}>{type.toUpperCase()}</span>
-          <a
+          <Link
             href={monitorHref}
             style={{
               display: 'inline-flex',
@@ -622,7 +622,7 @@ function ArtifactPageInner() {
             }}
           >
             ← back to monitor
-          </a>
+          </Link>
         </div>
 
         {/* Artifact header */}

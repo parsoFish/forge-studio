@@ -627,19 +627,19 @@ function OnboardWithAgent({ projectId }: { projectId: string }) {
       {error && <p className="save-hint save-hint-dirty" style={{ marginTop: 6 }}>{error}</p>}
       {runId && (
         <div style={{ marginTop: 8, fontSize: 12 }}>
-          <div>run <code>{runId}</code> — <a href="/agents/onboarding-agent">agent page</a></div>
+          <div>run <code>{runId}</code> — <Link href="/agents/onboarding-agent">agent page</Link></div>
           <div>
             status: <strong>{runState}</strong>
             {status ? ` · $${status.costUsd.toFixed(4)} · ${status.events} events` : ''}
           </div>
           {sessionId && (
             <div style={{ marginTop: 4 }}>
-              <a
+              <Link
                 data-action="view-onboarding-session"
                 href={`/sessions/onboarding/${encodeURIComponent(sessionId)}?project=${encodeURIComponent(projectId)}`}
               >
                 View onboarding session →
-              </a>
+              </Link>
             </div>
           )}
         </div>
@@ -868,10 +868,10 @@ function ProjectOnboardForm() {
                 ))}
               </ul>
               {pendingId && (
-                <a className="btn" data-action="open-onboarded-project" href={`/projects/${encodeURIComponent(pendingId)}`}
+                <Link className="btn" data-action="open-onboarded-project" href={`/projects/${encodeURIComponent(pendingId)}`}
                   style={{ marginTop: 12, display: 'inline-block', textDecoration: 'none' }}>
                   Open the project editor anyway →
-                </a>
+                </Link>
               )}
             </div>
           )}

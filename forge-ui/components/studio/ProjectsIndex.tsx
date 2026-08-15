@@ -1,0 +1,109 @@
+'use client';
+
+import type { Kb, Project } from '@/lib/studio-client';
+import { StudioPage } from '@/components/StudioPage';
+import { ProjectCard } from './LibraryCard';
+
+// ---------------------------------------------------------------------------
+// ProjectsIndexBody — the real /projects index (W6-IA-1), replacing the
+// 23-line shim that used to redirect straight to the first registered
+// project and render dead-end "No projects registered." text when there were
+// none.
+//
+// Pure, props-driven presentational component — no fetch, no `useEffect` —
+// so it renders identically under `react-dom/server`'s `renderToStaticMarkup`
+// in a unit test (`lib/projects-index-render.test.ts`) and inside the real
+// `app/projects/page.tsx` fetch-and-`useState` wrapper (mirrors
+// `app/library/page.tsx`'s own `loadAll` shape, scoped to just
+// projects+kbs). `ProjectCard` is the SAME component the Library page's
+// projects section renders — one card, two shelves.
+// ---------------------------------------------------------------------------
+
+export function ProjectsIndexBody({
+  projects,
+  kbs,
+  ready,
+}: {
+  projects: Project[];
+  kbs: Kb[];
+  ready: boolean;
+}) {
+  // Zero-state is honest: only once the first fetch has actually settled
+  // (`ready`) AND the roster is genuinely empty — an in-flight fetch must
+  // never flash a false "no projects" before real data arrives.
+  const isEmpty = ready && projects.length === 0;
+
+  return (
+    <StudioPage
+      dataPage="projects-index"
+      ready={ready}
+      data={{ 'data-project-count': projects.length }}
+      eyebrow="forge studio"
+      title="Projects"
+      lede="Every project forge can build. Open one to work its editor and roadmap, or bring a new repo online."
+      actions={
+        <a
+          className="btn btn-primary"
+          href="/projects/new"
+          data-action="onboard-project-cta"
+          style={{ textDecoration: 'none' }}
+        >
+          Onboard a project
+        </a>
+      }
+    >
+      {isEmpty ? (
+        <section
+          data-section="projects-empty"
+          aria-label="No projects yet"
+          style={{
+            padding: '28px 30px',
+            background: 'var(--panel)',
+            border: '1px solid var(--line)',
+            borderRadius: 'var(--radius)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 14,
+          }}
+        >
+          <h2 style={{ fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 700, color: 'var(--text)', margin: 0 }}>
+            No projects yet
+          </h2>
+          <p style={{ fontSize: 13.5, color: 'var(--dim)', maxWidth: 560, lineHeight: 1.6, margin: 0 }}>
+            Onboard an existing repository so a flow can build it, or start a greenfield project
+            with no repo checked out yet — both open the same onboarding form.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a
+              className="btn btn-primary"
+              href="/projects/new"
+              data-action="onboard-project-cta"
+              style={{ textDecoration: 'none' }}
+            >
+              Onboard a project
+            </a>
+            <a
+              className="btn"
+              href="/projects/new"
+              data-action="create-project-cta"
+              style={{ textDecoration: 'none' }}
+            >
+              Start a greenfield project
+            </a>
+          </div>
+        </section>
+      ) : (
+        <div
+          className="card-grid"
+          data-section="projects-grid"
+          data-count={projects.length}
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(288px, 1fr))', gap: 14 }}
+        >
+          {projects.map((p, i) => (
+            <ProjectCard key={p.id} project={p} kbs={kbs} index={i} />
+          ))}
+        </div>
+      )}
+    </StudioPage>
+  );
+}
