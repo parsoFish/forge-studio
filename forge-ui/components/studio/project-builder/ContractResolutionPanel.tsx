@@ -54,7 +54,6 @@ export function ContractResolutionPanel({
   clauses,
   boundKbId,
   onChanged,
-  onDemoSessionStarted,
 }: {
   projectId: string;
   clauses: PreflightClause[];
@@ -65,10 +64,6 @@ export function ContractResolutionPanel({
    *  brain-fix agent-tier button is navigable or must render disabled. */
   boundKbId: string | null;
   onChanged?: () => void;
-  /** R1-03-F2: a demo-builder resolution spawned a session — the project page
-   *  shows it inline via DemoBuilderPanel rather than navigating to the
-   *  (now-retired) standalone /demo/<sid> route. */
-  onDemoSessionStarted?: (sessionId: string) => void;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<string | null>(null);
@@ -102,8 +97,11 @@ export function ContractResolutionPanel({
       const s = await startInstructions({ project: projectId, mode: 'init' });
       if (s.ok && s.sessionId) router.push(`/sessions/instructions/${encodeURIComponent(s.sessionId)}`);
     } else if (r.route === 'demo-builder') {
+      // W6-B10 (R1-03-F2 reversed): navigates straight to the dedicated
+      // session screen, exactly like the 'instructions' branch above —
+      // there is no inline panel to hand a started session off to anymore.
       const s = await startDemoBuilder({ project: projectId, mode: 'create' });
-      if (s.ok && s.sessionId) onDemoSessionStarted?.(s.sessionId);
+      if (s.ok && s.sessionId) router.push(`/sessions/demo/${encodeURIComponent(s.sessionId)}?project=${encodeURIComponent(projectId)}`);
     } else if (r.route === 'brain-fix') {
       // Defense in depth: the button itself is disabled whenever
       // boundKbId is null (isAgentRouteBlocked, below) so this branch
@@ -112,7 +110,7 @@ export function ContractResolutionPanel({
       if (boundKbId) router.push(brainFixHref(boundKbId));
       else setMsg(BRAIN_FIX_UNBOUND_HINT);
     }
-  }, [projectId, router, onDemoSessionStarted, boundKbId]);
+  }, [projectId, router, boundKbId]);
 
   const submitUser = useCallback(async (c: PreflightClause) => {
     const instruction = (notes[c.id] ?? '').trim();
