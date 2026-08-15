@@ -122,6 +122,16 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       'adversarial-review',
       'architect',
       'brain-ingest',
+      // W6-CR-3: community-refresh — the FIRST interactive session-kind agent
+      // to declare `library: true` (unlike creation-agent/brain-maintenance/
+      // demo-builder/instructions-creator/project-brain-builder, which all
+      // opt out with `library: false`) — a deliberate choice: it is the one
+      // interactive agent meant to be operator-discoverable as a real forge
+      // capability (kicked off from its own /community entry point), not an
+      // internal bridge-dispatched setup helper. See
+      // orchestrator/agent-dispatch.test.ts's COMPLEMENT PIN for the
+      // consequence this has on the roster's interactivity invariant.
+      'community-refresh',
       // R4-18: contract-check is the declaration carrier + display identity
       // for the onboard-project flow's contract gate (the onboard-preflight
       // band guard) — a composition.guards entry and studio/catalog.yaml row,
@@ -147,7 +157,7 @@ test('listAgentDefinitions returns the studio agent roster', () => {
       // mirrors reflector) — it runs post-approval, pre-merge.
       'release-finalizer',
     ],
-    `Expected the 11-agent studio roster; got: ${slugs.join(', ')}`,
+    `Expected the 12-agent studio roster; got: ${slugs.join(', ')}`,
   );
 });
 

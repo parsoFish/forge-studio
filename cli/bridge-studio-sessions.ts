@@ -174,6 +174,18 @@ export function invalidSessionIdReason(id: string): string | null {
   return null;
 }
 
+// W6-CR-3 — the community-refresh session anchors under this ONE fixed,
+// dot-prefixed pseudo-project (mirrors KB_SEEDING_ANCHOR_PREFIX's own
+// non-project carve-out immediately below, but unparameterized: there is
+// exactly ONE community registry, forge-wide, not N per-id KBs, so a single
+// literal constant is the honest shape rather than a prefix + variable slug).
+// `discoverProjects` (orchestrator/studio/registry.ts) already filters every
+// dot-prefixed directory, so this anchor never surfaces as a phantom
+// project. Exported so cli/ui-bridge.ts's `/api/studio/community-refresh/
+// start` route and cli/bridge-studio-affordances.ts's generic verdict
+// dispatch both use the SAME literal rather than each hand-typing it.
+export const COMMUNITY_REFRESH_PROJECT_ANCHOR = '.community-registry';
+
 export function invalidProjectReason(id: string): string | null {
   if (id.length === 0) {
     return 'project query parameter must not be empty';
@@ -194,6 +206,12 @@ export function invalidProjectReason(id: string): string | null {
       return null;
     }
     return `invalid KB seeding anchor "${id}" — the id after "${KB_SEEDING_ANCHOR_PREFIX}" must match ${SLUG_RE}`;
+  }
+  // W6-CR-3 — the SAME bounded carve-out for the community-refresh anchor:
+  // EXACTLY this one literal value is allowed, never a general leading-"."
+  // exemption.
+  if (id === COMMUNITY_REFRESH_PROJECT_ANCHOR) {
+    return null;
   }
   if (!SLUG_RE.test(id)) {
     return `invalid project "${id}" — must match ${SLUG_RE} (a single lowercase-kebab slug; no "/", "\\", ".", or "..")`;

@@ -569,6 +569,23 @@ inventory rather than one shared page-level contract:
   never invented as an attribute value), and `data-has-signals="false"`
   renders "no signals published" rather than a fabricated zero.
 
+  **Refresh entry (W6-CR-3, 2026-08-15).** `[data-action="refresh-community-registry"]`
+  (a real `<a href="/sessions/community-refresh/new">`, rendered via
+  `StudioPage`'s `actions` header slot — never a bespoke button) is the
+  ONLY thing on this browser that can ever change what it shows: the
+  registry is a declared list forge does not crawl on its own (D10 —
+  `studio/community/hubs.yaml`'s own header), so an operator explicitly asks
+  the community-refresh agent for a verified pass. The link lands on the
+  SAME generic `/sessions/[kind]/new` kickoff surface B6 built for every
+  other interactive kind (see below), just with `selector:"none"` — no
+  project/KB to pick, since the registry is forge's own single file. The
+  agent's draft (a `staging/registry.yaml` diff + `staging/evidence.md`)
+  stops for an explicit operator `approve`/`reject` verdict before anything
+  here ever changes; a `reject`ed draft never touches this browser's data at
+  all. Registry rows this browser has never been refreshed for keep
+  rendering the honest "seed — never verified" freshness state below —
+  refreshing is additive, never retroactive.
+
   **Sorting (W6-CR-2), operator-locked — SIMPLE SORTS ONLY**: `name`,
   `stars`, `updated`, `source`; there is deliberately no search/facets/tags
   sort. A native `select[data-community-sort]` picks the key, and
@@ -589,8 +606,11 @@ inventory rather than one shared page-level contract:
   `[data-component="freshness-badge"][data-freshness="seed"|"stale"|"fresh"]`
   span (`forge-ui/lib/community-view.ts`'s `freshnessBadge`): `fetchedAt:
   null` renders the spec-literal "seed — never verified" (every item sourced
-  from `studio/community/registry.yaml` today, since no refresh pass has
-  ever run — see that file's own header); a `fetchedAt` older than 30 days
+  from `studio/community/registry.yaml` today reads this way — the
+  community-refresh agent's `commitRegistryDraft` finalizer stamps a real
+  `fetchedAt` only on a row it actually verified this pass, W6-CR-3; an item
+  no operator has ever run a refresh against keeps this honest seed state
+  indefinitely, never a fabricated verification date); a `fetchedAt` older than 30 days
   reads "stale"; anything fresher renders a relative time ("3h ago", "2d
   ago"). **A raw date is NEVER rendered for a null `fetchedAt`** — this is
   the freshness-honesty contract the badge exists to enforce.
@@ -1567,12 +1587,17 @@ inventory rather than one shared page-level contract:
   computes for the StageHex burst chips on the bespoke panels, now also
   handed to this one.
 - **`/sessions/[kind]/new` — the ONE kickoff screen for every session kind
-  (W6-B6, 2026-08-15).** `app/sessions/[kind]/new/page.tsx`. Kind context
+  (W6-B6, 2026-08-15; W6-CR-3, 2026-08-15 adds the `selector:"none"` case).**
+  `app/sessions/[kind]/new/page.tsx`. Kind context
   card (agent slug + `SKILL.md` path, produced artifact label, session
   directory shape) + a project select (`[data-field="kickoff-project"]`,
   datalist-backed, mirroring `NewIdeaBox`/`AuthoringLauncher`'s own
-  convention) or, for `kb-cleanup` only, a KB select
-  (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`) + a
+  convention), or, for `kb-cleanup` only, a KB select
+  (`[data-field="kickoff-kb"]`, sourced from `fetchStudioKbs()`), or, for
+  `community-refresh` only, **no selector section renders at all**
+  (`[data-section="kickoff-selector"]` is absent from the DOM, not merely
+  empty — the community registry is forge's own single, forge-wide file,
+  not a per-project/per-KB artifact) — plus a
   free-text prompt field for the ONE kind whose `/start` body requires one
   (`authoring` — `[data-field="kickoff-prompt"]`; every other kickoff kind
   takes its brief on a LATER turn, via its own bespoke panel's briefing
@@ -1586,13 +1611,17 @@ inventory rather than one shared page-level contract:
   a read-only chip (`[data-field="kickoff-model-fixed-chip"]`) naming
   `runtime.model` for `strategy:fixed`; widening a skill's range is a
   `SKILL.md` edit, never a UI decision. `[data-action="start-session"]`
-  POSTs the kind's existing `/start` route (now every one of the five client
+  POSTs the kind's existing `/start` route (now every one of the six client
   wrappers — `startInstructions`/`startDemoBuilder`/`startProjectBrain`/
-  `startAuthoring`/`startKbCleanup` — threads an optional `modelTier` onto
-  the wire, validated server-side against the SKILL-declared envelope,
-  W6-B5's seam) and `router.push`es onto `/sessions/<kind>/<sid>?project=<p>`
-  on success. Kickoff kinds: `instructions`, `demo`, `kb-cleanup`,
-  `authoring`, `project-brain`. `architect` is explicitly OUT —
+  `startAuthoring`/`startKbCleanup`/`startCommunityRefresh` — threads an
+  optional `modelTier` onto the wire, validated server-side against the
+  SKILL-declared envelope, W6-B5's seam) and `router.push`es onto
+  `/sessions/<kind>/<sid>?project=<p>` on success (`project` for
+  `community-refresh` is the server-resolved fixed anchor
+  `.community-registry`, echoed back on the `/start` response — the
+  kickoff page never invents or requires one). Kickoff kinds:
+  `instructions`, `demo`, `kb-cleanup`, `authoring`, `project-brain`,
+  `community-refresh`. `architect` is explicitly OUT —
   `kind === 'architect'` renders a small link-out card to `/architect/new`
   rather than duplicating `NewIdeaBox` (ADR-043 amendment §4: architect
   stays bespoke, kickoff included).

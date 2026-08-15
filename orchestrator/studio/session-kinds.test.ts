@@ -295,15 +295,20 @@ describe('SESSION_STAGES + SESSION_ARTIFACT_KINDS — closed vocabularies', () =
   // session kind (creation-agent). Appended at the end (it is a standalone
   // single-stage session, unrelated to the ordered onboarding sequence
   // contract→instructions→secrets→demo→roadmap→brain the other 6 tokens
-  // encode). RED at branch base: today's real, unmodified session-kinds.ts
-  // still exports exactly the 6-token array with no 'authoring' member —
-  // this deepEqual (which subsumes plain membership, RED-1a's ask) fails
-  // until the extension lands.
-  it('AT-1: SESSION_STAGES is exactly the 7-token ordered vocabulary (R4-21 adds "authoring"), frozen', () => {
-    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain', 'authoring']);
+  // encode).
+  //
+  // W6-CR-3 (this edit): 'community' is the SECOND extension — an 8th
+  // token, mirroring 'authoring's own precedent exactly, backing the new
+  // single-stage `community-refresh` session kind.
+  it('AT-1: SESSION_STAGES is exactly the 8-token ordered vocabulary (R4-21 adds "authoring", W6-CR-3 adds "community"), frozen', () => {
+    assert.deepEqual([...SESSION_STAGES], ['contract', 'instructions', 'secrets', 'demo', 'roadmap', 'brain', 'authoring', 'community']);
     assert.ok(
       (SESSION_STAGES as readonly string[]).includes('authoring'),
-      'RED-1a: SESSION_STAGES must include the new "authoring" token',
+      'RED-1a: SESSION_STAGES must include the "authoring" token',
+    );
+    assert.ok(
+      (SESSION_STAGES as readonly string[]).includes('community'),
+      'W6-CR-3: SESSION_STAGES must include the new "community" token',
     );
     assert.ok(Object.isFrozen(SESSION_STAGES), 'SESSION_STAGES must be frozen — a closed vocabulary is never mutated at runtime');
   });
@@ -593,9 +598,9 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(errors, [], `expected 0 error-level findings in the real repo, got: ${JSON.stringify(errors)}`);
   });
 
-  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 7 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding"; R4-21 adds "authoring"; R4-19-F2 adds "kb-cleanup")', () => {
+  it('AT-18: loadSessionKinds(REPO_ROOT) returns EXACTLY the 8 shipped descriptors with their pinned real ids/agents/stages/defaultStage/artifact kinds+labels (R4-16 adds "demo"; R4-17 adds "onboarding"; R4-21 adds "authoring"; R4-19-F2 adds "kb-cleanup"; W6-CR-3 adds "community-refresh")', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 7, `expected exactly 7 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding", R4-21 adds "authoring", R4-19-F2 adds "kb-cleanup"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    assert.equal(descs.length, 8, `expected exactly 8 real session kinds (R4-16 adds "demo", R4-17 adds "onboarding", R4-21 adds "authoring", R4-19-F2 adds "kb-cleanup", W6-CR-3 adds "community-refresh"), got ids: ${descs.map((d) => d.id).join(', ')}`);
     // R4-19-F2 (this edit): the length check alone cannot tell "kb-cleanup
     // landed" apart from "some other 7th row landed under a wrong id" — this
     // set-equality assertion pins the exact membership (order-independent;
@@ -605,8 +610,8 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     // below (which would simply not find a bogus id and throw on `!`).
     assert.deepEqual(
       descs.map((d) => d.id).sort(),
-      ['architect', 'authoring', 'demo', 'instructions', 'kb-cleanup', 'onboarding', 'project-brain'].sort(),
-      `expected exactly this 7-id set, got: ${descs.map((d) => d.id).join(', ')}`,
+      ['architect', 'authoring', 'community-refresh', 'demo', 'instructions', 'kb-cleanup', 'onboarding', 'project-brain'].sort(),
+      `expected exactly this 8-id set, got: ${descs.map((d) => d.id).join(', ')}`,
     );
 
     const architect = byId(descs, 'architect');
@@ -687,6 +692,19 @@ describe('the real repo (studio/session-kinds.yaml) lints clean and matches the 
     assert.deepEqual(authoring.stages, ['authoring']);
     assert.equal(authoring.defaultStage, 'authoring');
     assert.deepEqual(authoring.artifact, { kind: 'file-package', label: 'Package' });
+
+    // W6-CR-3: the new "community-refresh" session kind. artifact.kind is
+    // REUSED 'file-package' (ADR-043's "prefer reuse" discipline) — never a
+    // new reserved row (SESSION_ARTIFACT_KINDS' own AT-2 above stays a
+    // 7-live/0-reserved count, unmodified by this addition). A single-stage
+    // session: 'community' is SESSION_STAGES's SECOND extension (this file's
+    // AT-1 above), mirroring 'authoring's own precedent.
+    const communityRefresh = byId(descs, 'community-refresh');
+    assert.equal(communityRefresh.agent, 'community-refresh');
+    assert.deepEqual(communityRefresh.legacyRoutes, []);
+    assert.deepEqual(communityRefresh.stages, ['community']);
+    assert.equal(communityRefresh.defaultStage, 'community');
+    assert.deepEqual(communityRefresh.artifact, { kind: 'file-package', label: 'Registry draft' });
   });
 });
 
@@ -1173,15 +1191,16 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
   // guarantee itself is unweakened — it now has TWO declared exceptions
   // instead of one, and the other 5 kinds are still asserted turnSpec-less
   // exactly as before.
-  it('AT-R422-5 (updated for R4-19-F2): ADDITIVE-OPTIONAL, proven against the REAL repo — 5 of the 7 real session kinds still carry no turnSpec at all (loadSessionKinds/validateSessionKinds(REPO_ROOT) behaves EXACTLY as before for them); "authoring" and "kb-cleanup" are the TWO declared exceptions, each turnSpec deep-equaling its own ratified table exactly (kills an implementation that makes turnSpec required on every kind, that emits a finding merely for its absence on the OTHER 5, or that ships either exception with a turnSpec that drifts from its ratified table)', () => {
+  it('AT-R422-5 (updated for W6-CR-3): ADDITIVE-OPTIONAL, proven against the REAL repo — 5 of the 8 real session kinds still carry no turnSpec at all (loadSessionKinds/validateSessionKinds(REPO_ROOT) behaves EXACTLY as before for them); "authoring", "kb-cleanup", and "community-refresh" are the THREE declared exceptions, each turnSpec deep-equaling its own ratified table exactly (kills an implementation that makes turnSpec required on every kind, that emits a finding merely for its absence on the OTHER 5, or that ships any exception with a turnSpec that drifts from its ratified table)', () => {
     const descs = loadSessionKinds(REPO_ROOT);
-    assert.equal(descs.length, 7, `expected exactly 7 real session kinds (R4-16 "demo", R4-17 "onboarding", R4-21 "authoring", R4-19-F2 "kb-cleanup"), got ids: ${descs.map((d) => d.id).join(', ')}`);
-    // R4-19-F2 (this edit): "kb-cleanup" joins "authoring" as a turnSpec-
-    // bearing exception — excluded from the turnSpec-less loop below same as
-    // "authoring" always has been, so kb-cleanup's real turnSpec does not
-    // trip the negative-control assertion meant for the OTHER 5 kinds.
+    assert.equal(descs.length, 8, `expected exactly 8 real session kinds (R4-16 "demo", R4-17 "onboarding", R4-21 "authoring", R4-19-F2 "kb-cleanup", W6-CR-3 "community-refresh"), got ids: ${descs.map((d) => d.id).join(', ')}`);
+    // W6-CR-3 (this edit): "community-refresh" joins "authoring"/"kb-cleanup"
+    // as a turnSpec-bearing exception — excluded from the turnSpec-less loop
+    // below same as the other two always have been, so its real turnSpec
+    // does not trip the negative-control assertion meant for the OTHER 5
+    // kinds.
     for (const d of descs) {
-      if (d.id === 'authoring' || d.id === 'kb-cleanup') continue;
+      if (d.id === 'authoring' || d.id === 'kb-cleanup' || d.id === 'community-refresh') continue;
       assert.equal(
         (d as SessionKindDescriptor & { turnSpec?: unknown }).turnSpec,
         undefined,
@@ -1234,6 +1253,30 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
 
     const kbCleanupFindings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:kb-cleanup');
     assert.deepEqual(kbCleanupFindings, [], `expected zero turnspec-* findings for the real "kb-cleanup" descriptor, got: ${JSON.stringify(kbCleanupFindings)}`);
+
+    // W6-CR-3 (this edit): the THIRD turnSpec consumer, community-refresh,
+    // gets the exact same positive-control treatment as authoring/kb-cleanup
+    // above.
+    const communityRefresh = byId(descs, 'community-refresh');
+    assert.ok(communityRefresh.turnSpec, 'expected the real "community-refresh" descriptor to carry a turnSpec (W6-CR-3 — ADR-043 consumer #3)');
+    assert.deepEqual(
+      communityRefresh.turnSpec,
+      {
+        kindDir: '_community-refresh',
+        style: 'agent',
+        phases: [
+          { phase: 'gathering', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
+          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict', verdicts: ['approve', 'reject'] },
+          { phase: 'committing', step: 'finalize', finalizer: 'commitRegistryDraft', next: 'committed' },
+          { phase: 'committed', step: 'terminal' },
+          { phase: 'rejected', step: 'terminal' },
+        ],
+      },
+      `community-refresh's real turnSpec must deep-equal its ratified 5-phase table (kindDir:_community-refresh, style:agent, gathering→awaiting-review→committing→committed, plus a direct awaiting-review→rejected terminal), got: ${JSON.stringify(communityRefresh.turnSpec)}`,
+    );
+
+    const communityRefreshFindings = turnspecFindings(validateSessionKinds(REPO_ROOT)).filter((f) => f.object === 'session-kind:community-refresh');
+    assert.deepEqual(communityRefreshFindings, [], `expected zero turnspec-* findings for the real "community-refresh" descriptor, got: ${JSON.stringify(communityRefreshFindings)}`);
   });
 });
 
@@ -1696,11 +1739,11 @@ describe('R4-19-F2 — the constraint: no new orchestrator runner for kb-cleanup
     );
   });
 
-  it('FINALIZER_IDS (orchestrator/studio/session-kinds.ts) gains no new row FOR kb-cleanup specifically — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it (updated W6-B3: FINALIZER_IDS DOES grow, for a DIFFERENT reason — the new panel.phases finalize steps on demo/instructions need named finalizer identities; this assertion is scoped to "not because of kb-cleanup", not "never grows at all")', () => {
+  it('FINALIZER_IDS (orchestrator/studio/session-kinds.ts) gains no new row FOR kb-cleanup specifically — its phase table declares no `finalize` step, so a correct implementation needs no finalizer for it (updated W6-B3: FINALIZER_IDS DOES grow, for a DIFFERENT reason — the new panel.phases finalize steps on demo/instructions need named finalizer identities; updated W6-CR-3: FINALIZER_IDS grows again for a THIRD reason — community-refresh IS a real dispatchable turnSpec finalizer; this assertion is scoped to "not because of kb-cleanup", not "never grows at all")', () => {
     assert.deepEqual(
       FINALIZER_IDS.map((f) => f.id),
-      ['copyStagingToLibrary', 'writeToRepoRoot', 'recordLockedDemo'],
-      `FINALIZER_IDS must be exactly these three rows post-W6-B3 — copyStagingToLibrary (authoring's real turnSpec finalizer, pre-existing), plus writeToRepoRoot/recordLockedDemo (W6-B3's panel.phases-only finalizer identities for instructions/demo) — kb-cleanup's own turnSpec (drafting -> awaiting-approval -> applied) still declares no "finalize" step anywhere, so it still contributes none of these three. Got: ${JSON.stringify(FINALIZER_IDS.map((f) => f.id))}`,
+      ['copyStagingToLibrary', 'writeToRepoRoot', 'recordLockedDemo', 'commitRegistryDraft'],
+      `FINALIZER_IDS must be exactly these four rows post-W6-CR-3 — copyStagingToLibrary (authoring's real turnSpec finalizer, pre-existing), writeToRepoRoot/recordLockedDemo (W6-B3's panel.phases-only finalizer identities for instructions/demo), plus commitRegistryDraft (community-refresh's real turnSpec finalizer, W6-CR-3) — kb-cleanup's own turnSpec (drafting -> awaiting-approval -> applied) still declares no "finalize" step anywhere, so it still contributes none of these four. Got: ${JSON.stringify(FINALIZER_IDS.map((f) => f.id))}`,
     );
   });
 });
