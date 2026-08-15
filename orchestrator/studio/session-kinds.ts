@@ -46,6 +46,7 @@ import matter from 'gray-matter';
 
 import { reqString, reqObject, stringArray, optString } from './yaml-fields.ts';
 import { listSkillMdDirs, skillsDir, SLUG_RE } from '../skill-path.ts';
+import { FINALIZERS } from '../interactive-finalizers.ts';
 import type { Finding } from './validate.ts';
 
 // ---------------------------------------------------------------------------
@@ -185,6 +186,32 @@ export const FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze([
 ]);
 export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 
+/**
+ * The DISPATCHABLE finalizer id set — derived DIRECTLY from
+ * `orchestrator/interactive-finalizers.ts`'s `FINALIZERS` registry keys, not
+ * a hand-maintained mirror (that module has no import path back to this one
+ * — it only imports node builtins + `cli/studio-path-guard.ts`, which itself
+ * imports only node builtins — so this is a plain, cycle-free import, not a
+ * duplicated literal).
+ *
+ * Reviewer finding (W6-B3 post-merge review): a `turnSpec.phases` row naming
+ * a `finalize` step is REAL dispatchable data — `runInteractiveTurn`
+ * (orchestrator/interactive-runner.ts) resolves its `finalizer` id via
+ * `resolveFinalizer`, which throws `InteractiveFinalizerError` at SPAWN TIME
+ * for any id `FINALIZERS` does not carry. `FINALIZER_IDS` above is the
+ * DESCRIPTIVE, ADR-043 §5 vocabulary (every finalizer the ADR names, whether
+ * or not it is wired to the primitive yet) — validating a `turnSpec` row
+ * against that WIDER set would lint-approve `writeToRepoRoot`/
+ * `recordLockedDemo`, both of which are real, but neither of which
+ * `FINALIZERS` implements (demo/instructions never migrate onto `turnSpec`,
+ * 2026-08-14 amendment §1) — a shared vocabulary must never lint-approve
+ * what dispatch will throw on. `panel.phases` rows are NEVER dispatched
+ * (invisible to `cmdAgentRun`'s turnSpec fork — ADR-043 2026-08-15 amendment
+ * §2), so they correctly keep validating against the full descriptive
+ * `FINALIZER_IDS`.
+ */
+const DISPATCHABLE_FINALIZER_IDS: readonly FinalizerIdRow[] = Object.freeze(FINALIZERS.map((row) => Object.freeze({ id: row.id })));
+
 /** EXPIRY CONDITION (deliberately empty for R4-22 WI-1): the ADR's only
  *  worked example (style: agent) never exercises `schema` at all, and no
  *  `structured`-style turnSpec consumer exists anywhere in the repo yet.
@@ -196,7 +223,27 @@ export type FinalizerId = (typeof FINALIZER_IDS)[number]['id'];
 export const SCHEMA_IDS: readonly SchemaIdRow[] = Object.freeze([] as SchemaIdRow[]);
 export type SchemaId = (typeof SCHEMA_IDS)[number]['id'];
 
-/** Total lookups over the four turnSpec vocabularies: the matching id, or
+export type AwaitsKindRow = { readonly id: string };
+
+/**
+ * What a `step: noop` phase is WAITING ON the operator to supply — the
+ * closed, frozen vocabulary `deriveSessionAffordances` reads to pick between
+ * a `question-form` and a `verdict` affordance (W6-B3 post-merge review
+ * finding). REQUIRED on every `step: noop` row (validateSessionKinds below)
+ * — replaces a bare `row.phase === 'awaiting-answers'` NAME match, which
+ * silently miscategorised any interview-Q&A checkpoint not spelled with
+ * that exact literal string as a `verdict` instead of a `question-form`.
+ * `awaits` is AUTHORED data (the yaml row states its own kind), the same
+ * class as `writes:` — never inferred from the phase name. Exactly the two
+ * values every real noop row in this repo needs today; nothing speculative
+ * added. Typed `readonly`, as TURN_STYLES. */
+export const AWAITS_KINDS: readonly AwaitsKindRow[] = Object.freeze([
+  Object.freeze({ id: 'questions' }),
+  Object.freeze({ id: 'verdict' }),
+]);
+export type AwaitsKind = (typeof AWAITS_KINDS)[number]['id'];
+
+/** Total lookups over the turnSpec/panel vocabularies: the matching id, or
  *  `undefined` for anything unrecognised. Never throw, never guess — mirror
  *  sessionArtifactKindState's exact shape. */
 export function turnStyleState(id: string): string | undefined {
@@ -210,6 +257,9 @@ export function finalizerIdState(id: string): string | undefined {
 }
 export function schemaIdState(id: string): string | undefined {
   return SCHEMA_IDS.find((s) => s.id === id)?.id;
+}
+export function awaitsKindState(id: string): string | undefined {
+  return AWAITS_KINDS.find((s) => s.id === id)?.id;
 }
 
 /** Renders a closed-vocabulary's allowed set for an error message — honest
@@ -228,10 +278,12 @@ export type SessionKindArtifactRef = {
 };
 
 /** One row of a turnSpec's phase table (ADR-043 §1's worked example).
- *  `writes`/`next`/`finalizer` are genuinely optional — a `terminal` or
- *  `noop` phase carries neither. Structural only: `step` and `finalizer`
- *  are NOT validated against TURN_STEPS/FINALIZER_IDS here — see
- *  validateSessionKinds.
+ *  `writes`/`next`/`finalizer`/`awaits` are genuinely optional AT THE TYPE
+ *  LEVEL — a `terminal` phase carries none of them. Structural only: `step`,
+ *  `finalizer`, and `awaits` are NOT validated against TURN_STEPS/
+ *  FINALIZER_IDS/AWAITS_KINDS here — see validateSessionKinds. `awaits` IS
+ *  semantically REQUIRED on every `step: noop` row (validateSessionKinds
+ *  enforces this — a noop row omitting it is an error, not a silent gap).
  *
  *  EXPIRY CONDITION (deliberately unvalidated for R4-22 WI-1, matching the
  *  discipline SCHEMA_IDS sets above): `writes` names the staging area(s) an
@@ -248,16 +300,23 @@ export type TurnSpecPhase = {
   readonly writes?: readonly string[];
   readonly next?: string;
   readonly finalizer?: string;
+  /** What a `step: noop` row is waiting on the operator to supply —
+   *  `'questions' | 'verdict'` (AWAITS_KINDS). AUTHORED data (like
+   *  `writes:`), never inferred from `phase`'s name — this is exactly what
+   *  closes the "differently-named question phase silently derives as
+   *  verdict" misclassification class (W6-B3 post-merge review). */
+  readonly awaits?: string;
 };
 
 /** The additive-optional producer/state-machine half of a session-kind
  *  descriptor (ADR-043 §1) — the "missing half" that turns a read-only
  *  session shell into one that can actually run a turn. Structural only at
  *  load time (AT-R422-6 mirrors AT-16's split for the pre-existing fields):
- *  `style`, each phase's `step`/`finalizer`, and `schema` are validated ONLY
- *  by validateSessionKinds, against TURN_STYLES/TURN_STEPS/FINALIZER_IDS/
- *  SCHEMA_IDS respectively — loadSessionKinds carries the values through
- *  unmodified, however bogus. */
+ *  `style`, each phase's `step`/`finalizer`/`awaits`, and `schema` are
+ *  validated ONLY by validateSessionKinds, against TURN_STYLES/TURN_STEPS/
+ *  (the DISPATCHABLE subset of) FINALIZER_IDS/SCHEMA_IDS/AWAITS_KINDS
+ *  respectively — loadSessionKinds carries the values through unmodified,
+ *  however bogus. */
 export type TurnSpec = {
   /** The one containment segment (SEC-04 guard root) — e.g. `_authoring`. */
   readonly kindDir: string;
@@ -353,20 +412,23 @@ function parseTurnSpecPhase(raw: unknown, file: string, descIndex: number, phase
   const writes = p.writes !== undefined ? stringArray(p, 'writes', file) : undefined;
   const next = optString(p, 'next');
   const finalizer = optString(p, 'finalizer');
+  const awaits = optString(p, 'awaits');
   return {
     phase,
     step,
     ...(writes !== undefined ? { writes } : {}),
     ...(next !== undefined ? { next } : {}),
     ...(finalizer !== undefined ? { finalizer } : {}),
+    ...(awaits !== undefined ? { awaits } : {}),
   };
 }
 
 /** Structural-only parse of a descriptor's `turnSpec` (AT-R422-6, mirrors
  *  the AT-16 split): throws only on missing-file-shape problems (not a
  *  mapping, `phases` not an array, missing required scalars) — `style`,
- *  each phase's `step`/`finalizer`, and `schema` are NOT checked against
- *  their closed vocabularies here; that is validateSessionKinds's job. */
+ *  each phase's `step`/`finalizer`/`awaits`, and `schema` are NOT checked
+ *  against their closed vocabularies here; that is validateSessionKinds's
+ *  job. */
 function parseTurnSpec(raw: Record<string, unknown>, file: string, descIndex: number): TurnSpec {
   const kindDir = reqString(raw, 'kindDir', file);
   const style = reqString(raw, 'style', file);
@@ -519,6 +581,17 @@ const CHECK_PANEL_FINALIZE_MISSING_FINALIZER = 'session-kinds/panel-finalize-mis
 const CHECK_PANEL_NO_TERMINAL_PHASE = 'session-kinds/panel-no-terminal-phase';
 const CHECK_PANEL_DUPLICATE_PHASE = 'session-kinds/panel-duplicate-phase';
 const CHECK_PANEL_EMPTY_PHASES = 'session-kinds/panel-empty-phases';
+// W6-B3 post-merge review — `awaits` (a `step: noop` row's REQUIRED,
+// AUTHORED "what is the operator being asked for" field, AWAITS_KINDS)
+// mirrors `finalizer`'s own two-check shape exactly: an UNKNOWN value (the
+// key is present but not in AWAITS_KINDS) vs a MISSING one (a noop row that
+// omits the key entirely) are distinct failure modes, distinct checks — see
+// CHECK_TURNSPEC_UNKNOWN_FINALIZER / CHECK_TURNSPEC_FINALIZE_MISSING_FINALIZER
+// for the precedent this pair follows.
+const CHECK_TURNSPEC_UNKNOWN_AWAITS = 'session-kinds/turnspec-unknown-awaits';
+const CHECK_TURNSPEC_NOOP_MISSING_AWAITS = 'session-kinds/turnspec-noop-missing-awaits';
+const CHECK_PANEL_UNKNOWN_AWAITS = 'session-kinds/panel-unknown-awaits';
+const CHECK_PANEL_NOOP_MISSING_AWAITS = 'session-kinds/panel-noop-missing-awaits';
 // The turnSpec⊕panel mutual-exclusion check (ADR-043 2026-08-15 amendment
 // §2): a descriptor carrying BOTH is rejected with exactly one finding
 // naming the kind and both fields — see the exclusivity guard in the main
@@ -579,6 +652,8 @@ type PhaseTableCheckIds = {
   readonly duplicatePhase: string;
   readonly noTerminalPhase: string;
   readonly emptyPhases: string;
+  readonly unknownAwaits: string;
+  readonly noopMissingAwaits: string;
 };
 
 const TURNSPEC_PHASE_CHECK_IDS: PhaseTableCheckIds = {
@@ -589,6 +664,8 @@ const TURNSPEC_PHASE_CHECK_IDS: PhaseTableCheckIds = {
   duplicatePhase: CHECK_TURNSPEC_DUPLICATE_PHASE,
   noTerminalPhase: CHECK_TURNSPEC_NO_TERMINAL_PHASE,
   emptyPhases: CHECK_TURNSPEC_EMPTY_PHASES,
+  unknownAwaits: CHECK_TURNSPEC_UNKNOWN_AWAITS,
+  noopMissingAwaits: CHECK_TURNSPEC_NOOP_MISSING_AWAITS,
 };
 
 const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
@@ -599,6 +676,8 @@ const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
   duplicatePhase: CHECK_PANEL_DUPLICATE_PHASE,
   noTerminalPhase: CHECK_PANEL_NO_TERMINAL_PHASE,
   emptyPhases: CHECK_PANEL_EMPTY_PHASES,
+  unknownAwaits: CHECK_PANEL_UNKNOWN_AWAITS,
+  noopMissingAwaits: CHECK_PANEL_NOOP_MISSING_AWAITS,
 };
 
 /**
@@ -613,6 +692,15 @@ const PANEL_PHASE_CHECK_IDS: PhaseTableCheckIds = {
  * message text. `writes` is deliberately NOT validated here — see
  * TurnSpecPhase's own EXPIRY CONDITION doc comment (no `writes` vocabulary
  * exists yet, for either table).
+ *
+ * `allowedFinalizers` (W6-B3 post-merge review): the caller supplies its OWN
+ * finalizer set rather than this function reading a fixed global — `turnSpec`
+ * (real dispatch, `resolveFinalizer` in orchestrator/interactive-runner.ts)
+ * must validate against `DISPATCHABLE_FINALIZER_IDS` (derived from
+ * `orchestrator/interactive-finalizers.ts`'s `FINALIZERS` registry — the set
+ * dispatch will actually resolve), while `panel` (never dispatched) validates
+ * against the full descriptive `FINALIZER_IDS`. A shared vocabulary must
+ * never lint-approve a value dispatch will throw on.
  */
 function validatePhaseTable(
   d: SessionKindDescriptor,
@@ -620,6 +708,7 @@ function validatePhaseTable(
   obj: string,
   tableLabel: string,
   checkIds: PhaseTableCheckIds,
+  allowedFinalizers: readonly FinalizerIdRow[],
   findings: Finding[],
 ): void {
   // empty-phases (AT-R422-17): a state machine with zero rows can never run a
@@ -646,12 +735,12 @@ function validatePhaseTable(
         ),
       );
     }
-    if (phase.finalizer !== undefined && finalizerIdState(phase.finalizer) === undefined) {
+    if (phase.finalizer !== undefined && !allowedFinalizers.some((row) => row.id === phase.finalizer)) {
       findings.push(
         err(
           obj,
           checkIds.unknownFinalizer,
-          `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" declares finalizer "${phase.finalizer}" — must be one of ${allowedIdsSummary(FINALIZER_IDS)}`,
+          `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" declares finalizer "${phase.finalizer}" — must be one of ${allowedIdsSummary(allowedFinalizers)}`,
         ),
       );
     }
@@ -665,6 +754,36 @@ function validatePhaseTable(
     if (phase.step === 'finalize' && !('finalizer' in phase)) {
       findings.push(
         err(obj, checkIds.finalizeMissingFinalizer, `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" has step "finalize" but is missing the required "finalizer" field`),
+      );
+    }
+
+    // unknown-awaits (W6-B3 post-merge review): the check above's finalizer
+    // shape, applied to `awaits` — fires only when the key IS present with a
+    // value outside AWAITS_KINDS.
+    if (phase.awaits !== undefined && awaitsKindState(phase.awaits) === undefined) {
+      findings.push(
+        err(
+          obj,
+          checkIds.unknownAwaits,
+          `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" declares awaits "${phase.awaits}" — must be one of ${allowedIdsSummary(AWAITS_KINDS)}`,
+        ),
+      );
+    }
+
+    // noop-missing-awaits (W6-B3 post-merge review): mirrors
+    // finalize-missing-finalizer's exact shape — a `step: noop` phase that
+    // omits `awaits` ENTIRELY (the key itself absent, `'awaits' in phase` is
+    // false) is an error naming the kind, the phase, and the allowed set. No
+    // fallback, no silent misclassification: `deriveSessionAffordances`
+    // trusts `awaits` is present on every noop row it is asked to derive,
+    // and this is the check that makes that trust safe.
+    if (phase.step === 'noop' && !('awaits' in phase)) {
+      findings.push(
+        err(
+          obj,
+          checkIds.noopMissingAwaits,
+          `Session kind "${d.id}" ${tableLabel} phase "${phase.phase}" has step "noop" but is missing the required "awaits" field — must be one of ${allowedIdsSummary(AWAITS_KINDS)}`,
+        ),
       );
     }
 
@@ -918,7 +1037,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
           );
         }
 
-        validatePhaseTable(d, ts.phases, obj, 'turnSpec.phases', TURNSPEC_PHASE_CHECK_IDS, findings);
+        validatePhaseTable(d, ts.phases, obj, 'turnSpec.phases', TURNSPEC_PHASE_CHECK_IDS, DISPATCHABLE_FINALIZER_IDS, findings);
 
         // `writes` (each phase's optional staging-area list) is deliberately
         // NOT validated anywhere in this block — see TurnSpecPhase's own
@@ -930,7 +1049,7 @@ export function validateSessionKinds(forgeRoot: string): Finding[] {
       // block entirely, no finding, no default. Only the phase-row-level
       // checks apply (panel carries no kindDir/style/schema to validate).
       if (d.panel !== undefined) {
-        validatePhaseTable(d, d.panel.phases, obj, 'panel.phases', PANEL_PHASE_CHECK_IDS, findings);
+        validatePhaseTable(d, d.panel.phases, obj, 'panel.phases', PANEL_PHASE_CHECK_IDS, FINALIZER_IDS, findings);
       }
     }
   }
@@ -978,24 +1097,28 @@ export type SessionAffordance = {
  * already guarantees a descriptor never carries both, so there is no
  * ambiguity about which table to read.
  *
- * Mapping (ADR-043 §1's "affordances are derived, not authored" clause,
- * resolved against this file's ACTUAL phase-row vocabulary — TURN_STEPS has
- * no `structured` value, and `style: structured` can never validate while
- * SCHEMA_IDS is empty, CHECK_TURNSPEC_STRUCTURED_UNSUPPORTED above — so
- * "structured interview phase" is read off the phase NAME, the only signal
- * that actually exists on a real, validated table today):
+ * Mapping (ADR-043 §1's "affordances are derived, not authored" clause):
  *   - no row matches `currentPhase`     → `[]` (unknown/undeclared phase —
  *     fail closed, never fabricate an affordance for a phase the table
  *     doesn't name)
  *   - `row.step === 'terminal'`         → `[]` (ADR: "terminal ⇒ none" —
  *     checked FIRST, so a terminal row can never leak a stray affordance
  *     even if it also happened to carry `writes`/`next`)
- *   - `row.step === 'noop'`             → one operator-decision affordance:
- *     `question-form` when the phase is literally the interview Q&A
- *     checkpoint (`awaiting-answers` — instructions-runner.ts:18, the only
- *     phase name this repo uses for that checkpoint), else `verdict` (every
- *     other `awaiting-*` gate: awaiting-review, awaiting-verdict,
- *     awaiting-approval, …)
+ *   - `row.step === 'noop'`             → one operator-decision affordance,
+ *     resolved through `row.awaits` (AWAITS_KINDS) — AUTHORED, VALIDATED
+ *     data, never the phase's own NAME. `validateSessionKinds` REQUIRES
+ *     `awaits` on every `noop` row (CHECK_*_NOOP_MISSING_AWAITS), so by the
+ *     time a real, linted table reaches this function `row.awaits` is
+ *     guaranteed to be `'questions'` or `'verdict'`, the only two members of
+ *     the vocabulary: `awaits: 'questions'` → `question-form`, `awaits:
+ *     'verdict'` → `verdict` (every other `awaiting-*` gate: awaiting-review,
+ *     awaiting-verdict, awaiting-approval, …). This closes a real
+ *     misclassification class a prior revision of this function had: a bare
+ *     `row.phase === 'awaiting-answers'` NAME match silently mis-derived
+ *     `verdict` for ANY interview Q&A checkpoint not spelled with that exact
+ *     literal string — a differently-named question phase (e.g.
+ *     `awaiting-input`) now derives correctly via its own `awaits: questions`
+ *     row, with no dependence on how the phase happens to be spelled.
  *   - `row.writes` has entries (any step) → `staged-review`, carrying
  *     `meta.writes` verbatim
  *   - `row.next` is defined (any step)    → `next-turn`, carrying `meta.next`
@@ -1017,7 +1140,7 @@ export function deriveSessionAffordances(descriptor: SessionKindDescriptor, curr
   const affordances: SessionAffordance[] = [];
 
   if (row.step === 'noop') {
-    const kind: SessionAffordanceKind = row.phase === 'awaiting-answers' ? 'question-form' : 'verdict';
+    const kind: SessionAffordanceKind = row.awaits === 'questions' ? 'question-form' : 'verdict';
     affordances.push({ id: `${row.phase}-${kind}`, kind, phase: row.phase });
   }
 

@@ -178,9 +178,9 @@ function writeSessionKindsYaml(root: string): void {
         panel: {
           phases: [
             { phase: 'interviewing', step: 'agent' },
-            { phase: 'awaiting-answers', step: 'noop', next: 'interviewing' },
+            { phase: 'awaiting-answers', step: 'noop', awaits: 'questions', next: 'interviewing' },
             { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
-            { phase: 'awaiting-verdict', step: 'noop' },
+            { phase: 'awaiting-verdict', step: 'noop', awaits: 'verdict' },
             { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
             { phase: 'committed', step: 'terminal' },
             { phase: 'rejected', step: 'terminal' },
@@ -227,7 +227,7 @@ function writeSessionKindsYaml(root: string): void {
           style: 'agent',
           phases: [
             { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-            { phase: 'awaiting-approval', step: 'noop' },
+            { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
             { phase: 'applied', step: 'terminal' },
           ],
         },

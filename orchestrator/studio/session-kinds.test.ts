@@ -991,7 +991,7 @@ function wellFormedTurnSpec(): Record<string, unknown> {
     style: 'agent',
     phases: [
       { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
-      { phase: 'awaiting-review', step: 'noop' },
+      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
       { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
       { phase: 'committed', step: 'terminal' },
     ],
@@ -1055,8 +1055,10 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     }
   });
 
-  it('AT-R422-3: a phase.finalizer outside FINALIZER_IDS (on an otherwise-valid step:finalize phase) → error naming the offending value AND every id in FINALIZER_IDS (kills an implementation that validates step but never resolves the finalizer id it names — a dangling reference would otherwise only fail at RUNTIME, mid-cycle, not at lint time)', async () => {
-    const mod = await import('./session-kinds.ts');
+  it('AT-R422-3 (updated W6-B3 post-merge review): a phase.finalizer outside the DISPATCHABLE finalizer set (on an otherwise-valid step:finalize phase) → error naming the offending value AND every id `orchestrator/interactive-finalizers.ts`\'s FINALIZERS registry actually implements — turnSpec.phases validates against the set dispatch will resolve, NOT the wider descriptive FINALIZER_IDS (kills an implementation that validates step but never resolves the finalizer id it names — a dangling reference would otherwise only fail at RUNTIME, mid-cycle, not at lint time; also kills an implementation that lint-approves a merely DESCRIPTIVE finalizer id turnSpec dispatch would throw on)', async () => {
+    // Parity import (reviewer-preferred over a hand-maintained mirror): the
+    // REAL registry a turnSpec finalize step actually dispatches through.
+    const { FINALIZERS } = await import('../interactive-finalizers.ts');
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     const bogus = 'notARealFinalizerAtAll';
@@ -1071,10 +1073,20 @@ describe('validateSessionKinds — turnSpec (AT-R422-1..4): unknown value in a c
     assert.ok(f, `expected a session-kinds/turnspec-unknown-finalizer finding, got: ${JSON.stringify(findings)}`);
     assert.equal(f.level, 'error');
     assert.ok(f.message.includes(bogus), 'message must name the offending value');
-    const finalizers: readonly { id: string }[] = mod.FINALIZER_IDS ?? [];
-    assert.ok(finalizers.length > 0, 'FINALIZER_IDS must be seeded with at least copyStagingToLibrary (the ADR\'s own worked example) for this allowed-set assertion to be meaningful');
-    for (const row of finalizers) {
-      assert.ok(f.message.includes(row.id), `message must name the allowed set (missing "${row.id}")`);
+    assert.ok(FINALIZERS.length > 0, 'FINALIZERS must be seeded with at least copyStagingToLibrary for this allowed-set assertion to be meaningful');
+    for (const row of FINALIZERS) {
+      assert.ok(f.message.includes(row.id), `message must name the DISPATCHABLE allowed set (missing "${row.id}")`);
+    }
+    // The other direction (the actual reviewer finding): a merely
+    // DESCRIPTIVE finalizer id (real in FINALIZER_IDS, but NOT implemented
+    // by FINALIZERS) must NOT be lint-approved for turnSpec — see
+    // W6-B3-11 below for the direct "this id passes on panel, fails on
+    // turnSpec" pairing.
+    for (const descriptiveOnlyId of ['writeToRepoRoot', 'recordLockedDemo']) {
+      assert.ok(
+        !FINALIZERS.some((row) => row.id === descriptiveOnlyId),
+        `arrange: "${descriptiveOnlyId}" must be absent from the REAL FINALIZERS registry (a precondition of this test, not the assertion under test)`,
+      );
     }
   });
 
@@ -1189,7 +1201,7 @@ describe('validateSessionKinds — turnSpec positive control + additive-optional
         style: 'agent',
         phases: [
           { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-          { phase: 'awaiting-approval', step: 'noop' },
+          { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
           { phase: 'applied', step: 'terminal' },
         ],
       },
@@ -1387,6 +1399,24 @@ describe('validateSessionKinds — turnSpec.phases graph coherence (AT-R422-13..
     assert.ok(f.message.includes('committing'), 'message must name the offending phase');
   });
 
+  it('W6-B3-14 (the turnSpec-side twin of AT-R422-14, same shape, `awaits` instead of `finalizer` — the reviewer\'s HIGH finding): a turnSpec `step: noop` phase that OMITS `awaits` ENTIRELY → session-kinds/turnspec-noop-missing-awaits naming the kind, the phase, AND the allowed set', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const phases = turnSpec.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    phases[idx] = { phase: 'awaiting-review', step: 'noop' }; // no `awaits` key at all
+    writeSessionKindsYaml(root, [turnSpecDescriptor(turnSpec)]);
+
+    const findings = turnspecFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/turnspec-noop-missing-awaits');
+    assert.ok(f, `expected a session-kinds/turnspec-noop-missing-awaits finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('fixture-kind'), 'message must name the offending kind');
+    assert.ok(f.message.includes('awaiting-review'), 'message must name the offending phase');
+    assert.ok(f.message.includes('questions') && f.message.includes('verdict'), 'message must name the allowed set');
+  });
+
   it('AT-R422-15: a turnSpec.phases table containing NO `step: terminal` row anywhere ("no terminal phase", an unterminated state machine) → error naming the offending descriptor (kills an implementation that validates every individual step/finalizer/next value in isolation but never checks the table as a WHOLE has a terminal state — the generic runner\'s dispatch loop then has no phase it can legally stop advancing from)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
@@ -1522,7 +1552,7 @@ describe('R4-19-F2 — the "kb-cleanup" session kind (brain-maintenance, cleanup
     style: 'agent',
     phases: [
       { phase: 'drafting', step: 'agent', writes: ['plan'], next: 'awaiting-approval' },
-      { phase: 'awaiting-approval', step: 'noop' },
+      { phase: 'awaiting-approval', step: 'noop', awaits: 'verdict' },
       { phase: 'applied', step: 'terminal' },
     ],
   };
@@ -1660,7 +1690,7 @@ function wellFormedPanel(): Record<string, unknown> {
   return {
     phases: [
       { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-review' },
-      { phase: 'awaiting-review', step: 'noop' },
+      { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
       { phase: 'done', step: 'terminal' },
     ],
   };
@@ -1745,12 +1775,82 @@ describe('validateSessionKinds — panel (W6-B3): reuses the SAME frozen phase-r
     assert.ok(f.message.includes('fixture-kind'));
   });
 
+  it('W6-B3-12 (the reviewer\'s HIGH finding, missing-awaits rejection): a panel `step: noop` phase that OMITS `awaits` ENTIRELY → session-kinds/panel-noop-missing-awaits naming the kind, the phase, AND the allowed set — no fallback, no silent misclassification', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    phases[idx] = { phase: 'awaiting-review', step: 'noop' }; // `awaits` key genuinely absent, not merely undefined-valued
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-noop-missing-awaits');
+    assert.ok(f, `expected a session-kinds/panel-noop-missing-awaits finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes('fixture-kind'), 'message must name the offending kind');
+    assert.ok(f.message.includes('awaiting-review'), 'message must name the offending phase');
+    assert.ok(f.message.includes('questions'), 'message must name the allowed set (missing "questions")');
+    assert.ok(f.message.includes('verdict'), 'message must name the allowed set (missing "verdict")');
+  });
+
+  it('W6-B3-13: a panel phase.awaits present but outside AWAITS_KINDS → session-kinds/panel-unknown-awaits naming the offending value AND the allowed set', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const bogus = 'not-a-real-awaits-value';
+    const panel = wellFormedPanel();
+    const phases = panel.phases as Record<string, unknown>[];
+    const idx = phases.findIndex((p) => p.phase === 'awaiting-review');
+    phases[idx] = { ...phases[idx], awaits: bogus };
+    writeSessionKindsYaml(root, [panelDescriptor(panel)]);
+
+    const findings = panelFindings(validateSessionKinds(root));
+    const f = findings.find((x) => x.check === 'session-kinds/panel-unknown-awaits');
+    assert.ok(f, `expected a session-kinds/panel-unknown-awaits finding, got: ${JSON.stringify(findings)}`);
+    assert.equal(f.level, 'error');
+    assert.ok(f.message.includes(bogus), 'message must name the offending value');
+    assert.ok(f.message.includes('questions') && f.message.includes('verdict'), 'message must name the allowed set');
+  });
+
   it('W6-B3-5 (positive control): the well-formed panel fixture validates CLEAN — zero panel-* findings (without this, W6-B3-1..4 could all pass for the wrong reason — an implementation that rejects every panel unconditionally)', () => {
     const root = makeForgeRoot();
     writeAgentSkill(root, 'fixture-agent');
     writeSessionKindsYaml(root, [panelDescriptor(wellFormedPanel())]);
     const findings = panelFindings(validateSessionKinds(root));
     assert.deepEqual(findings, [], `expected zero panel-* findings for a well-formed panel, got: ${JSON.stringify(findings)}`);
+  });
+
+  it('W6-B3-11 (the finalizer-vocab-split reviewer finding, direct pairing): a turnSpec row naming "writeToRepoRoot" FAILS lint (it is real and descriptive but not in the DISPATCHABLE set — resolveFinalizer would throw at spawn time), while the IDENTICAL finalizer id on a panel row (never dispatched) PASSES', () => {
+    const root = makeForgeRoot();
+    writeAgentSkill(root, 'fixture-agent');
+    const turnSpec = wellFormedTurnSpec();
+    const turnSpecPhases = turnSpec.phases as Record<string, unknown>[];
+    const committingIdx = turnSpecPhases.findIndex((p) => p.phase === 'committing');
+    turnSpecPhases[committingIdx] = { ...turnSpecPhases[committingIdx], finalizer: 'writeToRepoRoot' };
+
+    const panel = wellFormedPanel();
+    const panelPhases = panel.phases as Record<string, unknown>[];
+    panelPhases[panelPhases.length - 1] = { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot' }; // replaces the terminal row — see W6-B3-2's own note on this shape
+
+    writeSessionKindsYaml(root, [
+      { ...turnSpecDescriptor(turnSpec), id: 'turnspec-writetorepo-kind' },
+      { ...panelDescriptor(panel), id: 'panel-writetorepo-kind' },
+    ]);
+
+    const findings = validateSessionKinds(root);
+    const turnSpecFinding = findings.find((f) => f.object === 'session-kind:turnspec-writetorepo-kind' && f.check === 'session-kinds/turnspec-unknown-finalizer');
+    assert.ok(
+      turnSpecFinding,
+      `expected a session-kinds/turnspec-unknown-finalizer finding for the turnSpec row naming "writeToRepoRoot" (it would throw at spawn — resolveFinalizer/FINALIZERS has no such id), got: ${JSON.stringify(findings)}`,
+    );
+    assert.ok(turnSpecFinding!.message.includes('writeToRepoRoot'), 'message must name the offending value');
+
+    const panelUnknownFinalizerFindings = findings.filter((f) => f.object === 'session-kind:panel-writetorepo-kind' && f.check === 'session-kinds/panel-unknown-finalizer');
+    assert.deepEqual(
+      panelUnknownFinalizerFindings,
+      [],
+      `the IDENTICAL finalizer id on a panel row must pass — panel is never dispatched (invisible to cmdAgentRun's turnSpec fork), so it validates against the full DESCRIPTIVE FINALIZER_IDS, which does carry "writeToRepoRoot". Got: ${JSON.stringify(panelUnknownFinalizerFindings)}`,
+    );
   });
 });
 
@@ -1824,7 +1924,7 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
       {
         phases: [
           { phase: 'generating', step: 'agent', writes: ['demo'], next: 'awaiting-review' },
-          { phase: 'awaiting-review', step: 'noop' },
+          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
           { phase: 'locking', step: 'finalize', finalizer: 'recordLockedDemo', next: 'locked' },
           { phase: 'locked', step: 'terminal' },
           { phase: 'abandoned', step: 'terminal' },
@@ -1839,9 +1939,9 @@ describe('the real repo (studio/session-kinds.yaml) — panel.phases on demo/ins
       {
         phases: [
           { phase: 'interviewing', step: 'agent' },
-          { phase: 'awaiting-answers', step: 'noop', next: 'interviewing' },
+          { phase: 'awaiting-answers', step: 'noop', awaits: 'questions', next: 'interviewing' },
           { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
-          { phase: 'awaiting-verdict', step: 'noop' },
+          { phase: 'awaiting-verdict', step: 'noop', awaits: 'verdict' },
           { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
           { phase: 'committed', step: 'terminal' },
           { phase: 'rejected', step: 'terminal' },
@@ -1887,9 +1987,9 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
     panel: {
       phases: [
         { phase: 'interviewing', step: 'agent' },
-        { phase: 'awaiting-answers', step: 'noop', next: 'interviewing' },
+        { phase: 'awaiting-answers', step: 'noop', awaits: 'questions', next: 'interviewing' },
         { phase: 'drafting', step: 'agent', writes: ['draft'], next: 'awaiting-verdict' },
-        { phase: 'awaiting-verdict', step: 'noop' },
+        { phase: 'awaiting-verdict', step: 'noop', awaits: 'verdict' },
         { phase: 'finalizing', step: 'finalize', finalizer: 'writeToRepoRoot', next: 'committed' },
         { phase: 'committed', step: 'terminal' },
       ],
@@ -1910,11 +2010,31 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
     assert.deepEqual(deriveSessionAffordances(PANEL_DESCRIPTOR, 'committed'), []);
   });
 
-  it('a `noop` phase named exactly "awaiting-answers" → [question-form] (the ONE interview Q&A checkpoint name this repo uses) — also carries next-turn from its `next` field', () => {
+  it('a `noop` phase with `awaits: "questions"` (here, named "awaiting-answers") → [question-form] — driven by the AUTHORED `awaits` field, not the phase name — also carries next-turn from its `next` field', () => {
     const result = deriveSessionAffordances(PANEL_DESCRIPTOR, 'awaiting-answers');
     assert.deepEqual(result, [
       { id: 'awaiting-answers-question-form', kind: 'question-form', phase: 'awaiting-answers' },
       { id: 'awaiting-answers-next-turn', kind: 'next-turn', phase: 'awaiting-answers', meta: { next: 'interviewing' } },
+    ]);
+  });
+
+  it('W6-B3 post-merge review — the misclassification fix, direct proof: a `noop` phase named SOMETHING OTHER THAN "awaiting-answers" (e.g. "awaiting-input") still derives [question-form] when its `awaits` field says so — a bare phase-NAME match would have silently mis-derived this as `verdict`', () => {
+    const differentlyNamedQuestionPhase: SessionKindDescriptor = {
+      ...baseDescriptor(),
+      panel: { phases: [{ phase: 'awaiting-input', step: 'noop', awaits: 'questions' }] },
+    } as SessionKindDescriptor;
+    assert.deepEqual(deriveSessionAffordances(differentlyNamedQuestionPhase, 'awaiting-input'), [
+      { id: 'awaiting-input-question-form', kind: 'question-form', phase: 'awaiting-input' },
+    ]);
+  });
+
+  it('W6-B3 post-merge review — the converse proof: a `noop` phase LITERALLY named "awaiting-answers" but with `awaits: "verdict"` derives [verdict], NOT [question-form] — proves derivation reads `awaits`, never the phase name (the old `row.phase === \'awaiting-answers\'` heuristic would have gotten this one right for the wrong reason)', () => {
+    const namedLikeAQuestionButIsAVerdict: SessionKindDescriptor = {
+      ...baseDescriptor(),
+      panel: { phases: [{ phase: 'awaiting-answers', step: 'noop', awaits: 'verdict' }] },
+    } as SessionKindDescriptor;
+    assert.deepEqual(deriveSessionAffordances(namedLikeAQuestionButIsAVerdict, 'awaiting-answers'), [
+      { id: 'awaiting-answers-verdict', kind: 'verdict', phase: 'awaiting-answers' },
     ]);
   });
 
@@ -1948,7 +2068,7 @@ describe('deriveSessionAffordances — derivation table (W6-B3)', () => {
         style: 'agent',
         phases: [
           { phase: 'analyzing', step: 'agent', writes: ['staging'], next: 'awaiting-review' },
-          { phase: 'awaiting-review', step: 'noop' },
+          { phase: 'awaiting-review', step: 'noop', awaits: 'verdict' },
           { phase: 'committing', step: 'finalize', finalizer: 'copyStagingToLibrary', next: 'committed' },
           { phase: 'committed', step: 'terminal' },
         ],

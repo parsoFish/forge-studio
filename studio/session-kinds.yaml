@@ -45,17 +45,24 @@
       # orchestrator/instructions-runner.ts:310) — branches (needs input ->
       # awaiting-answers; ready -> drafting), so no single `next` here.
       - { phase: interviewing, step: agent }
-      # orchestrator/instructions-runner.ts:18 — the interview Q&A checkpoint
-      # (bridge: answer -> interviewing, orchestrator/instructions-runner.ts:247).
-      - { phase: awaiting-answers, step: noop, next: interviewing }
+      # orchestrator/instructions-runner.ts:18 — the interview Q&A checkpoint.
+      # awaits:questions — this IS the interview Q&A checkpoint the operator
+      # answers. The answer -> interviewing transition is written by
+      # cli/ui-bridge.ts:3264 (POST /api/instructions/answer,
+      # `{ ...status, phase: 'interviewing', round: round + 1 }`), NOT
+      # orchestrator/instructions-runner.ts:247 (which writes the OPPOSITE
+      # entry, drafting/interviewing -> awaiting-answers, when the agent turn
+      # itself decides it needs more input).
+      - { phase: awaiting-answers, step: noop, awaits: questions, next: interviewing }
       # orchestrator/instructions-runner.ts:20-21, runDraftStep (agent turn,
       # orchestrator/instructions-runner.ts:373) — writes the AGENTS.md draft
       # (orchestrator/instructions-runner.ts:457), advances to awaiting-verdict.
       - { phase: drafting, step: agent, writes: [draft], next: awaiting-verdict }
       # orchestrator/instructions-runner.ts:21-23 — operator decision point
       # (bridge: approve -> finalizing; revise -> drafting; reject ->
-      # rejected), no single `next` (3-way branch).
-      - { phase: awaiting-verdict, step: noop }
+      # rejected), no single `next` (3-way branch). awaits:verdict — an
+      # approve/revise/reject decision, not a Q&A checkpoint.
+      - { phase: awaiting-verdict, step: noop, awaits: verdict }
       # orchestrator/instructions-runner.ts:21, runFinalizeStep (deterministic
       # write via withStudioWrite, orchestrator/instructions-runner.ts:464,491;
       # no agent call), advances to committed.
@@ -107,8 +114,9 @@
       - { phase: generating, step: agent, writes: [demo], next: awaiting-review }
       # orchestrator/demo-builder-runner.ts:16 — operator decision point
       # (bridge: feedback -> generating; lock -> locking; abandon ->
-      # abandoned), no single `next` (3-way branch).
-      - { phase: awaiting-review, step: noop }
+      # abandoned), no single `next` (3-way branch). awaits:verdict — a
+      # feedback/lock/abandon decision, not a Q&A checkpoint.
+      - { phase: awaiting-review, step: noop, awaits: verdict }
       # orchestrator/demo-builder-runner.ts:19, runLockStep (deterministic —
       # "record the locked demo for reproducibility",
       # orchestrator/demo-builder-runner.ts:405-409; no agent call).
@@ -206,7 +214,7 @@
     style: agent
     phases:
       - { phase: analyzing, step: agent, writes: [staging], next: awaiting-review }
-      - { phase: awaiting-review, step: noop }
+      - { phase: awaiting-review, step: noop, awaits: verdict }
       - { phase: committing, step: finalize, finalizer: copyStagingToLibrary, next: committed }
       - { phase: committed, step: terminal }
 
@@ -255,5 +263,5 @@
     style: agent
     phases:
       - { phase: drafting, step: agent, writes: [plan], next: awaiting-approval }
-      - { phase: awaiting-approval, step: noop }
+      - { phase: awaiting-approval, step: noop, awaits: verdict }
       - { phase: applied, step: terminal }
