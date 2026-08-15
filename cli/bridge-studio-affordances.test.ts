@@ -512,6 +512,131 @@ test('TBL-authoring-3: verdict approve with missing "id" -> 400, nothing landed/
 });
 
 // ===========================================================================
+// TABLE TEST — community-refresh (W6-CR-3; verdict: approve -> commit,
+// reject -> rejected — UNLIKE kb-cleanup/authoring, BOTH verdicts are
+// supported here per `studio/session-kinds.yaml`'s own `verdicts: [approve,
+// reject]` declaration on this kind's `awaiting-review` row)
+// ===========================================================================
+
+const COMMUNITY_REFRESH_PROJECT = '.community-registry';
+
+function communityRegistryPath(): string {
+  return join(forgeRoot, 'studio', 'community', 'registry.yaml');
+}
+
+function writeCommunityRegistry(itemsYaml: string): void {
+  mkdirSync(join(forgeRoot, 'studio', 'community'), { recursive: true });
+  writeFileSync(communityRegistryPath(), `meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems:\n${itemsYaml}`, 'utf8');
+}
+
+const ALPHA_LIVE_YAML = [
+  '  - id: alpha',
+  '    kind: skill',
+  '    name: Alpha',
+  '    category: testing',
+  '    sourceUrl: "https://github.com/example/alpha"',
+  '    provenance: "example/alpha"',
+  '    signals:',
+  '      stars: 100',
+  '      starsDisplay: "100"',
+  '      attributedTo: "example/alpha"',
+  '    upstreamUpdatedAt: null',
+  '    fetchedAt: null',
+  '    fetchedBy: seed',
+  '',
+].join('\n');
+
+test('TBL-communityrefresh-1: verdict approve at awaiting-review -> 200, delegates to commitRegistryDraft (real registry.yaml updated), phase -> committed', async () => {
+  writeCommunityRegistry(ALPHA_LIVE_YAML);
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(COMMUNITY_REFRESH_PROJECT, '_community-refresh', sessionId, {
+    session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
+  });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(
+    join(sessionDir, 'staging', 'registry.yaml'),
+    [
+      'meta:',
+      '  schemaVersion: 1',
+      '  lastRefresh: null',
+      'items:',
+      '  - id: alpha',
+      '    kind: skill',
+      '    name: Alpha',
+      '    category: testing',
+      '    sourceUrl: "https://github.com/example/alpha"',
+      '    provenance: "example/alpha"',
+      '    signals:',
+      '      stars: 250',
+      '      starsDisplay: "250"',
+      '      attributedTo: "example/alpha"',
+      '    upstreamUpdatedAt: "2026-08-01T00:00:00.000Z"',
+      '    fetchedAt: null',
+      '    fetchedBy: seed',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  writeFileSync(join(sessionDir, 'staging', 'evidence.md'), '# Evidence\n\nalpha: verified via WebFetch of the GitHub API.\n', 'utf8');
+
+  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
+    project: COMMUNITY_REFRESH_PROJECT, verdict: 'approve',
+  });
+  const text = await res.text();
+  assert.equal(res.status, 200, `expected 200, got ${res.status}: ${text}`);
+  const body = JSON.parse(text) as { ok: boolean; phase: string };
+  assert.equal(body.ok, true);
+  assert.equal(body.phase, 'committed');
+  assert.equal(readPhase(sessionDir), 'committed');
+
+  const outRaw = readFileSync(communityRegistryPath(), 'utf8');
+  assert.match(outRaw, /stars: 250/, 'the real registry.yaml must reflect the committed diff');
+  assert.match(outRaw, new RegExp(`fetchedBy: community-refresh/${sessionId}`), 'the stamp must name the real session id');
+});
+
+test('TBL-communityrefresh-2: verdict reject at awaiting-review -> 200, phase -> rejected, real registry.yaml untouched', async () => {
+  writeCommunityRegistry(ALPHA_LIVE_YAML);
+  const before = readFileSync(communityRegistryPath(), 'utf8');
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(COMMUNITY_REFRESH_PROJECT, '_community-refresh', sessionId, {
+    session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
+  });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), `meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems:\n${ALPHA_LIVE_YAML}`, 'utf8');
+
+  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
+    project: COMMUNITY_REFRESH_PROJECT, verdict: 'reject',
+  });
+  const body = (await res.json()) as { ok: boolean; phase: string };
+  assert.equal(res.status, 200);
+  assert.equal(body.ok, true);
+  assert.equal(body.phase, 'rejected');
+  assert.equal(readPhase(sessionDir), 'rejected');
+  assert.equal(readFileSync(communityRegistryPath(), 'utf8'), before, 'a reject must never touch the real registry');
+});
+
+test('TBL-communityrefresh-3: verdict approve with a malformed staged draft -> 500, phase reverts to awaiting-review, real registry.yaml untouched', async () => {
+  writeCommunityRegistry(ALPHA_LIVE_YAML);
+  const before = readFileSync(communityRegistryPath(), 'utf8');
+  const sessionId = freshSessionId();
+  const sessionDir = seedSession(COMMUNITY_REFRESH_PROJECT, '_community-refresh', sessionId, {
+    session_id: sessionId, project: COMMUNITY_REFRESH_PROJECT, phase: 'awaiting-review', package_id: 'community-registry',
+  });
+  mkdirSync(join(sessionDir, 'staging'), { recursive: true });
+  // Malformed: "items" is a scalar, not an array — loadCommunityRegistry throws.
+  writeFileSync(join(sessionDir, 'staging', 'registry.yaml'), 'meta:\n  schemaVersion: 1\n  lastRefresh: null\nitems: not-an-array\n', 'utf8');
+
+  const res = await postJson(affordanceUrl('community-refresh', sessionId, 'awaiting-review-verdict'), {
+    project: COMMUNITY_REFRESH_PROJECT, verdict: 'approve',
+  });
+  const body = (await res.json()) as { error: string };
+  assert.equal(res.status, 500);
+  assert.match(body.error, /items/i);
+  assert.equal(readPhase(sessionDir), 'awaiting-review', 'a refused commit must revert to awaiting-review, never brick the session at "committing"');
+  assert.equal(readFileSync(communityRegistryPath(), 'utf8'), before, 'the real registry.yaml must be untouched by a refused commit');
+});
+
+// ===========================================================================
 // staged-review / next-turn — display-only, no write handler wired
 // ===========================================================================
 

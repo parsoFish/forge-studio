@@ -12,6 +12,17 @@
 # external dependency = ask-first), and the browsable index is a static curated
 # seed (D10).
 #
+# W6-CR-3 amendment (D10 still holds): studio/community/registry.yaml CAN now
+# be extended from these hubs' real, live upstream state — but only via the
+# operator-invoked community-refresh agent (skills/community-refresh/SKILL.md,
+# kicked off from /community's "Refresh registry (agent)" entry), never by
+# forge-the-platform crawling anything on its own. The AGENT fetches (WebFetch/
+# WebSearch, one bounded interactive turn); forge itself still ships no runtime
+# hub dependency, no scheduled poller, no background job — a refresh happens
+# exactly when, and only when, an operator asks for one, and the draft it
+# produces stops for an explicit approve/reject before this registry ever
+# changes (orchestrator/interactive-finalizers.ts's commitRegistryDraft).
+#
 # `url` is matched as a repository/site prefix on a path-segment boundary, so
 # `.../modelcontextprotocol/servers-archived` does NOT match the
 # `.../modelcontextprotocol/servers` hub.

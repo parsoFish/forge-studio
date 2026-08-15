@@ -1009,5 +1009,43 @@ export const journey = defineJourney({
         await frame(page, 'cm-17-connections-used-by', 'Part 2 (community) — used-by is derived; nothing else to wire', { key: true });
       },
     },
+    {
+      id: 'community-refresh-kickoff',
+      title: 'The refresh entry — kicks off the community-refresh agent\'s kickoff page',
+      narration:
+        'W6-CR-3: the registry never fetches itself — an operator asks for a ' +
+        'verified pass via [data-action="refresh-community-registry"] on the ' +
+        'browser itself, landing on the SAME generic session-kickoff surface ' +
+        'every other interactive kind uses (B6), just with no project/KB ' +
+        'selector to fill in — the community registry is forge\'s own single, ' +
+        'forge-wide file. This beat proves the entry point and the kickoff ' +
+        'page render correctly; it deliberately never clicks Start — no live ' +
+        'agent spawn belongs in a gate.',
+      drive: async (ctx) => {
+        const { page, watch, frame, check } = ctx;
+        console.log('\n[CM-23] /community → refresh entry → session-kickoff');
+        await page.goto(watch.uiUrl + '/community', { waitUntil: 'domcontentloaded' });
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="community-browser"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        check(await page.locator('[data-action="refresh-community-registry"]').count() > 0,
+          'CM-23: /community exposes [data-action="refresh-community-registry"] — the entry point into the refresh agent\'s kickoff');
+
+        await page.locator('[data-action="refresh-community-registry"]').click().catch(() => {});
+        await page.waitForURL('**/sessions/community-refresh/new', { timeout: 10000 }).catch(() => {});
+        await page.waitForFunction(
+          () => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-page-ready') === 'true',
+          null, { timeout: 20000 }).catch(() => {});
+        check(await page.locator('main[data-page="session-kickoff"]').count() > 0, 'CM-23: /sessions/community-refresh/new renders [data-page="session-kickoff"]');
+        const kindChip = await page.evaluate(() => document.querySelector('[data-page="session-kickoff"]')?.getAttribute('data-kickoff-kind'));
+        check(kindChip === 'community-refresh', `CM-23: the kickoff page's own kind chip reads "community-refresh" (got "${kindChip}")`);
+        check(await page.locator('[data-section="kickoff-context"]').count() > 0, 'CM-23: the context card renders (agent, produces, session directory)');
+        check(await page.locator('[data-section="kickoff-selector"]').count() === 0,
+          'CM-23: NO project/KB selector renders — community-refresh is the one kind with selector:"none" (nothing forge-wide to pick)');
+        check(await page.locator('[data-action="start-session"]').count() > 0, 'CM-23: the Start button is present — never clicked in this gate (no live agent spawn)');
+        await caption(page, 'Just Start + a model tier — the registry is forge\'s own, nothing to select.');
+        await frame(page, 'cm-23-community-refresh-kickoff', 'Part 2 (community) — the refresh agent\'s kickoff page, unattended-safe', { key: true });
+      },
+    },
   ],
 });

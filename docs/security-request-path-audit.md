@@ -1129,3 +1129,39 @@ All three resolve the identical fixed `<uiDir>/.next/FORGE_BUILD_OK` path —
 `uiDir` is `resolve(forgeRoot, 'forge-ui')` as above, never request-derived;
 the leaf segments `.next` and `FORGE_BUILD_OK` are literals. No caller-
 supplied value reaches any of the three.
+
+### Guarded in W6-CR-3 — `commitRegistryDraft`'s temp+rename commit write
+
+`orchestrator/interactive-finalizers.ts` grew three new tracked sinks
+(`writeFileSync` 0→1, `renameSync` 0→1, `unlinkSync` 0→1) — the
+`community-refresh` session's `committing`-phase finalizer,
+`commitRegistryDraft` (ADR-043 §5), which commits an operator-**approved**
+draft of `studio/community/registry.yaml` onto the real file. Reachable from
+`cli/bridge-studio-affordances.ts`'s generic verdict route
+(`handleCommunityRefreshVerdict`'s `approve` arm, via the dynamically-imported
+`runInteractiveTurn` → `resolveFinalizer('commitRegistryDraft')`) — the same
+file-level reachability model as the R4-22 WI-2 row above (`interactive-
+finalizers.ts` was already ratchet-tracked before this WI; this is new sinks
+inside an already-reachable file, not a newly-reachable file).
+
+| file:line | op | request field | class | evidence |
+|---|---|---|---|---|
+| `orchestrator/interactive-finalizers.ts` (`commitRegistryDraft`) | `writeFileSync` | none — `tempPath = join(dirname(destPath), '.registry.yaml.tmp-<random>')`, where `destPath = resolveGuardedPath(forgeRoot, ['studio','community','registry.yaml']).realPath`; the random suffix is `randomBytes(6)` generated IN-PROCESS, never request-derived | guarded `[read]` | `dirname(destPath)` is a directory the guard already identity-verified; the leaf filename is a fixed literal prefix plus server-generated entropy, never a caller-supplied string — there is no path segment here an attacker can influence at all. |
+| `orchestrator/interactive-finalizers.ts` (`commitRegistryDraft`) | `renameSync` | none — both arguments are `tempPath` (as above) and `destPath` (the same already-guarded `realPath` used throughout the rest of this function, e.g. `draftGuard`/`registryGuard`) | guarded `[read]` | `renameSync` only ever moves the just-written temp file (created by the `writeFileSync` row above, same directory) onto the guard-verified destination — the atomic swap step of a check-then-write-then-atomically-publish sequence, not a caller-influenced path operation. |
+| `orchestrator/interactive-finalizers.ts` (`commitRegistryDraft`) | `unlinkSync` | none — `tempPath`, identical to the `writeFileSync` row | guarded `[read]` | Best-effort cleanup ONLY on the `renameSync` failure path (orphaned-temp-file removal); wrapped in its own `try/catch` so a failed cleanup never masks the real error. Same non-request-derived path as the write. |
+
+**Why a temp+rename write here, unlike `copyStagingToLibrary`'s `O_EXCL`
+create-only writes above:** `copyStagingToLibrary` installs a package into a
+NEW, never-before-existing destination (`O_EXCL` refuses to overwrite
+anything). `commitRegistryDraft` REPLACES an EXISTING file — the live
+`studio/community/registry.yaml` — so `O_EXCL` is the wrong primitive (it
+would refuse the very file this function exists to update); atomic
+`rename(2)` over a same-directory temp file is the standard way to replace a
+file's contents without ever leaving readers of the real path observing a
+partial write, and needs no new containment shape beyond the guard this
+function already resolves `destPath` through.
+
+`node scripts/check-request-path-sinks.mjs --write` accepted this delta —
+`scripts/request-path-sinks.baseline.txt` now records
+`orchestrator/interactive-finalizers.ts` `writeFileSync`/`renameSync`/
+`unlinkSync` at 1 each.

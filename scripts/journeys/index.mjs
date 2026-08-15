@@ -410,4 +410,9 @@ export const RUN_ORDER = [
   ['community', 'community-return-to-browser'],
   ['community', 'community-connections-local-shelf'],
   ['community', 'community-connections-used-by'],
+  // W6-CR-3: the refresh-entry -> session-kickoff beat runs LAST of all —
+  // community already runs last of every journey (see the header comment
+  // above), and this beat only reads/renders (no live agent spawn belongs
+  // in a gate), so it carries no ordering risk to anything before it.
+  ['community', 'community-refresh-kickoff'],
 ];

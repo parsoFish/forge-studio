@@ -156,6 +156,8 @@ export const BRIDGE_ROUTE_CLASSIFICATION: readonly RouteClassification[] = [
     reason: 'spawnAgentTurn (R4-21 phase 2 — the authoring session, riding the generic runInteractiveTurn spine) — the session dir, status.json and prompt.md are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the onboarding-start row above' },
   { method: 'POST', route: '/api/studio/kbs/:id/cleanup/start', classification: 'stub-actions', guard: 'spawn-helper',
     reason: 'spawnAgentTurn (R4-19-F2 — the kb-cleanup session, riding the generic runInteractiveTurn spine) — the session dir, status.json (kb_id/kb_binding/findings) are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring/onboarding-start rows above' },
+  { method: 'POST', route: '/api/studio/community-refresh/start', classification: 'stub-actions', guard: 'spawn-helper',
+    reason: 'spawnAgentTurn (W6-CR-3 — the community-refresh session, riding the generic runInteractiveTurn spine) — the session dir + status.json (registryPath/hubsPath/package_id) under the fixed .community-registry anchor are REAL bookkeeping and still land; only the agent turn is skipped with marker + event, exactly as the authoring/kb-cleanup-start rows above' },
 
   // ---- exempt-local: kb-cleanup apply (R4-19-F2) -------------------------
   // NOT a spawn-helper row: this route runs `runBrainConsolidateNow`

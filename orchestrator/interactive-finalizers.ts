@@ -120,11 +120,18 @@ import {
   readSync,
   writeSync,
   closeSync,
+  writeFileSync,
+  renameSync,
+  unlinkSync,
   constants as fsConstants,
 } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join, dirname, basename } from 'node:path';
+import { randomBytes } from 'node:crypto';
+import yaml from 'js-yaml';
 
 import { resolveGuardedPath } from '../cli/studio-path-guard.ts';
+import { loadCommunityRegistry } from './studio/registry.ts';
+import type { CommunityRegistryItem } from './studio/types.ts';
 
 // ---------------------------------------------------------------------------
 // Error contract (ADR-042's third boundary — a pure function with an
@@ -148,7 +155,7 @@ export class InteractiveFinalizerError extends Error {
 // Registry types
 // ---------------------------------------------------------------------------
 
-export type FinalizerId = 'copyStagingToLibrary';
+export type FinalizerId = 'copyStagingToLibrary' | 'commitRegistryDraft';
 
 export type FinalizerContext = {
   /** Trusted — the caller already SEC-04-guarded this. */
@@ -398,6 +405,193 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 }
 
 // ---------------------------------------------------------------------------
+// commitRegistryDraft (W6-CR-3) — the `community-refresh` session's
+// `committing` finalizer. Commits an operator-APPROVED draft of
+// `studio/community/registry.yaml` (the W6-CR-1 source of truth) — never
+// invents a fact, never half-writes.
+//
+// SCOPE DISCIPLINE (mirrors `copyStagingToLibrary`'s own header note): this
+// is the generic COMMIT primitive for exactly one file. It does not decide
+// what a "good" draft looks like — that judgment already happened (the
+// operator's `approve` verdict, gating the `committing` phase in the first
+// place; a `reject` verdict never reaches this function at all — it advances
+// straight to the `rejected` terminal phase instead, see
+// `studio/session-kinds.yaml`'s own comment on the `community-refresh` row).
+//
+// VALIDATION: the staged draft is parsed through `loadCommunityRegistry`
+// (`orchestrator/studio/registry.ts`) — the SAME structural loader/validator
+// `communitySkillsFromRegistry` and `forge studio lint` already trust for the
+// LIVE registry — never a hand-rolled parallel parser. A malformed draft
+// (missing `meta`, a non-array `items`, a bad `kind`/`signals` shape) throws
+// here, NAMING the exact offending field, BEFORE this function ever opens
+// the real `studio/community/registry.yaml` for writing.
+//
+// THE STAMP: `fetchedAt`/`fetchedBy` are NEVER trusted from the draft — this
+// function is the SOLE source of both, derived from whether a draft item's
+// CONTENT (every field except those two) differs from the live registry's
+// current row for the same `id` (`itemContentEqual` below). A row the agent
+// verified and updated differs from live in some real field (a star count,
+// an `upstreamUpdatedAt`, a brand-new item's very presence) and is stamped
+// `fetchedAt: <now>`, `fetchedBy: community-refresh/<sessionId>`. A row the
+// agent could not verify is, per `skills/community-refresh/SKILL.md`'s own
+// contract, copied forward BYTE-IDENTICAL to its live entry — content-equal
+// by construction, so it is returned as the EXACT live object, never
+// restamped, never touched. This closes the fabrication surface a
+// draft-supplied `fetchedAt` would otherwise open (an agent — or a
+// compromised draft — claiming a verification that never happened) without
+// requiring a separate `verified: boolean` field in the registry schema.
+//
+// `sessionId` is derived from `basename(ctx.sessionDir)` (the session dir's
+// OWN last path segment — the caller already SEC-04-guarded the whole
+// `sessionDir`), never from `ctx.packageId`: this finalizer intentionally
+// leaves `packageId`/`libraryRoot` UNUSED — the community registry is one
+// forge-wide file, not a per-package library entry, so the generic runner's
+// packageId/libraryRoot machinery (SLUG_RE validation,
+// `_interactive-library/` scaffolding) is inert plumbing here, never this
+// function's actual destination.
+//
+// WRITE: `resolveGuardedPath(forgeRoot, ['studio','community','registry.yaml'])`
+// — the SAME containment guard every other writer in this repo uses, never a
+// lexical join. Temp-then-rename (a sibling `.registry.yaml.tmp-<random>`
+// file in the SAME directory, written in full, then atomically renamed over
+// the real path) — the real registry.yaml is NEVER open for a partial write;
+// a crash or throw mid-write leaves the temp file orphaned and the real file
+// untouched, never a half-written source of truth for the whole Studio
+// community browser.
+// ---------------------------------------------------------------------------
+
+/** Compares two registry items on every field EXCEPT `fetchedAt`/`fetchedBy`
+ *  — those two are what `commitRegistryDraft` itself derives, never what it
+ *  compares on (see the section header above). `desc`/`tier` are optional
+ *  fields on `CommunityRegistryItem`; `?? null` normalizes "absent" and
+ *  "explicitly null-like" to the same comparison value on both sides. */
+function itemContentEqual(a: CommunityRegistryItem, b: CommunityRegistryItem): boolean {
+  return (
+    a.id === b.id &&
+    a.kind === b.kind &&
+    a.name === b.name &&
+    (a.desc ?? null) === (b.desc ?? null) &&
+    a.category === b.category &&
+    a.sourceUrl === b.sourceUrl &&
+    a.provenance === b.provenance &&
+    (a.tier ?? null) === (b.tier ?? null) &&
+    a.signals.stars === b.signals.stars &&
+    a.signals.starsDisplay === b.signals.starsDisplay &&
+    a.signals.attributedTo === b.signals.attributedTo &&
+    a.upstreamUpdatedAt === b.upstreamUpdatedAt
+  );
+}
+
+/** Renders one `CommunityRegistryItem` back to the plain-object shape
+ *  `js-yaml` dumps — optional fields (`desc`/`tier`) are OMITTED (never
+ *  written as `null`/`undefined`) when absent, mirroring
+ *  `serializeFlowDefinition`'s own "spread in only when defined" discipline
+ *  (`orchestrator/studio/registry.ts`) rather than trusting `yaml.dump` to
+ *  drop `undefined` values on its own. */
+function serializeCommunityRegistryItem(item: CommunityRegistryItem): Record<string, unknown> {
+  const out: Record<string, unknown> = { id: item.id, kind: item.kind, name: item.name };
+  if (item.desc !== undefined) out.desc = item.desc;
+  out.category = item.category;
+  out.sourceUrl = item.sourceUrl;
+  out.provenance = item.provenance;
+  if (item.tier !== undefined) out.tier = item.tier;
+  out.signals = {
+    stars: item.signals.stars,
+    starsDisplay: item.signals.starsDisplay,
+    attributedTo: item.signals.attributedTo,
+  };
+  out.upstreamUpdatedAt = item.upstreamUpdatedAt;
+  out.fetchedAt = item.fetchedAt;
+  out.fetchedBy = item.fetchedBy;
+  return out;
+}
+
+export function commitRegistryDraft(ctx: FinalizerContext): string[] {
+  const { sessionDir, forgeRoot } = ctx;
+
+  // ---- Phase 1: locate + validate the staged draft. Zero writes. --------
+  const draftGuard = resolveGuardedPath(sessionDir, ['staging', 'registry.yaml']);
+  if (!draftGuard.ok) {
+    throw new InteractiveFinalizerError(
+      `commitRegistryDraft: staged registry.yaml failed containment (${draftGuard.reason}).`,
+    );
+  }
+  if (!draftGuard.exists) {
+    throw new InteractiveFinalizerError(
+      'commitRegistryDraft: no staged registry.yaml draft found under this session\'s staging/ directory.',
+    );
+  }
+
+  let draft: ReturnType<typeof loadCommunityRegistry>;
+  try {
+    // Reuses the CR-1 loader/validator VERBATIM — a malformed shape (missing
+    // meta, a non-array items, a bad kind/signals) throws here, naming the
+    // exact field, before this function ever touches the real registry.
+    draft = loadCommunityRegistry(draftGuard.realPath);
+  } catch (err) {
+    throw new InteractiveFinalizerError(
+      `commitRegistryDraft: staged registry.yaml is invalid — ${(err as Error).message}`,
+    );
+  }
+
+  // ---- Phase 1b: the live registry — the diff baseline + write target,
+  // resolved ONCE (the same guarded path serves both the read-for-diff below
+  // and the write at the end). A fresh forge root with no registry.yaml yet
+  // is a legitimate first-ever-commit — `exists:false` degrades to an empty
+  // baseline, never a throw. ------------------------------------------------
+  const registryGuard = resolveGuardedPath(forgeRoot, ['studio', 'community', 'registry.yaml']);
+  if (!registryGuard.ok) {
+    throw new InteractiveFinalizerError(
+      `commitRegistryDraft: live registry.yaml failed containment (${registryGuard.reason}).`,
+    );
+  }
+  const liveItems = registryGuard.exists ? loadCommunityRegistry(registryGuard.realPath).items : [];
+  const liveById = new Map(liveItems.map((item) => [item.id, item] as const));
+
+  // ---- Phase 2: compute the stamped output. Pure — no writes yet. -------
+  const sessionId = basename(sessionDir);
+  const now = new Date().toISOString();
+  const fetchedBy = `community-refresh/${sessionId}`;
+
+  const stampedItems: CommunityRegistryItem[] = draft.items.map((item) => {
+    const liveItem = liveById.get(item.id);
+    if (liveItem !== undefined && itemContentEqual(item, liveItem)) {
+      // Untouched row — the live entry itself, byte-identical, never
+      // restamped (see itemContentEqual's doc comment).
+      return liveItem;
+    }
+    // A genuinely new or changed row — this function, never the draft, is
+    // the sole source of fetchedAt/fetchedBy.
+    return { ...item, fetchedAt: now, fetchedBy };
+  });
+
+  const outDoc = {
+    meta: { schemaVersion: draft.schemaVersion, lastRefresh: now },
+    items: stampedItems.map(serializeCommunityRegistryItem),
+  };
+  const serialized = yaml.dump(outDoc, { lineWidth: 100, quotingType: '"', forceQuotes: false });
+
+  // ---- Phase 3: write. Guarded destination, temp+rename (atomic). -------
+  const destPath = registryGuard.realPath;
+  const tempPath = join(dirname(destPath), `.registry.yaml.tmp-${randomBytes(6).toString('hex')}`);
+  writeFileSync(tempPath, serialized, 'utf8');
+  try {
+    renameSync(tempPath, destPath);
+  } catch (err) {
+    try {
+      unlinkSync(tempPath);
+    } catch {
+      /* best-effort cleanup of the orphaned temp file */
+    }
+    throw new InteractiveFinalizerError(
+      `commitRegistryDraft: failed to commit registry.yaml — ${(err as NodeJS.ErrnoException).message}`,
+    );
+  }
+
+  return [destPath];
+}
+
+// ---------------------------------------------------------------------------
 // FINALIZERS registry — deep-frozen (each row individually, BEFORE the outer
 // array — Object.freeze is SHALLOW, so freezing only the outer container
 // would leave each row object mutable). Copied verbatim from
@@ -410,6 +604,7 @@ export function copyStagingToLibrary(ctx: FinalizerContext): string[] {
 
 export const FINALIZERS: readonly FinalizerRow[] = Object.freeze([
   Object.freeze({ id: 'copyStagingToLibrary', run: copyStagingToLibrary }),
+  Object.freeze({ id: 'commitRegistryDraft', run: commitRegistryDraft }),
 ] as const);
 
 /** Total lookup: an array + `.find()`, never a plain `{}` id-keyed map — a

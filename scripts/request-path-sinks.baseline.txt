@@ -246,6 +246,9 @@ orchestrator/interactive-finalizers.ts mkdirSync 1
 orchestrator/interactive-finalizers.ts openSync 2
 orchestrator/interactive-finalizers.ts readdirSync 1
 orchestrator/interactive-finalizers.ts realpathSync 1
+orchestrator/interactive-finalizers.ts renameSync 1
+orchestrator/interactive-finalizers.ts unlinkSync 1
+orchestrator/interactive-finalizers.ts writeFileSync 1
 orchestrator/interactive-runner.ts lstatSync 1
 orchestrator/interactive-runner.ts mkdirSync 1
 orchestrator/interactive-runner.ts readdirSync 1
