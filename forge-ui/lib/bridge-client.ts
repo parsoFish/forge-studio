@@ -190,18 +190,31 @@ export async function fetchWorkItem(cycleId: string, wiId: string): Promise<Work
 
 // ---- Per-project roadmap (S6) -----------------------------------------------
 
+/**
+ * W6-RV-1: forge-ui cannot import `orchestrator/` TypeScript directly in
+ * production code (the same constraint `SHIPPED_TRIGGER_KINDS` documents for
+ * itself in `./studio-client.ts`), so this mirrors `orchestrator/work-item.ts`'s
+ * `WORK_ITEM_STATUSES` as a runtime array (not just a re-typed literal union)
+ * so `./wi-status-parity.test.ts` can pin it against that SSOT — follows the
+ * same precedent as `SHIPPED_TRIGGER_KINDS` / `./trigger-kind-parity.test.ts`.
+ * Keep in lockstep by hand; the parity test goes red the moment either drifts.
+ */
+export const WI_STATUSES = ['pending', 'in-progress', 'complete', 'failed'] as const;
+type WiStatus = (typeof WI_STATUSES)[number];
+
 export type RoadmapWorkItem = {
   id: string;
   title: string;
   dependsOn: string[];
   /**
    * W6-RV-1: the WI's own status (mirrors `orchestrator/work-item.ts`'s
-   * `WorkItemStatus`), read straight off its frontmatter. Feeds the
-   * collapsed roadmap card's "done/total" micro-badge. Optional — legacy WI
-   * snapshots or a read that predates this field leave it undefined; callers
-   * treat undefined as "not complete" rather than fabricating a status.
+   * `WorkItemStatus` via `WI_STATUSES` above), read straight off its
+   * frontmatter. Feeds the collapsed roadmap card's "done/total" micro-badge.
+   * Optional — legacy WI snapshots or a read that predates this field leave
+   * it undefined; callers treat undefined as "not complete" rather than
+   * fabricating a status.
    */
-  status?: 'pending' | 'in-progress' | 'complete' | 'failed';
+  status?: WiStatus;
 };
 
 export type RoadmapInitiative = {

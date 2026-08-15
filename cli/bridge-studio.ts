@@ -26,7 +26,6 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { basename, join, resolve, sep } from 'node:path';
-import matter from 'gray-matter';
 
 import { runPreflight } from './preflight.ts';
 import { classifyClause } from './preflight-resolve.ts';
@@ -1012,15 +1011,6 @@ type ScannedManifestEntry = {
   /** Bare filename (e.g. `INIT-1.md`) — what `checkInitiativeDeps` expects. */
   file: string;
   manifest: ReturnType<typeof parseManifest>;
-  /**
-   * mock finding I3: the raw frontmatter `title:` field, when the manifest
-   * carries one. `InitiativeManifest` (orchestrator/manifest.ts) does not
-   * parse/retain this field (it is not part of the scheduler's typed
-   * contract), so it is read here, straight off the frontmatter, alongside
-   * the typed `parseManifest` call — same file content, no orchestrator
-   * surface growth. Undefined when absent or blank.
-   */
-  frontmatterTitle?: string;
 };
 
 /**
@@ -1059,20 +1049,18 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
       if (seen.has(initId)) continue;
       const fp = join(dir, file);
       let manifest: ReturnType<typeof parseManifest>;
-      let frontmatterTitle: string | undefined;
       try {
-        const content = readFileSync(fp, 'utf8');
-        manifest = parseManifest(content);
-        const rawTitle = matter(content).data?.title;
-        if (typeof rawTitle === 'string' && rawTitle.trim().length > 0) {
-          frontmatterTitle = rawTitle.trim();
-        }
+        // W6-RV-1 perf fix: parseManifest already runs matter() internally and
+        // now exposes `title` (orchestrator/manifest.ts, additive-optional) —
+        // a second matter() call here would parse the same buffer twice on a
+        // route the operator UI polls repeatedly.
+        manifest = parseManifest(readFileSync(fp, 'utf8'));
       } catch {
         continue;
       }
       if (manifest.project !== projectId) continue;
       seen.add(initId);
-      entries.push({ initId, status, file, manifest, frontmatterTitle });
+      entries.push({ initId, status, file, manifest });
     }
   }
 
@@ -1099,12 +1087,13 @@ function scanProjectManifests(projectId: string, forgeRoot: string): ScannedMani
 const BOILERPLATE_HEADINGS: ReadonlySet<string> = new Set(['goal', 'summary', 'context', 'overview']);
 
 /**
- * Precedence: frontmatter `title:` (an explicit author-supplied title) →
- * first NON-boilerplate `#`/`##` heading in the body → the initiativeId
- * (never a boilerplate heading, and never blank).
+ * Precedence: `manifest.title` (an explicit author-supplied frontmatter
+ * `title:`, orchestrator/manifest.ts) → first NON-boilerplate `#`/`##`
+ * heading in the body → the initiativeId (never a boilerplate heading, and
+ * never blank).
  */
-function deriveInitiativeTitle(initId: string, frontmatterTitle: string | undefined, body: string): string {
-  if (frontmatterTitle) return frontmatterTitle;
+function deriveInitiativeTitle(initId: string, manifestTitle: string | undefined, body: string): string {
+  if (manifestTitle) return manifestTitle;
   for (const m of body.matchAll(/^##?\s+(.+)$/gm)) {
     const heading = m[1].trim();
     if (heading.length > 0 && !BOILERPLATE_HEADINGS.has(heading.toLowerCase())) return heading;
@@ -1116,8 +1105,8 @@ function buildProjectRoadmap(projectId: string, forgeRoot: string, logsRoot: str
   const queuePaths = getPaths(join(resolve(forgeRoot), '_queue'));
   const entries = scanProjectManifests(projectId, forgeRoot);
 
-  const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest, frontmatterTitle }) => {
-    const title = deriveInitiativeTitle(initId, frontmatterTitle, manifest.body);
+  const initiatives: RoadmapInitiative[] = entries.map(({ initId, status, file, manifest }) => {
+    const title = deriveInitiativeTitle(initId, manifest.title, manifest.body);
 
     const items = readWorkItemsForInitiative(initId, manifest.cycle_id ?? null, forgeRoot, logsRoot);
     const workItems = items.length > 0 ? items : undefined;

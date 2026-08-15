@@ -5,8 +5,9 @@
  * `RoadmapNode` (RoadmapDag.tsx) as a PURE re-home (W6-RV-1, the
  * direction-agnostic first step toward the time-axis canvas, RV-2). Every
  * data-* attribute and the surrounding DOM shape are byte-identical to the
- * markup this replaces — see `lib/roadmap-dag-render.test.ts` /
- * `lib/initiative-detail-render.test.ts` for the pin.
+ * markup this replaces — see `lib/roadmap-dag-render.test.ts` (the AT4/AT5
+ * cases plus the W6-RV-1 collapsed-card/badge-arithmetic block) for the pin;
+ * there is no separate `initiative-detail-render.test.ts` file.
  *
  * Deps line, blocked/blocked-until-planned locks, WI badges (via
  * `topoLevels`), the run dig-in (active + prior cycles), demo-builder link,

@@ -820,9 +820,17 @@ inventory rather than one shared page-level contract:
   renders **collapsed by default** — a uniform, scannable ~280×72 card
   (title, 1-line ellipsis; `initiativeId`, monospace; the status chip) plus
   two micro-badges, `[data-micro-badge="deps-count"][data-badge-value]` and
-  `[data-micro-badge="wi-progress"][data-badge-value="<done>/<total>"]` (WI
-  done/total counts a WI `status === 'complete'`; an unplanned initiative
-  with no WI snapshot reads `"0/0"`, never a fabricated total). The header
+  `[data-micro-badge="wi-progress"][data-badge-value="<done>/<total>"]
+  [data-badge-failed="<n>"]` — the arithmetic contract: `'complete'` counts
+  toward done, `'failed'` counts in the total but **never** toward done (a
+  failed WI is real signal, not silently folded into "not done yet"), and
+  `workItems === undefined` (unplanned) reads `"0/0"`/`data-badge-failed="0"`,
+  never a fabricated total. A failed count > 0 additionally renders a small
+  `[data-badge-failed-marker]` (⚠ + count) inline in the badge so it's never
+  hidden. Styling: the badge is muted (dim, italic) when unplanned (`0/0` —
+  distinct from "done"), the shared `STATUS_COLOR.complete` tone when every WI
+  is done with zero failures, neutral otherwise — the two never render
+  identically. The header
   `[data-action="toggle-node-detail"]` toggles the full detail card open —
   extracted to its own component, `InitiativeDetail.tsx` (a pure re-home,
   byte-identical data-*/DOM to the pre-W6-RV-1 inline markup) — rendered into

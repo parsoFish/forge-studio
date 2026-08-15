@@ -280,11 +280,11 @@ export const journey = defineJourney({
                   // expanded before framing — a real click needs it visible.
                   const initToggle = page.locator(`${initNode} [data-action="toggle-node-detail"]`);
                   await initToggle.click().catch(() => {}); // expand
-                  await sleep(300);
+                  await page.waitForSelector(`${initNode}[data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
                   await initToggle.click().catch(() => {}); // collapse
-                  await sleep(300);
+                  await page.waitForSelector(`${initNode}[data-initiative-collapsed="true"]`, { timeout: 5000 }).catch(() => {});
                   await initToggle.click().catch(() => {}); // re-expand / pop
-                  await sleep(300);
+                  await page.waitForSelector(`${initNode}[data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
                   const expanded = await initToggle.getAttribute('aria-expanded').catch(() => null);
                   if (expanded !== 'true') { await initToggle.click().catch(() => {}); await sleep(200); }
                   await frame(page, 'r6-0b-popover', 'R4-13 — a DAG node\'s detail card: its real work items, run links, and demo tie-in, laid out inline');
@@ -314,6 +314,48 @@ export const journey = defineJourney({
               // Clean up the seeded merged/ initiative — self-contained to this beat,
               // unlike INIT_DEV which the next beat still needs.
               try { rmSync(join(QDIR('merged'), `${INIT_MERGED}.md`), { force: true }); } catch { /* */ }
+
+        },
+      },
+      {
+        id: 'roadmap-collapse-expand-all',
+        title: 'Collapse-all / expand-all toolbar (W6-RV-1)',
+        narration: 'Every DAG node card defaults to a uniform, scannable collapsed state; the DAG header\'s Collapse all / Expand all buttons bulk-toggle every node at once — a bulk affordance the per-node toggle alone can\'t give once a roadmap holds many initiatives.',
+        drive: async (ctx) => {
+              const { page, check, frame } = ctx;
+              // ── W6-RV-1: collapse-all / expand-all toolbar ────────────────────────────
+              console.log('\n[W6-RV-1] Collapse-all / expand-all toolbar');
+
+              // The roadmap tab is already showing (left there by roadmap-tab); sample a
+              // real, already-present node (INIT) to assert the bulk toggle actually
+              // reaches it, not just that the buttons exist.
+              const sampleNode = `[data-roadmap-node][data-initiative-id="${INIT}"]`;
+              await page.waitForSelector('[data-roadmap-dag]', { timeout: 10000 }).catch(() => {});
+
+              const collapseAllBtn = page.locator('[data-action="roadmap-collapse-all"]');
+              const expandAllBtn = page.locator('[data-action="roadmap-expand-all"]');
+              const collapseAllPresent = (await collapseAllBtn.count()) > 0;
+              const expandAllPresent = (await expandAllBtn.count()) > 0;
+              check(collapseAllPresent, 'roadmap: the DAG header carries [data-action="roadmap-collapse-all"]');
+              check(expandAllPresent, 'roadmap: the DAG header carries [data-action="roadmap-expand-all"]');
+
+              if (collapseAllPresent && expandAllPresent) {
+                // Expand all — the sampled card flips to [data-initiative-collapsed="false"].
+                await expandAllBtn.click();
+                await page.waitForSelector(`${sampleNode}[data-initiative-collapsed="false"]`, { timeout: 5000 }).catch(() => {});
+                const afterExpandAll = await page.locator(sampleNode).getAttribute('data-initiative-collapsed').catch(() => null);
+                check(afterExpandAll === 'false', `roadmap: expand-all flips a sampled card to [data-initiative-collapsed="false"] (got ${afterExpandAll})`);
+                await caption(page, 'Expand all pops every DAG node\'s detail card open at once.');
+                await frame(page, 'r6-2-expand-all', 'W6-RV-1 — expand-all bulk-opens every roadmap node\'s detail card', { key: true });
+
+                // Collapse all — the sampled card flips back to [data-initiative-collapsed="true"].
+                await collapseAllBtn.click();
+                await page.waitForSelector(`${sampleNode}[data-initiative-collapsed="true"]`, { timeout: 5000 }).catch(() => {});
+                const afterCollapseAll = await page.locator(sampleNode).getAttribute('data-initiative-collapsed').catch(() => null);
+                check(afterCollapseAll === 'true', `roadmap: collapse-all flips a sampled card back to [data-initiative-collapsed="true"] (got ${afterCollapseAll})`);
+                await caption(page, 'Collapse all folds every DAG node back down to its uniform, scannable card.');
+                await frame(page, 'r6-2b-collapse-all', 'W6-RV-1 — collapse-all folds every roadmap node back to its uniform card');
+              }
 
         },
       },

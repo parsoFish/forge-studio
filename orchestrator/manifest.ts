@@ -45,6 +45,20 @@ const DEFAULT_ORIGIN: InitiativeOrigin = 'architect';
 
 export type InitiativeManifest = {
   initiative_id: string;       // INIT-<YYYY-MM-DD>-<slug>
+  /**
+   * W6-RV-1 (mock finding I3), additive-optional field per ADR-042's
+   * disclose-not-park rule: an explicit author-supplied title, read
+   * straight off frontmatter. When present, the roadmap card's
+   * title-derivation (cli/bridge-studio.ts `deriveInitiativeTitle`) prefers
+   * it over scraping the body's first heading — betterado manifests
+   * otherwise all open on the same boilerplate heading ("Goal" / "Summary" /
+   * "Context"), collapsing every roadmap card to the same word. Exposed here
+   * (rather than re-parsing frontmatter a second time downstream) so a
+   * polled endpoint like the roadmap builder never parses the same manifest
+   * buffer twice. Absent on manifests authored before this field existed, or
+   * when the architect never set one.
+   */
+  title?: string;
   project: string;
   project_repo_path: string;
   created_at: string;          // ISO-8601
@@ -237,6 +251,12 @@ export function parseManifest(content: string): InitiativeManifest {
     origin,
     body: parsed.content.replace(/^\n+/, ''),
   };
+  // W6-RV-1: explicit author-supplied title, trimmed; absent/blank stays absent
+  // rather than storing an empty string (mirrors the frontmatterTitle
+  // trim-and-treat-blank-as-absent convention it replaces downstream).
+  if (typeof data.title === 'string' && data.title.trim().length > 0) {
+    manifest.title = data.title.trim();
+  }
   if (typeof data.claimed_at === 'string') manifest.claimed_at = data.claimed_at;
   if (typeof data.claimed_by === 'string') manifest.claimed_by = data.claimed_by;
   if (typeof data.worktree_path === 'string') manifest.worktree_path = data.worktree_path;
@@ -308,6 +328,11 @@ export function serializeManifest(m: InitiativeManifest): string {
     // unambiguous on disk, not inferred at read time forever.
     origin: m.origin ?? DEFAULT_ORIGIN,
   };
+  // W6-RV-1: round-trip the explicit title unchanged — every write path
+  // (claim, cycle_id/cost_ceiling/specs stamps, resume-from) spreads the
+  // parsed manifest back through serializeManifest, so omitting this would
+  // silently drop an author-supplied title on the next write.
+  if (m.title) data.title = m.title;
   if (m.claimed_at) data.claimed_at = m.claimed_at;
   if (m.claimed_by) data.claimed_by = m.claimed_by;
   if (m.worktree_path) data.worktree_path = m.worktree_path;

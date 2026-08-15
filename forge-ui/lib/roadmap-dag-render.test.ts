@@ -87,8 +87,8 @@ import type { InitiativeGroup } from '@/lib/cycle-grouping';
 // edges, >=2, and C carries two parents whose depths differ.
 // ---------------------------------------------------------------------------
 
-function wi(id: string): RoadmapWorkItem {
-  return { id, title: `work item ${id}`, dependsOn: [] };
+function wi(id: string, status?: RoadmapWorkItem['status']): RoadmapWorkItem {
+  return { id, title: `work item ${id}`, dependsOn: [], status };
 }
 
 function initiative(over: Partial<RoadmapInitiative> & { initiativeId: string }): RoadmapInitiative {
@@ -338,6 +338,69 @@ test('[R4-13/W6-RV-1] the RoadmapDag header carries collapse-all / expand-all to
   const html = render();
   expect(html).toContain('data-action="roadmap-collapse-all"');
   expect(html).toContain('data-action="roadmap-expand-all"');
+});
+
+// ---------------------------------------------------------------------------
+// wi-progress badge arithmetic — a CONTRACT, pinned with real WorkItemStatus
+// values, not a synthetic count: 'complete' counts toward done; 'failed'
+// counts in the total but NEVER toward done (a failed WI is real signal, not
+// silently folded into "not done yet"); undefined workItems reads 0/0
+// (unplanned), never a fabricated total.
+// ---------------------------------------------------------------------------
+
+function buildBadgeArithmeticRoadmap(): ProjectRoadmap {
+  return {
+    projectId: 'gitpulse',
+    initiatives: [
+      initiative({
+        initiativeId: 'INIT-MIXED',
+        status: 'in-flight',
+        workItems: [wi('WI-1', 'complete'), wi('WI-2', 'complete'), wi('WI-3', 'failed'), wi('WI-4', 'pending')],
+      }),
+      initiative({
+        initiativeId: 'INIT-ALL-DONE',
+        status: 'done',
+        workItems: [wi('WI-5', 'complete'), wi('WI-6', 'complete')],
+      }),
+    ],
+  };
+}
+
+test('[W6-RV-1] wi-progress arithmetic: complete counts toward done, failed counts in total but not done', () => {
+  const html = render(buildBadgeArithmeticRoadmap(), []);
+  const node = nodeBlock(html, 'INIT-MIXED');
+  // 4 total (2 complete + 1 failed + 1 pending); only the 2 complete count as done.
+  expect(node).toContain('data-badge-value="2/4"');
+  // The failed WI surfaces its own count — never silently absorbed into "not done".
+  expect(node).toContain('data-badge-failed="1"');
+  expect(node).toContain('data-badge-failed-marker');
+});
+
+test('[W6-RV-1] wi-progress arithmetic: undefined workItems (unplanned) reads 0/0, never a fabricated total', () => {
+  const html = render(); // default fixture — INIT-D carries workItems: undefined
+  const node = nodeBlock(html, 'INIT-D');
+  expect(node).toContain('data-badge-value="0/0"');
+  expect(node).toContain('data-badge-failed="0"');
+  expect(node).not.toContain('data-badge-failed-marker');
+});
+
+test('[W6-RV-1] wi-progress styling: 0/0 unplanned is muted, distinct from the all-complete tone', () => {
+  const html = render(buildBadgeArithmeticRoadmap(), []);
+
+  // All-complete, zero failures → the shared complete tone, no muted italic.
+  const allDoneNode = nodeBlock(html, 'INIT-ALL-DONE');
+  const allDoneBadge = tagContaining(allDoneNode, 'data-micro-badge="wi-progress"');
+  expect(allDoneBadge).toMatch(/color:\s*#2ea043/);
+  expect(allDoneBadge).not.toMatch(/font-style:\s*italic/);
+
+  // Unplanned (0/0) → muted italic, NOT the complete tone — the two states
+  // must never render identically (a de-emphasized "nothing planned" badge
+  // reading as "done" would be actively misleading).
+  const unplannedHtml = render();
+  const dNode = nodeBlock(unplannedHtml, 'INIT-D');
+  const unplannedBadge = tagContaining(dNode, 'data-micro-badge="wi-progress"');
+  expect(unplannedBadge).toMatch(/font-style:\s*italic/);
+  expect(unplannedBadge).not.toMatch(/color:\s*#2ea043/);
 });
 
 /** The full outer `<div data-roadmap-node ...>...</div>` block for one

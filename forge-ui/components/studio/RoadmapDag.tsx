@@ -391,9 +391,16 @@ function RoadmapNode({
   const runCycleIds = group ? [group.activeCycleId, ...group.priorCycleIds] : [];
 
   // W6-RV-1: the collapsed card's two micro-badges — deps count, WI done/total.
+  // 'complete' counts toward done; 'failed' counts in the total but NOT
+  // toward done (a failed WI is not silently folded into "not done yet" —
+  // its own count surfaces via data-badge-failed + the visual indicator
+  // below, since failed != pending is real signal an operator needs); an
+  // undefined workItems (unplanned) reads as 0/0, never a fabricated total.
   const depsCount = dependsOnInitiatives.length;
   const wiTotal = workItems?.length ?? 0;
   const wiDone = workItems?.filter((w) => w.status === 'complete').length ?? 0;
+  const wiFailed = workItems?.filter((w) => w.status === 'failed').length ?? 0;
+  const wiAllComplete = wiTotal > 0 && wiDone === wiTotal && wiFailed === 0;
 
   return (
     <div
@@ -430,10 +437,13 @@ function RoadmapNode({
         }}
       >
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
-            fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35,
-            ...(expanded ? {} : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
-          }}>{title}</div>
+          <div
+            title={title}
+            style={{
+              fontFamily: 'var(--font-display)', fontSize: 13, fontWeight: 700, color: 'var(--text)', lineHeight: 1.35,
+              ...(expanded ? {} : { overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }),
+            }}
+          >{title}</div>
           <div style={{
             fontSize: 11, color: 'var(--faint)', marginTop: 3,
             ...(expanded ? {} : { fontFamily: 'var(--font-mono, monospace)' }),
@@ -447,14 +457,33 @@ function RoadmapNode({
 
       {/* W6-RV-1: the uniform collapsed card's two micro-badges — deps count,
           WI done/total. Only rendered while collapsed; the expanded state
-          shows the real deps line + per-WI badges instead (InitiativeDetail). */}
+          shows the real deps line + per-WI badges instead (InitiativeDetail).
+          wi-progress styling: muted when unplanned (0/0 — nothing to show
+          yet, distinct from "done"), a complete tone when every WI is done
+          with zero failures, neutral otherwise. A failed WI always surfaces
+          via [data-badge-failed] + a visual marker — never silently folded
+          into "not done yet". */}
       {!expanded && (
         <div data-micro-badges style={{ display: 'flex', gap: 6 }}>
           <span data-micro-badge="deps-count" data-badge-value={depsCount} style={microBadgeStyle}>
             {depsCount} dep{depsCount === 1 ? '' : 's'}
           </span>
-          <span data-micro-badge="wi-progress" data-badge-value={`${wiDone}/${wiTotal}`} style={microBadgeStyle}>
+          <span
+            data-micro-badge="wi-progress"
+            data-badge-value={`${wiDone}/${wiTotal}`}
+            data-badge-failed={wiFailed}
+            style={wiProgressBadgeStyle(wiTotal, wiAllComplete)}
+          >
             {wiDone}/{wiTotal} WI
+            {wiFailed > 0 && (
+              <span
+                data-badge-failed-marker
+                title={`${wiFailed} failed work item${wiFailed === 1 ? '' : 's'}`}
+                style={{ marginLeft: 4, color: STATUS_COLOR.failed, fontWeight: 700 }}
+              >
+                ⚠{wiFailed}
+              </span>
+            )}
           </span>
         </div>
       )}
@@ -490,3 +519,18 @@ const microBadgeStyle: React.CSSProperties = {
   fontSize: 10, fontWeight: 600, color: 'var(--dim)', background: 'var(--bg)',
   border: '1px solid var(--line)', borderRadius: 4, padding: '2px 6px', whiteSpace: 'nowrap',
 };
+
+/** wi-progress micro-badge tone: muted when unplanned (0/0 — distinct from
+ *  "done", never conflated with it), the shared complete tone when every WI
+ *  is done with zero failures, neutral (the base badge) otherwise — a failed
+ *  WI's own indicator (data-badge-failed + the ⚠ marker) carries that signal
+ *  instead of a badge-wide tone change. */
+function wiProgressBadgeStyle(wiTotal: number, wiAllComplete: boolean): React.CSSProperties {
+  if (wiTotal === 0) {
+    return { ...microBadgeStyle, color: 'var(--faint)', fontStyle: 'italic', opacity: 0.7 };
+  }
+  if (wiAllComplete) {
+    return { ...microBadgeStyle, color: STATUS_COLOR.complete, borderColor: `${STATUS_COLOR.complete}55` };
+  }
+  return microBadgeStyle;
+}
