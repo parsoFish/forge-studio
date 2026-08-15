@@ -1216,7 +1216,16 @@ inventory rather than one shared page-level contract:
   — `data-turn-source` names the checkpoint file the turn was DERIVED from
   (`idea.md`, `prompt.md`, `answers.json#round-N`, `questions.json`,
   `feedback.md`), because no chat transcript exists on disk and none is
-  invented. Artifact pane:
+  invented. **W6-B9 reviewer fix** — a `source="questions.json"` turn's
+  `text` is a joined multi-question blob (`deriveSessionTranscript` joins
+  every real question on a blank line, no per-question boundary on the
+  wire); `SessionTranscript.tsx` splits that SAME turn's rendering (display-
+  only, gated on `source === 'questions.json'`, never any other turn's
+  legitimately multi-paragraph text) into one
+  `[data-question-index="0"|"1"|…]` child per question — a structural
+  ≥N-questions proof now that the bespoke per-question
+  `ArchitectQuestionForm` fieldset list no longer renders for instructions
+  (below). Artifact pane:
   `[data-section="session-artifact"][data-artifact-kind][data-artifact-label]`
   (the label comes from `studio/session-kinds.yaml` over the wire, never a
   client-side table). Fail-closed state:
@@ -1489,8 +1498,17 @@ inventory rather than one shared page-level contract:
   the panel — `useRouter()` throws under the `renderToStaticMarkup` harness
   this file's DOM regression suite uses) navigates to `/skills/<id>` or
   `/hooks/<id>`, mirroring the retired `SessionAuthoringPanel`'s own
-  `onFinalized` behaviour. `staged-review`/`next-turn` render DISABLED,
-  labelled "not yet wired" (B4 returns 501 for both). Every endpoint error —
+  `onFinalized` behaviour. `staged-review`/`next-turn` are HIDDEN entirely
+  (W6-B9 reviewer fix; previously rendered disabled, labelled "not yet
+  wired" — B4 returns 501 for both). `isRenderableAffordance` filters
+  `affordances[]` down to `question-form`/`verdict` before this component
+  ever maps over it — `[data-affordance-count]` and the
+  `[data-section="session-no-affordances"]` empty-state gate both read the
+  FILTERED count, so a phase deriving only a `next-turn` row (instructions'
+  own `briefing`/`awaiting-answers` rows both legitimately do, via their
+  `next:` field) renders the honest no-affordances state, not a disabled
+  placeholder — clutter on the FIRST screen an operator sees is a real cost,
+  a control that can never work either way. Every endpoint error —
   409 wrong-phase (naming the offending affordance id + the
   currently-available set), 422, 501 `UnhandledAffordanceBody` — surfaces
   verbatim via `[data-affordance-error]`, never swallowed.

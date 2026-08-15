@@ -8,7 +8,7 @@ import { StudioArchitectShell } from '@/components/StudioArchitectShell';
 import { useCycleEvents } from '@/lib/use-cycle-events';
 import { useNowTicker } from '@/lib/use-now-ticker';
 import { fetchSessionShell, type SessionShellFetchResult } from '@/lib/session-client';
-import { deriveSessionShellViewState } from '@/lib/session-shell-view';
+import { deriveSessionShellViewState, backToProjectLink } from '@/lib/session-shell-view';
 import {
   fetchArchitectSessions,
   listInstructionsSessions,
@@ -193,6 +193,14 @@ export default function SessionShellPage({
 
   const ready = viewState.status !== 'loading' || noProjectKnown;
 
+  // W6-B9 reviewer fix — computed ONCE, pure (lib/session-shell-view.ts),
+  // never re-derived inline in the JSX below: null for a non-terminal
+  // session, one with no project known, OR a pseudo-project anchor with no
+  // recognised destination (an unbound kb-cleanup/community-refresh session
+  // anchored under ".kb-<id>"/".community-registry" is never a REAL
+  // registered project — /projects/<that> would be a dead end).
+  const backTo = viewState.status === 'ready' ? backToProjectLink(project, viewState.terminal) : null;
+
   return (
     <StudioArchitectShell
       dataPage="session"
@@ -217,20 +225,23 @@ export default function SessionShellPage({
               from the shell itself (never a per-panel one-off): whenever a
               session has settled (`viewState.terminal`, the SAME server-derived
               fact SessionInteractivePanel already gates its ActivityLog drawer
-              on) AND `project` is known, there is nothing left for the operator
-              to do here — closes the gap instructions' retired bespoke panel
-              used to close ONLY for itself (its own committed/rejected states'
-              `data-action="back-to-project"` link), now true for demo/
-              onboarding/kb-cleanup/authoring/instructions alike. architect and
-              project-brain keep their own additional bespoke nav (unaffected,
-              unremoved) — this is purely additive. */}
-          {viewState.terminal && project && (
+              on) AND `project` resolves to a REAL destination (`backTo`,
+              above — never rendered for a pseudo-project anchor with no
+              recognised kind, W6-B9 reviewer fix), there is nothing left for
+              the operator to do here — closes the gap instructions' retired
+              bespoke panel used to close ONLY for itself (its own
+              committed/rejected states' `data-action="back-to-project"`
+              link), now true for demo/onboarding/kb-cleanup/authoring/
+              instructions alike. architect and project-brain keep their own
+              additional bespoke nav (unaffected, unremoved) — this is purely
+              additive. */}
+          {backTo && (
             <Link
-              href={`/projects/${encodeURIComponent(project)}`}
+              href={backTo.href}
               data-action="back-to-project"
               style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: 'var(--dim)', textDecoration: 'none', marginBottom: 12 }}
             >
-              ← Back to project
+              ← Back to {backTo.label}
             </Link>
           )}
           <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) minmax(0,1fr)', gap: 24, alignItems: 'start' }}>

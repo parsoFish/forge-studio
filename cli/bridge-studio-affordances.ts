@@ -140,6 +140,7 @@ import { isSafeRunId } from '../orchestrator/run-agent.ts';
 import { invalidProjectReason } from './bridge-studio-sessions.ts';
 import { approveKbCleanup } from './bridge-studio-kbs.ts';
 import { runFinalize } from './bridge-studio-authoring.ts';
+import { dryBridgeAgentTurnMarker } from './dry-bridge.ts';
 
 // ---------------------------------------------------------------------------
 // UnhandledAffordanceBody — mirrors forge-ui's `UnhandledArtifactBody`
@@ -224,7 +225,14 @@ function safeParseJson<T>(raw: string): T | null {
  *  (a real round asks a handful of questions with paragraph-length answers)
  *  and named in the 400 they produce, never silently truncated. */
 const MAX_ANSWERS_COUNT = 64;
-const MAX_ANSWER_FIELD_BYTES = 8 * 1024;
+/** Exported (W6-B9 reviewer fix) so `cli/ui-bridge.ts`'s bespoke
+ *  `POST /api/instructions/brief` route can cap its own `body.brief` field
+ *  against this SAME limit — `handleInstructionsBrief` above already caps
+ *  the generic `briefing-question-form` path's equivalent field to it; two
+ *  routes writing the identical `prompt.md`/`status.prompt` target with two
+ *  different, hand-kept limits (one bounded, one not) is exactly the kind
+ *  of quiet drift a single shared constant closes, one number, not two. */
+export const MAX_ANSWER_FIELD_BYTES = 8 * 1024;
 
 function answersCapReason(answers: readonly { question: string; answer: string }[]): string | null {
   if (answers.length > MAX_ANSWERS_COUNT) {
@@ -241,6 +249,30 @@ function answersCapReason(answers: readonly { question: string; answer: string }
     }
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// W6-B9 reviewer fix — the generic route's spawn-triggering handlers
+// (answer/brief/verdict-instructions/verdict-demo) previously called
+// `ctx.spawnAgentTurn` with no dry-bridge marker at all: `spawnAgentTurn`
+// itself already no-ops under `FORGE_DRY_BRIDGE=1`
+// (`cli/ui-bridge.ts:2124`), so no REAL spawn ever happened — but the 200
+// body silently omitted the `dryBridge:{skipped:['agent-turn']}` disclosure
+// every bespoke per-kind spawn route already gives the same caller (e.g.
+// `POST /api/instructions/brief`, `cli/ui-bridge.ts:3310`), a parity gap
+// this batch has otherwise been careful to close. ONE shared helper (not
+// four repeated `...dryBridgeAgentTurnMarker(...)` call sites) — `route` is
+// a fixed, literal identifier for this generic dispatch point (mirrors
+// `BRIDGE_ROUTE_CLASSIFICATION`'s own `:id`-style placeholder convention,
+// `cli/dry-bridge.ts` — documentation, not a router pattern), never the
+// bespoke route name a given call happens to mirror, so the emitted
+// `dry-bridge.skip` event names what ACTUALLY handled the request.
+// ---------------------------------------------------------------------------
+
+const GENERIC_AFFORDANCE_ROUTE = '/api/studio/sessions/:kind/:sessionId/:affordance';
+
+function affordanceDryBridgeMarker(ctx: AffordanceRouteContext, sessionId: string): ReturnType<typeof dryBridgeAgentTurnMarker> {
+  return dryBridgeAgentTurnMarker(ctx.logsRoot, GENERIC_AFFORDANCE_ROUTE, sessionId);
 }
 
 async function handleInstructionsAnswer(
@@ -287,7 +319,7 @@ async function handleInstructionsAnswer(
 
   ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastInstructionsChanged();
-  sendJson(res, 200, { ok: true, round }, origin);
+  sendJson(res, 200, { ok: true, round, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -343,7 +375,7 @@ async function handleInstructionsBrief(
 
   ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastInstructionsChanged();
-  sendJson(res, 200, { ok: true, phase: 'interviewing' }, origin);
+  sendJson(res, 200, { ok: true, phase: 'interviewing', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -372,7 +404,7 @@ async function handleInstructionsVerdict(
   }
   ctx.spawnAgentTurn(ctx.forgeRoot, 'instructions', project, sessionId);
   ctx.broadcastInstructionsChanged();
-  sendJson(res, 200, { ok: true, phase: nextPhase }, origin);
+  sendJson(res, 200, { ok: true, phase: nextPhase, ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------
@@ -404,7 +436,7 @@ async function handleDemoVerdict(
     }
     ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
     ctx.broadcastDemoChanged();
-    sendJson(res, 200, { ok: true, phase: 'abandoned' }, origin);
+    sendJson(res, 200, { ok: true, phase: 'abandoned', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
     return;
   }
 
@@ -427,7 +459,7 @@ async function handleDemoVerdict(
   }
   ctx.spawnAgentTurn(ctx.forgeRoot, 'demo-builder', project, sessionId);
   ctx.broadcastDemoChanged();
-  sendJson(res, 200, { ok: true, phase: 'locking' }, origin);
+  sendJson(res, 200, { ok: true, phase: 'locking', ...affordanceDryBridgeMarker(ctx, sessionId) }, origin);
 }
 
 // ---------------------------------------------------------------------------

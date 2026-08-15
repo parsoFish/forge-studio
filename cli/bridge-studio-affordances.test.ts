@@ -854,6 +854,67 @@ test('HARDEN-3: exactly at the caps (64 entries, 8KB fields) still succeeds — 
   assert.equal(readPhase(sessionDir), 'interviewing');
 });
 
+// ===========================================================================
+// W6-B9 reviewer fix — every spawn-triggering handler in this file
+// (answer/brief/verdict-instructions/verdict-demo) spreads
+// dryBridgeAgentTurnMarker into its 200 body, exactly like every bespoke
+// per-kind spawn route already does. This whole file runs under
+// FORGE_DRY_BRIDGE=1 (see `before()`, above), so every 200 in every OTHER
+// test in this file already implicitly carries this marker too — these
+// tests just assert it explicitly, once per handler.
+// ===========================================================================
+
+test('DRYBRIDGE-1: question-form (answer) at awaiting-answers — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge1';
+  const sessionId = freshSessionId();
+  seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-answers', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-answers-question-form'), {
+    project,
+    answers: [{ question: 'Q?', answer: 'A.' }],
+  });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-2: question-form (brief) at briefing — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge2';
+  const sessionId = freshSessionId();
+  seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'briefing', mode: 'init', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'briefing-question-form'), {
+    project,
+    answers: [{ question: 'Operator response', answer: 'notes' }],
+  });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-3: verdict approve at awaiting-verdict (instructions) — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge3';
+  const sessionId = freshSessionId();
+  seedSession(project, '_instructions', sessionId, { session_id: sessionId, project, phase: 'awaiting-verdict', round: 1, prompt: '' });
+  const res = await postJson(affordanceUrl('instructions', sessionId, 'awaiting-verdict-verdict'), { project, verdict: 'approve' });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-4: verdict approve at awaiting-review (demo, lock path) — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge4';
+  const sessionId = freshSessionId();
+  seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'awaiting-review', iteration: 1 });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'awaiting-review-verdict'), { project, verdict: 'approve' });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
+test('DRYBRIDGE-5: verdict reject at awaiting-review (demo, abandon path) — the 200 body carries dryBridge:{skipped:["agent-turn"]}', async () => {
+  const project = 'drybridge5';
+  const sessionId = freshSessionId();
+  seedSession(project, '_demo', sessionId, { session_id: sessionId, project, project_repo_path: '', phase: 'awaiting-review', iteration: 1 });
+  const res = await postJson(affordanceUrl('demo', sessionId, 'awaiting-review-verdict'), { project, verdict: 'reject' });
+  const body = (await res.json()) as { dryBridge?: { skipped: string[] } };
+  assert.deepEqual(body.dryBridge, { skipped: ['agent-turn'] });
+});
+
 test('STRUCT-1: cli/bridge-studio-affordances.ts makes ZERO raw fs sink calls, and no such call (if one is ever added) may take "kind" or "affordanceId" directly — every read/write must go through a guarded primitive', () => {
   const src = readFileSync(join(REPO_ROOT, 'cli', 'bridge-studio-affordances.ts'), 'utf8');
   const RAW_FS_SINKS = [

@@ -96,8 +96,16 @@ import {
   sessionShellState,
   selectStage,
   deriveSessionShellViewState,
+  isPseudoProjectAnchor,
+  pseudoProjectAnchorDestination,
+  backToProjectLink,
 } from './session-shell-view.ts';
 import type { SessionShellPayload, SessionShellFetchResult } from './session-client.ts';
+// W6-B9 reviewer fix — the real, on-disk SSOT this file's own
+// `isPseudoProjectAnchor` mirrors (imported directly, not re-typed/
+// re-declared, mirroring trigger-kind-parity.test.ts's precedent — inert at
+// module-load time, no I/O until a function is actually called).
+import { isPseudoProjectAnchor as SSOT_isPseudoProjectAnchor } from '../../cli/bridge-studio-sessions.ts';
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -513,4 +521,49 @@ test('AT-101: selectStage: "terminal" is UNCHANGED across a stage switch — a s
   if (switched.ok) {
     expect(switched.state.terminal).toBe(true);
   }
+});
+
+// ===========================================================================
+// W6-B9 reviewer fix — pseudo-project anchors: the generic terminal "back to
+// project" link must be honest for EVERY value `project` can hold, including
+// a pseudo-project session anchor (".kb-<id>", ".community-registry") that
+// discoverProjects (orchestrator/studio/registry.ts) categorically filters
+// out of the real project list — /projects/.kb-x would be a dead end.
+// ===========================================================================
+
+test('AT-102: isPseudoProjectAnchor — a real project slug is NOT a pseudo-anchor', () => {
+  expect(isPseudoProjectAnchor('mdtoc')).toBe(false);
+  expect(isPseudoProjectAnchor('my-real-project')).toBe(false);
+});
+
+test('AT-103: isPseudoProjectAnchor — any leading-"." value IS a pseudo-anchor (the general check, not an enumerated allow-list)', () => {
+  expect(isPseudoProjectAnchor('.kb-forge-dev')).toBe(true);
+  expect(isPseudoProjectAnchor('.community-registry')).toBe(true);
+  expect(isPseudoProjectAnchor('.some-future-anchor')).toBe(true);
+});
+
+test('AT-104: PARITY — forge-ui\'s isPseudoProjectAnchor mirror agrees with the real cli/bridge-studio-sessions.ts SSOT for every sampled value, both directions', () => {
+  const samples = ['mdtoc', 'my-real-project', '.kb-forge-dev', '.community-registry', '.some-future-anchor', ''];
+  for (const s of samples) {
+    expect(isPseudoProjectAnchor(s), `sample ${JSON.stringify(s)}`).toBe(SSOT_isPseudoProjectAnchor(s));
+  }
+});
+
+test('AT-105: pseudoProjectAnchorDestination — the KB-seeding anchor resolves to Knowledge; the community-refresh anchor resolves to Community; an unrecognised pseudo-anchor resolves to null (never a guessed destination)', () => {
+  expect(pseudoProjectAnchorDestination('.kb-forge-dev')).toEqual({ label: 'Knowledge', href: '/knowledge' });
+  expect(pseudoProjectAnchorDestination('.community-registry')).toEqual({ label: 'Community', href: '/community' });
+  expect(pseudoProjectAnchorDestination('.some-future-anchor')).toBeNull();
+});
+
+test('AT-106: backToProjectLink — null when not terminal, null when project is null, the real /projects/<id> for an honest project, the pseudo-anchor\'s own destination for a pseudo-anchor, and null (not a dead-ended link) for an unrecognised pseudo-anchor', () => {
+  expect(backToProjectLink('mdtoc', false)).toBeNull();
+  expect(backToProjectLink(null, true)).toBeNull();
+  expect(backToProjectLink('mdtoc', true)).toEqual({ label: 'project', href: '/projects/mdtoc' });
+  expect(backToProjectLink('.kb-forge-dev', true)).toEqual({ label: 'Knowledge', href: '/knowledge' });
+  expect(backToProjectLink('.community-registry', true)).toEqual({ label: 'Community', href: '/community' });
+  expect(backToProjectLink('.some-future-anchor', true)).toBeNull();
+});
+
+test('AT-107: backToProjectLink — a project id needing URL-encoding is encoded in the href', () => {
+  expect(backToProjectLink('my project/weird', true)).toEqual({ label: 'project', href: '/projects/my%20project%2Fweird' });
 });

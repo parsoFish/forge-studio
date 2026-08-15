@@ -169,6 +169,26 @@ export function invalidSessionIdReason(id: string): string | null {
   return null;
 }
 
+// W6-B9 reviewer fix — the general invariant `invalidProjectReason`'s own
+// KB-seeding carve-out comment already states: `discoverProjects`
+// (orchestrator/studio/registry.ts) filters EVERY dot-prefixed directory out
+// of the real project list, categorically — not just `.kb-<id>`
+// (KB_SEEDING_ANCHOR_PREFIX) or `.community-registry` (W6-CR-3's
+// COMMUNITY_REGISTRY_PROJECT_ANCHOR, not yet merged onto this branch). A
+// project id starting with "." is therefore NEVER a real registered
+// project, full stop — this is that one general check, exported so a
+// consumer that only needs "is this a phantom anchor, yes/no" (as opposed
+// to `invalidProjectReason`'s full validate-or-reject contract) has a single
+// source rather than re-deriving the same leading-"." fact. forge-ui never
+// imports cli/ at runtime (see this repo's SSOT-parity-test convention,
+// e.g. forge-ui/lib/trigger-kind-parity.test.ts) — its own
+// `isPseudoProjectAnchor` (forge-ui/lib/session-shell-view.ts) is a small,
+// independently-declared mirror, kept honest by a parity test
+// (forge-ui/lib/session-shell-view.test.ts).
+export function isPseudoProjectAnchor(project: string): boolean {
+  return project.startsWith('.');
+}
+
 export function invalidProjectReason(id: string): string | null {
   if (id.length === 0) {
     return 'project query parameter must not be empty';

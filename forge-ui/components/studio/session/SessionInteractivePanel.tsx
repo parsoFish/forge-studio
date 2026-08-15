@@ -79,10 +79,16 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 //     rather than a `useRouter()` call here: `useRouter()` throws "invariant
 //     expected app router to be mounted" under `renderToStaticMarkup`, the
 //     harness this file's own DOM regression suite renders with.
-//   - `staged-review` / `next-turn` — rendered DISABLED, honestly labelled
-//     "not yet wired" — B4 returns 501 `UnhandledAffordanceBody` for both
-//     (they describe what an `agent` step already did / where it advances
-//     to, not an operator write action).
+//   - `staged-review` / `next-turn` — HIDDEN entirely (W6-B9 reviewer fix;
+//     previously rendered disabled with a "not yet wired" label). B4 returns
+//     501 `UnhandledAffordanceBody` for both — they describe what an `agent`
+//     step already did / where it advances to, not an operator write
+//     action, and a placeholder block for a control that can never work is
+//     clutter, not an honest affordance, especially on the FIRST screen an
+//     operator sees (instructions' `briefing` row derives exactly this
+//     shape). `deriveSessionAffordances` still derives them onto the wire
+//     honestly — `isRenderableAffordance` filters them out of the DOM here,
+//     a presentation decision, not a data one.
 //
 // Every endpoint error — 409 wrong-phase (naming the offending affordance id
 // + the currently-available set), 422, 501 UnhandledAffordanceBody — reaches
@@ -98,9 +104,28 @@ import type { EventLogEntry } from '@/lib/bridge-client';
 // this identically — never a per-kind branch.
 // ---------------------------------------------------------------------------
 
-/** Affordance kinds this route has no write handler for at all (B4's
- *  `unhandledAffordanceBody` fallthrough) — rendered disabled, honestly. */
-const NOT_YET_WIRED_KINDS: ReadonlySet<SessionAffordance['kind']> = new Set(['staged-review', 'next-turn']);
+/** W6-B9 reviewer fix — a GENERIC "does this panel have an actual renderer
+ *  for this affordance kind" predicate, keyed on `kind` alone (never on
+ *  `phase`/session `kind` — the SAME discipline every other branch in this
+ *  file already holds). `staged-review`/`next-turn` are real, honestly
+ *  DERIVED wire data (`deriveSessionAffordances` legitimately emits
+ *  `next-turn` for any `noop` row that also declares `next` — instructions'
+ *  OWN `briefing`/`awaiting-answers` rows both do) describing what an agent
+ *  step already wrote / where it advances to, not an operator WRITE action
+ *  (B4's write route 501s both, `UnhandledAffordanceBody`) — but a
+ *  placeholder "not yet wired" block for them is CLUTTER, not an honest
+ *  affordance, especially on `briefing`, the FIRST screen every new
+ *  instructions session lands the operator on. Filtering renders here (a
+ *  presentation decision) rather than at `deriveSessionAffordances` (the
+ *  wire contract, a data decision) keeps `affordances[]` itself the full,
+ *  honest derived set — `[data-affordance-count]` reflects what's actually
+ *  IN THE DOM (the CWC discipline this whole file's header note leans on),
+ *  never a count the operator can't see. */
+const RENDERABLE_AFFORDANCE_KINDS: ReadonlySet<SessionAffordance['kind']> = new Set(['question-form', 'verdict']);
+
+function isRenderableAffordance(affordance: SessionAffordance): boolean {
+  return RENDERABLE_AFFORDANCE_KINDS.has(affordance.kind);
+}
 
 /** Detects a drafted authoring package's shape purely by file PRESENCE
  *  (skills/creation-agent/SKILL.md's own two package shapes) — mirrors the
@@ -221,7 +246,13 @@ export function SessionInteractivePanel({
 
   const drawer = !terminal && <ActivityLog label={`${kind} activity`} events={events} phaseLabel={phase} phaseActive />;
 
-  if (affordances.length === 0) {
+  // W6-B9 reviewer fix — filtered to what this panel can actually RENDER
+  // (see isRenderableAffordance's own doc comment); `data-affordance-count`
+  // and the empty-state gate both read this, not the raw wire `affordances`,
+  // so the DOM metric never over-counts placeholder sections nothing draws.
+  const renderableAffordances = affordances.filter(isRenderableAffordance);
+
+  if (renderableAffordances.length === 0) {
     return (
       <div data-component="session-interactive-panel" data-affordance-count={0}>
         <ProvenanceStrip phase={phase} modelTier={modelTier} />
@@ -234,10 +265,10 @@ export function SessionInteractivePanel({
   }
 
   return (
-    <div data-component="session-interactive-panel" data-affordance-count={affordances.length}>
+    <div data-component="session-interactive-panel" data-affordance-count={renderableAffordances.length}>
       <ProvenanceStrip phase={phase} modelTier={modelTier} />
 
-      {affordances.map((affordance) => {
+      {renderableAffordances.map((affordance) => {
         const error = errors[affordance.id];
         const busy = busyAffordanceId === affordance.id;
 
@@ -356,21 +387,16 @@ export function SessionInteractivePanel({
           );
         }
 
-        if (NOT_YET_WIRED_KINDS.has(affordance.kind)) {
-          return (
-            <div key={affordance.id} data-section="session-affordance" data-affordance-kind={affordance.kind} style={sectionStyle}>
-              <button type="button" className="btn" disabled style={{ opacity: 0.4 }}>
-                {affordance.kind === 'staged-review' ? 'Review staged files' : 'Advance turn'}
-              </button>
-              <div style={{ fontSize: 11.5, color: 'var(--faint)', marginTop: 6 }}>not yet wired</div>
-            </div>
-          );
-        }
-
-        // Structurally unreachable (SessionAffordanceKind's closed vocabulary
-        // is exactly the four cases above) — fails honestly rather than
-        // silently rendering nothing for a future kind this panel hasn't
-        // been taught yet.
+        // Structurally unreachable TODAY — `renderableAffordances` is
+        // already filtered to `RENDERABLE_AFFORDANCE_KINDS` (question-form/
+        // verdict only; `staged-review`/`next-turn` never reach this map at
+        // all any more, W6-B9 reviewer fix — see `isRenderableAffordance`'s
+        // own doc comment for why hiding them entirely, not rendering a
+        // disabled "not yet wired" placeholder, is the honest behaviour).
+        // Kept as defense-in-depth against `RENDERABLE_AFFORDANCE_KINDS`
+        // drifting ahead of the render branches above (a THIRD kind added
+        // there with no matching `if` here) — fails honestly rather than
+        // silently rendering nothing.
         return (
           <div key={affordance.id} data-section="session-affordance" data-affordance-kind={affordance.kind} style={sectionStyle}>
             <div style={{ fontSize: 11.5, color: 'var(--faint)' }}>unrecognised affordance kind &quot;{affordance.kind}&quot;</div>

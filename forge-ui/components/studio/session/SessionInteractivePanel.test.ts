@@ -212,11 +212,12 @@ test('a verdict affordance with meta.verdicts ABSENT entirely renders NEITHER bu
 });
 
 // ---------------------------------------------------------------------------
-// staged-review / next-turn — disabled, honestly labelled "not yet wired"
-// (B4 returns 501 for both).
+// staged-review / next-turn — HIDDEN entirely (W6-B9 reviewer fix; a
+// placeholder "not yet wired" block used to render for both — B4 returns 501
+// for both, so neither has ever had a real operator control here).
 // ---------------------------------------------------------------------------
 
-test('staged-review and next-turn affordances render disabled with an honest "not yet wired" label', () => {
+test('staged-review and next-turn affordances render NOTHING — no section, no "not yet wired" placeholder — and the panel falls back to the honest no-affordances state', () => {
   const html = render({
     kind: 'instructions',
     phase: 'drafting',
@@ -225,23 +226,23 @@ test('staged-review and next-turn affordances render disabled with an honest "no
       { id: 'drafting-next-turn', kind: 'next-turn', phase: 'drafting', meta: { next: 'awaiting-verdict' } },
     ],
   });
-  expect(html).toContain('data-affordance-kind="staged-review"');
-  expect(html).toContain('data-affordance-kind="next-turn"');
-  const notYetWiredCount = html.split('not yet wired').length - 1;
-  expect(notYetWiredCount).toBe(2);
-  // Both controls in this state are plain disabled buttons — no data-action
-  // (there is no operator write act for either), so neither
-  // "verdict-approve"/"submit-answers" leak in for this shape.
+  expect(html).not.toContain('data-affordance-kind="staged-review"');
+  expect(html).not.toContain('data-affordance-kind="next-turn"');
+  expect(html).not.toContain('not yet wired');
+  expect(html).toContain('data-affordance-count="0"');
+  expect(html).toContain('data-section="session-no-affordances"');
   expect(html).not.toContain('data-action="verdict-approve"');
   expect(html).not.toContain('data-action="submit-answers"');
 });
 
 // ---------------------------------------------------------------------------
 // Multiple affordances on one phase row (e.g. a noop row that ALSO carries
-// `next`) all render together, in order.
+// `next`) — only the RENDERABLE ones render (W6-B9 reviewer fix: next-turn
+// is filtered out of the DOM even though the server-derived affordances[]
+// legitimately carries it).
 // ---------------------------------------------------------------------------
 
-test('a phase yielding multiple affordances (question-form + next-turn) renders both sections', () => {
+test('a phase yielding a renderable affordance (question-form) alongside a non-renderable one (next-turn) renders ONLY the renderable section — count reflects the DOM, not the wire array', () => {
   const html = render({
     kind: 'instructions',
     phase: 'awaiting-answers',
@@ -251,8 +252,8 @@ test('a phase yielding multiple affordances (question-form + next-turn) renders 
     ],
   });
   expect(html).toContain('data-affordance-kind="question-form"');
-  expect(html).toContain('data-affordance-kind="next-turn"');
-  expect(html).toContain('data-affordance-count="2"');
+  expect(html).not.toContain('data-affordance-kind="next-turn"');
+  expect(html).toContain('data-affordance-count="1"');
 });
 
 // ---------------------------------------------------------------------------

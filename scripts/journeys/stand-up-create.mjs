@@ -420,7 +420,7 @@ export const journey = defineJourney({
         title: 'instructions-creator — generate AGENTS.md (AI-assisted)',
         narration: 'The operator launches the instructions-creator agent, answers its two clarifying questions, and approves the AGENTS.md it drafts — a new project gets its onboarding contract written for it, with a human still signing off.',
         drive: async (ctx) => {
-              const { page, watch, browser, frame, recordClip, check } = ctx;
+              const { page, watch, browser, frame, recordClip, check, countAtLeast } = ctx;
               // ════════════════════════════════════════════════════════════════════════
               // PART 1 — STAND UP (AI-assisted generation). The project's AGENTS.md and its
               // seed brain, generated WITH AI ASSISTANCE, plus aligning an existing repo to
@@ -459,25 +459,24 @@ export const journey = defineJourney({
               check(await page.locator('[data-affordance-kind="question-form"]').count() > 0, 'AI-1: interview returns a question-form affordance');
               // R2-10: at least one turn, derived from a REAL checkpoint file —
               // questions.json contributes a pending AGENT turn while phase is
-              // exactly 'awaiting-answers' (never invented). Per-question DOM
-              // elements no longer exist (the generic panel doesn't render one
-              // fieldset per question) — the transcript pane is now the ONLY
-              // place BOTH real questions' text is observable, so the "≥2
-              // instructions questions" proof moves there.
+              // exactly 'awaiting-answers' (never invented). The bespoke
+              // per-question ArchitectQuestionForm fieldset list is retired
+              // (the generic panel renders one free-text box), but the
+              // transcript pane (SessionTranscript.tsx, W6-B9 reviewer fix)
+              // now splits a questions.json turn's joined text back into one
+              // [data-question-index] element PER real question — a
+              // structural proof, not a text-substring sniff.
               await page.waitForFunction(
                 () => document.querySelector('[data-turn-index="0"]')?.getAttribute('data-turn-source') === 'questions.json',
                 null, { timeout: 8000 },
               ).catch(() => {});
               const instrTurn0 = await page.evaluate(() => {
                 const el = document.querySelector('[data-turn-index="0"]');
-                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source'), text: el.textContent ?? '' } : null;
+                return el ? { role: el.getAttribute('data-turn-role'), source: el.getAttribute('data-turn-source') } : null;
               });
               check(instrTurn0 !== null && instrTurn0.role === 'agent' && instrTurn0.source === 'questions.json',
                 `AI-1: transcript derives a real turn from questions.json (got ${JSON.stringify(instrTurn0)})`);
-              check(
-                Boolean(instrTurn0?.text.includes('primary audience') && instrTurn0?.text.includes('quality gate')),
-                'AI-1: ≥2 instructions questions — both real question strings reach the transcript pane',
-              );
+              await countAtLeast(page, '[data-turn-index="0"] [data-question-index]', 2, 'AI-1: ≥2 instructions questions — structurally distinct [data-question-index] entries in the transcript pane');
               await frame(page, 'instr-0-interview', 'Part 1 — instructions-creator interviews before writing AGENTS.md (AI-assisted)');
               // answer → draft → verdict — the generic single free-text box
               // (data-action="submit-answers" is the ONE action name shared with
